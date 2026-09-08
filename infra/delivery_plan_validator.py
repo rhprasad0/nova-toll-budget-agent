@@ -67,6 +67,11 @@ LAMBDA = tuple(
     f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{name}"
     for name in ("toll-v2-pricing-loader-dev", "toll-v2-report-publisher-dev", "tollchat-v2-chat-proxy-dev")
 )
+LAMBDA_FUNCTION_NAMES = MappingProxyType({
+    "loader": "toll-v2-pricing-loader-dev",
+    "publisher": "toll-v2-report-publisher-dev",
+    "tollchat_proxy": "tollchat-v2-chat-proxy-dev",
+})
 LOG_GROUPS = tuple(
     f"arn:aws:logs:{REGION}:{ACCOUNT}:log-group:{name}"
     for name in (
@@ -106,9 +111,9 @@ def _build_contract() -> dict[str, Mutation]:
     result: dict[str, Mutation] = {}
     for name, resource in zip(("loader", "publisher", "tollchat_proxy"), LAMBDA):
         delivery_identity = (
-            (("filename", None), ("s3_bucket", ARTIFACT_BUCKET_NAME), ("s3_key", "lambda/v2/chat-proxy-dev.zip"))
+            (("function_name", LAMBDA_FUNCTION_NAMES[name]), ("filename", None), ("s3_bucket", ARTIFACT_BUCKET_NAME), ("s3_key", "lambda/v2/chat-proxy-dev.zip"))
             if name == "tollchat_proxy"
-            else (("s3_bucket", None), ("s3_key", None), ("s3_object_version", None))
+            else (("function_name", LAMBDA_FUNCTION_NAMES[name]), ("s3_bucket", None), ("s3_key", None), ("s3_object_version", None))
         )
         result[f"aws_lambda_function.{name}"] = _mutation(
             ("filename", "source_code_hash", "s3_bucket", "s3_key", "s3_object_version"),
@@ -286,6 +291,7 @@ SUPPORTED_ADDRESSES = frozenset(CONTRACT)
 _PLAN_KEYS = frozenset({
     "format_version", "terraform_version", "resource_changes", "planned_values", "prior_state",
     "configuration", "output_changes", "variables", "timestamp", "checks", "errored",
+    "applyable", "complete", "resource_drift", "relevant_attributes",
 })
 _RESOURCE_KEYS = frozenset({
     "address", "mode", "type", "name", "index", "provider_name", "schema_version", "change",
@@ -293,7 +299,7 @@ _RESOURCE_KEYS = frozenset({
 })
 _CHANGE_KEYS = frozenset({
     "actions", "before", "after", "after_unknown", "before_sensitive", "after_sensitive",
-    "replace_paths", "action_reason",
+    "replace_paths", "action_reason", "before_identity", "after_identity",
 })
 _MANIFEST_KEYS = frozenset({
     "schema_version", "provider_identity", "deployment_inputs", "packages", "mutations", "permissions",
@@ -302,7 +308,11 @@ _MUTATION_KEYS = frozenset({"address", "action", "operation_class", "changed_fie
 _PERMISSION_KEYS = frozenset({"address", "action", "resource", "conditions"})
 _ACTIONS = frozenset({"create", "update", "delete", "read", "no-op", "import", "refresh"})
 _PRODUCTION_ACCOUNT = "920534282028"
-_PRODUCTION_MARKERS = re.compile(r"(?:production|tollchat\.ai|www\.tollchat\.ai|(?:^|[-_/.])prod(?:$|[-_/.]))", re.I)
+_PRODUCTION_MARKERS = re.compile(
+    r"(?:^|[-_/:.])(?:production|prod)(?:$|[-_/:.])"
+    r"|(?<![A-Za-z0-9.-])(?:www\.)?tollchat\.ai(?::\d+)?(?=$|[/?#])",
+    re.I,
+)
 _AUTHORIZATION_FIELDS = frozenset({
     "runtime", "handler", "role", "environment", "memory_size", "timeout", "reserved_concurrent_executions",
     "vpc_config", "layers", "architectures", "tracing_config", "ephemeral_storage", "file_system_config",
@@ -310,6 +320,38 @@ _AUTHORIZATION_FIELDS = frozenset({
     "code_signing_config_arn", "package_type", "image_uri", "acl", "tags", "content_type", "cache_control",
     "force_destroy", "policy", "public_access_block", "lifecycle_rule", "versioning", "logging", "encryption",
     "role_arn", "target_arn", "schedule_expression", "guardrail_arn", "resource_policy", "domain_name",
+})
+_DERIVED_UNKNOWN_EDGES = MappingProxyType({
+    (
+        "aws_bedrockagentcore_agent_runtime.tollchat",
+        "agent_runtime_artifact.code_configuration.code.s3.version_id",
+    ): (
+        (
+            "agent_runtime_artifact.code_configuration.code.s3.version_id",
+            "agent_runtime_artifact[0].code_configuration[0].code[0].s3[0].version_id",
+        ),
+        ("agent_runtime_artifact.code_configuration.code.s3.version_id", "agent_runtime_artifact.0.code_configuration.0.code.0.s3.0.version_id"),
+        "aws_s3_object.agentcore.version_id",
+        "aws_s3_object.agentcore",
+    ),
+    ("aws_bedrockagentcore_agent_runtime_endpoint.tollchat", "agent_runtime_version"): (
+        ("agent_runtime_version",),
+        ("agent_runtime_version",),
+        "aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_version",
+        "aws_bedrockagentcore_agent_runtime.tollchat",
+    ),
+    ("aws_lambda_alias.tollchat_live", "function_version"): (
+        ("function_version",),
+        ("function_version",),
+        "aws_lambda_function.tollchat_proxy.version",
+        "aws_lambda_function.tollchat_proxy",
+    ),
+    ("aws_lambda_function.tollchat_proxy", "s3_object_version"): (
+        ("s3_object_version",),
+        ("s3_object_version",),
+        "aws_s3_object.tollchat_proxy.version_id",
+        "aws_s3_object.tollchat_proxy",
+    ),
 })
 
 
@@ -339,31 +381,80 @@ def _flatten(value: Any, prefix: str = "") -> dict[str, Any]:
                 _reject("malformed_input")
             result.update(_flatten(child, f"{prefix}.{key}" if prefix else key))
         return result
+    if isinstance(value, list):
+        if not value and prefix:
+            return {prefix: []}
+        result: dict[str, Any] = {}
+        for index, child in enumerate(value):
+            result.update(_flatten(child, f"{prefix}[{index}]"))
+        return result
     return {prefix: value}
 
 
-def _changed_fields(before: Any, after: Any, allowed: tuple[str, ...] = ()) -> tuple[str, ...]:
+def _without_paths(value: Any, ignored: tuple[str, ...], prefix: str = "") -> Any:
+    if isinstance(value, dict):
+        result: dict[str, Any] = {}
+        for key, child in value.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if path in ignored:
+                continue
+            result[key] = _without_paths(child, ignored, path)
+        return result
+    if isinstance(value, list):
+        result: list[Any] = []
+        for index, child in enumerate(value):
+            path = f"{prefix}[{index}]"
+            if path in ignored:
+                continue
+            result.append(_without_paths(child, ignored, path))
+        return result
+    return value
+
+
+def _changed_fields(
+    before: Any,
+    after: Any,
+    allowed: tuple[str, ...] = (),
+    ignored: tuple[str, ...] = (),
+) -> tuple[str, ...]:
     left = _flatten(before) if before is not None else {}
     right = _flatten(after) if after is not None else {}
-    changed = (key for key in set(left) | set(right) if left.get(key) != right.get(key))
+    changed = (
+        key for key in set(left) | set(right)
+        if left.get(key) != right.get(key)
+        and not any(_path_allowed(key, (path,)) for path in ignored)
+    )
     result: set[str] = set()
     for path in changed:
-        parents = [field for field in allowed if path == field or path.startswith(field + ".")]
+        parents = [field for field in allowed if _path_allowed(path, (field,))]
         result.add(max(parents, key=len) if parents else path)
     return tuple(sorted(result))
 
 
 def _path_allowed(path: str, fields: tuple[str, ...]) -> bool:
-    return any(path == field or path.startswith(field + ".") or path.startswith(field + "[") for field in fields)
+    normalized = re.sub(r"\[\d+\]", "", path)
+    return any(normalized == field or normalized.startswith(field + ".") for field in fields)
 
 
-def _create_fields(after: dict[str, Any], spec: Mutation, address: str, action: str) -> tuple[str, ...]:
+def _path_root(path: str) -> str:
+    return re.sub(r"\[\d+\]", "", path).split(".", 1)[0]
+
+
+def _create_fields(
+    after: dict[str, Any],
+    spec: Mutation,
+    address: str,
+    action: str,
+    ignored: tuple[str, ...] = (),
+) -> tuple[str, ...]:
     result: set[str] = set()
     for path, value in _flatten(after).items():
-        parents = [field for field in spec.fields if path == field or path.startswith(field + ".")]
+        if any(_path_allowed(path, (ignored_path,)) for ignored_path in ignored):
+            continue
+        parents = [field for field in spec.fields if _path_allowed(path, (field,))]
         if parents:
             result.add(max(parents, key=len))
-        elif path.split(".", 1)[0] in _AUTHORIZATION_FIELDS and value not in (None, False, "", {}, []):
+        elif _path_root(path) in _AUTHORIZATION_FIELDS and value not in (None, False, "", {}, []):
             _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
     return tuple(sorted(result))
 
@@ -371,8 +462,8 @@ def _create_fields(after: dict[str, Any], spec: Mutation, address: str, action: 
 def _metadata_authorized(path: str, spec: Mutation) -> bool:
     return (
         _path_allowed(path, spec.fields)
-        or any(path == field or path.startswith(field + ".") or path.startswith(field + "[") for field, _ in spec.create_identity)
-        or path.split(".", 1)[0] in _AUTHORIZATION_FIELDS
+        or any(_path_allowed(path, (field,)) for field, _ in spec.create_identity)
+        or _path_root(path) in _AUTHORIZATION_FIELDS
     )
 
 
@@ -405,6 +496,91 @@ def _unknown_paths(value: Any, prefix: str = "") -> tuple[str, ...]:
         return tuple(paths)
     _reject("malformed_input")
     return ()
+
+
+def _expression_nodes(value: Any, parts: tuple[str, ...]) -> tuple[Any, ...]:
+    if not parts:
+        return (value,)
+    if isinstance(value, list):
+        if len(value) != 1:
+            return (value,)
+        return _expression_nodes(value[0], parts)
+    if not isinstance(value, dict):
+        return (value,)
+    nodes: list[Any] = []
+    full_path = ".".join(parts)
+    if full_path in value:
+        nodes.extend(_expression_nodes(value[full_path], ()))
+        return tuple(nodes)
+    part = parts[0]
+    if part in value:
+        nodes.extend(_expression_nodes(value[part], parts[1:]))
+    for wrapper in ("expressions", "block"):
+        if wrapper in value:
+            nodes.extend(_expression_nodes(value[wrapper], parts))
+    return tuple(nodes)
+
+
+def _has_configuration_reference(
+    plan: Mapping[str, Any],
+    address: str,
+    paths: tuple[str, ...],
+    reference: str,
+    producer: str,
+) -> bool:
+    configuration = plan.get("configuration")
+    if not isinstance(configuration, dict):
+        return False
+    root_module = configuration.get("root_module")
+    resources = root_module.get("resources") if isinstance(root_module, dict) else None
+    if not isinstance(resources, list):
+        return False
+    matching = [resource for resource in resources if isinstance(resource, dict) and resource.get("address") == address]
+    if len(matching) != 1 or not isinstance(matching[0].get("expressions"), dict):
+        return False
+    expressions = matching[0]["expressions"]
+    nodes: list[Any] = []
+    for path in paths:
+        nodes.extend(_expression_nodes(expressions, tuple(path.split("."))))
+    if len(nodes) != 1 or not isinstance(nodes[0], dict):
+        return False
+    references = nodes[0].get("references")
+    return (
+        isinstance(references, list)
+        and len(references) == 2
+        and all(_is_string(item) for item in references)
+        and set(references) == {reference, producer}
+    )
+
+
+def _validate_derived_unknowns(
+    plan: Mapping[str, Any],
+    pending: list[tuple[str, str, str | None, tuple[str, ...]]],
+    records: list[dict[str, Any]],
+) -> None:
+    producers = {
+        record["address"]
+        for record in records
+        if record["action"] in {"create", "update"}
+    }
+    for address, action, operation_class, paths in pending:
+        spec = CONTRACT.get(address)
+        for path in paths:
+            if spec is None or not _metadata_authorized(path, spec):
+                continue
+            edge = next(
+                (
+                    value
+                    for (edge_address, _), value in _DERIVED_UNKNOWN_EDGES.items()
+                    if edge_address == address and path in value[0]
+                ),
+                None,
+            )
+            if edge is None:
+                _reject("unknown_authorization_value", address=address, action=action, operation_class=operation_class)
+            _, expression_paths, reference, producer = edge
+            if producer not in producers or not _has_configuration_reference(plan, address, expression_paths, reference, producer):
+                _reject("unknown_authorization_value", address=address, action=action, operation_class=operation_class)
 
 
 def _walk_strings(value: Any) -> tuple[str, ...]:
@@ -452,8 +628,94 @@ def _address_identity(address: str) -> tuple[str, str, Any | None]:
     return resource_type, name, index
 
 
+def _validate_resource_shape(resource: Any) -> tuple[str, str, dict[str, Any], dict[str, tuple[str, ...]]]:
+    if not isinstance(resource, dict) or not set(resource).issubset(_RESOURCE_KEYS):
+        _reject("malformed_input")
+    address = resource.get("address")
+    mode = resource.get("mode")
+    change = resource.get("change")
+    if not _is_string(address) or not _is_string(mode) or not isinstance(change, dict):
+        _reject("malformed_input")
+    resource_type, resource_name, resource_index = _address_identity(address)
+    if resource.get("type") != resource_type or resource.get("name") != resource_name:
+        _reject("malformed_input", address=address)
+    if resource_index is None:
+        if "index" in resource:
+            _reject("malformed_input", address=address)
+    elif resource.get("index") != resource_index:
+        _reject("malformed_input", address=address)
+    for key in ("type", "name", "provider_name", "action_reason"):
+        if key in resource and not isinstance(resource[key], str):
+            _reject("malformed_input", address=address)
+    if "index" in resource and not isinstance(resource["index"], (str, int)):
+        _reject("malformed_input", address=address)
+    if "schema_version" in resource and not isinstance(resource["schema_version"], int):
+        _reject("malformed_input", address=address)
+    if "depends_on" in resource and (
+        not isinstance(resource["depends_on"], list)
+        or any(not _is_string(item) for item in resource["depends_on"])
+    ):
+        _reject("malformed_input", address=address)
+    if not set(change).issubset(_CHANGE_KEYS) or not isinstance(change.get("actions"), list):
+        _reject("malformed_input", address=address)
+    if "action_reason" in change and not isinstance(change["action_reason"], str):
+        _reject("malformed_input", address=address)
+    actions = change["actions"]
+    if not actions or any(not _is_string(action) or action not in _ACTIONS for action in actions):
+        _reject("malformed_input", address=address)
+    for key in ("before_identity", "after_identity"):
+        if key in change and not isinstance(change[key], (dict, type(None))):
+            _reject("malformed_input", address=address)
+    if len(actions) == 1 and actions[0] in {"no-op", "update"}:
+        if change.get("before_identity") != change.get("after_identity"):
+            _reject("malformed_input", address=address)
+    if not isinstance(change.get("before"), (dict, type(None))) or not isinstance(change.get("after"), (dict, type(None))):
+        _reject("malformed_input", address=address)
+    if "replace_paths" in change and not isinstance(change["replace_paths"], list):
+        _reject("malformed_input", address=address)
+    metadata_paths: dict[str, tuple[str, ...]] = {}
+    for key in ("after_unknown", "before_sensitive", "after_sensitive"):
+        if key in change:
+            if not isinstance(change[key], dict):
+                _reject("malformed_input", address=address)
+            try:
+                metadata_paths[key] = _unknown_paths(change[key])
+            except _Invalid:
+                _reject("malformed_input", address=address)
+    return address, mode, change, metadata_paths
+
+
+def _validate_resource_drift(value: Any) -> None:
+    if not isinstance(value, list):
+        _reject("malformed_input")
+    seen: set[str] = set()
+    for resource in value:
+        address, mode, _, _ = _validate_resource_shape(resource)
+        if resource.get("provider_name") != EXPECTED_PROVIDER_NAME or mode not in {"managed", "data"}:
+            _reject("malformed_input")
+        if (mode == "data") != address.startswith("data."):
+            _reject("malformed_input")
+        if "previous_address" in resource or "deposed" in resource or address in seen:
+            _reject("malformed_input")
+        seen.add(address)
+
+
 def _resource_ok(value: str, patterns: tuple[str, ...]) -> bool:
     return any(fnmatch.fnmatchcase(value, pattern) for pattern in patterns)
+
+
+def _validate_relevant_attributes(value: Any) -> None:
+    if not isinstance(value, list):
+        _reject("malformed_input")
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {"resource", "attribute"}:
+            _reject("malformed_input")
+        if not _is_string(item["resource"]):
+            _reject("malformed_input")
+        if not isinstance(item["attribute"], list) or any(
+            not _is_string(attribute) for attribute in item["attribute"]
+        ):
+            _reject("malformed_input")
 
 
 def _validate_permission(record: Any, spec: Mutation, address: str) -> tuple[str, str, Mapping[str, str]]:
@@ -476,13 +738,14 @@ def _fingerprint(value: Any) -> str:
 
 
 def _mutation_result(plan_record: Mapping[str, Any], manifest_record: Mapping[str, Any], permissions: list[Mapping[str, Any]]) -> dict[str, Any]:
+    ignored_unknown = plan_record.get("ignored_unknown", ())
     return {
         "address": plan_record["address"],
         "action": plan_record["action"],
         "operation_class": plan_record["operation_class"],
         "changed_fields": list(plan_record["changed_fields"]),
-        "before": plan_record.get("before"),
-        "after": plan_record.get("after"),
+        "before": _without_paths(plan_record.get("before"), ignored_unknown),
+        "after": _without_paths(plan_record.get("after"), ignored_unknown),
         "manifest": dict(manifest_record),
         "permissions": permissions,
     }
@@ -496,45 +759,33 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
     for key in ("format_version", "terraform_version", "timestamp"):
         if key in plan and not isinstance(plan[key], str):
             _reject("malformed_input")
-    if "errored" in plan and not isinstance(plan["errored"], bool):
-        _reject("malformed_input")
+    expected_flags = {"applyable": True, "complete": True, "errored": False}
+    for key, expected in expected_flags.items():
+        if key in plan and not isinstance(plan[key], bool):
+            _reject("malformed_input")
     for key in ("planned_values", "prior_state", "configuration", "output_changes", "variables"):
         if key in plan and not isinstance(plan[key], dict):
             _reject("malformed_input")
     if "checks" in plan and not isinstance(plan["checks"], (dict, list)):
         _reject("malformed_input")
+    if "resource_drift" in plan:
+        _validate_resource_drift(plan["resource_drift"])
+    if "relevant_attributes" in plan:
+        _validate_relevant_attributes(plan["relevant_attributes"])
     records: list[dict[str, Any]] = []
+    pending_unknowns: list[tuple[str, str, str | None, tuple[str, ...]]] = []
     seen: set[str] = set()
     for resource in plan["resource_changes"]:
-        if not isinstance(resource, dict) or not set(resource).issubset(_RESOURCE_KEYS):
-            _reject("malformed_input")
-        address = resource.get("address")
-        mode = resource.get("mode")
-        change = resource.get("change")
-        if not _is_string(address) or not _is_string(mode) or not isinstance(change, dict):
-            _reject("malformed_input")
-        resource_type, resource_name, resource_index = _address_identity(address)
-        if resource.get("type") != resource_type or resource.get("name") != resource_name:
-            _reject("malformed_input", address=address)
+        address, mode, change, metadata_paths = _validate_resource_shape(resource)
+        spec = CONTRACT.get(address)
+        pending_unknowns.append((
+            address,
+            change["actions"][0],
+            spec.operation_class if spec is not None else None,
+            metadata_paths.get("after_unknown", ()),
+        ))
         if resource.get("provider_name") != EXPECTED_PROVIDER_NAME:
             _reject("provider_identity_mismatch", address=address)
-        if resource_index is None:
-            if "index" in resource:
-                _reject("malformed_input", address=address)
-        elif resource.get("index") != resource_index:
-            _reject("malformed_input", address=address)
-        for key in ("type", "name", "provider_name", "action_reason"):
-            if key in resource and not isinstance(resource[key], str):
-                _reject("malformed_input", address=address)
-        if "index" in resource and not isinstance(resource["index"], (str, int)):
-            _reject("malformed_input", address=address)
-        if "schema_version" in resource and not isinstance(resource["schema_version"], int):
-            _reject("malformed_input", address=address)
-        if "depends_on" in resource and (
-            not isinstance(resource["depends_on"], list)
-            or any(not _is_string(item) for item in resource["depends_on"])
-        ):
-            _reject("malformed_input", address=address)
         if address in seen:
             _reject("duplicate_address", address=address)
         seen.add(address)
@@ -542,11 +793,6 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             _reject("moved_resource", address=address)
         if "deposed" in resource:
             _reject("deposed_resource", address=address)
-        if not set(change).issubset(_CHANGE_KEYS) or not isinstance(change.get("actions"), list):
-            _reject("malformed_input", address=address)
-        for key in ("action_reason",):
-            if key in change and not isinstance(change[key], str):
-                _reject("malformed_input", address=address)
         actions = change["actions"]
         if not actions or any(not _is_string(action) or action not in _ACTIONS for action in actions):
             _reject("unsupported_action", address=address)
@@ -555,24 +801,12 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         if len(actions) != 1:
             _reject("replacement", address=address, action="+".join(actions))
         action = actions[0]
-        if not isinstance(change.get("before"), (dict, type(None))) or not isinstance(change.get("after"), (dict, type(None))):
-            _reject("malformed_input", address=address, action=action)
         if "replace_paths" in change:
-            if not isinstance(change["replace_paths"], list):
-                _reject("malformed_input", address=address, action=action)
             if change["replace_paths"]:
                 _reject("replacement", address=address, action=action)
-        metadata_paths: dict[str, tuple[str, ...]] = {}
         for key in ("after_unknown", "before_sensitive", "after_sensitive"):
             if action in {"create", "update"} and key not in change:
                 _reject("malformed_input", address=address, action=action)
-            if key in change:
-                if not isinstance(change[key], dict):
-                    _reject("malformed_input", address=address, action=action)
-                try:
-                    metadata_paths[key] = _unknown_paths(change[key])
-                except _Invalid:
-                    _reject("malformed_input", address=address, action=action)
         if action == "delete":
             _reject("delete_not_permitted", address=address, action=action)
         if _has_production_value(resource):
@@ -586,18 +820,31 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         if action == "read":
             _reject("data_mode_misuse", address=address, action=action)
         if action == "no-op":
-            if _changed_fields(change.get("before"), change.get("after")):
+            if _changed_fields(change.get("before"), change.get("after"), ignored=metadata_paths.get("after_unknown", ())):
                 _reject("unsupported_field_delta", address=address, action=action)
             continue
-        spec = CONTRACT.get(address)
         if spec is None:
             _reject("unsupported_address", address=address, action=action)
         before, after = change.get("before"), change.get("after")
+        ignored_unknown: tuple[str, ...] = ()
         if action == "update" and (before is None or after is None):
             _reject("malformed_input", address=address, action=action)
         if action == "create" and (before is not None or after is None):
             _reject("malformed_input", address=address, action=action)
-        changed = _create_fields(after, spec, address, action) if action == "create" else _changed_fields(before, after, spec.fields)
+        _validate_s3_identity(before, after, spec, address, action)
+        if action == "create":
+            unknown_paths = metadata_paths.get("after_unknown", ())
+            ignored_unknown = tuple(path for path in unknown_paths if not _path_allowed(path, spec.fields))
+            changed = _create_fields(after, spec, address, action, ignored_unknown)
+        else:
+            unknown_paths = metadata_paths.get("after_unknown", ())
+            ignored_unknown = tuple(path for path in unknown_paths if not _path_allowed(path, spec.fields))
+            changed_set = set(_changed_fields(before, after, spec.fields, ignored_unknown))
+            for path in unknown_paths:
+                parents = [field for field in spec.fields if _path_allowed(path, (field,))]
+                if parents:
+                    changed_set.add(max(parents, key=len))
+            changed = tuple(sorted(changed_set))
         if action not in spec.actions:
             _reject("unsupported_action", address=address, action=action, operation_class=spec.operation_class)
         if not changed or any(not _path_allowed(field, spec.fields) for field in changed):
@@ -609,15 +856,12 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 and bool(changed_set & {"s3_bucket", "s3_key", "s3_object_version"})
             ):
                 _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
-        if any(_metadata_authorized(path, spec) for path in metadata_paths.get("after_unknown", ())):
-            _reject("unknown_authorization_value", address=address, action=action, operation_class=spec.operation_class)
         if any(
             _metadata_authorized(path, spec)
             for key in ("before_sensitive", "after_sensitive")
             for path in metadata_paths.get(key, ())
         ):
             _reject("sensitive_authorization_value", address=address, action=action, operation_class=spec.operation_class)
-        _validate_s3_identity(before, after, spec, address, action)
         records.append({
             "address": address,
             "action": action,
@@ -626,7 +870,21 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             "before": before,
             "after": after,
             "spec": spec,
+            "ignored_unknown": ignored_unknown,
         })
+    _validate_derived_unknowns(plan, pending_unknowns, records)
+    if any((address, path) in _DERIVED_UNKNOWN_EDGES for address, _, _, paths in pending_unknowns for path in paths):
+        records.sort(key=lambda record: record["address"])
+    metadata_present = bool(plan["resource_changes"]) or any(
+        key in plan for key in ("applyable", "complete", "errored", "resource_drift", "relevant_attributes")
+    )
+    if metadata_present:
+        if any(key not in plan for key in expected_flags):
+            _reject("malformed_input")
+        if plan["complete"] is not True or plan["errored"] is not False:
+            _reject("malformed_input")
+        if records and plan["applyable"] is not True:
+            _reject("malformed_input")
     return records
 
 
@@ -720,7 +978,7 @@ def _validate_manifest_entry(address: str, declaration: Mapping[str, Any], permi
 def validate_plan(plan: Any, manifest: Any, identity: Any | None = None) -> dict[str, Any]:
     """Validate a plan and release manifest, returning only sanitized data."""
     try:
-        if _has_production_value(plan) or _has_production_value(manifest) or (identity is not None and _has_production_value(identity)):
+        if _has_production_value(manifest) or (identity is not None and _has_production_value(identity)):
             _reject("production_target")
         _validate_identity(identity)
         records = _parse_plan(plan)

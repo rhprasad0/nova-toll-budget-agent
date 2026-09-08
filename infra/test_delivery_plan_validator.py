@@ -5,7 +5,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from infra.delivery_plan_validator import CONTRACT, EXPECTED_IDENTITY, EXPECTED_PROVIDER_NAME, validate_plan as _validate_plan
+from infra.delivery_plan_validator import (
+    CONTRACT,
+    EXPECTED_IDENTITY,
+    EXPECTED_PROVIDER_NAME,
+    LAMBDA_FUNCTION_NAMES,
+    validate_plan as _validate_plan,
+)
 
 
 LAMBDA_ADDRESS = "aws_lambda_function.loader"
@@ -25,7 +31,18 @@ def manifest_header():
     }
 
 
-def _resource_change(address, action, before, after, *, after_unknown=None, before_sensitive=None, after_sensitive=None):
+def _resource_change(
+    address,
+    action,
+    before,
+    after,
+    *,
+    after_unknown=None,
+    before_sensitive=None,
+    after_sensitive=None,
+    before_identity=None,
+    after_identity=None,
+):
     base, _, index_text = address.partition("[")
     resource_type, name = base.split(".")
     record = {
@@ -41,6 +58,8 @@ def _resource_change(address, action, before, after, *, after_unknown=None, befo
             "after_unknown": {} if after_unknown is None else after_unknown,
             "before_sensitive": {} if before_sensitive is None else before_sensitive,
             "after_sensitive": {} if after_sensitive is None else after_sensitive,
+            "before_identity": before_identity,
+            "after_identity": after_identity,
         },
     }
     if index_text:
@@ -48,11 +67,23 @@ def _resource_change(address, action, before, after, *, after_unknown=None, befo
     return record
 
 
+def _plan(resource_changes, **metadata):
+    plan = {
+        "terraform_version": "1.15.8",
+        "applyable": True,
+        "complete": True,
+        "errored": False,
+        "resource_changes": resource_changes,
+    }
+    plan.update(metadata)
+    return plan
+
+
 def lambda_plan(**changes):
-    before = {"filename": "old.zip", "source_code_hash": "old", "s3_bucket": None, "s3_key": None, "s3_object_version": None}
-    after = {"filename": "new.zip", "source_code_hash": "new", "s3_bucket": None, "s3_key": None, "s3_object_version": None}
+    before = {"function_name": LAMBDA_FUNCTION_NAMES["loader"], "filename": "old.zip", "source_code_hash": "old", "s3_bucket": None, "s3_key": None, "s3_object_version": None}
+    after = {"function_name": LAMBDA_FUNCTION_NAMES["loader"], "filename": "new.zip", "source_code_hash": "new", "s3_bucket": None, "s3_key": None, "s3_object_version": None}
     after.update(changes)
-    return {"terraform_version": "1.15.8", "resource_changes": [_resource_change(LAMBDA_ADDRESS, "update", before, after)]}
+    return _plan([_resource_change(LAMBDA_ADDRESS, "update", before, after)])
 
 
 def lambda_manifest(changed_fields=("filename", "source_code_hash")):
@@ -81,6 +112,101 @@ def _set_path(target, path, value):
     current[parts[-1]] = value
 
 
+_DERIVED_FIXTURES = (
+    (
+        "aws_bedrockagentcore_agent_runtime.tollchat",
+        "agent_runtime_artifact.code_configuration.code.s3.version_id",
+        "aws_s3_object.agentcore.version_id",
+        "aws_s3_object.agentcore",
+        ("agent_runtime_artifact.code_configuration.code.s3.version_id",),
+        ("source", "source_hash"),
+    ),
+    (
+        "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+        "agent_runtime_version",
+        "aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_version",
+        "aws_bedrockagentcore_agent_runtime.tollchat",
+        ("agent_runtime_version",),
+        ("agent_runtime_artifact.code_configuration.code.s3.version_id",),
+    ),
+    (
+        "aws_lambda_alias.tollchat_live",
+        "function_version",
+        "aws_lambda_function.tollchat_proxy.version",
+        "aws_lambda_function.tollchat_proxy",
+        ("function_version",),
+        ("s3_object_version", "source_code_hash"),
+    ),
+    (
+        "aws_lambda_function.tollchat_proxy",
+        "s3_object_version",
+        "aws_s3_object.tollchat_proxy.version_id",
+        "aws_s3_object.tollchat_proxy",
+        ("s3_object_version", "source_code_hash"),
+        ("source", "source_hash"),
+    ),
+)
+
+
+def _mutation_change(address, fields, action="update"):
+    before, after = {}, {}
+    spec = CONTRACT[address]
+    for field in fields:
+        _set_path(before, field, "old")
+        _set_path(after, field, "new")
+    for field, value in spec.create_identity:
+        before[field] = after[field] = value
+    if action == "no-op":
+        after = copy.deepcopy(before)
+    return _resource_change(address, action, before, after)
+
+
+def _mutation_manifest(entries):
+    manifest = manifest_header()
+    manifest["mutations"] = []
+    manifest["permissions"] = []
+    for address, action, fields in entries:
+        spec = CONTRACT[address]
+        manifest["mutations"].append({
+            "address": address,
+            "action": action,
+            "operation_class": spec.operation_class,
+            "changed_fields": list(fields),
+        })
+        for permission in spec.permissions:
+            manifest["permissions"].append({
+                "address": address,
+                "action": permission.action,
+                "resource": permission.resources[0],
+                "conditions": dict(permission.conditions),
+            })
+    return manifest
+
+
+def _derived_fixture(index, *, producer_action="update", configuration=True, expression_path=None, reference=None, resource_address=None):
+    consumer, unknown_path, source_reference, producer, consumer_fields, producer_fields = _DERIVED_FIXTURES[index]
+    consumer_change = _mutation_change(consumer, consumer_fields)
+    consumer_change["change"]["after_unknown"] = {unknown_path: True}
+    producer_change = _mutation_change(producer, producer_fields, producer_action)
+    resources = [consumer_change, producer_change]
+    plan = _plan(resources)
+    if configuration:
+        plan["configuration"] = {
+            "root_module": {
+                "resources": [{
+                    "address": resource_address or consumer,
+                    "expressions": {
+                        expression_path or unknown_path: {
+                            "references": [reference or source_reference, producer],
+                        },
+                    },
+                }],
+            },
+        }
+    manifest = _mutation_manifest(((consumer, "update", consumer_fields), (producer, "update", producer_fields)))
+    return plan, manifest
+
+
 class DeliveryPlanValidatorTests(unittest.TestCase):
     def assert_reason(self, reason, plan=None, manifest=None, identity=None):
         result = validate_plan(plan if plan is not None else lambda_plan(), manifest if manifest is not None else lambda_manifest(), identity)
@@ -99,6 +225,335 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         self.assertEqual(result["operation_classes"], ["lambda-code"])
         self.assertEqual(len(result["fingerprint"]), 64)
         self.assertEqual(set(result), {"status", "reason_code", "addresses", "actions", "operation_classes", "fingerprint"})
+
+    def test_lambda_updates_require_exact_development_function_identity(self):
+        fields_by_address = {
+            "aws_lambda_function.loader": ("filename", "source_code_hash"),
+            "aws_lambda_function.publisher": ("filename", "source_code_hash"),
+            "aws_lambda_function.tollchat_proxy": ("s3_object_version", "source_code_hash"),
+        }
+        for address, fields in fields_by_address.items():
+            with self.subTest(address=address):
+                plan = _plan([_mutation_change(address, fields)])
+                manifest = _mutation_manifest(((address, "update", fields),))
+                self.assertEqual(validate_plan(plan, manifest)["status"], "accepted")
+                for invalid in (None, "wrong-development-function"):
+                    with self.subTest(invalid=invalid):
+                        mismatched = copy.deepcopy(plan)
+                        change = mismatched["resource_changes"][0]["change"]
+                        if invalid is None:
+                            change["before"].pop("function_name", None)
+                        else:
+                            change["before"]["function_name"] = invalid
+                        self.assertEqual(
+                            validate_plan(mismatched, manifest)["reason_code"],
+                            "invalid_resource_identity",
+                        )
+
+    def test_accepts_pinned_metadata_and_keeps_drift_out_of_result(self):
+        drift = [_resource_change("aws_iam_role.publisher", "update", {"name": "old"}, {"name": "new"})]
+        plan = lambda_plan()
+        plan.update(
+            resource_drift=drift,
+            relevant_attributes=[{"resource": "aws_iam_role.publisher", "attribute": ["name"]}],
+        )
+        result = validate_plan(plan, lambda_manifest())
+        baseline = validate_plan(lambda_plan(), lambda_manifest())
+        self.assertEqual(result, baseline)
+
+    def test_accepts_equal_identity_metadata_without_output_or_field_deltas(self):
+        plan = lambda_plan()
+        identity = {"id": "stable", "version": 1}
+        change = plan["resource_changes"][0]["change"]
+        change["before_identity"] = identity
+        change["after_identity"] = copy.deepcopy(identity)
+        result = validate_plan(plan, lambda_manifest())
+        self.assertEqual(result, validate_plan(lambda_plan(), lambda_manifest()))
+        self.assertNotIn("before_identity", json.dumps(result))
+        self.assertNotIn("after_identity", json.dumps(result))
+
+        no_op = _resource_change(
+            "aws_acm_certificate.site[0]",
+            "no-op",
+            {"domain_name": "dev.tollchat.ai"},
+            {"domain_name": "dev.tollchat.ai"},
+        )
+        no_op["change"]["before_identity"] = None
+        no_op["change"]["after_identity"] = None
+        result = validate_plan(
+            _plan([no_op], applyable=False),
+            lambda_manifest(),
+        )
+        self.assertEqual(result["status"], "accepted")
+
+    def test_rejects_invalid_mismatched_and_production_identity_metadata(self):
+        for field, value in (
+            ("before_identity", "not-an-object"),
+            ("after_identity", ["not-an-object"]),
+        ):
+            with self.subTest(field=field):
+                plan = lambda_plan()
+                plan["resource_changes"][0]["change"][field] = value
+                self.assert_reason("malformed_input", plan=plan)
+
+        plan = lambda_plan()
+        plan["resource_changes"][0]["change"].update(
+            before_identity={"id": "old"},
+            after_identity={"id": "new"},
+        )
+        self.assert_reason("malformed_input", plan=plan)
+
+        no_op = _resource_change(
+            "aws_acm_certificate.site[0]",
+            "no-op",
+            {"domain_name": "dev.tollchat.ai"},
+            {"domain_name": "dev.tollchat.ai"},
+            before_identity={"id": "old"},
+            after_identity={"id": "new"},
+        )
+        self.assert_reason("malformed_input", plan=_plan([no_op], applyable=False))
+
+        plan = lambda_plan()
+        plan["resource_changes"][0]["change"].update(
+            before_identity={"account": "920534282028"},
+            after_identity={"account": "920534282028"},
+        )
+        result = self.assert_reason("production_target", plan=plan)
+        self.assertNotIn("920534282028", json.dumps(result))
+        self.assertNotIn("before_identity", json.dumps(result))
+        self.assertNotIn("after_identity", json.dumps(result))
+
+    def test_accepts_noop_and_read_resources_with_applyable_false_or_true(self):
+        no_op = _resource_change(
+            "aws_acm_certificate.site[0]",
+            "no-op",
+            {"domain_name": "dev.tollchat.ai"},
+            {"domain_name": "dev.tollchat.ai"},
+        )
+        read = _resource_change("aws_iam_role.publisher", "read", None, None)
+        read["address"] = "data.aws_iam_role.publisher"
+        read["mode"] = "data"
+        for applyable in (False, True):
+            with self.subTest(applyable=applyable):
+                result = validate_plan(
+                    _plan([no_op, read], applyable=applyable),
+                    lambda_manifest(),
+                )
+                self.assertEqual(result["status"], "accepted")
+                self.assertEqual(result["addresses"], [])
+
+    def test_rejects_partial_invalid_flags_and_unapplyable_mutation(self):
+        for missing in ("applyable", "complete", "errored"):
+            with self.subTest(missing=missing):
+                plan = lambda_plan()
+                del plan[missing]
+                self.assert_reason("malformed_input", plan=plan)
+        for field, value in (
+            ("applyable", "true"),
+            ("complete", 1),
+            ("errored", None),
+            ("complete", False),
+            ("errored", True),
+            ("applyable", False),
+        ):
+            with self.subTest(field=field, value=value):
+                plan = lambda_plan()
+                plan[field] = value
+                self.assert_reason("malformed_input", plan=plan)
+
+    def test_rejects_malformed_plan_metadata_and_unknown_keys(self):
+        plan = lambda_plan()
+        plan["unexpected"] = "value"
+        self.assert_reason("malformed_input", plan=plan)
+
+        for value in ({}, "drift", ["not-a-resource"]):
+            with self.subTest(resource_drift=value):
+                plan = lambda_plan()
+                plan["resource_drift"] = value
+                self.assert_reason(
+                    "malformed_input",
+                    plan=plan,
+                )
+
+        valid_drift = _resource_change("aws_iam_role.publisher", "update", {"name": "old"}, {"name": "new"})
+        for mutation in (
+            {"unknown": True},
+            {"provider_name": "registry.terraform.io/hashicorp/random"},
+            {"deposed": "0"},
+        ):
+            with self.subTest(mutation=mutation):
+                drift = copy.deepcopy(valid_drift)
+                drift.update(mutation)
+                plan = lambda_plan()
+                plan["resource_drift"] = [drift]
+                self.assert_reason(
+                    "malformed_input",
+                    plan=plan,
+                )
+
+        for value in ({}, [{"resource": "x"}], [{"resource": "", "attribute": []}], [{"resource": "x", "attribute": [1]}]):
+            with self.subTest(relevant_attributes=value):
+                plan = lambda_plan()
+                plan["relevant_attributes"] = value
+                self.assert_reason(
+                    "malformed_input",
+                    plan=plan,
+                )
+
+    def test_accepts_each_derived_unknown_edge_with_exact_provenance(self):
+        for index in range(len(_DERIVED_FIXTURES)):
+            with self.subTest(index=index):
+                plan, manifest = _derived_fixture(index)
+                result = validate_plan(plan, manifest)
+                self.assertEqual(result["status"], "accepted")
+                self.assertNotIn("after_unknown", json.dumps(result))
+
+        plan, manifest = _derived_fixture(0)
+        result = validate_plan(plan, manifest)
+        changed = copy.deepcopy(plan)
+        _set_path(
+            changed["resource_changes"][0]["change"]["after"],
+            "agent_runtime_artifact.code_configuration.code.s3.version_id",
+            "different",
+        )
+        self.assertNotEqual(result["fingerprint"], validate_plan(changed, manifest)["fingerprint"])
+
+        plan, manifest = _derived_fixture(0, expression_path="agent_runtime_artifact.0.code_configuration.0.code.0.s3.0.version_id")
+        plan["resource_changes"][0]["change"]["after_unknown"] = {
+            "agent_runtime_artifact[0].code_configuration[0].code[0].s3[0].version_id": True,
+        }
+        self.assertEqual(validate_plan(plan, manifest)["status"], "accepted")
+
+    def test_rejects_derived_unknown_without_exact_provenance_or_producer(self):
+        for label, kwargs in (
+            ("missing_configuration", {"configuration": False}),
+            ("wrong_expression_path", {"expression_path": "agent_runtime_artifact.code_configuration.code.s3.key"}),
+            ("wrong_reference", {"reference": "aws_s3_object.agentcore.version_id.value"}),
+            ("different_resource", {"resource_address": "aws_s3_object.agentcore"}),
+        ):
+            with self.subTest(label=label):
+                plan, manifest = _derived_fixture(0, **kwargs)
+                self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+        plan, manifest = _derived_fixture(0)
+        plan["resource_changes"] = plan["resource_changes"][:1]
+        self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+        plan, manifest = _derived_fixture(0, producer_action="no-op")
+        self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+        plan, manifest = _derived_fixture(0)
+        producer = plan["resource_changes"].pop()
+        plan["resource_drift"] = [producer]
+        self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+        plan, manifest = _derived_fixture(0)
+        producer = plan["resource_changes"][1]
+        producer["address"] = "data.aws_s3_object.agentcore"
+        producer["mode"] = "data"
+        producer["change"]["actions"] = ["read"]
+        self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+    def test_rejects_arbitrary_unknown_contract_and_authorization_paths(self):
+        plan, manifest = _derived_fixture(3)
+        change = plan["resource_changes"][0]["change"]
+        change["after_unknown"] = {"source_code_hash": True}
+        self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+        plan, manifest = _derived_fixture(3)
+        change = plan["resource_changes"][0]["change"]
+        change["after_unknown"] = {"filename": True}
+        self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+        plan, manifest = _derived_fixture(3)
+        change = plan["resource_changes"][0]["change"]
+        change["after_unknown"] = {"runtime": True}
+        self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+        plan, manifest = _derived_fixture(0)
+        expression = plan["configuration"]["root_module"]["resources"][0]["expressions"][
+            "agent_runtime_artifact.code_configuration.code.s3.version_id"
+        ]
+        expression["references"].append("aws_s3_object.agentcore.source")
+        self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+        plan, manifest = _derived_fixture(0)
+        expression = plan["configuration"]["root_module"]["resources"][0]["expressions"][
+            "agent_runtime_artifact.code_configuration.code.s3.version_id"
+        ]
+        expression["references"] = [
+            "aws_s3_object.agentcore.version_id",
+            "aws_s3_object.agentcore.version_id",
+        ]
+        self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+        plan, manifest = _derived_fixture(0)
+        plan["configuration"]["root_module"]["resources"][0]["expressions"][
+            "agent_runtime_artifact.0.code_configuration.0.code.0.s3.0.version_id"
+        ] = {"references": [
+            "aws_s3_object.agentcore.version_id",
+            "aws_s3_object.agentcore",
+        ]}
+        self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+        for index, path in (
+            (1, "agent_runtime_version[0]"),
+            (2, "function_version[0]"),
+            (3, "s3_object_version[0]"),
+        ):
+            with self.subTest(index=index, path=path):
+                plan, manifest = _derived_fixture(index)
+                plan["resource_changes"][0]["change"]["after_unknown"] = {path: True}
+                self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+        plan, manifest = _derived_fixture(0)
+        plan["resource_changes"][0]["change"]["after_unknown"] = {
+            "agent_runtime_artifact[1].code_configuration[0].code[0].s3[0].version_id": True,
+        }
+        self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+        for unknown in (
+            {"layers": [True]},
+            {"vpc_config": [{"subnet_ids": [True]}]},
+        ):
+            with self.subTest(unknown=unknown):
+                plan, manifest = _derived_fixture(3)
+                plan["resource_changes"][0]["change"]["after_unknown"] = unknown
+                self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
+
+    def test_ignores_non_contract_computed_unknowns_without_output_or_fingerprint_delta(self):
+        plan = lambda_plan(last_modified="new")
+        plan["resource_changes"][0]["change"]["after_unknown"] = {"last_modified": True}
+        result = validate_plan(plan, lambda_manifest())
+        baseline = validate_plan(lambda_plan(), lambda_manifest())
+        self.assertEqual(result, baseline)
+        self.assertNotIn("last_modified", json.dumps(result))
+
+    def test_ignores_non_contract_computed_unknowns_on_create_fingerprint(self):
+        address = "aws_s3_object.agentcore"
+        after = {
+            "source": "payload",
+            "source_hash": HASH,
+            "bucket": "nova-toll-agentcore-903859731897",
+            "key": "runtime/v2/agentcore-dev.zip",
+        }
+        baseline_resource = _resource_change(address, "create", None, after)
+        unknown_resource = copy.deepcopy(baseline_resource)
+        unknown_resource["change"]["after"]["etag"] = "computed"
+        unknown_resource["change"]["after_unknown"] = {"etag": True}
+        manifest = _mutation_manifest(((address, "create", ("source", "source_hash")),))
+        baseline = validate_plan(_plan([baseline_resource]), manifest)
+        result = validate_plan(_plan([unknown_resource]), manifest)
+        self.assertEqual(result, baseline)
+        self.assertNotIn("etag", json.dumps(result))
+
+    def test_derived_unknown_provenance_is_independent_of_resource_order(self):
+        plan, manifest = _derived_fixture(2)
+        first = validate_plan(plan, manifest)
+        reordered = copy.deepcopy(plan)
+        reordered["resource_changes"].reverse()
+        second = validate_plan(reordered, manifest)
+        self.assertEqual(first, second)
 
     def test_accepts_one_fixture_for_every_contract_entry(self):
         for address, spec in CONTRACT.items():
@@ -120,7 +575,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 if before is not None:
                     before[field] = value
                 after[field] = value
-            plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, action, before, after)]}
+            plan = _plan([_resource_change(address, action, before, after)])
             manifest = {
                 **manifest_header(),
                 "mutations": [{
@@ -246,10 +701,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 before[field] = after[field] = value
             return _resource_change(address, "update", before, after)
 
-        plan = {
-            "terraform_version": "1.15.8",
-            "resource_changes": [update(address) for address in expected_mutations],
-        }
+        plan = _plan([update(address) for address in expected_mutations])
         accepted = validate_plan(plan, manifest)
         self.assertEqual(accepted["status"], "accepted")
         self.assertEqual(accepted["reason_code"], "ok")
@@ -278,6 +730,51 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
     def test_rejects_lambda_configuration_disguised_as_code(self):
         plan = lambda_plan(runtime="python3.13")
         self.assert_reason("unsupported_field_delta", plan=plan)
+
+    def test_accepts_dormant_production_configuration_and_development_resources(self):
+        plan = _plan(
+            [
+                _resource_change(
+                    "aws_acm_certificate.site[0]",
+                    "no-op",
+                    {"domain_name": "dev.tollchat.ai"},
+                    {"domain_name": "dev.tollchat.ai"},
+                ),
+                _resource_change(
+                    "aws_cloudfront_distribution.site",
+                    "no-op",
+                    {"aliases": {"items": ["dev.tollchat.ai"]}},
+                    {"aliases": {"items": ["dev.tollchat.ai"]}},
+                ),
+                _resource_change(
+                    "aws_lambda_function.publisher",
+                    "no-op",
+                    {"environment": {"variables": {"PUBLIC_BASE_URL": "https://dev.tollchat.ai"}}},
+                    {"environment": {"variables": {"PUBLIC_BASE_URL": "https://dev.tollchat.ai"}}},
+                ),
+            ],
+            configuration={
+                "root_module": {
+                    "expressions": {
+                        "account": {"constant_value": "920534282028"},
+                        "environment": {"constant_value": "production"},
+                        "site_url": {"constant_value": "https://tollchat.ai/"},
+                        "www_url": {"constant_value": "https://www.tollchat.ai/"},
+                    }
+                }
+            },
+        )
+        result = validate_plan(plan, lambda_manifest())
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(result["reason_code"], "ok")
+        self.assertEqual(result["addresses"], [])
+        self.assertEqual(result["actions"], [])
+        self.assertEqual(result["operation_classes"], [])
+        self.assertEqual(len(result["fingerprint"]), 64)
+        self.assertEqual(
+            set(result),
+            {"status", "reason_code", "addresses", "actions", "operation_classes", "fingerprint"},
+        )
 
     def test_rejects_malformed_identity_and_input(self):
         self.assert_reason("malformed_input", plan=[])
@@ -319,6 +816,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
     def test_accepts_s3_object_version_only_lambda_update(self):
         address = "aws_lambda_function.tollchat_proxy"
         before = {
+            "function_name": LAMBDA_FUNCTION_NAMES["tollchat_proxy"],
             "filename": None,
             "s3_bucket": "nova-toll-agentcore-903859731897",
             "s3_key": "lambda/v2/chat-proxy-dev.zip",
@@ -326,7 +824,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "source_code_hash": "old",
         }
         after = dict(before, s3_object_version="new", source_code_hash="new")
-        plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "update", before, after)]}
+        plan = _plan([_resource_change(address, "update", before, after)])
         manifest = lambda_manifest(("s3_object_version", "source_code_hash"))
         manifest["mutations"][0]["address"] = address
         manifest["permissions"][0].update({
@@ -355,6 +853,24 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         missing = lambda_plan()
         del missing["resource_changes"][0]["change"]["after"]["s3_key"]
         self.assert_reason("invalid_resource_identity", plan=missing)
+
+    def test_rejects_realized_production_markers_at_boundaries(self):
+        for marker in (
+            "920534282028",
+            "https://tollchat.ai/",
+            "https://www.tollchat.ai/path?x=1#fragment",
+            "production",
+            "prod",
+        ):
+            with self.subTest(marker=marker):
+                result = self.assert_reason(
+                    "production_target",
+                    plan=lambda_plan(filename=marker),
+                )
+                self.assertNotIn(
+                    marker,
+                    json.dumps({key: value for key, value in result.items() if key != "reason_code"}),
+                )
 
     def test_rejects_production_moved_deposed_import_replacement_and_delete(self):
         plan = lambda_plan()
@@ -389,7 +905,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
 
         address = "aws_cloudwatch_metric_alarm.loader_errors"
         spec = CONTRACT[address]
-        plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "update", {"tags": {"old": "1"}}, {"tags": {"new": "1"}})]}
+        plan = _plan([_resource_change(address, "update", {"tags": {"old": "1"}}, {"tags": {"new": "1"}})])
         manifest = {
             **manifest_header(),
             "mutations": [{"address": address, "action": "update", "operation_class": spec.operation_class, "changed_fields": ["tags"]}],
@@ -437,7 +953,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         )
         for address, after, fields in cases:
             spec = CONTRACT[address]
-            plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "create", None, after, after_unknown={"id": True})]}
+            plan = _plan([_resource_change(address, "create", None, after, after_unknown={"id": True})])
             manifest = {
                 **manifest_header(),
                 "mutations": [{"address": address, "action": "create", "operation_class": spec.operation_class, "changed_fields": list(fields)}],
@@ -451,7 +967,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 continue
             fields = spec.fields[:2]
             after = {fields[0]: "source", fields[1]: "hash", **dict(spec.create_identity)}
-            plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "create", None, after)]}
+            plan = _plan([_resource_change(address, "create", None, after)])
             manifest = {
                 **manifest_header(),
                 "mutations": [{"address": address, "action": "create", "operation_class": spec.operation_class, "changed_fields": list(fields)}],
@@ -460,18 +976,18 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             self.assertEqual(validate_plan(plan, manifest)["status"], "accepted", address)
 
             redirected = dict(after, key="runtime/v2/unauthorized.py")
-            redirected_plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "create", None, redirected)]}
+            redirected_plan = _plan([_resource_change(address, "create", None, redirected)])
             self.assertEqual(validate_plan(redirected_plan, manifest)["reason_code"], "invalid_resource_identity", address)
 
             before_update = {fields[0]: "old", fields[1]: "old", **dict(spec.create_identity)}
             after_update = {fields[0]: "new", fields[1]: "new", **dict(spec.create_identity)}
-            update_plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "update", before_update, after_update)]}
+            update_plan = _plan([_resource_change(address, "update", before_update, after_update)])
             update_manifest = dict(manifest, mutations=[dict(manifest["mutations"][0], action="update")])
             self.assertEqual(validate_plan(update_plan, update_manifest)["status"], "accepted", address)
 
             redirected_update_before = dict(before_update, bucket="unauthorized-bucket")
             redirected_update_after = dict(after_update, bucket="unauthorized-bucket")
-            redirected_update = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "update", redirected_update_before, redirected_update_after)]}
+            redirected_update = _plan([_resource_change(address, "update", redirected_update_before, redirected_update_after)])
             self.assertEqual(validate_plan(redirected_update, update_manifest)["reason_code"], "invalid_resource_identity", address)
 
         address = 'aws_s3_object.site_assets["LICENSE.txt"]'
@@ -482,16 +998,16 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "mutations": [{"address": address, "action": "create", "operation_class": spec.operation_class, "changed_fields": ["source", "source_hash"]}],
             "permissions": [{"address": address, "action": p.action, "resource": p.resources[0], "conditions": dict(p.conditions)} for p in spec.permissions],
         }
-        unknown = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "create", None, after, after_unknown={"key": True})]}
+        unknown = _plan([_resource_change(address, "create", None, after, after_unknown={"key": True})])
         self.assertEqual(validate_plan(unknown, manifest)["reason_code"], "unknown_authorization_value")
-        sensitive = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "create", None, after, after_sensitive={"key": True})]}
+        sensitive = _plan([_resource_change(address, "create", None, after, after_sensitive={"key": True})])
         self.assertEqual(validate_plan(sensitive, manifest)["reason_code"], "sensitive_authorization_value")
         update_before = {"source": "old", "source_hash": "old", **dict(spec.create_identity)}
         update_after = {"source": "new", "source_hash": "new", **dict(spec.create_identity)}
         update_manifest = dict(manifest, mutations=[dict(manifest["mutations"][0], action="update")])
-        unknown_update = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "update", update_before, update_after, after_unknown={"key": True})]}
+        unknown_update = _plan([_resource_change(address, "update", update_before, update_after, after_unknown={"key": True})])
         self.assertEqual(validate_plan(unknown_update, update_manifest)["reason_code"], "unknown_authorization_value")
-        sensitive_update = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "update", update_before, update_after, after_sensitive={"bucket": True})]}
+        sensitive_update = _plan([_resource_change(address, "update", update_before, update_after, after_sensitive={"bucket": True})])
         self.assertEqual(validate_plan(sensitive_update, update_manifest)["reason_code"], "sensitive_authorization_value")
 
     def test_plan_identity_and_type_name_are_bound(self):
