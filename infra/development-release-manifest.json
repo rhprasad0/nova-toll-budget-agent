@@ -88,9 +88,9 @@
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
     "v2/lambdas/publisher/handler.py": "4d3570e0c014301dc4cf20d93a0d9f8ebdac5ce9e073bcb25be138331b2db396",
     "v2/pyproject.toml": "f10d2072ae861df7b129813407c61b7b846639c0a67ba1a67b9a5833c4f5d4b1",
-    "v2/scripts/build_agentcore_zips.sh": "800ad92ec9f88ea47855d66bfe5c06b4c93ea0eda1550157391b476c533aa9a4",
-    "v2/scripts/build_loader_zip.sh": "05c9d906c20b9d6cbbb95330d5dea1885dfa83b2ea33b724702fefdb134d1306",
-    "v2/scripts/build_publisher_zip.sh": "88272b2f2a67134a23821e45a8f000ac9a1fbbfe3a7f147ce263696dba2d237f",
+    "v2/scripts/build_agentcore_zips.sh": "d731301c6d376a6af9a5fe9091e991326e671aeaa62b1969fd8a124bb8aecc9e",
+    "v2/scripts/build_loader_zip.sh": "018e0f5ff41f8619d8903481928bfb40e765c9356af132cf6104a4ad40fa5646",
+    "v2/scripts/build_publisher_zip.sh": "174e88fd65a997a16c08cf7f838105b7d19a2e3d1fc0a63d460ad43bcaf4834b",
     "v2/scripts/loader-requirements.in": "38c314f1e9470587a6b566f2c8ed28cdf2ed3df2d87d349c3cbfc9f5a707230e",
     "v2/scripts/loader-requirements.txt": "7e35ab33589fae931d8bac07a7e32f868c02c4f37b629eb4208075a98fd918b4",
     "v2/scripts/publisher-requirements.in": "443323b60ce646abe57f80efe6a842af9467d089d73459b84830450825fabdcc",
@@ -98,10 +98,10 @@
     "v2/uv.lock": "a4fe1765a080d8c07154e28265c125fe1b2ceaf2d9f7d353e255e3988e0ce137"
   },
   "packages": {
-    "agentcore.zip": "f5f6cdf7992f31c973b7510d18ae2ae8aa7d93d8ed2ba092e12ae0eb0cfce86c",
-    "chat-proxy.zip": "9fa677e9ff78282c6e01b3cc61e7217678f670a2a9dfc755b90b96761d57e79a",
-    "loader.zip": "8ad4e76b217be6375fa362f0aa761e6834de3c14d9e191b32d4333581bf098c6",
-    "publisher.zip": "65262d9eb1952995f6ba26dca8b22a8965cb36680b060c9658248144a2117580"
+    "agentcore.zip": "d391659d32f46c418b23104b8ea103679000cb7077309d3684d83e0d953f490f",
+    "chat-proxy.zip": "de0a8bcaa0a01fb993c11f9550ee75aa08578838889d3e4145fd0044dfb9afff",
+    "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
+    "publisher.zip": "0d7e95193f2d6deb9816b132b7bb6774e932f643d237aac0d7a8e1aab8245064"
   },
   "mutations": [],
   "permissions": []
