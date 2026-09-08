@@ -34,18 +34,6 @@ regexes = [
 ]
 
 [[allowlists]]
-description = "Public corpus route identity is a non-secret SHA-256 digest"
-condition = "AND"
-paths = [
-  '''^v2/eval/golden/manifest-v2\.json$''',
-]
-regexTarget = "line"
-regexes = [
-  '''^\s*"route_key"\s*:\s*"[0-9a-f]{64}"\s*,?\s*$''',
-]
-targetRules = ["generic-api-key"]
-
-[[allowlists]]
 description = "Reviewed development release fingerprints are SHA-256 digests"
 condition = "AND"
 paths = [
