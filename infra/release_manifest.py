@@ -79,6 +79,28 @@ EXACT_INPUTS = {
     "v2/uv.lock",
 }
 INPUT_PREFIXES = ("v2/agent/assets/", "v2/agent_tools/")
+BUNDLE_MARKER = "v2/scripts/build_release_bundle.sh"
+BUNDLE_FIXED_INPUTS = {
+    BUNDLE_MARKER,
+    "v2/scripts/verify_release_bundle.py",
+    "v2/agent/robots.txt",
+    "v2/db/application-schemas.json",
+    "v2/db/migration-baselines.json",
+    "v2/db/schema.sql",
+    "v2/db/analysis.sql",
+    "v2/db/roles.sql",
+    "v2/db/oracle/schema.sql",
+    "v2/db/oracle/data.sql",
+}
+BUNDLE_OPTIONAL_INPUTS = {
+    "v2/scripts/check_development_admission.py",
+    "v2/scripts/check_development_release.py",
+    "v2/scripts/development_deployment_status.py",
+    "v2/scripts/run_development_migrations.py",
+    "v2/scripts/run_development_migrations_workflow.sh",
+    ".github/workflows/v2-development-migrations.yml",
+}
+BUNDLE_INPUT_PREFIXES = ("v2/db/migrations/",)
 FIXED_BACKENDS = {
     "infra/backend.development.hcl": """bucket       = "nova-toll-tfstate-903859731897"
 key          = "nova-toll/development/terraform.tfstate"
@@ -165,12 +187,18 @@ def _valid_relative(path: str) -> bool:
     )
 
 
-def _selected(path: str) -> bool:
-    return (
+def _selected(path: str, bundle_enabled: bool = False) -> bool:
+    selected = (
         path in EXACT_INPUTS
         or any(path.startswith(prefix) for prefix in INPUT_PREFIXES)
         or (path.startswith("infra/") and path.endswith(".tf"))
         or (path.startswith("v2/infra/") and path.endswith(".tf"))
+    )
+    if selected or not bundle_enabled:
+        return selected
+    return path in BUNDLE_FIXED_INPUTS | BUNDLE_OPTIONAL_INPUTS or any(
+        path.startswith(prefix) and path.endswith(".sql")
+        for prefix in BUNDLE_INPUT_PREFIXES
     )
 
 
@@ -181,13 +209,13 @@ def _tracked_inputs(repo_root: Path) -> list[str]:
             check=True,
             capture_output=True,
         ).stdout
-        paths = sorted(
-            path.decode("utf-8")
-            for path in output.split(b"\0")
-            if path and _selected(path.decode("utf-8"))
-        )
+        tracked = [path.decode("utf-8") for path in output.split(b"\0") if path]
     except (OSError, UnicodeError, subprocess.CalledProcessError):
         _reject("inventory_unavailable")
+    bundle_enabled = BUNDLE_MARKER in tracked
+    if bundle_enabled and not BUNDLE_FIXED_INPUTS.issubset(tracked):
+        _reject("inventory_incomplete")
+    paths = sorted(path for path in tracked if _selected(path, bundle_enabled))
     if not paths or set(EXACT_INPUTS) - set(paths):
         _reject("inventory_incomplete")
     return paths
@@ -226,7 +254,10 @@ def _validate_manifest(value: Any) -> tuple[dict[str, str], dict[str, str]]:
     ):
         _reject("manifest_schema_invalid")
     contract_result = validate_plan(
-        {"terraform_version": PROVIDER_IDENTITY["terraform_version"], "resource_changes": []},
+        {
+            "terraform_version": PROVIDER_IDENTITY["terraform_version"],
+            "resource_changes": [],
+        },
         value,
         PROVIDER_IDENTITY,
     )
