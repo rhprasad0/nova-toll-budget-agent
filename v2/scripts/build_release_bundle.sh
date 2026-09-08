@@ -32,6 +32,8 @@ for package in loader publisher agentcore chat-proxy; do
   fi
 done
 
+(cd "$BUILD" && sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip > DEPLOYMENT_SHA256SUMS)
+
 python3 "$V2_ROOT/scripts/verify_release_bundle.py" create \
   --root "$ROOT" --release "$RELEASE" --commit "$COMMIT"
 echo "built immutable release bundle at $RELEASE"

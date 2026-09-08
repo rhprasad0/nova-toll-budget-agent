@@ -8,8 +8,12 @@ import sys
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+release_manifest = cast(Any, importlib.import_module("infra.release_manifest"))
 
 SPEC = importlib.util.spec_from_file_location(
     "verify_release_bundle",
@@ -103,6 +107,51 @@ def test_valid_bundle_is_verified_and_extracted(
     assert (
         output / "v2/infra/build/loader.zip"
     ).read_bytes() == b"v2/infra/build/loader.zip"
+
+
+def test_transport_valid_bundle_is_rejected_by_reviewed_payload_binding(
+    fixture_root: Path, tmp_path: Path
+) -> None:
+    archive, release = _bundle(fixture_root, tmp_path)
+    reviewed_inputs = {
+        path: hashlib.sha256((fixture_root / path).read_bytes()).hexdigest()
+        for path in bundle.expected_payload_paths(fixture_root)
+        if not path.startswith("v2/infra/build/")
+    }
+    reviewed_packages = {
+        name: hashlib.sha256(
+            (fixture_root / f"v2/infra/build/{name}").read_bytes()
+        ).hexdigest()
+        for name in release_manifest.PACKAGES
+    }
+
+    changed = release / "v2/agent/dev_chat.html"
+    changed.write_bytes(b"reviewed authority differs\n")
+    manifest_path = release / bundle.MANIFEST_NAME
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    next(
+        record
+        for record in manifest["files"]
+        if record["path"] == "v2/agent/dev_chat.html"
+    )["sha256"] = hashlib.sha256(changed.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    _archive(release, archive)
+
+    output = tmp_path / "overlay"
+    bundle.verify_bundle(
+        archive,
+        output,
+        fixture_root,
+        _digest(archive),
+        COMMIT,
+        {"pricing": "1.3.0", "oracle": "1.14.0"},
+    )
+    with pytest.raises(
+        release_manifest.Invalid, match=r"^bundle_payload_digest_mismatch$"
+    ):
+        release_manifest._verify_bundle_payload(
+            output, reviewed_inputs, reviewed_packages
+        )
 
 
 @pytest.mark.parametrize(

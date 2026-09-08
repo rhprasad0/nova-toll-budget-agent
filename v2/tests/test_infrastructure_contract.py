@@ -4074,6 +4074,19 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "name" not in proof_download_with
     assert "infra/release_manifest.py" in deploy_source
     assert "development-release-evidence.json" in deploy_source
+    assert "--bundle-root v2/infra/build/release" in build_source
+    assert '--bundle-root "$RUNNER_TEMP/release-overlay"' in deploy_source
+    assert 'find "$GITHUB_WORKSPACE/v2/infra"' not in deploy_source
+    assert '"$GITHUB_WORKSPACE/v2/infra/"*.tf' in deploy_source
+    for reviewed_scaffold in (
+        '"$GITHUB_WORKSPACE/v2/infra/.terraform.lock.hcl"',
+        '"$GITHUB_WORKSPACE/v2/infra/backend.development.hcl"',
+        '"$GITHUB_WORKSPACE/v2/infra/development.tfvars"',
+    ):
+        assert reviewed_scaffold in deploy_source
+    assert "backend.production.hcl" not in deploy_source
+    assert "known_managed" not in deploy_source
+    assert "known_data" not in deploy_source
     assert 'git show "${GITHUB_SHA}:infra/development-release-manifest.json"' in source
     assert (
         source.index("Build reviewed deployment packages")
@@ -4206,8 +4219,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
         "apply",
     ):
         assert f'"$TF_LOG_DIR/{stage}.log"' in deploy_source
-    assert 'rm -rf -- "$TF_LOG_DIR"' in deploy_source
-    assert "terraform stage failed:" in deploy_source
+    assert '"$RUNNER_TEMP/development-terraform-logs"' in source
     assert deploy_source.index(
         'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"'
     ) < deploy_source.index(
@@ -4530,7 +4542,7 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
     assert "known_action" not in source
     assert "if ! jq -e" not in source
     assert "infra/delivery_plan_validator.py" in source
-    assert 'MANIFEST="$PACKAGE_DIR/development-release-manifest.json"' in source
+    assert 'MANIFEST="$EVIDENCE_DIR/development-release-manifest.json"' in source
     assert 'IDENTITY="$RUNNER_TEMP/development-plan-identity.json"' in source
     assert (
         'test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST" || MANIFEST_VALID=false'
@@ -4553,18 +4565,39 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
     assert source.index('PROOF="$RUNNER_TEMP/protected-main-oidc.json"') < source.index(
         'test -s "$PROOF"'
     )
-    plan = source.index('terraform -chdir=v2/infra plan -input=false -out="$PLAN"')
-    show = source.index('terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"')
+    plan = source.index(
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
+    )
+    show = source.index(
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON"'
+    )
     manifest_check = source.index('test -f "$MANIFEST"', show)
     validator = source.index("python3 infra/delivery_plan_validator.py", manifest_check)
-    assert 'terraform -chdir=v2/infra apply -input=false "$PLAN"' in source
-    apply = source.index('terraform -chdir=v2/infra apply -input=false "$PLAN"')
-    assert plan < show < manifest_check < validator < apply
-    assert source.count('terraform -chdir=v2/infra plan -input=false -out="$PLAN"') == 1
     assert (
-        source.count('terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"') == 1
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"' in source
     )
-    assert source.count('terraform -chdir=v2/infra apply -input=false "$PLAN"') == 1
+    apply = source.index(
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
+    )
+    assert plan < show < manifest_check < validator < apply
+    assert (
+        source.count(
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
+        )
+        == 1
+    )
+    assert (
+        source.count(
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON"'
+        )
+        == 1
+    )
+    assert (
+        source.count(
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
+        )
+        == 1
+    )
     assert '"$PLAN" >"$APPLY_LOG" 2>&1' in source
 
 
@@ -4581,8 +4614,8 @@ def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_pla
         ),
         ('test "$VALIDATOR_STATUS" -eq 0', 'test "$VALIDATOR_STATUS" -ne 0'),
         (
-            'terraform -chdir=v2/infra apply -input=false "$PLAN" >"$APPLY_LOG" 2>&1',
-            'terraform -chdir=v2/infra apply -input=false "$OTHER_PLAN" >"$APPLY_LOG" 2>&1',
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN" >"$APPLY_LOG" 2>&1',
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$OTHER_PLAN" >"$APPLY_LOG" 2>&1',
         ),
         (
             'python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" >"$VALIDATION"',
@@ -4598,8 +4631,8 @@ def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_pla
     _must_reject(
         _assert_development_delivery_validator_contract,
         DEVELOPMENT_DELIVERY_WORKFLOW,
-        'terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"\n          MANIFEST_VALID=true',
-        'terraform -chdir=v2/infra apply -input=false "$PLAN"\n          terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"\n          MANIFEST_VALID=true',
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"\n          MANIFEST_VALID=true',
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"\n          terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"\n          MANIFEST_VALID=true',
     )
 
 
