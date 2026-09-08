@@ -300,6 +300,7 @@ BEGIN
             interval '1 day'
         ) AS candidate(day)
         WHERE extract(isodow FROM day) BETWEEN 1 AND 5
+          AND oracle.i66_tolling_active('EB', day::date + time '08:00')
         ORDER BY day DESC
         LIMIT 5
     ) AS recent_weekdays;
