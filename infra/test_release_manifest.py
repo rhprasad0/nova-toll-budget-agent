@@ -4,11 +4,11 @@ import json
 import subprocess
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
 
 from infra import release_manifest
-
 
 SHA = "1" * 40
 RUN = "12345"
@@ -56,6 +56,31 @@ class ReleaseManifestTests(unittest.TestCase):
 
     def write_manifest(self):
         self.manifest.write_text(json.dumps(self.manifest_value), encoding="utf-8")
+
+    def track(self, relative, content=b"reviewed\n"):
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        subprocess.run(["git", "-C", self.root, "add", relative], check=True)
+        return path
+
+    def bundle_context(self):
+        values = {
+            "EXACT_INPUTS": {"input.txt"},
+            "INPUT_PREFIXES": (),
+            "BUNDLE_MARKER": "bundle.sh",
+            "BUNDLE_FIXED_INPUTS": {
+                "bundle.sh",
+                "bundle-helper.py",
+                "db/schema.sql",
+            },
+            "BUNDLE_OPTIONAL_INPUTS": {"future.py"},
+            "BUNDLE_INPUT_PREFIXES": ("migrations/",),
+        }
+        stack = ExitStack()
+        for name, value in values.items():
+            stack.enter_context(mock.patch.object(release_manifest, name, value))
+        return stack
 
     def args(self, **changes):
         values = {
@@ -171,6 +196,88 @@ class ReleaseManifestTests(unittest.TestCase):
         self.manifest.unlink()
         self.manifest.symlink_to(self.root / "missing.json")
         self.assert_rejected("manifest_unreadable")
+
+    def test_untracked_bundle_marker_preserves_old_inventory(self):
+        marker = self.root / "v2/scripts/build_release_bundle.sh"
+        marker.parent.mkdir(parents=True)
+        marker.write_text("untracked\n", encoding="utf-8")
+        with (
+            mock.patch.object(release_manifest, "EXACT_INPUTS", {"input.txt"}),
+            mock.patch.object(release_manifest, "INPUT_PREFIXES", ()),
+        ):
+            self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
+
+    def test_tracked_bundle_marker_selects_bounded_inventory(self):
+        tracked = {"input.txt", "bundle.sh", "bundle-helper.py", "db/schema.sql"}
+        for relative in tracked - {"input.txt"}:
+            self.track(relative)
+        self.track("migrations/002.sql")
+        self.track("future.py")
+        self.track("unknown.txt")
+        with self.bundle_context():
+            selected = release_manifest._tracked_inputs(self.root)
+        self.assertEqual(
+            selected,
+            sorted(
+                {
+                    "input.txt",
+                    "bundle.sh",
+                    "bundle-helper.py",
+                    "db/schema.sql",
+                    "migrations/002.sql",
+                    "future.py",
+                }
+            ),
+        )
+        self.assertNotIn("unknown.txt", selected)
+
+    def test_tracked_bundle_marker_requires_fixed_inputs(self):
+        self.track("bundle.sh")
+        with (
+            self.bundle_context(),
+            self.assertRaisesRegex(release_manifest.Invalid, "^inventory_incomplete$"),
+        ):
+            release_manifest._tracked_inputs(self.root)
+
+    def test_bundle_manifest_rejects_omission_and_changed_payload(self):
+        for relative in (
+            "bundle.sh",
+            "bundle-helper.py",
+            "db/schema.sql",
+            "migrations/001.sql",
+        ):
+            self.track(relative)
+        input_paths = sorted(
+            {
+                "input.txt",
+                "bundle.sh",
+                "bundle-helper.py",
+                "db/schema.sql",
+                "migrations/001.sql",
+            }
+        )
+        inputs = {relative: digest(self.root / relative) for relative in input_paths}
+        self.manifest_value["deployment_inputs"] = inputs
+        self.write_manifest()
+        with self.bundle_context():
+            self.assertEqual(self.verify()["status"], "accepted")
+            (self.root / "evidence.json").unlink()
+            self.manifest_value["deployment_inputs"].pop("migrations/001.sql")
+            self.write_manifest()
+            with self.assertRaisesRegex(
+                release_manifest.Invalid, "^inventory_mismatch$"
+            ):
+                self.verify()
+            self.manifest_value["deployment_inputs"]["migrations/001.sql"] = digest(
+                self.root / "migrations/001.sql"
+            )
+            self.write_manifest()
+            self.track("migrations/001.sql", b"changed\n")
+            (self.root / "evidence.json").unlink(missing_ok=True)
+            with self.assertRaisesRegex(
+                release_manifest.Invalid, "^input_digest_mismatch$"
+            ):
+                self.verify()
 
 
 if __name__ == "__main__":
