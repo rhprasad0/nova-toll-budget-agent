@@ -207,6 +207,10 @@ class ReleaseManifestTests(unittest.TestCase):
         ):
             self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
 
+    def test_bundle_selects_archived_robots_input(self):
+        self.assertIn("v2/agent/robots.txt", release_manifest.BUNDLE_FIXED_INPUTS)
+        self.assertTrue(release_manifest._selected("v2/agent/robots.txt", True))
+
     def test_tracked_bundle_marker_selects_bounded_inventory(self):
         tracked = {"input.txt", "bundle.sh", "bundle-helper.py", "db/schema.sql"}
         for relative in tracked - {"input.txt"}:

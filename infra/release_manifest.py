@@ -83,6 +83,7 @@ BUNDLE_MARKER = "v2/scripts/build_release_bundle.sh"
 BUNDLE_FIXED_INPUTS = {
     BUNDLE_MARKER,
     "v2/scripts/verify_release_bundle.py",
+    "v2/agent/robots.txt",
     "v2/db/application-schemas.json",
     "v2/db/migration-baselines.json",
     "v2/db/schema.sql",

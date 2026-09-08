@@ -27,7 +27,7 @@
     "infra/outputs.tf": "22cefa1936b1c41a9b41146bf7210c7d42b9f4666c775bfa77b5940e1a8efb74",
     "infra/providers.tf": "698c60284f5f3621a8fdd47ae29684254d54bb1b57db4fbe5aa42f453a8b57e5",
     "infra/rds.tf": "52085157d4398808227e100f56481ceae1669a8394f98b326fa219c1413a4d40",
-    "infra/release_manifest.py": "e9f163196b9f8502067eecab65627e4bba46623e38b1a93dcf9e36090e621b15",
+    "infra/release_manifest.py": "7eccbb139c28d46fc764111c4be8e8f20f47001ee497174115ca108fc24a5768",
     "infra/s3.tf": "e74b230347830bd268099bdacad255656f4c60d68d53159e1240a8b56dbc2d6d",
     "infra/ssm.tf": "84d24c7793f7ac21208a7a67b4796cd4a107dd22ff4d01d6ae05c3390e88c68e",
     "infra/tailscale.tf": "2b306a832a00b1d63b48a16c1ec63c13f3f18ab9f7ccec770230d6e1c43e6a4c",
