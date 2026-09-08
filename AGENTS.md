@@ -26,6 +26,7 @@ app if it would actually help.
 
 - Do all code and content changes in `.worktrees/`, not on `main`.
 - `main` is protected. Changes ship through a PR that passes CI.
+- Run only tests that are relevant to the task at hand.
 - Do not open a PR or push without user authorization.
 - When authorized to open a PR: open it ready for review, never as draft.
 - Do not request additional Codex GitHub reviews (`@codex review` or
