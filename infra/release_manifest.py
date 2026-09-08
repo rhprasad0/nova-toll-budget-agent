@@ -95,9 +95,11 @@ BUNDLE_FIXED_INPUTS = {
 BUNDLE_OPTIONAL_INPUTS = {
     "v2/scripts/check_development_admission.py",
     "v2/scripts/check_development_release.py",
+    "v2/scripts/classify_deployment_error.py",
     "v2/scripts/development_deployment_status.py",
     "v2/scripts/run_development_migrations.py",
     "v2/scripts/run_development_migrations_workflow.sh",
+    "v2/scripts/run_private_stage.sh",
     ".github/workflows/v2-development-migrations.yml",
 }
 BUNDLE_INPUT_PREFIXES = ("v2/db/migrations/",)
