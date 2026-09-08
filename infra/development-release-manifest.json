@@ -8,7 +8,7 @@
     "lock_identity": "V2-AWS60"
   },
   "deployment_inputs": {
-    ".github/workflows/v2-development-delivery.yml": "4aa14e35b0c5847ce734cec5724300456f86dad4a83dd3b3b3e91ee3c335cc02",
+    ".github/workflows/v2-development-delivery.yml": "81bdc752022a5f1d9aae28650dc91d99d3266526307cfe631038c8ff70dc24d5",
     ".github/workflows/v2-development-migrations.yml": "16b32c0f47ca15ee63012fbb8b15c9dd409ee561d3b235fdbe071349b8dc828a",
     ".github/workflows/v2-development-plan.yml": "67be30fd054358f1a08c689a8ba7ce32dc4c312fb3b37d56b2c4fd3934434781",
     "infra/.terraform.lock.hcl": "798415e2b72a761023f0ee096521a29223173428c99de7e4c50103e726eef4d8",
@@ -133,6 +133,8 @@
     "v2/scripts/build_publisher_zip.sh": "174e88fd65a997a16c08cf7f838105b7d19a2e3d1fc0a63d460ad43bcaf4834b",
     "v2/scripts/build_release_bundle.sh": "f5ea3703dd9e6ca7c1b5abd21a36f2322cf34a3373100c025f296425905e0540",
     "v2/scripts/check_development_admission.py": "3d4f6a8ebab3d0aaf6c92311847b689cf35a278925be67a03f75cec64ea891d5",
+    "v2/scripts/check_development_release.py": "693558e1eca17cd83645d3ac0762210ca318d3d633579e7161bf5d32f6d7fd81",
+    "v2/scripts/development_deployment_status.py": "e543cd88f8c13ae1b3839e9db45bf27cd1a5da1c407f177ab02af95af3783b31",
     "v2/scripts/loader-requirements.in": "38c314f1e9470587a6b566f2c8ed28cdf2ed3df2d87d349c3cbfc9f5a707230e",
     "v2/scripts/loader-requirements.txt": "7e35ab33589fae931d8bac07a7e32f868c02c4f37b629eb4208075a98fd918b4",
     "v2/scripts/publisher-requirements.in": "443323b60ce646abe57f80efe6a842af9467d089d73459b84830450825fabdcc",
