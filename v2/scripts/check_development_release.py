@@ -513,6 +513,12 @@ def smoke(values: dict[str, Any]) -> None:
         _diagnostic("pass", "reused")
     finally:
         # Attempt cleanup of both jars even when a prior request or reset failed.
+        original_context = (
+            _current_stage,
+            _current_subcheck,
+            _current_attempt,
+            _current_elapsed,
+        )
         errors: list[bool] = []
         for session in (first, second):
             if any(item.name == COOKIE for item in session):
@@ -523,6 +529,8 @@ def smoke(values: dict[str, Any]) -> None:
                 except (ValueError, KeyError, OSError):
                     _diagnostic("fail", "reset_failed")
                     errors.append(True)
+        if not errors:
+            _select(*original_context)
         require(not errors, "reset_failed")
 
 
