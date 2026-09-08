@@ -75,6 +75,47 @@ jobs:
           done
           (cd infra/build && sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip > DEPLOYMENT_SHA256SUMS)
 
+      - name: Prepare immutable candidate evidence inputs
+        env:
+          CANDIDATE_SHA: ${{ steps.resolve.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test ! -e "$GITHUB_WORKSPACE/trusted-build"
+          test -f v2/infra/build/DEPLOYMENT_SHA256SUMS && test ! -L v2/infra/build/DEPLOYMENT_SHA256SUMS
+          EVIDENCE_DIR="$RUNNER_TEMP/v2-development-checksums"
+          mkdir "$EVIDENCE_DIR"
+          git show "${CANDIDATE_SHA}:infra/development-release-manifest.json" \
+            >"$EVIDENCE_DIR/development-release-manifest.json"
+          cp -P -- v2/infra/build/DEPLOYMENT_SHA256SUMS "$EVIDENCE_DIR/"
+
+      - name: Checkout trusted manifest verifier after candidate build
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: trusted-build
+          persist-credentials: false
+
+      - name: Verify reviewed manifest and write runtime evidence
+        env:
+          CANDIDATE_SHA: ${{ steps.resolve.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          EVIDENCE_DIR="$RUNNER_TEMP/v2-development-checksums"
+          python3 trusted-build/infra/release_manifest.py \
+            --manifest "$EVIDENCE_DIR/development-release-manifest.json" \
+            --package-dir v2/infra/build \
+            --checksums "$EVIDENCE_DIR/DEPLOYMENT_SHA256SUMS" \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --write-evidence "$EVIDENCE_DIR/development-release-evidence.json" \
+            >"$RUNNER_TEMP/development-release-verification.json"
+          jq -e '.status == "accepted" and .reason_code == "ok"' \
+            "$RUNNER_TEMP/development-release-verification.json" >/dev/null
+
       - name: Upload candidate packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -90,8 +131,14 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: v2-development-checksums-${{ github.run_id }}-${{ steps.resolve.outputs.candidate_sha }}
-          path: v2/infra/build/DEPLOYMENT_SHA256SUMS
+          path: ${{ runner.temp }}/v2-development-checksums
           if-no-files-found: error
+
+      - name: Cleanup candidate evidence
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/v2-development-checksums" \
+            "$RUNNER_TEMP/development-release-verification.json" "$GITHUB_WORKSPACE/trusted-build"
 
   plan:
     name: Read-only development application plan
@@ -168,6 +215,24 @@ jobs:
           name: v2-development-checksums-${{ github.run_id }}-${{ needs.build.outputs.candidate_sha }}
           path: ${{ runner.temp }}/v2-development-packages
 
+      - name: Verify candidate release binding without credentials
+        env:
+          CANDIDATE_SHA: ${{ steps.binding.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          STAGING="$RUNNER_TEMP/v2-development-packages"
+          python3 trusted/infra/release_manifest.py \
+            --manifest "$STAGING/development-release-manifest.json" \
+            --package-dir "$STAGING" \
+            --checksums "$STAGING/DEPLOYMENT_SHA256SUMS" \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --evidence "$STAGING/development-release-evidence.json" \
+            >"$RUNNER_TEMP/development-release-verification.json"
+          jq -e '.status == "accepted" and .reason_code == "ok"' \
+            "$RUNNER_TEMP/development-release-verification.json" >/dev/null
+
       - name: Assume read-only development-plan identity
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
@@ -192,12 +257,13 @@ jobs:
           SHOW_LOG="$RUNNER_TEMP/development.tfshow.log"
           FOUNDATION_VALIDATE_LOG="$RUNNER_TEMP/development-foundation-validate.log"
           IDENTITY="$RUNNER_TEMP/development-plan-identity.json"
-          MANIFEST="$RUNNER_TEMP/development-release-manifest.json"
+          MANIFEST="$STAGING/development-release-manifest.json"
           VALIDATION="$RUNNER_TEMP/development-plan-validation.json"
           cleanup() {
             rm -rf -- "$STAGING" "$FOUNDATION_OUTPUT" "$FOUNDATION_VARS" "$FOUNDATION_INIT_LOG" \
               "$FOUNDATION_OUTPUT_LOG" "$APPLICATION_INIT_LOG" "$PLAN" "$PLAN_LOG" "$PLAN_JSON" \
-              "$SHOW_LOG" "$FOUNDATION_VALIDATE_LOG" "$IDENTITY" "$MANIFEST" "$VALIDATION" \
+              "$SHOW_LOG" "$FOUNDATION_VALIDATE_LOG" "$IDENTITY" "$VALIDATION" \
+              "$RUNNER_TEMP/development-release-verification.json" \
               "$GITHUB_WORKSPACE/trusted/infra/.terraform" "$GITHUB_WORKSPACE/trusted/v2/infra/.terraform"
             unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
           }
@@ -256,3 +322,18 @@ jobs:
           test "$MANIFEST_VALID" = true
           test "$IDENTITY_VALID" = true
           test "$VALIDATOR_STATUS" -eq 0
+
+      - name: Cleanup private plan files
+        if: always()
+        run: |
+          set +e
+          rm -rf -- "$RUNNER_TEMP/v2-development-packages" \
+            "$RUNNER_TEMP/development-release-verification.json" \
+            "$RUNNER_TEMP/development-foundation-output.json" "$RUNNER_TEMP/foundation.tfvars.json" \
+            "$RUNNER_TEMP/development-foundation-init.log" "$RUNNER_TEMP/development-foundation-output.log" \
+            "$RUNNER_TEMP/development-application-init.log" "$RUNNER_TEMP/development.tfplan" \
+            "$RUNNER_TEMP/development.tfplan.log" "$RUNNER_TEMP/development.tfplan.json" \
+            "$RUNNER_TEMP/development.tfshow.log" "$RUNNER_TEMP/development-foundation-validate.log" \
+            "$RUNNER_TEMP/development-plan-identity.json" "$RUNNER_TEMP/development-plan-validation.json" \
+            "$GITHUB_WORKSPACE/trusted/infra/.terraform" "$GITHUB_WORKSPACE/trusted/v2/infra/.terraform"
+          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN

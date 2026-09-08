@@ -42,7 +42,7 @@ class Mutation:
     actions: tuple[str, ...]
     operation_class: str
     permissions: tuple[Permission, ...]
-    create_identity: tuple[tuple[str, str], ...] = ()
+    create_identity: tuple[tuple[str, Any], ...] = ()
 
 
 def _permission(action: str, *resources: str, conditions: Mapping[str, str] | None = None) -> Permission:
@@ -54,7 +54,7 @@ def _mutation(
     actions: tuple[str, ...],
     operation_class: str,
     *permissions: Permission,
-    create_identity: tuple[tuple[str, str], ...] = (),
+    create_identity: tuple[tuple[str, Any], ...] = (),
 ) -> Mutation:
     return Mutation(fields, actions, operation_class, permissions, create_identity)
 
@@ -105,11 +105,17 @@ SITE_BUCKET = f"arn:aws:s3:::{SITE_BUCKET_NAME}"
 def _build_contract() -> dict[str, Mutation]:
     result: dict[str, Mutation] = {}
     for name, resource in zip(("loader", "publisher", "tollchat_proxy"), LAMBDA):
+        delivery_identity = (
+            (("filename", None), ("s3_bucket", ARTIFACT_BUCKET_NAME), ("s3_key", "lambda/v2/chat-proxy-dev.zip"))
+            if name == "tollchat_proxy"
+            else (("s3_bucket", None), ("s3_key", None), ("s3_object_version", None))
+        )
         result[f"aws_lambda_function.{name}"] = _mutation(
             ("filename", "source_code_hash", "s3_bucket", "s3_key", "s3_object_version"),
             ("update",),
             "lambda-code",
             _permission("lambda:UpdateFunctionCode", resource),
+            create_identity=delivery_identity,
         )
     result["aws_lambda_alias.tollchat_live"] = _mutation(
         ("function_version",),
@@ -289,7 +295,9 @@ _CHANGE_KEYS = frozenset({
     "actions", "before", "after", "after_unknown", "before_sensitive", "after_sensitive",
     "replace_paths", "action_reason",
 })
-_MANIFEST_KEYS = frozenset({"schema_version", "provider_identity", "mutations", "permissions"})
+_MANIFEST_KEYS = frozenset({
+    "schema_version", "provider_identity", "deployment_inputs", "packages", "mutations", "permissions",
+})
 _MUTATION_KEYS = frozenset({"address", "action", "operation_class", "changed_fields"})
 _PERMISSION_KEYS = frozenset({"address", "action", "resource", "conditions"})
 _ACTIONS = frozenset({"create", "update", "delete", "read", "no-op", "import", "refresh"})
@@ -374,7 +382,7 @@ def _validate_s3_identity(before: dict[str, Any] | None, after: dict[str, Any], 
     values = (after,) if action == "create" else (before, after)
     if any(
         not isinstance(value, dict)
-        or any(not isinstance(value.get(field), str) or value[field] != expected for field, expected in spec.create_identity)
+        or any(field not in value or value[field] != expected for field, expected in spec.create_identity)
         for value in values
     ):
         _reject("invalid_resource_identity", address=address, action=action, operation_class=spec.operation_class)
@@ -623,11 +631,25 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
 
 
 def _parse_manifest(manifest: Any) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
-    if not isinstance(manifest, dict) or not set(manifest).issubset(_MANIFEST_KEYS):
+    if not isinstance(manifest, dict) or set(manifest) != _MANIFEST_KEYS:
         _reject("unknown_manifest_declaration")
     if manifest.get("schema_version") != 1 or not isinstance(manifest.get("mutations"), list) or not isinstance(manifest.get("permissions"), list):
         _reject("malformed_input")
     _validate_identity(manifest.get("provider_identity"))
+    inputs, packages = manifest.get("deployment_inputs"), manifest.get("packages")
+    if not isinstance(inputs, dict) or not isinstance(packages, dict):
+        _reject("malformed_input")
+    if (
+        not inputs
+        or list(inputs) != sorted(inputs)
+        or any(
+            not _is_string(path) or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+            for path, digest in inputs.items()
+        )
+        or list(packages) != ["agentcore.zip", "chat-proxy.zip", "loader.zip", "publisher.zip"]
+        or any(not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest) for digest in packages.values())
+    ):
+        _reject("malformed_input")
     mutations: dict[str, dict[str, Any]] = {}
     permissions: dict[str, list[dict[str, Any]]] = {}
     for record in manifest["mutations"]:
