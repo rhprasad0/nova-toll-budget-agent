@@ -109,13 +109,16 @@ plan` or `apply`. The manual production planner stores only a reviewed, gated
 saved plan. Follow the [deployment runbook](RUNBOOK.md) for the reviewed
 saved-plan, smoke-test, rollout, and rollback procedures.
 
-After merge, development schema migrations use the protected, manually
+After merge, only human-reviewed backward-compatible development migrations use
+the protected exact-release delivery sequence: artifact/checkout verification,
+one saved private Terraform plan and gate, fixed-role migration, delivery-role
+re-assumption, and application of that same plan. The protected, manually
 dispatched [development migration workflow](../.github/workflows/v2-development-migrations.yml)
-from `refs/heads/main`, after the foundation and fresh-bootstrap gates in the
-[protected development migration runbook](RUNBOOK.md#protected-development-migration-workflow-305-slice-3).
-Its fixed runner accepts no arbitrary target, role, or migration-path input and
-emits sanitized evidence. This is separate from disposable local/PR checks and
-does not authorize production schema changes; production remains limited to the
+remains a main-only recovery path after the foundation and fresh-bootstrap gates in
+the [protected development migration runbook](RUNBOOK.md#protected-development-migration-workflow-305-slice-3).
+Both paths accept no arbitrary target, role, or migration-path input and emit
+sanitized evidence. This is separate from disposable local/PR checks and does
+not authorize production schema changes; production remains limited to the
 [manual Oracle migration 030 procedure](RUNBOOK.md#manual-oracle-migration-030).
 
 The public interface at `tollchat.ai` uses a private S3 origin for the v2 site

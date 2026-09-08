@@ -48,6 +48,17 @@ EVIDENCE_PATTERN: Final = re.compile(
     r"[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 )
 COMMIT_PATTERN: Final = re.compile(r"^[0-9a-f]{40}$")
+TRANSACTION_BOUNDARY_PATTERN: Final = re.compile(
+    r"(?is)(?:(?<=;)|\A)\s*(?P<boundary>"
+    r"(?:BEGIN|COMMIT|ROLLBACK|START|END|ABORT|PREPARE)\b[^;]*;)"
+)
+PSQL_CONTROL_PATTERN: Final = re.compile(
+    r"(?m)^[ \t]*\\(?P<command>gset|(?:if|elif)[ \t]+[^\n]+|else|endif|"
+    r"set[ \t]+ON_ERROR_STOP[ \t]+on)[ \t]*\r?$"
+)
+SUPPORTED_PSQL_PREFIX: Final = re.compile(
+    r"(?is)(?:\s|\\set[ \t]+ON_ERROR_STOP[ \t]+on[ \t]*(?:\r?\n|$))*\Z"
+)
 DEVELOPMENT_TRANSPORT_NETWORK: Final = ipaddress.ip_network("fd7a:115c:a1e0:b1a::/64")
 
 
@@ -277,6 +288,114 @@ def _baseline_values(baselines: tuple[bootstrap.Baseline, ...]) -> str:
     if not rows:
         return "SELECT NULL::text, NULL::text, NULL::text, NULL::text, NULL::text, NULL::text WHERE false"
     return "VALUES\n        " + ",\n        ".join(rows)
+
+
+def _is_identifier_continuation(character: str) -> bool:
+    """Return whether a character can continue a PostgreSQL identifier."""
+    return (
+        character == "_"
+        or character == "$"
+        or character.isalnum()
+        or ord(character) >= 128
+    )
+
+
+def _mask_sql_literals(sql: str) -> str:
+    masked = list(sql)
+    index = 0
+    while index < len(sql):
+        if sql.startswith("--", index):
+            end = sql.find("\n", index)
+            end = len(sql) if end < 0 else end
+            masked[index:end] = " " * (end - index)
+            index = end
+        elif sql.startswith("/*", index):
+            end = sql.find("*/", index + 2)
+            if end < 0:
+                end = len(sql) - 2
+            end += 2
+            masked[index:end] = " " * (end - index)
+            index = end
+        elif sql[index] in "'\"":
+            quote = sql[index]
+            end = index + 1
+            while end < len(sql):
+                if sql[end] == quote:
+                    if end + 1 < len(sql) and sql[end + 1] == quote:
+                        end += 2
+                        continue
+                    end += 1
+                    break
+                end += 1
+            masked[index:end] = " " * (end - index)
+            index = end
+        elif sql[index] == "$":
+            if index > 0 and _is_identifier_continuation(sql[index - 1]):
+                index += 1
+                continue
+            match = re.match(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$", sql[index:])
+            if match is None:
+                index += 1
+                continue
+            delimiter = match.group(0)
+            end = sql.find(delimiter, index + len(delimiter))
+            if end < 0:
+                end = len(sql)
+            else:
+                end += len(delimiter)
+            masked[index:end] = " " * (end - index)
+            index = end
+        else:
+            index += 1
+    return "".join(masked)
+
+
+def _remove_terminal_commit(path: Path) -> None:
+    """Prepare one private rendered migration for the session transaction."""
+    try:
+        sql = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise MigrationError("rendered migration is not valid UTF-8") from error
+    masked = _mask_sql_literals(sql)
+
+    def mask_control(match: re.Match[str]) -> str:
+        # psql's gset ends a SQL statement; conditionals do not. Preserve offsets.
+        first = ";" if match.group("command") == "gset" else " "
+        return first + " " * (len(match.group()) - 1)
+
+    statements = PSQL_CONTROL_PATTERN.sub(mask_control, masked)
+    if "\\" in statements:
+        raise MigrationError(f"migration transaction shape is unsupported: {path.name}")
+    boundaries = list(TRANSACTION_BOUNDARY_PATTERN.finditer(statements))
+    begins = [
+        boundary
+        for boundary in boundaries
+        if boundary.group("boundary").upper().startswith("BEGIN")
+    ]
+    commits = [
+        boundary
+        for boundary in boundaries
+        if boundary.group("boundary").upper().startswith("COMMIT")
+    ]
+    if (
+        len(begins) != 1
+        or len(commits) != 1
+        or not SUPPORTED_PSQL_PREFIX.fullmatch(masked[: begins[0].start("boundary")])
+        or any(
+            masked[boundary.start("boundary") : boundary.end("boundary")]
+            .strip()
+            .upper()
+            not in {"BEGIN;", "COMMIT;"}
+            for boundary in boundaries
+        )
+        or begins[0].start("boundary") >= commits[0].start("boundary")
+        or sql[commits[0].end("boundary") :].strip()
+    ):
+        raise MigrationError(f"migration transaction shape is unsupported: {path.name}")
+    path.write_text(
+        sql[: commits[0].start("boundary")] + sql[commits[0].end("boundary") :],
+        encoding="utf-8",
+    )
 
 
 def _identity_sql() -> str:
@@ -682,8 +801,8 @@ INSERT INTO {HISTORY_TABLE} (
   {_sql_literal(migration.schema)}, {_sql_literal(migration.target)},
   {_sql_literal(migration.migration_id)}, {_sql_literal(migration.path)},
   {_sql_literal(migration.source_sha256)}, {_sql_literal(evidence)}, false
-)
-ON CONFLICT (schema_name, migration_id) DO NOTHING;
+);
+COMMIT;
 \echo TOLLCHAT_APPLIED_{run_id} {migration.path}
 \endif
 RESET ROLE;
@@ -845,6 +964,7 @@ def run() -> dict[str, object]:
             captured_source.write_bytes(committed)
             captured_source.chmod(0o600)
             bootstrap.render(captured_source, destination)
+            _remove_terminal_commit(destination)
             destination.chmod(0o600)
             rendered[migration.path] = destination
             captured_sources[migration.path] = committed

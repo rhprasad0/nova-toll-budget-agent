@@ -42,6 +42,12 @@ FIXED_PATHS = (
     "v2/db/oracle/schema.sql",
     "v2/db/oracle/data.sql",
 )
+SOURCE_FIXED_PATHS = (
+    "v2/db/application-schemas.json",
+    "v2/db/migration-baselines.json",
+    "v2/db/schema.sql",
+    "v2/db/oracle/schema.sql",
+)
 MANIFEST_NAME = "release-manifest.json"
 
 
@@ -79,6 +85,21 @@ def _tracked_migrations(root: Path) -> list[str]:
     return paths
 
 
+def _migration_inventory(root: Path) -> list[str]:
+    tracked = _tracked_migrations(root)
+    directory = root / "v2/db/migrations"
+    if directory.is_symlink() or not directory.is_dir():
+        raise BundleError("migration directory is unavailable")
+    filesystem = sorted(
+        path.relative_to(root).as_posix()
+        for path in directory.iterdir()
+        if path.is_file() or path.is_symlink()
+    )
+    if filesystem != tracked:
+        raise BundleError("migration inventory does not match git")
+    return tracked
+
+
 def expected_payload_paths(
     root: Path, *, require_sources: bool = False
 ) -> tuple[str, ...]:
@@ -93,7 +114,7 @@ def expected_payload_paths(
             raise BundleError(f"bundle input is a symlink: {relative}")
         if path.is_file():
             paths.add(relative)
-    paths.update(_tracked_migrations(root))
+    paths.update(_migration_inventory(root))
     ordered = tuple(sorted(paths))
     if require_sources:
         for relative in ordered:
@@ -123,6 +144,45 @@ def _commit(value: str) -> str:
     if not COMMIT_RE.fullmatch(value):
         raise BundleError("commit SHA must be 40 lowercase hexadecimal characters")
     return value
+
+
+def _checkout_commit(root: Path) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise BundleError("cannot determine checked-out commit")
+    return _commit(result.stdout.strip())
+
+
+def _committed_bytes(root: Path, relative: str) -> bytes:
+    result = subprocess.run(
+        ["git", "-C", str(root), "show", f"HEAD:{relative}"],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise BundleError(f"committed source is unavailable: {relative}")
+    return result.stdout
+
+
+def _verify_checkout_sources(
+    root: Path,
+    bundle: zipfile.ZipFile,
+    digests: dict[str, str],
+) -> None:
+    for relative in (*SOURCE_FIXED_PATHS, *_migration_inventory(root)):
+        source = _regular_file(root, relative)
+        committed = _committed_bytes(root, relative)
+        if source.read_bytes() != committed:
+            raise BundleError(f"checkout source differs from HEAD: {relative}")
+        if hashlib.sha256(committed).hexdigest() != digests[relative]:
+            raise BundleError(f"bundle source differs from HEAD: {relative}")
+        if bundle.read(relative) != committed:
+            raise BundleError(f"bundle source bytes differ from HEAD: {relative}")
 
 
 def _manifest_payload(root: Path, commit: str) -> dict[str, Any]:
@@ -249,6 +309,8 @@ def verify_bundle(
     expected_digest: str,
     expected_commit: str,
     expected_schema_versions: dict[str, str],
+    *,
+    verify_checkout: bool = False,
 ) -> None:
     if archive.is_symlink() or not archive.is_file():
         raise BundleError("artifact archive is not a regular file")
@@ -256,6 +318,8 @@ def verify_bundle(
         raise BundleError("artifact digest is malformed")
     if f"sha256:{_digest(archive)}" != expected_digest:
         raise BundleError("artifact archive digest does not match")
+    if verify_checkout and _checkout_commit(root) != _commit(expected_commit):
+        raise BundleError("checked-out commit does not match candidate commit")
     expected_paths = expected_payload_paths(root)
     expected_entries = set(expected_paths) | {MANIFEST_NAME}
     if output.exists() and (
@@ -279,6 +343,8 @@ def verify_bundle(
             digest = hashlib.sha256(bundle.read(path)).hexdigest()
             if digest != expected:
                 raise BundleError(f"bundle file digest mismatch: {path}")
+        if verify_checkout:
+            _verify_checkout_sources(root, bundle, digests)
 
         output.mkdir(parents=True, exist_ok=True)
         for path in (*expected_paths, MANIFEST_NAME):
@@ -306,6 +372,7 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--commit", default=os.environ.get("GITHUB_SHA", ""))
     verify.add_argument("--pricing-version")
     verify.add_argument("--oracle-version")
+    verify.add_argument("--verify-checkout", action="store_true")
     return parser
 
 
@@ -327,6 +394,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 args.expected_digest,
                 args.commit,
                 schema_versions,
+                verify_checkout=args.verify_checkout,
             )
     except (BundleError, OSError, ValueError, zipfile.BadZipFile) as error:
         print(f"release bundle failed: {error}", file=sys.stderr)

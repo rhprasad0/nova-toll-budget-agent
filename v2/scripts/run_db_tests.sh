@@ -265,6 +265,238 @@ assert not any(
     for secret in ("password", "token", "endpoint", "host", "port", "url")
 )
 PY
+cat >"$migration_source_dir/run_actual_runner_atomicity.py" <<'PY'
+import hashlib
+import importlib.util
+import os
+import sys
+from pathlib import Path
+
+path = Path("v2/scripts/run_development_migrations.py")
+spec = importlib.util.spec_from_file_location("development_runner", path)
+assert spec and spec.loader
+runner = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = runner
+spec.loader.exec_module(runner)
+
+migration_path = "v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql"
+migration = runner.Migration(
+    path=migration_path,
+    schema="pricing",
+    previous="1.0.0",
+    target="1.0.1",
+    migration_id="002_upgrade_pricing_1_0_0_to_1_0_1.sql",
+    number=2,
+    source_sha256=hashlib.sha256(Path(migration_path).read_bytes()).hexdigest(),
+)
+
+runner._registry = lambda: ((), {"pricing": "1.0.1", "oracle": "1.14.0"})
+runner._migration_candidates = lambda _schemas: (migration,)
+runner._history_preflight_sql = lambda *_args, **_kwargs: ""
+
+
+def final_sql(_migrations, _versions, run_id):
+    return f"""
+SET ROLE pricing_owner_development;
+SELECT version AS pricing_after FROM pricing.schema_version WHERE singleton\\gset
+RESET ROLE;
+SET ROLE oracle_owner_development;
+SELECT version AS oracle_after FROM oracle.schema_version WHERE singleton\\gset
+RESET ROLE;
+\\echo TOLLCHAT_RESULT_{run_id} :pricing_before :oracle_before :pricing_after :oracle_after
+SELECT pg_advisory_unlock(hashtext('tollchat-development-schema-migrations'));
+"""
+
+
+runner._final_sql = final_sql
+
+if os.environ.get("SHAPE_FAILURE") == "1":
+    shape = os.environ.get("SHAPE_CASE", "outside")
+    malformed_sql = {
+        "outside": "SELECT 1;\nBEGIN;\nSELECT 2;\nCOMMIT;\n",
+        "end_form_feed": "BEGIN;\nSELECT 1; END\f;\nCOMMIT;\n",
+        "end_vertical_tab": "BEGIN;\nSELECT 1; END\v;\nCOMMIT;\n",
+        "dollar_identifier": "BEGIN;\nSELECT 1 AS foo$tag$;\nCOMMIT;\nSELECT 1 AS bar$tag$;\nCOMMIT;\n",
+    }[shape]
+
+    def malformed_render(_source_path, destination):
+        destination.write_text(malformed_sql, encoding="utf-8")
+
+    runner.bootstrap.render = malformed_render
+
+try:
+    result = runner.run()
+except runner.MigrationError:
+    raise SystemExit(0 if os.environ.get("EXPECT_FAILURE") == "1" else 1)
+if os.environ.get("EXPECT_FAILURE") == "1":
+    raise SystemExit("injected migration failure unexpectedly committed")
+print(result)
+PY
+
+for shape_case in outside end_form_feed end_vertical_tab dollar_identifier; do
+  if EXPECT_FAILURE=1 SHAPE_FAILURE=1 SHAPE_CASE="$shape_case" \
+    python3 "$migration_source_dir/run_actual_runner_atomicity.py"; then
+    :
+  else
+    echo "actual runner transaction-shape failure did not fail closed: $shape_case" >&2
+    exit 1
+  fi
+done
+
+cat >"$migration_source_dir/run_actual_runner_partial_history.py" <<'PY'
+import importlib.util
+import os
+import sys
+from pathlib import Path
+
+path = Path("v2/scripts/run_development_migrations.py")
+spec = importlib.util.spec_from_file_location("development_runner", path)
+assert spec and spec.loader
+runner = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = runner
+spec.loader.exec_module(runner)
+
+try:
+    result = runner.run()
+except runner.MigrationError:
+    raise SystemExit(0 if os.environ.get("EXPECT_FAILURE") == "1" else 1)
+if os.environ.get("EXPECT_FAILURE") == "1":
+    raise SystemExit("partial history unexpectedly passed the real preflight")
+print(result)
+PY
+
+reset_pricing_for_runner_test() {
+  psql --dbname "$development_db" --set ON_ERROR_STOP=1 --command \
+    "SET ROLE pricing_owner_development; UPDATE pricing.schema_version SET version = '1.0.0' WHERE singleton; RESET ROLE; DELETE FROM tollchat_migration.schema_history WHERE migration_id = '002_upgrade_pricing_1_0_0_to_1_0_1.sql';"
+}
+
+reset_pricing_for_runner_test
+psql --dbname "$development_db" --set ON_ERROR_STOP=1 <<'SQL'
+CREATE OR REPLACE FUNCTION public.fail_development_migration_history()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.migration_id = '002_upgrade_pricing_1_0_0_to_1_0_1.sql' THEN
+    RAISE EXCEPTION 'injected migration history failure';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER fail_development_migration_history
+BEFORE INSERT ON tollchat_migration.schema_history
+FOR EACH ROW EXECUTE FUNCTION public.fail_development_migration_history();
+SQL
+if EXPECT_FAILURE=1 python3 "$migration_source_dir/run_actual_runner_atomicity.py"; then
+  :
+else
+  echo "actual runner history failure did not fail closed" >&2
+  exit 1
+fi
+psql --dbname "$development_db" --set ON_ERROR_STOP=1 --command \
+  'DROP TRIGGER fail_development_migration_history ON tollchat_migration.schema_history; DROP FUNCTION public.fail_development_migration_history()'
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  'SELECT version FROM pricing.schema_version WHERE singleton')" = "1.0.0"
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  "SELECT count(*) FROM tollchat_migration.schema_history WHERE migration_id = '002_upgrade_pricing_1_0_0_to_1_0_1.sql'")" = "0"
+
+reset_pricing_for_runner_test
+psql --dbname "$development_db" --set ON_ERROR_STOP=1 <<'SQL'
+CREATE OR REPLACE FUNCTION public.conflict_development_migration_history()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.migration_id = '002_upgrade_pricing_1_0_0_to_1_0_1.sql'
+     AND pg_trigger_depth() = 1 THEN
+    INSERT INTO tollchat_migration.schema_history (
+      schema_name, schema_version, migration_id, source_path, source_sha256,
+      evidence, is_baseline
+    ) VALUES (
+      NEW.schema_name, NEW.schema_version, NEW.migration_id, NEW.source_path,
+      NEW.source_sha256, NEW.evidence, NEW.is_baseline
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER conflict_development_migration_history
+BEFORE INSERT ON tollchat_migration.schema_history
+FOR EACH ROW EXECUTE FUNCTION public.conflict_development_migration_history();
+SQL
+if EXPECT_FAILURE=1 python3 "$migration_source_dir/run_actual_runner_atomicity.py"; then
+  :
+else
+  echo "actual runner history conflict did not fail closed" >&2
+  exit 1
+fi
+psql --dbname "$development_db" --set ON_ERROR_STOP=1 --command \
+  'DROP TRIGGER conflict_development_migration_history ON tollchat_migration.schema_history; DROP FUNCTION public.conflict_development_migration_history()'
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  'SELECT version FROM pricing.schema_version WHERE singleton')" = "1.0.0"
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  "SELECT count(*) FROM tollchat_migration.schema_history WHERE migration_id = '002_upgrade_pricing_1_0_0_to_1_0_1.sql'")" = "0"
+
+reset_pricing_for_runner_test
+python3 "$migration_source_dir/run_actual_runner_atomicity.py" >/dev/null
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  'SELECT version FROM pricing.schema_version WHERE singleton')" = "1.0.1"
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  "SELECT count(*) FROM tollchat_migration.schema_history WHERE migration_id = '002_upgrade_pricing_1_0_1.sql'")" = "0"
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  "SELECT count(*) FROM tollchat_migration.schema_history WHERE migration_id = '002_upgrade_pricing_1_0_0_to_1_0_1.sql'")" = "1"
+python3 "$migration_source_dir/run_actual_runner_atomicity.py" >/dev/null
+
+reset_pricing_for_runner_test
+psql --dbname "$development_db" --set ON_ERROR_STOP=1 <<'SQL'
+CREATE OR REPLACE FUNCTION public.disconnect_development_migration_history()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.migration_id = '002_upgrade_pricing_1_0_0_to_1_0_1.sql' THEN
+    PERFORM pg_terminate_backend(pg_backend_pid());
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER disconnect_development_migration_history
+BEFORE INSERT ON tollchat_migration.schema_history
+FOR EACH ROW EXECUTE FUNCTION public.disconnect_development_migration_history();
+SQL
+if EXPECT_FAILURE=1 python3 "$migration_source_dir/run_actual_runner_atomicity.py"; then
+  :
+else
+  echo "actual runner disconnect did not fail closed" >&2
+  exit 1
+fi
+psql --dbname "$development_db" --set ON_ERROR_STOP=1 --command \
+  'DROP TRIGGER disconnect_development_migration_history ON tollchat_migration.schema_history; DROP FUNCTION public.disconnect_development_migration_history()'
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  'SELECT version FROM pricing.schema_version WHERE singleton')" = "1.0.0"
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  "SELECT count(*) FROM tollchat_migration.schema_history WHERE migration_id = '002_upgrade_pricing_1_0_0_to_1_0_1.sql'")" = "0"
+
+psql --dbname "$development_db" --set ON_ERROR_STOP=1 --command \
+  "SET ROLE pricing_owner_development; UPDATE pricing.schema_version SET version = '1.0.1' WHERE singleton; RESET ROLE; DELETE FROM tollchat_migration.schema_history WHERE NOT is_baseline;"
+partial_pricing_before="$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  'SELECT version FROM pricing.schema_version WHERE singleton')"
+partial_history_before="$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  'SELECT count(*) FROM tollchat_migration.schema_history WHERE NOT is_baseline')"
+if EXPECT_FAILURE=1 python3 "$migration_source_dir/run_actual_runner_partial_history.py"; then
+  :
+else
+  echo "real runner preflight did not reject partial history" >&2
+  exit 1
+fi
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  'SELECT version FROM pricing.schema_version WHERE singleton')" = "$partial_pricing_before"
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  'SELECT count(*) FROM tollchat_migration.schema_history WHERE NOT is_baseline')" = "$partial_history_before"
+
+psql --dbname "$development_db" --set ON_ERROR_STOP=1 --command \
+  "SET ROLE pricing_owner_development; UPDATE pricing.schema_version SET version = '1.3.0' WHERE singleton; RESET ROLE;"
+
 POSTGRES_CONTAINER_ID="$POSTGRES_CONTAINER_ID" \
   PGHOST="$PGHOST" PGPORT="$PGPORT" PGUSER="$PGUSER" \
   python3 v2/scripts/test_legacy_database_retirement.py
