@@ -66,28 +66,11 @@ FOUNDATION_FIELDS = (
     "db_instance",
     "alerts_topic_arn",
 )
-DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES = (
-    "aws_iam_role.usage_publisher",
-    "aws_iam_role_policy.usage_publisher",
-    "aws_lambda_function.usage_publisher",
-    "aws_cloudwatch_event_rule.usage_publisher",
-    "aws_cloudwatch_event_target.usage_publisher",
-    "aws_lambda_permission.usage_publisher",
-    "aws_cloudwatch_metric_alarm.usage_publisher_errors",
-    "aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations",
-    "aws_iam_role.agent_usage_rollup",
-    "aws_iam_role_policy.agent_usage_rollup",
-    "aws_lambda_function.agent_usage_rollup",
-    "aws_cloudwatch_event_rule.agent_usage_rollup",
-    "aws_cloudwatch_event_target.agent_usage_rollup",
-    "aws_lambda_permission.agent_usage_rollup",
-    "aws_cloudwatch_metric_alarm.agent_usage_log_coverage",
-    "aws_cloudwatch_metric_alarm.agent_usage_rollup_errors",
-    "aws_cloudwatch_metric_alarm.agent_usage_rollup_missing",
-    "aws_wafv2_web_acl_logging_configuration.agent_reports",
-)
 DEVELOPMENT_DELIVERY_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-development-delivery.yml"
+).read_text()
+DEVELOPMENT_PLAN_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "v2-development-plan.yml"
 ).read_text()
 DEVELOPMENT_CONNECTIVITY_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-development-connectivity-verification.yml"
@@ -3728,7 +3711,7 @@ def _development_foundation_validator(source: str) -> str:
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     deploy_source = _workflow_run_source(jobs["deploy"])
     match = re.search(
-        r'''jq -e '\n(.*?)\n' <<<"\$FOUNDATION_OUTPUT"''',
+        r'''jq -e '\n(.*?)\n' "\$FOUNDATION_OUTPUT"''',
         deploy_source,
         flags=re.DOTALL,
     )
@@ -3777,7 +3760,7 @@ def test_development_foundation_output_validators_fail_closed_and_match():
     output_index = deploy_source.index("terraform -chdir=infra output -json foundation")
     validator_index = deploy_source.index("jq -e '\n", output_index)
     wrapper_index = deploy_source.index(
-        'jq -n --argjson foundation "$FOUNDATION_OUTPUT"'
+        'jq -n --slurpfile foundation "$FOUNDATION_OUTPUT"'
     )
     assert output_index < validator_index < wrapper_index
 
@@ -3898,9 +3881,10 @@ def _assert_development_delivery_workflow(source: str) -> None:
         for step in build_steps
         if cast(str, step.get("uses", "")).startswith("actions/upload-artifact@")
     ]
-    assert {cast(dict[str, str], step["with"])["name"] for step in uploads} == {
-        "v2-development-packages",
-        "v2-development-checksums",
+    upload_names = {cast(dict[str, str], step["with"])["name"] for step in uploads}
+    assert upload_names == {
+        "v2-development-packages-${{ github.run_id }}-${{ github.sha }}",
+        "v2-development-checksums-${{ github.run_id }}-${{ github.sha }}",
     }
 
     proof = jobs["oidc-proof"]
@@ -3999,13 +3983,14 @@ def _assert_development_delivery_workflow(source: str) -> None:
         for step in deploy_steps
         if cast(str, step.get("uses", "")).startswith("actions/download-artifact@")
     ]
-    assert {
+    download_names = {
         cast(dict[str, str], step["with"])["name"]
         for step in downloads
         if "name" in cast(dict[str, str], step["with"])
-    } == {
-        "v2-development-packages",
-        "v2-development-checksums",
+    }
+    assert download_names == {
+        "v2-development-packages-${{ github.run_id }}-${{ github.sha }}",
+        "v2-development-checksums-${{ github.run_id }}-${{ github.sha }}",
     }
     proof_downloads = [
         step
@@ -4021,6 +4006,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
     }
     assert "name" not in proof_download_with
     assert "sha256sum --check DEPLOYMENT_SHA256SUMS" in deploy_source
+    assert "path: ${{ runner.temp }}/v2-development-packages" in source
     assert "aws-actions/configure-aws-credentials@" in "\n".join(
         cast(str, step.get("uses", "")) for step in deploy_steps
     )
@@ -4100,7 +4086,8 @@ def _assert_development_delivery_workflow(source: str) -> None:
         )
         == 1
     )
-    assert 'rm -f -- "$FOUNDATION_VARS" "$PLAN" "$PLAN_JSON"' in deploy_source
+    assert "trap cleanup EXIT" in deploy_source
+    assert '"$PACKAGE_DIR"' in deploy_source
     plan_index = deploy_source.index(
         'terraform -chdir=v2/infra plan -input=false -out="$PLAN"'
     )
@@ -4110,22 +4097,21 @@ def _assert_development_delivery_workflow(source: str) -> None:
     apply_index = deploy_source.index(
         'terraform -chdir=v2/infra apply -input=false "$PLAN"'
     )
-    preflight_index = deploy_source.index("if ! jq -e '\n", show_index)
-    assert plan_index < show_index < preflight_index < apply_index
+    validator_index = deploy_source.index(
+        "python3 infra/delivery_plan_validator.py", show_index
+    )
+    assert plan_index < show_index < validator_index < apply_index
     for forbidden in (
-        "known_managed",
-        "known_data",
-        "read_only",
-        "immutable",
+        "approved_delete",
+        "known_action",
         "teardown_deletions",
-        "moved/deposed change",
     ):
         assert forbidden not in deploy_source
     for package in (
-        "build/loader.zip",
-        "build/publisher.zip",
-        "build/agentcore.zip",
-        "build/chat-proxy.zip",
+        "$PACKAGE_DIR/loader.zip",
+        "$PACKAGE_DIR/publisher.zip",
+        "$PACKAGE_DIR/agentcore.zip",
+        "$PACKAGE_DIR/chat-proxy.zip",
     ):
         assert package in deploy_source
     for forbidden in (
@@ -4134,8 +4120,6 @@ def _assert_development_delivery_workflow(source: str) -> None:
         "backend.production.hcl",
         "terraform_remote_state",
         "AWS_PROFILE",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
         "pull_request",
         "cloudflare",
         "placeholder",
@@ -4144,165 +4128,244 @@ def _assert_development_delivery_workflow(source: str) -> None:
         assert forbidden not in source
 
 
-def _development_delivery_plan_predicate(source: str) -> str:
+def _assert_development_plan_workflow(source: str) -> None:
+    workflow = cast(dict[str, object], yaml.safe_load(source))
+    assert _workflow_trigger(workflow) == {
+        "workflow_call": {
+            "inputs": {
+                "candidate_sha": {
+                    "description": "Event-derived lowercase candidate commit SHA.",
+                    "required": True,
+                    "type": "string",
+                }
+            }
+        }
+    }
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    assert set(jobs) == {"build", "plan"}
+    build = jobs["build"]
+    plan = jobs["plan"]
+    assert build["permissions"] == {"contents": "read"}
+    assert "environment" not in build
+    build_source = _workflow_run_source(build)
+    assert "aws-actions/configure-aws-credentials@" not in build_source
+    assert "id-token: write" not in build_source
+    assert "role-to-assume" not in build_source
+    assert "EVENT_SHA" in build_source
+    assert "INPUT_SHA" in build_source
+    assert "github.event.pull_request.head.sha" in source
+    assert "github.event.merge_group.head_sha" in source
+    assert "github.sha" in source
+    assert "refs/pull/" in source
+    assert "refs/heads/gh-readonly-queue/" in source
+    assert "refs/heads/main" in source
+    assert 'test "$INPUT_SHA" = "$EVENT_SHA"' in source
+    assert "candidate_sha" in build_source
+    assert "persist-credentials: false" in source
+    for package in ("loader.zip", "publisher.zip", "agentcore.zip", "chat-proxy.zip"):
+        assert package in build_source
+    assert "DEPLOYMENT_SHA256SUMS" in build_source
+    assert (
+        "sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip"
+        in build_source
+    )
+    uploads = [
+        step
+        for step in cast(list[dict[str, object]], build["steps"])
+        if str(step.get("uses", "")).startswith("actions/upload-artifact@")
+    ]
+    assert {cast(dict[str, str], step["with"])["name"] for step in uploads} == {
+        "v2-development-packages-${{ github.run_id }}-${{ steps.resolve.outputs.candidate_sha }}",
+        "v2-development-checksums-${{ github.run_id }}-${{ steps.resolve.outputs.candidate_sha }}",
+    }
+
+    assert plan["needs"] == "build"
+    assert plan["environment"] == "development-plan"
+    assert plan["permissions"] == {"contents": "read", "id-token": "write"}
+    plan_source = _workflow_run_source(plan)
+    assert "nova-toll-v2-development-plan" in source
+    assert "903859731897" in plan_source
+    assert "aws-region: us-east-1" in source
+    assert "job.workflow_repository" in source
+    assert "job.workflow_sha" in source
+    assert "job.workflow_ref" in source
+    assert "job.workflow_file_path" in source
+    assert "path: trusted" in source
+    assert "repository: ${{ job.workflow_repository }}" in source
+    assert "ref: ${{ job.workflow_sha }}" in source
+    assert (
+        "v2-development-packages-${{ github.run_id }}-${{ needs.build.outputs.candidate_sha }}"
+        in source
+    )
+    assert (
+        "v2-development-checksums-${{ github.run_id }}-${{ needs.build.outputs.candidate_sha }}"
+        in source
+    )
+    assert "artifact-ids:" not in plan_source
+    assert "download-artifact" in source
+    assert "sha256sum --check DEPLOYMENT_SHA256SUMS" in plan_source
+    assert 'terraform_version: "1.15.8"' in source
+    assert plan_source.count("-lockfile=readonly") == 2
+    assert "-lock=false" in plan_source
+    assert (
+        plan_source.count('terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" plan')
+        == 1
+    )
+    assert (
+        'terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" show -json "$PLAN"'
+        in plan_source
+    )
+    assert (
+        'terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" apply' not in plan_source
+    )
+    assert "development-release-manifest.json" in plan_source
+    assert "delivery_plan_validator.py" in plan_source
+    assert "GITHUB_STEP_SUMMARY" in plan_source
+    assert (
+        'FOUNDATION_VALIDATE_LOG="$RUNNER_TEMP/development-foundation-validate.log"'
+        in plan_source
+    )
+    assert '2>"$FOUNDATION_VALIDATE_LOG"' in plan_source
+    assert 'type == "object"' in plan_source
+    assert "trap cleanup EXIT" in plan_source
+    assert (
+        "unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN" in plan_source
+    )
+    assert '"$PLAN"' in plan_source
+    for forbidden in (
+        "-target",
+        "backend.production.hcl",
+        "terraform_remote_state",
+        "cloudflare",
+        "ssm",
+        "secrets",
+    ):
+        assert forbidden not in plan_source.lower()
+    for job in jobs.values():
+        for step in cast(list[dict[str, object]], job["steps"]):
+            if "uses" in step:
+                assert re.fullmatch(r"[^@]+@[0-9a-f]{40}", cast(str, step["uses"]))
+            if str(step.get("uses", "")).startswith("actions/checkout@"):
+                assert (
+                    cast(dict[str, object], step["with"])["persist-credentials"]
+                    is False
+                )
+
+
+def test_development_plan_workflow_is_reusable_and_fail_closed():
+    _assert_development_plan_workflow(DEVELOPMENT_PLAN_WORKFLOW)
+    for original, replacement in (
+        ("workflow_call:", "push:"),
+        (
+            "candidate_sha:\n        description:",
+            "candidate_ref:\n        description:",
+        ),
+        ("environment: development-plan", "environment: development"),
+        (
+            "role/nova-toll-v2-development-plan",
+            "role/nova-toll-v2-development-delivery",
+        ),
+        (
+            "${{ github.run_id }}-${{ needs.build.outputs.candidate_sha }}",
+            "${{ github.run_id }}",
+        ),
+        (
+            "repository: ${{ job.workflow_repository }}",
+            "repository: ${{ github.repository }}",
+        ),
+        ("ref: ${{ job.workflow_sha }}", "ref: ${{ github.sha }}"),
+        ("-lockfile=readonly", "-lockfile=update"),
+        ("-lock=false", "-lock=true"),
+        ("trap cleanup EXIT", "trap cleanup RETURN"),
+    ):
+        _must_reject(
+            _assert_development_plan_workflow,
+            DEVELOPMENT_PLAN_WORKFLOW,
+            original,
+            replacement,
+        )
+
+
+def _assert_development_delivery_validator_contract(source: str) -> None:
+    workflow_source = source
     workflow = cast(dict[str, object], yaml.safe_load(source))
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
-    deploy_source = _workflow_run_source(jobs["deploy"])
-    match = re.search(
-        r"""if ! jq -e '\n(.*?)\n' "\$PLAN_JSON" >/dev/null; then""",
-        deploy_source,
-        flags=re.DOTALL,
+    source = _workflow_run_source(jobs["deploy"])
+    assert "approved_delete" not in source
+    assert "known_action" not in source
+    assert "if ! jq -e" not in source
+    assert "infra/delivery_plan_validator.py" in source
+    assert 'MANIFEST="$RUNNER_TEMP/development-release-manifest.json"' in source
+    assert 'IDENTITY="$RUNNER_TEMP/development-plan-identity.json"' in source
+    assert (
+        'test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST" || MANIFEST_VALID=false'
+        in source
     )
-    assert match is not None
-    return match.group(1)
-
-
-def test_development_delivery_plan_preflight_fails_closed_for_unapproved_deletes():
-    predicate = _development_delivery_plan_predicate(DEVELOPMENT_DELIVERY_WORKFLOW)
-
-    def change(address: object, actions: object) -> dict[str, object]:
-        return {
-            "address": address,
-            "mode": "managed",
-            "change": {"actions": actions},
-        }
-
-    def accepts(plan: object) -> bool:
-        result = subprocess.run(
-            ["jq", "-e", predicate],
-            input=json.dumps(plan),
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        return result.returncode == 0
-
-    def accepts_raw(plan: str) -> bool:
-        result = subprocess.run(
-            ["jq", "-e", predicate],
-            input=plan,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        return result.returncode == 0
-
-    assert len(DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES) == 18
-    for address in DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES:
-        assert accepts({"resource_changes": [change(address, ["delete"])]}), address
-        assert not accepts(
-            {"resource_changes": [change(f"{address}[0]", ["delete"])]}
-        ), address
-
-    assert accepts(
-        {
-            "resource_changes": [
-                change(address, ["delete"])
-                for address in DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES
-            ]
-        }
+    assert (
+        'test -f "$IDENTITY" && test ! -L "$IDENTITY" && test -r "$IDENTITY" || IDENTITY_VALID=false'
+        in source
     )
-    assert accepts(
-        {
-            "resource_changes": [
-                change('aws_s3_object.site_assets["asset"]', ["update"]),
-                change("aws_lambda_function.active", ["create"]),
-            ]
-        }
+    assert (
+        'jq -e \'type == "object" and (.status == "accepted" or .status == "rejected") and (.reason_code | type == "string")\''
+        in source
     )
-    for action in ("no-op", "read", "create", "update"):
-        assert accepts(
-            {"resource_changes": [change("aws_lambda_function.active", [action])]}
-        )
-    data_read = change("data.aws_region.current", ["read"])
-    data_read["mode"] = "data"
-    assert accepts({"resource_changes": [data_read]})
+    assert 'test "$MANIFEST_VALID" = true' in source
+    assert 'test "$IDENTITY_VALID" = true' in source
+    assert 'test "$VALIDATOR_STATUS" -eq 0' in source
+    assert 'PROOF="$RUNNER_TEMP/protected-main-oidc.json"' in source
+    assert 'rm -f -- "$PROOF"' in source
+    assert "if: always()" in workflow_source
+    assert source.index('PROOF="$RUNNER_TEMP/protected-main-oidc.json"') < source.index(
+        'test -s "$PROOF"'
+    )
+    plan = source.index('terraform -chdir=v2/infra plan -input=false -out="$PLAN"')
+    show = source.index('terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"')
+    manifest_check = source.index('test -f "$MANIFEST"', show)
+    validator = source.index("python3 infra/delivery_plan_validator.py", manifest_check)
+    assert 'terraform -chdir=v2/infra apply -input=false "$PLAN"' in source
+    apply = source.index('terraform -chdir=v2/infra apply -input=false "$PLAN"')
+    assert plan < show < manifest_check < validator < apply
+    assert source.count('terraform -chdir=v2/infra plan -input=false -out="$PLAN"') == 1
+    assert (
+        source.count('terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"') == 1
+    )
+    assert source.count('terraform -chdir=v2/infra apply -input=false "$PLAN"') == 1
+    assert '"$PLAN" >"$APPLY_LOG" 2>&1' in source
 
-    for actions in (["delete", "create"], ["create", "delete"], ["delete", "update"]):
-        assert not accepts(
-            {
-                "resource_changes": [
-                    change(DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES[0], actions)
-                ]
-            }
-        )
 
-    for actions in (["import"], ["refresh"], ["unknown"], ["create", "unknown"]):
-        assert not accepts(
-            {"resource_changes": [change("aws_lambda_function.active", actions)]}
-        )
-
-    for mode in (None, "", "unknown", 1, cast(object, [])):
-        invalid_mode = change("aws_lambda_function.active", ["update"])
-        invalid_mode["mode"] = mode
-        assert not accepts({"resource_changes": [invalid_mode]}), mode
-    missing_mode = change("aws_lambda_function.active", ["update"])
-    del missing_mode["mode"]
-    assert not accepts({"resource_changes": [missing_mode]})
-
-    for address in (
-        "aws_iam_role.usage_publisher_extra",
-        "aws_iam_role.usage_publisher[*]",
-        'aws_s3_object.site_assets["asset"]',
-        "aws_s3_object.usage",
-        "aws_cloudwatch_log_group.usage_publisher",
-        "aws_cloudwatch_log_group.agent_usage_rollup",
-        "aws_lambda_function.active",
-        "aws_athena_named_query.usage",
-        "aws_athena_named_query.agent_usage_rollup",
+def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_plan():
+    _assert_development_delivery_validator_contract(DEVELOPMENT_DELIVERY_WORKFLOW)
+    for original, replacement in (
+        (
+            'test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST" || MANIFEST_VALID=false',
+            "MANIFEST_VALID=true",
+        ),
+        (
+            'test -f "$IDENTITY" && test ! -L "$IDENTITY" && test -r "$IDENTITY" || IDENTITY_VALID=false',
+            "IDENTITY_VALID=true",
+        ),
+        ('test "$VALIDATOR_STATUS" -eq 0', 'test "$VALIDATOR_STATUS" -ne 0'),
+        (
+            'terraform -chdir=v2/infra apply -input=false "$PLAN" >"$APPLY_LOG" 2>&1',
+            'terraform -chdir=v2/infra apply -input=false "$OTHER_PLAN" >"$APPLY_LOG" 2>&1',
+        ),
+        (
+            'python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" >"$VALIDATION"',
+            "true",
+        ),
     ):
-        assert not accepts({"resource_changes": [change(address, ["delete"])]}), address
-
-    assert not accepts(
-        {
-            "resource_changes": [
-                change('aws_s3_object.site_assets["asset"]', ["delete"]),
-                change("aws_lambda_function.active", ["update"]),
-            ]
-        }
+        _must_reject(
+            _assert_development_delivery_validator_contract,
+            DEVELOPMENT_DELIVERY_WORKFLOW,
+            original,
+            replacement,
+        )
+    _must_reject(
+        _assert_development_delivery_validator_contract,
+        DEVELOPMENT_DELIVERY_WORKFLOW,
+        'terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"\n          MANIFEST_VALID=true',
+        'terraform -chdir=v2/infra apply -input=false "$PLAN"\n          terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"\n          MANIFEST_VALID=true',
     )
-    deposed_delete = dict(
-        change(DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES[0], ["delete"]),
-        deposed="old",
-    )
-    previous_address_delete = dict(
-        change(DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES[0], ["delete"]),
-        previous_address="aws_iam_role.usage_publisher_old",
-    )
-    assert not accepts({"resource_changes": [deposed_delete]})
-    assert not accepts({"resource_changes": [previous_address_delete]})
-    assert not accepts(
-        {
-            "resource_changes": [
-                deposed_delete,
-                change("aws_lambda_function.active", ["create"]),
-            ]
-        }
-    )
-
-    malformed: tuple[object, ...] = (
-        cast(object, {}),
-        {"resource_changes": None},
-        {"resource_changes": cast(object, {})},
-        {"resource_changes": "not-an-array"},
-        {"resource_changes": [None]},
-        {"resource_changes": [cast(object, {})]},
-        {"resource_changes": [change(None, ["delete"])]},
-        {"resource_changes": [change("aws_lambda_function.active", None)]},
-        {"resource_changes": [change("aws_lambda_function.active", {})]},
-        {"resource_changes": [change("aws_lambda_function.active", "update")]},
-        {"resource_changes": [change("aws_lambda_function.active", [])]},
-        {"resource_changes": [change("aws_lambda_function.active", [None])]},
-        {"resource_changes": [change("aws_lambda_function.active", ["delete", 1])]},
-        {
-            "resource_changes": [
-                {"address": "aws_lambda_function.active", "change": None}
-            ]
-        },
-    )
-    for malformed_plan in malformed:
-        assert not accepts(malformed_plan), malformed_plan
-    assert not accepts_raw("{")
 
 
 def test_development_oidc_validator_rejects_malformed_and_wrong_claim_fixtures():
