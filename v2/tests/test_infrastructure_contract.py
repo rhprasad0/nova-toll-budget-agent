@@ -4118,6 +4118,15 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "Recheck admission before credentials" in "\n".join(
         cast(str, step.get("name", "")) for step in deploy_steps
     )
+    admission_recheck_source = cast(
+        str,
+        next(
+            step["run"]
+            for step in deploy_steps
+            if step.get("name") == "Recheck admission before credentials"
+        ),
+    )
+    assert "PRIVATE_STAGE_REPORTED=1" not in admission_recheck_source
     downloads = [
         step
         for step in deploy_steps

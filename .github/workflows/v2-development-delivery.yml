@@ -490,7 +490,6 @@ jobs:
             trap - EXIT
           else
             status=$?
-            PRIVATE_STAGE_REPORTED=1
             exit "$status"
           fi
 
