@@ -3008,6 +3008,17 @@ def test_v2_agent_packages_are_required_for_real_deployments():
     assert build.exists()
 
 
+def test_reviewed_zip_builders_use_store_mode():
+    expected_calls = {
+        "build_loader_zip.sh": r'zip -qX0 "\$BUILD/loader\.zip" -@',
+        "build_publisher_zip.sh": r'zip -qX0 "\$BUILD/publisher\.zip" -@',
+        "build_agentcore_zips.sh": r'zip -qX0 "\$out" -@',
+    }
+    for script_name, archive_call in expected_calls.items():
+        script = (V2_ROOT / "scripts" / script_name).read_text()
+        assert re.search(rf"(?m)^[ \t]*\([^\n]*\| {archive_call}\)$", script)
+
+
 def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
     ignores = (REPO_ROOT / ".trivyignore.yaml").read_text()
     exception = """  - id: AVD-AWS-0104

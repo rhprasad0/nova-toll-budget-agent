@@ -7,6 +7,9 @@ STAGE="$BUILD/loader"
 CA_URL="https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
 CA_SHA256="e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
 EPOCH="2020-01-01 00:00:00Z"
+export TZ=UTC
+export UV_MANAGED_PYTHON=1 UV_PYTHON_INSTALL_DIR=/tmp/nova-toll-cpython
+uv python install 3.13 >/dev/null
 
 rm -rf "$STAGE" "$BUILD/loader.zip"
 mkdir -p "$STAGE"
@@ -28,5 +31,5 @@ uv pip install \
 find "$STAGE" -type f ! -name .lock -exec chmod 0644 {} +
 find "$STAGE" -type f -name '*.so.*' -exec chmod 0755 {} +
 find "$STAGE" -exec touch -d "$EPOCH" {} +
-(cd "$STAGE" && find . -type f | LC_ALL=C sort | zip -qX "$BUILD/loader.zip" -@)
+(cd "$STAGE" && find . -type f | LC_ALL=C sort | zip -qX0 "$BUILD/loader.zip" -@)
 echo "built $BUILD/loader.zip"
