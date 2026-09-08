@@ -259,6 +259,82 @@ class ReleaseManifestTests(unittest.TestCase):
         ):
             self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
 
+    def test_future_bundle_helpers_are_allowlisted_and_digest_checked(self):
+        helpers = {
+            "v2/scripts/classify_deployment_error.py": b"classify\n",
+            "v2/scripts/run_private_stage.sh": b"stage\n",
+        }
+        with (
+            mock.patch.object(release_manifest, "EXACT_INPUTS", {"input.txt"}),
+            mock.patch.object(release_manifest, "INPUT_PREFIXES", ()),
+            mock.patch.object(
+                release_manifest,
+                "BUNDLE_MARKER",
+                "bundle.sh",
+            ),
+            mock.patch.object(
+                release_manifest,
+                "BUNDLE_FIXED_INPUTS",
+                {"bundle.sh", "bundle-helper.py", "db/schema.sql"},
+            ),
+            mock.patch.object(release_manifest, "BUNDLE_INPUT_PREFIXES", ()),
+        ):
+            self.assertEqual(
+                release_manifest._tracked_inputs(self.root), ["input.txt"]
+            )
+            self.track("bundle.sh")
+            self.track("bundle-helper.py")
+            self.track("db/schema.sql")
+            fixed = {"bundle.sh", "bundle-helper.py", "db/schema.sql"}
+            self.assertEqual(
+                release_manifest._tracked_inputs(self.root),
+                sorted({"input.txt", *fixed}),
+            )
+            release_manifest._verify_inputs(
+                self.root,
+                {
+                    relative: digest(self.root / relative)
+                    for relative in sorted({"input.txt", *fixed})
+                },
+            )
+
+            for relative, content in helpers.items():
+                self.track(relative, content)
+            self.track("v2/scripts/unrelated_helper.py")
+            selected = release_manifest._tracked_inputs(self.root)
+            expected = sorted(
+                {
+                    "input.txt",
+                    *helpers,
+                    "bundle.sh",
+                    "bundle-helper.py",
+                    "db/schema.sql",
+                }
+            )
+            self.assertEqual(selected, expected)
+            self.assertNotIn("v2/scripts/unrelated_helper.py", selected)
+
+            inputs = {
+                relative: digest(self.root / relative) for relative in selected
+            }
+            release_manifest._verify_inputs(self.root, inputs)
+            for relative in helpers:
+                omitted = inputs.copy()
+                omitted.pop(relative)
+                with self.assertRaisesRegex(
+                    release_manifest.Invalid, "^inventory_mismatch$"
+                ):
+                    release_manifest._verify_inputs(self.root, omitted)
+
+            for relative in helpers:
+                path = self.root / relative
+                path.write_bytes(b"changed\n")
+                with self.assertRaisesRegex(
+                    release_manifest.Invalid, "^input_digest_mismatch$"
+                ):
+                    release_manifest._verify_inputs(self.root, inputs)
+                path.write_bytes(helpers[relative])
+
     def test_bundle_selects_archived_robots_input(self):
         self.assertIn("v2/agent/robots.txt", release_manifest.BUNDLE_FIXED_INPUTS)
         self.assertTrue(release_manifest._selected("v2/agent/robots.txt", True))
