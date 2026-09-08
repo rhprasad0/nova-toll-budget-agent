@@ -278,6 +278,21 @@ def test_deploy_recheck_does_not_wait_for_predecessor_inside_apply_lock() -> Non
     )
 
 
+def test_progress_events_are_fixed_and_mirrored_without_exception_text(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    summary = tmp_path / "summary"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    monkeypatch.setattr(admission, "_progress_started", None)
+    admission._emit_progress("start")
+    admission._emit_progress("pending", "not-a-reviewed-reason")
+    captured = capsys.readouterr()
+    assert "stage=admission status=start" in captured.err
+    assert "reason=unclassified" in captured.err
+    assert "not-a-reviewed-reason" not in captured.err
+    assert "stage=admission status=pending" in summary.read_text()
+
+
 def test_workflow_keeps_retained_artifact_guard_and_pr_only_packages() -> None:
     root = Path(__file__).parents[2]
     delivery = (root / ".github/workflows/v2-development-delivery.yml").read_text()

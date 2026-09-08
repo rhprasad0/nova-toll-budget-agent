@@ -30,6 +30,19 @@ TERRAFORM_PATHS = (
     ".github/workflows/v2-production-plan.yml",
 )
 TERMINAL_STATUSES = {"completed"}
+ADMISSION_REASONS = {
+    "unclassified",
+    "api_unavailable",
+    "malformed_evidence",
+    "missing_evidence",
+    "running_evidence",
+    "predecessor_pending",
+    "upstream_failed",
+    "stale_rerun",
+    "timeout",
+    "recheck_not_ready",
+}
+_progress_started: float | None = None
 
 
 class AdmissionError(RuntimeError):
@@ -38,6 +51,59 @@ class AdmissionError(RuntimeError):
 
 class RetryableAdmission(AdmissionError):
     """Evidence is not ready yet and may become valid before the deadline."""
+
+
+def _admission_reason(error: BaseException) -> str:
+    """Map local, reviewed control-flow messages to bounded reason tokens."""
+
+    message = str(error)
+    if "API request failed" in message:
+        return "api_unavailable"
+    if "malformed" in message:
+        return "malformed_evidence"
+    if "predecessor" in message:
+        return "predecessor_pending"
+    if "missing" in message or "unavailable" in message:
+        return "missing_evidence"
+    if "still running" in message or "active job" in message:
+        return "running_evidence"
+    if "stale" in message:
+        return "stale_rerun"
+    if "timed out" in message:
+        return "timeout"
+    if "recheck" in message:
+        return "recheck_not_ready"
+    if "not successful" in message:
+        return "upstream_failed"
+    return "unclassified"
+
+
+def _emit_progress(
+    status: str, reason: str = "unclassified", exit_code: int = 0
+) -> None:
+    """Emit only fixed, non-sensitive progress fields."""
+
+    global _progress_started
+    if status == "start":
+        _progress_started = time.monotonic()
+    elapsed = 0
+    if _progress_started is not None:
+        elapsed = max(int(time.monotonic() - _progress_started), 0)
+    if reason not in ADMISSION_REASONS:
+        reason = "unclassified"
+    event = f"stage=admission status={status} elapsed={elapsed} exit={exit_code} reason={reason}"
+    print(event, file=sys.stderr)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY", "")
+    if summary:
+        try:
+            with Path(summary).open("a", encoding="utf-8") as output:
+                output.write(event + "\n")
+        except OSError:
+            # Summary writes are diagnostic-only and must never change admission.
+            print(
+                "stage=admission status=fail elapsed=0 exit=125 reason=diagnostic_unavailable",
+                file=sys.stderr,
+            )
 
 
 class GitHubAPI:
@@ -367,6 +433,7 @@ def admit(
         raise AdmissionError("candidate SHA is malformed")
     if before != ZERO_SHA and not _valid_sha(before):
         raise AdmissionError("predecessor SHA is malformed")
+    _emit_progress("start")
     deadline = time.monotonic() + max(timeout_seconds, 0)
     while True:
         try:
@@ -391,8 +458,11 @@ def admit(
                     raise AdmissionError("current delivery identity does not match SHA")
                 current = delivery
             reject_stale_rerun(api, repository, sha, current)
+            _emit_progress("pass")
             return True
-        except RetryableAdmission:
+        except RetryableAdmission as error:
+            reason = _admission_reason(error)
+            _emit_progress("pending", reason)
             if not check_predecessor:
                 raise AdmissionError("admission recheck not ready") from None
             if time.monotonic() >= deadline:
@@ -454,7 +524,8 @@ def main(argv: list[str] | None = None) -> int:
             check_predecessor=not args.recheck,
         )
     except AdmissionError as error:
-        print(f"development admission rejected: {error}", file=sys.stderr)
+        _emit_progress("fail", _admission_reason(error), 1)
+        print("development admission rejected", file=sys.stderr)
         return 1
     terraform = "required" if terraform_applicable(paths) else "not-required"
     print(f"development admission accepted: sha={args.sha} terraform={terraform}")
