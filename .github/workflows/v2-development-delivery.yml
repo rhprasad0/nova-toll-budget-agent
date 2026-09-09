@@ -437,6 +437,8 @@ jobs:
     environment: development
     outputs:
       verified: ${{ steps.verify-release.outputs.verified }}
+      verified_pricing_schema: ${{ steps.migration-schema.outputs.verified_pricing_schema }}
+      verified_oracle_schema: ${{ steps.migration-schema.outputs.verified_oracle_schema }}
     permissions:
       contents: read
       actions: read
@@ -875,6 +877,46 @@ jobs:
       - name: Run reviewed backward-compatible development migrations
         run: bash v2/scripts/run_development_migrations_workflow.sh
 
+      - name: Extract verified installed schema versions
+        id: migration-schema
+        run: |
+          set -euo pipefail
+          source v2/scripts/run_private_stage.sh
+          extract_schema_versions() {
+            set -euo pipefail
+            evidence="$RUNNER_TEMP/v2-development-migrations-evidence.json"
+            test -f "$evidence" && test ! -L "$evidence"
+            jq -e \
+              --arg commit "$GITHUB_SHA" \
+              --arg run "$GITHUB_RUN_ID" \
+              --arg attempt "$GITHUB_RUN_ATTEMPT" \
+              --arg pricing "$EXPECTED_PRICING_VERSION" \
+              --arg oracle "$EXPECTED_ORACLE_VERSION" '
+              type == "object"
+              and (keys_unsorted | sort) == ["account", "after", "applied", "before", "commit_sha", "database", "github_run_attempt", "github_run_id", "role", "route", "route_valid", "runner_run_id", "status", "transport_valid", "user"]
+              and .account == "903859731897"
+              and .commit_sha == $commit and .github_run_id == $run and .github_run_attempt == $attempt
+              and .database == "nova_toll_development" and .user == "schema_migrator_development"
+              and .role == "nova-toll-v2-development-migrations-dev"
+              and .route == "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
+              and .route_valid == true and .transport_valid == true and .status == "ok"
+              and (.runner_run_id | type == "string" and length > 0)
+              and (.before | type == "object" and (keys_unsorted | sort) == ["oracle", "pricing"]
+                   and all(.[]; type == "string" and test("^[0-9]+[.][0-9]+[.][0-9]+$")))
+              and (.applied | type == "array" and all(.[]; type == "string" and test("^v2/db/migrations/[0-9]{3}_upgrade_(pricing|oracle)_.*[.]sql$")))
+              and (.after | type == "object" and (keys_unsorted | sort) == ["oracle", "pricing"]
+                   and .pricing == $pricing and .oracle == $oracle
+                   and all(.[]; type == "string" and test("^[0-9]+[.][0-9]+[.][0-9]+$")))
+              and ((.before == .after and (.applied | length) == 0)
+                   or (.before != .after and (.applied | length) > 0))
+            ' "$evidence" >/dev/null
+            printf 'verified_pricing_schema=%s\nverified_oracle_schema=%s\n' \
+              "$(jq -er '.after.pricing' "$evidence")" "$(jq -er '.after.oracle' "$evidence")" \
+              >>"$GITHUB_OUTPUT"
+          }
+          run_private_stage "migration-evidence" "$RUNNER_TEMP/development-migration-schema.log" "$RUNNER_TEMP/development-migration-schema.log" \
+            extract_schema_versions
+
       - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-development-delivery
@@ -992,6 +1034,7 @@ jobs:
             "$RUNNER_TEMP/development-release-manifest.json" "$RUNNER_TEMP/development-plan-validation.json" \
             "$RUNNER_TEMP/development-release-staging-verification.json" "$RUNNER_TEMP/development-plan-validation-summary.json" \
             "$RUNNER_TEMP/development-release-verification.json" "$RUNNER_TEMP/v2-development-migrations-evidence.json" \
+            "$RUNNER_TEMP/development-migration-schema.log" \
             "$RUNNER_TEMP/development-readiness-state.json" "$RUNNER_TEMP/development-readiness-state.log" \
             "$RUNNER_TEMP/development-readiness-cleanup.log" \
             "$RUNNER_TEMP/development-plan-cleanup.log" "$RUNNER_TEMP/development-migration-stage.stdout" \
@@ -1024,8 +1067,30 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Publish sanitized release outcome
+      - name: Prepare durable release evidence
+        id: prepare-evidence
+        if: always()
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 v2/scripts/development_deployment_status.py prepare
+      - name: Upload durable release evidence
+        id: upload-evidence
+        if: always() && steps.prepare-evidence.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: v2-development-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/development-release-evidence.json
+          if-no-files-found: error
+          retention-days: 90
+          overwrite: false
+      - name: Finalize sanitized release outcome
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           NEEDS_JSON: ${{ toJSON(needs) }}
+          PREPARE_OUTCOME: ${{ steps.prepare-evidence.outcome }}
+          UPLOAD_OUTCOME: ${{ steps.upload-evidence.outcome }}
+          EVIDENCE_ARTIFACT_NAME: v2-development-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          EVIDENCE_ARTIFACT_ID: ${{ steps.upload-evidence.outputs.artifact-id }}
+          RAW_EVIDENCE_ARTIFACT_DIGEST: ${{ steps.upload-evidence.outputs.artifact-digest }}
         run: python3 v2/scripts/development_deployment_status.py finish
