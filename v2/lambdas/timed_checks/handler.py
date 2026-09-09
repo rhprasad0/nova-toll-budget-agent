@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import cast
 
@@ -27,6 +28,10 @@ class TimedChecksValidationError(ValueError):
     """A malformed invocation event rejected at the Lambda boundary."""
 
 
+class TimedChecksStaleError(RuntimeError):
+    """The invocation arrived outside its reviewed freshness window."""
+
+
 def _validate_event(event: object) -> tuple[str, str]:
     if not isinstance(event, dict):
         raise TimedChecksValidationError("invalid timed-check event")
@@ -48,35 +53,84 @@ def _validate_event(event: object) -> tuple[str, str]:
     return window_id, schedule
 
 
+def _scheduled_time(schedule: str, actual_start: datetime) -> datetime:
+    """Derive the local scheduled timestamp without expanding the event contract."""
+    minute, hour, _, _, weekday = schedule.split()
+    scheduled = (
+        actual_start - timedelta(days=(actual_start.isoweekday() - int(weekday)) % 7)
+    ).replace(hour=int(hour), minute=int(minute), second=0, microsecond=0)
+    return scheduled if scheduled <= actual_start else scheduled - timedelta(days=7)
+
+
 def _emit_result(result: dict[str, object]) -> None:
-    logger.info("timed_checks_result", extra=result)
+    record = {"event": "timed_checks_result", **result}
+    logger.info(json.dumps(record, sort_keys=True, separators=(",", ":")), extra=record)
 
 
 def handler(event: object, _context: object) -> dict[str, str]:
     """Validate and run one timed-check window."""
     window_id: str | None = None
-    terminal: dict[str, object] | None = None
+    schedule: str | None = None
+    actual_start = datetime.now(NEW_YORK)
+    terminal: dict[str, object] = {
+        "status": "invalid",
+        "window_id": None,
+        "schedule": None,
+        "scheduled_time": None,
+        "actual_start_time": actual_start.isoformat(),
+        "freshness": "not_checked",
+        "route": "not_run",
+        "annual": "not_run",
+        "evaluation": "not_run",
+    }
+    phase: str | None = None
     try:
         window_id, schedule = _validate_event(event)
-        if not scheduled_run_is_fresh(schedule, datetime.now(NEW_YORK)):
-            terminal = {"status": "stale", "window_id": window_id}
-            return {"status": "stale", "window_id": window_id}
+        terminal.update(
+            {
+                "window_id": window_id,
+                "schedule": schedule,
+                "scheduled_time": _scheduled_time(schedule, actual_start).isoformat(),
+            }
+        )
+        fresh = scheduled_run_is_fresh(schedule, actual_start)
+        terminal["freshness"] = "fresh" if fresh else "stale"
+        if not fresh:
+            terminal.update(
+                {
+                    "status": "stale",
+                    "failure_type": "TimedChecksStaleError",
+                }
+            )
+            raise TimedChecksStaleError("timed-check window is stale")
 
+        phase = "route"
         run_route_checks(window_id)
+        terminal["route"] = "succeeded"
+        phase = "annual"
         run_annual_checks()
+        terminal["annual"] = "succeeded"
+        phase = "evaluation"
         run_evaluation.main(window=window_id, output_dir=_EVAL_OUTPUT_DIR)
-        terminal = {"status": "succeeded", "window_id": window_id}
+        terminal["evaluation"] = "succeeded"
+        terminal["status"] = "succeeded"
         return {"status": "succeeded", "window_id": window_id}
     except TimedChecksValidationError:
-        terminal = {"status": "invalid", "reason": "invalid_event"}
+        terminal.update(
+            {"status": "invalid", "failure_type": "TimedChecksValidationError"}
+        )
+        raise
+    except TimedChecksStaleError:
         raise
     except (Exception, SystemExit) as error:
-        terminal = {
-            "status": "failed",
-            **({"window_id": window_id} if window_id is not None else {}),
-            "error_type": type(error).__name__,
-        }
+        if phase is not None:
+            terminal[phase] = "failed"
+        terminal.update(
+            {
+                "status": "failed",
+                "failure_type": type(error).__name__,
+            }
+        )
         raise
     finally:
-        if terminal is not None:
-            _emit_result(terminal)
+        _emit_result(terminal)

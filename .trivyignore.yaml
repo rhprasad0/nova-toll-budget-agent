@@ -4,6 +4,10 @@ misconfigurations:
     statement: The runtime must reach the public OpenAI API over HTTPS.
     expired_at: 2027-02-13
   - id: AVD-AWS-0104
+    paths: [v2/infra/timed_checks.tf]
+    statement: Timed evaluations must reach the public OpenAI API over HTTPS.
+    expired_at: 2027-02-13
+  - id: AVD-AWS-0104
     paths: [infra/network.tf]
     statement: The Tailscale exit node must forward peer-selected internet traffic.
     expired_at: 2027-02-13

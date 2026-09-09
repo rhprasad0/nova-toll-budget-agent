@@ -678,6 +678,8 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "aws_s3_object.agentcore": ("artifact-upload", ("source", "source_hash")),
             "aws_s3_object.tollchat_proxy": ("artifact-upload", ("source", "source_hash")),
             "aws_lambda_function.tollchat_proxy": ("lambda-code", ("s3_object_version", "source_code_hash")),
+            "aws_s3_object.timed_checks": ("artifact-upload", ("source", "source_hash")),
+            "aws_lambda_function.timed_checks": ("lambda-code", ("s3_object_version", "source_code_hash")),
             "aws_lambda_alias.tollchat_live": ("lambda-alias", ("function_version",)),
             "aws_bedrockagentcore_agent_runtime.tollchat": (
                 "agentcore-code",
@@ -723,6 +725,18 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "aws_lambda_function.tollchat_proxy",
                 "lambda:UpdateFunctionCode",
                 "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-chat-proxy-dev",
+                (),
+            ),
+            (
+                "aws_s3_object.timed_checks",
+                "s3:PutObject",
+                "arn:aws:s3:::nova-toll-agentcore-903859731897/lambda/v2/timed-checks-dev.zip",
+                (),
+            ),
+            (
+                "aws_lambda_function.timed_checks",
+                "lambda:UpdateFunctionCode",
+                "arn:aws:lambda:us-east-1:903859731897:function:nova-toll-v2-timed-checks-dev",
                 (),
             ),
             (

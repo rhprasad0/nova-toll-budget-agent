@@ -1,6 +1,7 @@
 import logging
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -12,7 +13,11 @@ from timed_checks import SCHEDULE_WINDOW_PAIRS
 
 
 def _records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
-    return [record for record in caplog.records if record.msg == "timed_checks_result"]
+    return [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "timed_checks_result"
+    ]
 
 
 def _always_fresh(*_args: object, **_kwargs: object) -> bool:
@@ -88,6 +93,22 @@ def test_fresh_invocation_runs_in_order_and_uses_tmp(
     records = _records(caplog)
     assert len(records) == 1
     assert _record_field(records[0], "status") == "succeeded"
+    assert _record_field(records[0], "freshness") == "fresh"
+    assert _record_field(records[0], "route") == "succeeded"
+    assert _record_field(records[0], "annual") == "succeeded"
+    assert _record_field(records[0], "evaluation") == "succeeded"
+    assert _record_field(records[0], "schedule") == _schedule("i95_northbound")
+    assert _record_field(records[0], "scheduled_time").endswith(("-05:00", "-04:00"))
+
+
+def test_scheduled_time_is_the_latest_reviewed_new_york_occurrence() -> None:
+    actual = datetime(2026, 9, 9, 1, 49, tzinfo=runner.NEW_YORK)
+    assert runner._scheduled_time(  # pyright: ignore[reportPrivateUsage]
+        "47 1 * * 3", actual
+    ).isoformat() == ("2026-09-09T01:47:00-04:00")
+    assert runner._scheduled_time(  # pyright: ignore[reportPrivateUsage]
+        "17 14 * * 3", actual
+    ).isoformat() == ("2026-09-02T14:17:00-04:00")
 
 
 def test_stale_invocation_short_circuits_and_records_once(
@@ -97,19 +118,19 @@ def test_stale_invocation_short_circuits_and_records_once(
     monkeypatch.setattr(runner, "run_route_checks", _unexpected_call)
     monkeypatch.setattr(runner, "run_annual_checks", _unexpected_call)
     monkeypatch.setattr(runner.run_evaluation, "main", _unexpected_call)
-    with caplog.at_level(logging.INFO):
-        result = runner.handler(
+    with caplog.at_level(logging.INFO), pytest.raises(runner.TimedChecksStaleError):
+        runner.handler(
             {
                 "window_id": "greenway_eb_peak",
                 "schedule": _schedule("greenway_eb_peak"),
             },
             object(),
         )
-
-    assert result == {"status": "stale", "window_id": "greenway_eb_peak"}
     records = _records(caplog)
     assert len(records) == 1
     assert _record_field(records[0], "status") == "stale"
+    assert _record_field(records[0], "freshness") == "stale"
+    assert _record_field(records[0], "failure_type") == "TimedChecksStaleError"
 
 
 @pytest.mark.parametrize(
@@ -170,7 +191,8 @@ def test_failure_is_reraised_and_logged_once_without_exception_text(
     records = _records(caplog)
     assert len(records) == 1
     assert _record_field(records[0], "status") == "failed"
-    assert _record_field(records[0], "error_type") == type(failure).__name__
+    assert _record_field(records[0], "failure_type") == type(failure).__name__
+    assert _record_field(records[0], stage) == "failed"
     assert "secret details" not in caplog.text
 
 

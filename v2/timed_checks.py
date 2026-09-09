@@ -109,6 +109,8 @@ def scheduled_run_is_fresh(schedule: str, now: datetime) -> bool:
 
 
 def _configure_rds_endpoint() -> None:
+    if os.environ.get("DB_HOST") and os.environ.get("DB_PORT"):
+        return
     rds = cast(
         Any,
         boto3.client("rds", region_name="us-east-1"),  # pyright: ignore[reportUnknownMemberType]

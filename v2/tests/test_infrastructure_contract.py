@@ -22,6 +22,7 @@ import yaml
 V2_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = V2_ROOT.parent
 MAIN_TF = (V2_ROOT / "infra" / "main.tf").read_text()
+TIMED_CHECKS_TF = (V2_ROOT / "infra" / "timed_checks.tf").read_text()
 PUBLISHER_HANDLER = (V2_ROOT / "lambdas" / "publisher" / "handler.py").read_text()
 ENVIRONMENT_TF = (V2_ROOT / "infra" / "environment.tf").read_text()
 SITE_TF = (V2_ROOT / "infra" / "site.tf").read_text()
@@ -3061,6 +3062,127 @@ def test_timed_builder_import_smoke_is_secret_isolated():
         in script
     )
     assert "uv run --python 3.13 --no-project python" in script
+    assert "global-bundle.pem" in script
+    assert 'DB_CA_BUNDLE_PATH = "/var/task/rds-ca-bundle.pem"' in TIMED_CHECKS_TF
+
+
+def test_timed_lambda_scheduler_and_failure_contract():
+    pairs = set(
+        next(
+            ast.literal_eval(node.value)
+            for node in ast.parse(TIMED_CHECKS_MODULE).body
+            if isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "SCHEDULE_WINDOW_PAIRS"
+            and node.value is not None
+        )
+    )
+    entries = re.findall(
+        r'"([^"]+)"\s*=\s*\{ schedule = "([^"]+)", expression = "([^"]+)", window_id = "([^"]+)" \}',
+        TIMED_CHECKS_TF,
+    )
+    assert len(entries) == 28
+    assert len({name for name, *_ in entries}) == 28
+    assert {(schedule, window) for _, schedule, _, window in entries} == pairs
+    weekdays = {"1": "MON", "2": "TUE", "3": "WED", "4": "THU", "5": "FRI", "6": "SAT"}
+    for _, schedule, expression, _ in entries:
+        minute, hour, _, _, weekday = schedule.split()
+        assert expression == f"cron({minute} {hour} ? * {weekdays[weekday]} *)"
+
+    lambda_block = terraform_block(
+        TIMED_CHECKS_TF, 'resource "aws_lambda_function" "timed_checks"'
+    )
+    for name, value in (
+        ("s3_bucket", "var.foundation.agentcore_artifacts_bucket_name"),
+        ("s3_key", "aws_s3_object.timed_checks.key"),
+        ("s3_object_version", "aws_s3_object.timed_checks.version_id"),
+        ("source_code_hash", "local.timed_checks_zip_hash"),
+        ("reserved_concurrent_executions", "1"),
+    ):
+        assert_assignment(lambda_block, name, value)
+    assert "filename" not in lambda_block
+    assert "subnet_ids         = local.private_subnets" in lambda_block
+
+    schedule = terraform_block(
+        TIMED_CHECKS_TF, 'resource "aws_scheduler_schedule" "timed_checks"'
+    )
+    assert_assignment(schedule, "for_each", "local.timed_check_schedules")
+    assert_assignment(schedule, "state", '"ENABLED"')
+    assert_assignment(schedule, "schedule_expression_timezone", '"America/New_York"')
+    assert_assignment(schedule, "mode", '"OFF"')
+    assert "window_id = each.value.window_id" in schedule
+    assert "schedule  = each.value.schedule" in schedule
+    assert schedule.count("maximum_retry_attempts       = 0") == 1
+    assert schedule.count("maximum_event_age_in_seconds = 600") == 1
+
+    invoke = terraform_block(
+        TIMED_CHECKS_TF,
+        'resource "aws_lambda_function_event_invoke_config" "timed_checks"',
+    )
+    assert_assignment(invoke, "maximum_retry_attempts", "0")
+    assert_assignment(invoke, "maximum_event_age_in_seconds", "600")
+    for queue_name in ("timed_checks_invoke_failure", "timed_checks_delivery_failure"):
+        queue = terraform_block(
+            TIMED_CHECKS_TF, f'resource "aws_sqs_queue" "{queue_name}"'
+        )
+        assert_assignment(queue, "sqs_managed_sse_enabled", "true")
+        assert_assignment(queue, "message_retention_seconds", "1209600")
+    assert TIMED_CHECKS_TF.count("alarm_actions       = local.alarm_actions") == 2
+
+    lambda_trust = terraform_block(
+        TIMED_CHECKS_TF,
+        'data "aws_iam_policy_document" "timed_checks_lambda_assume"',
+    )
+    scheduler_trust = terraform_block(
+        TIMED_CHECKS_TF,
+        'data "aws_iam_policy_document" "timed_checks_scheduler_assume"',
+    )
+    assert 'identifiers = ["lambda.amazonaws.com"]' in lambda_trust
+    assert 'identifiers = ["scheduler.amazonaws.com"]' in scheduler_trust
+    assert 'variable = "aws:SourceAccount"' in scheduler_trust
+    assert 'variable = "aws:SourceArn"' in scheduler_trust
+
+    lambda_policy = terraform_block(
+        TIMED_CHECKS_TF,
+        'data "aws_iam_policy_document" "timed_checks_lambda"',
+    )
+    assert 'actions   = ["rds:DescribeDBInstances"]' in lambda_policy
+    assert 'actions = ["rds-db:connect"]' in lambda_policy
+    assert "/${local.database_roles.agent}" in lambda_policy
+    assert "/${local.database_roles.pricing_caller}" in lambda_policy
+    assert 'actions   = ["ssm:GetParameter"]' in lambda_policy
+    assert 'actions   = ["sqs:SendMessage"]' in lambda_policy
+    assert 'resources = ["*"]' not in lambda_policy
+
+    assert 'cidr_ipv4         = "0.0.0.0/0"' in TIMED_CHECKS_TF
+    assert "from_port         = 443" in TIMED_CHECKS_TF
+    assert "to_port           = 443" in TIMED_CHECKS_TF
+    assert "from_port                    = 5432" in TIMED_CHECKS_TF
+    assert "to_port                      = 5432" in TIMED_CHECKS_TF
+    assert 'ip_protocol = "-1"' not in TIMED_CHECKS_TF
+
+
+def test_timed_package_is_threaded_through_all_plan_paths():
+    assert (
+        '-var timed_checks_package_path="$STAGING/timed-checks.zip"'
+        in DEVELOPMENT_PLAN_WORKFLOW
+    )
+    assert (
+        '-var timed_checks_package_path="$PACKAGE_DIR/timed-checks.zip"'
+        in DEVELOPMENT_DELIVERY_WORKFLOW
+    )
+    assert (
+        "-var timed_checks_package_path=build/timed-checks.zip"
+        in PRODUCTION_PLAN_WORKFLOW
+    )
+    for address in (
+        "aws_lambda_function.timed_checks",
+        "aws_scheduler_schedule.timed_checks",
+        "aws_s3_object.timed_checks",
+        "aws_security_group.timed_checks",
+        "aws_sqs_queue.timed_checks_invoke_failure",
+    ):
+        assert address in PRODUCTION_PLAN_WORKFLOW
 
 
 def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
@@ -3070,6 +3192,13 @@ def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
     statement: The runtime must reach the public OpenAI API over HTTPS.
     expired_at: 2027-02-13"""
     assert exception in ignores
+    assert (
+        """  - id: AVD-AWS-0104
+    paths: [v2/infra/timed_checks.tf]
+    statement: Timed evaluations must reach the public OpenAI API over HTTPS.
+    expired_at: 2027-02-13"""
+        in ignores
+    )
     assert (
         """  - id: AVD-AWS-0104
     paths: [infra/agentcore.tf]"""
@@ -6087,6 +6216,7 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "/aws/lambda/toll-v2-report-publisher-dev",
             "/aws/lambda/tollchat-v2-chat-proxy-dev",
             "/aws/lambda/tollchat-v2-usage-publisher-dev",
+            "/aws/lambda/nova-toll-v2-timed-checks-dev",
             "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
             "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
         )
@@ -6347,12 +6477,14 @@ def _assert_application_roles_are_bootstrap_owned() -> None:
         "agent_measurement.tf": (
             V2_ROOT / "infra" / "agent_measurement.tf"
         ).read_text(),
+        "timed_checks.tf": TIMED_CHECKS_TF,
     }
     role_names = {
         "main.tf": ("loader", "timed_checks", "publisher", "publisher_scheduler"),
         "agentcore.tf": ("tollchat_runtime", "tollchat_proxy"),
         "site.tf": (),
         "agent_measurement.tf": (),
+        "timed_checks.tf": ("timed_checks_lambda", "timed_checks_scheduler"),
     }
     for filename, names in role_names.items():
         for name in names:
@@ -6927,8 +7059,7 @@ DEVELOPMENT_PLAN_REFRESH_TUPLES = {
     "ReadApplicationSchedules": (
         ("scheduler:GetSchedule", "scheduler:ListTagsForResource"),
         (
-            "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev",
-            "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default",
+            'concat([ "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev", "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default", ], local.development_delivery_timed_schedule_arns)',
         ),
         _NO_PLAN_CONDITIONS,
     ),

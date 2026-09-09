@@ -8,9 +8,9 @@
     "lock_identity": "V2-AWS60"
   },
   "deployment_inputs": {
-    ".github/workflows/v2-development-delivery.yml": "532b43a80e5da20a973db8ca06bd64d2a58c10ca3269beca3fc5b3ea8028dda7",
+    ".github/workflows/v2-development-delivery.yml": "e7b861ce0adee450d9b076aac9c8253ce56604efdfe61a35afe9d9339527653d",
     ".github/workflows/v2-development-migrations.yml": "06f7d3d432f77dac9fb6c680752918e6def5af0cff4b52349a8cddb098dd217a",
-    ".github/workflows/v2-development-plan.yml": "0a95edc4c6af31b75a5d495466a8155aa9bf5dc2591268ae15ea7093845f0246",
+    ".github/workflows/v2-development-plan.yml": "5b6a20804dde0bcd1b906262e2b43aac0389dc580c6aea7a73d54d84d0d009b8",
     "infra/.terraform.lock.hcl": "798415e2b72a761023f0ee096521a29223173428c99de7e4c50103e726eef4d8",
     "infra/account-contract.json": "c5959d0778042c89768547979937d789d454a9b2d36db2e77f35147e0ab1e8fa",
     "infra/agentcore.tf": "cfe196ec653cf2b903375c8a4fc64411f53d578c663e8549c79926049a64f9c2",
@@ -19,7 +19,7 @@
     "infra/budget.tf": "01980ebb992a5256e5cdb3ae4b3da19a197e5011b83551d94b638d0dfc1d3ec7",
     "infra/data.tf": "e8e443e33a9d908f405eec54fa6bee2075fa8c228e293d734d1b0a5fc0428bc1",
     "infra/delivery_plan_validator.py": "566c6cf883cfa205d9423eb3437825045d3405e9057fe4841226fcc21fc6bda1",
-    "infra/iam.tf": "d85795e6a37e721c53906c7c56f73a1406be4856bae2e00061afc1b0068f4092",
+    "infra/iam.tf": "1c5ec442a65c1bb72404f1065bda7e1ed3c8e49b1e89dc7791d36634d2131d40",
     "infra/kms.tf": "be9512e49926805d56b6c521793c08880929948b820f943f0a2c5a0f9e589168",
     "infra/lambda-stub/handler.py": "d86cf7746868e087960da8c551496bcf21aa71d79baf4d910e60fb3f43a05868",
     "infra/lambda.tf": "c95fafdc5f815820273eb9f314787532e8b6e5c1f601f50c2481f51b5c48ce0c",
@@ -119,7 +119,8 @@
     "v2/infra/main.tf": "1e3d9b326841dc9fdd1fce7b7a0f2cd44632019067761c25f78f68af84583331",
     "v2/infra/providers.tf": "b5fc8bb0f92ed4990625aebbe95811d683f36d48a9f18ad3520238d79b95e4aa",
     "v2/infra/site.tf": "dad79b68b07ba405562adce53da900c8b7241650bf20e056014f9ea1436c43b2",
-    "v2/infra/variables.tf": "fc7a4508656d70dfc8a5f1c7c829afdf49a61bd0796a96a5575cf20c9f82ee67",
+    "v2/infra/timed_checks.tf": "40a6f5817147335e309f5bcc195f7cb23d8fa11e270362f1c38d1aaa170b12bd",
+    "v2/infra/variables.tf": "c054a672130eb9a10e6340c610e9b864c422455440b1554c182ef76122771f73",
     "v2/infra/versions.tf": "e08079981fe5f42c0af5906a3710c635d03e346e2724811d02cb8528bb5ad32d",
     "v2/lambdas/chat_proxy/handler.mjs": "c1d6dfcdc6b71be2d8ad25e51d2ba16f2944c449234b442a4373e053ad8dcdf2",
     "v2/lambdas/chat_proxy/package-lock.json": "247f0d8b76dc17b79c2c626f8cb5b50deb404cc500fe89fc11e4df3725aabd69",
@@ -129,13 +130,13 @@
     "v2/lambdas/loader/parse_csv.py": "313d5d0843f9e884e7649dc66da3ebc5cdb015e2484899f4152d5ab9fb7b19ac",
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
     "v2/lambdas/publisher/handler.py": "4d3570e0c014301dc4cf20d93a0d9f8ebdac5ce9e073bcb25be138331b2db396",
-    "v2/lambdas/timed_checks/handler.py": "b49ee965e9f22bcaa7aeae1902475179d08d91528bfdb502eb2a1765387d9303",
+    "v2/lambdas/timed_checks/handler.py": "c1a3d697d99becd89b00ad45bd04ff36904541e1ee528a7402711d72410294bf",
     "v2/pyproject.toml": "f10d2072ae861df7b129813407c61b7b846639c0a67ba1a67b9a5833c4f5d4b1",
     "v2/scripts/build_agentcore_zips.sh": "d731301c6d376a6af9a5fe9091e991326e671aeaa62b1969fd8a124bb8aecc9e",
     "v2/scripts/build_loader_zip.sh": "018e0f5ff41f8619d8903481928bfb40e765c9356af132cf6104a4ad40fa5646",
     "v2/scripts/build_publisher_zip.sh": "174e88fd65a997a16c08cf7f838105b7d19a2e3d1fc0a63d460ad43bcaf4834b",
     "v2/scripts/build_release_bundle.sh": "40bf8759eddb5b75a5b0e44b3fbd568f2252f1e5fa034163da8111c444a5c6e8",
-    "v2/scripts/build_timed_checks_zip.sh": "5cb809db8db1d6d79526e71cc8aa9031ba5f3ec776fb3ac2662e5e714e22e999",
+    "v2/scripts/build_timed_checks_zip.sh": "c51b3e752ace8ecc34ff5e6964739d167f0edc61ebeffbcd4ca595fe9359dab1",
     "v2/scripts/check_development_admission.py": "d80ca41e1469da2a7a45b8cf052382424f9f15fe69516e1303310665c6240f6c",
     "v2/scripts/check_development_release.py": "a9b44797a123e3d4fbd075065b6ece356416f139976de752db6fb67c147cbe3b",
     "v2/scripts/classify_deployment_error.py": "8c736cbd2a8957f347408b92553efd0971bb50d42e6c8f658f5ff7602079b405",
@@ -150,7 +151,7 @@
     "v2/scripts/timed-checks-requirements.in": "8218bd738a1337e889d04756b2f7c53f1693503b97c519dcc8a10a423b2837e5",
     "v2/scripts/timed-checks-requirements.txt": "c7f9d037e3fb740603863c144cfc053ebb4e52b25024318b68390bf1518e0515",
     "v2/scripts/verify_release_bundle.py": "a0773f48ad37509f571176e2ec6f758763ac749e523482264a99976607f7ca80",
-    "v2/timed_checks.py": "cd2985f4bd8ff41d3032980c5950210d6dab21cc0e57295ddc94515ec1f5524a",
+    "v2/timed_checks.py": "835aec120c4d47f44aa8e88990eb3642fc3adb114d41e89a1d4e5d064df76ac8",
     "v2/uv.lock": "a4fe1765a080d8c07154e28265c125fe1b2ceaf2d9f7d353e255e3988e0ce137"
   },
   "packages": {
@@ -158,7 +159,7 @@
     "chat-proxy.zip": "de0a8bcaa0a01fb993c11f9550ee75aa08578838889d3e4145fd0044dfb9afff",
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
     "publisher.zip": "0d7e95193f2d6deb9816b132b7bb6774e932f643d237aac0d7a8e1aab8245064",
-    "timed-checks.zip": "05d69cbae010c0b9e717051de4de335b33b1d3ed6b1b19d2f06cf95d0753667e"
+    "timed-checks.zip": "f318421d40047bd57a1bd9c0cd6eab961d7281a66595bf883616b7468b0b8fff"
   },
   "mutations": [
     {
@@ -199,6 +200,24 @@
     },
     {
       "address": "aws_lambda_function.tollchat_proxy",
+      "action": "update",
+      "operation_class": "lambda-code",
+      "changed_fields": [
+        "s3_object_version",
+        "source_code_hash"
+      ]
+    },
+    {
+      "address": "aws_s3_object.timed_checks",
+      "action": "update",
+      "operation_class": "artifact-upload",
+      "changed_fields": [
+        "source",
+        "source_hash"
+      ]
+    },
+    {
+      "address": "aws_lambda_function.timed_checks",
       "action": "update",
       "operation_class": "lambda-code",
       "changed_fields": [
@@ -260,6 +279,18 @@
       "address": "aws_lambda_function.tollchat_proxy",
       "action": "lambda:UpdateFunctionCode",
       "resource": "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-chat-proxy-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.timed_checks",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::nova-toll-agentcore-903859731897/lambda/v2/timed-checks-dev.zip",
+      "conditions": {}
+    },
+    {
+      "address": "aws_lambda_function.timed_checks",
+      "action": "lambda:UpdateFunctionCode",
+      "resource": "arn:aws:lambda:us-east-1:903859731897:function:nova-toll-v2-timed-checks-dev",
       "conditions": {}
     },
     {

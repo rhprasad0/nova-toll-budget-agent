@@ -756,7 +756,8 @@ jobs:
             -var loader_package_path="$PACKAGE_DIR/loader.zip" \
             -var publisher_package_path="$PACKAGE_DIR/publisher.zip" \
             -var agentcore_package_path="$PACKAGE_DIR/agentcore.zip" \
-            -var chat_proxy_package_path="$PACKAGE_DIR/chat-proxy.zip"
+            -var chat_proxy_package_path="$PACKAGE_DIR/chat-proxy.zip" \
+            -var timed_checks_package_path="$PACKAGE_DIR/timed-checks.zip"
 
           run_private_stage "show" "$PLAN_JSON" "$SHOW_LOG" \
             terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"

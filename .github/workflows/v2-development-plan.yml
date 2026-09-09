@@ -402,6 +402,7 @@ jobs:
             -var publisher_package_path="$STAGING/publisher.zip" \
             -var agentcore_package_path="$STAGING/agentcore.zip" \
             -var chat_proxy_package_path="$STAGING/chat-proxy.zip" \
+            -var timed_checks_package_path="$STAGING/timed-checks.zip" \
             >"$PLAN_LOG" 2>&1
           terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" show -json "$PLAN" \
             >"$PLAN_JSON" 2>"$SHOW_LOG"

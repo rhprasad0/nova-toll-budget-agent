@@ -61,6 +61,18 @@ def test_freshness_boundaries_and_dst() -> None:
     )
 
 
+def test_configured_database_endpoint_is_not_replaced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_client(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("unexpected RDS lookup")
+
+    monkeypatch.setenv("DB_HOST", "reviewed-development.example")
+    monkeypatch.setenv("DB_PORT", "5432")
+    monkeypatch.setattr(timed_checks.boto3, "client", fail_client)
+    timed_checks._configure_rds_endpoint()  # pyright: ignore[reportPrivateUsage]
+
+
 def test_route_checks_cover_all_windows(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(timed_checks, "_configure_rds_endpoint", lambda: None)
 
