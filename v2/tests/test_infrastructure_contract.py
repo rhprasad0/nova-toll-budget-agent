@@ -32,17 +32,7 @@ TERRAFORM_WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").rea
 PRODUCTION_PLAN_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-production-plan.yml"
 ).read_text()
-TIMED_CHECKS_WORKFLOW = (
-    REPO_ROOT / ".github" / "workflows" / "v2-timed-checks.yml"
-).read_text()
-TIMED_SCHEDULE_WORKFLOW = (
-    REPO_ROOT / ".github" / "workflows" / "v2-timed-schedule.yml"
-).read_text()
 TIMED_CHECKS_MODULE = (V2_ROOT / "timed_checks.py").read_text()
-TIMED_ROUTE_TEST = (V2_ROOT / "tests" / "test_validate_toll_route_live.py").read_text()
-TIMED_ANNUAL_TEST = (
-    V2_ROOT / "tests" / "test_get_annual_toll_ballpark_live.py"
-).read_text()
 VERSIONS_TF = (V2_ROOT / "infra" / "versions.tf").read_text()
 FOUNDATION_ROOT = REPO_ROOT / "infra"
 FOUNDATION_TRIGGERS = (FOUNDATION_ROOT / "triggers.tf").read_text()
@@ -3571,7 +3561,7 @@ def test_report_publisher_scheduler_and_environment_contract():
         assert obsolete not in MAIN_TF
 
 
-def test_timed_ci_uses_the_internal_pricing_caller():
+def test_timed_connectivity_role_uses_the_internal_pricing_caller():
     policy = MAIN_TF.split('data "aws_iam_policy_document" "timed_checks"', maxsplit=1)[
         1
     ].split('resource "aws_iam_role_policy" "timed_checks"', maxsplit=1)[0]
@@ -3591,134 +3581,6 @@ def test_timed_ci_uses_the_internal_pricing_caller():
     ) in policy
     assert "ssm:GetParameters" not in policy
     assert "/pricing_reader" not in policy
-    assert "role/nova-toll-v2-timed-checks" in TIMED_CHECKS_WORKFLOW
-    assert "role/nova-toll-github-ci" not in TIMED_CHECKS_WORKFLOW
-
-
-def test_timed_ci_wrapper_keeps_dual_triggers_and_freshness_contract():
-    workflow = cast(dict[str, object], yaml.safe_load(TIMED_SCHEDULE_WORKFLOW))
-    trigger = cast(dict[str, object], _workflow_trigger(workflow))
-    assert set(trigger) == {"schedule", "workflow_dispatch"}
-    schedules = cast(list[dict[str, str]], trigger["schedule"])
-    expected_schedules = [
-        ("17 6 * * 1", "America/New_York"),
-        ("17 6 * * 2", "America/New_York"),
-        ("17 6 * * 3", "America/New_York"),
-        ("17 6 * * 4", "America/New_York"),
-        ("17 6 * * 5", "America/New_York"),
-        ("17 14 * * 1", "America/New_York"),
-        ("17 14 * * 2", "America/New_York"),
-        ("17 14 * * 3", "America/New_York"),
-        ("17 14 * * 4", "America/New_York"),
-        ("17 14 * * 5", "America/New_York"),
-        ("17 11 * * 1", "America/New_York"),
-        ("47 1 * * 2", "America/New_York"),
-        ("47 1 * * 3", "America/New_York"),
-        ("47 1 * * 4", "America/New_York"),
-        ("47 1 * * 5", "America/New_York"),
-        ("17 10 * * 6", "America/New_York"),
-        ("17 15 * * 6", "America/New_York"),
-        ("17 18 * * 6", "America/New_York"),
-        ("23 7 * * 1", "America/New_York"),
-        ("23 7 * * 2", "America/New_York"),
-        ("23 7 * * 3", "America/New_York"),
-        ("23 7 * * 4", "America/New_York"),
-        ("23 7 * * 5", "America/New_York"),
-        ("23 17 * * 1", "America/New_York"),
-        ("23 17 * * 2", "America/New_York"),
-        ("23 17 * * 3", "America/New_York"),
-        ("23 17 * * 4", "America/New_York"),
-        ("23 17 * * 5", "America/New_York"),
-    ]
-    assert [
-        (entry["cron"], entry["timezone"]) for entry in schedules
-    ] == expected_schedules
-    selector = cast(dict[str, dict[str, object]], workflow["jobs"])["select-window"]
-    selector_script = cast(list[dict[str, object]], selector["steps"])[0]["run"]
-    selector_script = cast(str, selector_script)
-    expected_windows = {
-        "i95_northbound": expected_schedules[:5] + expected_schedules[17:18],
-        "i95_southbound": expected_schedules[5:10] + expected_schedules[15:16],
-        "i95_reversal": expected_schedules[10:15] + expected_schedules[16:17],
-        "greenway_eb_peak": expected_schedules[18:23],
-        "greenway_wb_peak": expected_schedules[23:28],
-    }
-    for window_id, pairs in expected_windows.items():
-        schedules_text = "|".join(f'"{cron}"' for cron, _ in pairs)
-        assert f'{schedules_text}) window_id="{window_id}"' in selector_script
-    assert "github.event.schedule || inputs.window_id" in TIMED_SCHEDULE_WORKFLOW
-    assert "TIMED_SCHEDULE: ${{ inputs.schedule }}" in TIMED_CHECKS_WORKFLOW
-    assert 'python3 scripts/check_timed_window.py "$TIMED_SCHEDULE"' in (
-        TIMED_CHECKS_WORKFLOW
-    )
-
-
-def test_timed_ci_checks_agent_pricing_tool_in_every_window():
-    workflow = cast(dict[str, object], yaml.safe_load(TIMED_SCHEDULE_WORKFLOW))
-    trigger = cast(dict[str, object], _workflow_trigger(workflow))
-    dispatch = cast(dict[str, object], trigger["workflow_dispatch"])
-    window_input = cast(dict[str, object], dispatch["inputs"])["window_id"]
-    assert cast(dict[str, object], window_input)["required"] is True
-    assert cast(dict[str, object], window_input)["type"] == "choice"
-    assert cast(dict[str, object], window_input)["options"] == [
-        "i95_northbound",
-        "i95_reversal",
-        "i95_southbound",
-        "greenway_eb_peak",
-        "greenway_wb_peak",
-    ]
-    for window_id in ("i95_northbound", "i95_reversal", "i95_southbound"):
-        assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
-        assert f'"{window_id}":' in TIMED_CHECKS_MODULE
-    for window_id in ("greenway_eb_peak", "greenway_wb_peak"):
-        assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
-
-    assert "DISPATCH_WINDOW: ${{ inputs.window_id }}" in TIMED_SCHEDULE_WORKFLOW
-    assert "SCHEDULE: ${{ github.event.schedule }}" in TIMED_SCHEDULE_WORKFLOW
-    assert "tests/test_validate_toll_route_live.py" in TIMED_CHECKS_WORKFLOW
-    assert "tests/test_get_annual_toll_ballpark_live.py" in TIMED_CHECKS_WORKFLOW
-    assert "get_current_toll_price" in TIMED_CHECKS_MODULE
-    assert "get_annual_toll_ballpark" in TIMED_CHECKS_MODULE
-    assert "route_validation.validate_toll_route" not in TIMED_ROUTE_TEST
-    assert "eval/run_evaluation.py --check" in CI_WORKFLOW
-    assert 'eval/run_evaluation.py --window "$TIMED_WINDOW_ID"' in TIMED_CHECKS_WORKFLOW
-    assert "TollChat timed evaluation" in TIMED_CHECKS_WORKFLOW
-    assert "test_live_route_checks_match_timed_window" in TIMED_ROUTE_TEST
-    assert (
-        "test_live_i95_northbound_restart_is_state_independent" not in TIMED_ROUTE_TEST
-    )
-    assert TIMED_ROUTE_TEST.count("run_route_checks(") == 1
-    assert TIMED_ANNUAL_TEST.count("run_annual_checks(") == 1
-    assert "OPENAI_API_KEY" not in TIMED_CHECKS_WORKFLOW
-
-
-def test_timed_ci_manual_window_call_is_main_only_and_fail_closed():
-    workflow = cast(dict[str, object], yaml.safe_load(TIMED_SCHEDULE_WORKFLOW))
-    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
-    assert set(jobs) == {"select-window", "live-checks"}
-    job = jobs["live-checks"]
-    assert job["if"] == "github.ref == 'refs/heads/main'"
-    assert job["uses"] == "./.github/workflows/v2-timed-checks.yml"
-    assert job["needs"] == "select-window"
-    assert "continue-on-error" not in job
-    with_values = cast(dict[str, object], job["with"])
-    assert with_values == {
-        "schedule": "${{ github.event.schedule || '' }}",
-        "window_id": "${{ needs.select-window.outputs.window_id }}",
-    }
-    assert set(re.findall(r"secrets\.([A-Z0-9_]+)", TIMED_SCHEDULE_WORKFLOW)) == {
-        "TS_OAUTH_CLIENT_ID",
-        "TS_OAUTH_SECRET",
-    }
-
-
-def test_timed_ci_checks_both_greenway_peak_windows():
-    for window_id in ("greenway_eb_peak", "greenway_wb_peak"):
-        assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
-    assert "DISPATCH_WINDOW: ${{ inputs.window_id }}" in TIMED_SCHEDULE_WORKFLOW
-
-    assert "test_live_route_checks_match_timed_window" in TIMED_ROUTE_TEST
-    assert "if: startsWith(inputs.window_id, 'i95_')" not in TIMED_CHECKS_WORKFLOW
 
 
 def test_exact_plan_success_path_is_private_ordered_and_fail_closed():
@@ -4092,7 +3954,6 @@ def test_setup_uv_v10_pins_version_and_checksum() -> None:
         DEVELOPMENT_DELIVERY_WORKFLOW,
         DEVELOPMENT_PLAN_WORKFLOW,
         PRODUCTION_PLAN_WORKFLOW,
-        TIMED_CHECKS_WORKFLOW,
     )
     for source in sources:
         workflow = cast(dict[str, object], yaml.safe_load(source))
