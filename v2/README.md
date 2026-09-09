@@ -115,6 +115,10 @@ smokes pass. The result includes immutable artifact/commit/schema identity;
 native OIDC environment records alone are not release proof. PR checks use
 fakes, and a live demonstration remains separately authorized.
 
+Each successful result also retains `v2-development-evidence-<run-id>-<attempt>`
+for 90 days. Operators retrieve that exact artifact to inspect the versioned,
+sanitized release identity; it contains no plans, credentials, or private logs.
+
 After merge, only human-reviewed backward-compatible development migrations use
 the protected exact-release delivery sequence: artifact/checkout verification,
 one saved private Terraform plan and gate, fixed-role migration, delivery-role

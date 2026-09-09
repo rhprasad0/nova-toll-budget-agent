@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Own the explicit end-to-end development deployment, separate from OIDC jobs."""
+"""Own development deployment status and durable release evidence."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from typing import Any, cast
 REPOSITORY = "rhprasad0/nova-toll-budget-agent"
 ENVIRONMENT = "development-release"
 SITE = "https://dev.tollchat.ai"
+EVIDENCE_FILE = "development-release-evidence.json"
 STATUS_REASONS = {
     "unclassified",
     "upstream_failed",
@@ -33,7 +34,7 @@ class DeploymentStatusError(ValueError):
 
 
 def _emit_progress(
-    state: str, reason: str = "unclassified", exit_code: int = 0
+    stage: str, state: str, reason: str = "unclassified", exit_code: int = 0
 ) -> None:
     global _progress_started
     if state == "start":
@@ -43,7 +44,7 @@ def _emit_progress(
         elapsed = max(int(time.monotonic() - _progress_started), 0)
     if reason not in STATUS_REASONS:
         reason = "unclassified"
-    event = f"stage=release-status status={state} elapsed={elapsed} exit={exit_code} reason={reason}"
+    event = f"stage={stage} status={state} elapsed={elapsed} exit={exit_code} reason={reason}"
     print(event, file=sys.stderr)
     summary = os.environ.get("GITHUB_STEP_SUMMARY", "")
     if summary:
@@ -52,7 +53,7 @@ def _emit_progress(
                 output.write(event + "\n")
         except OSError:
             print(
-                "stage=release-status status=fail elapsed=0 exit=125 reason=unclassified",
+                f"stage={stage} status=fail elapsed=0 exit=125 reason=unclassified",
                 file=sys.stderr,
             )
 
@@ -93,10 +94,8 @@ def identity() -> tuple[str, int, int]:
         os.environ["GITHUB_REPOSITORY"] != REPOSITORY
         or os.environ["GITHUB_REF"] != "refs/heads/main"
         or not re.fullmatch(r"[0-9a-f]{40}", sha)
-        or not run.isdecimal()
-        or not attempt.isdecimal()
-        or int(run) < 1
-        or int(attempt) < 1
+        or not re.fullmatch(r"[1-9][0-9]*", run)
+        or not re.fullmatch(r"[1-9][0-9]*", attempt)
     ):
         raise DeploymentStatusError("malformed_evidence")
     return sha, int(run), int(attempt)
@@ -117,6 +116,160 @@ def status(record: int, state: str, run: int, attempt: int) -> None:
     )
 
 
+def _mapping(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise DeploymentStatusError("malformed_evidence")
+    return cast(dict[str, Any], value)
+
+
+def _positive(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise DeploymentStatusError("malformed_evidence")
+    text = str(value)
+    if not re.fullmatch(r"[1-9][0-9]*", text):
+        raise DeploymentStatusError("malformed_evidence")
+    return int(text)
+
+
+def _version(value: object) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", value):
+        raise DeploymentStatusError("malformed_evidence")
+    return value
+
+
+def _prefixed_digest(value: object) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
+        raise DeploymentStatusError("malformed_evidence")
+    return value
+
+
+def _needs() -> dict[str, Any]:
+    try:
+        return _mapping(json.loads(os.environ["NEEDS_JSON"]))
+    except (KeyError, TypeError, json.JSONDecodeError) as error:
+        raise DeploymentStatusError("malformed_evidence") from error
+
+
+def _job(needs: dict[str, Any], name: str) -> dict[str, Any]:
+    return _mapping(needs.get(name))
+
+
+def _outputs(job: dict[str, Any]) -> dict[str, Any]:
+    return _mapping(job.get("outputs"))
+
+
+def _record(needs: dict[str, Any]) -> int:
+    return _positive(_outputs(_job(needs, "release-record")).get("deployment_id"))
+
+
+def _prerequisites(
+    sha: str, run: int, attempt: int, needs: dict[str, Any]
+) -> dict[str, Any]:
+    jobs = ("admission", "release-record", "build", "oidc-proof", "deploy")
+    entries = {name: _job(needs, name) for name in jobs}
+    if any(entry.get("result") != "success" for entry in entries.values()):
+        raise DeploymentStatusError("upstream_failed")
+    record = _positive(_outputs(entries["release-record"]).get("deployment_id"))
+    build = _outputs(entries["build"])
+    deploy = _outputs(entries["deploy"])
+    if deploy.get("verified") != "success":
+        raise DeploymentStatusError("upstream_failed")
+    artifact_id = _positive(build.get("artifact_id"))
+    artifact_digest = _prefixed_digest(build.get("artifact_digest"))
+    declared = {
+        "pricing": _version(build.get("pricing_schema")),
+        "oracle": _version(build.get("oracle_schema")),
+    }
+    installed = {
+        "pricing": _version(deploy.get("verified_pricing_schema")),
+        "oracle": _version(deploy.get("verified_oracle_schema")),
+    }
+    if declared != installed:
+        raise DeploymentStatusError("malformed_evidence")
+    return {
+        "schema_version": 1,
+        "repository": REPOSITORY,
+        "environment": ENVIRONMENT,
+        "commit": sha,
+        "deployment_id": record,
+        "run_id": run,
+        "attempt": attempt,
+        "artifact_id": artifact_id,
+        "artifact_digest": artifact_digest,
+        "schema_versions": {"declared": declared, "installed": installed},
+        "readiness": "success",
+    }
+
+
+def _validate_record(record: int, sha: str, run: int, attempt: int) -> None:
+    deployment = api("GET", f"deployments/{record}")
+    current = api("GET", f"actions/runs/{run}")
+    payload = deployment.get("payload")
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError as error:
+            raise DeploymentStatusError("malformed_evidence") from error
+    payload = _mapping(payload)
+    if (
+        deployment.get("sha") != sha
+        or deployment.get("environment") != ENVIRONMENT
+        or deployment.get("task") != "development-release"
+        or payload.get("sha") != sha
+        or payload.get("run_id") != run
+        or type(payload.get("created_attempt")) is not int
+        or not 1 <= cast(int, payload["created_attempt"]) <= attempt
+        or current.get("head_sha") != sha
+        or current.get("run_attempt") != attempt
+    ):
+        raise DeploymentStatusError("malformed_evidence")
+
+
+def _publication(run: int, attempt: int) -> dict[str, Any]:
+    if (
+        os.environ.get("PREPARE_OUTCOME") != "success"
+        or os.environ.get("UPLOAD_OUTCOME") != "success"
+    ):
+        raise DeploymentStatusError("publisher_failed")
+    expected_name = f"v2-development-evidence-{run}-{attempt}"
+    if os.environ.get("EVIDENCE_ARTIFACT_NAME") != expected_name:
+        raise DeploymentStatusError("malformed_evidence")
+    artifact_id = _positive(os.environ.get("EVIDENCE_ARTIFACT_ID"))
+    raw_digest = os.environ.get("RAW_EVIDENCE_ARTIFACT_DIGEST")
+    if not isinstance(raw_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", raw_digest):
+        raise DeploymentStatusError("malformed_evidence")
+    return {
+        "name": expected_name,
+        "id": artifact_id,
+        "digest": f"sha256:{raw_digest}",
+    }
+
+
+def _summary(state: str, evidence: dict[str, Any], publication: dict[str, Any]) -> None:
+    with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
+        summary.write("### Development release result\n\n")
+        summary.write(f"{state}; {SITE}\n\n")
+        summary.write(
+            "```json\n"
+            + json.dumps(
+                {
+                    "artifact_digest": evidence["artifact_digest"],
+                    "artifact_id": evidence["artifact_id"],
+                    "attempt": evidence["attempt"],
+                    "commit": evidence["commit"],
+                    "evidence_artifact_digest": publication["digest"],
+                    "evidence_artifact_id": publication["id"],
+                    "evidence_artifact_name": publication["name"],
+                    "run_id": evidence["run_id"],
+                    "schema_versions": evidence["schema_versions"],
+                    "state": state,
+                },
+                sort_keys=True,
+            )
+            + "\n```\n"
+        )
+
+
 def create() -> None:
     sha, run, attempt = identity()
     result = api(
@@ -135,133 +288,78 @@ def create() -> None:
     record = result.get("id")
     if type(record) is not int or record < 1 or result.get("sha") != sha:
         raise DeploymentStatusError("malformed_evidence")
-    # Persist before the status call so a failed creation job can be reconciled.
-    with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+    with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
         output.write(f"deployment_id={record}\n")
     status(record, "in_progress", run, attempt)
 
 
+def prepare() -> None:
+    sha, run, attempt = identity()
+    evidence = _prerequisites(sha, run, attempt, _needs())
+    path = Path(os.environ["RUNNER_TEMP"]) / EVIDENCE_FILE
+    path.write_text(json.dumps(evidence, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def finish() -> None:
     sha, run, attempt = identity()
+    needs = _needs()
+    record = _record(needs)
+    _validate_record(record, sha, run, attempt)
     try:
-        needs = json.loads(os.environ["NEEDS_JSON"])
-    except (KeyError, TypeError, json.JSONDecodeError) as error:
-        raise DeploymentStatusError("malformed_evidence") from error
-    if not isinstance(needs, dict):
-        raise DeploymentStatusError("malformed_evidence")
-    needs = cast(dict[str, Any], needs)
-    try:
-        raw_record = needs["release-record"]["outputs"].get("deployment_id", "")
-    except (KeyError, TypeError, AttributeError) as error:
-        raise DeploymentStatusError("malformed_evidence") from error
-    if (
-        not isinstance(raw_record, str)
-        or not raw_record.isdecimal()
-        or int(raw_record) < 1
-    ):
-        raise DeploymentStatusError("malformed_evidence")
-    record = int(raw_record)
-    deployment = api("GET", f"deployments/{record}")
-    current = api("GET", f"actions/runs/{run}")
-    payload = deployment.get("payload")
-    if isinstance(payload, str):
-        try:
-            payload = json.loads(payload)
-        except json.JSONDecodeError as error:
-            raise DeploymentStatusError("malformed_evidence") from error
-    if not isinstance(payload, dict):
-        raise DeploymentStatusError("malformed_evidence")
-    payload = cast(dict[str, Any], payload)
-    if (
-        deployment.get("sha") != sha
-        or deployment.get("environment") != ENVIRONMENT
-        or deployment.get("task") != "development-release"
-        or payload.get("sha") != sha
-        or payload.get("run_id") != run
-        or type(payload.get("created_attempt")) is not int
-        or not 1 <= payload["created_attempt"] <= attempt
-        or current.get("head_sha") != sha
-        or current.get("run_attempt") != attempt
-    ):
-        raise DeploymentStatusError("malformed_evidence")
-    # A failed-deploy rerun intentionally reuses this run's verified successful
-    # build and explicit record. The status log URL identifies the current attempt.
-    jobs = ("admission", "release-record", "build", "oidc-proof", "deploy")
-    try:
-        outcomes: dict[str, Any] = {}
-        for job in jobs:
-            value = needs.get(job, {})
-            if not isinstance(value, dict):
-                raise DeploymentStatusError("malformed_evidence")
-            outcomes[job] = cast(dict[str, Any], value).get("result", "missing")
-        deploy = needs.get("deploy", {})
-        build_job = needs.get("build", {})
-    except (AttributeError, TypeError) as error:
-        raise DeploymentStatusError("malformed_evidence") from error
-    if not isinstance(deploy, dict) or not isinstance(build_job, dict):
-        raise DeploymentStatusError("malformed_evidence")
-    deploy_outputs = cast(dict[str, Any], deploy).get("outputs", {})
-    build = cast(dict[str, Any], build_job).get("outputs", {})
-    success = all(value == "success" for value in outcomes.values())
-    success = success and deploy_outputs.get("verified") == "success"
-    if not isinstance(build, dict) or not isinstance(deploy_outputs, dict):
-        raise DeploymentStatusError("malformed_evidence")
-    build = cast(dict[str, Any], build)
-    deploy_outputs = cast(dict[str, Any], deploy_outputs)
-    evidence = {"commit": sha, "run_id": run, "attempt": attempt, "jobs": outcomes}
-    release: dict[str, Any] = {
-        "artifact_id": build.get("artifact_id", "unavailable"),
-        "artifact_digest": build.get("artifact_digest", "unavailable"),
-        "pricing_schema": build.get("pricing_schema", "unavailable"),
-        "oracle_schema": build.get("oracle_schema", "unavailable"),
-    }
-    patterns = {
-        "artifact_id": r"[1-9][0-9]*",
-        "artifact_digest": r"sha256:[0-9a-f]{64}",
-        "pricing_schema": r"[0-9]+\.[0-9]+\.[0-9]+",
-        "oracle_schema": r"[0-9]+\.[0-9]+\.[0-9]+",
-    }
-    malformed_release = False
-    for key, pattern in patterns.items():
-        value = release[key]
-        if not isinstance(value, str) or not re.fullmatch(pattern, value):
-            release[key] = "unavailable"
-            success = False
-            malformed_release = True
-    state = "success" if success else "failure"
-    status(record, state, run, attempt)
-    with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
-        summary.write("### Development release result\n\n")
-        summary.write(f"{state}; {SITE}\n\n")
-        summary.write(
-            "```json\n"
-            + json.dumps({**evidence, **release}, sort_keys=True)
-            + "\n```\n"
+        evidence = _prerequisites(sha, run, attempt, needs)
+        publication = _publication(run, attempt)
+    except DeploymentStatusError as error:
+        status(record, "failure", run, attempt)
+        _summary(
+            "failure",
+            {
+                "artifact_digest": "unavailable",
+                "artifact_id": "unavailable",
+                "attempt": attempt,
+                "commit": sha,
+                "run_id": run,
+                "schema_versions": "unavailable",
+            },
+            {"digest": "unavailable", "id": "unavailable", "name": "unavailable"},
         )
-    if not success:
-        if malformed_release:
-            raise DeploymentStatusError("malformed_evidence")
-        raise DeploymentStatusError("upstream_failed")
+        raise error
+    try:
+        _summary("pending", evidence, publication)
+    except (KeyError, OSError, TypeError, ValueError) as error:
+        status(record, "failure", run, attempt)
+        raise DeploymentStatusError("publisher_failed") from error
+    status(record, "success", run, attempt)
 
 
 def main() -> int:
+    command = sys.argv[1:]
+    if command == ["create"]:
+        stage = "release-record"
+    elif command == ["prepare"]:
+        stage = "release-evidence-prepare"
+    elif command == ["finish"]:
+        stage = "release-status"
+    else:
+        stage = "release-evidence-invalid"
     try:
-        _emit_progress("start")
-        if sys.argv[1:] == ["create"]:
+        _emit_progress(stage, "start")
+        if command == ["create"]:
             create()
-        elif sys.argv[1:] == ["finish"]:
+        elif command == ["prepare"]:
+            prepare()
+        elif command == ["finish"]:
             finish()
         else:
             raise DeploymentStatusError("malformed_evidence")
     except DeploymentStatusError as error:
-        _emit_progress("fail", error.reason, 1)
+        _emit_progress(stage, "fail", error.reason, 1)
         print("development deployment evidence failed closed", file=sys.stderr)
         return 1
     except (KeyError, TypeError, ValueError, OSError, subprocess.SubprocessError):
-        _emit_progress("fail", "publisher_failed", 1)
+        _emit_progress(stage, "fail", "publisher_failed", 1)
         print("development deployment evidence failed closed", file=sys.stderr)
         return 1
-    _emit_progress("pass")
+    _emit_progress(stage, "pass")
     return 0
 
 

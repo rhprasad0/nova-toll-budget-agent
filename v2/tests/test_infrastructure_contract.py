@@ -4005,14 +4005,70 @@ def _assert_development_delivery_workflow(source: str) -> None:
         "actions": "read",
         "deployments": "write",
     }
-    assert "development_deployment_status.py finish" in _workflow_run_source(result)
+    result_steps = cast(list[dict[str, object]], result["steps"])
+    prepare = next(
+        step for step in result_steps if step.get("id") == "prepare-evidence"
+    )
+    upload = next(step for step in result_steps if step.get("id") == "upload-evidence")
+    finalize = next(
+        step
+        for step in result_steps
+        if step.get("name") == "Finalize sanitized release outcome"
+    )
+    assert prepare["if"] == "always()"
+    assert "development_deployment_status.py prepare" in cast(str, prepare["run"])
+    assert upload["if"] == "always() && steps.prepare-evidence.outcome == 'success'"
+    assert (
+        upload["uses"]
+        == "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    )
+    assert upload["with"] == {
+        "name": "v2-development-evidence-${{ github.run_id }}-${{ github.run_attempt }}",
+        "path": "${{ runner.temp }}/development-release-evidence.json",
+        "if-no-files-found": "error",
+        "retention-days": 90,
+        "overwrite": False,
+    }
+    assert finalize["if"] == "always()"
+    finalize_source = cast(str, finalize["run"])
+    assert "development_deployment_status.py finish" in finalize_source
+    for required in (
+        "PREPARE_OUTCOME",
+        "UPLOAD_OUTCOME",
+        "EVIDENCE_ARTIFACT_NAME",
+        "EVIDENCE_ARTIFACT_ID",
+        "RAW_EVIDENCE_ARTIFACT_DIGEST",
+    ):
+        assert required in cast(dict[str, str], finalize["env"])
+    assert (
+        result_steps.index(prepare)
+        < result_steps.index(upload)
+        < result_steps.index(finalize)
+    )
     deploy_source = _workflow_run_source(jobs["deploy"])
     assert deploy_source.index('apply -input=false "$PLAN"') < deploy_source.index(
         "check_development_release.py"
     )
     assert jobs["deploy"]["outputs"] == {
-        "verified": "${{ steps.verify-release.outputs.verified }}"
+        "verified": "${{ steps.verify-release.outputs.verified }}",
+        "verified_pricing_schema": "${{ steps.migration-schema.outputs.verified_pricing_schema }}",
+        "verified_oracle_schema": "${{ steps.migration-schema.outputs.verified_oracle_schema }}",
     }
+    deploy_steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
+    deploy_names = [cast(str, step.get("name", "")) for step in deploy_steps]
+    extraction = next(
+        step
+        for step in deploy_steps
+        if step.get("name") == "Extract verified installed schema versions"
+    )
+    assert (
+        deploy_names.index("Run reviewed backward-compatible development migrations")
+        < deploy_names.index("Extract verified installed schema versions")
+        < deploy_names.index("Cleanup private delivery files")
+    )
+    extraction_source = cast(str, extraction["run"])
+    assert "v2-development-migrations-evidence.json" in extraction_source
+    assert ".after" in extraction_source
     assert "development-readiness-state.json" in deploy_source
 
     admission = jobs["admission"]
@@ -5541,6 +5597,86 @@ def test_development_delivery_apply_readiness_and_cleanup_failures_are_bounded()
         assert call_text.index(str(failing_path)) < call_text.index(
             str(root / "development.tfplan.json")
         )
+
+
+def test_development_delivery_extracts_only_validated_migration_after_versions():
+    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
+    source = cast(
+        str,
+        next(
+            step["run"]
+            for step in steps
+            if step.get("name") == "Extract verified installed schema versions"
+        ),
+    )
+    evidence: dict[str, object] = {
+        "account": "903859731897",
+        "after": {"pricing": "1.2.3", "oracle": "1.14.0"},
+        "applied": list[str](),
+        "before": {"pricing": "1.2.3", "oracle": "1.14.0"},
+        "commit_sha": "a" * 40,
+        "database": "nova_toll_development",
+        "github_run_attempt": "2",
+        "github_run_id": "123",
+        "role": "nova-toll-v2-development-migrations-dev",
+        "route": "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112",
+        "route_valid": True,
+        "runner_run_id": "migration-run",
+        "status": "ok",
+        "transport_valid": True,
+        "user": "schema_migrator_development",
+    }
+
+    def run(
+        value: Mapping[str, object],
+    ) -> tuple[subprocess.CompletedProcess[str], str, bool]:
+        with tempfile.TemporaryDirectory() as directory_name:
+            root = Path(directory_name)
+            output = root / "output"
+            summary = root / "summary"
+            (root / "v2-development-migrations-evidence.json").write_text(
+                json.dumps(value), encoding="utf-8"
+            )
+            result = subprocess.run(
+                ["bash", "-c", source],
+                cwd=REPO_ROOT,
+                env={
+                    **os.environ,
+                    "RUNNER_TEMP": str(root),
+                    "GITHUB_OUTPUT": str(output),
+                    "GITHUB_STEP_SUMMARY": str(summary),
+                    "GITHUB_SHA": "a" * 40,
+                    "GITHUB_RUN_ID": "123",
+                    "GITHUB_RUN_ATTEMPT": "2",
+                    "EXPECTED_PRICING_VERSION": "1.2.3",
+                    "EXPECTED_ORACLE_VERSION": "1.14.0",
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            return (
+                result,
+                output.read_text() if output.exists() else "",
+                output.exists(),
+            )
+
+    result, output, exists = run(evidence)
+    assert result.returncode == 0, result.stderr
+    assert exists
+    assert output == "verified_pricing_schema=1.2.3\nverified_oracle_schema=1.14.0\n"
+    mutations: tuple[dict[str, object], ...] = (
+        {**evidence, "commit_sha": "b" * 40},
+        {**evidence, "after": {"pricing": "9.9.9", "oracle": "1.14.0"}},
+        {**evidence, "after": "secret malformed evidence"},
+    )
+    for mutation in mutations:
+        result, _, exists = run(mutation)
+        assert result.returncode != 0
+        assert not exists
+        assert "secret malformed evidence" not in result.stdout + result.stderr
 
 
 def test_slice2_delivery_diagnostics_keep_machine_outputs_and_fixed_labels():
