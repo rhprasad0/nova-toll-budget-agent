@@ -3592,25 +3592,40 @@ def test_timed_ci_uses_the_internal_pricing_caller():
     assert "role/nova-toll-github-ci" not in TIMED_CHECKS_WORKFLOW
 
 
-def test_timed_ci_skips_stale_scheduled_runs():
-    schedules = re.findall(r'cron: "([^"]+)"', TIMED_SCHEDULE_WORKFLOW)
-    assert all(schedule.split()[-1].isdigit() for schedule in schedules)
-    assert "schedule: ${{ github.event.schedule || '' }}" in TIMED_SCHEDULE_WORKFLOW
+def test_timed_ci_wrapper_is_manual_only_and_keeps_freshness_contract():
+    workflow = cast(dict[str, object], yaml.safe_load(TIMED_SCHEDULE_WORKFLOW))
+    trigger = cast(dict[str, object], _workflow_trigger(workflow))
+    assert set(trigger) == {"workflow_dispatch"}
+    assert "cron:" not in TIMED_SCHEDULE_WORKFLOW
+    assert "github.event.schedule" not in TIMED_SCHEDULE_WORKFLOW
+    assert 'schedule: ""' in TIMED_SCHEDULE_WORKFLOW
     assert "TIMED_SCHEDULE: ${{ inputs.schedule }}" in TIMED_CHECKS_WORKFLOW
     assert 'python3 scripts/check_timed_window.py "$TIMED_SCHEDULE"' in (
         TIMED_CHECKS_WORKFLOW
     )
 
 
-def test_timed_ci_checks_agent_pricing_tool_in_every_scheduled_state():
+def test_timed_ci_checks_agent_pricing_tool_in_every_manual_window():
+    workflow = cast(dict[str, object], yaml.safe_load(TIMED_SCHEDULE_WORKFLOW))
+    trigger = cast(dict[str, object], _workflow_trigger(workflow))
+    dispatch = cast(dict[str, object], trigger["workflow_dispatch"])
+    window_input = cast(dict[str, object], dispatch["inputs"])["window_id"]
+    assert cast(dict[str, object], window_input)["required"] is True
+    assert cast(dict[str, object], window_input)["type"] == "choice"
+    assert cast(dict[str, object], window_input)["options"] == [
+        "i95_northbound",
+        "i95_reversal",
+        "i95_southbound",
+        "greenway_eb_peak",
+        "greenway_wb_peak",
+    ]
     for window_id in ("i95_northbound", "i95_reversal", "i95_southbound"):
         assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
-        assert f'window_id="{window_id}"' in TIMED_SCHEDULE_WORKFLOW
         assert f'"{window_id}":' in TIMED_CHECKS_MODULE
     for window_id in ("greenway_eb_peak", "greenway_wb_peak"):
         assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
-        assert f'window_id="{window_id}"' in TIMED_SCHEDULE_WORKFLOW
 
+    assert "window_id: ${{ inputs.window_id }}" in TIMED_SCHEDULE_WORKFLOW
     assert "tests/test_validate_toll_route_live.py" in TIMED_CHECKS_WORKFLOW
     assert "tests/test_get_annual_toll_ballpark_live.py" in TIMED_CHECKS_WORKFLOW
     assert "get_current_toll_price" in TIMED_CHECKS_MODULE
@@ -3623,65 +3638,27 @@ def test_timed_ci_checks_agent_pricing_tool_in_every_scheduled_state():
     assert "OPENAI_API_KEY" not in TIMED_CHECKS_WORKFLOW
 
 
-def test_timed_ci_covers_three_real_i95_states_monday_through_saturday():
-    expected = {
-        1: {
-            "i95_northbound": "17 6",
-            "i95_reversal": "17 11",
-            "i95_southbound": "17 14",
-        },
-        2: {
-            "i95_northbound": "17 6",
-            "i95_reversal": "47 1",
-            "i95_southbound": "17 14",
-        },
-        3: {
-            "i95_northbound": "17 6",
-            "i95_reversal": "47 1",
-            "i95_southbound": "17 14",
-        },
-        4: {
-            "i95_northbound": "17 6",
-            "i95_reversal": "47 1",
-            "i95_southbound": "17 14",
-        },
-        5: {
-            "i95_northbound": "17 6",
-            "i95_reversal": "47 1",
-            "i95_southbound": "17 14",
-        },
-        6: {
-            "i95_northbound": "17 18",
-            "i95_reversal": "17 15",
-            "i95_southbound": "17 10",
-        },
+def test_timed_ci_manual_window_call_is_main_only_and_fail_closed():
+    workflow = cast(dict[str, object], yaml.safe_load(TIMED_SCHEDULE_WORKFLOW))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    assert set(jobs) == {"live-checks"}
+    job = jobs["live-checks"]
+    assert job["if"] == "github.ref == 'refs/heads/main'"
+    assert job["uses"] == "./.github/workflows/v2-timed-checks.yml"
+    assert "needs" not in job
+    assert "continue-on-error" not in job
+    with_values = cast(dict[str, object], job["with"])
+    assert with_values == {"schedule": "", "window_id": "${{ inputs.window_id }}"}
+    assert set(re.findall(r"secrets\.([A-Z0-9_]+)", TIMED_SCHEDULE_WORKFLOW)) == {
+        "TS_OAUTH_CLIENT_ID",
+        "TS_OAUTH_SECRET",
     }
-
-    for weekday, windows in expected.items():
-        schedules = [f"{clock} * * {weekday}" for clock in windows.values()]
-        assert len(schedules) == len(set(schedules)) == 3
-        for schedule in schedules:
-            assert TIMED_SCHEDULE_WORKFLOW.count(f'cron: "{schedule}"') == 1
-        for window_id, clock in windows.items():
-            schedule = f"{clock} * * {weekday}"
-            assert re.search(
-                rf'^.*"{re.escape(schedule)}".*window_id="{window_id}"',
-                TIMED_SCHEDULE_WORKFLOW,
-                re.MULTILINE,
-            )
-
-    assert not re.search(r'cron: "[^\"]+ \* \* 0"', TIMED_SCHEDULE_WORKFLOW)
 
 
 def test_timed_ci_checks_both_greenway_peak_windows():
     for window_id in ("greenway_eb_peak", "greenway_wb_peak"):
         assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
-        assert f'window_id="{window_id}"' in TIMED_SCHEDULE_WORKFLOW
-        assert f'"{window_id}":' in TIMED_CHECKS_MODULE
-
-    for weekday in range(1, 6):
-        assert f'cron: "23 7 * * {weekday}"' in TIMED_SCHEDULE_WORKFLOW
-        assert f'cron: "23 17 * * {weekday}"' in TIMED_SCHEDULE_WORKFLOW
+    assert "window_id: ${{ inputs.window_id }}" in TIMED_SCHEDULE_WORKFLOW
 
     assert "test_live_greenway_peak_price" in TIMED_ROUTE_TEST
     assert "if: startsWith(inputs.window_id, 'i95_')" not in TIMED_CHECKS_WORKFLOW
