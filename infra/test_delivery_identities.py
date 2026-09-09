@@ -1197,8 +1197,8 @@ def main() -> None:
     for statement in split_statements:
         if "s3:GetObjectVersion" in statement.get("Action", []):
             assert all("/plans/" not in resource for resource in statement["Resource"])
-    assert set(deploy_documents) == {"state", "release", "compute", "observability", "storage", "data", "runtime", "edge"}
-    deploy_application_keys = ("compute", "observability", "storage", "data", "runtime", "edge")
+    assert set(deploy_documents) == {"state", "release", "compute", "observability", "storage", "data", "runtime", "schedules", "edge"}
+    deploy_application_keys = ("compute", "observability", "storage", "data", "runtime", "schedules", "edge")
     rendered_deploy_application = [
         statement
         for key in deploy_application_keys

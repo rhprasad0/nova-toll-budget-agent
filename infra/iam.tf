@@ -1683,11 +1683,15 @@ locals {
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = concat(slice(local.production_delivery_application_policy_statements, 24, 28), [local.production_delivery_agentcore_default_statement, local.production_delivery_agentcore_pass_role_statement])
+      Statement = concat(slice(local.production_delivery_application_policy_statements, 24, 29), [local.production_delivery_agentcore_default_statement, local.production_delivery_agentcore_pass_role_statement])
+    })
+    schedules = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_application_policy_statements, 29, 30)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.production_delivery_application_policy_statements, 28, length(local.production_delivery_application_policy_statements))
+      Statement = slice(local.production_delivery_application_policy_statements, 30, length(local.production_delivery_application_policy_statements))
     })
   }
 
