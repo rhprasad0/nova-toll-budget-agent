@@ -1,0 +1,9 @@
+# Lambda target: Python 3.13 on x86_64 with manylinux_2_28 wheels.
+# The generated hash lock is constrained by v2/uv.lock.
+bedrock-agentcore
+boto3[crt]
+defusedxml
+psycopg[binary]
+pydantic
+strands-agents[openai]
+strands-agents-evals==1.1.0

@@ -22,6 +22,12 @@ variable "chat_proxy_package_path" {
   default     = ""
 }
 
+variable "timed_checks_package_path" {
+  description = "Reviewed v2 timed-checks Lambda zip; required for deployment."
+  type        = string
+  default     = ""
+}
+
 variable "foundation" {
   description = "Reviewed, non-secret inputs emitted by the account-local foundation root."
   type = object({

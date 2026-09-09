@@ -128,6 +128,8 @@ locals {
     "toll-v2-report-publisher-dev",
     "toll-v2-report-publisher-scheduler-dev",
     "nova-toll-v2-timed-checks-dev",
+    "nova-toll-v2-timed-checks-lambda-dev",
+    "nova-toll-v2-timed-checks-scheduler-dev",
     "nova-toll-v2-agentcore-runtime-dev",
     "nova-toll-v2-chat-proxy-dev",
     "tollchat-v2-agent-usage-rollup-dev",
@@ -141,6 +143,7 @@ locals {
       "toll-v2-pricing-loader-dev",
       "toll-v2-report-publisher-dev",
       "tollchat-v2-chat-proxy-dev",
+      "nova-toll-v2-timed-checks-dev",
     ] : "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:${function_name}"
   ]
   development_delivery_lambda_resources = flatten([
@@ -158,6 +161,8 @@ locals {
       "toll-v2-pricing-loader-delivery-failure-dev",
       "toll-v2-report-publisher-invoke-failure-dev",
       "toll-v2-report-publisher-delivery-failure-dev",
+      "nova-toll-v2-timed-checks-invoke-failure-dev",
+      "nova-toll-v2-timed-checks-delivery-failure-dev",
     ] : "arn:aws:sqs:${local.development_delivery_region}:${local.development_delivery_account_id}:${queue_name}"
   ]
   development_delivery_event_rule_arns = [
@@ -172,6 +177,7 @@ locals {
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/toll-v2-report-publisher-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/tollchat-v2-usage-publisher-dev",
+    "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/nova-toll-v2-timed-checks-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
   ]
@@ -191,6 +197,9 @@ locals {
       "tollchat-v2-chat-proxy-errors-dev",
       "tollchat-v2-chat-proxy-failures-dev",
       "tollchat-v2-chat-proxy-latency-dev",
+      "nova-toll-v2-timed-checks-errors-dev",
+      "nova-toll-v2-timed-checks-invoke-failure-queue-dev",
+      "nova-toll-v2-timed-checks-delivery-failure-queue-dev",
     ] : "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:${alarm_name}"
   ]
   development_delivery_legacy_rollup_alarm_arns = [
@@ -224,6 +233,38 @@ locals {
   development_delivery_site_bucket_arn        = "arn:aws:s3:::tollchat-site-${local.development_delivery_account_id}-dev"
   development_delivery_measurement_bucket_arn = "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${local.development_delivery_account_id}-dev"
   development_delivery_artifact_bucket_arn    = "arn:aws:s3:::nova-toll-agentcore-${local.development_delivery_account_id}"
+  development_delivery_timed_schedule_arns = [
+    for schedule_name in [
+      "nova-toll-v2-greenway-eb-fri-0723-dev",
+      "nova-toll-v2-greenway-eb-mon-0723-dev",
+      "nova-toll-v2-greenway-eb-thu-0723-dev",
+      "nova-toll-v2-greenway-eb-tue-0723-dev",
+      "nova-toll-v2-greenway-eb-wed-0723-dev",
+      "nova-toll-v2-greenway-wb-fri-1723-dev",
+      "nova-toll-v2-greenway-wb-mon-1723-dev",
+      "nova-toll-v2-greenway-wb-thu-1723-dev",
+      "nova-toll-v2-greenway-wb-tue-1723-dev",
+      "nova-toll-v2-greenway-wb-wed-1723-dev",
+      "nova-toll-v2-i95-northbound-fri-0617-dev",
+      "nova-toll-v2-i95-northbound-mon-0617-dev",
+      "nova-toll-v2-i95-northbound-sat-1817-dev",
+      "nova-toll-v2-i95-northbound-thu-0617-dev",
+      "nova-toll-v2-i95-northbound-tue-0617-dev",
+      "nova-toll-v2-i95-northbound-wed-0617-dev",
+      "nova-toll-v2-i95-reversal-fri-0147-dev",
+      "nova-toll-v2-i95-reversal-mon-1117-dev",
+      "nova-toll-v2-i95-reversal-sat-1517-dev",
+      "nova-toll-v2-i95-reversal-thu-0147-dev",
+      "nova-toll-v2-i95-reversal-tue-0147-dev",
+      "nova-toll-v2-i95-reversal-wed-0147-dev",
+      "nova-toll-v2-i95-southbound-fri-1417-dev",
+      "nova-toll-v2-i95-southbound-mon-1417-dev",
+      "nova-toll-v2-i95-southbound-sat-1017-dev",
+      "nova-toll-v2-i95-southbound-thu-1417-dev",
+      "nova-toll-v2-i95-southbound-tue-1417-dev",
+      "nova-toll-v2-i95-southbound-wed-1417-dev",
+    ] : "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/default/${schedule_name}"
+  ]
 }
 
 data "aws_iam_policy_document" "development_delivery_assume" {
@@ -617,10 +658,24 @@ data "aws_iam_policy_document" "development_delivery" {
   statement {
     sid     = "ManageApplicationSchedules"
     actions = ["scheduler:GetSchedule", "scheduler:ListTagsForResource", "scheduler:TagResource", "scheduler:UntagResource", "scheduler:UpdateSchedule"]
-    resources = [
-      "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev",
-      "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default",
-    ]
+    resources = concat(
+      [
+        "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev",
+        "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default",
+      ],
+      local.development_delivery_timed_schedule_arns,
+    )
+  }
+
+  statement {
+    sid       = "PassTimedChecksSchedulerRole"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-timed-checks-scheduler-dev"]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["scheduler.amazonaws.com"]
+    }
   }
 
   statement {
@@ -791,11 +846,11 @@ locals {
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 35, 44)
+      Statement = slice(local.development_delivery_policy_statements, 35, 45)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 44, 52)
+      Statement = slice(local.development_delivery_policy_statements, 45, 53)
     })
   }
 }
@@ -1117,10 +1172,13 @@ data "aws_iam_policy_document" "development_plan" {
   statement {
     sid     = "ReadApplicationSchedules"
     actions = ["scheduler:GetSchedule", "scheduler:ListTagsForResource"]
-    resources = [
-      "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev",
-      "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default",
-    ]
+    resources = concat(
+      [
+        "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev",
+        "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default",
+      ],
+      local.development_delivery_timed_schedule_arns,
+    )
   }
 
   statement {
@@ -1636,11 +1694,15 @@ locals {
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = concat(slice(local.production_delivery_application_policy_statements, 24, 28), [local.production_delivery_agentcore_default_statement, local.production_delivery_agentcore_pass_role_statement])
+      Statement = concat(slice(local.production_delivery_application_policy_statements, 24, 29), [local.production_delivery_agentcore_default_statement, local.production_delivery_agentcore_pass_role_statement])
+    })
+    schedules = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_application_policy_statements, 29, 31)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.production_delivery_application_policy_statements, 28, length(local.production_delivery_application_policy_statements))
+      Statement = slice(local.production_delivery_application_policy_statements, 31, length(local.production_delivery_application_policy_statements))
     })
   }
 

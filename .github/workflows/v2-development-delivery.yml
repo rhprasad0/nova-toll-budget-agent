@@ -244,6 +244,7 @@ jobs:
             v2/infra/build/publisher.zip
             v2/infra/build/agentcore.zip
             v2/infra/build/chat-proxy.zip
+            v2/infra/build/timed-checks.zip
           if-no-files-found: error
 
       - name: Upload immutable release bundle
@@ -576,6 +577,7 @@ jobs:
           test -s "$overlay/v2/infra/build/publisher.zip"
           test -s "$overlay/v2/infra/build/agentcore.zip"
           test -s "$overlay/v2/infra/build/chat-proxy.zip"
+          test -s "$overlay/v2/infra/build/timed-checks.zip"
           }
           run_private_stage "artifact-download" "$RUNNER_TEMP/development-artifact-download.log" "$RUNNER_TEMP/development-artifact-download.log" \
             download_release
@@ -605,14 +607,14 @@ jobs:
 
           rm -rf -- "$STAGED_PACKAGE_DIR"
           mkdir -m 700 -- "$STAGED_PACKAGE_DIR"
-          for package in loader.zip publisher.zip agentcore.zip chat-proxy.zip; do
+          for package in loader.zip publisher.zip agentcore.zip chat-proxy.zip timed-checks.zip; do
             source="$PACKAGE_DIR/$package"
             test -f "$source" && test ! -L "$source" && test -s "$source"
             cp -P -- "$source" "$STAGED_PACKAGE_DIR/$package"
           done
           test "$(find "$STAGED_PACKAGE_DIR" -mindepth 1 -maxdepth 1 -printf '%f\n' | LC_ALL=C sort | tr '\n' ' ')" = \
-            "agentcore.zip chat-proxy.zip loader.zip publisher.zip "
-          for package in loader.zip publisher.zip agentcore.zip chat-proxy.zip; do
+            "agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip "
+          for package in loader.zip publisher.zip agentcore.zip chat-proxy.zip timed-checks.zip; do
             test -f "$STAGED_PACKAGE_DIR/$package" && test ! -L "$STAGED_PACKAGE_DIR/$package" \
               && test -s "$STAGED_PACKAGE_DIR/$package"
           done
@@ -754,7 +756,8 @@ jobs:
             -var loader_package_path="$PACKAGE_DIR/loader.zip" \
             -var publisher_package_path="$PACKAGE_DIR/publisher.zip" \
             -var agentcore_package_path="$PACKAGE_DIR/agentcore.zip" \
-            -var chat_proxy_package_path="$PACKAGE_DIR/chat-proxy.zip"
+            -var chat_proxy_package_path="$PACKAGE_DIR/chat-proxy.zip" \
+            -var timed_checks_package_path="$PACKAGE_DIR/timed-checks.zip"
 
           run_private_stage "show" "$PLAN_JSON" "$SHOW_LOG" \
             terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"

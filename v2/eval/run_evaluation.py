@@ -1255,7 +1255,7 @@ def _configure_database() -> None:
         os.environ["DB_PORT"] = str(instance["Endpoint"]["Port"])
 
 
-def main(window: str, suite: str = "all") -> None:
+def main(window: str, suite: str = "all", output_dir: Path | str | None = None) -> None:
     _configure_database()
     report = Experiment[str, str](
         cases=load_cases(
@@ -1265,8 +1265,9 @@ def main(window: str, suite: str = "all") -> None:
         ),
         evaluators=[TollChatEvaluator()],
     ).run_evaluations(task_function)
-    _RESULTS_DIR.mkdir(exist_ok=True)
-    report.to_file(str(_RESULTS_DIR / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
+    results_dir = _RESULTS_DIR if output_dir is None else Path(output_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    report.to_file(str(results_dir / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
     report.display(include_input=False)
     if not all(report.test_passes):
         raise SystemExit("TollChat evaluation failed")

@@ -822,7 +822,7 @@ plan_policy() {
   fi
   sha256sum "$plan" | cut -d' ' -f1
 }
-PLAN_ARGS="-var-file=$ROOT/v2/infra/development.tfvars -var-file=$DEV_FOUNDATION_VARS -var loader_package_path=$ROOT/v2/infra/build/loader.zip -var publisher_package_path=$ROOT/v2/infra/build/publisher.zip -var agentcore_package_path=$ROOT/v2/infra/build/agentcore.zip -var chat_proxy_package_path=$ROOT/v2/infra/build/chat-proxy.zip"
+PLAN_ARGS="-var-file=$ROOT/v2/infra/development.tfvars -var-file=$DEV_FOUNDATION_VARS -var loader_package_path=$ROOT/v2/infra/build/loader.zip -var publisher_package_path=$ROOT/v2/infra/build/publisher.zip -var agentcore_package_path=$ROOT/v2/infra/build/agentcore.zip -var chat_proxy_package_path=$ROOT/v2/infra/build/chat-proxy.zip -var timed_checks_package_path=$ROOT/v2/infra/build/timed-checks.zip"
 read -r -d '' DEVELOPMENT_RESOURCE_ALLOWLIST <<'EOF' || true
 aws_api_gateway_deployment.tollchat
 aws_api_gateway_integration.tollchat_proxy

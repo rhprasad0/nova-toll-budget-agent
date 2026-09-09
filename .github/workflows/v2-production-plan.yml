@@ -80,10 +80,20 @@ jobs:
           ./scripts/build_loader_zip.sh
           ./scripts/build_publisher_zip.sh
           ./scripts/build_agentcore_zips.sh
-          for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip; do
+          ./scripts/build_timed_checks_zip.sh
+          for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip infra/build/timed-checks.zip; do
             test -f "$package"
+            test ! -L "$package"
             test -s "$package"
           done
+          (
+            cd infra/build
+            sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip timed-checks.zip > DEPLOYMENT_SHA256SUMS
+            test "$(wc -l < DEPLOYMENT_SHA256SUMS)" -eq 5
+            test "$(awk '{print $2}' DEPLOYMENT_SHA256SUMS | LC_ALL=C sort | tr '\n' ' ')" = \
+              "agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip "
+            sha256sum --check DEPLOYMENT_SHA256SUMS >/dev/null
+          )
 
       - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
@@ -167,6 +177,7 @@ jobs:
               -var publisher_package_path=build/publisher.zip \
               -var agentcore_package_path=build/agentcore.zip \
               -var chat_proxy_package_path=build/chat-proxy.zip \
+              -var timed_checks_package_path=build/timed-checks.zip \
               >"$PLAN_LOG" 2>"$PLAN_ERROR"
           )
           unset CLOUDFLARE_API_TOKEN
@@ -219,6 +230,7 @@ jobs:
           aws_cloudwatch_log_group.loader
           aws_cloudwatch_log_group.publisher
           aws_cloudwatch_log_group.tollchat_proxy
+          aws_cloudwatch_log_group.timed_checks
           aws_cloudwatch_log_group.usage_publisher
           aws_cloudwatch_log_metric_filter.load_success
           aws_cloudwatch_log_metric_filter.proxy_failure
@@ -235,6 +247,8 @@ jobs:
           aws_cloudwatch_metric_alarm.tollchat_proxy_failures
           aws_cloudwatch_metric_alarm.tollchat_proxy_latency
           aws_cloudwatch_metric_alarm.tollchat_sessions
+          aws_cloudwatch_metric_alarm.timed_checks_errors
+          aws_cloudwatch_metric_alarm.timed_checks_failure_queues
           aws_cloudwatch_metric_alarm.usage_publisher_errors
           aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations
           aws_dynamodb_table.tollchat_sessions
@@ -249,6 +263,8 @@ jobs:
           aws_iam_role.publisher
           aws_iam_role.publisher_scheduler
           aws_iam_role.timed_checks
+          aws_iam_role.timed_checks_lambda
+          aws_iam_role.timed_checks_scheduler
           aws_iam_role.tollchat_proxy
           aws_iam_role.tollchat_runtime
           aws_iam_role.usage_publisher
@@ -257,12 +273,15 @@ jobs:
           aws_iam_role_policy.publisher
           aws_iam_role_policy.publisher_scheduler
           aws_iam_role_policy.timed_checks
+          aws_iam_role_policy.timed_checks_lambda
+          aws_iam_role_policy.timed_checks_scheduler
           aws_iam_role_policy.tollchat_proxy
           aws_iam_role_policy.tollchat_runtime
           aws_iam_role_policy.usage_publisher
           aws_iam_role_policy_attachment.loader_vpc
           aws_iam_role_policy_attachment.publisher_vpc
           aws_iam_role_policy_attachment.tollchat_proxy_vpc
+          aws_iam_role_policy_attachment.timed_checks_lambda_vpc
           aws_kms_alias.agent_measurement
           aws_kms_alias.site
           aws_kms_key.agent_measurement
@@ -272,9 +291,11 @@ jobs:
           aws_lambda_function.loader
           aws_lambda_function.publisher
           aws_lambda_function.tollchat_proxy
+          aws_lambda_function.timed_checks
           aws_lambda_function.usage_publisher
           aws_lambda_function_event_invoke_config.loader
           aws_lambda_function_event_invoke_config.publisher
+          aws_lambda_function_event_invoke_config.timed_checks
           aws_lambda_function_url.public_chat
           aws_lambda_permission.agent_usage_rollup
           aws_lambda_permission.eventbridge_invoke
@@ -302,16 +323,21 @@ jobs:
           aws_s3_object.site_assets
           aws_s3_object.terms
           aws_s3_object.tollchat_proxy
+          aws_s3_object.timed_checks
           aws_s3_object.usage
           aws_scheduler_schedule.publisher
+          aws_scheduler_schedule.timed_checks
           aws_security_group.loader
           aws_security_group.publisher
           aws_security_group.tollchat_proxy
           aws_security_group.tollchat_runtime
+          aws_security_group.timed_checks
           aws_sqs_queue.delivery_failure
           aws_sqs_queue.invoke_failure
           aws_sqs_queue.publisher_delivery_failure
           aws_sqs_queue.publisher_invoke_failure
+          aws_sqs_queue.timed_checks_delivery_failure
+          aws_sqs_queue.timed_checks_invoke_failure
           aws_sqs_queue_policy.delivery_failure
           aws_vpc_security_group_egress_rule.loader_to_eventbridge
           aws_vpc_security_group_egress_rule.loader_to_rds
@@ -322,10 +348,13 @@ jobs:
           aws_vpc_security_group_egress_rule.publisher_to_s3
           aws_vpc_security_group_egress_rule.runtime_https
           aws_vpc_security_group_egress_rule.runtime_to_rds
+          aws_vpc_security_group_egress_rule.timed_checks_https
+          aws_vpc_security_group_egress_rule.timed_checks_to_rds
           aws_vpc_security_group_ingress_rule.agentcore_from_proxy
           aws_vpc_security_group_ingress_rule.rds_from_loader
           aws_vpc_security_group_ingress_rule.rds_from_publisher
           aws_vpc_security_group_ingress_rule.rds_from_runtime
+          aws_vpc_security_group_ingress_rule.rds_from_timed_checks
           aws_wafv2_web_acl.public_chat
           aws_wafv2_web_acl_logging_configuration.agent_reports
           cloudflare_dns_record.apex
@@ -351,6 +380,9 @@ jobs:
           data.aws_iam_policy_document.site_kms
           data.aws_iam_policy_document.timed_checks
           data.aws_iam_policy_document.timed_checks_assume
+          data.aws_iam_policy_document.timed_checks_lambda
+          data.aws_iam_policy_document.timed_checks_lambda_assume
+          data.aws_iam_policy_document.timed_checks_scheduler_assume
           data.aws_iam_policy_document.usage_publisher
           data.aws_prefix_list.dynamodb
           data.aws_prefix_list.s3

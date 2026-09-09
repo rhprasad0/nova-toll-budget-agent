@@ -394,6 +394,7 @@ Use only the procedure that owns the intended operation:
 - [Development application release and database validation (#331)](runbooks/development-release.md)
   is the operative development release path.
 - [Development bootstrap/import boundary (#332)](runbooks/development-bootstrap-import.md)
+- [Timed-check Scheduler bootstrap and verification (#345)](runbooks/timed-checks-scheduler.md)
   is retained for its bounded bootstrap, Cloudflare/DNS, and recovery contracts.
 - [Development foundation replacement handoff (#327/#333)](runbooks/development-foundation-replacement.md)
   is the current development foundation and protected migration path.
@@ -502,7 +503,7 @@ jq -e 'has("foundation") and (.foundation | type == "object")' "$PRODUCTION_FOUN
 jq . "$PRODUCTION_FOUNDATION_VARS"  # review the production-account object
 cd "$ROOT/v2/infra"
 AWS_PROFILE=nova-toll-prod terraform init -reconfigure -input=false -backend-config=backend.production.hcl
-AWS_PROFILE=nova-toll-prod terraform plan -input=false -lock=false -var-file=production.tfvars -var-file="$PRODUCTION_FOUNDATION_VARS" -var loader_package_path=build/loader.zip -var publisher_package_path=build/publisher.zip -var agentcore_package_path=build/agentcore.zip -var chat_proxy_package_path=build/chat-proxy.zip -out=build/production-release.tfplan
+AWS_PROFILE=nova-toll-prod terraform plan -input=false -lock=false -var-file=production.tfvars -var-file="$PRODUCTION_FOUNDATION_VARS" -var loader_package_path=build/loader.zip -var publisher_package_path=build/publisher.zip -var agentcore_package_path=build/agentcore.zip -var chat_proxy_package_path=build/chat-proxy.zip -var timed_checks_package_path=build/timed-checks.zip -out=build/production-release.tfplan
 production_plan_sha="$(sha256sum build/production-release.tfplan | awk '{print $1}')"
 AWS_PROFILE=nova-toll-prod terraform show -json build/production-release.tfplan | jq -e '
   def valid: (.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string"));

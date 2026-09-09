@@ -22,6 +22,7 @@ import yaml
 V2_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = V2_ROOT.parent
 MAIN_TF = (V2_ROOT / "infra" / "main.tf").read_text()
+TIMED_CHECKS_TF = (V2_ROOT / "infra" / "timed_checks.tf").read_text()
 PUBLISHER_HANDLER = (V2_ROOT / "lambdas" / "publisher" / "handler.py").read_text()
 ENVIRONMENT_TF = (V2_ROOT / "infra" / "environment.tf").read_text()
 SITE_TF = (V2_ROOT / "infra" / "site.tf").read_text()
@@ -37,8 +38,9 @@ TIMED_CHECKS_WORKFLOW = (
 TIMED_SCHEDULE_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-timed-schedule.yml"
 ).read_text()
+TIMED_CHECKS_MODULE = (V2_ROOT / "timed_checks.py").read_text()
 TIMED_ROUTE_TEST = (V2_ROOT / "tests" / "test_validate_toll_route_live.py").read_text()
-TIMED_BALLPARK_TEST = (
+TIMED_ANNUAL_TEST = (
     V2_ROOT / "tests" / "test_get_annual_toll_ballpark_live.py"
 ).read_text()
 VERSIONS_TF = (V2_ROOT / "infra" / "versions.tf").read_text()
@@ -3046,10 +3048,144 @@ def test_reviewed_zip_builders_use_store_mode():
         "build_loader_zip.sh": r'zip -qX0 "\$BUILD/loader\.zip" -@',
         "build_publisher_zip.sh": r'zip -qX0 "\$BUILD/publisher\.zip" -@',
         "build_agentcore_zips.sh": r'zip -qX0 "\$out" -@',
+        "build_timed_checks_zip.sh": r'zip -qX0 "\$BUILD/timed-checks\.zip" -@',
     }
     for script_name, archive_call in expected_calls.items():
         script = (V2_ROOT / "scripts" / script_name).read_text()
         assert re.search(rf"(?m)^[ \t]*\([^\n]*\| {archive_call}\)$", script)
+
+
+def test_timed_builder_import_smoke_is_secret_isolated():
+    script = (V2_ROOT / "scripts" / "build_timed_checks_zip.sh").read_text()
+    assert "env -i" in script
+    assert "PYTHONNOUSERSITE=1" in script
+    assert 'PYTHONPATH="$STAGE"' in script
+    assert (
+        'name.startswith(("AWS_", "ACTIONS_", "GITHUB_", "OPENAI_", "CLOUDFLARE_"))'
+        in script
+    )
+    assert "uv run --python 3.13 --no-project python" in script
+    assert "global-bundle.pem" in script
+    assert 'DB_CA_BUNDLE_PATH = "/var/task/rds-ca-bundle.pem"' in TIMED_CHECKS_TF
+
+
+def test_timed_lambda_scheduler_and_failure_contract():
+    pairs = set(
+        next(
+            ast.literal_eval(node.value)
+            for node in ast.parse(TIMED_CHECKS_MODULE).body
+            if isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "SCHEDULE_WINDOW_PAIRS"
+            and node.value is not None
+        )
+    )
+    entries = re.findall(
+        r'"([^"]+)"\s*=\s*\{ schedule = "([^"]+)", expression = "([^"]+)", window_id = "([^"]+)" \}',
+        TIMED_CHECKS_TF,
+    )
+    assert len(entries) == 28
+    assert len({name for name, *_ in entries}) == 28
+    assert {(schedule, window) for _, schedule, _, window in entries} == pairs
+    weekdays = {"1": "MON", "2": "TUE", "3": "WED", "4": "THU", "5": "FRI", "6": "SAT"}
+    for _, schedule, expression, _ in entries:
+        minute, hour, _, _, weekday = schedule.split()
+        assert expression == f"cron({minute} {hour} ? * {weekdays[weekday]} *)"
+
+    lambda_block = terraform_block(
+        TIMED_CHECKS_TF, 'resource "aws_lambda_function" "timed_checks"'
+    )
+    for name, value in (
+        ("s3_bucket", "var.foundation.agentcore_artifacts_bucket_name"),
+        ("s3_key", "aws_s3_object.timed_checks.key"),
+        ("s3_object_version", "aws_s3_object.timed_checks.version_id"),
+        ("source_code_hash", "local.timed_checks_zip_hash"),
+        ("reserved_concurrent_executions", "1"),
+    ):
+        assert_assignment(lambda_block, name, value)
+    assert "filename" not in lambda_block
+    assert "subnet_ids         = local.private_subnets" in lambda_block
+
+    schedule = terraform_block(
+        TIMED_CHECKS_TF, 'resource "aws_scheduler_schedule" "timed_checks"'
+    )
+    assert_assignment(schedule, "for_each", "local.timed_check_schedules")
+    assert_assignment(schedule, "state", '"ENABLED"')
+    assert_assignment(schedule, "schedule_expression_timezone", '"America/New_York"')
+    assert_assignment(schedule, "mode", '"OFF"')
+    assert "window_id = each.value.window_id" in schedule
+    assert "schedule  = each.value.schedule" in schedule
+    assert schedule.count("maximum_retry_attempts       = 0") == 1
+    assert schedule.count("maximum_event_age_in_seconds = 600") == 1
+
+    invoke = terraform_block(
+        TIMED_CHECKS_TF,
+        'resource "aws_lambda_function_event_invoke_config" "timed_checks"',
+    )
+    assert_assignment(invoke, "maximum_retry_attempts", "0")
+    assert_assignment(invoke, "maximum_event_age_in_seconds", "600")
+    for queue_name in ("timed_checks_invoke_failure", "timed_checks_delivery_failure"):
+        queue = terraform_block(
+            TIMED_CHECKS_TF, f'resource "aws_sqs_queue" "{queue_name}"'
+        )
+        assert_assignment(queue, "sqs_managed_sse_enabled", "true")
+        assert_assignment(queue, "message_retention_seconds", "1209600")
+    assert TIMED_CHECKS_TF.count("alarm_actions       = local.alarm_actions") == 2
+
+    lambda_trust = terraform_block(
+        TIMED_CHECKS_TF,
+        'data "aws_iam_policy_document" "timed_checks_lambda_assume"',
+    )
+    scheduler_trust = terraform_block(
+        TIMED_CHECKS_TF,
+        'data "aws_iam_policy_document" "timed_checks_scheduler_assume"',
+    )
+    assert 'identifiers = ["lambda.amazonaws.com"]' in lambda_trust
+    assert 'identifiers = ["scheduler.amazonaws.com"]' in scheduler_trust
+    assert 'variable = "aws:SourceAccount"' in scheduler_trust
+    assert 'variable = "aws:SourceArn"' in scheduler_trust
+
+    lambda_policy = terraform_block(
+        TIMED_CHECKS_TF,
+        'data "aws_iam_policy_document" "timed_checks_lambda"',
+    )
+    assert 'actions   = ["rds:DescribeDBInstances"]' in lambda_policy
+    assert 'actions = ["rds-db:connect"]' in lambda_policy
+    assert "/${local.database_roles.agent}" in lambda_policy
+    assert "/${local.database_roles.pricing_caller}" in lambda_policy
+    assert 'actions   = ["ssm:GetParameter"]' in lambda_policy
+    assert 'actions   = ["sqs:SendMessage"]' in lambda_policy
+    assert 'resources = ["*"]' not in lambda_policy
+
+    assert 'cidr_ipv4         = "0.0.0.0/0"' in TIMED_CHECKS_TF
+    assert "from_port         = 443" in TIMED_CHECKS_TF
+    assert "to_port           = 443" in TIMED_CHECKS_TF
+    assert "from_port                    = 5432" in TIMED_CHECKS_TF
+    assert "to_port                      = 5432" in TIMED_CHECKS_TF
+    assert 'ip_protocol = "-1"' not in TIMED_CHECKS_TF
+
+
+def test_timed_package_is_threaded_through_all_plan_paths():
+    assert (
+        '-var timed_checks_package_path="$STAGING/timed-checks.zip"'
+        in DEVELOPMENT_PLAN_WORKFLOW
+    )
+    assert (
+        '-var timed_checks_package_path="$PACKAGE_DIR/timed-checks.zip"'
+        in DEVELOPMENT_DELIVERY_WORKFLOW
+    )
+    assert (
+        "-var timed_checks_package_path=build/timed-checks.zip"
+        in PRODUCTION_PLAN_WORKFLOW
+    )
+    for address in (
+        "aws_lambda_function.timed_checks",
+        "aws_scheduler_schedule.timed_checks",
+        "aws_s3_object.timed_checks",
+        "aws_security_group.timed_checks",
+        "aws_sqs_queue.timed_checks_invoke_failure",
+    ):
+        assert address in PRODUCTION_PLAN_WORKFLOW
 
 
 def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
@@ -3059,6 +3195,13 @@ def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
     statement: The runtime must reach the public OpenAI API over HTTPS.
     expired_at: 2027-02-13"""
     assert exception in ignores
+    assert (
+        """  - id: AVD-AWS-0104
+    paths: [v2/infra/timed_checks.tf]
+    statement: Timed evaluations must reach the public OpenAI API over HTTPS.
+    expired_at: 2027-02-13"""
+        in ignores
+    )
     assert (
         """  - id: AVD-AWS-0104
     paths: [infra/agentcore.tf]"""
@@ -3290,6 +3433,8 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
     assert "alarm_actions       = local.alarm_actions" in freshness_alarm
     assert (V2_ROOT / "scripts" / "build_publisher_zip.sh").exists()
     assert "./scripts/build_publisher_zip.sh" in CI_WORKFLOW
+    assert (V2_ROOT / "scripts" / "build_timed_checks_zip.sh").exists()
+    assert "./scripts/build_timed_checks_zip.sh" in CI_WORKFLOW
 
     publisher_invoke = terraform_block(
         MAIN_TF, 'resource "aws_lambda_function_event_invoke_config" "publisher"'
@@ -3450,98 +3595,129 @@ def test_timed_ci_uses_the_internal_pricing_caller():
     assert "role/nova-toll-github-ci" not in TIMED_CHECKS_WORKFLOW
 
 
-def test_timed_ci_skips_stale_scheduled_runs():
-    schedules = re.findall(r'cron: "([^"]+)"', TIMED_SCHEDULE_WORKFLOW)
-    assert all(schedule.split()[-1].isdigit() for schedule in schedules)
-    assert "schedule: ${{ github.event.schedule || '' }}" in TIMED_SCHEDULE_WORKFLOW
+def test_timed_ci_wrapper_keeps_dual_triggers_and_freshness_contract():
+    workflow = cast(dict[str, object], yaml.safe_load(TIMED_SCHEDULE_WORKFLOW))
+    trigger = cast(dict[str, object], _workflow_trigger(workflow))
+    assert set(trigger) == {"schedule", "workflow_dispatch"}
+    schedules = cast(list[dict[str, str]], trigger["schedule"])
+    expected_schedules = [
+        ("17 6 * * 1", "America/New_York"),
+        ("17 6 * * 2", "America/New_York"),
+        ("17 6 * * 3", "America/New_York"),
+        ("17 6 * * 4", "America/New_York"),
+        ("17 6 * * 5", "America/New_York"),
+        ("17 14 * * 1", "America/New_York"),
+        ("17 14 * * 2", "America/New_York"),
+        ("17 14 * * 3", "America/New_York"),
+        ("17 14 * * 4", "America/New_York"),
+        ("17 14 * * 5", "America/New_York"),
+        ("17 11 * * 1", "America/New_York"),
+        ("47 1 * * 2", "America/New_York"),
+        ("47 1 * * 3", "America/New_York"),
+        ("47 1 * * 4", "America/New_York"),
+        ("47 1 * * 5", "America/New_York"),
+        ("17 10 * * 6", "America/New_York"),
+        ("17 15 * * 6", "America/New_York"),
+        ("17 18 * * 6", "America/New_York"),
+        ("23 7 * * 1", "America/New_York"),
+        ("23 7 * * 2", "America/New_York"),
+        ("23 7 * * 3", "America/New_York"),
+        ("23 7 * * 4", "America/New_York"),
+        ("23 7 * * 5", "America/New_York"),
+        ("23 17 * * 1", "America/New_York"),
+        ("23 17 * * 2", "America/New_York"),
+        ("23 17 * * 3", "America/New_York"),
+        ("23 17 * * 4", "America/New_York"),
+        ("23 17 * * 5", "America/New_York"),
+    ]
+    assert [
+        (entry["cron"], entry["timezone"]) for entry in schedules
+    ] == expected_schedules
+    selector = cast(dict[str, dict[str, object]], workflow["jobs"])["select-window"]
+    selector_script = cast(list[dict[str, object]], selector["steps"])[0]["run"]
+    selector_script = cast(str, selector_script)
+    expected_windows = {
+        "i95_northbound": expected_schedules[:5] + expected_schedules[17:18],
+        "i95_southbound": expected_schedules[5:10] + expected_schedules[15:16],
+        "i95_reversal": expected_schedules[10:15] + expected_schedules[16:17],
+        "greenway_eb_peak": expected_schedules[18:23],
+        "greenway_wb_peak": expected_schedules[23:28],
+    }
+    for window_id, pairs in expected_windows.items():
+        schedules_text = "|".join(f'"{cron}"' for cron, _ in pairs)
+        assert f'{schedules_text}) window_id="{window_id}"' in selector_script
+    assert "github.event.schedule || inputs.window_id" in TIMED_SCHEDULE_WORKFLOW
     assert "TIMED_SCHEDULE: ${{ inputs.schedule }}" in TIMED_CHECKS_WORKFLOW
     assert 'python3 scripts/check_timed_window.py "$TIMED_SCHEDULE"' in (
         TIMED_CHECKS_WORKFLOW
     )
 
 
-def test_timed_ci_checks_agent_pricing_tool_in_every_scheduled_state():
+def test_timed_ci_checks_agent_pricing_tool_in_every_window():
+    workflow = cast(dict[str, object], yaml.safe_load(TIMED_SCHEDULE_WORKFLOW))
+    trigger = cast(dict[str, object], _workflow_trigger(workflow))
+    dispatch = cast(dict[str, object], trigger["workflow_dispatch"])
+    window_input = cast(dict[str, object], dispatch["inputs"])["window_id"]
+    assert cast(dict[str, object], window_input)["required"] is True
+    assert cast(dict[str, object], window_input)["type"] == "choice"
+    assert cast(dict[str, object], window_input)["options"] == [
+        "i95_northbound",
+        "i95_reversal",
+        "i95_southbound",
+        "greenway_eb_peak",
+        "greenway_wb_peak",
+    ]
     for window_id in ("i95_northbound", "i95_reversal", "i95_southbound"):
         assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
-        assert f'window_id="{window_id}"' in TIMED_SCHEDULE_WORKFLOW
-        assert f'"{window_id}":' in TIMED_ROUTE_TEST
+        assert f'"{window_id}":' in TIMED_CHECKS_MODULE
     for window_id in ("greenway_eb_peak", "greenway_wb_peak"):
         assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
-        assert f'window_id="{window_id}"' in TIMED_SCHEDULE_WORKFLOW
 
+    assert "DISPATCH_WINDOW: ${{ inputs.window_id }}" in TIMED_SCHEDULE_WORKFLOW
+    assert "SCHEDULE: ${{ github.event.schedule }}" in TIMED_SCHEDULE_WORKFLOW
     assert "tests/test_validate_toll_route_live.py" in TIMED_CHECKS_WORKFLOW
     assert "tests/test_get_annual_toll_ballpark_live.py" in TIMED_CHECKS_WORKFLOW
-    assert "get_current_toll_price" in TIMED_ROUTE_TEST
-    assert "get_annual_toll_ballpark" in TIMED_BALLPARK_TEST
+    assert "get_current_toll_price" in TIMED_CHECKS_MODULE
+    assert "get_annual_toll_ballpark" in TIMED_CHECKS_MODULE
     assert "route_validation.validate_toll_route" not in TIMED_ROUTE_TEST
     assert "eval/run_evaluation.py --check" in CI_WORKFLOW
     assert 'eval/run_evaluation.py --window "$TIMED_WINDOW_ID"' in TIMED_CHECKS_WORKFLOW
     assert "TollChat timed evaluation" in TIMED_CHECKS_WORKFLOW
-    assert "test_live_i95_northbound_restart_is_state_independent" in TIMED_ROUTE_TEST
+    assert "test_live_route_checks_match_timed_window" in TIMED_ROUTE_TEST
+    assert (
+        "test_live_i95_northbound_restart_is_state_independent" not in TIMED_ROUTE_TEST
+    )
+    assert TIMED_ROUTE_TEST.count("run_route_checks(") == 1
+    assert TIMED_ANNUAL_TEST.count("run_annual_checks(") == 1
     assert "OPENAI_API_KEY" not in TIMED_CHECKS_WORKFLOW
 
 
-def test_timed_ci_covers_three_real_i95_states_monday_through_saturday():
-    expected = {
-        1: {
-            "i95_northbound": "17 6",
-            "i95_reversal": "17 11",
-            "i95_southbound": "17 14",
-        },
-        2: {
-            "i95_northbound": "17 6",
-            "i95_reversal": "47 1",
-            "i95_southbound": "17 14",
-        },
-        3: {
-            "i95_northbound": "17 6",
-            "i95_reversal": "47 1",
-            "i95_southbound": "17 14",
-        },
-        4: {
-            "i95_northbound": "17 6",
-            "i95_reversal": "47 1",
-            "i95_southbound": "17 14",
-        },
-        5: {
-            "i95_northbound": "17 6",
-            "i95_reversal": "47 1",
-            "i95_southbound": "17 14",
-        },
-        6: {
-            "i95_northbound": "17 18",
-            "i95_reversal": "17 15",
-            "i95_southbound": "17 10",
-        },
+def test_timed_ci_manual_window_call_is_main_only_and_fail_closed():
+    workflow = cast(dict[str, object], yaml.safe_load(TIMED_SCHEDULE_WORKFLOW))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    assert set(jobs) == {"select-window", "live-checks"}
+    job = jobs["live-checks"]
+    assert job["if"] == "github.ref == 'refs/heads/main'"
+    assert job["uses"] == "./.github/workflows/v2-timed-checks.yml"
+    assert job["needs"] == "select-window"
+    assert "continue-on-error" not in job
+    with_values = cast(dict[str, object], job["with"])
+    assert with_values == {
+        "schedule": "${{ github.event.schedule || '' }}",
+        "window_id": "${{ needs.select-window.outputs.window_id }}",
     }
-
-    for weekday, windows in expected.items():
-        schedules = [f"{clock} * * {weekday}" for clock in windows.values()]
-        assert len(schedules) == len(set(schedules)) == 3
-        for schedule in schedules:
-            assert TIMED_SCHEDULE_WORKFLOW.count(f'cron: "{schedule}"') == 1
-        for window_id, clock in windows.items():
-            schedule = f"{clock} * * {weekday}"
-            assert re.search(
-                rf'^.*"{re.escape(schedule)}".*window_id="{window_id}"',
-                TIMED_SCHEDULE_WORKFLOW,
-                re.MULTILINE,
-            )
-
-    assert not re.search(r'cron: "[^\"]+ \* \* 0"', TIMED_SCHEDULE_WORKFLOW)
+    assert set(re.findall(r"secrets\.([A-Z0-9_]+)", TIMED_SCHEDULE_WORKFLOW)) == {
+        "TS_OAUTH_CLIENT_ID",
+        "TS_OAUTH_SECRET",
+    }
 
 
 def test_timed_ci_checks_both_greenway_peak_windows():
     for window_id in ("greenway_eb_peak", "greenway_wb_peak"):
         assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
-        assert f'window_id="{window_id}"' in TIMED_SCHEDULE_WORKFLOW
-        assert f'"{window_id}":' in TIMED_ROUTE_TEST
+    assert "DISPATCH_WINDOW: ${{ inputs.window_id }}" in TIMED_SCHEDULE_WORKFLOW
 
-    for weekday in range(1, 6):
-        assert f'cron: "23 7 * * {weekday}"' in TIMED_SCHEDULE_WORKFLOW
-        assert f'cron: "23 17 * * {weekday}"' in TIMED_SCHEDULE_WORKFLOW
-
-    assert "test_live_greenway_peak_price" in TIMED_ROUTE_TEST
+    assert "test_live_route_checks_match_timed_window" in TIMED_ROUTE_TEST
     assert "if: startsWith(inputs.window_id, 'i95_')" not in TIMED_CHECKS_WORKFLOW
 
 
@@ -4577,9 +4753,9 @@ def _assert_development_plan_workflow(source: str) -> None:
         "publisher_package_path",
         "agentcore_package_path",
         "chat_proxy_package_path",
+        "timed_checks_package_path",
     ):
         assert f"-var {package_variable}" in plan_source
-    assert "timed_checks_package_path" not in plan_source
     assert "development-release-manifest.json" in plan_source
     assert "delivery_plan_validator.py" in plan_source
     assert "GITHUB_STEP_SUMMARY" in plan_source
@@ -4857,7 +5033,13 @@ def test_development_delivery_staging_snippet_accepts_only_verified_package_byte
         checksums_dir = root / "checksums"
         checksums_dir.mkdir()
         checksums = checksums_dir / "DEPLOYMENT_SHA256SUMS"
-        packages = ("loader.zip", "publisher.zip", "agentcore.zip", "chat-proxy.zip")
+        packages = (
+            "loader.zip",
+            "publisher.zip",
+            "agentcore.zip",
+            "chat-proxy.zip",
+            "timed-checks.zip",
+        )
         for package in packages:
             (package_dir / package).write_bytes(package.encode())
         checksums.write_text(
@@ -5850,6 +6032,17 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     ]
     assert by_sid["DecryptDevelopmentState"]["actions"] == ["kms:Decrypt"]
     assert by_sid["WriteDevelopmentStateDataKeys"]["actions"] == ["kms:GenerateDataKey"]
+    assert by_sid["PassTimedChecksSchedulerRole"]["actions"] == ["iam:PassRole"]
+    assert by_sid["PassTimedChecksSchedulerRole"]["resources"] == [
+        "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-timed-checks-scheduler-dev"
+    ]
+    assert by_sid["PassTimedChecksSchedulerRole"]["conditions"] == [
+        {
+            "test": "StringEquals",
+            "variable": "iam:PassedToService",
+            "values": ["scheduler.amazonaws.com"],
+        }
+    ]
     for sid in ("DecryptDevelopmentState", "WriteDevelopmentStateDataKeys"):
         assert by_sid[sid]["resources"] == ["aws_kms_key.tfstate.arn"]
         conditions = cast(list[dict[str, object]], by_sid[sid]["conditions"])
@@ -5906,6 +6099,7 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "iam:ListRoleTags",
         ],
         "PassExistingAgentCoreRuntimeRole": ["iam:PassRole"],
+        "PassTimedChecksSchedulerRole": ["iam:PassRole"],
     }
     temporary_sids = {
         "RetireUsagePublisherIam",
@@ -6068,6 +6262,7 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "/aws/lambda/toll-v2-report-publisher-dev",
             "/aws/lambda/tollchat-v2-chat-proxy-dev",
             "/aws/lambda/tollchat-v2-usage-publisher-dev",
+            "/aws/lambda/nova-toll-v2-timed-checks-dev",
             "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
             "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
         )
@@ -6328,12 +6523,14 @@ def _assert_application_roles_are_bootstrap_owned() -> None:
         "agent_measurement.tf": (
             V2_ROOT / "infra" / "agent_measurement.tf"
         ).read_text(),
+        "timed_checks.tf": TIMED_CHECKS_TF,
     }
     role_names = {
         "main.tf": ("loader", "timed_checks", "publisher", "publisher_scheduler"),
         "agentcore.tf": ("tollchat_runtime", "tollchat_proxy"),
         "site.tf": (),
         "agent_measurement.tf": (),
+        "timed_checks.tf": ("timed_checks_lambda", "timed_checks_scheduler"),
     }
     for filename, names in role_names.items():
         for name in names:
@@ -6908,8 +7105,7 @@ DEVELOPMENT_PLAN_REFRESH_TUPLES = {
     "ReadApplicationSchedules": (
         ("scheduler:GetSchedule", "scheduler:ListTagsForResource"),
         (
-            "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev",
-            "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default",
+            'concat([ "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev", "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default", ], local.development_delivery_timed_schedule_arns)',
         ),
         _NO_PLAN_CONDITIONS,
     ),
@@ -7433,7 +7629,7 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
 
 def test_development_delivery_policy_set_is_deterministic_and_bounded():
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 52
+    assert len(statements) == 53
     expected_groups = {
         "state": (
             0,
@@ -7502,9 +7698,10 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         ),
         "runtime": (
             35,
-            44,
+            45,
             [
                 "ManageApplicationSchedules",
+                "PassTimedChecksSchedulerRole",
                 "ReadRetiredUsagePublisherIam",
                 "ReadRetiredUsagePublisherLambda",
                 "ReadRetiredUsagePublisherEvents",
@@ -7516,8 +7713,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
         "edge": (
-            44,
-            52,
+            45,
+            53,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -7535,13 +7732,20 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
     )
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups)
-    assert len(rendered_aggregate) == len(statements) == 52
+    assert len(rendered_aggregate) == len(statements) == 53
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
         "StringEquals": {"aws:RequestedRegion": "us-east-1"}
     }
     assert rendered_by_sid["PassExistingAgentCoreRuntimeRole"]["Condition"] == {
         "StringEquals": {"iam:PassedToService": "bedrock-agentcore.amazonaws.com"}
+    }
+    assert rendered_by_sid["PassTimedChecksSchedulerRole"]["Action"] == "iam:PassRole"
+    assert rendered_by_sid["PassTimedChecksSchedulerRole"]["Resource"] == (
+        "arn:aws:iam::903859731897:role/nova-toll-v2-timed-checks-scheduler-dev"
+    )
+    assert rendered_by_sid["PassTimedChecksSchedulerRole"]["Condition"] == {
+        "StringEquals": {"iam:PassedToService": "scheduler.amazonaws.com"}
     }
     temporary_sids = {
         "RetireUsagePublisherIam",
