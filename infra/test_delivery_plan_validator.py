@@ -829,14 +829,69 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             }],
             "permissions": [{
                 "address": address,
-                "action": spec.permissions[0].action,
-                "resource": spec.permissions[0].resources[0],
-                "conditions": {},
-            }],
+                "action": permission.action,
+                "resource": permission.resources[0],
+                "conditions": dict(permission.conditions),
+            } for permission in spec.permissions],
         }
         self.assertEqual(
             validate_plan(_plan([_resource_change(address, "update", before, after)]), manifest)["status"],
             "accepted",
+        )
+
+        missing_passrole = copy.deepcopy(manifest)
+        missing_passrole["permissions"] = [
+            record for record in missing_passrole["permissions"] if record["action"] != "iam:PassRole"
+        ]
+        self.assertEqual(
+            validate_plan(_plan([_resource_change(address, "update", before, after)]), missing_passrole)["reason_code"],
+            "missing_permission",
+        )
+
+        widened_passrole = copy.deepcopy(manifest)
+        next(record for record in widened_passrole["permissions"] if record["action"] == "iam:PassRole")["resource"] = "*"
+        self.assertEqual(
+            validate_plan(_plan([_resource_change(address, "update", before, after)]), widened_passrole)["reason_code"],
+            "invalid_permission",
+        )
+
+        wrong_service = copy.deepcopy(manifest)
+        next(record for record in wrong_service["permissions"] if record["action"] == "iam:PassRole")["conditions"] = {
+            "iam:PassedToService": "events.amazonaws.com"
+        }
+        self.assertEqual(
+            validate_plan(_plan([_resource_change(address, "update", before, after)]), wrong_service)["reason_code"],
+            "invalid_permission",
+        )
+
+        wrong_role = copy.deepcopy(manifest)
+        next(record for record in wrong_role["permissions"] if record["action"] == "iam:PassRole")["resource"] = (
+            "arn:aws:iam::903859731897:role/nova-toll-v2-timed-checks-scheduler-other"
+        )
+        self.assertEqual(
+            validate_plan(_plan([_resource_change(address, "update", before, after)]), wrong_role)["reason_code"],
+            "invalid_permission",
+        )
+
+        wrong_condition_key = copy.deepcopy(manifest)
+        next(record for record in wrong_condition_key["permissions"] if record["action"] == "iam:PassRole")["conditions"] = {
+            "iam:PassedToServiceCondition": "scheduler.amazonaws.com"
+        }
+        self.assertEqual(
+            validate_plan(_plan([_resource_change(address, "update", before, after)]), wrong_condition_key)["reason_code"],
+            "invalid_permission",
+        )
+
+        orphan_permission = copy.deepcopy(manifest)
+        orphan_permission["permissions"].append({
+            "address": 'aws_scheduler_schedule.timed_checks["greenway-eb-fri-0723"]',
+            "action": "scheduler:UpdateSchedule",
+            "resource": "arn:aws:scheduler:us-east-1:903859731897:schedule/default/nova-toll-v2-greenway-eb-fri-0723-dev",
+            "conditions": {},
+        })
+        self.assertEqual(
+            validate_plan(_plan([_resource_change(address, "update", before, after)]), orphan_permission)["reason_code"],
+            "manifest_coverage_mismatch",
         )
 
         provider_after = copy.deepcopy(after)

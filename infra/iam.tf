@@ -668,6 +668,17 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
+    sid       = "PassTimedChecksSchedulerRole"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-timed-checks-scheduler-dev"]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["scheduler.amazonaws.com"]
+    }
+  }
+
+  statement {
     sid = "ReadRetiredUsagePublisherIam"
     actions = [
       "iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:ListRoleTags",
@@ -835,11 +846,11 @@ locals {
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 35, 44)
+      Statement = slice(local.development_delivery_policy_statements, 35, 45)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 44, 52)
+      Statement = slice(local.development_delivery_policy_statements, 45, 53)
     })
   }
 }
@@ -1687,11 +1698,11 @@ locals {
     })
     schedules = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.production_delivery_application_policy_statements, 29, 30)
+      Statement = slice(local.production_delivery_application_policy_statements, 29, 31)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.production_delivery_application_policy_statements, 30, length(local.production_delivery_application_policy_statements))
+      Statement = slice(local.production_delivery_application_policy_statements, 31, length(local.production_delivery_application_policy_statements))
     })
   }
 

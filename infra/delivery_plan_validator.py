@@ -287,6 +287,11 @@ def _build_contract() -> dict[str, Mutation]:
                 "scheduler:UpdateSchedule",
                 f"arn:aws:scheduler:{REGION}:{ACCOUNT}:schedule/default/nova-toll-v2-{key}-dev",
             ),
+            _permission(
+                "iam:PassRole",
+                f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-timed-checks-scheduler-dev",
+                conditions={"iam:PassedToService": "scheduler.amazonaws.com"},
+            ),
         )
     result["aws_bedrock_guardrail_version.tollchat"] = _mutation(
         ("description", "guardrail_arn"),

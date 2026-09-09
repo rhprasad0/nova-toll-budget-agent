@@ -1126,6 +1126,23 @@ def main() -> None:
     require('"iam:PassedToService"', production)
     require("bedrock-agentcore.amazonaws.com", production)
 
+    development_delivery = terraform_block(
+        IAM, 'data "aws_iam_policy_document" "development_delivery"'
+    )
+    development_shards = terraform_block(IAM, "locals", 1)
+    assert development_delivery.count('sid       = "PassTimedChecksSchedulerRole"') == 1
+    require('actions   = ["iam:PassRole"]', development_delivery)
+    require(
+        'arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-timed-checks-scheduler-dev',
+        development_delivery,
+    )
+    require('variable = "iam:PassedToService"', development_delivery)
+    require('values   = ["scheduler.amazonaws.com"]', development_delivery)
+    require(
+        "Statement = slice(local.development_delivery_policy_statements, 35, 45)",
+        development_shards,
+    )
+
     planner = production[: production.index("  production_delivery_deploy_state_statements")]
     application_slice = production[
         production.index("  production_delivery_application_policy_statements") : production.index(
@@ -1198,6 +1215,20 @@ def main() -> None:
         if "s3:GetObjectVersion" in statement.get("Action", []):
             assert all("/plans/" not in resource for resource in statement["Resource"])
     assert set(deploy_documents) == {"state", "release", "compute", "observability", "storage", "data", "runtime", "schedules", "edge"}
+    schedule_statements = deploy_documents["schedules"]["Statement"]
+    assert [statement["Sid"] for statement in schedule_statements] == [
+        "ManageApplicationSchedules",
+        "PassTimedChecksSchedulerRole",
+    ]
+    passrole = schedule_statements[1]
+    assert passrole["Action"] in ("iam:PassRole", ["iam:PassRole"])
+    assert passrole["Resource"] in (
+        "arn:aws:iam::920534282028:role/nova-toll-v2-timed-checks-scheduler",
+        ["arn:aws:iam::920534282028:role/nova-toll-v2-timed-checks-scheduler"],
+    )
+    assert passrole["Condition"] == {
+        "StringEquals": {"iam:PassedToService": "scheduler.amazonaws.com"}
+    }
     deploy_application_keys = ("compute", "observability", "storage", "data", "runtime", "schedules", "edge")
     rendered_deploy_application = [
         statement
