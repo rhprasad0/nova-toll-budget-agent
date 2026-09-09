@@ -4428,11 +4428,44 @@ def _assert_development_plan_workflow(source: str) -> None:
     assert 'test "$INPUT_SHA" = "$EVENT_SHA"' in source
     assert "candidate_sha" in build_source
     assert "persist-credentials: false" in source
-    for package in ("loader.zip", "publisher.zip", "agentcore.zip", "chat-proxy.zip"):
+    assert "id: package-mode" in source
+    assert 'test ! -L "$MANIFEST"' in build_source
+    assert "isinstance(value, dict)" in build_source
+    assert 'isinstance(value.get("deployment_inputs"), dict)' in build_source
+    assert (
+        '"v2/scripts/build_timed_checks_zip.sh" in value["deployment_inputs"]'
+        in build_source
+    )
+    assert (
+        "PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip)"
+        in build_source
+    )
+    assert (
+        "PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip)"
+        in build_source
+    )
+    for package in (
+        "loader.zip",
+        "publisher.zip",
+        "agentcore.zip",
+        "chat-proxy.zip",
+        "timed-checks.zip",
+    ):
         assert package in build_source
     assert "DEPLOYMENT_SHA256SUMS" in build_source
+    assert 'sha256sum "${PACKAGE_NAMES[@]}" > DEPLOYMENT_SHA256SUMS' in build_source
     assert (
-        "sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip"
+        "awk '{print $2}' DEPLOYMENT_SHA256SUMS | LC_ALL=C sort | tr '\\n' ' '"
+        in build_source
+    )
+    assert 'if [[ "$PACKAGE_MODE" = timed ]]; then' in build_source
+    assert "./scripts/build_timed_checks_zip.sh" in build_source
+    assert 'PACKAGE_STAGE="$RUNNER_TEMP/v2-development-packages"' in build_source
+    assert 'mkdir -m 700 -- "$PACKAGE_STAGE"' in build_source
+    assert 'cp -P -- "$source" "$PACKAGE_STAGE/$package"' in build_source
+    assert 'find "$PACKAGE_STAGE" -mindepth 1 -maxdepth 1 -printf' in build_source
+    assert (
+        'sha256sum --check "$GITHUB_WORKSPACE/v2/infra/build/DEPLOYMENT_SHA256SUMS"'
         in build_source
     )
     assert "trusted-build/infra/release_manifest.py" in build_source
@@ -4488,9 +4521,43 @@ def _assert_development_plan_workflow(source: str) -> None:
     assert "trusted/infra/release_manifest.py" in plan_source
     assert "--evidence" in plan_source
     assert "--repo-root" not in plan_source
+    assert 'test ! -L "$MANIFEST"' in plan_source
+    assert "isinstance(value, dict)" in plan_source
+    assert 'isinstance(value.get("deployment_inputs"), dict)' in plan_source
+    assert (
+        '"v2/scripts/build_timed_checks_zip.sh" in value["deployment_inputs"]'
+        in plan_source
+    )
+    assert (
+        "PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip)"
+        in plan_source
+    )
+    assert (
+        "PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip)"
+        in plan_source
+    )
+    assert "PACKAGE_COUNT=4" in plan_source
+    assert "PACKAGE_COUNT=5" in plan_source
+    assert (
+        "find \"$STAGING\" -mindepth 1 -maxdepth 1 -name '*.zip' -printf" in plan_source
+    )
+    assert 'test "$(wc -l <"$CHECKSUMS")" -eq "$PACKAGE_COUNT"' in plan_source
+    assert 'sha256sum --check "$(basename "$CHECKSUMS")"' in plan_source
     assert source.index(
         "Verify candidate release binding without credentials"
     ) < source.index("aws-actions/configure-aws-credentials@")
+    plan_start = source.index("\n  plan:\n")
+    credential_index = source.index(
+        "aws-actions/configure-aws-credentials@", plan_start
+    )
+    for boundary in (
+        'PACKAGE_MODE="$(python3 - "$MANIFEST"',
+        "find \"$STAGING\" -mindepth 1 -maxdepth 1 -name '*.zip'",
+        'sha256sum --check "$(basename "$CHECKSUMS")"',
+        "python3 trusted/infra/release_manifest.py",
+    ):
+        boundary_index = source.index(boundary, plan_start)
+        assert plan_start < boundary_index < credential_index
     assert 'terraform_version: "1.15.8"' in source
     assert plan_source.count("-lockfile=readonly") == 2
     assert "-lock=false" in plan_source
@@ -4505,6 +4572,14 @@ def _assert_development_plan_workflow(source: str) -> None:
     assert (
         'terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" apply' not in plan_source
     )
+    for package_variable in (
+        "loader_package_path",
+        "publisher_package_path",
+        "agentcore_package_path",
+        "chat_proxy_package_path",
+    ):
+        assert f"-var {package_variable}" in plan_source
+    assert "timed_checks_package_path" not in plan_source
     assert "development-release-manifest.json" in plan_source
     assert "delivery_plan_validator.py" in plan_source
     assert "GITHUB_STEP_SUMMARY" in plan_source
@@ -4538,6 +4613,16 @@ def _assert_development_plan_workflow(source: str) -> None:
                     cast(dict[str, object], step["with"])["persist-credentials"]
                     is False
                 )
+
+
+def test_development_plan_workflow_digest_matches_reviewed_manifest():
+    manifest = json.loads(
+        (REPO_ROOT / "infra" / "development-release-manifest.json").read_text()
+    )
+    assert (
+        hashlib.sha256(DEVELOPMENT_PLAN_WORKFLOW.encode()).hexdigest()
+        == manifest["deployment_inputs"][".github/workflows/v2-development-plan.yml"]
+    )
 
 
 def test_development_plan_workflow_is_reusable_and_fail_closed():
