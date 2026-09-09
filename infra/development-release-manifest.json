@@ -133,7 +133,7 @@
     "v2/scripts/build_publisher_zip.sh": "174e88fd65a997a16c08cf7f838105b7d19a2e3d1fc0a63d460ad43bcaf4834b",
     "v2/scripts/build_release_bundle.sh": "f5ea3703dd9e6ca7c1b5abd21a36f2322cf34a3373100c025f296425905e0540",
     "v2/scripts/check_development_admission.py": "d80ca41e1469da2a7a45b8cf052382424f9f15fe69516e1303310665c6240f6c",
-    "v2/scripts/check_development_release.py": "916c9c2efaabbce3e20cfa307d34d23467e8f0183141a670d222318d3c7a249f",
+    "v2/scripts/check_development_release.py": "a9b44797a123e3d4fbd075065b6ece356416f139976de752db6fb67c147cbe3b",
     "v2/scripts/classify_deployment_error.py": "8c736cbd2a8957f347408b92553efd0971bb50d42e6c8f658f5ff7602079b405",
     "v2/scripts/development_deployment_status.py": "2ec1176019489b84d8f2c910ed739c4eee959f43c7bbd3655a2cf2698bb94cd9",
     "v2/scripts/loader-requirements.in": "38c314f1e9470587a6b566f2c8ed28cdf2ed3df2d87d349c3cbfc9f5a707230e",

@@ -291,7 +291,40 @@ def test_invalid_ndjson_never_passes(events: list[dict[str, Any]]) -> None:
         )
 
 
-def cookie(value: str) -> http.cookiejar.Cookie:
+@pytest.mark.parametrize(
+    ("response", "reason"),
+    [
+        ((500, "application/x-ndjson", b""), "answer_status"),
+        ((200, "application/json", b""), "answer_content_type"),
+        ((200, "application/x-ndjson", b""), "answer_lines"),
+        ((200, "application/x-ndjson", b"[]"), "answer_event"),
+        (
+            (
+                200,
+                "application/x-ndjson",
+                b'{"type":"answer","text":"sentinel-answer","blocked":true}',
+            ),
+            "answer_content",
+        ),
+        (
+            (200, "application/x-ndjson", b'{"type":"tool"}'),
+            "answer_terminal",
+        ),
+    ],
+)
+def test_answer_failures_have_fixed_reasons(
+    response: tuple[int, str, bytes],
+    reason: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(check.CheckFailure):
+        check.answer(response)
+    output = capsys.readouterr().err
+    assert f"reason={reason}" in output
+    assert "sentinel-answer" not in output
+
+
+def cookie(value: str, *, http_only: bool = True) -> http.cookiejar.Cookie:
     return http.cookiejar.Cookie(
         0,
         check.COOKIE,
@@ -308,9 +341,64 @@ def cookie(value: str) -> http.cookiejar.Cookie:
         True,
         None,
         None,
-        {"HttpOnly": ""},
+        {"HttpOnly": ""} if http_only else {},
         False,
     )
+
+
+@pytest.mark.parametrize("failure", ["count", "attributes", "value"])
+def test_session_cookie_failures_have_fixed_reasons(
+    failure: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    jar = http.cookiejar.CookieJar()
+    if failure != "count":
+        item = cookie("sentinel-token", http_only=failure != "value")
+        if failure == "attributes":
+            item.secure = False
+        jar.set_cookie(item)
+    with pytest.raises(check.CheckFailure):
+        check.token(jar)
+    output = capsys.readouterr().err
+    assert f"reason=session_cookie_{failure}" in output
+    assert "sentinel-token" not in output
+
+
+@pytest.mark.parametrize(
+    ("code", "body", "with_cookie", "reason"),
+    [
+        (502, b"{}", False, "reset_response"),
+        (200, b'{"ok": true}', True, "reset_cookie"),
+    ],
+)
+def test_reset_failures_have_fixed_reasons(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    code: int,
+    body: bytes,
+    with_cookie: bool,
+    reason: str,
+) -> None:
+    def request_stub(
+        _jar: http.cookiejar.CookieJar,
+        _path: str,
+        _body: dict[str, Any] | None = None,
+        *,
+        origin: str = check.SITE,
+        cookie: str | None = None,
+    ) -> tuple[int, str, bytes]:
+        del origin, cookie
+        return code, "application/json", body
+
+    monkeypatch.setattr(check, "request", request_stub)
+    jar = http.cookiejar.CookieJar()
+    if with_cookie:
+        jar.set_cookie(cookie("sentinel-reset-token"))
+    with pytest.raises(check.CheckFailure):
+        check.reset(jar)
+    output = capsys.readouterr().err
+    assert f"reason={reason}" in output
+    assert "sentinel-reset-token" not in output
 
 
 @pytest.mark.parametrize(
@@ -331,6 +419,7 @@ def cookie(value: str) -> http.cookiejar.Cookie:
 def test_public_smoke_and_two_session_lifecycle(
     release: tuple[dict[str, Any], ...],
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
     wrong: str | None,
 ) -> None:
     state, manifest, _ = release
@@ -404,17 +493,39 @@ def test_public_smoke_and_two_session_lifecycle(
     if wrong:
         with pytest.raises(ValueError):
             check.smoke(values)
+        expected_reason = {
+            "static": "content_mismatch",
+            "robots": "http",
+            "config": "malformed_response",
+            "origin": "http",
+            "shared": "session_distinct",
+            "revoked": "session_revocation",
+            "reset": "reset_response",
+            "blocked": "answer_content",
+            "cleanup": "reset_failed",
+        }[wrong]
+        output = capsys.readouterr().err
+        assert f"reason={expected_reason}" in output
+        if wrong == "cleanup":
+            assert output.count("reason=reset_failed") == 1
     else:
         check.smoke(values)
         assert len(set(created)) == 2 and len(reset_calls) == 2
 
 
 @pytest.mark.parametrize(
-    ("failure_stage", "failure_kind", "expected_subcheck", "expected_resets"),
+    (
+        "failure_stage",
+        "failure_kind",
+        "expected_subcheck",
+        "expected_resets",
+        "cleanup_failure",
+    ),
     [
-        ("session_first", "answer", "session_first", 1),
-        ("session_second", "answer", "session_second", 2),
-        ("session_reuse", "revoked", "session_reuse", 2),
+        ("session_first", "answer", "session_first", 1, False),
+        ("session_second", "answer", "session_second", 2, False),
+        ("session_reuse", "revoked", "session_reuse", 2, False),
+        ("session_first", "answer", "session_first", 1, True),
     ],
 )
 def test_main_preserves_original_smoke_diagnostic_after_cleanup(
@@ -426,6 +537,7 @@ def test_main_preserves_original_smoke_diagnostic_after_cleanup(
     failure_kind: str,
     expected_subcheck: str,
     expected_resets: int,
+    cleanup_failure: bool,
 ) -> None:
     state, manifest, _ = release
     values = check.expected(state, manifest)
@@ -455,6 +567,8 @@ def test_main_preserves_original_smoke_diagnostic_after_cleanup(
             )
         if path == "/api/reset":
             reset_calls.append(id(jar))
+            if cleanup_failure:
+                return 502, "application/json", b"{}"
             jar.clear()
             return 200, "application/json", b'{"ok": true}'
         if path == "/api/chat":
@@ -501,8 +615,170 @@ def test_main_preserves_original_smoke_diagnostic_after_cleanup(
     assert len(reset_calls) == expected_resets
 
 
+def test_request_hashes_exact_json_bytes_and_skips_bodyless_hash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[Request] = []
+
+    class Response:
+        status = 200
+        headers = Message()
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_: object) -> bool:
+            return False
+
+        def read(self, _size: int) -> bytes:
+            return b"ok"
+
+    class Opener:
+        def open(self, req: Request, timeout: int) -> Response:
+            assert timeout <= 90
+            captured.append(req)
+            return Response()
+
+    def build_opener_stub(*_handlers: object) -> Opener:
+        return Opener()
+
+    monkeypatch.setattr(
+        check.urllib.request,
+        "build_opener",
+        build_opener_stub,
+    )
+    jar = http.cookiejar.CookieJar()
+    body = {"message": "exact bytes", "items": [3, 1, 4], "nested": {"ok": True}}
+    check.request(jar, "/api/chat", body)
+    request_with_body = captured.pop()
+    assert isinstance(request_with_body.data, bytes)
+    assert request_with_body.data == json.dumps(body).encode()
+    payload_hash = next(
+        value
+        for name, value in request_with_body.header_items()
+        if name.lower() == "x-amz-content-sha256"
+    )
+    assert payload_hash == hashlib.sha256(request_with_body.data).hexdigest()
+    assert len(payload_hash) == 64 and payload_hash == payload_hash.lower()
+    assert all(char in "0123456789abcdef" for char in payload_hash)
+
+    check.request(jar, "/api/config")
+    bodyless_request = captured.pop()
+    assert bodyless_request.data is None
+    assert not any(
+        name.lower() in {"content-type", "x-amz-content-sha256"}
+        for name, _value in bodyless_request.header_items()
+    )
+
+
+def test_request_path_failure_has_fixed_reason(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(check.CheckFailure):
+        check.request(http.cookiejar.CookieJar(), "relative")
+    assert "reason=request_path" in capsys.readouterr().err
+
+
+def test_diagnostics_never_echo_sensitive_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    response_body = "response-body-secret"
+    cookie_token = "cookie-token-secret"
+    prompt = "prompt-secret"
+    request_header = "https://request-header-secret.example"
+    response_header = "response-header-secret"
+    exception_text = "exception-text-secret"
+
+    monkeypatch.setattr(check, "PROMPT", prompt)
+    with pytest.raises(check.CheckFailure):
+        check.answer(
+            (
+                200,
+                "application/x-ndjson",
+                json.dumps(
+                    {
+                        "type": "answer",
+                        "text": f"{response_body}:{check.PROMPT}",
+                        "blocked": True,
+                    }
+                ).encode(),
+            )
+        )
+
+    class FailingOpener:
+        def open(self, req: Request, timeout: int) -> object:
+            assert req.get_header("Origin") == request_header
+            assert req.get_header("Cookie") == f"{check.COOKIE}={cookie_token}"
+            raise check.urllib.error.URLError(exception_text)
+
+    def build_failing_opener(*_handlers: object) -> FailingOpener:
+        return FailingOpener()
+
+    monkeypatch.setattr(
+        check.urllib.request,
+        "build_opener",
+        build_failing_opener,
+    )
+    with pytest.raises(check.CheckFailure):
+        check.request(
+            http.cookiejar.CookieJar(),
+            "/api/chat",
+            {"message": check.PROMPT},
+            origin=request_header,
+            cookie=cookie_token,
+        )
+
+    jar = http.cookiejar.CookieJar()
+    invalid_cookie = cookie(cookie_token, http_only=False)
+    jar.set_cookie(invalid_cookie)
+    with pytest.raises(check.CheckFailure):
+        check.token(jar)
+
+    class OversizedResponse:
+        status = 200
+        headers = Message()
+
+        def __enter__(self) -> "OversizedResponse":
+            self.headers["X-Response-Secret"] = response_header
+            return self
+
+        def __exit__(self, *_: object) -> bool:
+            return False
+
+        def read(self, size: int) -> bytes:
+            return b"x" * size
+
+    class OversizedOpener:
+        def open(self, _req: Request, timeout: int) -> OversizedResponse:
+            return OversizedResponse()
+
+    def build_oversized_opener(*_handlers: object) -> OversizedOpener:
+        return OversizedOpener()
+
+    monkeypatch.setattr(
+        check.urllib.request,
+        "build_opener",
+        build_oversized_opener,
+    )
+    with pytest.raises(check.CheckFailure):
+        check.request(http.cookiejar.CookieJar(), "/api/config")
+
+    output = capsys.readouterr().err
+    for sentinel in (
+        response_body,
+        cookie_token,
+        prompt,
+        request_header,
+        response_header,
+        exception_text,
+    ):
+        assert sentinel not in output
+
+
 def test_redirect_and_oversized_response_fail_closed(
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     with pytest.raises(ValueError):
         check.NoRedirect().redirect_request(
@@ -533,3 +809,4 @@ def test_redirect_and_oversized_response_fail_closed(
     monkeypatch.setattr(check.urllib.request, "build_opener", opener)
     with pytest.raises(ValueError):
         check.request(http.cookiejar.CookieJar(), "/api/config")
+    assert "reason=response_size" in capsys.readouterr().err
