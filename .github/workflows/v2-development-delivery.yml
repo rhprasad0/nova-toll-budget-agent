@@ -772,7 +772,7 @@ jobs:
           if run_private_stage "validator" "$VALIDATION_SUMMARY" "$VALIDATOR_PARSE_LOG" jq -e '
             def valid_reason:
               .reason_code as $reason |
-              ["data_mode_misuse", "delete_not_permitted", "deposed_resource", "duplicate_address", "duplicate_manifest_mutation", "duplicate_permission", "import_or_refresh", "invalid_permission", "invalid_resource_identity", "malformed_input", "manifest_coverage_mismatch", "manifest_mutation_mismatch", "missing_permission", "moved_resource", "production_target", "provider_identity_mismatch", "provider_identity_missing", "replacement", "sensitive_authorization_value", "unknown_authorization_value", "unknown_manifest_declaration", "unsupported_action", "unsupported_address", "unsupported_field_delta"]
+              ["data_mode_misuse", "delete_not_permitted", "deposed_resource", "duplicate_address", "duplicate_manifest_mutation", "duplicate_permission", "import_or_refresh", "invalid_permission", "invalid_resource_identity", "invalid_schedule_value", "malformed_input", "manifest_coverage_mismatch", "manifest_mutation_mismatch", "missing_permission", "moved_resource", "production_target", "provider_identity_mismatch", "provider_identity_missing", "replacement", "sensitive_authorization_value", "timed_contract_requires_marker", "unknown_authorization_value", "unknown_manifest_declaration", "unsupported_action", "unsupported_address", "unsupported_field_delta"]
               | index($reason) != null;
             def valid_result:
             type == "object" and

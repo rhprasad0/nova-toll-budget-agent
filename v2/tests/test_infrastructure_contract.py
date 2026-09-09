@@ -4699,6 +4699,8 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
         in source
     )
     assert 'cat "$VALIDATION_SUMMARY" >>"$VALIDATOR_PARSE_LOG"' in source
+    assert '"invalid_schedule_value"' in source
+    assert '"timed_contract_requires_marker"' in source
     assert (
         'VALIDATOR_RESULT_STATUS="$(jq -er \'.status\' "$VALIDATION_SUMMARY"' in source
     )
@@ -5246,18 +5248,32 @@ def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup()
         assert "stage=foundation-output-validation status=fail" in result.stderr
         assert not marker.exists()
 
-        result, marker, summary = run_plan(validator_json=rejected, validator_exit=1)
-        assert result.returncode == 1
+        for reason in ("invalid_schedule_value", "timed_contract_requires_marker"):
+            reason_rejected = json.dumps(
+                {**json.loads(rejected), "reason_code": reason}
+            )
+            result, marker, summary = run_plan(
+                validator_json=reason_rejected, validator_exit=1
+            )
+            assert result.returncode == 1
+            assert "stage=validator status=fail" in result.stderr
+            assert not marker.exists()
+            summary_text = summary.read_text(encoding="utf-8")
+            summary_value = json.loads(
+                summary_text[summary_text.index("{") : summary_text.rindex("}") + 1]
+            )
+            assert summary_value == {
+                "status": "rejected",
+                "reason_code": reason,
+            }
+
+        arbitrary = json.dumps(
+            {**json.loads(rejected), "reason_code": "unregistered_reason"}
+        )
+        result, marker, _ = run_plan(validator_json=arbitrary, validator_exit=1)
+        assert result.returncode != 0
         assert "stage=validator status=fail" in result.stderr
         assert not marker.exists()
-        summary_text = summary.read_text(encoding="utf-8")
-        summary_value = json.loads(
-            summary_text[summary_text.index("{") : summary_text.rindex("}") + 1]
-        )
-        assert summary_value == {
-            "status": "rejected",
-            "reason_code": "unsupported_field_delta",
-        }
 
         result, marker, _ = run_plan(validator_json=rejected, validator_exit=0)
         assert result.returncode == 1

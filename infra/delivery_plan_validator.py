@@ -7,6 +7,7 @@ patterns; resource patterns occur only in the IAM evidence for an address.
 from __future__ import annotations
 
 import argparse
+import copy
 import fnmatch
 import hashlib
 import json
@@ -480,6 +481,7 @@ def _timed_schedule_plan_value(address: str) -> dict[str, Any]:
 
 
 def _validate_timed_schedule(after: dict[str, Any], address: str, action: str, operation_class: str) -> None:
+    after = copy.deepcopy(after)
     expected = _timed_schedule_expected(address)
     for field in ("name", "state", "schedule_expression", "schedule_expression_timezone"):
         if after.get(field) != expected[field]:
@@ -487,6 +489,10 @@ def _validate_timed_schedule(after: dict[str, Any], address: str, action: str, o
     windows = after.get("flexible_time_window")
     if not isinstance(windows, list) or len(windows) != 1 or not isinstance(windows[0], dict) or windows[0].get("mode") != "OFF":
         _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
+    if "maximum_window_in_minutes" in windows[0]:
+        if windows[0]["maximum_window_in_minutes"] is not None:
+            _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
+        del windows[0]["maximum_window_in_minutes"]
     if set(windows[0]) != {"mode"}:
         _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
     targets = after.get("target")
@@ -499,6 +505,11 @@ def _validate_timed_schedule(after: dict[str, Any], address: str, action: str, o
     }
     if any(target.get(field) != value for field, value in required.items()):
         _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
+    for field in ("ecs_parameters", "eventbridge_parameters", "kinesis_parameters", "sagemaker_pipeline_parameters", "sqs_parameters"):
+        if field in target:
+            if type(target[field]) is not list or target[field]:
+                _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
+            del target[field]
     target_fields = {"arn", "role_arn", "input", "retry_policy", "dead_letter_config"}
     if set(target) != target_fields:
         _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)

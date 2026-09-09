@@ -825,6 +825,76 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "accepted",
         )
 
+        provider_after = copy.deepcopy(after)
+        provider_after["flexible_time_window"][0]["maximum_window_in_minutes"] = None
+        for field in (
+            "ecs_parameters",
+            "eventbridge_parameters",
+            "kinesis_parameters",
+            "sagemaker_pipeline_parameters",
+            "sqs_parameters",
+        ):
+            provider_after["target"][0][field] = []
+        provider_before = copy.deepcopy(provider_after)
+        provider_before["schedule_expression"] = "cron(0 0 ? * SUN *)"
+        provider_snapshot = copy.deepcopy(provider_after)
+        self.assertEqual(
+            validate_plan(
+                _plan([_resource_change(address, "update", provider_before, provider_after)]), manifest
+            )["status"],
+            "accepted",
+        )
+        self.assertEqual(provider_after, provider_snapshot)
+
+        def assert_invalid_provider_value(candidate, changed_field):
+            invalid_manifest = copy.deepcopy(manifest)
+            invalid_manifest["mutations"][0]["changed_fields"] = [changed_field]
+            self.assertEqual(
+                validate_plan(
+                    _plan([_resource_change(address, "update", provider_after, candidate)]),
+                    invalid_manifest,
+                )["reason_code"],
+                "invalid_schedule_value",
+            )
+
+        for value in (0, -1, False, 1, True, "0", [], {}):
+            invalid_window = copy.deepcopy(provider_after)
+            invalid_window["flexible_time_window"][0]["maximum_window_in_minutes"] = value
+            assert_invalid_provider_value(invalid_window, "flexible_time_window")
+
+        for field in (
+            "ecs_parameters",
+            "eventbridge_parameters",
+            "kinesis_parameters",
+            "sagemaker_pipeline_parameters",
+            "sqs_parameters",
+        ):
+            for value in (None, {}, [{}], [{"unexpected": "value"}], "[]"):
+                invalid_target = copy.deepcopy(provider_after)
+                invalid_target["target"][0][field] = value
+                assert_invalid_provider_value(invalid_target, "target")
+
+        unknown_target = copy.deepcopy(provider_after)
+        unknown_target["target"][0]["unexpected_parameters"] = []
+        assert_invalid_provider_value(unknown_target, "target")
+
+        unknown_window = copy.deepcopy(provider_after)
+        unknown_window["flexible_time_window"][0]["unexpected"] = None
+        assert_invalid_provider_value(unknown_window, "flexible_time_window")
+
+        for field in ("retry_policy", "dead_letter_config"):
+            invalid_required = copy.deepcopy(provider_after)
+            invalid_required["target"][0][field] = []
+            assert_invalid_provider_value(invalid_required, "target")
+
+        invalid_input = copy.deepcopy(provider_after)
+        invalid_input["target"][0]["input"] = "{}"
+        assert_invalid_provider_value(invalid_input, "target")
+
+        invalid_timezone = copy.deepcopy(provider_after)
+        invalid_timezone["schedule_expression_timezone"] = "UTC"
+        assert_invalid_provider_value(invalid_timezone, "schedule_expression_timezone")
+
         disabled = copy.deepcopy(after)
         disabled["state"] = "DISABLED"
         disabled_manifest = copy.deepcopy(manifest)
@@ -847,20 +917,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         extended_target["target"][0]["sqs_parameters"] = [{"message_group_id": "unexpected"}]
         self.assertEqual(
             validate_plan(_plan([_resource_change(address, "update", after, extended_target)]), retargeted_manifest)["reason_code"],
-            "invalid_schedule_value",
-        )
-
-        empty_target = copy.deepcopy(after)
-        empty_target["target"][0]["sqs_parameters"] = []
-        self.assertEqual(
-            validate_plan(_plan([_resource_change(address, "update", after, empty_target)]), retargeted_manifest)["reason_code"],
-            "invalid_schedule_value",
-        )
-
-        null_window = copy.deepcopy(after)
-        null_window["flexible_time_window"][0]["unexpected"] = None
-        self.assertEqual(
-            validate_plan(_plan([_resource_change(address, "update", after, null_window)]), retargeted_manifest)["reason_code"],
             "invalid_schedule_value",
         )
 
