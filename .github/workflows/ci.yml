@@ -65,6 +65,8 @@ jobs:
         run: ./scripts/build_publisher_zip.sh
       - if: github.event_name == 'pull_request'
         run: ./scripts/build_agentcore_zips.sh
+      - if: github.event_name == 'pull_request'
+        run: ./scripts/build_timed_checks_zip.sh
 
   v2-database:
     runs-on: ubuntu-latest

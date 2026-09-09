@@ -80,10 +80,20 @@ jobs:
           ./scripts/build_loader_zip.sh
           ./scripts/build_publisher_zip.sh
           ./scripts/build_agentcore_zips.sh
-          for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip; do
+          ./scripts/build_timed_checks_zip.sh
+          for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip infra/build/timed-checks.zip; do
             test -f "$package"
+            test ! -L "$package"
             test -s "$package"
           done
+          (
+            cd infra/build
+            sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip timed-checks.zip > DEPLOYMENT_SHA256SUMS
+            test "$(wc -l < DEPLOYMENT_SHA256SUMS)" -eq 5
+            test "$(awk '{print $2}' DEPLOYMENT_SHA256SUMS | LC_ALL=C sort | tr '\n' ' ')" = \
+              "agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip "
+            sha256sum --check DEPLOYMENT_SHA256SUMS >/dev/null
+          )
 
       - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:

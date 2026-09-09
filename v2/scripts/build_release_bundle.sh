@@ -22,8 +22,9 @@ mkdir -p "$BUILD"
 "$V2_ROOT/scripts/build_loader_zip.sh"
 "$V2_ROOT/scripts/build_publisher_zip.sh"
 "$V2_ROOT/scripts/build_agentcore_zips.sh"
+"$V2_ROOT/scripts/build_timed_checks_zip.sh"
 
-for package in loader publisher agentcore chat-proxy; do
+for package in loader publisher agentcore chat-proxy timed-checks; do
   test -s "$BUILD/$package.zip"
   python3 -m zipfile -t "$BUILD/$package.zip" >/dev/null
   if unzip -Z1 "$BUILD/$package.zip" | grep -E '(^|/)\.env($|/)' >/dev/null; then
@@ -32,7 +33,7 @@ for package in loader publisher agentcore chat-proxy; do
   fi
 done
 
-(cd "$BUILD" && sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip > DEPLOYMENT_SHA256SUMS)
+(cd "$BUILD" && sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip timed-checks.zip > DEPLOYMENT_SHA256SUMS)
 
 python3 "$V2_ROOT/scripts/verify_release_bundle.py" create \
   --root "$ROOT" --release "$RELEASE" --commit "$COMMIT"

@@ -25,6 +25,7 @@ FIXED_PATHS = (
     "v2/infra/build/publisher.zip",
     "v2/infra/build/agentcore.zip",
     "v2/infra/build/chat-proxy.zip",
+    "v2/infra/build/timed-checks.zip",
     "v2/agent/dev_chat.html",
     "v2/agent/public_chat.mjs",
     "v2/agent/faq.html",

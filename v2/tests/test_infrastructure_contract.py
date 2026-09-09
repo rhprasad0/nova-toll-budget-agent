@@ -3044,10 +3044,23 @@ def test_reviewed_zip_builders_use_store_mode():
         "build_loader_zip.sh": r'zip -qX0 "\$BUILD/loader\.zip" -@',
         "build_publisher_zip.sh": r'zip -qX0 "\$BUILD/publisher\.zip" -@',
         "build_agentcore_zips.sh": r'zip -qX0 "\$out" -@',
+        "build_timed_checks_zip.sh": r'zip -qX0 "\$BUILD/timed-checks\.zip" -@',
     }
     for script_name, archive_call in expected_calls.items():
         script = (V2_ROOT / "scripts" / script_name).read_text()
         assert re.search(rf"(?m)^[ \t]*\([^\n]*\| {archive_call}\)$", script)
+
+
+def test_timed_builder_import_smoke_is_secret_isolated():
+    script = (V2_ROOT / "scripts" / "build_timed_checks_zip.sh").read_text()
+    assert "env -i" in script
+    assert "PYTHONNOUSERSITE=1" in script
+    assert 'PYTHONPATH="$STAGE"' in script
+    assert (
+        'name.startswith(("AWS_", "ACTIONS_", "GITHUB_", "OPENAI_", "CLOUDFLARE_"))'
+        in script
+    )
+    assert "uv run --python 3.13 --no-project python" in script
 
 
 def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
@@ -3288,6 +3301,8 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
     assert "alarm_actions       = local.alarm_actions" in freshness_alarm
     assert (V2_ROOT / "scripts" / "build_publisher_zip.sh").exists()
     assert "./scripts/build_publisher_zip.sh" in CI_WORKFLOW
+    assert (V2_ROOT / "scripts" / "build_timed_checks_zip.sh").exists()
+    assert "./scripts/build_timed_checks_zip.sh" in CI_WORKFLOW
 
     publisher_invoke = terraform_block(
         MAIN_TF, 'resource "aws_lambda_function_event_invoke_config" "publisher"'
@@ -4855,7 +4870,13 @@ def test_development_delivery_staging_snippet_accepts_only_verified_package_byte
         checksums_dir = root / "checksums"
         checksums_dir.mkdir()
         checksums = checksums_dir / "DEPLOYMENT_SHA256SUMS"
-        packages = ("loader.zip", "publisher.zip", "agentcore.zip", "chat-proxy.zip")
+        packages = (
+            "loader.zip",
+            "publisher.zip",
+            "agentcore.zip",
+            "chat-proxy.zip",
+            "timed-checks.zip",
+        )
         for package in packages:
             (package_dir / package).write_bytes(package.encode())
         checksums.write_text(

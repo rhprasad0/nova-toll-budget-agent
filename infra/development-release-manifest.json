@@ -8,7 +8,7 @@
     "lock_identity": "V2-AWS60"
   },
   "deployment_inputs": {
-    ".github/workflows/v2-development-delivery.yml": "9d0aa47b42610cbb2ac791ca8ada5f0dde563fd53cc0a6c4e9f508c06dc7a25d",
+    ".github/workflows/v2-development-delivery.yml": "532b43a80e5da20a973db8ca06bd64d2a58c10ca3269beca3fc5b3ea8028dda7",
     ".github/workflows/v2-development-migrations.yml": "06f7d3d432f77dac9fb6c680752918e6def5af0cff4b52349a8cddb098dd217a",
     ".github/workflows/v2-development-plan.yml": "0a95edc4c6af31b75a5d495466a8155aa9bf5dc2591268ae15ea7093845f0246",
     "infra/.terraform.lock.hcl": "798415e2b72a761023f0ee096521a29223173428c99de7e4c50103e726eef4d8",
@@ -106,6 +106,8 @@
     "v2/db/oracle/schema.sql": "2634341b7c84ed42c0cd56fe94532cbe6e6b49ae9a2f81245635cb7b659d8911",
     "v2/db/roles.sql": "7657a7e48f1c4f580a9c8c467c7972d58154f1560b21ed18015a968e23c20de6",
     "v2/db/schema.sql": "fbfe52f47d1cc1f88d97e9e2f9b641f73f2798ecf9bc88e4abc9897c9190bddf",
+    "v2/eval/run_evaluation.py": "20594845ec7dcacdf5d3f8056e166d96fd2fb46892230f8662d21fd2f2baac31",
+    "v2/eval/test-cases.jsonl": "6cb6bffebe10469bf86ae6482ed39f088e2b7a94203910630660d6afe09e1cbe",
     "v2/infra/.terraform.lock.hcl": "fd42f83e883fe5b260118f566eeb4f4a918f6c68dd791bcf7a3e5677f3830fad",
     "v2/infra/agent_measurement.tf": "d748c5b5dc8aeb30d9bdd96c322388526c1ea18d0174c55d5aa1705607c189a6",
     "v2/infra/agentcore.tf": "2b46984936dfd56459b19d145e18be7370477196f23ac1fbf285d79b536bc313",
@@ -127,11 +129,13 @@
     "v2/lambdas/loader/parse_csv.py": "313d5d0843f9e884e7649dc66da3ebc5cdb015e2484899f4152d5ab9fb7b19ac",
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
     "v2/lambdas/publisher/handler.py": "4d3570e0c014301dc4cf20d93a0d9f8ebdac5ce9e073bcb25be138331b2db396",
+    "v2/lambdas/timed_checks/handler.py": "b49ee965e9f22bcaa7aeae1902475179d08d91528bfdb502eb2a1765387d9303",
     "v2/pyproject.toml": "f10d2072ae861df7b129813407c61b7b846639c0a67ba1a67b9a5833c4f5d4b1",
     "v2/scripts/build_agentcore_zips.sh": "d731301c6d376a6af9a5fe9091e991326e671aeaa62b1969fd8a124bb8aecc9e",
     "v2/scripts/build_loader_zip.sh": "018e0f5ff41f8619d8903481928bfb40e765c9356af132cf6104a4ad40fa5646",
     "v2/scripts/build_publisher_zip.sh": "174e88fd65a997a16c08cf7f838105b7d19a2e3d1fc0a63d460ad43bcaf4834b",
-    "v2/scripts/build_release_bundle.sh": "f5ea3703dd9e6ca7c1b5abd21a36f2322cf34a3373100c025f296425905e0540",
+    "v2/scripts/build_release_bundle.sh": "40bf8759eddb5b75a5b0e44b3fbd568f2252f1e5fa034163da8111c444a5c6e8",
+    "v2/scripts/build_timed_checks_zip.sh": "5cb809db8db1d6d79526e71cc8aa9031ba5f3ec776fb3ac2662e5e714e22e999",
     "v2/scripts/check_development_admission.py": "d80ca41e1469da2a7a45b8cf052382424f9f15fe69516e1303310665c6240f6c",
     "v2/scripts/check_development_release.py": "a9b44797a123e3d4fbd075065b6ece356416f139976de752db6fb67c147cbe3b",
     "v2/scripts/classify_deployment_error.py": "8c736cbd2a8957f347408b92553efd0971bb50d42e6c8f658f5ff7602079b405",
@@ -143,14 +147,18 @@
     "v2/scripts/run_development_migrations.py": "c93ced525834cf86fd5e087e9ee3a95e616259868e57325288a20231143c2383",
     "v2/scripts/run_development_migrations_workflow.sh": "06279a34ca06825152139ddf18d1f593d0d8d94e5dee1388e9eedf7af67c1185",
     "v2/scripts/run_private_stage.sh": "e6335bce0b7971d425e457e35df7d4fc1c5fcce212cc338322a65f9c535fdf76",
-    "v2/scripts/verify_release_bundle.py": "89c0d3fbf4d76d46681aafc1185d46258ee1457d6d48c2adce87770550cf5624",
+    "v2/scripts/timed-checks-requirements.in": "8218bd738a1337e889d04756b2f7c53f1693503b97c519dcc8a10a423b2837e5",
+    "v2/scripts/timed-checks-requirements.txt": "c7f9d037e3fb740603863c144cfc053ebb4e52b25024318b68390bf1518e0515",
+    "v2/scripts/verify_release_bundle.py": "a0773f48ad37509f571176e2ec6f758763ac749e523482264a99976607f7ca80",
+    "v2/timed_checks.py": "cd2985f4bd8ff41d3032980c5950210d6dab21cc0e57295ddc94515ec1f5524a",
     "v2/uv.lock": "a4fe1765a080d8c07154e28265c125fe1b2ceaf2d9f7d353e255e3988e0ce137"
   },
   "packages": {
     "agentcore.zip": "d391659d32f46c418b23104b8ea103679000cb7077309d3684d83e0d953f490f",
     "chat-proxy.zip": "de0a8bcaa0a01fb993c11f9550ee75aa08578838889d3e4145fd0044dfb9afff",
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
-    "publisher.zip": "0d7e95193f2d6deb9816b132b7bb6774e932f643d237aac0d7a8e1aab8245064"
+    "publisher.zip": "0d7e95193f2d6deb9816b132b7bb6774e932f643d237aac0d7a8e1aab8245064",
+    "timed-checks.zip": "05d69cbae010c0b9e717051de4de335b33b1d3ed6b1b19d2f06cf95d0753667e"
   },
   "mutations": [
     {
