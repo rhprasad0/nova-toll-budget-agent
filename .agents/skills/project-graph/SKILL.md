@@ -67,10 +67,10 @@ default.
 
 ```text
 intent → explorer → researcher → pre-checker → builder → review 1
-review 1 → PASS | FAIL → builder → review 2
-review 2 → Root repair | Root accept | Root block
-Root repair → builder → same review stage
-Root accept/PASS → human review
+review 1 PASS → Root accept → human review
+review 1 FAIL → original Builder → review 2
+review 2/critical recheck → Root repair | Root accept | Root block
+Root repair → original Builder → same review stage
 ```
 
 1. Create or reuse an isolated project-root `.worktrees/` path. Keep `.graph/`
@@ -137,9 +137,12 @@ Root accept/PASS → human review
    non-blocking checklist, return any other failing-lane evidence to the original
    builder; otherwise return every failing-lane finding directly to that builder.
    Never include evidence from a passing lane. Do not restart exploration or
-   pre-checking for implementation or security findings. After repair, rerun
-   review at the same stage with fresh checker and security reviewer lanes as in
-   step 7.
+   pre-checking for implementation or security findings. A review-1 PASS must
+   receive an explicit Root `accept` disposition with rationale in
+   `.graph/acceptance.md` before human review. For a review-1 failure, return
+   the failing evidence to the original Builder, then advance the repaired run
+   to review 2 with fresh Checker and Security lanes as in step 7; do not loop
+   the repaired run through review 1.
 9. Review 2 is a Root disposition gate. A completed review advances only when
    Root explicitly chooses `repair`, `accept`, or `block` and records the choice
    plus rationale in `.graph/acceptance.md`. `repair` returns to the original
@@ -148,16 +151,19 @@ Root accept/PASS → human review
    is complete. Critical findings, missing required artifacts, incomplete
    required evidence, and any failed instrumentation status force `repair` or
    `block`; they cannot be accepted or represented as PASS. Security's durable
-   verdict must be present and readable before acceptance.
+   verdict must be present and readable before acceptance. A review-2 repair
+   returns to the original Builder and reruns fresh Checker and Security lanes
+   at review 2.
 10. Review 2 and every critical recheck fail for a critical issue—an exploitable
     security vulnerability, potential data or secret loss or exposure, or
     inability to perform the requested core function—or for either graph-
     integrity exception: missing failure-boundary instrumentation evidence as
     specified below, or a conflict between research and an authoritative
     artifact. Return those findings to the original Builder or planning-repair
-    edge as applicable. After implementation repair, run a fresh checker and
-    security reviewer over the complete repaired diff at the same stage. Repeat
-    until PASS or until repair needs user input or authority.
+    edge as applicable. After implementation repair from review 2 or a critical
+    recheck, run a fresh Checker and Security reviewer over the complete
+    repaired diff at that same stage. Repeat until PASS or until repair needs
+    user input or authority.
 11. On Root acceptance/PASS, update `STATE.md` and summarize files, checks,
     remaining risk, and non-blocking notes for human review. Human review and
     every existing production, credential, migration, and deployment gate still
