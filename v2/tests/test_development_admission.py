@@ -64,7 +64,7 @@ class FakeAPI:
         }
         self.jobs: dict[int, list[dict[str, object]]] = {
             101: [_job("v2-loader", 101, SHA), _job("v2-database", 101, SHA)],
-            102: [_job("scan", 102, SHA)],
+            102: [_job("gitleaks", 102, SHA)],
             103: [_job("scan", 103, SHA)],
             800: [_job("Deploy v2 to development", 800, BEFORE)],
             900: [_job("Admit exact main delivery", 900, SHA)],

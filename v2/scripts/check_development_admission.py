@@ -21,7 +21,7 @@ ZERO_SHA = "0" * 40
 DELIVERY_WORKFLOW = "v2-development-delivery.yml"
 REQUIRED_WORKFLOWS: dict[str, tuple[str, ...]] = {
     "ci.yml": ("v2-loader", "v2-database"),
-    "gitleaks.yml": ("scan",),
+    "gitleaks.yml": ("gitleaks",),
     "trivy.yml": ("scan",),
 }
 TERRAFORM_PATH_PREFIXES = ("infra/", "v2/infra/")
