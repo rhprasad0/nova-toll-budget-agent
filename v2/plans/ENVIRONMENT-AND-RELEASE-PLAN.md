@@ -58,7 +58,7 @@ expensive shared foundations or adding tools that TollChat does not need.
 | Terraform state | Explicit S3 state key per environment | More visible and harder to select accidentally than CLI workspaces. |
 | Production compatibility | Preserve current state key and physical names | The environment refactor must not replace production resources. |
 | Environment identity | Application objects are `development` or `production`; each account-local foundation uses `shared` internally | Tags identify supported AWS resources; names, descriptions, PostgreSQL comments, and deployment manifests cover objects that cannot carry AWS tags. |
-| Database isolation | Separate PostgreSQL databases and runtime roles on the existing RDS instance; keep the migrator role development-only | Isolates ordinary application mistakes while keeping migration authority out of production. It is not an instance-level security boundary. |
+| Database isolation | Separate PostgreSQL databases and runtime roles on the existing RDS instance; human-admin production adoption creates `schema_migrator_production` for the later protected workflow | Isolates ordinary application mistakes while keeping recurring migration automation bounded to reviewed fixed targets. It is not an instance-level security boundary. |
 | Deployable artifact | Build once per commit and address by SHA-256 | Development and production should execute identical bytes. |
 | Migration execution | Retain disposable PR checks; run registered migrations only through the protected main-only development workflow | CI validation stays credential-free, while the fixed development identity and target provide the only automated deployed-migration path; production remains separately authorized. |
 | Agent tracing | Defer persistent traces, PII sanitization, storage, and privacy-notice changes until after the environment split | Establish the boundary first, then validate the complete telemetry path in development before production. |
@@ -323,8 +323,10 @@ separately approved boundaries.
 
 Do not use an application deployment to apply a schema change. Development
 schema changes use the protected workflow after bootstrap; production keeps its
-existing database and deployment procedure, with migration 030 as the only
-currently authorized manual production schema change.
+existing database and deployment procedure. The separately approved one-time
+baseline adoption helper establishes production history, while migration 030
+remains the only currently authorized manual schema migration until the later
+protected production workflow is reviewed.
 
 ### 6.3 Post-split migration work
 

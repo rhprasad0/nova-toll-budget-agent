@@ -239,6 +239,134 @@ def rendered_production_policies() -> tuple[
         )
 
 
+def rendered_production_migration_identity() -> tuple[dict[str, object], dict[str, object]]:
+    """Render the fixed migration trust and permissions in an offline root."""
+    assume = terraform_block(
+        IAM, 'data "aws_iam_policy_document" "production_migrations_assume"'
+    )
+    policy = terraform_block(IAM, 'data "aws_iam_policy_document" "production_migrations"')
+    replacements = {
+        'var.environment == "production" ? 1 : 0': "1",
+        "aws_iam_openid_connect_provider.github.arn": "local.github_oidc_arn",
+        "local.production_delivery_region": "local.production_region",
+        "local.production_delivery_account_id": "local.production_account",
+        "aws_db_instance.main.identifier": "local.rds_identifier",
+        "aws_db_instance.main.resource_id": "local.rds_resource_id",
+    }
+    for old, new in replacements.items():
+        assume = assume.replace(old, new)
+        policy = policy.replace(old, new)
+    configuration = dedent(
+        f"""
+        terraform {{
+          required_providers {{
+            aws = {{
+              source  = "hashicorp/aws"
+              version = "~> 6.47"
+            }}
+          }}
+        }}
+
+        provider "aws" {{
+          region                       = "us-east-1"
+          access_key                   = "test"
+          secret_key                   = "test"
+          skip_credentials_validation = true
+          skip_requesting_account_id  = true
+          skip_metadata_api_check     = true
+        }}
+
+        locals {{
+          github_oidc_arn  = "arn:aws:iam::920534282028:oidc-provider/token.actions.githubusercontent.com"
+          production_region = "us-east-1"
+          production_account = "920534282028"
+          rds_identifier = "nova-toll-db"
+          rds_resource_id = "db-E16XVTXNFUS8T4"
+        }}
+
+        {assume}
+        {policy}
+
+        output "migration_trust" {{
+          value = data.aws_iam_policy_document.production_migrations_assume[0].json
+        }}
+
+        output "migration_policy" {{
+          value = data.aws_iam_policy_document.production_migrations[0].json
+        }}
+        """
+    )
+    with tempfile.TemporaryDirectory(prefix="nova-toll-migration-render-") as directory:
+        root = Path(directory)
+        (root / "main.tf").write_text(configuration, encoding="utf-8")
+        environment = {
+            key: value for key, value in os.environ.items() if not key.startswith("AWS_")
+        }
+        environment["TF_DATA_DIR"] = str(root / ".terraform-data")
+        provider_mirror = ROOT / "infra" / ".terraform" / "providers"
+        if provider_mirror.is_dir():
+            cli_config = root / "terraform.tfrc"
+            cli_config.write_text(
+                dedent(
+                    f"""
+                    provider_installation {{
+                      filesystem_mirror {{
+                        path = {json.dumps(str(provider_mirror))}
+                      }}
+                      direct {{
+                        exclude = ["hashicorp/aws"]
+                      }}
+                    }}
+                    """
+                ),
+                encoding="utf-8",
+            )
+            environment["TF_CLI_CONFIG_FILE"] = str(cli_config)
+        init = subprocess.run(
+            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+        assert init.returncode == 0, init.stdout + init.stderr
+        plan_path = root / "migration.tfplan"
+        plan = subprocess.run(
+            [
+                "terraform",
+                "plan",
+                "-refresh=false",
+                "-input=false",
+                "-no-color",
+                f"-out={plan_path}",
+            ],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+        assert plan.returncode == 0, plan.stdout + plan.stderr
+        rendered = subprocess.run(
+            ["terraform", "show", "-json", str(plan_path)],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+        assert rendered.returncode == 0, rendered.stdout + rendered.stderr
+        outputs = json.loads(rendered.stdout)["planned_values"]["outputs"]
+        return (
+            json.loads(outputs["migration_trust"]["value"]),
+            json.loads(outputs["migration_policy"]["value"]),
+        )
+
+
 def _gate_source() -> str:
     marker = '          python3 - "$PLAN_JSON" <<\'PY\'\n'
     start = PRODUCTION_PLAN.index(marker) + len(marker)
@@ -1085,9 +1213,101 @@ def main() -> None:
         "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:production",
     ):
         require(subject, production)
-    assert production.count('actions = ["sts:AssumeRoleWithWebIdentity"]') == 2
+    assert production.count('actions = ["sts:AssumeRoleWithWebIdentity"]') == 3
     assert 'sts:TagSession' not in production
     assert 'test     = "StringLike"' not in production
+
+    migration_assume = terraform_block(
+        IAM, 'data "aws_iam_policy_document" "production_migrations_assume"'
+    )
+    migration_policy = terraform_block(
+        IAM, 'data "aws_iam_policy_document" "production_migrations"'
+    )
+    migration_role = terraform_block(
+        IAM, 'resource "aws_iam_role" "production_migrations"'
+    )
+    migration_attachment = terraform_block(
+        IAM, 'resource "aws_iam_role_policy" "production_migrations"'
+    )
+    require('name                 = "nova-toll-v2-production-migrations"', migration_role)
+    require('name   = "nova-toll-v2-production-migrations"', migration_attachment)
+    require('count = var.environment == "production" ? 1 : 0', migration_assume)
+    require('count = var.environment == "production" ? 1 : 0', migration_policy)
+    require(
+        'repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:production',
+        migration_assume,
+    )
+    require(
+        'token.actions.githubusercontent.com:ref',
+        migration_assume,
+    )
+    require(
+        'rhprasad0/nova-toll-budget-agent/.github/workflows/v2-production-migrations.yml@refs/heads/main',
+        migration_assume,
+    )
+    require('sid       = "DescribeFixedProductionRds"', migration_policy)
+    require('actions   = ["rds:DescribeDBInstances"]', migration_policy)
+    require('sid       = "ConnectAsProductionSchemaMigrator"', migration_policy)
+    require('actions   = ["rds-db:connect"]', migration_policy)
+    require(
+        'dbuser:${aws_db_instance.main.resource_id}/schema_migrator_production',
+        migration_policy,
+    )
+    assert "Resource = [\"*\"]" not in migration_policy
+    assert "migration_path" not in migration_policy
+    migration_trust_json, migration_policy_json = rendered_production_migration_identity()
+    trust_statement = migration_trust_json["Statement"]
+    assert len(trust_statement) == 1
+    assert trust_statement[0]["Action"] == "sts:AssumeRoleWithWebIdentity"
+    assert trust_statement[0]["Principal"] == {
+        "Federated": "arn:aws:iam::920534282028:oidc-provider/token.actions.githubusercontent.com"
+    }
+    assert trust_statement[0]["Condition"] == {
+        "StringEquals": {
+            "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+            "token.actions.githubusercontent.com:ref": "refs/heads/main",
+            "token.actions.githubusercontent.com:job_workflow_ref": (
+                "rhprasad0/nova-toll-budget-agent/.github/workflows/"
+                "v2-production-migrations.yml@refs/heads/main"
+            ),
+            "token.actions.githubusercontent.com:sub": (
+                "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:"
+                "environment:production"
+            ),
+        }
+    }
+    policy_statements = migration_policy_json["Statement"]
+    assert len(policy_statements) == 2
+
+    def as_tuple(value: object) -> tuple[object, ...]:
+        if isinstance(value, str):
+            return (value,)
+        assert isinstance(value, list)
+        return tuple(value)
+
+    assert {
+        (statement["Sid"], as_tuple(statement["Action"]), as_tuple(statement["Resource"]))
+        for statement in policy_statements
+    } == {
+        (
+            "DescribeFixedProductionRds",
+            ("rds:DescribeDBInstances",),
+            ("arn:aws:rds:us-east-1:920534282028:db:nova-toll-db",),
+        ),
+        (
+            "ConnectAsProductionSchemaMigrator",
+            ("rds-db:connect",),
+            (
+                "arn:aws:rds-db:us-east-1:920534282028:dbuser:"
+                "db-E16XVTXNFUS8T4/schema_migrator_production",
+            ),
+        ),
+    }
+    assert all(
+        resource != "*"
+        for statement in policy_statements
+        for resource in as_tuple(statement["Resource"])
+    )
 
     for identifier in (
         "920534282028",

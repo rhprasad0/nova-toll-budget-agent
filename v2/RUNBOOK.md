@@ -37,8 +37,8 @@ for its foundation, bootstrap, identity, and evidence gates. Production
 releases remain manual, reviewed deployments from `main`.
 The manual production planner stores only a gated saved plan.
 Production schema changes remain limited to the separately authorized, reviewed
-migration 030 procedure below; no other production schema-changing release is
-authorized here, and future exceptions require approved deployment automation.
+procedures below. The one-time baseline adoption path is described next; future
+recurring migrations require the later protected delivery workflow.
 Application release
 artifacts do not apply schema changes; this procedure is separate.
 
@@ -68,6 +68,28 @@ The current production baseline is AWS account `920534282028` in `us-east-1`:
 Before release apply, require the foundation plan to be zero-change. Review every
 action in the saved candidate application plan against intended reviewed release
 changes. Stop on any unexplained action or any replacement.
+
+## Production baseline adoption (issue 304, slice 1)
+
+The checked-in `v2/scripts/adopt_production_baseline.py` is a fixed-target,
+one-time adoption helper for the existing `nova_toll` database on
+`nova-toll-db`. It may run only after a human explicitly approves production
+adoption and records a fresh, read-only evidence packet covering the AWS
+account/region, private RDS endpoint, TLS CA, managed master secret, database
+identity, schema versions and source hashes, the 996 Oracle connections,
+runtime role memberships and `CONNECT`, and the explicit object-owner/ACL
+allowlist. The helper rejects drift and records verified deployed schemas as
+adopted; it never resets, bootstraps, migrates, or accepts caller-supplied
+targets or manifest paths.
+
+The operator must use the existing private-network route, the RDS-managed
+administrative secret held only in process memory, and `verify-full` TLS. The
+helper creates only `pricing_owner` and `schema_migrator_production`, transfers
+the named pricing objects, and writes the two immutable baseline rows in one
+bounded transaction. A SQL or postcondition failure is not a success signal;
+if commit acknowledgement is uncertain, stop and collect a new read-only
+state packet before retrying. This source PR performs no production invocation,
+Terraform plan/apply, or live database mutation.
 
 ## Manual Oracle migration 030
 
