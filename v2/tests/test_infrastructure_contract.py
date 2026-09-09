@@ -3906,8 +3906,35 @@ def _assert_development_build_setup_uv(build: dict[str, object]) -> None:
     assert len(setup_uv_steps) == 1
     assert cast(dict[str, str], setup_uv_steps[0]["with"]) == {
         "version": "0.12.5",
+        "checksum": "68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2",
         "python-version": "3.13",
     }
+
+
+def test_setup_uv_v10_pins_version_and_checksum() -> None:
+    sources = (
+        DEVELOPMENT_DELIVERY_WORKFLOW,
+        DEVELOPMENT_PLAN_WORKFLOW,
+        PRODUCTION_PLAN_WORKFLOW,
+        TIMED_CHECKS_WORKFLOW,
+    )
+    for source in sources:
+        workflow = cast(dict[str, object], yaml.safe_load(source))
+        jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+        setup_uv_steps = [
+            step
+            for job in jobs.values()
+            for step in cast(list[dict[str, object]], job["steps"])
+            if cast(str, step.get("uses", "")).startswith("astral-sh/setup-uv@")
+        ]
+        assert setup_uv_steps
+        for step in setup_uv_steps:
+            with_values = cast(dict[str, str], step["with"])
+            assert with_values["version"] == "0.12.5"
+            assert (
+                with_values["checksum"]
+                == "68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2"
+            )
 
 
 def _assert_development_delivery_workflow(source: str) -> None:
@@ -11151,11 +11178,11 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
         in DEVELOPMENT_MIGRATIONS_WORKFLOW
     )
     assert (
-        "aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c"
+        "aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c"
         in DEVELOPMENT_MIGRATIONS_WORKFLOW
     )
     assert (
-        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
         in DEVELOPMENT_MIGRATIONS_WORKFLOW
     )
     assert (
