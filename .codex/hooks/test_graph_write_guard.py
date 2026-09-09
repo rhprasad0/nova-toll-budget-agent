@@ -87,6 +87,13 @@ class GraphWriteGuardTests(unittest.TestCase):
         self.assertTrue(nested["permissionDecisionReason"])
         return nested["permissionDecisionReason"]
 
+    def assert_patch_denied(self, payload: dict, fragment: str | None = None) -> None:
+        _, output, _ = self.invoke("pre-tool-use", payload=payload)
+        self.assertIsNotNone(output)
+        reason = self.denied_reason(output)
+        if fragment:
+            self.assertIn(fragment, reason)
+
     def test_registration_is_idempotent_and_immutable(self) -> None:
         self.assertEqual(self.register()[0], 0)
         record_path = self.repo / ".worktrees" / ".graph-assignments" / "agent-1.json"
@@ -138,6 +145,7 @@ class GraphWriteGuardTests(unittest.TestCase):
         for command in (
             f"cd {self.target} && git rev-parse --show-toplevel",
             f"cd {self.target} && sed -n '1,260p' AGENTS.md",
+            f"cd {self.target} && sed -n '1,320p' .graph/contract.md",
             f"cd {self.target} && sed -n '1,320p' .graph/explore.md",
         ):
             payload = self.payload(role=role, agent_id=agent_id, command=command)
@@ -199,12 +207,217 @@ class GraphWriteGuardTests(unittest.TestCase):
             self.invoke("pre-tool-use", payload=escaped)[1]))
 
     def test_registration_rejects_invalid_role_main_outside_and_registry(self) -> None:
-        self.assertNotEqual(self.register(role="security_reviewer")[0], 0)
+        self.assertNotEqual(self.register(role="unrelated")[0], 0)
         self.assertNotEqual(self.register(agent_id="main", target=self.repo)[0], 0)
         self.assertNotEqual(self.register(agent_id="outside", target=self.outside)[0], 0)
         registry = self.repo / ".worktrees" / ".graph-assignments"
         registry.mkdir()
         self.assertNotEqual(self.register(agent_id="registry", target=registry)[0], 0)
+
+    def test_non_builder_roles_are_limited_to_their_owned_graph_artifact(self) -> None:
+        owned_artifacts = {
+            "explorer": "explore.md",
+            "researcher": "research.md",
+            "pre_checker": "checklist.md",
+            "checker": "verdict.md",
+            "security_reviewer": "security-verdict.md",
+        }
+        for role, artifact in owned_artifacts.items():
+            with self.subTest(role=role):
+                agent_id = f"native-{role}"
+                self.assertEqual(self.register(agent_id=agent_id, role=role)[0], 0)
+                owned = self.payload(
+                    role=role,
+                    agent_id=agent_id,
+                    tool="apply_patch",
+                    command=f"*** Add File: {self.target}/.graph/{artifact}",
+                )
+                self.assertIsNone(self.invoke("pre-tool-use", payload=owned)[1])
+                relative = self.payload(
+                    role=role,
+                    agent_id=agent_id,
+                    tool="apply_patch",
+                    command=f"*** Update File: .graph/{artifact}",
+                    payload_cwd=self.target,
+                )
+                self.assertIsNone(self.invoke("pre-tool-use", payload=relative)[1])
+                for command in (
+                    f"*** Update File: {self.target}/tracked.txt",
+                    f"*** Update File: {self.target}/.graph/other.md",
+                    f"*** Delete File: {self.target}/.graph/{artifact}",
+                    f"*** Move to: {self.target}/.graph/{artifact}",
+                    f"*** Update File: {self.repo}/.graph/{artifact}",
+                    f"*** Update File: {self.sibling}/.graph/{artifact}",
+                ):
+                    self.assert_patch_denied(
+                        self.payload(
+                            role=role,
+                            agent_id=agent_id,
+                            tool="apply_patch",
+                            command=command,
+                        ),
+                        artifact,
+                    )
+                graph = self.target / ".graph"
+                if graph.is_symlink():
+                    graph.unlink()
+                graph.mkdir(exist_ok=True)
+                escaped_graph = self.sibling / f"escaped-{role}"
+                escaped_graph.mkdir()
+                graph.rmdir()
+                graph.symlink_to(escaped_graph, target_is_directory=True)
+                self.assert_patch_denied(
+                    self.payload(
+                        role=role,
+                        agent_id=agent_id,
+                        tool="apply_patch",
+                        command=f"*** Update File: .graph/{artifact}",
+                        payload_cwd=self.target,
+                    ),
+                    "outside",
+                )
+                graph.unlink()
+
+                graph.mkdir()
+                graph_alias = self.target / f"graph-alias-{role}"
+                graph_alias.mkdir()
+                (graph_alias / artifact).write_text("alias\n", encoding="utf-8")
+                graph.rmdir()
+                graph.symlink_to(graph_alias, target_is_directory=True)
+                try:
+                    self.assert_patch_denied(
+                        self.payload(
+                            role=role,
+                            agent_id=agent_id,
+                            tool="apply_patch",
+                            command=f"*** Update File: .graph/{artifact}",
+                            payload_cwd=self.target,
+                        ),
+                        "symlink",
+                    )
+                finally:
+                    graph.unlink()
+                graph.mkdir()
+                active_guard = self.target / ".codex" / "hooks" / HOOK.name
+                active_guard.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(HOOK, active_guard)
+                owned_file = graph / artifact
+                owned_file.symlink_to(active_guard)
+                try:
+                    self.assert_patch_denied(
+                        self.payload(
+                            role=role,
+                            agent_id=agent_id,
+                            tool="apply_patch",
+                            command=f"*** Update File: .graph/{artifact}",
+                            payload_cwd=self.target,
+                        ),
+                        "symlink",
+                    )
+                finally:
+                    owned_file.unlink()
+                for hardlink_target in (
+                    self.target / "tracked.txt",
+                    active_guard,
+                ):
+                    owned_file.hardlink_to(hardlink_target)
+                    try:
+                        self.assert_patch_denied(
+                            self.payload(
+                                role=role,
+                                agent_id=agent_id,
+                                tool="apply_patch",
+                                command=f"*** Update File: .graph/{artifact}",
+                                payload_cwd=self.target,
+                            ),
+                            "hard link",
+                        )
+                    finally:
+                        owned_file.unlink()
+
+    def test_builder_cannot_patch_reserved_graph_artifacts(self) -> None:
+        self.assertEqual(self.register()[0], 0)
+        reserved_artifacts = (
+            "contract.md",
+            "acceptance.md",
+            "STATE.md",
+            "explore.md",
+            "research.md",
+            "checklist.md",
+            "verdict.md",
+            "security-verdict.md",
+        )
+        for artifact in reserved_artifacts:
+            self.assert_patch_denied(
+                self.payload(
+                    tool="apply_patch",
+                    command=f"*** Update File: {self.target}/.graph/{artifact}",
+                ),
+                artifact,
+            )
+        self.assertIsNone(
+            self.invoke(
+                "pre-tool-use",
+                payload=self.payload(
+                    tool="apply_patch",
+                    command=f"*** Update File: {self.target}/.graph/change.md",
+                ),
+            )[1]
+        )
+        self.assertIsNone(
+            self.invoke(
+                "pre-tool-use",
+                payload=self.payload(
+                    tool="apply_patch",
+                    command=f"*** Update File: {self.target}/tracked.txt",
+                ),
+            )[1]
+        )
+
+    def test_builder_rejects_hardlink_aliases_to_any_protected_source(self) -> None:
+        self.assertEqual(self.register()[0], 0)
+        graph = self.target / ".graph"
+        graph.mkdir()
+        protected_graph_targets = {
+            artifact: graph / artifact
+            for artifact in (
+                "contract.md",
+                "acceptance.md",
+                "STATE.md",
+                "explore.md",
+                "research.md",
+                "checklist.md",
+                "verdict.md",
+                "security-verdict.md",
+            )
+        }
+        for target in protected_graph_targets.values():
+            target.write_text("protected\n", encoding="utf-8")
+        active_guard = self.target / ".codex" / "hooks" / HOOK.name
+        active_guard.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(HOOK, active_guard)
+        outside_file = self.outside / "outside.txt"
+        outside_file.write_text("outside\n", encoding="utf-8")
+        hardlink_targets = {
+            **protected_graph_targets,
+            "active-guard": active_guard,
+            "main-checkout": self.repo / "tracked.txt",
+            "outside-worktree": outside_file,
+        }
+        for name, target in hardlink_targets.items():
+            with self.subTest(target=name):
+                alias = self.target / f"hardlink-alias-{name}"
+                alias.hardlink_to(target)
+                try:
+                    self.assert_patch_denied(
+                        self.payload(
+                            tool="apply_patch",
+                            command=f"*** Update File: {alias}",
+                        ),
+                        "hard link",
+                    )
+                finally:
+                    alias.unlink()
 
     def test_stale_or_recreated_worktree_is_rejected_for_registration_and_use(self) -> None:
         self.assertEqual(self.register()[0], 0)
@@ -227,12 +440,11 @@ class GraphWriteGuardTests(unittest.TestCase):
         self.assertIn("native-uuid", context)
         self.assertIn("Report", context)
         self.assertIn("Wait", context)
-        self.assertIsNone(
-            self.invoke(
-                "subagent-start",
-                payload={"agent_type": "security_reviewer", "agent_id": "native-uuid"},
-            )[1]
+        _, security_started, _ = self.invoke(
+            "subagent-start",
+            payload={"agent_type": "security_reviewer", "agent_id": "native-uuid"},
         )
+        self.assertIn("native-uuid", security_started["hookSpecificOutput"]["additionalContext"])
         _, missing, _ = self.invoke(
             "subagent-start", payload={"agent_type": "builder", "agent_id": ""}
         )
@@ -241,7 +453,7 @@ class GraphWriteGuardTests(unittest.TestCase):
 
     def test_role_exclusions_and_missing_registration(self) -> None:
         sentinel = "*** Update File: /outside/sentinel"
-        for role in (None, "security_reviewer", "unrelated"):
+        for role in (None, "unrelated"):
             payload = self.payload(role=role or "", agent_id="", tool="apply_patch", command=sentinel)
             if role is None:
                 payload.pop("agent_type")

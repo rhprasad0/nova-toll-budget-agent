@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -14,7 +15,21 @@ from typing import Any
 
 GUARDED_ROLES = frozenset({
     "explorer", "researcher", "pre_checker", "builder", "checker",
+    "security_reviewer",
     "case_miner", "eval_runner", "eval_reviewer", "eval_fixer",
+})
+OWNED_GRAPH_ARTIFACTS = {
+    "explorer": "explore.md",
+    "researcher": "research.md",
+    "pre_checker": "checklist.md",
+    "checker": "verdict.md",
+    "security_reviewer": "security-verdict.md",
+}
+BUILDER_RESERVED_GRAPH_ARTIFACTS = frozenset({
+    "contract.md",
+    "acceptance.md",
+    "STATE.md",
+    *OWNED_GRAPH_ARTIFACTS.values(),
 })
 GIT_TIMEOUT = 2
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -269,7 +284,21 @@ def _patch_paths(command: str) -> list[str]:
     return paths
 
 
-def _validate_patch(command: str, payload_cwd: str, assignment: Path) -> None:
+def _reject_hard_link(candidate: Path, role: str) -> None:
+    try:
+        if candidate.stat().st_nlink != 1:
+            raise GuardError(
+                f"{role} apply_patch destination {candidate} is a hard link with multiple links"
+            )
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        raise GuardError(f"{role} apply_patch destination {candidate} cannot be inspected: {exc}") from exc
+
+
+def _validate_patch(
+    command: str, payload_cwd: str, assignment: Path, role: str | None = None
+) -> None:
     paths = _patch_paths(command)
     if not paths:
         raise GuardError("apply_patch must contain at least one recognized destination header")
@@ -282,31 +311,56 @@ def _validate_patch(command: str, payload_cwd: str, assignment: Path) -> None:
             raise GuardError(
                 f"apply_patch destination {candidate} (from {raw_path}) is outside assigned worktree {assignment}"
             )
+        if role == "builder":
+            _reject_hard_link(candidate, role)
         if candidate == Path(__file__).resolve():
             raise GuardError(f"apply_patch cannot replace the active guard source {candidate}")
+        if role == "builder" and candidate in {
+            assignment / ".graph" / artifact for artifact in BUILDER_RESERVED_GRAPH_ARTIFACTS
+        }:
+            raise GuardError(
+                f"builder apply_patch destination {candidate} is a reserved graph artifact"
+            )
 
 
-def _validate_researcher_patch(command: str, payload_cwd: str, assignment: Path) -> None:
+def _validate_owned_graph_patch(
+    command: str, payload_cwd: str, assignment: Path, role: str
+) -> None:
+    expected = assignment / ".graph" / OWNED_GRAPH_ARTIFACTS[role]
     paths = _patch_paths(command)
     if len(paths) != 1:
-        raise GuardError("researcher apply_patch must target only .graph/research.md")
+        raise GuardError(f"{role} apply_patch must target only {expected}")
     if any(
         line.strip(NATIVE_PATCH_WHITESPACE).startswith(("*** Delete File: ", "*** Move to: "))
         for line in command.split("\n")
     ):
-        raise GuardError("researcher apply_patch may only add or update .graph/research.md")
-    cwd = Path(payload_cwd).resolve(strict=False)
-    candidate = (Path(paths[0]) if Path(paths[0]).is_absolute() else cwd / paths[0]).resolve(
-        strict=False
-    )
-    expected = (assignment / ".graph" / "research.md").resolve(strict=False)
+        raise GuardError(f"{role} apply_patch may only add or update {expected}")
+    raw_path = Path(paths[0])
+    if any(part in {".", ".."} for part in raw_path.parts):
+        raise GuardError(f"{role} apply_patch destination uses a lexical alias for {expected}")
+    cwd = Path(payload_cwd).absolute()
+    lexical = raw_path if raw_path.is_absolute() else cwd / raw_path
+    lexical = Path(os.path.abspath(lexical))
+    candidate = lexical.resolve(strict=False)
     if not _inside(candidate, assignment):
         raise GuardError(
-            f"researcher apply_patch destination {candidate} is outside assigned worktree {assignment}"
+            f"{role} apply_patch destination {candidate} is outside assigned worktree {assignment}"
         )
+    if not _inside(lexical, assignment):
+        raise GuardError(
+            f"{role} apply_patch destination {lexical} is outside assigned worktree {assignment}"
+        )
+    current = assignment
+    for component in lexical.relative_to(assignment).parts:
+        current /= component
+        if current.is_symlink():
+            raise GuardError(
+                f"{role} apply_patch destination {lexical} contains a symlink component"
+            )
+    _reject_hard_link(candidate, role)
     if candidate != expected:
         raise GuardError(
-            f"researcher apply_patch destination {candidate} must be the assigned {expected}"
+            f"{role} apply_patch destination {candidate} must be the assigned {expected}"
         )
 
 
@@ -316,6 +370,7 @@ def _validate_researcher_bash(command: str, assignment: Path) -> None:
     allowed = {
         f"{prefix}git rev-parse --show-toplevel",
         f"{prefix}sed -n '1,260p' AGENTS.md",
+        f"{prefix}sed -n '1,320p' .graph/contract.md",
         f"{prefix}sed -n '1,320p' .graph/explore.md",
     }
     if command not in allowed:
@@ -325,7 +380,7 @@ def _validate_researcher_bash(command: str, assignment: Path) -> None:
         )
 
 
-# ponytail: only leading cd is inspected; full shell write enforcement needs filesystem sandboxing.
+# ponytail: best-effort only leading cd is inspected; full shell write enforcement needs filesystem sandboxing.
 def _validate_bash(command: str, assignment: Path) -> None:
     if not command.startswith("cd "):
         raise GuardError("Bash command must begin with literal `cd <absolute-worktree-path> &&`")
@@ -378,12 +433,12 @@ def _pre_tool_use(payload: Any) -> None:
         raise GuardError(f"guarded {tool_name} call requires tool_input.command")
     if role == "researcher" and tool_name == "Bash":
         _validate_researcher_bash(command, assignment)
-    elif role == "researcher" and tool_name == "apply_patch":
-        _validate_researcher_patch(command, payload_cwd, assignment)
+    elif role in OWNED_GRAPH_ARTIFACTS and tool_name == "apply_patch":
+        _validate_owned_graph_patch(command, payload_cwd, assignment, role)
     elif tool_name == "Bash":
         _validate_bash(command, assignment)
     elif tool_name == "apply_patch":
-        _validate_patch(command, payload_cwd, assignment)
+        _validate_patch(command, payload_cwd, assignment, role)
 
 
 def _load_json() -> Any:

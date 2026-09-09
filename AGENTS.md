@@ -41,10 +41,12 @@ app if it would actually help.
 # Project graph hook
 
 The project graph uses a synchronous, fail-closed Codex hook for the guarded
-`explorer`, `researcher`, `pre_checker`, `builder`, and `checker` roles. A child must report
+`explorer`, `researcher`, `pre_checker`, `builder`, `checker`, and
+`security_reviewer` roles. A child must report
 the native `SubagentStart` UUID to the parent, wait for the parent to register
 that UUID to its assigned worktree, and wait for the registration acknowledgement
-before using tools. The parent and `security_reviewer` are outside this guard.
+before using tools. The Root parent is outside this guard; Security is a guarded
+source-read-only reviewer with its own durable graph verdict.
 
 Before graph work, ensure this source is present in the active trusted checkout,
 open `/hooks`, and trust both the `SubagentStart` and `PreToolUse` project-hook
@@ -60,9 +62,10 @@ and remain covered by the declared sandbox and permissions boundary.
 
 # Coding agents
 
-Use GPT-5.6 Sol (`gpt-5.6-sol`) at medium reasoning effort for the parent coding
-agent. Keep project-graph nodes and specialist reviewers on their existing
-models, reasoning efforts, and instructions in `.codex/agents/`.
+The Root model and reasoning effort remain selected by the host/user; do not pin
+them in repository config. Keep project-graph nodes and specialist reviewers on
+their configured instructions in `.codex/agents/`, with graph child profiles
+selected explicitly at spawn time by the project-graph skill.
 
 TollChat's application agent stays on `gpt-5.6-luna`. Leave its model and prompt
 unchanged unless the user explicitly requests an application-agent change.
