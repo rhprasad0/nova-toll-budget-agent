@@ -69,17 +69,76 @@ jobs:
           checksum: "68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2"
           python-version: "3.13"
 
-      - name: Build reviewed deployment packages
-        working-directory: v2
+      - name: Resolve candidate package mode
+        id: package-mode
         run: |
           set -euo pipefail
+          MANIFEST="infra/development-release-manifest.json"
+          test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST"
+          PACKAGE_MODE="$(python3 - "$MANIFEST" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          try:
+              value = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          except (OSError, UnicodeError, json.JSONDecodeError) as error:
+              raise SystemExit(f"invalid candidate manifest: {error}")
+          if not isinstance(value, dict) or not isinstance(value.get("deployment_inputs"), dict):
+              raise SystemExit("invalid candidate manifest shape")
+          print(
+              "timed"
+              if "v2/scripts/build_timed_checks_zip.sh" in value["deployment_inputs"]
+              else "legacy"
+          )
+          PY
+          )"
+          case "$PACKAGE_MODE" in
+            legacy|timed) printf 'mode=%s\n' "$PACKAGE_MODE" >>"$GITHUB_OUTPUT" ;;
+            *) exit 1 ;;
+          esac
+
+      - name: Build reviewed deployment packages
+        working-directory: v2
+        env:
+          PACKAGE_MODE: ${{ steps.package-mode.outputs.mode }}
+        run: |
+          set -euo pipefail
+          case "$PACKAGE_MODE" in
+            legacy)
+              PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip)
+              EXPECTED_PACKAGE_NAMES="agentcore.zip chat-proxy.zip loader.zip publisher.zip "
+              ;;
+            timed)
+              PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip)
+              EXPECTED_PACKAGE_NAMES="agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip "
+              ;;
+            *) exit 1 ;;
+          esac
           ./scripts/build_loader_zip.sh
           ./scripts/build_publisher_zip.sh
           ./scripts/build_agentcore_zips.sh
-          for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip; do
-            test -s "$package"
+          if [[ "$PACKAGE_MODE" = timed ]]; then
+            ./scripts/build_timed_checks_zip.sh
+          fi
+          for package in "${PACKAGE_NAMES[@]}"; do
+            test -f "infra/build/$package" && test ! -L "infra/build/$package" && test -s "infra/build/$package"
           done
-          (cd infra/build && sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip > DEPLOYMENT_SHA256SUMS)
+          (cd infra/build && sha256sum "${PACKAGE_NAMES[@]}" > DEPLOYMENT_SHA256SUMS)
+          test "$(cd infra/build && awk '{print $2}' DEPLOYMENT_SHA256SUMS | LC_ALL=C sort | tr '\n' ' ')" = "$EXPECTED_PACKAGE_NAMES"
+          PACKAGE_STAGE="$RUNNER_TEMP/v2-development-packages"
+          rm -rf -- "$PACKAGE_STAGE"
+          mkdir -m 700 -- "$PACKAGE_STAGE"
+          for package in "${PACKAGE_NAMES[@]}"; do
+            source="infra/build/$package"
+            test -f "$source" && test ! -L "$source" && test -s "$source"
+            cp -P -- "$source" "$PACKAGE_STAGE/$package"
+          done
+          test "$(find "$PACKAGE_STAGE" -mindepth 1 -maxdepth 1 -printf '%f\n' | LC_ALL=C sort | tr '\n' ' ')" = "$EXPECTED_PACKAGE_NAMES"
+          for package in "${PACKAGE_NAMES[@]}"; do
+            test -f "$PACKAGE_STAGE/$package" && test ! -L "$PACKAGE_STAGE/$package" && test -s "$PACKAGE_STAGE/$package"
+          done
+          (cd "$PACKAGE_STAGE" && sha256sum --check "$GITHUB_WORKSPACE/v2/infra/build/DEPLOYMENT_SHA256SUMS" >/dev/null)
 
       - name: Prepare immutable candidate evidence inputs
         env:
@@ -126,11 +185,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: v2-development-packages-${{ github.run_id }}-${{ steps.resolve.outputs.candidate_sha }}
-          path: |
-            v2/infra/build/loader.zip
-            v2/infra/build/publisher.zip
-            v2/infra/build/agentcore.zip
-            v2/infra/build/chat-proxy.zip
+          path: ${{ runner.temp }}/v2-development-packages
           if-no-files-found: error
 
       - name: Upload candidate checksums
@@ -144,6 +199,7 @@ jobs:
         if: always()
         run: |
           rm -rf -- "$RUNNER_TEMP/v2-development-checksums" \
+            "$RUNNER_TEMP/v2-development-packages" \
             "$RUNNER_TEMP/development-release-verification.json" "$GITHUB_WORKSPACE/trusted-build"
 
   plan:
@@ -228,10 +284,52 @@ jobs:
           set -euo pipefail
           umask 077
           STAGING="$RUNNER_TEMP/v2-development-packages"
+          MANIFEST="$STAGING/development-release-manifest.json"
+          CHECKSUMS="$STAGING/DEPLOYMENT_SHA256SUMS"
+          test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST"
+          PACKAGE_MODE="$(python3 - "$MANIFEST" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          try:
+              value = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          except (OSError, UnicodeError, json.JSONDecodeError) as error:
+              raise SystemExit(f"invalid downloaded manifest: {error}")
+          if not isinstance(value, dict) or not isinstance(value.get("deployment_inputs"), dict):
+              raise SystemExit("invalid downloaded manifest shape")
+          print(
+              "timed"
+              if "v2/scripts/build_timed_checks_zip.sh" in value["deployment_inputs"]
+              else "legacy"
+          )
+          PY
+          )"
+          case "$PACKAGE_MODE" in
+            legacy)
+              PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip)
+              PACKAGE_COUNT=4
+              EXPECTED_PACKAGE_NAMES="agentcore.zip chat-proxy.zip loader.zip publisher.zip "
+              ;;
+            timed)
+              PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip)
+              PACKAGE_COUNT=5
+              EXPECTED_PACKAGE_NAMES="agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip "
+              ;;
+            *) exit 1 ;;
+          esac
+          test -f "$CHECKSUMS" && test ! -L "$CHECKSUMS" && test -r "$CHECKSUMS"
+          test "$(find "$STAGING" -mindepth 1 -maxdepth 1 -name '*.zip' -printf '%f\n' | LC_ALL=C sort | tr '\n' ' ')" = "$EXPECTED_PACKAGE_NAMES"
+          for package in "${PACKAGE_NAMES[@]}"; do
+            test -f "$STAGING/$package" && test ! -L "$STAGING/$package" && test -s "$STAGING/$package"
+          done
+          test "$(wc -l <"$CHECKSUMS")" -eq "$PACKAGE_COUNT"
+          test "$(cd "$STAGING" && awk '{print $2}' "$(basename "$CHECKSUMS")" | LC_ALL=C sort | tr '\n' ' ')" = "$EXPECTED_PACKAGE_NAMES"
+          (cd "$STAGING" && sha256sum --check "$(basename "$CHECKSUMS")" >/dev/null)
           python3 trusted/infra/release_manifest.py \
-            --manifest "$STAGING/development-release-manifest.json" \
+            --manifest "$MANIFEST" \
             --package-dir "$STAGING" \
-            --checksums "$STAGING/DEPLOYMENT_SHA256SUMS" \
+            --checksums "$CHECKSUMS" \
             --candidate-sha "$CANDIDATE_SHA" \
             --run-id "$GITHUB_RUN_ID" \
             --evidence "$STAGING/development-release-evidence.json" \
@@ -277,10 +375,6 @@ jobs:
 
           test "$CANDIDATE_SHA" = "${{ needs.build.outputs.candidate_sha }}"
           test "$(aws sts get-caller-identity --query Account --output text)" = "903859731897"
-          test "$(find "$STAGING" -maxdepth 1 -type f -name '*.zip' | wc -l)" -eq 4
-          test "$(wc -l <"$STAGING/DEPLOYMENT_SHA256SUMS")" -eq 4
-          test "$(cd "$STAGING" && awk '{print $2}' DEPLOYMENT_SHA256SUMS | LC_ALL=C sort | tr '\n' ' ')" = "agentcore.zip chat-proxy.zip loader.zip publisher.zip "
-          (cd "$STAGING" && sha256sum --check DEPLOYMENT_SHA256SUMS >/dev/null)
 
           terraform -chdir="$GITHUB_WORKSPACE/trusted/infra" init -input=false -lockfile=readonly \
             -backend-config=backend.development.hcl >"$FOUNDATION_INIT_LOG" 2>&1
