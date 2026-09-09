@@ -567,13 +567,19 @@ Only technically valid, representative reports should be curated in
 - Every trust policy requires the supported GitHub OIDC condition keys
   `aud = sts.amazonaws.com` and an exact immutable repository `sub`.
   Development requires `ref:refs/heads/main`; production deploy requires the
-  protected `production` GitHub environment in its subject. AWS IAM does not
-  expose GitHub's `job_workflow_ref` as an independent condition key, so do not
-  test it in a trust policy. Protect the production workflow path and reviewed
-  ref through repository rules and review. If workflow identity must later be
-  enforced by AWS, first configure GitHub's customized `sub` template to
-  include `repo`, `context`, and `job_workflow_ref`, then atomically update
-  every affected role to require the exact resulting subject.
+  protected `production` GitHub environment in its subject. The fixed
+  production migration role additionally requires `ref = refs/heads/main`
+  and the exact reusable `job_workflow_ref`; these additional conditions do not
+  change the existing production deploy or planner roles. AWS IAM documents
+  these GitHub OIDC condition keys in its
+  [condition-key reference](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_iam-condition-keys.html),
+  with the support recorded in the [IAM documentation history](https://docs.aws.amazon.com/IAM/latest/UserGuide/document-history.html)
+  on 2026-05-12. GitHub emits `job_workflow_ref` for jobs calling reusable
+  workflows; the fixed production migration identity therefore binds it to
+  `rhprasad0/nova-toll-budget-agent/.github/workflows/v2-production-migrations.yml@refs/heads/main`.
+  Keep that reusable workflow main-only and behind the protected production
+  environment; never accept an arbitrary workflow path, ref, target, or
+  migration input. No workflow implementation is added in this slice.
 - Give the planner explicit discovery reads plus only the narrow state-lock and
   unique plan-object writes it needs. A permissions boundary prevents other
   infrastructure mutation. Do not attempt a brittle hand-written deny list of

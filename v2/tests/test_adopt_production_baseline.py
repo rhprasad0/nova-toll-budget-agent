@@ -3,8 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import secrets
+import select
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -48,6 +51,15 @@ def _psql_environment(
     )
 
 
+_BLOCKED_AWS_OVERRIDE_VARIABLES = (
+    "AWS_CA_BUNDLE",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+)
+
+
 @pytest.fixture(autouse=True)
 def _system_ca_bundle(  # pyright: ignore[reportUnusedFunction]
     monkeypatch: pytest.MonkeyPatch,
@@ -57,6 +69,11 @@ def _system_ca_bundle(  # pyright: ignore[reportUnusedFunction]
         "get_default_verify_paths",
         lambda: SimpleNamespace(cafile="/etc/ssl/certs/ca-certificates.crt"),
     )
+    for name in tuple(os.environ):
+        if name == "AWS_ENDPOINT_URL" or name.startswith("AWS_ENDPOINT_URL_"):
+            monkeypatch.delenv(name, raising=False)
+    for name in _BLOCKED_AWS_OVERRIDE_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
 
 
 def _synthetic_aws_error_run(*args: object, **kwargs: object) -> SimpleNamespace:
@@ -194,6 +211,8 @@ def test_capture_rejects_cli_failure_without_diagnostics(
     [
         "AWS_ENDPOINT_URL",
         "AWS_ENDPOINT_URL_RDS",
+        "AWS_ENDPOINT_URL_STS",
+        "AWS_ENDPOINT_URL_SECRETS_MANAGER",
         "AWS_CA_BUNDLE",
         "SSL_CERT_FILE",
         "SSL_CERT_DIR",
@@ -227,6 +246,40 @@ def test_capture_ignores_configured_endpoint_urls(
     assert _capture("sts", "get-caller-identity") == "expected"
     environment = cast(dict[str, str], captured["env"])
     assert environment["AWS_IGNORE_CONFIGURED_ENDPOINT_URLS"] == "true"
+
+
+def test_binary_marker_reader_handles_coalesced_output() -> None:
+    child = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.stdout.buffer.write(b'LOCK TABLE\\nLOCK_HELD\\n'); "
+            "sys.stdout.buffer.flush(); sys.stdin.buffer.read()",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=False,
+        bufsize=0,
+    )
+    try:
+        assert child.stdin is not None
+        child.stdin.close()
+        assert child.stdout is not None
+        lines: list[str] = []
+        deadline = time.monotonic() + 5
+        while len(lines) < 2 and time.monotonic() < deadline:
+            ready, _, _ = select.select(
+                [child.stdout], [], [], max(0, deadline - time.monotonic())
+            )
+            if not ready:
+                break
+            lines.append(child.stdout.readline().decode().strip())
+        assert lines == ["LOCK TABLE", "LOCK_HELD"]
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=5)
 
 
 def _rds_metadata(**overrides: object) -> dict[str, object]:
@@ -304,18 +357,20 @@ def test_rds_identity_rejects_synthetic_metadata(
 
 
 @pytest.mark.parametrize(
-    "secret_string",
-    [
-        "not-json",
-        "[]",
-        '{"username":"other","password":"present"}',
-        '{"username":"nova_toll_admin","password":""}',
-    ],
-    ids=["malformed", "wrong-shape", "wrong-user", "empty-password"],
+    "secret_case", ["malformed", "wrong-shape", "wrong-user", "empty-password"]
 )
 def test_admin_secret_rejects_synthetic_secret(
-    monkeypatch: pytest.MonkeyPatch, secret_string: str
+    monkeypatch: pytest.MonkeyPatch, secret_case: str
 ) -> None:
+    secret_string = {
+        "malformed": "not-json",
+        "wrong-shape": "[]",
+        "wrong-user": json.dumps(
+            {"username": "other", "password": f"fixture-{secrets.token_hex(8)}"}
+        ),
+        "empty-password": '{"username":"nova_toll_admin","password":""}',
+    }[secret_case]
+
     def synthetic_capture(*args: str) -> str:
         return secret_string
 
@@ -981,6 +1036,32 @@ def test_disposable_postgis_adoption_and_rerun_guard(
             "DROP INDEX pricing.unapproved_extra_idx;",
         ),
         (
+            "CREATE TRIGGER adoption_drift_trigger BEFORE UPDATE ON pricing.trip_pricing_i95 "
+            "FOR EACH ROW EXECUTE FUNCTION pg_catalog.suppress_redundant_updates_trigger(); "
+            "ALTER TABLE pricing.trip_pricing_i95 DISABLE TRIGGER adoption_drift_trigger;",
+            "DROP TRIGGER adoption_drift_trigger ON pricing.trip_pricing_i95;",
+        ),
+        (
+            "ALTER TABLE oracle.toll_connection DISABLE TRIGGER ALL;",
+            "ALTER TABLE oracle.toll_connection ENABLE TRIGGER ALL;",
+        ),
+        (
+            "CREATE POLICY adoption_drift_policy ON pricing.trip_pricing_i95 USING (true);",
+            "DROP POLICY adoption_drift_policy ON pricing.trip_pricing_i95;",
+        ),
+        (
+            "ALTER TABLE pricing.trip_pricing_i95 ENABLE ROW LEVEL SECURITY;",
+            "ALTER TABLE pricing.trip_pricing_i95 DISABLE ROW LEVEL SECURITY;",
+        ),
+        (
+            "ALTER TABLE pricing.trip_pricing_i95 FORCE ROW LEVEL SECURITY;",
+            "ALTER TABLE pricing.trip_pricing_i95 NO FORCE ROW LEVEL SECURITY;",
+        ),
+        (
+            "CREATE RULE adoption_drift_rule AS ON UPDATE TO pricing.trip_pricing_i95 DO NOTHING;",
+            "DROP RULE adoption_drift_rule ON pricing.trip_pricing_i95;",
+        ),
+        (
             "CREATE FUNCTION pricing.unapproved() RETURNS integer LANGUAGE sql AS 'SELECT 1';",
             "DROP FUNCTION pricing.unapproved();",
         ),
@@ -1092,6 +1173,32 @@ def test_disposable_postgis_adoption_and_rerun_guard(
             "GRANT EXECUTE ON FUNCTION oracle.postgis_full_version() TO PUBLIC;",
             "PostGIS ACL is outside the canonical allowlist",
         ),
+        (
+            "CREATE TRIGGER adoption_drift_trigger BEFORE UPDATE ON pricing.trip_pricing_i95 "
+            "FOR EACH ROW EXECUTE FUNCTION pg_catalog.suppress_redundant_updates_trigger(); "
+            "ALTER TABLE pricing.trip_pricing_i95 DISABLE TRIGGER adoption_drift_trigger;",
+            "application trigger, policy, row-security, or rewrite-rule inventory is outside the canonical contract",
+        ),
+        (
+            "ALTER TABLE oracle.toll_connection DISABLE TRIGGER ALL;",
+            "application trigger, policy, row-security, or rewrite-rule inventory is outside the canonical contract",
+        ),
+        (
+            "CREATE POLICY adoption_drift_policy ON pricing.trip_pricing_i95 USING (true);",
+            "application trigger, policy, row-security, or rewrite-rule inventory is outside the canonical contract",
+        ),
+        (
+            "ALTER TABLE pricing.trip_pricing_i95 ENABLE ROW LEVEL SECURITY;",
+            "application trigger, policy, row-security, or rewrite-rule inventory is outside the canonical contract",
+        ),
+        (
+            "ALTER TABLE pricing.trip_pricing_i95 FORCE ROW LEVEL SECURITY;",
+            "application trigger, policy, row-security, or rewrite-rule inventory is outside the canonical contract",
+        ),
+        (
+            "CREATE RULE adoption_drift_rule AS ON UPDATE TO pricing.trip_pricing_i95 DO NOTHING;",
+            "application trigger, policy, row-security, or rewrite-rule inventory is outside the canonical contract",
+        ),
     ):
         sql = adopt.adoption_sql().replace(
             "DO $$\nDECLARE\n  expected_count integer;",
@@ -1107,6 +1214,108 @@ def test_disposable_postgis_adoption_and_rerun_guard(
         assert "TOLLCHAT_PRODUCTION_BASELINE_ADOPTED" not in rejected.stdout
         assert adoption_state() == "0,none,nova_toll_admin"
         assert boundary_state() == before_boundary
+
+    # The adoption transaction holds relation locks through its final
+    # postcondition. A second session's privileged Oracle RLS DDL must time
+    # out rather than commit between the final guard and COMMIT.
+    lock_statement = next(
+        line
+        for line in adopt.adoption_sql().splitlines()
+        if line.startswith("LOCK TABLE ")
+    )
+    adoption_script = adopt.adoption_sql()
+    prefix, suffix = adoption_script.split(lock_statement, 1)
+    held_prefix = prefix + lock_statement + "\nSELECT 'LOCK_HELD';\n"
+    held_suffix = suffix.replace("COMMIT;", "SELECT 1 / 0;\nCOMMIT;", 1)
+    holder = subprocess.Popen(
+        [
+            psql,
+            "-X",
+            "--no-psqlrc",
+            "--set",
+            "ON_ERROR_STOP=1",
+            "--tuples-only",
+            "--no-align",
+            "--host",
+            host,
+            "--port",
+            port,
+            "--username",
+            "nova_toll_admin",
+            "--dbname",
+            "nova_toll",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=False,
+        bufsize=0,
+    )
+    try:
+        assert holder.stdin is not None
+        holder.stdin.write(held_prefix.encode())
+        holder.stdin.flush()
+        assert holder.stdout is not None
+        marker_seen = False
+        output_lines: list[str] = []
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select(
+                [holder.stdout], [], [], max(0, deadline - time.monotonic())
+            )
+            if not ready:
+                break
+            line = holder.stdout.readline().decode().strip()
+            output_lines.append(line)
+            if line == "LOCK_HELD":
+                marker_seen = True
+                break
+        assert marker_seen, f"adoption lock holder output: {output_lines!r}"
+        held_lock = run_psql(
+            "--username",
+            "postgres",
+            "--dbname",
+            "nova_toll",
+            "--tuples-only",
+            "--no-align",
+            input_sql=(
+                "SELECT mode, granted FROM pg_locks "
+                "WHERE relation='oracle.toll_connection'::regclass;"
+            ),
+        )
+        assert held_lock.returncode == 0, held_lock.stderr
+        assert "AccessExclusiveLock|t" in held_lock.stdout
+        blocked = run_psql(
+            "--username",
+            "postgres",
+            "--dbname",
+            "nova_toll",
+            input_sql=(
+                "BEGIN; SET LOCAL lock_timeout='1s'; "
+                "CREATE POLICY lock_probe ON oracle.toll_connection USING (true);"
+            ),
+        )
+        assert blocked.returncode != 0
+        assert "lock timeout" in blocked.stderr
+        assert holder.stdin is not None
+        holder.stdin.write(held_suffix.encode())
+        holder.stdin.close()
+        holder_returncode = holder.wait(timeout=15)
+        holder_stdout = holder.stdout.read().decode()
+        assert holder.stderr is not None
+        holder_stderr = holder.stderr.read().decode()
+        assert holder_returncode != 0
+        assert_propagated_failure(
+            subprocess.CompletedProcess(
+                [psql], holder_returncode, holder_stdout, holder_stderr
+            )
+        )
+    finally:
+        if holder.poll() is None:
+            holder.kill()
+            holder.wait(timeout=10)
+    assert adoption_state() == "0,none,nova_toll_admin"
+    assert boundary_state() == before_boundary
 
     adoption = run_psql(
         "--username",

@@ -495,6 +495,22 @@ def adoption_sql(baselines: tuple[Baseline, ...] | None = None) -> str:
     oracle_function_values = ", ".join(
         _sql_literal(name) for name in ORACLE_APPLICATION_FUNCTIONS
     )
+    application_relation_values = ",\n      ".join(
+        "(" + ", ".join((_sql_literal(schema), _sql_literal(name))) + ")"
+        for schema, names in (
+            ("pricing", PRICING_OBJECTS),
+            ("oracle", ORACLE_APPLICATION_RELATIONS),
+        )
+        for name in names
+    )
+    application_relation_locks = ", ".join(
+        f"{schema}.{name}"
+        for schema, names in (
+            ("pricing", PRICING_OBJECTS),
+            ("oracle", ORACLE_APPLICATION_RELATIONS),
+        )
+        for name in names
+    )
     oracle_function_acl_values = ",\n      ".join(
         "("
         + ", ".join(
@@ -607,6 +623,51 @@ GRANT SELECT ON tollchat_migration.schema_history TO nova_toll_admin;
     RAISE EXCEPTION 'application column ACL is outside the empty canonical contract';
   END IF;
 """
+    # Canonical application relations have no user triggers or policies and no
+    # row security. Views retain only PostgreSQL's canonical _RETURN rewrite;
+    # any other rule can change behavior without changing the definition
+    # fingerprint above. Internal constraint triggers remain allowed.
+    behavior_guard = f"""
+  IF EXISTS (
+    SELECT 1
+    FROM pg_class relation
+    JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+    WHERE (namespace.nspname, relation.relname) IN (VALUES
+      {application_relation_values}
+    )
+      AND (relation.relrowsecurity OR relation.relforcerowsecurity)
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_trigger trigger_
+    JOIN pg_class relation ON relation.oid = trigger_.tgrelid
+    JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+    WHERE (namespace.nspname, relation.relname) IN (VALUES
+      {application_relation_values}
+    )
+      AND (NOT trigger_.tgisinternal OR trigger_.tgenabled <> 'O')
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_policy policy
+    JOIN pg_class relation ON relation.oid = policy.polrelid
+    JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+    WHERE (namespace.nspname, relation.relname) IN (VALUES
+      {application_relation_values}
+    )
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_rewrite rewrite
+    JOIN pg_class relation ON relation.oid = rewrite.ev_class
+    JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+    WHERE (namespace.nspname, relation.relname) IN (VALUES
+      {application_relation_values}
+    )
+      AND (rewrite.rulename <> '_RETURN'
+           OR relation.relkind NOT IN ('v', 'm')
+           OR rewrite.ev_enabled <> 'O')
+  ) THEN
+    RAISE EXCEPTION 'application trigger, policy, row-security, or rewrite-rule inventory is outside the canonical contract';
+  END IF;
+"""
     environment_guard = """
   IF EXISTS (SELECT 1 FROM pg_auth_members WHERE member = to_regrole('rds_iam')) THEN
     RAISE EXCEPTION 'rds_iam must not inherit any other role';
@@ -679,6 +740,7 @@ SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';
 SET LOCAL idle_in_transaction_session_timeout = '2min';
 SELECT pg_advisory_xact_lock(hashtext({_sql_literal(LOCK_NAME)}));
+LOCK TABLE {application_relation_locks} IN ACCESS EXCLUSIVE MODE;
 
 CREATE TEMP TABLE _canonical_application_definition (
     object_name text PRIMARY KEY,
@@ -728,6 +790,7 @@ BEGIN
     RAISE EXCEPTION 'production adoption history already exists';
   END IF;
 {column_acl_guard}
+{behavior_guard}
 {environment_guard}
 {extension_acl_guard}
   IF (SELECT nspowner::regrole::text FROM pg_namespace WHERE nspname = 'pricing') <> {_sql_literal(ADMIN_ROLE)}
@@ -1190,6 +1253,7 @@ DECLARE
   expected_count integer;
 BEGIN
 {column_acl_guard}
+{behavior_guard}
   IF NOT EXISTS (
     SELECT 1 FROM _production_adoption_snapshot snapshot
     JOIN pg_namespace namespace ON namespace.oid = snapshot.object_oid
