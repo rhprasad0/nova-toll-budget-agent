@@ -2,24 +2,15 @@
 
 import sys
 from datetime import datetime
-from zoneinfo import ZoneInfo
+from pathlib import Path
 
-MAX_DELAY_SECONDS = 600
-NEW_YORK = ZoneInfo("America/New_York")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-
-def scheduled_run_is_fresh(schedule: str, now: datetime) -> bool:
-    if not schedule:
-        return True
-
-    minute, hour, _, _, weekday = schedule.split()
-    if now.isoweekday() != int(weekday):
-        return False
-
-    scheduled_at = now.replace(
-        hour=int(hour), minute=int(minute), second=0, microsecond=0
-    )
-    return 0 <= (now - scheduled_at).total_seconds() <= MAX_DELAY_SECONDS
+from timed_checks import (
+    MAX_DELAY_SECONDS,
+    NEW_YORK,
+    scheduled_run_is_fresh,
+)
 
 
 def main() -> int:
