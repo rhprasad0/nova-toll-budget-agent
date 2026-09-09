@@ -58,7 +58,7 @@ expensive shared foundations or adding tools that TollChat does not need.
 | Terraform state | Explicit S3 state key per environment | More visible and harder to select accidentally than CLI workspaces. |
 | Production compatibility | Preserve current state key and physical names | The environment refactor must not replace production resources. |
 | Environment identity | Application objects are `development` or `production`; each account-local foundation uses `shared` internally | Tags identify supported AWS resources; names, descriptions, PostgreSQL comments, and deployment manifests cover objects that cannot carry AWS tags. |
-| Database isolation | Separate PostgreSQL databases and runtime roles on the existing RDS instance; keep the migrator role development-only | Isolates ordinary application mistakes while keeping migration authority out of production. It is not an instance-level security boundary. |
+| Database isolation | Separate PostgreSQL databases and runtime roles on the existing RDS instance; human-admin production adoption creates `schema_migrator_production` for the later protected workflow | Isolates ordinary application mistakes while keeping recurring migration automation bounded to reviewed fixed targets. It is not an instance-level security boundary. |
 | Deployable artifact | Build once per commit and address by SHA-256 | Development and production should execute identical bytes. |
 | Migration execution | Retain disposable PR checks; run registered migrations only through the protected main-only development workflow | CI validation stays credential-free, while the fixed development identity and target provide the only automated deployed-migration path; production remains separately authorized. |
 | Agent tracing | Defer persistent traces, PII sanitization, storage, and privacy-notice changes until after the environment split | Establish the boundary first, then validate the complete telemetry path in development before production. |
@@ -323,8 +323,10 @@ separately approved boundaries.
 
 Do not use an application deployment to apply a schema change. Development
 schema changes use the protected workflow after bootstrap; production keeps its
-existing database and deployment procedure, with migration 030 as the only
-currently authorized manual production schema change.
+existing database and deployment procedure. The separately approved one-time
+baseline adoption helper establishes production history, while migration 030
+remains the only currently authorized manual schema migration until the later
+protected production workflow is reviewed.
 
 ### 6.3 Post-split migration work
 
@@ -565,13 +567,19 @@ Only technically valid, representative reports should be curated in
 - Every trust policy requires the supported GitHub OIDC condition keys
   `aud = sts.amazonaws.com` and an exact immutable repository `sub`.
   Development requires `ref:refs/heads/main`; production deploy requires the
-  protected `production` GitHub environment in its subject. AWS IAM does not
-  expose GitHub's `job_workflow_ref` as an independent condition key, so do not
-  test it in a trust policy. Protect the production workflow path and reviewed
-  ref through repository rules and review. If workflow identity must later be
-  enforced by AWS, first configure GitHub's customized `sub` template to
-  include `repo`, `context`, and `job_workflow_ref`, then atomically update
-  every affected role to require the exact resulting subject.
+  protected `production` GitHub environment in its subject. The fixed
+  production migration role additionally requires `ref = refs/heads/main`
+  and the exact reusable `job_workflow_ref`; these additional conditions do not
+  change the existing production deploy or planner roles. AWS IAM documents
+  these GitHub OIDC condition keys in its
+  [condition-key reference](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_iam-condition-keys.html),
+  with the support recorded in the [IAM documentation history](https://docs.aws.amazon.com/IAM/latest/UserGuide/document-history.html)
+  on 2026-05-12. GitHub emits `job_workflow_ref` for jobs calling reusable
+  workflows; the fixed production migration identity therefore binds it to
+  `rhprasad0/nova-toll-budget-agent/.github/workflows/v2-production-migrations.yml@refs/heads/main`.
+  Keep that reusable workflow main-only and behind the protected production
+  environment; never accept an arbitrary workflow path, ref, target, or
+  migration input. No workflow implementation is added in this slice.
 - Give the planner explicit discovery reads plus only the narrow state-lock and
   unique plan-object writes it needs. A permissions boundary prevents other
   infrastructure mutation. Do not attempt a brittle hand-written deny list of

@@ -1834,6 +1834,77 @@ data "aws_iam_policy_document" "production_deploy_assume" {
   }
 }
 
+# This identity is only the prerequisite for the separately reviewed,
+# fixed-target production migration workflow.  It is intentionally not a
+# Terraform/apply identity and has no release or arbitrary-target inputs.
+data "aws_iam_policy_document" "production_migrations_assume" {
+  count = var.environment == "production" ? 1 : 0
+
+  statement {
+    sid     = "GitHubProductionMigrationEnvironment"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:production"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:ref"
+      values   = ["refs/heads/main"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:job_workflow_ref"
+      values   = ["rhprasad0/nova-toll-budget-agent/.github/workflows/v2-production-migrations.yml@refs/heads/main"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "production_migrations" {
+  count = var.environment == "production" ? 1 : 0
+
+  statement {
+    sid       = "DescribeFixedProductionRds"
+    actions   = ["rds:DescribeDBInstances"]
+    resources = ["arn:aws:rds:${local.production_delivery_region}:${local.production_delivery_account_id}:db:${aws_db_instance.main.identifier}"]
+  }
+
+  statement {
+    sid       = "ConnectAsProductionSchemaMigrator"
+    actions   = ["rds-db:connect"]
+    resources = ["arn:aws:rds-db:${local.production_delivery_region}:${local.production_delivery_account_id}:dbuser:${aws_db_instance.main.resource_id}/schema_migrator_production"]
+  }
+}
+
+resource "aws_iam_role" "production_migrations" {
+  count                = var.environment == "production" ? 1 : 0
+  name                 = "nova-toll-v2-production-migrations"
+  assume_role_policy   = data.aws_iam_policy_document.production_migrations_assume[0].json
+  max_session_duration = 3600
+}
+
+resource "aws_iam_role_policy" "production_migrations" {
+  count  = var.environment == "production" ? 1 : 0
+  name   = "nova-toll-v2-production-migrations"
+  role   = aws_iam_role.production_migrations[0].id
+  policy = data.aws_iam_policy_document.production_migrations[0].json
+}
+
 data "aws_iam_policy_document" "production_deploy" {
   count = var.environment == "production" ? 1 : 0
 
