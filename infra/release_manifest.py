@@ -14,9 +14,21 @@ from pathlib import Path, PurePosixPath
 from typing import Any, NoReturn
 
 try:
-    from .delivery_plan_validator import validate_plan
+    from .delivery_plan_validator import (
+        LEGACY_PACKAGES,
+        TIMED_CHECKS_MARKER,
+        TIMED_PACKAGES,
+        _packages_for_inputs,
+        validate_plan,
+    )
 except ImportError:  # Direct script execution.
-    from delivery_plan_validator import validate_plan
+    from delivery_plan_validator import (
+        LEGACY_PACKAGES,
+        TIMED_CHECKS_MARKER,
+        TIMED_PACKAGES,
+        _packages_for_inputs,
+        validate_plan,
+    )
 
 
 MANIFEST_KEYS = {
@@ -34,7 +46,17 @@ PROVIDER_IDENTITY = {
     "lockfile": "v2/infra/.terraform.lock.hcl",
     "lock_identity": "V2-AWS60",
 }
-PACKAGES = ("agentcore.zip", "chat-proxy.zip", "loader.zip", "publisher.zip")
+PACKAGES = LEGACY_PACKAGES
+TIMED_INPUTS = frozenset({
+    "v2/eval/run_evaluation.py",
+    "v2/eval/test-cases.jsonl",
+    "v2/infra/timed_checks.tf",
+    "v2/lambdas/timed_checks/handler.py",
+    TIMED_CHECKS_MARKER,
+    "v2/scripts/timed-checks-requirements.in",
+    "v2/scripts/timed-checks-requirements.txt",
+    "v2/timed_checks.py",
+})
 EXACT_INPUTS = {
     ".github/workflows/v2-development-delivery.yml",
     ".github/workflows/v2-development-plan.yml",
@@ -189,7 +211,9 @@ def _valid_relative(path: str) -> bool:
     )
 
 
-def _selected(path: str, bundle_enabled: bool = False) -> bool:
+def _selected(path: str, bundle_enabled: bool = False, timed_enabled: bool = False) -> bool:
+    if path in TIMED_INPUTS:
+        return timed_enabled
     selected = (
         path in EXACT_INPUTS
         or any(path.startswith(prefix) for prefix in INPUT_PREFIXES)
@@ -204,7 +228,7 @@ def _selected(path: str, bundle_enabled: bool = False) -> bool:
     )
 
 
-def _tracked_inputs(repo_root: Path) -> list[str]:
+def _tracked_inputs(repo_root: Path, timed_enabled: bool = False) -> list[str]:
     try:
         output = subprocess.run(
             ["git", "-C", os.fspath(repo_root), "ls-files", "-z"],
@@ -214,10 +238,13 @@ def _tracked_inputs(repo_root: Path) -> list[str]:
         tracked = [path.decode("utf-8") for path in output.split(b"\0") if path]
     except (OSError, UnicodeError, subprocess.CalledProcessError):
         _reject("inventory_unavailable")
+    tracked_set = set(tracked)
+    if timed_enabled and not TIMED_INPUTS <= tracked_set:
+        _reject("inventory_incomplete")
     bundle_enabled = BUNDLE_MARKER in tracked
     if bundle_enabled and not BUNDLE_FIXED_INPUTS.issubset(tracked):
         _reject("inventory_incomplete")
-    paths = sorted(path for path in tracked if _selected(path, bundle_enabled))
+    paths = sorted(path for path in tracked if _selected(path, bundle_enabled, timed_enabled))
     if not paths or set(EXACT_INPUTS) - set(paths):
         _reject("inventory_incomplete")
     return paths
@@ -239,7 +266,14 @@ def _validate_manifest(value: Any) -> tuple[dict[str, str], dict[str, str]]:
         not _valid_relative(path) for path in inputs
     ):
         _reject("inventory_invalid")
-    if set(packages) != set(PACKAGES) or list(packages) != list(PACKAGES):
+    timed_enabled = TIMED_CHECKS_MARKER in inputs
+    timed_inputs = set(inputs) & TIMED_INPUTS
+    if timed_enabled and not TIMED_INPUTS <= set(inputs):
+        _reject("inventory_incomplete")
+    if not timed_enabled and timed_inputs:
+        _reject("inventory_invalid")
+    expected_packages = _packages_for_inputs(inputs)
+    if set(packages) != set(expected_packages) or list(packages) != list(expected_packages):
         _reject("package_inventory_invalid")
     if any(
         not isinstance(digest, str) or not HEX64.fullmatch(digest)
@@ -269,7 +303,12 @@ def _validate_manifest(value: Any) -> tuple[dict[str, str], dict[str, str]]:
 
 
 def _verify_inputs(repo_root: Path, expected: dict[str, str]) -> None:
-    actual_paths = _tracked_inputs(repo_root)
+    timed_enabled = TIMED_CHECKS_MARKER in expected
+    if timed_enabled and not TIMED_INPUTS <= set(expected):
+        _reject("inventory_incomplete")
+    if not timed_enabled and set(expected) & TIMED_INPUTS:
+        _reject("inventory_invalid")
+    actual_paths = _tracked_inputs(repo_root, timed_enabled)
     if actual_paths != list(expected):
         _reject("inventory_mismatch")
     for relative, digest in expected.items():
@@ -277,7 +316,7 @@ def _verify_inputs(repo_root: Path, expected: dict[str, str]) -> None:
             _reject("input_digest_mismatch")
 
 
-def _read_checksums(path: Path) -> dict[str, str]:
+def _read_checksums(path: Path, package_names: tuple[str, ...] = PACKAGES) -> dict[str, str]:
     try:
         mode = path.lstat().st_mode
         if not stat.S_ISREG(mode) or path.is_symlink():
@@ -293,7 +332,7 @@ def _read_checksums(path: Path) -> dict[str, str]:
         if not match or match.group(2) in result:
             _reject("checksums_invalid")
         result[match.group(2)] = match.group(1)
-    if tuple(sorted(result)) != PACKAGES:
+    if tuple(sorted(result)) != tuple(sorted(package_names)):
         _reject("checksums_invalid")
     return result
 
@@ -307,7 +346,8 @@ def _verify_packages(
         names = tuple(sorted(path.name for path in package_dir.glob("*.zip")))
     except OSError:
         _reject("package_inventory_invalid")
-    if names != PACKAGES or _read_checksums(checksums_path) != expected:
+    package_names = tuple(expected)
+    if names != package_names or _read_checksums(checksums_path, package_names) != expected:
         _reject("package_inventory_invalid")
     for name, digest in expected.items():
         if _digest_file(package_dir / name, "package_unreadable") != digest:

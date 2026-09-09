@@ -57,6 +57,27 @@ class ReleaseManifestTests(unittest.TestCase):
     def write_manifest(self):
         self.manifest.write_text(json.dumps(self.manifest_value), encoding="utf-8")
 
+    def enable_timed_mode(self):
+        for relative in sorted(release_manifest.TIMED_INPUTS):
+            self.track(relative, b"timed-reviewed\n")
+        (self.packages / "timed-checks.zip").write_bytes(b"timed-checks.zip")
+        self.checksums.write_text(
+            "".join(
+                f"{digest(self.packages / name)}  {name}\n"
+                for name in release_manifest.TIMED_PACKAGES
+            ),
+            encoding="ascii",
+        )
+        self.manifest_value["deployment_inputs"] = {
+            relative: digest(self.root / relative)
+            for relative in sorted({"input.txt", *release_manifest.TIMED_INPUTS})
+        }
+        self.manifest_value["packages"] = {
+            name: digest(self.packages / name)
+            for name in release_manifest.TIMED_PACKAGES
+        }
+        self.write_manifest()
+
     def track(self, relative, content=b"reviewed\n"):
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -184,6 +205,39 @@ class ReleaseManifestTests(unittest.TestCase):
             package.write_bytes(original)
         (self.packages / "extra.zip").write_bytes(b"extra")
         self.assert_rejected("package_inventory_invalid")
+
+        (self.packages / "extra.zip").unlink()
+        (self.packages / "extra.zip").write_bytes(b"extra")
+        self.checksums.write_text(
+            "".join(
+                f"{digest(self.packages / name)}  {name}\n"
+                for name in (*release_manifest.PACKAGES, "extra.zip")
+            ),
+            encoding="ascii",
+        )
+        self.assert_rejected("package_inventory_invalid")
+
+    def test_timed_marker_requires_full_inventory_and_five_packages(self):
+        self.enable_timed_mode()
+        self.assertEqual(self.verify()["status"], "accepted")
+
+        missing = sorted(release_manifest.TIMED_INPUTS)[0]
+        self.manifest_value["deployment_inputs"].pop(missing)
+        self.write_manifest()
+        self.assert_rejected("inventory_incomplete")
+
+        self.enable_timed_mode()
+        (self.packages / "timed-checks.zip").unlink()
+        self.assert_rejected("package_inventory_invalid")
+
+    def test_legacy_mode_excludes_tracked_timed_inputs(self):
+        for relative in sorted(release_manifest.TIMED_INPUTS):
+            self.track(relative)
+        with (
+            mock.patch.object(release_manifest, "EXACT_INPUTS", {"input.txt"}),
+            mock.patch.object(release_manifest, "INPUT_PREFIXES", ()),
+        ):
+            self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
 
     def test_rejects_missing_symlinked_and_extra_inputs(self):
         self.input.unlink()
