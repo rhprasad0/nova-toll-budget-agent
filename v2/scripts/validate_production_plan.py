@@ -42,7 +42,9 @@ def _inventory(root: Path) -> tuple[set[str], set[str]]:
     data: set[str] = set()
     for path in root.glob("*.tf"):
         for mode, kind, name in RESOURCE.findall(path.read_text(encoding="utf-8")):
-            (managed if mode == "resource" else data).add(f"{kind}.{name}")
+            (managed if mode == "resource" else data).add(
+                f"{'' if mode == 'resource' else 'data.'}{kind}.{name}"
+            )
     if not managed or not data:
         raise PlanError("inventory")
     return managed, data

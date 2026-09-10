@@ -107,9 +107,12 @@ v2/scripts/run_db_tests.sh "$(git rev-parse HEAD^)"
 Credential-free PR CI never runs `terraform plan` or `apply`. A published stable
 `vX.Y.Z` release first records its bounded event without credentials. The
 main-resident production consumer independently admits the exact successful
-development candidate and privately saves one versioned, checksummed KMS plan.
-It does not apply Terraform or migrate a database; those later release phases
-remain separately reviewed.
+development candidate and privately saves one versioned, checksummed KMS plan
+under the existing state bucket's private `plans/` prefix. The one protected
+production reusable job verifies that immutable version, checksum, state binding
+and 24-hour age before deploy preflight, fixed migrations, re-assumed deploy
+apply, and fixed production readiness. It records sanitized terminal evidence;
+the Greenway conversation canary remains the separate slice-6 success gate.
 
 Development delivery reports an explicit `development-release` GitHub result
 only after exact-version readiness and bounded static/API/two-session agent

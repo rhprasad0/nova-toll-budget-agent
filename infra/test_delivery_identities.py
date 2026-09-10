@@ -391,11 +391,12 @@ def _check_production_planner() -> None:
     actions = re.findall(r"uses:\s+([^@\s]+)@([0-9a-f]{40})", PRODUCTION_PLAN)
     assert {name for name, _ in actions} == {
         "actions/checkout",
+        "actions/upload-artifact",
         "astral-sh/setup-uv",
         "hashicorp/setup-terraform",
         "aws-actions/configure-aws-credentials",
     }
-    assert len(actions) == 7
+    assert len(actions) == 9
     require("persist-credentials: false", PRODUCTION_PLAN)
     require("path: trusted", PRODUCTION_PLAN)
     require("path: candidate", PRODUCTION_PLAN)
@@ -421,7 +422,6 @@ def _check_production_planner() -> None:
         "build_loader_zip.sh",
         "build_publisher_zip.sh",
         "build_agentcore_zips.sh",
-        "actions/upload-artifact",
         "actions/download-artifact",
     ):
         assert forbidden not in PRODUCTION_PLAN, forbidden
@@ -951,9 +951,10 @@ def main() -> None:
                 assert not retired_actions.intersection(statement.get("Action", []))
     state_statements = deploy_documents["state"]["Statement"]
     release_statements = deploy_documents["release"]["Statement"]
-    assert [statement["Sid"] for statement in state_statements] == ["ListProductionApplicationState", "ManageProductionApplicationState", "ManageProductionApplicationLock", "DecryptProductionApplicationStateAndLock", "GenerateProductionApplicationStateDataKeys"]
+    assert [statement["Sid"] for statement in state_statements] == ["ListProductionApplicationState", "ManageProductionApplicationState", "ManageProductionApplicationLock", "DecryptProductionApplicationStateAndLock", "GenerateProductionApplicationStateDataKeys", "ReadCloudflareProviderTokenForApply", "DecryptCloudflareProviderTokenForApply"]
     assert [statement["Sid"] for statement in release_statements] == ["ReadVersionedReleasePlan", "DecryptVersionedReleasePlan"]
-    assert all("GetObjectVersion" not in json.dumps(statement) and "/plans/" not in json.dumps(statement) for statement in state_statements)
+    assert "/plans/" not in json.dumps(state_statements)
+    assert state_statements[1]["Action"] == ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]
     assert [statement["Action"] for statement in release_statements] == [["s3:GetObjectVersion"], ["kms:Decrypt"]]
     assert all("plans/*" in json.dumps(statement) for statement in release_statements)
 
@@ -976,6 +977,7 @@ def main() -> None:
     cases = [
         ("s3:ListBucket", bucket, {"s3:prefix": "nova-toll/v2/terraform.tfstate"}, True),
         ("s3:GetObject", state, {}, True),
+        ("s3:GetObjectVersion", state, {}, True),
         ("s3:PutObject", state, {}, True),
         ("s3:GetObject", lock, {}, True),
         ("s3:PutObject", lock, {}, True),

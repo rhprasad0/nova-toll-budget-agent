@@ -6,6 +6,12 @@ on:
       admission:
         required: true
         type: string
+      saved_plan:
+        required: true
+        type: string
+    outputs:
+      delivery_evidence:
+        value: ${{ jobs.migrate.outputs.delivery_evidence }}
     secrets:
       TS_PRODUCTION_OAUTH_CLIENT_ID:
         required: true
@@ -26,6 +32,8 @@ jobs:
       contents: read
       deployments: read
       id-token: write
+    outputs:
+      delivery_evidence: ${{ steps.delivery-evidence.outputs.delivery_evidence }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -35,6 +43,7 @@ jobs:
       - id: admission
         env:
           ADMISSION: ${{ inputs.admission }}
+          SAVED_PLAN: ${{ inputs.saved_plan }}
         run: |
           set -euo pipefail
           set +x
@@ -65,6 +74,33 @@ jobs:
             jq -r '"candidate=\(.candidate)"' "$RUNNER_TEMP/admission.json" >>"$GITHUB_OUTPUT" || return
           }
           run_private_stage release-verification "$RUNNER_TEMP/production-bind.out" "$RUNNER_TEMP/production-bind.err" bind_admission
+      - id: saved-plan
+        env:
+          SAVED_PLAN: ${{ inputs.saved_plan }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          source trusted/v2/scripts/run_private_stage.sh
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_SUMMARY_FAILED=0
+          PRIVATE_STAGE_FALLBACK_STAGE=release-verification
+          finish() {
+            status=$?
+            trap - EXIT
+            if (( status != 0 && PRIVATE_STAGE_REPORTED == 0 )); then
+              _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"
+            fi
+            exit "$status"
+          }
+          trap finish EXIT
+          bind_plan() {
+            printf '%s' "$SAVED_PLAN" >"$RUNNER_TEMP/saved-plan.json" || return
+            python3 trusted/v2/scripts/check_production_release.py validate-saved-plan --admission "$RUNNER_TEMP/admission.json" --saved-plan "$RUNNER_TEMP/saved-plan.json" --output "$RUNNER_TEMP/validated-saved-plan.json" || return
+            jq -r '"candidate=\(.candidate)\nplan_bucket=\(.saved_plan.bucket)\nplan_key=\(.saved_plan.key)\nplan_version=\(.saved_plan.version_id)\nplan_checksum=\(.saved_plan.checksum)\nplan_kms=\(.saved_plan.kms_key_arn)\nstate=\(.state|@json)"' "$RUNNER_TEMP/validated-saved-plan.json" >>"$GITHUB_OUTPUT" || return
+            jq -r '"session_policy=" + ({Version:"2012-10-17",Statement:[{Effect:"Allow",NotAction:"s3:GetObjectVersion",Resource:"*"},{Effect:"Allow",Action:"s3:GetObjectVersion",NotResource:("arn:aws:s3:::" + .saved_plan.bucket + "/plans/*")},{Effect:"Allow",Action:"s3:GetObjectVersion",Resource:("arn:aws:s3:::" + .saved_plan.bucket + "/" + .saved_plan.key),Condition:{StringEquals:{"s3:VersionId":.saved_plan.version_id}}}]}|@json)' "$RUNNER_TEMP/validated-saved-plan.json" >>"$GITHUB_OUTPUT" || return
+          }
+          run_private_stage release-verification "$RUNNER_TEMP/saved-plan-bind.out" "$RUNNER_TEMP/saved-plan-bind.err" bind_plan
       - name: Revalidate release claim and exact candidate before credentials
         env:
           GH_TOKEN: ${{ github.token }}
@@ -104,7 +140,7 @@ jobs:
           set +x
           umask 077
           bundle="$RUNNER_TEMP/production-migration-release.zip"
-          overlay="$RUNNER_TEMP/production-migration-release-overlay"
+          overlay="$GITHUB_WORKSPACE/candidate/release-overlay"
           source trusted/v2/scripts/run_private_stage.sh
           PRIVATE_STAGE_REPORTED=0
           PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -124,6 +160,8 @@ jobs:
             test "sha256:$(sha256sum "$bundle" | awk '{print $1}')" = "$BUNDLE_DIGEST" || return
             python3 -c 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); sizes=[item.file_size for item in z.infolist()]; raise SystemExit(not sizes or max(sizes)>268435456 or sum(sizes)>536870912)' "$bundle" || return
             python3 trusted/v2/scripts/verify_release_bundle.py verify --archive "$bundle" --output "$overlay" --root "$GITHUB_WORKSPACE/candidate" --expected-digest "$BUNDLE_DIGEST" --commit "$CANDIDATE" --pricing-version "$PRICING" --oracle-version "$ORACLE" --verify-checkout || return
+            cp -a -- "$overlay/v2/agent/." "$GITHUB_WORKSPACE/candidate/v2/agent/" || return
+            cp -- "$overlay/v2/analytics/agent_registry.ndjson" "$GITHUB_WORKSPACE/candidate/v2/analytics/agent_registry.ndjson" || return
             test "$(git -C candidate rev-parse HEAD)" = "$(jq -r .candidate "$RUNNER_TEMP/admission.json")" || return
             git -C trusted ls-tree -r -z HEAD -- v2/scripts >"$RUNNER_TEMP/trusted-scripts.tree" || return
             git -C candidate ls-tree -r -z HEAD -- v2/scripts >"$RUNNER_TEMP/candidate-scripts.tree" || return
@@ -132,6 +170,56 @@ jobs:
             test ! -s "$RUNNER_TEMP/candidate-scripts.status" || return
           }
           run_private_stage artifact-download "$RUNNER_TEMP/production-bundle.out" "$RUNNER_TEMP/production-bundle.err" verify_bundle
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
+        with:
+          terraform_wrapper: false
+          terraform_version: 1.15.8
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        with:
+          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-deploy
+          aws-region: us-east-1
+          inline-session-policy: ${{ steps.saved-plan.outputs.session_policy }}
+          unset-current-credentials: true
+      - name: Verify exact saved plan and state before migration
+        env:
+          PLAN_BUCKET: ${{ steps.saved-plan.outputs.plan_bucket }}
+          PLAN_KEY: ${{ steps.saved-plan.outputs.plan_key }}
+          PLAN_VERSION: ${{ steps.saved-plan.outputs.plan_version }}
+          PLAN_CHECKSUM: ${{ steps.saved-plan.outputs.plan_checksum }}
+          PLAN_KMS: ${{ steps.saved-plan.outputs.plan_kms }}
+          STATE: ${{ steps.saved-plan.outputs.state }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          source trusted/v2/scripts/run_private_stage.sh
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_SUMMARY_FAILED=0
+          PRIVATE_STAGE_FALLBACK_STAGE=release-verification
+          finish() { status=$?; trap - EXIT; if (( status != 0 && PRIVATE_STAGE_REPORTED == 0 )); then _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"; fi; rm -f -- "$RUNNER_TEMP/production-state.json" "$RUNNER_TEMP/production-head.json" "$RUNNER_TEMP/production-state-head.json" "$RUNNER_TEMP/production-cloudflare-preflight"; exit "$status"; }
+          trap finish EXIT
+          preflight() {
+            aws sts get-caller-identity --output json >"$RUNNER_TEMP/production-caller.json" || return
+            jq -e '.Account == "920534282028" and (.Arn|test("^arn:aws:sts::920534282028:assumed-role/nova-toll-production-deploy/"))' "$RUNNER_TEMP/production-caller.json" >/dev/null || return
+            aws s3api head-object --bucket "$PLAN_BUCKET" --key "$PLAN_KEY" --version-id "$PLAN_VERSION" --checksum-mode ENABLED --expected-bucket-owner 920534282028 >"$RUNNER_TEMP/production-head.json" || return
+            jq -e --arg version "$PLAN_VERSION" --arg checksum "$PLAN_CHECKSUM" --arg kms "$PLAN_KMS" '.VersionId == $version and .ChecksumSHA256 == $checksum and .SSEKMSKeyId == $kms and .ServerSideEncryption == "aws:kms"' "$RUNNER_TEMP/production-head.json" >/dev/null || return
+            aws s3api head-object --bucket "$PLAN_BUCKET" --key nova-toll/v2/terraform.tfstate --expected-bucket-owner 920534282028 >"$RUNNER_TEMP/production-state-head.json" || return
+            version="$(jq -er '.VersionId' "$RUNNER_TEMP/production-state-head.json")" || return
+            aws s3api get-object --bucket "$PLAN_BUCKET" --key nova-toll/v2/terraform.tfstate --version-id "$version" --expected-bucket-owner 920534282028 "$RUNNER_TEMP/production-state.json" >/dev/null || return
+            jq -e --argjson expected "$STATE" --arg version "$version" '.lineage == $expected.lineage and .serial == $expected.serial and $expected.version_id == $version' "$RUNNER_TEMP/production-state.json" >/dev/null || return
+            aws ssm get-parameter --name /nova-toll/cloudflare-read-api-token --with-decryption --query Parameter.Value --output text >"$RUNNER_TEMP/production-cloudflare-preflight" || return
+            test -s "$RUNNER_TEMP/production-cloudflare-preflight" || return
+            rm -f -- "$RUNNER_TEMP/production-cloudflare-preflight" || return
+          }
+          run_private_stage release-verification "$RUNNER_TEMP/production-preflight.out" "$RUNNER_TEMP/production-preflight.err" preflight
+      - name: Clear deploy credentials before Tailscale
+        run: |
+          set -euo pipefail
+          rm -f -- "$RUNNER_TEMP/production-state.json" "$RUNNER_TEMP/production-head.json" "$RUNNER_TEMP/production-state-head.json" "$RUNNER_TEMP/production-cloudflare-preflight" "$RUNNER_TEMP/production-plan.tfplan"
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN; do
+            unset "$name" || true
+            printf '%s=\n' "$name" >>"$GITHUB_ENV"
+          done
       - uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888
         with:
           oauth-client-id: ${{ secrets.TS_PRODUCTION_OAUTH_CLIENT_ID }}
@@ -141,6 +229,7 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::920534282028:role/nova-toll-v2-production-migrations
           aws-region: us-east-1
+          unset-current-credentials: true
       - name: Fetch pinned RDS CA bundle
         working-directory: candidate/v2
         run: |
@@ -172,6 +261,108 @@ jobs:
           PRODUCTION_MIGRATION_CANDIDATE: ${{ steps.admission.outputs.candidate }}
           PRODUCTION_MIGRATION_ADMISSION: ${{ inputs.admission }}
         run: bash v2/scripts/run_production_migrations_workflow.sh
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        with:
+          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-deploy
+          aws-region: us-east-1
+          inline-session-policy: ${{ steps.saved-plan.outputs.session_policy }}
+          unset-current-credentials: true
+      - name: Revalidate exact saved plan and state before apply
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ADMISSION: ${{ inputs.admission }}
+          SAVED_PLAN: ${{ inputs.saved_plan }}
+          PLAN_BUCKET: ${{ steps.saved-plan.outputs.plan_bucket }}
+          PLAN_KEY: ${{ steps.saved-plan.outputs.plan_key }}
+          PLAN_VERSION: ${{ steps.saved-plan.outputs.plan_version }}
+          PLAN_CHECKSUM: ${{ steps.saved-plan.outputs.plan_checksum }}
+          PLAN_KMS: ${{ steps.saved-plan.outputs.plan_kms }}
+          STATE: ${{ steps.saved-plan.outputs.state }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          source trusted/v2/scripts/run_private_stage.sh
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_SUMMARY_FAILED=0
+          PRIVATE_STAGE_FALLBACK_STAGE=release-verification
+          finish() { status=$?; trap - EXIT; if (( status != 0 && PRIVATE_STAGE_REPORTED == 0 )); then _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"; fi; rm -f -- "$RUNNER_TEMP/production-state.json" "$RUNNER_TEMP/production-head.json" "$RUNNER_TEMP/production-state-head.json"; if (( status != 0 )); then rm -f -- "$RUNNER_TEMP/production-plan.tfplan"; fi; exit "$status"; }
+          trap finish EXIT
+          recheck() {
+            printf '%s' "$ADMISSION" >"$RUNNER_TEMP/apply-admission.json" || return
+            printf '%s' "$SAVED_PLAN" >"$RUNNER_TEMP/apply-saved-plan.json" || return
+            python3 trusted/v2/scripts/check_production_release.py validate-saved-plan --admission "$RUNNER_TEMP/apply-admission.json" --saved-plan "$RUNNER_TEMP/apply-saved-plan.json" --output "$RUNNER_TEMP/apply-saved-plan-validated.json" || return
+            python3 trusted/v2/scripts/check_production_release.py revalidate --admission "$RUNNER_TEMP/apply-admission.json" --output "$RUNNER_TEMP/apply-revalidated.json" || return
+            aws sts get-caller-identity --output json >"$RUNNER_TEMP/production-caller.json" || return
+            jq -e '.Account == "920534282028" and (.Arn|test("^arn:aws:sts::920534282028:assumed-role/nova-toll-production-deploy/"))' "$RUNNER_TEMP/production-caller.json" >/dev/null || return
+            aws s3api head-object --bucket "$PLAN_BUCKET" --key "$PLAN_KEY" --version-id "$PLAN_VERSION" --checksum-mode ENABLED --expected-bucket-owner 920534282028 >"$RUNNER_TEMP/production-head.json" || return
+            jq -e --arg version "$PLAN_VERSION" --arg checksum "$PLAN_CHECKSUM" --arg kms "$PLAN_KMS" '.VersionId == $version and .ChecksumSHA256 == $checksum and .SSEKMSKeyId == $kms and .ServerSideEncryption == "aws:kms"' "$RUNNER_TEMP/production-head.json" >/dev/null || return
+            aws s3api get-object --bucket "$PLAN_BUCKET" --key "$PLAN_KEY" --version-id "$PLAN_VERSION" --checksum-mode ENABLED --expected-bucket-owner 920534282028 "$RUNNER_TEMP/production-plan.tfplan" >/dev/null || return
+            test "$(sha256sum "$RUNNER_TEMP/production-plan.tfplan" | awk '{print $1}' | xxd -r -p | base64 -w0)" = "$PLAN_CHECKSUM" || return
+            aws s3api head-object --bucket "$PLAN_BUCKET" --key nova-toll/v2/terraform.tfstate --expected-bucket-owner 920534282028 >"$RUNNER_TEMP/production-state-head.json" || return
+            version="$(jq -er '.VersionId' "$RUNNER_TEMP/production-state-head.json")" || return
+            aws s3api get-object --bucket "$PLAN_BUCKET" --key nova-toll/v2/terraform.tfstate --version-id "$version" --expected-bucket-owner 920534282028 "$RUNNER_TEMP/production-state.json" >/dev/null || return
+            jq -e --argjson expected "$STATE" --arg version "$version" '.lineage == $expected.lineage and .serial == $expected.serial and $expected.version_id == $version' "$RUNNER_TEMP/production-state.json" >/dev/null || return
+          }
+          run_private_stage release-verification "$RUNNER_TEMP/production-recheck.out" "$RUNNER_TEMP/production-recheck.err" recheck
+      - name: Apply the one verified production plan and check readiness
+        env:
+          CANDIDATE: ${{ steps.admission.outputs.candidate }}
+          STATE: ${{ steps.saved-plan.outputs.state }}
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          source "$GITHUB_WORKSPACE/trusted/v2/scripts/run_private_stage.sh"
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_SUMMARY_FAILED=0
+          PRIVATE_STAGE_FALLBACK_STAGE=apply
+          finish() { status=$?; trap - EXIT; unset CLOUDFLARE_API_TOKEN; rm -f -- "$RUNNER_TEMP/production-plan.tfplan" "$RUNNER_TEMP/production-state-after.json" "$RUNNER_TEMP/production-readiness-state.json" "$RUNNER_TEMP/production-cloudflare-token" "$RUNNER_TEMP/production-lock-private.err"; if (( status != 0 && PRIVATE_STAGE_REPORTED == 0 )); then _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"; fi; exit "$status"; }
+          trap finish EXIT
+          token="$RUNNER_TEMP/production-cloudflare-token"
+          run_private_stage artifact-metadata "$token" "$RUNNER_TEMP/production-cloudflare.err" aws ssm get-parameter --name /nova-toll/cloudflare-read-api-token --with-decryption --query Parameter.Value --output text
+          CLOUDFLARE_API_TOKEN="$(<"$token")"
+          run_private_stage artifact-metadata "$RUNNER_TEMP/production-cloudflare-check.out" "$RUNNER_TEMP/production-cloudflare.err" test -n "$CLOUDFLARE_API_TOKEN"
+          export CLOUDFLARE_API_TOKEN
+          run_private_stage release-init "$RUNNER_TEMP/production-apply-init.out" "$RUNNER_TEMP/production-apply.err" terraform -chdir=v2/infra init -input=false -backend-config=backend.production.hcl
+          run_private_stage apply "$RUNNER_TEMP/production-apply.out" "$RUNNER_TEMP/production-apply.err" terraform -chdir=v2/infra apply -input=false "$RUNNER_TEMP/production-plan.tfplan"
+          unset CLOUDFLARE_API_TOKEN
+          run_private_stage readiness-state "$RUNNER_TEMP/production-state-after.json" "$RUNNER_TEMP/production-readiness.err" terraform -chdir=v2/infra state pull
+          run_private_stage readiness-state "$RUNNER_TEMP/production-readiness-state.json" "$RUNNER_TEMP/production-readiness.err" terraform -chdir=v2/infra show -json
+          run_private_stage readiness-state "$RUNNER_TEMP/production-state-after-head.json" "$RUNNER_TEMP/production-readiness.err" aws s3api head-object --bucket nova-toll-tfstate-920534282028 --key nova-toll/v2/terraform.tfstate --expected-bucket-owner 920534282028
+          run_private_stage readiness-state "$RUNNER_TEMP/production-state-after-match.out" "$RUNNER_TEMP/production-readiness.err" jq -ne --argjson expected "$STATE" --slurpfile state "$RUNNER_TEMP/production-state-after.json" --slurpfile head "$RUNNER_TEMP/production-state-after-head.json" '$state[0].lineage == $expected.lineage and ($state[0].serial >= $expected.serial) and ($head[0].VersionId != $expected.version_id or $state[0].serial > $expected.serial)'
+          lock_released() { if aws s3api head-object --bucket nova-toll-tfstate-920534282028 --key nova-toll/v2/terraform.tfstate.tflock --expected-bucket-owner 920534282028 >"$RUNNER_TEMP/production-lock-private.out" 2>"$RUNNER_TEMP/production-lock-private.err"; then return 1; fi; grep -Eq '(404|Not Found)' "$RUNNER_TEMP/production-lock-private.err"; }
+          run_private_stage readiness-state "$RUNNER_TEMP/production-lock.out" "$RUNNER_TEMP/production-readiness.err" lock_released
+          GITHUB_SHA="$CANDIDATE" run_private_stage readiness-check "$RUNNER_TEMP/production-readiness.out" "$RUNNER_TEMP/production-readiness.err" python3 v2/scripts/check_development_release.py --profile production "$RUNNER_TEMP/production-readiness-state.json" release-overlay/release-manifest.json
+      - name: Clear deploy credentials before evidence upload
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -f -- "$RUNNER_TEMP/production-plan.tfplan" "$RUNNER_TEMP/production-state-after.json" "$RUNNER_TEMP/production-readiness-state.json" "$RUNNER_TEMP/production-state-after-head.json" "$RUNNER_TEMP/production-cloudflare-token" "$RUNNER_TEMP/production-lock-private.err"
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN; do
+            unset "$name" || true
+            printf '%s=\n' "$name" >>"$GITHUB_ENV"
+          done
+      - id: delivery-evidence
+        env:
+          CANDIDATE: ${{ steps.admission.outputs.candidate }}
+          ADMISSION: ${{ inputs.admission }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          source trusted/v2/scripts/run_private_stage.sh
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_SUMMARY_FAILED=0
+          PRIVATE_STAGE_FALLBACK_STAGE=migration-evidence
+          finish() { status=$?; trap - EXIT; if (( status != 0 && PRIVATE_STAGE_REPORTED == 0 )); then _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"; fi; exit "$status"; }
+          trap finish EXIT
+          evidence() {
+            jq -e --arg candidate "$CANDIDATE" --argjson admission "$ADMISSION" 'type == "object" and .candidate == $candidate and .release_id == $admission.release_id and .claim_id == $admission.claim_id and .status == "ok"' "$RUNNER_TEMP/v2-production-migrations-evidence.json" >/dev/null || return
+            jq -cn --arg candidate "$CANDIDATE" --argjson admission "$ADMISSION" '{schema_version:1,candidate:$candidate,release_id:$admission.release_id,claim_id:$admission.claim_id,migration:"success",apply:"success",readiness:"success"}' | sed 's/^/delivery_evidence=/' >>"$GITHUB_OUTPUT" || return
+          }
+          run_private_stage migration-evidence "$RUNNER_TEMP/delivery-evidence.out" "$RUNNER_TEMP/delivery-evidence.err" evidence
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: success()
         with:

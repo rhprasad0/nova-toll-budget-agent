@@ -1615,7 +1615,7 @@ locals {
     {
       Sid      = "ManageProductionApplicationState"
       Effect   = "Allow"
-      Action   = ["s3:GetObject", "s3:PutObject"]
+      Action   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]
       Resource = [local.production_delivery_state_arns[1]]
     },
     {
@@ -1645,6 +1645,24 @@ locals {
         StringEquals = {
           "kms:ViaService"                   = "s3.us-east-1.amazonaws.com"
           "kms:EncryptionContext:aws:s3:arn" = [local.production_delivery_state_arns[1], local.production_delivery_lock_arn]
+        }
+      }
+    },
+    {
+      Sid      = "ReadCloudflareProviderTokenForApply"
+      Effect   = "Allow"
+      Action   = ["ssm:GetParameter"]
+      Resource = [local.production_delivery_cloudflare_param_arn]
+    },
+    {
+      Sid      = "DecryptCloudflareProviderTokenForApply"
+      Effect   = "Allow"
+      Action   = ["kms:Decrypt"]
+      Resource = [local.production_delivery_cloudflare_key_arn]
+      Condition = {
+        StringEquals = {
+          "kms:ViaService"                      = "ssm.us-east-1.amazonaws.com"
+          "kms:EncryptionContext:PARAMETER_ARN" = local.production_delivery_cloudflare_param_arn
         }
       }
     },

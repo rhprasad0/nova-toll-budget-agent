@@ -30,7 +30,9 @@ def release(
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     monkeypatch.setenv("GITHUB_SHA", "a" * 40)
     digest = hashlib.sha256(b"static").hexdigest()
-    paths = [f"v2/infra/build/{package}" for _, package in check.FUNCTIONS.values()]
+    paths = [
+        f"v2/infra/build/{package}" for _, package in check.profile_functions.values()
+    ]
     paths += [
         f"v2/agent/{name}"
         for name in (
@@ -47,24 +49,24 @@ def release(
         "files": [{"path": path, "sha256": digest} for path in paths],
     }
     resources: dict[str, Any] = {
-        "aws_cloudfront_distribution.site": {"id": check.DISTRIBUTION},
+        "aws_cloudfront_distribution.site": {"id": check.profile_distribution},
         "aws_bedrockagentcore_agent_runtime.tollchat": {
-            "agent_runtime_id": check.RUNTIME,
-            "agent_runtime_arn": check.RUNTIME_ARN,
+            "agent_runtime_id": check.profile_runtime,
+            "agent_runtime_arn": check.profile_runtime_arn,
             "agent_runtime_version": "8",
         },
         "aws_bedrockagentcore_agent_runtime_endpoint.tollchat": {
-            "agent_runtime_id": check.RUNTIME,
+            "agent_runtime_id": check.profile_runtime,
             "name": "preview",
             "agent_runtime_version": "8",
         },
         "aws_lambda_alias.tollchat_live": {
             "name": "live",
-            "function_name": check.FUNCTIONS["tollchat_proxy"][0],
+            "function_name": check.profile_functions["tollchat_proxy"][0],
             "function_version": "12",
         },
     }
-    for resource, (name, _) in check.FUNCTIONS.items():
+    for resource, (name, _) in check.profile_functions.items():
         resources[f"aws_lambda_function.{resource}"] = {
             "function_name": name,
             "source_code_hash": base64.b64encode(bytes.fromhex(digest)).decode(),
@@ -78,7 +80,7 @@ def release(
                     for address, values in resources.items()
                 ]
             },
-            "outputs": {"public_site": {"value": {"url": check.SITE}}},
+            "outputs": {"public_site": {"value": {"url": check.profile_site}}},
         }
     }
     return state, manifest, resources
@@ -87,6 +89,15 @@ def release(
 def test_expected_release_identity(release: tuple[dict[str, Any], ...]) -> None:
     state, manifest, _ = release
     assert check.expected(state, manifest)["version"] == "8"
+
+
+def test_fixed_profiles_switch_without_leaking_identifiers() -> None:
+    check.configure("production")
+    assert check.profile_production
+    assert check.profile_functions["tollchat_proxy"][0] == "tollchat-v2-chat-proxy"
+    check.configure("development")
+    assert not check.profile_production
+    assert check.profile_functions["tollchat_proxy"][0] == "tollchat-v2-chat-proxy-dev"
 
 
 @pytest.mark.parametrize(
@@ -163,12 +174,12 @@ def test_readiness_exact_versions_and_deadline(
         if wrong == "malformed":
             return {}
         if args[0] == "sts":
-            return {"Account": "wrong" if wrong == "account" else check.ACCOUNT}
+            return {"Account": "wrong" if wrong == "account" else check.profile_account}
         if args[1] == "get-function-configuration":
             name = args[3]
             return {
                 "FunctionName": name,
-                "FunctionArn": f"arn:aws:lambda:us-east-1:{check.ACCOUNT}:function:{name}",
+                "FunctionArn": f"arn:aws:lambda:us-east-1:{check.profile_account}:function:{name}",
                 "State": "Failed" if wrong == "lambda" else "Active",
                 "LastUpdateStatus": "Successful",
                 "CodeSha256": "wrong" if wrong == "hash" else digest,
@@ -186,12 +197,12 @@ def test_readiness_exact_versions_and_deadline(
         if args[0] == "cloudfront":
             return {
                 "Distribution": {
-                    "Id": check.DISTRIBUTION,
+                    "Id": check.profile_distribution,
                     "Status": "InProgress" if wrong == "distribution" else "Deployed",
                 }
             }
         endpoint = {
-            "agentRuntimeArn": check.RUNTIME_ARN,
+            "agentRuntimeArn": check.profile_runtime_arn,
             "name": "preview",
             "status": (
                 "UPDATE_FAILED"
@@ -232,7 +243,7 @@ def test_readiness_failure_output_is_local_and_bounded(
 
     def aws(*args: str) -> dict[str, Any]:
         if args[0] == "sts":
-            return {"Account": check.ACCOUNT}
+            return {"Account": check.profile_account}
         if args[1] == "get-function-configuration":
             name = args[3]
             digest = base64.b64encode(
@@ -240,7 +251,7 @@ def test_readiness_failure_output_is_local_and_bounded(
             ).decode()
             return {
                 "FunctionName": name,
-                "FunctionArn": f"arn:aws:lambda:us-east-1:{check.ACCOUNT}:function:{name}",
+                "FunctionArn": f"arn:aws:lambda:us-east-1:{check.profile_account}:function:{name}",
                 "State": "Active",
                 "LastUpdateStatus": "Successful",
                 "CodeSha256": digest,
@@ -252,9 +263,11 @@ def test_readiness_failure_output_is_local_and_bounded(
                 "RoutingConfig": {},
             }
         if args[0] == "cloudfront":
-            return {"Distribution": {"Id": check.DISTRIBUTION, "Status": "Deployed"}}
+            return {
+                "Distribution": {"Id": check.profile_distribution, "Status": "Deployed"}
+            }
         return {
-            "agentRuntimeArn": check.RUNTIME_ARN,
+            "agentRuntimeArn": check.profile_runtime_arn,
             "name": "preview",
             "status": sentinel,
         }
@@ -384,7 +397,7 @@ def test_reset_failures_have_fixed_reasons(
         _path: str,
         _body: dict[str, Any] | None = None,
         *,
-        origin: str = check.SITE,
+        origin: str = check.profile_site,
         cookie: str | None = None,
     ) -> tuple[int, str, bytes]:
         del origin, cookie
@@ -432,7 +445,7 @@ def test_public_smoke_and_two_session_lifecycle(
         path: str,
         body: dict[str, Any] | None = None,
         *,
-        origin: str = check.SITE,
+        origin: str = check.profile_site,
         cookie: str | None = None,
     ) -> tuple[int, str, bytes]:
         if path == "/robots.txt":
@@ -460,7 +473,7 @@ def test_public_smoke_and_two_session_lifecycle(
             jar.clear()
             return 200, "application/json", b'{"ok": true}'
         if path == "/api/chat":
-            if origin != check.SITE:
+            if origin != check.profile_site:
                 return 200 if wrong == "origin" else 403, "application/json", b"{}"
             if cookie is not None:
                 return (
@@ -553,7 +566,7 @@ def test_main_preserves_original_smoke_diagnostic_after_cleanup(
         path: str,
         body: dict[str, Any] | None = None,
         *,
-        origin: str = check.SITE,
+        origin: str = check.profile_site,
         cookie: str | None = None,
     ) -> tuple[int, str, bytes]:
         nonlocal created
@@ -572,7 +585,7 @@ def test_main_preserves_original_smoke_diagnostic_after_cleanup(
             jar.clear()
             return 200, "application/json", b'{"ok": true}'
         if path == "/api/chat":
-            if origin != check.SITE:
+            if origin != check.profile_site:
                 return 403, "application/json", b"{}"
             if cookie is not None:
                 if failure_kind == "revoked":
@@ -669,6 +682,12 @@ def test_request_hashes_exact_json_bytes_and_skips_bodyless_hash(
         name.lower() in {"content-type", "x-amz-content-sha256"}
         for name, _value in bodyless_request.header_items()
     )
+
+    monkeypatch.setattr(check, "profile_site", "https://tollchat.ai")
+    check.request(jar, "/api/config")
+    production_request = captured.pop()
+    assert production_request.full_url == "https://tollchat.ai/api/config"
+    assert production_request.get_header("Origin") == "https://tollchat.ai"
 
 
 def test_request_path_failure_has_fixed_reason(
@@ -800,7 +819,7 @@ def test_redirect_and_oversized_response_fail_closed(
 
     class Opener:
         def open(self, req: Request, timeout: int) -> Response:
-            assert req.full_url.startswith(check.SITE + "/") and timeout <= 90
+            assert req.full_url.startswith(check.profile_site + "/") and timeout <= 90
             return Response()
 
     def opener(*_handlers: object) -> Opener:

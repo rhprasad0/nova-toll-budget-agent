@@ -5,6 +5,8 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import UTC, datetime, timedelta
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
 
@@ -484,6 +486,7 @@ fi
 """,
         "aws": '#!/usr/bin/env bash\nprintf aws >>"$TRACE"\nexit 17\n',
         "jq": '#!/usr/bin/env bash\necho "$CANDIDATE"\n',
+        "cp": "#!/usr/bin/env bash\nexit 0\n",
     }
     for name, body in commands.items():
         command = binary / name
@@ -545,6 +548,29 @@ def test_workflow_expressions_are_executable_and_private_stages_are_fixed() -> N
         in source
     )
     assert "candidate-scripts.status" in source
+    assert 'NotAction:"s3:GetObjectVersion"' in source
+    assert 'NotResource:("arn:aws:s3:::" + .saved_plan.bucket + "/plans/*")' in source
+    assert 'StringEquals:{"s3:VersionId":.saved_plan.version_id}' in source
+    assert "release-overlay/release-manifest.json" in source
+
+
+def test_third_party_actions_follow_explicit_deploy_credential_clears() -> None:
+    workflow: dict[str, Any] = yaml.safe_load(WORKFLOW.read_text())
+    steps = workflow["jobs"]["migrate"]["steps"]
+    names = [step.get("name", step.get("uses", "")) for step in steps]
+    assert names.index("Clear deploy credentials before Tailscale") < names.index(
+        "tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888"
+    )
+    assert names.index("Clear deploy credentials before evidence upload") < names.index(
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    )
+    clear = next(
+        step
+        for step in steps
+        if step.get("name") == "Clear deploy credentials before Tailscale"
+    )
+    assert "AWS_SESSION_TOKEN" in clear["run"]
+    assert "production-plan.tfplan" in clear["run"]
 
 
 @pytest.mark.parametrize(
@@ -677,3 +703,422 @@ def test_actual_production_wrapper_boundaries(
             assert evidence["before"] == {"pricing": "1.2.0", "oracle": "1.13.0"}
             assert evidence["after"] == {"pricing": "1.3.0", "oracle": "1.14.0"}
         assert evidence["status"] == "ok"
+
+
+def _deploy_environment(tmp_path: Path, failure: str) -> dict[str, str]:
+    (tmp_path / "trusted").symlink_to(ROOT, target_is_directory=True)
+    (tmp_path / "candidate").symlink_to(ROOT, target_is_directory=True)
+    runner, binary = tmp_path / "runner", tmp_path / "bin"
+    runner.mkdir()
+    binary.mkdir()
+    checksum = subprocess.check_output(["sha256sum"], input=b"PLAN").decode().split()[0]
+    encoded = __import__("base64").b64encode(bytes.fromhex(checksum)).decode()
+    fake = (
+        r"""#!"""
+        + sys.executable
+        + r"""
+import json, os, pathlib, sys
+args=sys.argv[1:]; name=pathlib.Path(sys.argv[0]).name; failure=os.environ["FAILURE"]
+def value(flag): return args[args.index(flag)+1]
+if name == "aws":
+  pathlib.Path(os.environ["AWS_MARKER"]).write_text("aws")
+  if args[:2] == ["sts", "get-caller-identity"]: print(json.dumps({"Account":"920534282028","Arn":"arn:aws:sts::920534282028:assumed-role/nova-toll-production-deploy/test"}))
+  elif args[:2] == ["ssm", "get-parameter"]:
+    if failure == "token": raise SystemExit(17)
+    print("PRIVATE_TOKEN")
+  elif args[:2] == ["s3api", "head-object"]:
+    key=value("--key")
+    if failure == "head": raise SystemExit(17)
+    if key.endswith(".tflock"):
+      if failure == "lock": raise SystemExit(0)
+      if failure == "lock-access":
+        print("AccessDenied", file=sys.stderr); raise SystemExit(1)
+      print("An error occurred (404) Not Found", file=sys.stderr); raise SystemExit(1)
+    if key.endswith("terraform.tfstate"): print(json.dumps({"VersionId":"state-after" if os.environ.get("APPLY") else "state-version"}))
+    else: print(json.dumps({"VersionId":"plan-version","ChecksumSHA256":"wrong" if failure == "checksum" else os.environ["CHECKSUM"],"SSEKMSKeyId":os.environ["KMS"],"ServerSideEncryption":"aws:kms"}))
+  elif args[:2] == ["s3api", "get-object"]:
+    destination=pathlib.Path(args[-1]); destination.write_bytes(b'{"lineage":"11111111-1111-1111-1111-111111111111","serial":1}' if any("terraform.tfstate" in value for value in args) else b"PLAN")
+  else: raise SystemExit(17)
+elif name == "terraform":
+  if "apply" in args:
+    if failure == "apply": raise SystemExit(17)
+    assert pathlib.Path(args[-1]).read_bytes() == b"PLAN"
+    pathlib.Path(os.environ["APPLY_MARKER"]).write_text("apply")
+  elif "state" in args: print('{"lineage":"wrong","serial":1}' if failure == "state" else '{"lineage":"11111111-1111-1111-1111-111111111111","serial":2}')
+  elif "show" in args: print("{}")
+elif name == "python3":
+  if any("check_development_release.py" in value for value in args):
+    if failure == "readiness": raise SystemExit(17)
+  elif any("check_production_release.py" in value for value in args):
+    if "validate-saved-plan" in args: os.execv(sys.executable, [sys.executable, *args])
+    pathlib.Path(value("--output")).write_text("{}")
+  else: os.execv(sys.executable, [sys.executable, *args])
+"""
+    )
+    for command in ("aws", "terraform", "python3"):
+        path = binary / command
+        path.write_text(fake)
+        path.chmod(0o700)
+    return {
+        "PATH": str(binary) + os.pathsep + os.defpath,
+        "REAL_JQ": shutil.which("jq") or "jq",
+        "FAILURE": failure,
+        "CHECKSUM": encoded,
+        "KMS": "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7",
+        "PLAN_BUCKET": "nova-toll-tfstate-920534282028",
+        "PLAN_KEY": "plans/release-7-v1.2.3/14/release.tfplan",
+        "PLAN_VERSION": "plan-version",
+        "PLAN_CHECKSUM": encoded,
+        "PLAN_KMS": "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7",
+        "STATE": '{"lineage":"11111111-1111-1111-1111-111111111111","serial":1,"version_id":"state-version"}',
+        "RUNNER_TEMP": str(runner),
+        "GITHUB_WORKSPACE": str(tmp_path),
+        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+        "GITHUB_OUTPUT": str(tmp_path / "output"),
+        "CANDIDATE": "b" * 40,
+        "APPLY_MARKER": str(tmp_path / "applied"),
+        "AWS_MARKER": str(tmp_path / "aws-called"),
+    }
+
+
+def _saved_contract() -> tuple[dict[str, Any], dict[str, Any]]:
+    now = datetime.now(UTC).replace(microsecond=0)
+    admission: dict[str, Any] = {
+        "release_id": 7,
+        "tag": "v1.2.3",
+        "candidate": "b" * 40,
+        "listener_run": 11,
+        "listener_attempt": 1,
+        "development_run": 12,
+        "development_attempt": 2,
+        "development_deployment": 9,
+        "evidence_artifact": {"id": 13, "digest": "sha256:" + "c" * 64},
+        "bundle_id": 10,
+        "bundle_digest": "sha256:" + "d" * 64,
+        "schema_versions": {"pricing": "1.3.0", "oracle": "1.14.0"},
+        "consumer_run": 14,
+        "consumer_attempt": 1,
+        "claim_id": 15,
+    }
+    saved: dict[str, Any] = {
+        **admission,
+        "schema_version": 1,
+        "evidence_digest": admission["evidence_artifact"]["digest"],
+        "planner_run": 14,
+        "planner_attempt": 1,
+        "plan_counts": {},
+        "saved_plan": {
+            "bucket": "nova-toll-tfstate-920534282028",
+            "key": "plans/release-7-v1.2.3/14/release.tfplan",
+            "version_id": "plan-version",
+            "checksum": "A" * 43 + "=",
+            "kms_key_arn": "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7",
+        },
+        "state": {
+            "lineage": "11111111-1111-1111-1111-111111111111",
+            "serial": 1,
+            "version_id": "state-version",
+        },
+        "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "expires_at": (now + timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    return admission, saved
+
+
+def _session_allows(
+    policy: dict[str, Any], action: str, resource: str, version: str
+) -> bool:
+    for statement in policy["Statement"]:
+        applies = (
+            action in statement.get("Action", [])
+            if isinstance(statement.get("Action"), list)
+            else action == statement.get("Action")
+            if "Action" in statement
+            else action != statement.get("NotAction")
+        )
+        if not applies:
+            continue
+        if "Resource" in statement:
+            allowed_resource = fnmatchcase(resource, statement["Resource"])
+        else:
+            allowed_resource = not fnmatchcase(resource, statement["NotResource"])
+        if not allowed_resource:
+            continue
+        expected = (
+            statement.get("Condition", {}).get("StringEquals", {}).get("s3:VersionId")
+        )
+        if expected is None or version == expected:
+            return True
+    return False
+
+
+def test_actual_saved_plan_emits_and_enforces_exact_session_policy(
+    tmp_path: Path,
+) -> None:
+    env = _deploy_environment(tmp_path, "")
+    admission, saved = _saved_contract()
+    (tmp_path / "runner" / "admission.json").write_text(json.dumps(admission))
+    env["SAVED_PLAN"] = json.dumps(saved)
+    result = subprocess.run(
+        ["bash", "-c", _workflow_step("saved-plan")],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    output = dict(
+        line.split("=", 1)
+        for line in (tmp_path / "output").read_text().splitlines()
+        if "=" in line
+    )
+    policy = json.loads(output["session_policy"])
+    bucket = "arn:aws:s3:::nova-toll-tfstate-920534282028"
+    requests: list[tuple[str, str, str, bool]] = []
+
+    def get_object_version(key: str, version: str) -> bool:
+        allowed = _session_allows(
+            policy, "s3:GetObjectVersion", f"{bucket}/{key}", version
+        )
+        requests.append(("s3:GetObjectVersion", key, version, allowed))
+        return allowed
+
+    assert get_object_version(
+        "plans/release-7-v1.2.3/14/release.tfplan", "plan-version"
+    )
+    assert not get_object_version(
+        "plans/release-8-v1.2.3/14/release.tfplan", "plan-version"
+    )
+    assert not get_object_version(
+        "plans/release-7-v1.2.3/14/release.tfplan", "wrong-version"
+    )
+    assert [request[-1] for request in requests] == [True, False, False]
+
+
+@pytest.mark.parametrize(
+    "step", ["saved-plan", "Revalidate exact saved plan and state before apply"]
+)
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "malformed",
+        "candidate",
+        "claim",
+        "planner-run",
+        "expired",
+        "future",
+        "key",
+        "version",
+        "checksum",
+        "kms",
+        "state",
+    ],
+)
+def test_actual_saved_plan_validation_stops_before_aws(
+    tmp_path: Path, step: str, mutation: str
+) -> None:
+    env = _deploy_environment(tmp_path, "")
+    admission, saved = _saved_contract()
+    if mutation == "malformed":
+        saved_input = "{}"
+    else:
+        changed = json.loads(json.dumps(saved))
+        if mutation == "candidate":
+            changed["candidate"] = "a" * 40
+        elif mutation == "claim":
+            changed["claim_id"] = 99
+        elif mutation == "planner-run":
+            changed["planner_run"] = 99
+        elif mutation == "expired":
+            changed["expires_at"] = changed["created_at"]
+        elif mutation == "future":
+            future = datetime.now(UTC) + timedelta(hours=1)
+            changed["created_at"] = future.strftime("%Y-%m-%dT%H:%M:%SZ")
+            changed["expires_at"] = (future + timedelta(hours=24)).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+        elif mutation == "key":
+            changed["saved_plan"]["key"] = "plans/release-8-v1.2.3/14/release.tfplan"
+        elif mutation == "version":
+            changed["saved_plan"]["version_id"] = ""
+        elif mutation == "checksum":
+            changed["saved_plan"]["checksum"] = "not-a-checksum"
+        elif mutation == "kms":
+            changed["saved_plan"]["kms_key_arn"] = (
+                "arn:aws:kms:us-east-1:920534282028:key/other"
+            )
+        elif mutation == "state":
+            changed["state"]["serial"] = "not-a-serial"
+        saved_input = json.dumps(changed)
+    (tmp_path / "runner" / "admission.json").write_text(json.dumps(admission))
+    env.update(
+        {
+            "ADMISSION": json.dumps(admission),
+            "SAVED_PLAN": saved_input,
+            "GH_TOKEN": "fixture",
+        }
+    )
+    result = subprocess.run(
+        ["bash", "-c", _workflow_step(step)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert result.stderr.count("status=fail") == 1
+    assert not (tmp_path / "aws-called").exists()
+
+
+@pytest.mark.parametrize("failure", ["", "checksum", "head", "token"])
+def test_actual_deploy_preflight_stops_before_migration_or_apply(
+    tmp_path: Path, failure: str
+) -> None:
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            _workflow_step("Verify exact saved plan and state before migration"),
+        ],
+        cwd=tmp_path,
+        env=_deploy_environment(tmp_path, failure),
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert "PRIVATE_TOKEN" not in result.stdout + result.stderr
+    assert not (tmp_path / "applied").exists()
+    if failure:
+        assert result.returncode != 0
+        assert result.stderr.count("status=fail") == 1
+    else:
+        assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("failure", ["", "checksum", "head"])
+def test_actual_reassumed_deploy_rechecks_before_apply(
+    tmp_path: Path, failure: str
+) -> None:
+    env = _deploy_environment(tmp_path, failure)
+    admission, saved = _saved_contract()
+    env.update(
+        {
+            "ADMISSION": json.dumps(admission),
+            "SAVED_PLAN": json.dumps(saved),
+            "GH_TOKEN": "fixture",
+        }
+    )
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            _workflow_step("Revalidate exact saved plan and state before apply"),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert "PRIVATE_TOKEN" not in result.stdout + result.stderr
+    assert not (tmp_path / "applied").exists()
+    if failure:
+        assert result.returncode != 0
+        assert result.stderr.count("status=fail") == 1
+        assert not (tmp_path / "runner" / "production-plan.tfplan").exists()
+    else:
+        assert result.returncode == 0, result.stderr
+        assert (tmp_path / "runner" / "production-plan.tfplan").read_bytes() == b"PLAN"
+
+
+def test_actual_recheck_then_apply_consumes_the_retained_exact_plan(
+    tmp_path: Path,
+) -> None:
+    env = _deploy_environment(tmp_path, "")
+    admission, saved = _saved_contract()
+    env.update(
+        {
+            "ADMISSION": json.dumps(admission),
+            "SAVED_PLAN": json.dumps(saved),
+            "GH_TOKEN": "fixture",
+            "APPLY": "1",
+        }
+    )
+    env.pop("APPLY")
+    recheck = subprocess.run(
+        [
+            "bash",
+            "-c",
+            _workflow_step("Revalidate exact saved plan and state before apply"),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert recheck.returncode == 0, recheck.stderr
+    plan = tmp_path / "runner" / "production-plan.tfplan"
+    assert plan.read_bytes() == b"PLAN"
+    env["APPLY"] = "1"
+    apply = subprocess.run(
+        [
+            "bash",
+            "-c",
+            _workflow_step(
+                "Apply the one verified production plan and check readiness"
+            ),
+        ],
+        cwd=tmp_path / "candidate",
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert apply.returncode == 0, apply.stderr
+    assert (tmp_path / "applied").exists()
+    assert not plan.exists()
+
+
+@pytest.mark.parametrize(
+    "failure", ["", "apply", "readiness", "lock", "lock-access", "state", "token"]
+)
+def test_actual_saved_apply_and_readiness_boundaries(
+    tmp_path: Path, failure: str
+) -> None:
+    env = _deploy_environment(tmp_path, failure)
+    env["APPLY"] = "1"
+    env["STATE"] = (
+        '{"lineage":"11111111-1111-1111-1111-111111111111","serial":2,"version_id":"state-version"}'
+    )
+    (tmp_path / "runner" / "production-plan.tfplan").write_bytes(b"PLAN")
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            _workflow_step(
+                "Apply the one verified production plan and check readiness"
+            ),
+        ],
+        cwd=tmp_path / "candidate",
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert "PRIVATE_TOKEN" not in result.stdout + result.stderr
+    if failure:
+        assert result.returncode != 0
+        assert result.stderr.count("status=fail") == 1
+    else:
+        assert result.returncode == 0, result.stderr
+        assert (tmp_path / "applied").exists()

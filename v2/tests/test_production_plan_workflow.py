@@ -25,6 +25,15 @@ def _step(name: str) -> str:
     )
 
 
+def _result_step(name: str) -> str:
+    workflow: dict[str, Any] = yaml.safe_load(WORKFLOW.read_text())
+    return next(
+        step["run"]
+        for step in workflow["jobs"]["release-result"]["steps"]
+        if step.get("name", step.get("id")) == name
+    )
+
+
 FAKE_COMMAND = r"""
 import json, os, pathlib, subprocess, sys
 args = sys.argv[1:]
@@ -59,6 +68,8 @@ if name == "aws":
         if mode in {"version", "checksum", "kms"}:
             response[{"version": "VersionId", "checksum": "ChecksumSHA256", "kms": "SSEKMSKeyId"}[mode]] = ""
         print(json.dumps(response))
+    elif args[:2] == ["s3api", "head-object"]:
+        print(json.dumps({"VersionId": "state-version"}))
     else:
         raise AssertionError(args)
 elif name == "terraform":
@@ -76,6 +87,8 @@ elif name == "terraform":
         pathlib.Path(next(arg.split("=", 1)[1] for arg in args if arg.startswith("-out="))).write_bytes(b"PRIVATE_PLAN")
     elif "show" in args:
         print(json.dumps({"resource_changes": [{"address": "aws_s3_bucket.site", "mode": "managed", "provider_name": "registry.terraform.io/hashicorp/aws", "change": {"actions": ["no-op"], "after_unknown": {}}}], "output_changes": {}}))
+    elif "state" in args and "pull" in args:
+        print(json.dumps({"lineage": "11111111-1111-1111-1111-111111111111", "serial": 1}))
     else:
         raise AssertionError(args)
 else:
@@ -95,6 +108,27 @@ def _environment(tmp_path: Path, failure: str) -> dict[str, str]:
         path.chmod(0o700)
     jq = shutil.which("jq")
     assert jq
+    (temporary / "admission.json").write_text(
+        json.dumps(
+            {
+                "release_id": 7,
+                "tag": "v1.2.3",
+                "candidate": "a" * 40,
+                "listener_run": 11,
+                "listener_attempt": 1,
+                "development_run": 12,
+                "development_attempt": 2,
+                "development_deployment": 9,
+                "evidence_artifact": {"id": 13, "digest": "sha256:" + "c" * 64},
+                "bundle_id": 10,
+                "bundle_digest": "sha256:" + "b" * 64,
+                "schema_versions": {"pricing": "1.3.0", "oracle": "1.14.0"},
+                "consumer_run": 15,
+                "consumer_attempt": 1,
+                "claim_id": 14,
+            }
+        )
+    )
     return {
         "PATH": str(binary) + os.pathsep + os.defpath,
         "REAL_JQ": jq,
@@ -166,13 +200,12 @@ def test_actual_planner_shell_fails_privately_and_saves_exact_evidence(
         assert result.returncode == 0, result.stderr
         summary = (tmp_path / "summary").read_text()
         assert "PRIVATE_" not in summary
-        start = summary.index("{\n")
-        evidence, _ = json.JSONDecoder().raw_decode(summary[start:])
-        assert evidence["listener_attempt"] == "1"
-        assert evidence["development_attempt"] == "2"
+        evidence = json.loads((tmp_path / "output").read_text().split("=", 1)[1])
+        assert evidence["listener_attempt"] == 1
+        assert evidence["development_attempt"] == 2
         assert evidence["saved_plan"]["version_id"] == "private-version"
         assert evidence["saved_plan"]["key"] == (tmp_path / "uploaded").read_text()
-        assert len(evidence["local_sha256"]) == 64
+        assert evidence["state"]["version_id"] == "state-version"
 
 
 @pytest.mark.parametrize("broken_output", [False, True])
@@ -209,3 +242,133 @@ def test_actual_admission_binding_preserves_json_object_and_records_output_failu
         assert result.returncode == 0, result.stderr
         assert json.loads((tmp_path / "runner/admission.json").read_text()) == admission
         assert "candidate=" + "a" * 40 in (tmp_path / "output").read_text()
+
+
+@pytest.mark.parametrize(
+    "planner,migrate,cancelled,evidence,outcome",
+    [
+        ("success", "success", "false", "valid", "success"),
+        ("success", "success", "true", "valid", "failed"),
+        ("success", "success", "false", "missing", "failed"),
+        ("success", "success", "false", "wrong", "failed"),
+        ("skipped", "skipped", "false", "valid", "failed"),
+    ],
+)
+def test_finalizer_evidence_derives_explicit_success_or_failure(
+    tmp_path: Path,
+    planner: str,
+    migrate: str,
+    cancelled: str,
+    evidence: str,
+    outcome: str,
+) -> None:
+    (tmp_path / "v2").symlink_to(ROOT / "v2", target_is_directory=True)
+    (tmp_path / "runner").mkdir()
+    admission = {"release_id": 7, "claim_id": 14, "candidate": "a" * 40}
+    migration_evidence: object = {
+        "schema_version": 1,
+        "candidate": admission["candidate"],
+        "release_id": 7,
+        "claim_id": 14,
+        "migration": "success",
+        "apply": "success",
+        "readiness": "success",
+    }
+    if evidence == "missing":
+        migration_evidence = ""
+    elif evidence == "wrong":
+        migration_evidence = {**migration_evidence, "claim_id": 99}
+    result = subprocess.run(
+        ["bash", "-c", _result_step("evidence")],
+        cwd=tmp_path,
+        env={
+            "PATH": os.defpath,
+            "RUNNER_TEMP": str(tmp_path / "runner"),
+            "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+            "GITHUB_OUTPUT": str(tmp_path / "output"),
+            "ADMISSION": json.dumps(admission),
+            "PLANNER": planner,
+            "MIGRATE": migrate,
+            "MIGRATION_EVIDENCE": json.dumps(migration_evidence)
+            if migration_evidence
+            else "",
+            "CANCELLED": cancelled,
+        },
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "outcome=" + outcome in (tmp_path / "output").read_text()
+
+
+def test_finalizer_upload_is_always_required_and_terminal_status_is_always_run() -> (
+    None
+):
+    workflow: dict[str, Any] = yaml.safe_load(WORKFLOW.read_text())
+    steps = workflow["jobs"]["release-result"]["steps"]
+    upload = next(step for step in steps if step.get("id") == "upload")
+    terminal = next(
+        step for step in steps if step.get("name") == "Record terminal release status"
+    )
+    assert upload["if"] == "${{ always() }}"
+    assert upload["with"]["if-no-files-found"] == "error"
+    assert terminal["if"] == "${{ always() }}"
+
+
+@pytest.mark.parametrize(
+    "outcome,cancelled,api_failure,expected",
+    [
+        ("success", "false", False, 0),
+        ("failed", "false", False, 1),
+        ("success", "true", False, 1),
+        ("success", "false", True, 1),
+    ],
+)
+def test_finalizer_status_is_private_and_fails_closed(
+    tmp_path: Path, outcome: str, cancelled: str, api_failure: bool, expected: int
+) -> None:
+    (tmp_path / "v2").symlink_to(ROOT / "v2", target_is_directory=True)
+    (tmp_path / "runner").mkdir()
+    binary = tmp_path / "bin"
+    binary.mkdir()
+    python = binary / "python3"
+    python.write_text(
+        f"#!{sys.executable}\nimport json,os,sys\nif any('check_production_release.py' in a for a in sys.argv[1:]):\n output=sys.argv[sys.argv.index('--output')+1]; open(output, 'w').write(json.dumps({{'claim_id':14}})); raise SystemExit(0)\nos.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n"
+    )
+    python.chmod(0o700)
+    gh = binary / "gh"
+    gh.write_text(
+        '#!/usr/bin/env bash\nprintf \'%s\' "$*" >"$STATUS_MARKER"\nif [[ $API_FAILURE == 1 ]]; then exit 17; fi\n'
+    )
+    gh.chmod(0o700)
+    admission = {"claim_id": 14}
+    result = subprocess.run(
+        ["bash", "-c", _result_step("Record terminal release status")],
+        cwd=tmp_path,
+        env={
+            "PATH": str(binary) + os.pathsep + os.defpath,
+            "RUNNER_TEMP": str(tmp_path / "runner"),
+            "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+            "ADMISSION": json.dumps(admission),
+            "OUTCOME": outcome,
+            "UPLOAD": "success",
+            "CANCELLED": cancelled,
+            "GITHUB_REPOSITORY": "rhprasad0/nova-toll-budget-agent",
+            "GITHUB_RUN_ID": "15",
+            "GITHUB_RUN_ATTEMPT": "1",
+            "STATUS_MARKER": str(tmp_path / "status"),
+            "API_FAILURE": "1" if api_failure else "",
+        },
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if expected:
+        assert result.returncode != 0, result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+    assert "PRIVATE" not in result.stdout + result.stderr
+    assert (tmp_path / "status").exists()

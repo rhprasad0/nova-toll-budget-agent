@@ -13,7 +13,7 @@ import sys
 import tempfile
 import zipfile
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -29,6 +29,11 @@ SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+\Z")
 TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+\Z")
+PLAN_BUCKET = "nova-toll-tfstate-920534282028"
+PLAN_KMS_KEY = (
+    "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7"
+)
+PLAN_MAX_AGE = timedelta(hours=24)
 
 
 class AdmissionError(ValueError):
@@ -586,6 +591,108 @@ def revalidate(admission: dict[str, Any]) -> dict[str, Any]:
     return admission
 
 
+def _timestamp(value: object) -> datetime:
+    if not isinstance(value, str):
+        raise AdmissionError("malformed")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise AdmissionError("malformed") from error
+    if parsed.tzinfo is None:
+        raise AdmissionError("malformed")
+    return parsed.astimezone(UTC)
+
+
+def validate_saved_plan(
+    saved: dict[str, Any], admission: dict[str, Any], *, now: datetime | None = None
+) -> dict[str, Any]:
+    """Accept only the bounded plan description passed between protected jobs."""
+    expected = {
+        "schema_version",
+        "release_id",
+        "tag",
+        "candidate",
+        "bundle_id",
+        "bundle_digest",
+        "listener_run",
+        "listener_attempt",
+        "development_run",
+        "development_attempt",
+        "development_deployment",
+        "evidence_artifact",
+        "evidence_digest",
+        "consumer_run",
+        "consumer_attempt",
+        "claim_id",
+        "planner_run",
+        "planner_attempt",
+        "schema_versions",
+        "plan_counts",
+        "saved_plan",
+        "state",
+        "created_at",
+        "expires_at",
+    }
+    if set(saved) != expected or saved.get("schema_version") != 1:
+        raise AdmissionError("malformed")
+    for key in expected - {
+        "schema_version",
+        "planner_run",
+        "planner_attempt",
+        "plan_counts",
+        "saved_plan",
+        "state",
+        "created_at",
+        "expires_at",
+        "evidence_digest",
+    }:
+        if saved.get(key) != admission.get(key):
+            raise AdmissionError("binding")
+    _positive(saved.get("planner_run"))
+    _positive(saved.get("planner_attempt"))
+    if (
+        _positive(saved["planner_run"]) != _positive(admission["consumer_run"])
+        or _positive(saved["planner_attempt"])
+        != _positive(admission["consumer_attempt"])
+        or saved.get("evidence_digest")
+        != _mapping(admission["evidence_artifact"]).get("digest")
+    ):
+        raise AdmissionError("binding")
+    if not isinstance(saved["plan_counts"], dict):
+        raise AdmissionError("malformed")
+    plan, state = _mapping(saved["saved_plan"]), _mapping(saved["state"])
+    if set(plan) != {"bucket", "key", "version_id", "checksum", "kms_key_arn"} or set(
+        state
+    ) != {"lineage", "serial", "version_id"}:
+        raise AdmissionError("malformed")
+    if (
+        plan.get("bucket") != PLAN_BUCKET
+        or plan.get("kms_key_arn") != PLAN_KMS_KEY
+        or not isinstance(plan.get("key"), str)
+        or not re.fullmatch(
+            r"plans/release-[1-9][0-9]*-v[0-9]+(?:\.[0-9]+){2}/[1-9][0-9]*/release\.tfplan",
+            plan["key"],
+        )
+        or not isinstance(plan.get("version_id"), str)
+        or not plan["version_id"]
+        or not isinstance(plan.get("checksum"), str)
+        or not re.fullmatch(r"[A-Za-z0-9+/]{43}=", plan["checksum"])
+        or not isinstance(state.get("lineage"), str)
+        or not re.fullmatch(r"[0-9a-f-]{36}", state["lineage"])
+        or _positive(state.get("serial")) < 0
+        or not isinstance(state.get("version_id"), str)
+        or not state["version_id"]
+        or plan["key"]
+        != f"plans/release-{_positive(saved['release_id'])}-{saved['tag']}/{_positive(saved['planner_run'])}/release.tfplan"
+    ):
+        raise AdmissionError("malformed")
+    created, expires = _timestamp(saved["created_at"]), _timestamp(saved["expires_at"])
+    now = datetime.now(UTC) if now is None else now
+    if created > now or expires != created + PLAN_MAX_AGE or expires <= now:
+        raise AdmissionError("expired")
+    return saved
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -601,6 +708,10 @@ def _parser() -> argparse.ArgumentParser:
     revalidate_command = commands.add_parser("revalidate")
     revalidate_command.add_argument("--admission", type=Path, required=True)
     revalidate_command.add_argument("--output", type=Path, required=True)
+    saved_plan = commands.add_parser("validate-saved-plan")
+    saved_plan.add_argument("--admission", type=Path, required=True)
+    saved_plan.add_argument("--saved-plan", type=Path, required=True)
+    saved_plan.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -616,8 +727,13 @@ def main(argv: Iterable[str] | None = None) -> int:
             )
         elif args.command == "claim":
             result = claim(_mapping(_load(args.admission.read_bytes())))
-        else:
+        elif args.command == "revalidate":
             result = revalidate(_mapping(_load(args.admission.read_bytes())))
+        else:
+            result = validate_saved_plan(
+                _mapping(_load(args.saved_plan.read_bytes())),
+                _mapping(_load(args.admission.read_bytes())),
+            )
         args.output.write_text(
             json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n",
             encoding="utf-8",
