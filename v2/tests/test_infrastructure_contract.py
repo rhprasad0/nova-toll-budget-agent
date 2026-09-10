@@ -3777,9 +3777,7 @@ def test_production_release_plan_workflows_keep_trust_before_credentials_and_app
         jobs[name].get("environment") is None
         for name in ("admission", "claim", "planner", "release-result")
     )
-    assert str(jobs["migrate"]["uses"]).endswith(
-        "v2-production-migrations.yml@refs/heads/main"
-    )
+    assert str(jobs["migrate"]["uses"]).endswith("v2-production-migrations.yml@main")
     assert jobs["release-result"]["if"] == "${{ always() }}"
 
     admission_source = _workflow_run_source(jobs["admission"])

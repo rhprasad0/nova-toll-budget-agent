@@ -322,7 +322,7 @@ jobs:
       contents: read
       deployments: read
       id-token: write
-    uses: rhprasad0/nova-toll-budget-agent/.github/workflows/v2-production-migrations.yml@refs/heads/main
+    uses: rhprasad0/nova-toll-budget-agent/.github/workflows/v2-production-migrations.yml@main
     with:
       admission: ${{ needs.claim.outputs.admission }}
       saved_plan: ${{ needs.planner.outputs.saved_plan }}
