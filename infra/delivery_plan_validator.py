@@ -33,6 +33,14 @@ LEGACY_PACKAGES = ("agentcore.zip", "chat-proxy.zip", "loader.zip", "publisher.z
 TIMED_PACKAGES = (*LEGACY_PACKAGES, "timed-checks.zip")
 PACKAGES = LEGACY_PACKAGES
 TIMED_CHECKS_MARKER = "v2/scripts/build_timed_checks_zip.sh"
+PRODUCTION_CONTROL_MARKER = "v2/scripts/run_production_migrations.py"
+PRODUCTION_CONTROL_INPUTS = frozenset({
+    ".github/workflows/v2-production-migrations.yml",
+    "v2/scripts/adopt_production_baseline.py",
+    "v2/scripts/check_production_release.py",
+    PRODUCTION_CONTROL_MARKER,
+    "v2/scripts/run_production_migrations_workflow.sh",
+})
 
 
 def _packages_for_inputs(inputs: Mapping[str, Any]) -> tuple[str, ...]:
@@ -754,6 +762,22 @@ def _has_production_value(value: Any) -> bool:
     return any(_PRODUCTION_ACCOUNT in item or _PRODUCTION_MARKERS.search(item) for item in _walk_strings(value))
 
 
+def _manifest_has_production_value(manifest: Any) -> bool:
+    if not isinstance(manifest, dict):
+        return _has_production_value(manifest)
+    for key, value in manifest.items():
+        if key != "deployment_inputs" or not isinstance(value, dict):
+            if _has_production_value(key) or _has_production_value(value):
+                return True
+            continue
+        for source, digest in value.items():
+            if source not in PRODUCTION_CONTROL_INPUTS and _has_production_value(source):
+                return True
+            if _has_production_value(digest):
+                return True
+    return False
+
+
 def _validate_identity(identity: Any) -> None:
     if not isinstance(identity, dict):
         _reject("provider_identity_missing")
@@ -1068,6 +1092,9 @@ def _parse_manifest(manifest: Any) -> tuple[dict[str, Any], dict[str, list[dict[
         or any(not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest) for digest in packages.values())
     ):
         _reject("malformed_input")
+    production_inputs = set(inputs) & PRODUCTION_CONTROL_INPUTS
+    if production_inputs and production_inputs != PRODUCTION_CONTROL_INPUTS:
+        _reject("malformed_input")
     mutations: dict[str, dict[str, Any]] = {}
     permissions: dict[str, list[dict[str, Any]]] = {}
     for record in manifest["mutations"]:
@@ -1142,7 +1169,7 @@ def _validate_manifest_entry(address: str, declaration: Mapping[str, Any], permi
 def validate_plan(plan: Any, manifest: Any, identity: Any | None = None) -> dict[str, Any]:
     """Validate a plan and release manifest, returning only sanitized data."""
     try:
-        if _has_production_value(manifest) or (identity is not None and _has_production_value(identity)):
+        if _manifest_has_production_value(manifest) or (identity is not None and _has_production_value(identity)):
             _reject("production_target")
         _validate_identity(identity)
         records = _parse_plan(plan)
