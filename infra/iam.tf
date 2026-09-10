@@ -1468,6 +1468,13 @@ locals {
     ], statement.Sid)
   ]
 
+  production_delivery_dynamodb_default_key_statement = {
+    Sid      = "ReadProductionDynamoDBDefaultKey"
+    Effect   = "Allow"
+    Action   = ["kms:DescribeKey"]
+    Resource = ["arn:aws:kms:us-east-1:920534282028:key/52601535-3171-4f21-af72-125daaf1347d"]
+  }
+
   production_delivery_read_prefixes = ["Get", "List", "Describe", "GET"]
   production_delivery_discovery_statements = [
     for statement in local.production_delivery_application_policy_statements : merge(statement, {
@@ -1708,7 +1715,7 @@ locals {
     })
     data = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.production_delivery_application_policy_statements, 17, 24)
+      Statement = concat(slice(local.production_delivery_application_policy_statements, 17, 24), [local.production_delivery_dynamodb_default_key_statement])
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
@@ -1749,7 +1756,7 @@ locals {
     })
     data = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.production_delivery_discovery_statements, 17, 24)
+      Statement = concat(slice(local.production_delivery_discovery_statements, 17, 24), [local.production_delivery_dynamodb_default_key_statement])
     })
     runtime = jsonencode({
       Version   = "2012-10-17"

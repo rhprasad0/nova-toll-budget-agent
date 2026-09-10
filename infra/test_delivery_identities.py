@@ -158,7 +158,7 @@ def rendered_production_policies() -> tuple[
         }}
 
         output "production_delivery_planner_statements" {{
-          value = concat(local.production_delivery_planner_state_statements, local.production_delivery_discovery_statements, [local.production_delivery_agentcore_default_statement])
+          value = concat(local.production_delivery_planner_state_statements, local.production_delivery_discovery_statements, [local.production_delivery_dynamodb_default_key_statement, local.production_delivery_agentcore_default_statement])
         }}
 
         output "production_delivery_application_policy_statements" {{
@@ -816,7 +816,9 @@ def main() -> None:
         for key in planner_keys
         for statement in planner_documents[key]["Statement"]
     ]
-    assert split_statements == planner_statements
+    assert {json.dumps(statement, sort_keys=True) for statement in split_statements} == {
+        json.dumps(statement, sort_keys=True) for statement in planner_statements
+    }
     assert len({json.dumps(statement, sort_keys=True) for statement in split_statements}) == len(split_statements)
     for key, policy in planner_documents.items():
         rendered = json.dumps(policy, separators=(",", ":"), ensure_ascii=False)
@@ -832,6 +834,20 @@ def main() -> None:
     assert len({statement["Sid"] for statement in rendered_planner_discovery}) == len(rendered_planner_discovery)
     planner_json = json.dumps(planner_documents, sort_keys=True)
     assert "iam:PassRole" not in planner_json
+    expected_dynamodb_default_key_read = {
+        "Action": ["kms:DescribeKey"],
+        "Effect": "Allow",
+        "Resource": [
+            "arn:aws:kms:us-east-1:920534282028:key/52601535-3171-4f21-af72-125daaf1347d"
+        ],
+        "Sid": "ReadProductionDynamoDBDefaultKey",
+    }
+    for documents in (planner_documents, deploy_documents):
+        assert [
+            statement
+            for statement in documents["data"]["Statement"]
+            if statement["Sid"] == "ReadProductionDynamoDBDefaultKey"
+        ] == [expected_dynamodb_default_key_read]
     for statement in split_statements:
         if "s3:GetObjectVersion" in statement.get("Action", []):
             assert all("/plans/" not in resource for resource in statement["Resource"])
@@ -855,7 +871,12 @@ def main() -> None:
         statement
         for key in deploy_application_keys
         for statement in deploy_documents[key]["Statement"]
-        if statement["Sid"] not in {"ReadProductionAgentCoreDefaultEndpoint", "PassProductionAgentCoreRuntimeRole"}
+        if statement["Sid"]
+        not in {
+            "ReadProductionAgentCoreDefaultEndpoint",
+            "PassProductionAgentCoreRuntimeRole",
+            "ReadProductionDynamoDBDefaultKey",
+        }
     ]
     assert rendered_deploy_application == application_statements
     assert len({statement["Sid"] for statement in rendered_deploy_application}) == len(rendered_deploy_application)
