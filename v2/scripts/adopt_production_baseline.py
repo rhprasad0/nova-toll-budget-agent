@@ -683,9 +683,57 @@ GRANT SELECT ON tollchat_migration.schema_history TO nova_toll_admin;
     RAISE EXCEPTION 'extensions or foreign access are outside the canonical contract';
   END IF;
 """
-    # Only these five non-owner PostGIS grants appear in canonical Oracle SQL.
-    # NULL ACLs on other types retain PostgreSQL's default type USAGE; the
-    # geography/geometry types used by the app have explicit restricted ACLs.
+    rds_postgis_type_guard = """
+  IF EXISTS (
+    WITH targets(type_name, type_oid, type_owner) AS (
+      SELECT expected.type_name, type.oid, owner.rolname
+      FROM (VALUES ('geometry'), ('geography')) AS expected(type_name)
+      LEFT JOIN pg_type type
+        ON type.typnamespace = 'oracle'::regnamespace AND type.typname = expected.type_name
+      LEFT JOIN pg_roles owner ON owner.oid = type.typowner
+    ), postgis(extension_oid) AS (
+      SELECT extension.oid
+      FROM pg_extension extension
+      JOIN pg_namespace namespace ON namespace.oid = extension.extnamespace
+      JOIN pg_roles owner ON owner.oid = extension.extowner
+      WHERE extension.extname = 'postgis' AND namespace.nspname = 'oracle'
+        AND owner.rolname = 'rdsadmin' AND extension.extversion = '3.5.6'
+    ), expected_acl(type_name, grantee, grantor, privilege_type, is_grantable) AS (
+      VALUES
+        ('geometry', 'rdsadmin', 'rdsadmin', 'USAGE', false),
+        ('geometry', 'PUBLIC', 'rdsadmin', 'USAGE', false),
+        ('geography', 'rdsadmin', 'rdsadmin', 'USAGE', false),
+        ('geography', 'PUBLIC', 'rdsadmin', 'USAGE', false)
+    ), actual_acl(type_name, grantee, grantor, privilege_type, is_grantable) AS (
+      SELECT target.type_name,
+             CASE WHEN privilege.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
+             grantor.rolname,
+             privilege.privilege_type, privilege.is_grantable
+      FROM targets target
+      CROSS JOIN LATERAL aclexplode((SELECT typacl FROM pg_type WHERE oid = target.type_oid)) privilege
+      LEFT JOIN pg_roles grantee ON grantee.oid = privilege.grantee
+      LEFT JOIN pg_roles grantor ON grantor.oid = privilege.grantor
+    )
+    SELECT 1 FROM targets target
+    WHERE target.type_oid IS NULL OR target.type_owner IS DISTINCT FROM 'rdsadmin'
+       OR (SELECT count(*) FROM postgis) <> 1
+       OR (SELECT count(*) FROM pg_depend dependency
+           WHERE dependency.classid = 'pg_type'::regclass AND dependency.objid = target.type_oid
+             AND dependency.refclassid = 'pg_extension'::regclass) <> 1
+       OR NOT EXISTS (
+         SELECT 1 FROM pg_depend dependency JOIN postgis ON postgis.extension_oid = dependency.refobjid
+         WHERE dependency.classid = 'pg_type'::regclass AND dependency.objid = target.type_oid
+           AND dependency.refclassid = 'pg_extension'::regclass AND dependency.deptype = 'e'
+       )
+       OR (SELECT count(*) FROM actual_acl WHERE actual_acl.type_name = target.type_name) <> 2
+       OR EXISTS (SELECT * FROM expected_acl EXCEPT SELECT * FROM actual_acl)
+       OR EXISTS (SELECT * FROM actual_acl EXCEPT SELECT * FROM expected_acl)
+  ) THEN
+    RAISE EXCEPTION 'RDS PostGIS type ACL is outside the exact adoption exception';
+  END IF;
+"""
+    # Canonical Oracle SQL grants only the function and relation rows below;
+    # the two type rows are checked by the exact RDS exception above.
     extension_acl_guard = """
   IF EXISTS (
     WITH actual(kind, object_name, grantee, privilege_type, is_grantable) AS (
@@ -723,8 +771,8 @@ GRANT SELECT ON tollchat_migration.schema_history TO nova_toll_admin;
         ('function', 'st_distance(oracle.geography, oracle.geography, boolean)', 'oracle_owner', 'EXECUTE', false),
         ('function', 'st_asgeojson(oracle.geography, integer, integer)', 'oracle_owner', 'EXECUTE', false),
         ('relation', 'spatial_ref_sys', 'oracle_owner', 'SELECT', false),
-        ('type', 'geometry', 'oracle_owner', 'USAGE', false),
-        ('type', 'geography', 'oracle_owner', 'USAGE', false)
+        ('type', 'geometry', 'PUBLIC', 'USAGE', false),
+        ('type', 'geography', 'PUBLIC', 'USAGE', false)
     )
     SELECT 1 FROM actual FULL JOIN expected
       USING (kind, object_name, grantee, privilege_type, is_grantable)
@@ -792,6 +840,7 @@ BEGIN
 {column_acl_guard}
 {behavior_guard}
 {environment_guard}
+{rds_postgis_type_guard}
 {extension_acl_guard}
   IF (SELECT nspowner::regrole::text FROM pg_namespace WHERE nspname = 'pricing') <> {_sql_literal(ADMIN_ROLE)}
      OR EXISTS (
@@ -1265,6 +1314,7 @@ BEGIN
     RAISE EXCEPTION 'Oracle schema ownership or ACL boundary changed';
   END IF;
 {environment_guard}
+{rds_postgis_type_guard}
 {extension_acl_guard}
   SELECT count(*) INTO expected_count FROM tollchat_migration.schema_history;
   IF expected_count <> 2
