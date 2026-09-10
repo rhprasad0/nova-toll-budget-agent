@@ -40,7 +40,18 @@ def test_saved_plan_rejects_valid_looking_wrong_bindings() -> None:
         "development_run": 12,
         "development_attempt": 1,
         "development_deployment": 13,
-        "evidence_artifact": {"id": 14, "digest": "sha256:" + "b" * 64},
+        "evidence_artifact": {
+            "id": 14,
+            "name": "v2-development-evidence-12-1",
+            "size_in_bytes": 4096,
+            "archive_download_url": "https://api.github.test/artifacts/14/zip",
+            "expired": False,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:01:00Z",
+            "expires_at": "2999-01-01T00:00:00Z",
+            "workflow_run": {"id": 12},
+            "digest": "sha256:" + "b" * 64,
+        },
         "bundle_id": 15,
         "bundle_digest": "sha256:" + "c" * 64,
         "schema_versions": {"pricing": "1.3.0", "oracle": "1.14.0"},
@@ -50,6 +61,7 @@ def test_saved_plan_rejects_valid_looking_wrong_bindings() -> None:
     }
     saved = {
         **admission,
+        "evidence_artifact": {"id": 14, "digest": "sha256:" + "b" * 64},
         "schema_version": 1,
         "evidence_digest": admission["evidence_artifact"]["digest"],
         "planner_run": 16,
@@ -71,9 +83,17 @@ def test_saved_plan_rejects_valid_looking_wrong_bindings() -> None:
         },
     }
     assert release.validate_saved_plan(saved, admission, now=now) == saved
-    for field, value in (("key", "plans/release-8-v1.2.3/16/release.tfplan"),):
+    for path, value in (
+        (("saved_plan", "key"), "plans/release-8-v1.2.3/16/release.tfplan"),
+        (("evidence_artifact", "id"), 99),
+        (("evidence_artifact", "digest"), "sha256:" + "d" * 64),
+        (("evidence_digest",), "sha256:" + "d" * 64),
+    ):
         altered = json.loads(json.dumps(saved))
-        altered["saved_plan"][field] = value
+        target: dict[str, Any] = altered
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
         with pytest.raises(release.AdmissionError):
             release.validate_saved_plan(altered, admission, now=now)
     expired = json.loads(json.dumps(saved))
@@ -268,12 +288,25 @@ def test_admission_accepts_a_current_full_development_rerun(
             {"pricing": "1.3.0", "oracle": "1.14.0"},
         ),
     )
-    monkeypatch.setattr(
-        release, "_artifacts", lambda *_args: {"id": 13, "digest": "sha256:" + "c" * 64}
-    )
+    full_artifact = {
+        "id": 13,
+        "node_id": "MDg6QXJ0aWZhY3QxMw==",
+        "name": "v2-development-evidence-12-2",
+        "size_in_bytes": 4096,
+        "url": "https://api.github.test/artifacts/13",
+        "archive_download_url": "https://api.github.test/artifacts/13/zip",
+        "expired": False,
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:01:00Z",
+        "expires_at": "2999-01-01T00:00:00Z",
+        "workflow_run": {"id": 12, "head_sha": candidate},
+        "digest": "sha256:" + "c" * 64,
+    }
+    monkeypatch.setattr(release, "_artifacts", lambda *_args: full_artifact)
     admitted = release.admit(event, 11, 14, 1)
     assert admitted["candidate"] == candidate
     assert admitted["development_attempt"] == 2
+    assert admitted["evidence_artifact"] == full_artifact
 
 
 def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(

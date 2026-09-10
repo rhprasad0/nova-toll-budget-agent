@@ -637,6 +637,7 @@ def validate_saved_plan(
         raise AdmissionError("malformed")
     for key in expected - {
         "schema_version",
+        "evidence_artifact",
         "planner_run",
         "planner_attempt",
         "plan_counts",
@@ -648,6 +649,16 @@ def validate_saved_plan(
     }:
         if saved.get(key) != admission.get(key):
             raise AdmissionError("binding")
+    saved_artifact = _mapping(saved["evidence_artifact"])
+    admission_artifact = _mapping(admission["evidence_artifact"])
+    if (
+        set(saved_artifact) != {"id", "digest"}
+        or _positive(saved_artifact.get("id"))
+        != _positive(admission_artifact.get("id"))
+        or _digest(saved_artifact.get("digest"))
+        != _digest(admission_artifact.get("digest"))
+    ):
+        raise AdmissionError("binding")
     _positive(saved.get("planner_run"))
     _positive(saved.get("planner_attempt"))
     if (

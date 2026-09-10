@@ -120,7 +120,18 @@ def _environment(tmp_path: Path, failure: str) -> dict[str, str]:
                 "development_run": 12,
                 "development_attempt": 2,
                 "development_deployment": 9,
-                "evidence_artifact": {"id": 13, "digest": "sha256:" + "c" * 64},
+                "evidence_artifact": {
+                    "id": 13,
+                    "name": "v2-development-evidence-12-2",
+                    "size_in_bytes": 4096,
+                    "archive_download_url": "https://api.github.test/artifacts/13/zip",
+                    "expired": False,
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "updated_at": "2026-01-01T00:01:00Z",
+                    "expires_at": "2999-01-01T00:00:00Z",
+                    "workflow_run": {"id": 12},
+                    "digest": "sha256:" + "c" * 64,
+                },
                 "bundle_id": 10,
                 "bundle_digest": "sha256:" + "b" * 64,
                 "schema_versions": {"pricing": "1.3.0", "oracle": "1.14.0"},
@@ -225,6 +236,10 @@ def test_actual_planner_shell_fails_privately_and_saves_exact_evidence(
         evidence = json.loads((tmp_path / "output").read_text().split("=", 1)[1])
         assert evidence["listener_attempt"] == 1
         assert evidence["development_attempt"] == 2
+        assert evidence["evidence_artifact"] == {
+            "id": 13,
+            "digest": "sha256:" + "c" * 64,
+        }
         assert evidence["saved_plan"]["version_id"] == "private-version"
         assert evidence["saved_plan"]["key"] == (tmp_path / "uploaded").read_text()
         assert evidence["state"]["version_id"] == "state-version"
