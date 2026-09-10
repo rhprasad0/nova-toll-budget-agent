@@ -165,10 +165,10 @@ class ReleaseManifestTests(unittest.TestCase):
     def test_accepts_reviewed_development_overlay_scaffold(self):
         reviewed = {
             "infra/account-contract.json": b"{}\n",
-            "v2/infra/main.tf": b'terraform {}\n',
+            "v2/infra/main.tf": b"terraform {}\n",
             "v2/infra/.terraform.lock.hcl": b"lock\n",
             "v2/infra/backend.development.hcl": b"backend\n",
-            "v2/infra/development.tfvars": b"environment = \"development\"\n",
+            "v2/infra/development.tfvars": b'environment = "development"\n',
             "v2/infra/lambda-stub/handler.py": b"def handler(event, context): pass\n",
         }
         bundle = self.root / "development-overlay"
@@ -221,7 +221,7 @@ class ReleaseManifestTests(unittest.TestCase):
         self.enable_timed_mode()
         self.assertEqual(self.verify()["status"], "accepted")
 
-        missing = sorted(release_manifest.TIMED_INPUTS)[0]
+        missing = min(release_manifest.TIMED_INPUTS)
         self.manifest_value["deployment_inputs"].pop(missing)
         self.write_manifest()
         self.assert_rejected("inventory_incomplete")
@@ -238,6 +238,38 @@ class ReleaseManifestTests(unittest.TestCase):
             mock.patch.object(release_manifest, "INPUT_PREFIXES", ()),
         ):
             self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
+
+    def test_production_control_inventory_is_feature_detected_and_complete(self):
+        non_marker = next(
+            path
+            for path in sorted(release_manifest.PRODUCTION_CONTROL_INPUTS)
+            if path != release_manifest.PRODUCTION_CONTROL_MARKER
+        )
+        with (
+            mock.patch.object(release_manifest, "EXACT_INPUTS", {"input.txt"}),
+            mock.patch.object(release_manifest, "INPUT_PREFIXES", ()),
+        ):
+            self.track(non_marker)
+            self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
+            self.track(release_manifest.PRODUCTION_CONTROL_MARKER)
+            with self.assertRaisesRegex(
+                release_manifest.Invalid, "^inventory_incomplete$"
+            ):
+                release_manifest._tracked_inputs(self.root)
+            for relative in sorted(release_manifest.PRODUCTION_CONTROL_INPUTS):
+                if relative not in {
+                    non_marker,
+                    release_manifest.PRODUCTION_CONTROL_MARKER,
+                }:
+                    self.track(relative)
+            expected = sorted(
+                {"input.txt", *release_manifest.PRODUCTION_CONTROL_INPUTS}
+            )
+            self.assertEqual(release_manifest._tracked_inputs(self.root), expected)
+            release_manifest._verify_inputs(
+                self.root,
+                {relative: digest(self.root / relative) for relative in expected},
+            )
 
     def test_rejects_missing_symlinked_and_extra_inputs(self):
         self.input.unlink()
@@ -333,9 +365,7 @@ class ReleaseManifestTests(unittest.TestCase):
             ),
             mock.patch.object(release_manifest, "BUNDLE_INPUT_PREFIXES", ()),
         ):
-            self.assertEqual(
-                release_manifest._tracked_inputs(self.root), ["input.txt"]
-            )
+            self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
             self.track("bundle.sh")
             self.track("bundle-helper.py")
             self.track("db/schema.sql")
@@ -368,9 +398,7 @@ class ReleaseManifestTests(unittest.TestCase):
             self.assertEqual(selected, expected)
             self.assertNotIn("v2/scripts/unrelated_helper.py", selected)
 
-            inputs = {
-                relative: digest(self.root / relative) for relative in selected
-            }
+            inputs = {relative: digest(self.root / relative) for relative in selected}
             release_manifest._verify_inputs(self.root, inputs)
             for relative in helpers:
                 omitted = inputs.copy()
@@ -380,14 +408,14 @@ class ReleaseManifestTests(unittest.TestCase):
                 ):
                     release_manifest._verify_inputs(self.root, omitted)
 
-            for relative in helpers:
+            for relative, content in helpers.items():
                 path = self.root / relative
                 path.write_bytes(b"changed\n")
                 with self.assertRaisesRegex(
                     release_manifest.Invalid, "^input_digest_mismatch$"
                 ):
                     release_manifest._verify_inputs(self.root, inputs)
-                path.write_bytes(helpers[relative])
+                path.write_bytes(content)
 
     def test_bundle_selects_archived_robots_input(self):
         self.assertIn("v2/agent/robots.txt", release_manifest.BUNDLE_FIXED_INPUTS)

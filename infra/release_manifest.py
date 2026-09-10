@@ -16,6 +16,8 @@ from typing import Any, NoReturn
 try:
     from .delivery_plan_validator import (
         LEGACY_PACKAGES,
+        PRODUCTION_CONTROL_INPUTS,
+        PRODUCTION_CONTROL_MARKER,
         TIMED_CHECKS_MARKER,
         TIMED_PACKAGES,
         _packages_for_inputs,
@@ -24,11 +26,15 @@ try:
 except ImportError:  # Direct script execution.
     from delivery_plan_validator import (
         LEGACY_PACKAGES,
+        PRODUCTION_CONTROL_INPUTS,
+        PRODUCTION_CONTROL_MARKER,
         TIMED_CHECKS_MARKER,
         TIMED_PACKAGES,
         _packages_for_inputs,
         validate_plan,
     )
+
+__all__ = ("TIMED_PACKAGES",)
 
 
 MANIFEST_KEYS = {
@@ -47,16 +53,18 @@ PROVIDER_IDENTITY = {
     "lock_identity": "V2-AWS60",
 }
 PACKAGES = LEGACY_PACKAGES
-TIMED_INPUTS = frozenset({
-    "v2/eval/run_evaluation.py",
-    "v2/eval/test-cases.jsonl",
-    "v2/infra/timed_checks.tf",
-    "v2/lambdas/timed_checks/handler.py",
-    TIMED_CHECKS_MARKER,
-    "v2/scripts/timed-checks-requirements.in",
-    "v2/scripts/timed-checks-requirements.txt",
-    "v2/timed_checks.py",
-})
+TIMED_INPUTS = frozenset(
+    {
+        "v2/eval/run_evaluation.py",
+        "v2/eval/test-cases.jsonl",
+        "v2/infra/timed_checks.tf",
+        "v2/lambdas/timed_checks/handler.py",
+        TIMED_CHECKS_MARKER,
+        "v2/scripts/timed-checks-requirements.in",
+        "v2/scripts/timed-checks-requirements.txt",
+        "v2/timed_checks.py",
+    }
+)
 EXACT_INPUTS = {
     ".github/workflows/v2-development-delivery.yml",
     ".github/workflows/v2-development-plan.yml",
@@ -218,7 +226,12 @@ def _valid_relative(path: str) -> bool:
     )
 
 
-def _selected(path: str, bundle_enabled: bool = False, timed_enabled: bool = False) -> bool:
+def _selected(
+    path: str,
+    bundle_enabled: bool = False,
+    timed_enabled: bool = False,
+    production_controls_enabled: bool = False,
+) -> bool:
     if path in TIMED_INPUTS:
         return timed_enabled
     selected = (
@@ -227,8 +240,10 @@ def _selected(path: str, bundle_enabled: bool = False, timed_enabled: bool = Fal
         or (path.startswith("infra/") and path.endswith(".tf"))
         or (path.startswith("v2/infra/") and path.endswith(".tf"))
     )
-    if selected or not bundle_enabled:
-        return selected
+    if selected or (production_controls_enabled and path in PRODUCTION_CONTROL_INPUTS):
+        return True
+    if not bundle_enabled:
+        return False
     return path in BUNDLE_FIXED_INPUTS | BUNDLE_OPTIONAL_INPUTS or any(
         path.startswith(prefix) and path.endswith(".sql")
         for prefix in BUNDLE_INPUT_PREFIXES
@@ -249,9 +264,16 @@ def _tracked_inputs(repo_root: Path, timed_enabled: bool = False) -> list[str]:
     if timed_enabled and not TIMED_INPUTS <= tracked_set:
         _reject("inventory_incomplete")
     bundle_enabled = BUNDLE_MARKER in tracked
+    production_controls_enabled = PRODUCTION_CONTROL_MARKER in tracked
     if bundle_enabled and not BUNDLE_FIXED_INPUTS.issubset(tracked):
         _reject("inventory_incomplete")
-    paths = sorted(path for path in tracked if _selected(path, bundle_enabled, timed_enabled))
+    if production_controls_enabled and not PRODUCTION_CONTROL_INPUTS.issubset(tracked):
+        _reject("inventory_incomplete")
+    paths = sorted(
+        path
+        for path in tracked
+        if _selected(path, bundle_enabled, timed_enabled, production_controls_enabled)
+    )
     if not paths or set(EXACT_INPUTS) - set(paths):
         _reject("inventory_incomplete")
     return paths
@@ -280,7 +302,9 @@ def _validate_manifest(value: Any) -> tuple[dict[str, str], dict[str, str]]:
     if not timed_enabled and timed_inputs:
         _reject("inventory_invalid")
     expected_packages = _packages_for_inputs(inputs)
-    if set(packages) != set(expected_packages) or list(packages) != list(expected_packages):
+    if set(packages) != set(expected_packages) or list(packages) != list(
+        expected_packages
+    ):
         _reject("package_inventory_invalid")
     if any(
         not isinstance(digest, str) or not HEX64.fullmatch(digest)
@@ -323,7 +347,9 @@ def _verify_inputs(repo_root: Path, expected: dict[str, str]) -> None:
             _reject("input_digest_mismatch")
 
 
-def _read_checksums(path: Path, package_names: tuple[str, ...] = PACKAGES) -> dict[str, str]:
+def _read_checksums(
+    path: Path, package_names: tuple[str, ...] = PACKAGES
+) -> dict[str, str]:
     try:
         mode = path.lstat().st_mode
         if not stat.S_ISREG(mode) or path.is_symlink():
@@ -354,7 +380,10 @@ def _verify_packages(
     except OSError:
         _reject("package_inventory_invalid")
     package_names = tuple(expected)
-    if names != package_names or _read_checksums(checksums_path, package_names) != expected:
+    if (
+        names != package_names
+        or _read_checksums(checksums_path, package_names) != expected
+    ):
         _reject("package_inventory_invalid")
     for name, digest in expected.items():
         if _digest_file(package_dir / name, "package_unreadable") != digest:
@@ -469,7 +498,7 @@ def main(argv: list[str] | None = None) -> int:
         result = verify(args)
     except Invalid as error:
         result = {"status": "rejected", "reason_code": str(error)}
-    except Exception:
+    except Exception:  # noqa: BLE001 - untrusted bundle input fails closed.
         result = {"status": "rejected", "reason_code": "malformed_input"}
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0 if result["status"] == "accepted" else 1

@@ -10,6 +10,7 @@ from infra.delivery_plan_validator import (
     EXPECTED_IDENTITY,
     EXPECTED_PROVIDER_NAME,
     LAMBDA_FUNCTION_NAMES,
+    PRODUCTION_CONTROL_INPUTS,
     _timed_schedule_plan_value,
     validate_plan as _validate_plan,
 )
@@ -1115,6 +1116,39 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         missing = lambda_plan()
         del missing["resource_changes"][0]["change"]["after"]["s3_key"]
         self.assert_reason("invalid_resource_identity", plan=missing)
+
+    def test_accepts_only_complete_fixed_production_control_inputs(self):
+        manifest = lambda_manifest()
+        manifest["deployment_inputs"] = {
+            path: HASH
+            for path in sorted({"v2/infra/main.tf", *PRODUCTION_CONTROL_INPUTS})
+        }
+        self.assertEqual(validate_plan(lambda_plan(), manifest)["status"], "accepted")
+
+        incomplete = copy.deepcopy(manifest)
+        incomplete["deployment_inputs"].pop(next(iter(PRODUCTION_CONTROL_INPUTS)))
+        self.assert_reason("malformed_input", manifest=incomplete)
+
+        production_value = copy.deepcopy(manifest)
+        production_value["deployment_inputs"][
+            "v2/scripts/run_production_migrations.py"
+        ] = "production"
+        self.assert_reason("production_target", manifest=production_value)
+
+        same_filename_elsewhere = copy.deepcopy(manifest)
+        same_filename_elsewhere["deployment_inputs"][
+            "other/v2-production-migrations.yml"
+        ] = HASH
+        self.assert_reason("production_target", manifest=same_filename_elsewhere)
+
+        unknown_production_path = copy.deepcopy(manifest)
+        unknown_production_path["deployment_inputs"][
+            "v2/scripts/unknown-production-control.py"
+        ] = HASH
+        self.assert_reason("production_target", manifest=unknown_production_path)
+
+        production_identity = dict(EXPECTED_IDENTITY, account="920534282028")
+        self.assert_reason("production_target", manifest=manifest, identity=production_identity)
 
     def test_rejects_realized_production_markers_at_boundaries(self):
         for marker in (
