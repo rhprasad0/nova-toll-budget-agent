@@ -190,7 +190,6 @@
       "action": "update",
       "operation_class": "artifact-upload",
       "changed_fields": [
-        "source",
         "source_hash"
       ]
     },
@@ -199,7 +198,6 @@
       "action": "update",
       "operation_class": "artifact-upload",
       "changed_fields": [
-        "source",
         "source_hash"
       ]
     },

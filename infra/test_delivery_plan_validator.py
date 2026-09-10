@@ -621,7 +621,10 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "aws_lambda_function.timed_checks",
                 "aws_s3_object.timed_checks",
             }
-            if address.startswith('aws_scheduler_schedule.timed_checks["'):
+            if address in {"aws_s3_object.agentcore", "aws_s3_object.tollchat_proxy"}:
+                action = "update"
+                fields = ("source_hash",)
+            elif address.startswith('aws_scheduler_schedule.timed_checks["'):
                 fields = ("schedule_expression",)
             elif address in {
                 "aws_lambda_function.tollchat_proxy",
@@ -666,6 +669,28 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             }
             result = validate_plan(plan, manifest)
             self.assertEqual(result["status"], "accepted", address)
+            if address == "aws_s3_object.agentcore":
+                undeclared = _plan(
+                    [
+                        _resource_change(
+                            address,
+                            "update",
+                            {
+                                "source": "old",
+                                "source_hash": "old",
+                                **dict(spec.create_identity),
+                            },
+                            {
+                                "source": "new",
+                                "source_hash": "new",
+                                **dict(spec.create_identity),
+                            },
+                        )
+                    ]
+                )
+                self.assert_reason(
+                    "manifest_mutation_mismatch", plan=undeclared, manifest=manifest
+                )
 
     def test_committed_development_manifest_covers_full_package_graph(self):
         manifest = json.loads(
@@ -676,8 +701,8 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         expected_mutations = {
             "aws_lambda_function.loader": ("lambda-code", ("filename", "source_code_hash")),
             "aws_lambda_function.publisher": ("lambda-code", ("filename", "source_code_hash")),
-            "aws_s3_object.agentcore": ("artifact-upload", ("source", "source_hash")),
-            "aws_s3_object.tollchat_proxy": ("artifact-upload", ("source", "source_hash")),
+            "aws_s3_object.agentcore": ("artifact-upload", ("source_hash",)),
+            "aws_s3_object.tollchat_proxy": ("artifact-upload", ("source_hash",)),
             "aws_lambda_function.tollchat_proxy": ("lambda-code", ("s3_object_version", "source_code_hash")),
             "aws_s3_object.timed_checks": ("artifact-upload", ("source", "source_hash")),
             "aws_lambda_function.timed_checks": ("lambda-code", ("s3_object_version", "source_code_hash")),
