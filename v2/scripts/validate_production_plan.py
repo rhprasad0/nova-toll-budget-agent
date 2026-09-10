@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from collections.abc import Iterable
@@ -30,6 +31,26 @@ PERSISTENT = (
     "aws_kms_key",
     "aws_glue_catalog_",
     "aws_sqs_queue",
+)
+REJECTION_REASONS = frozenset(
+    {
+        "action",
+        "actions",
+        "address",
+        "data",
+        "drift",
+        "inventory",
+        "io",
+        "managed",
+        "moved",
+        "output",
+        "outputs",
+        "persistent",
+        "provider",
+        "replacement",
+        "shape",
+        "unknown-shape",
+    }
 )
 
 
@@ -82,12 +103,11 @@ def _actions(change: dict[str, Any]) -> tuple[str, ...]:
 def validate(plan: dict[str, Any], inventory_root: Path) -> dict[str, int]:
     managed, data = _inventory(inventory_root)
     changes = plan.get("resource_changes")
-    if (
-        not isinstance(changes, list)
-        or not isinstance(plan.get("resource_drift", []), list)
-        or plan.get("resource_drift", [])
-    ):
+    drift = plan.get("resource_drift", [])
+    if not isinstance(changes, list) or not isinstance(drift, list):
         raise PlanError("shape")
+    if drift:
+        raise PlanError("drift")
     outputs = plan.get("output_changes", {})
     if not isinstance(outputs, dict):
         raise PlanError("outputs")
@@ -176,7 +196,19 @@ def main(argv: Iterable[str] | None = None) -> int:
                 sort_keys=True,
             )
         )
-    except (OSError, json.JSONDecodeError, PlanError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, PlanError) as error:
+        reason = "io" if isinstance(error, OSError) else "shape"
+        if isinstance(error, PlanError):
+            reason = str(error)
+        if reason not in REJECTION_REASONS:
+            reason = "shape"
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            try:
+                with Path(summary).open("a", encoding="utf-8") as handle:
+                    handle.write(f"production_plan_rejection={reason}\n")
+            except OSError:
+                pass
         print("production plan gate: rejected", file=sys.stderr)
         return 1
     return 0

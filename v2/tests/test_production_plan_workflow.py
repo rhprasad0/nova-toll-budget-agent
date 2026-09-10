@@ -96,7 +96,10 @@ elif name == "terraform":
             sys.exit(18)
         pathlib.Path(next(arg.split("=", 1)[1] for arg in args if arg.startswith("-out="))).write_bytes(b"PRIVATE_PLAN")
     elif "show" in args:
-        print(json.dumps({"resource_changes": [{"address": "aws_s3_bucket.site", "mode": "managed", "provider_name": "registry.terraform.io/hashicorp/aws", "change": {"actions": ["no-op"], "after_unknown": {}}}], "output_changes": {}}))
+        plan = {"resource_changes": [{"address": "aws_s3_bucket.site", "mode": "managed", "provider_name": "registry.terraform.io/hashicorp/aws", "change": {"actions": ["no-op"], "after_unknown": {}}}], "output_changes": {}}
+        if mode == "validator":
+            plan["resource_drift"] = [{"private-malicious-plan-value": "PRIVATE_SENTINEL"}]
+        print(json.dumps(plan))
     elif "state" in args and "pull" in args:
         print(json.dumps({"lineage": "11111111-1111-1111-1111-111111111111", "serial": 1}))
     else:
@@ -208,6 +211,7 @@ def test_reusable_migration_permissions_and_cancellation_env_are_valid() -> None
         ("", ""),
         ("account", "account-identity"),
         ("plan", "plan"),
+        ("validator", "validator"),
         ("upload", "artifact-metadata"),
         ("version", "artifact-metadata"),
         ("checksum", "artifact-metadata"),
@@ -236,7 +240,10 @@ def test_actual_planner_shell_fails_privately_and_saves_exact_evidence(
         assert result.returncode != 0
         assert result.stderr.count("status=fail") == 1, result.stderr
         assert f"stage={stage} status=fail" in result.stderr
-        if failure in {"account", "plan", "upload"}:
+        if failure == "validator":
+            assert result.stdout == "production_plan_rejection=drift\n"
+            assert "private-malicious-plan-value" not in result.stdout + result.stderr
+        if failure in {"account", "plan", "validator", "upload"}:
             assert not (tmp_path / "uploaded").exists()
     else:
         assert result.returncode == 0, result.stderr
