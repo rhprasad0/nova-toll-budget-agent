@@ -317,6 +317,11 @@ jobs:
   migrate:
     needs: [claim, planner]
     if: needs.planner.result == 'success'
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+      id-token: write
     uses: rhprasad0/nova-toll-budget-agent/.github/workflows/v2-production-migrations.yml@refs/heads/main
     with:
       admission: ${{ needs.claim.outputs.admission }}
@@ -341,7 +346,7 @@ jobs:
         PLANNER: ${{ needs.planner.result }}
         MIGRATE: ${{ needs.migrate.result }}
         MIGRATION_EVIDENCE: ${{ needs.migrate.outputs.delivery_evidence }}
-        CANCELLED: ${{ cancelled() }}
+        CANCELLED: ${{ job.status == 'cancelled' }}
       run: |
         set -euo pipefail
         umask 077
@@ -386,7 +391,7 @@ jobs:
         ADMISSION: ${{ needs.claim.outputs.admission }}
         OUTCOME: ${{ steps.evidence.outputs.outcome }}
         UPLOAD: ${{ steps.upload.outcome }}
-        CANCELLED: ${{ cancelled() }}
+        CANCELLED: ${{ job.status == 'cancelled' }}
       run: |
         set -euo pipefail
         umask 077

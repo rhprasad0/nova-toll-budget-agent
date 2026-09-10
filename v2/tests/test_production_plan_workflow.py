@@ -13,6 +13,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/v2-production-plan.yml"
+MIGRATION_WORKFLOW = ROOT / ".github/workflows/v2-production-migrations.yml"
 KMS = "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7"
 
 
@@ -158,6 +159,27 @@ def _environment(tmp_path: Path, failure: str) -> dict[str, str]:
         "GITHUB_RUN_ID": "15",
         "GITHUB_RUN_ATTEMPT": "1",
     }
+
+
+def test_reusable_migration_permissions_and_cancellation_env_are_valid() -> None:
+    workflow: dict[str, Any] = yaml.safe_load(WORKFLOW.read_text())
+    migration: dict[str, Any] = yaml.safe_load(MIGRATION_WORKFLOW.read_text())
+    permissions = {
+        "actions": "read",
+        "contents": "read",
+        "deployments": "read",
+        "id-token": "write",
+    }
+
+    assert workflow["jobs"]["migrate"]["permissions"] == permissions
+    assert migration["jobs"]["migrate"]["permissions"] == permissions
+    for name in ("evidence", "Record terminal release status"):
+        step = next(
+            step
+            for step in workflow["jobs"]["release-result"]["steps"]
+            if step.get("name", step.get("id")) == name
+        )
+        assert step["env"]["CANCELLED"] == "${{ job.status == 'cancelled' }}"
 
 
 @pytest.mark.parametrize(
