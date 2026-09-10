@@ -56,6 +56,10 @@ _EMOJIS = (
     "📅",
 )
 _EASTERN_TIME = re.compile(r"\b(?:1[0-2]|[1-9]):[0-5]\d [AP]M E(?:S|D)T\b")
+_CURRENCY_PATTERN = re.compile(
+    r"(?P<sign_before>[+\-\u2212]?)\s*\$\s*"
+    r"(?P<sign_after>[+\-\u2212]?)\s*(?P<amount>[\d,]+(?:\.\d+)?)"
+)
 _MOVEMENT_EMOJIS = {
     "rising": "📈",
     "falling": "📉",
@@ -211,11 +215,56 @@ def _result(passed: bool, reason: str, label: str) -> list[EvaluationOutput]:
     ]
 
 
+def _currency_decimal(match: re.Match[str]) -> Decimal:
+    sign = match.group("sign_before") or match.group("sign_after")
+    value = Decimal(match.group("amount").replace(",", ""))
+    return -value if sign in ("-", "\u2212") else value
+
+
 def _response_style_error(response: str, subject: str) -> list[EvaluationOutput] | None:
     if not any(mark in response for mark in ("#", "**", "- ")):
         return _result(False, f"{subject} omitted Markdown", "missing_markdown")
     if not any(emoji in response for emoji in _EMOJIS):
         return _result(False, f"{subject} omitted an emoji", "missing_emoji")
+    return None
+
+
+def _check_annual_additional_gross_bindings(
+    payload: dict[str, Any], response: str
+) -> list[EvaluationOutput] | None:
+    scenarios = payload.get("scenarios")
+    if not isinstance(scenarios, dict):
+        return None
+    for line in response.splitlines():
+        markers = list(re.finditer(r"\badditional\s+gross\b", line, re.IGNORECASE))
+        for index, marker in enumerate(markers):
+            labels = list(
+                re.finditer(r"\b(p25|p50|p90)\b", line[: marker.start()], re.IGNORECASE)
+            )
+            if not labels:
+                continue
+            label = labels[-1].group(1).casefold()
+            scenario = scenarios.get(label)
+            if not isinstance(scenario, dict):
+                continue
+            expected = scenario.get("additional_gross_income_to_offset_usd")
+            if expected is None:
+                continue
+            expected_value = Decimal(str(expected))
+            next_marker = (
+                markers[index + 1].start() if index + 1 < len(markers) else len(line)
+            )
+            if any(
+                _currency_decimal(match) != expected_value
+                for match in _CURRENCY_PATTERN.finditer(
+                    line[marker.end() : next_marker]
+                )
+            ):
+                return _result(
+                    False,
+                    f"{label.upper()} additional gross income was not bound to its scenario",
+                    "misbound_money",
+                )
     return None
 
 
@@ -852,7 +901,14 @@ def evaluate_annual_turn(
     if call.get("input") != metadata["expected_call"]:
         return _result(False, "annual arguments did not match", "input_mismatch")
     payload = call.get("tool_result")
-    if metadata.get("annual_behavior") == "no_complete_paired_days":
+    no_complete_paired_days = metadata.get(
+        "annual_behavior"
+    ) == "no_complete_paired_days" or (
+        isinstance(payload, dict)
+        and payload.get("error") == "ballpark_unavailable"
+        and payload.get("reason") == "no_complete_paired_days"
+    )
+    if no_complete_paired_days:
         if (
             call.get("is_error")
             or not isinstance(payload, dict)
@@ -921,9 +977,9 @@ def evaluate_annual_turn(
                 (Decimal(str(per_mile)), (("per",), ("mile",), ("vehicle",), ("cost",)))
             )
         for line in response.splitlines():
-            first_money = re.search(r"\$\s*[\d,]+(?:\.\d+)?", line)
-            for match in re.finditer(r"\$\s*([\d,]+(?:\.\d+)?)", line):
-                value = Decimal(match.group(1).replace(",", ""))
+            first_money = _CURRENCY_PATTERN.search(line)
+            for match in _CURRENCY_PATTERN.finditer(line):
+                value = _currency_decimal(match)
                 clause_start = line.rfind(";", 0, match.start()) + 1
                 clause_end = line.find(";", match.end())
                 clause = line[clause_start : None if clause_end < 0 else clause_end]
@@ -1072,6 +1128,10 @@ def evaluate_annual_turn(
             "annual money was not bound to its required lead or bullet",
             "misbound_money",
         )
+    if additional_gross_error := _check_annual_additional_gross_bindings(
+        payload, response
+    ):
+        return additional_gross_error
     return _result(True, "annual tool call and affordability response passed", "passed")
 
 
@@ -1297,6 +1357,218 @@ def evaluate_annual_route_unavailable(
     return _result(True, "annual route unavailability was safely explained", "passed")
 
 
+def _check_annual_alternative_call(
+    call: dict[str, Any], metadata: dict[str, Any]
+) -> list[EvaluationOutput] | None:
+    expected_call = metadata["expected_initial_call"]
+    if call.get("name") != "get_annual_toll_ballpark":
+        return _result(False, "expected exactly one annual call", "tool_mismatch")
+    if call.get("input") != expected_call:
+        return _result(False, "annual arguments did not match", "input_mismatch")
+    payload = call.get("tool_result")
+    if (
+        call.get("is_error")
+        or not isinstance(payload, dict)
+        or payload.get("error") != "ballpark_unavailable"
+        or payload.get("reason") != "route_unavailable"
+    ):
+        return _result(
+            False, "annual tool did not return route unavailability", "tool_error"
+        )
+
+    expected_status = metadata["expected_route_status"]
+    for direction in ("outbound", "return"):
+        actual = payload.get(direction)
+        expected = expected_status[direction]
+        expected_input = expected_call[direction]
+        if not isinstance(actual, dict) or (
+            actual.get("origin_point_id") != expected_input["origin_point_id"]
+            or actual.get("destination_point_id")
+            != expected_input["destination_point_id"]
+            or actual.get("status") != expected["status"]
+            or (actual.get("reason") or {}).get("code") != expected["reason_code"]
+        ):
+            return _result(
+                False, "annual route status did not match", "result_mismatch"
+            )
+
+    reason = payload["outbound"].get("reason")
+    details = reason.get("details", {}) if isinstance(reason, dict) else {}
+    alternatives = details.get("alternatives")
+    actual_alternatives = (
+        [
+            (alternative.get("point_id"), alternative.get("label"))
+            for alternative in alternatives
+            if isinstance(alternative, dict)
+        ]
+        if isinstance(alternatives, list)
+        else []
+    )
+    expected_alternatives = [
+        (alternative["point_id"], alternative["label"])
+        for alternative in metadata["expected_alternatives"]
+    ]
+    if [point_id for point_id, _label in actual_alternatives] != metadata[
+        "expected_alternative_ids"
+    ] or actual_alternatives != expected_alternatives:
+        return _result(
+            False,
+            "annual tool returned unexpected alternatives",
+            "result_mismatch",
+        )
+    return None
+
+
+def _check_annual_alternative_response(
+    response: str, metadata: dict[str, Any], returned_alternatives: list[dict[str, Any]]
+) -> list[EvaluationOutput] | None:
+    folded = response.casefold()
+    names_by_option = [
+        {
+            str(term).casefold()
+            for term in (
+                *terms,
+                alternative_id,
+                alternative["label"],
+                *alternative.get("aliases", []),
+            )
+            if str(term).strip()
+        }
+        for terms, alternative_id, alternative in zip(
+            metadata["expected_alternative_terms"],
+            metadata["expected_alternative_ids"],
+            returned_alternatives,
+            strict=True,
+        )
+    ]
+    unique_names = {
+        name
+        for option_names in names_by_option
+        for name in option_names
+        if sum(name in other_names for other_names in names_by_option) == 1
+    }
+    if any(
+        not any(name in folded for name in option_names & unique_names)
+        for option_names in names_by_option
+    ):
+        return _result(
+            False,
+            "response omitted a returned annual alternative",
+            "missing_alternative",
+        )
+    if not any(
+        term in folded
+        for term in ("choose", "select", "which", "pick", "prefer", "would you like")
+    ):
+        return _result(
+            False,
+            "response did not wait for an alternative selection",
+            "missing_selection",
+        )
+    if any(
+        term in folded
+        for term in ("p25", "p50", "p90", "annualized daily", "total annual")
+    ):
+        return _result(
+            False,
+            "response invented annual financial scenarios before selection",
+            "invented_financials",
+        )
+    allowed_income = Decimal(
+        str(metadata["expected_initial_call"]["gross_annual_income_usd"])
+    )
+    for match in _CURRENCY_PATTERN.finditer(response):
+        value = _currency_decimal(match)
+        if value != allowed_income:
+            return _result(
+                False,
+                "response invented financial values before selection",
+                "invented_financials",
+            )
+    return None
+
+
+def evaluate_annual_relaxed(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    return evaluate_annual_turn(turns, metadata)
+
+
+def evaluate_annual_confirmation(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if len(turns) != 2 or turns[0].get("calls"):
+        return _result(
+            False,
+            "divergent annual legs must be confirmed before the tool call",
+            "bad_confirmation",
+        )
+    response = str(turns[0].get("response", ""))
+    folded = response.casefold()
+    terms = metadata.get("expected_confirmation_terms", [])
+    asks_confirmation = "?" in response or any(
+        term in folded
+        for term in ("should i", "would you like", "shall i", "confirm", "combine")
+    )
+    if not asks_confirmation or any(
+        str(term).casefold() not in folded for term in terms
+    ):
+        return _result(
+            False,
+            "divergent annual legs were not clearly confirmed",
+            "bad_confirmation",
+        )
+    return evaluate_annual_relaxed([turns[1]], metadata)
+
+
+def evaluate_annual_alternatives(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    selection = metadata.get("annual_behavior") == "alternative_selection"
+    if len(turns) != (2 if selection else 1):
+        return _result(
+            False,
+            "annual alternative flow had the wrong number of turns",
+            "turn_count",
+        )
+    first = turns[0]
+    calls = first.get("calls", [])
+    if len(calls) != 1:
+        return _result(
+            False,
+            "annual alternatives were not obtained with one call",
+            "tool_mismatch",
+        )
+    if call_error := _check_annual_alternative_call(calls[0], metadata):
+        return call_error
+    if response_error := _check_annual_alternative_response(
+        str(first.get("response", "")),
+        metadata,
+        calls[0]["tool_result"]["outbound"]["reason"]["details"]["alternatives"],
+    ):
+        return response_error
+    if not selection:
+        return _result(True, "annual alternatives were safely presented", "passed")
+
+    selected = turns[1]
+    selected_calls = selected.get("calls", [])
+    if len(selected_calls) != 1 or selected_calls[0].get("name") != (
+        "get_annual_toll_ballpark"
+    ):
+        return _result(
+            False,
+            "annual selection must make exactly one final call",
+            "tool_mismatch",
+        )
+    if selected_calls[0].get("input") != metadata["expected_call"]:
+        return _result(
+            False,
+            "selected annual alternative did not retain all inputs",
+            "input_mismatch",
+        )
+    return evaluate_annual_relaxed([selected], metadata)
+
+
 def task_function(case: Case[str, str]) -> dict[str, Any]:
     agent = build_agent()
     turns = []
@@ -1348,6 +1620,16 @@ class TollChatEvaluator(Evaluator[str, str]):
                 return evaluate_annual_income_clarification(turns, metadata)
             if behavior == "route_unavailable":
                 return evaluate_annual_route_unavailable(turns, metadata)
+            if behavior in {"route_alternatives", "alternative_selection"}:
+                return evaluate_annual_alternatives(turns, metadata)
+            if behavior in {
+                "independent_legs",
+                "divergent_confirmation",
+                "ordinary_reversal",
+            }:
+                if behavior == "divergent_confirmation":
+                    return evaluate_annual_confirmation(turns, metadata)
+                return evaluate_annual_relaxed(turns, metadata)
             return evaluate_annual_turn(turns, metadata)
         if metadata.get("expected_clarification"):
             return evaluate_current_clarification_turns(turns, metadata)
@@ -1444,19 +1726,39 @@ def _self_check() -> None:
         "route-7-to-i495-south-current-price",
         "leesburg-to-washington-i395-current-price",
         "leesburg-to-washington-i395-job-offer",
+        "annual-independent-ramps",
+        "annual-backlick-alternatives",
+        "annual-backlick-alternative-selection",
+        "annual-divergent-areas-confirmation",
+        "annual-ordinary-reversal-regression",
     ]
     assert [case.name for case in load_cases(window="i95_northbound")] == [
         "springfield-franconia-to-westpark",
         "dulles-airport-to-backlick-tp1sb-fallback",
         "dulles-to-reagan-current-price",
+        "annual-independent-ramps",
+        "annual-backlick-alternatives",
+        "annual-backlick-alternative-selection",
+        "annual-divergent-areas-confirmation",
+        "annual-ordinary-reversal-regression",
     ]
     assert [case.name for case in load_cases(window="i95_northbound", weekday=6)] == [
         "dulles-airport-to-backlick-tp1sb-fallback",
         "dulles-to-reagan-current-price",
+        "annual-independent-ramps",
+        "annual-backlick-alternatives",
+        "annual-backlick-alternative-selection",
+        "annual-divergent-areas-confirmation",
+        "annual-ordinary-reversal-regression",
     ]
     assert [case.name for case in load_cases(window="i95_reversal")] == [
         "dulles-airport-to-backlick-tp1sb-fallback",
         "old-keene-mill-to-reagan-i95-unavailable",
+        "annual-independent-ramps",
+        "annual-backlick-alternatives",
+        "annual-backlick-alternative-selection",
+        "annual-divergent-areas-confirmation",
+        "annual-ordinary-reversal-regression",
     ]
     assert [case.name for case in load_cases(window="i95_southbound")] == [
         "reagan-airport-to-westpark",
@@ -1465,6 +1767,11 @@ def _self_check() -> None:
         "i66-west-to-route-7-current-price",
         "route-7-to-i495-south-current-price",
         "leesburg-to-washington-i395-current-price",
+        "annual-independent-ramps",
+        "annual-backlick-alternatives",
+        "annual-backlick-alternative-selection",
+        "annual-divergent-areas-confirmation",
+        "annual-ordinary-reversal-regression",
     ]
     assert [case.name for case in load_cases(window="greenway_eb_peak")] == [
         "i66-west-to-route-7-current-price",
@@ -2382,6 +2689,319 @@ def _self_check() -> None:
         ].label
         == "result_mismatch"
     )
+
+    new_case_ids = {
+        "annual-independent-ramps",
+        "annual-backlick-alternatives",
+        "annual-backlick-alternative-selection",
+        "annual-divergent-areas-confirmation",
+        "annual-ordinary-reversal-regression",
+    }
+    for window in ("i95_northbound", "i95_southbound", "i95_reversal"):
+        selected_ids = {case.name for case in load_cases(window=window)}
+        assert new_case_ids <= selected_ids
+
+    def no_complete_result() -> dict[str, Any]:
+        return {
+            "error": "ballpark_unavailable",
+            "reason": "no_complete_paired_days",
+            "coverage": {"complete_pair_count": 0},
+            "income": {
+                "gross_annual_usd": "120000.00",
+                "estimated_tax_usd": "40000.00",
+                "estimated_after_tax_usd": "80000.00",
+            },
+            "vehicle_cost": {"daily_usd": "7.85", "annual_usd": "1885.12"},
+            "assumptions": {"vehicle_cost_per_mile_usd": "0.685"},
+        }
+
+    def no_complete_call(expected_call: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "name": "get_annual_toll_ballpark",
+            "input": expected_call,
+            "tool_result": no_complete_result(),
+            "is_error": False,
+        }
+
+    alternative_payload = {
+        "error": "ballpark_unavailable",
+        "reason": "route_unavailable",
+        "outbound": {
+            "origin_point_id": "i95:205SD",
+            "destination_point_id": "i95:223ND",
+            "status": "invalid_origin",
+            "reason": {
+                "code": "origin_not_entry",
+                "details": {
+                    "point_id": "i95:205SD",
+                    "point_type": "exit",
+                    "alternatives": [
+                        {
+                            "point_id": "i95:212NO",
+                            "label": "I-95 Near Franconia-Springfield Pkwy NB",
+                            "aliases": [
+                                "Franconia-Springfield Parkway",
+                                "Route 289",
+                                "Springfield",
+                            ],
+                        },
+                        {
+                            "point_id": "i95:203NO",
+                            "label": "Old Keene Mill Road/Route 644",
+                            "aliases": [
+                                "Old Keene Mill Road",
+                                "Route 644",
+                                "Springfield",
+                            ],
+                        },
+                    ],
+                },
+            },
+        },
+        "return": {
+            "origin_point_id": "i95:2233SO",
+            "destination_point_id": "i95:205SD",
+            "status": "valid",
+            "reason": None,
+        },
+    }
+    alternatives = next(
+        row for row in rows if row["id"] == "annual-backlick-alternatives"
+    )
+    alternative_call = {
+        "name": "get_annual_toll_ballpark",
+        "input": alternatives["expected_initial_call"],
+        "tool_result": alternative_payload,
+        "is_error": False,
+    }
+    alternative_turn = {
+        "response": (
+            "The morning ramp is unavailable. Choose either "
+            "Franconia-Springfield Parkway or Old Keene Mill Road."
+        ),
+        "calls": [alternative_call],
+    }
+    assert evaluate_annual_alternatives([alternative_turn], alternatives)[0].test_pass
+    varied_alternative_response = json.loads(json.dumps(alternative_turn))
+    varied_alternative_response["response"] = (
+        "## Available route choices\n\n"
+        "The returned choices are Franconia-Springfield Parkway and "
+        "Old Keene Mill Road. I will retain the evening return leg and "
+        "schedule. Which option should I use?"
+    )
+    assert evaluate_annual_alternatives([varied_alternative_response], alternatives)[
+        0
+    ].test_pass
+    shared_allowed_choices = json.loads(json.dumps(alternative_turn))
+    shared_allowed_choices["response"] = (
+        "Choose Franconia-Springfield Parkway, Old Keene Mill Road."
+    )
+    assert evaluate_annual_alternatives([shared_allowed_choices], alternatives)[
+        0
+    ].test_pass
+    for valid_response in (
+        "### Choose a morning origin\n\n- Franconia-Springfield Parkway\n- Old Keene Mill Road",
+        "Which route should I use: Franconia-Springfield Parkway or Old Keene Mill Road?",
+        "Please select Route 289 or Route 644. Your return stays at Backlick.",
+        "Choose one:\n1. Franconia-Springfield Parkway\n2. Old Keene Mill Road\n- Return: Pentagon/Eads Street to Backlick Road",
+        "Choose Franconia-Springfield Parkway or Old Keene Mill Road, and retain the return leg.",
+    ):
+        assert evaluate_annual_alternatives(
+            [{**alternative_turn, "response": valid_response}], alternatives
+        )[0].test_pass, valid_response
+    missing_selection = json.loads(json.dumps(alternative_turn))
+    missing_selection["response"] = (
+        "The returned choices are Franconia-Springfield Parkway and Old Keene Mill Road."
+    )
+    assert (
+        evaluate_annual_alternatives([missing_selection], alternatives)[0].label
+        == "missing_selection"
+    )
+    missing_option = json.loads(json.dumps(alternative_turn))
+    missing_option["response"] = (
+        "Choose Franconia-Springfield Parkway or Backlick Road."
+    )
+    assert (
+        evaluate_annual_alternatives([missing_option], alternatives)[0].label
+        == "missing_alternative"
+    )
+    invented_before_selection = json.loads(json.dumps(alternative_turn))
+    invented_before_selection["response"] += " The annual toll would be $1.00."
+    assert (
+        evaluate_annual_alternatives([invented_before_selection], alternatives)[0].label
+        == "invented_financials"
+    )
+    for sign in ("-$", "$-", "\u2212$"):
+        signed_before_selection = json.loads(json.dumps(alternative_turn))
+        signed_before_selection["response"] += f" The annual toll would be {sign}1.00."
+        assert (
+            evaluate_annual_alternatives([signed_before_selection], alternatives)[
+                0
+            ].label
+            == "invented_financials"
+        )
+    wrong_alternative = json.loads(json.dumps(alternative_turn))
+    wrong_alternative["calls"][0]["tool_result"]["outbound"]["reason"]["details"][
+        "alternatives"
+    ][0]["point_id"] = "i95:999NO"
+    assert (
+        evaluate_annual_alternatives([wrong_alternative], alternatives)[0].label
+        == "result_mismatch"
+    )
+
+    selection = next(
+        row for row in rows if row["id"] == "annual-backlick-alternative-selection"
+    )
+    selection_call = no_complete_call(selection["expected_call"])
+    selection_turns = [
+        alternative_turn,
+        {
+            "response": (
+                "### ⚠️ Annual estimate unavailable\n\n"
+                "The selected route is valid, but no complete paired days are "
+                "available, so the estimate is unavailable."
+            ),
+            "calls": [selection_call],
+        },
+    ]
+    selection_turns[0] = {
+        **alternative_turn,
+        "calls": [{**alternative_call, "input": selection["expected_initial_call"]}],
+    }
+    assert evaluate_annual_alternatives(selection_turns, selection)[0].test_pass
+    wrong_selected = json.loads(json.dumps(selection_turns))
+    wrong_selected[1]["calls"][0]["input"]["outbound"]["origin_point_id"] = "i95:999NO"
+    assert (
+        evaluate_annual_alternatives(wrong_selected, selection)[0].label
+        == "input_mismatch"
+    )
+    dropped_retained = json.loads(json.dumps(selection_turns))
+    dropped_retained[1]["calls"][0]["input"]["return"]["departure_time"] = "08:00:00"
+    assert (
+        evaluate_annual_alternatives(dropped_retained, selection)[0].label
+        == "input_mismatch"
+    )
+    premature_selection = json.loads(json.dumps(selection_turns))
+    premature_selection[0]["calls"].append(selection_call)
+    assert (
+        evaluate_annual_alternatives(premature_selection, selection)[0].label
+        == "tool_mismatch"
+    )
+    extra_selection = json.loads(json.dumps(selection_turns))
+    extra_selection[1]["calls"].append(selection_call)
+    assert (
+        evaluate_annual_alternatives(extra_selection, selection)[0].label
+        == "tool_mismatch"
+    )
+
+    independent = next(row for row in rows if row["id"] == "annual-independent-ramps")
+    independent_success = json.loads(json.dumps(annual_call))
+    independent_success["input"] = independent["expected_call"]
+    independent_success["tool_result"]["income"]["gross_annual_usd"] = "120000.00"
+    independent_success_turn = {
+        "response": annual_response,
+        "calls": [independent_success],
+    }
+    assert evaluate_annual_relaxed([independent_success_turn], independent)[0].test_pass
+
+    scenario_additional_gross = json.loads(json.dumps(independent_success_turn))
+    scenario_additional_gross["response"] += (
+        "\nP25 additional gross income to offset is $8280.00."
+        "\nP50 additional gross income to offset is $8640.00."
+        "\nP90 additional gross income to offset is $9000.00."
+    )
+    assert evaluate_annual_relaxed([scenario_additional_gross], independent)[
+        0
+    ].test_pass
+    swapped_additional_gross = json.loads(json.dumps(scenario_additional_gross))
+    swapped_additional_gross["response"] = swapped_additional_gross["response"].replace(
+        "P50 additional gross income to offset is $8640.00",
+        "P50 additional gross income to offset is $9000.00",
+    )
+    assert (
+        evaluate_annual_relaxed([swapped_additional_gross], independent)[0].label
+        == "misbound_money"
+    )
+    missing_disclosures = json.loads(json.dumps(independent_success_turn))
+    missing_disclosures["response"] = (
+        "P25 daily cost is $23.00, monthly cost is $460.00, annual cost is "
+        "$5520.00, and remaining income is $74480.00."
+    )
+    assert (
+        evaluate_annual_relaxed([missing_disclosures], independent)[0].label
+        == "missing_markdown"
+    )
+
+    independent_turn = {
+        "response": (
+            "### ⚠️ Annual estimate unavailable\n\n"
+            "The route is valid; no complete paired days are available, so the "
+            "estimate is unavailable."
+        ),
+        "calls": [no_complete_call(independent["expected_call"])],
+    }
+    assert evaluate_annual_relaxed([independent_turn], independent)[0].test_pass
+    invented_independent = json.loads(json.dumps(independent_turn))
+    invented_independent["response"] += " The annual toll is $999.00."
+    assert (
+        evaluate_annual_relaxed([invented_independent], independent)[0].label
+        == "invented_financials"
+    )
+    structural_failure = json.loads(json.dumps(independent_turn))
+    structural_failure["calls"][0]["tool_result"] = {
+        "error": "ballpark_unavailable",
+        "reason": "route_unavailable",
+    }
+    assert (
+        evaluate_annual_relaxed([structural_failure], independent)[0].label
+        == "tool_error"
+    )
+
+    divergent = next(
+        row for row in rows if row["id"] == "annual-divergent-areas-confirmation"
+    )
+    divergent_turns = [
+        {
+            "response": (
+                "Pentagon and Westpark are different work areas. Would you like "
+                "me to combine these commute legs?"
+            ),
+            "calls": [],
+        },
+        {
+            "response": (
+                "### ⚠️ Annual estimate unavailable\n\n"
+                "Historical sample data are insufficient: there are no complete "
+                "paired days for an annual estimate."
+            ),
+            "calls": [no_complete_call(divergent["expected_call"])],
+        },
+    ]
+    assert evaluate_annual_confirmation(divergent_turns, divergent)[0].test_pass
+    premature_confirmation = json.loads(json.dumps(divergent_turns))
+    premature_confirmation[0]["calls"] = [divergent_turns[1]["calls"][0]]
+    assert (
+        evaluate_annual_confirmation(premature_confirmation, divergent)[0].label
+        == "bad_confirmation"
+    )
+
+    reversal = next(
+        row for row in rows if row["id"] == "annual-ordinary-reversal-regression"
+    )
+    assert evaluate_annual_relaxed(
+        [
+            {
+                "response": (
+                    "### ⚠️ Annual estimate unavailable\n\n"
+                    "The inferred reverse route has no complete paired days, so "
+                    "the estimate is unavailable."
+                ),
+                "calls": [no_complete_call(reversal["expected_call"])],
+            }
+        ],
+        reversal,
+    )[0].test_pass
+
     print("self-check ok (fixtures and evaluator pass/fail branches; no network)")
 
 

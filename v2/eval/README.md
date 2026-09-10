@@ -1,11 +1,12 @@
 # TollChat v2 evaluation
 
-This code-graded Strands suite runs nine current-toll routing cases and seven
+This code-graded Strands suite runs nine current-toll routing cases and twelve
 annual job-offer affordability cases through a fresh production agent. It
 verifies exact tool calls, route/fallback behavior, required-input and income
 clarification, adjustable 52-week commute-day estimates, safe annual route
-unavailability, scenario-bound money, and the required Markdown/emoji response
-hierarchy.
+unavailability, independent AM/PM legs, retained alternative selection,
+divergent-area confirmation, scenario-bound money, and annual response
+grounding.
 
 ## Offline check
 
@@ -31,7 +32,7 @@ env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
   uv run python eval/run_evaluation.py --window i95_northbound --suite direct
 ```
 
-The seven annual cases are independent of the live I-95 direction:
+The twelve annual cases are independent of the live I-95 direction:
 
 ```bash
 env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
@@ -48,6 +49,15 @@ income. A current lane-closure result is valid only when its exact route and
 grounded closure explanation are present. An annual `no_complete_paired_days`
 result is valid only after that exact route call; `route_unavailable` or a
 Springfield alternative remains a failure.
+
+The independent-leg daily cases select every new annual behavior in each of
+`i95_northbound`, `i95_southbound`, and `i95_reversal`. The offline `--check`
+asserts exact endpoint inputs, the observed Backlick alternatives, retained
+selection fields, confirmation timing, rejection mutations, and tool-grounded
+financial claims. A bounded authenticated run requested the `i95_southbound`
+package selection and passed all five cases, but its annual trajectories carried
+no I-95 lane-state observation; `i95_northbound` and `i95_reversal` remain
+pending.
 
 Run each targeted workflow five times as a delivery check (not a reliability
 claim):

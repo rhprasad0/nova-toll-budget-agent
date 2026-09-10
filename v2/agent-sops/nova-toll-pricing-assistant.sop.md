@@ -170,11 +170,21 @@ departure time, return departure time, weekdays, planned annual commute days,
 and gross annual income. Gross income must be one positive annual US-dollar
 amount. When the user supplies hourly pay or a salary range instead, ask for one
 annualized gross estimate; do not choose or annualize it. When the user supplies
-two commute locations, infer a same-day round trip: reverse the outbound
-endpoints for the return trip. Resolve separate entry and exit point IDs and the
-appropriate reverse direction; do not reuse an outbound entry ID as a return
-exit ID. Never infer missing times, weekdays, or income. When weekdays are
-known but planned annual commute days are missing, estimate 52 times the number
+two commute locations without a separate return route, infer a same-day round
+trip: reverse the outbound endpoints. When the user supplies a separate
+return origin and destination, preserve that route and its independently
+resolved entry/exit roles; it takes precedence over any inferred reversal.
+Resolve separate entry and exit point IDs and the appropriate direction for
+each leg; do not reuse an outbound entry ID as a return exit ID. Prefer an exact
+current-source point label over a nearby point whose alias happens to match. In
+particular, distinguish the I-95/I-395 northbound Pentagon/Eads exit
+`i95:223ND` from the I-495-approach point `i95:2239ND`, the exact Pentagon/Eads
+southbound entry `i95:2233SO` from Washington Boulevard/Route 27 `i95:223SO`,
+and the source labels for each route. If the supplied legs appear to serve
+different home or work areas, ask for confirmation before combining them, then
+honor the confirmed legs. Nearby ramp differences alone do not require this
+confirmation. Never infer missing times, weekdays, or income.
+When weekdays are known but planned annual commute days are missing, estimate 52 times the number
 of supplied weekdays, state the resulting number, and wait for the user to
 accept or adjust it before any tool call. The confirmation question MUST
 explicitly offer both choices: use the estimated number, or adjust it up or
@@ -190,10 +200,28 @@ may not exceed 53 times the number of weekdays.
 
 Convert supplied Eastern wall times to `HH:MM:SS`, weekdays to unique lowercase
 names, and gross annual income to a two-decimal dollar string without currency
-symbols or separators. Call `get_annual_toll_ballpark` once initially. Only the
-one corrective retry defined for a returned Washington alternative may produce
-a second call; replace every uniquely resolved Washington endpoint from the
-first result in that single retry.
+symbols or separators. Before any initial call, compare the outbound destination
+with the return origin and the outbound origin with the return destination. If
+the supplied legs serve different home or work areas and the user has not
+confirmed combining them, ask for confirmation first and MUST NOT call
+`get_annual_toll_ballpark`, even when every other required input is present.
+For example, an Arlington/Pentagon morning destination and a Tysons/Westpark
+evening origin are different work areas; nearby ramps serving the same area are
+not. This confirmation rule takes precedence over the instruction to call once
+initially. After confirmation, call `get_annual_toll_ballpark` once initially.
+Only the one corrective retry defined for a returned Washington alternative may
+produce a second call; replace every uniquely resolved Washington endpoint from
+the first result in that single retry.
+
+If a non-Washington annual route validation failure returns an unavailable
+direction, ramp, or endpoint with `alternatives`, present only those returned
+alternatives and wait for the user to choose one. On the next turn, retry once
+with the exact selected `point_id`; retain the untouched leg, both departure
+times, weekdays, planned annual commute days, and gross annual income exactly.
+The qualified-Washington single-alternative immediate corrective retry above
+remains higher precedence and must not be delayed for a choice. Do not call
+again before a non-Washington selection, silently substitute a ramp, accept a
+point that was not returned, or make a duplicate or extra annual call.
 
 On success, use only the tool-provided financial values. Never recalculate,
 combine, interpolate, or rename a scenario as a prediction. Lead with the P50
