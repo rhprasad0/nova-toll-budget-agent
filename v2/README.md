@@ -104,10 +104,12 @@ until docker exec "$container_id" pg_isready --username "$PGUSER" --dbname postg
 v2/scripts/run_db_tests.sh "$(git rev-parse HEAD^)"
 ```
 
-Production deployment is manual; credential-free PR CI never runs `terraform
-plan` or `apply`. The manual production planner stores only a reviewed, gated
-saved plan. Follow the [deployment runbook](RUNBOOK.md) for the reviewed
-saved-plan, smoke-test, rollout, and rollback procedures.
+Credential-free PR CI never runs `terraform plan` or `apply`. A published stable
+`vX.Y.Z` release first records its bounded event without credentials. The
+main-resident production consumer independently admits the exact successful
+development candidate and privately saves one versioned, checksummed KMS plan.
+It does not apply Terraform or migrate a database; those later release phases
+remain separately reviewed.
 
 Development delivery reports an explicit `development-release` GitHub result
 only after exact-version readiness and bounded static/API/two-session agent
