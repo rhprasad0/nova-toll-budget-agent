@@ -91,43 +91,25 @@ if commit acknowledgement is uncertain, stop and collect a new read-only
 state packet before retrying. This source PR performs no production invocation,
 Terraform plan/apply, or live database mutation.
 
-## PostGIS type ACL repair (issue 304, prerequisite)
+## RDS PostGIS type ACL exception (issue 304)
 
-Run `v2/scripts/repair_production_postgis_acl.py` before production baseline
-adoption only after recording fresh read-only evidence for account `920534282028`,
-region `us-east-1`, instance `nova-toll-db`, database `nova_toll`, the private
-RDS endpoint and approved TLS CA, `nova_toll_admin`, its inherited
-`rds_superuser` membership, `oracle_owner`, the `oracle` schema, PostGIS
-`3.5.6`, and the `rdsadmin` ownership, extension dependencies, and ACLs of
-`oracle.geometry` and `oracle.geography`. Do not copy credentials into a
-terminal history, file, command line, or evidence packet; the existing helper
-obtains the managed secret in process memory and requires verify-full TLS.
+The adoption preflight accepts one observed platform state: `postgis` in
+`oracle`, owned by `rdsadmin`, at version `3.5.6`, with one direct extension
+dependency for each of `oracle.geometry` and `oracle.geography`. Both types
+must be owned by `rdsadmin` and have exactly two non-grantable `USAGE` rows:
+`rdsadmin` to `rdsadmin`, and `rdsadmin` to `PUBLIC`. Any other owner,
+extension identity, dependency, grantor, grantee, privilege, or grant option
+rejects adoption. Record that exact state in the fresh read-only evidence
+packet before the normal fixed-target adoption; keep the private route,
+in-memory managed secret, and `verify-full` TLS.
 
-The only invocation interlock is the already-authorized exact token:
-
-```sh
-NOVA_TOLL_PRODUCTION_APPROVAL=REPAIR_NOVA_TOLL_PRODUCTION_POSTGIS_ACL \
-  python3 v2/scripts/repair_production_postgis_acl.py
-```
-
-The helper accepts no arguments or alternate target. It performs one bounded
-transaction: it either removes the two PUBLIC type-USAGE entries and adds the
-two direct, non-grantable `oracle_owner` entries, or confirms the exact
-already-repaired state. It does not run baseline adoption or migration 030.
-The helper accepts success only after one internal
-`TOLLCHAT_PRODUCTION_POSTGIS_ACL_REPAIRED` marker after `COMMIT`, then emits
-its sanitized JSON `status` record and exits zero.
-
-On a refusal, warning, SQL error, timeout, missing marker, duplicate marker,
-or lost client acknowledgement, treat the outcome as unknown. Do not retry.
-Collect a new read-only packet for the same fixed target and compare the two
-type ACLs, owners, extension identity/dependencies, and Oracle catalog
-ownership/ACL inventory before any further decision. A confirmed in-transaction
-postflight on the production connection is the capability proof for RDS; a
-disposable true-superuser PostGIS test proves SQL shape, guards, atomicity,
-rollback, and idempotence only. It does not prove that RDS `rds_superuser` can
-alter `rdsadmin`-owned type ACLs. Keep baseline adoption blocked unless that
-live postflight confirms the repaired state.
+`PUBLIC` type `USAGE`, combined with an already-held database `TEMPORARY`
+privilege, can permit temporary type-dependent objects. It does not grant
+schema `USAGE` or `CREATE`, table `SELECT`/DML, function `EXECUTE`, persistent
+Oracle creation, or data access. A disposable true-superuser PostGIS test
+proves SQL shape, guards, atomicity, rollback, and idempotence only; it does
+not prove RDS authority. On a failed or uncertain commit, stop and collect new
+read-only evidence before any follow-up; do not reset, bootstrap, or migrate.
 
 ## Manual Oracle migration 030
 

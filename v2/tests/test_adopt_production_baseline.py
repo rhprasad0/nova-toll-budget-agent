@@ -175,7 +175,15 @@ def test_adoption_sql_is_fixed_allowlisted_and_atomic() -> None:
     )
     assert "TOLLCHAT_PRODUCTION_BASELINE_ADOPTED" in sql
     assert "deployed canonical schema verified and adopted" in sql
-    assert "rdsadmin" not in sql
+    assert (
+        sql.count("RDS PostGIS type ACL is outside the exact adoption exception") == 2
+    )
+    assert "extension.extversion = '3.5.6'" in sql
+    assert "owner.rolname = 'rdsadmin'" in sql
+    assert "dependency.deptype = 'e'" in sql
+    assert "privilege.grantor" in sql
+    assert "('type', 'geometry', 'PUBLIC', 'USAGE', false)" in sql
+    assert "('type', 'geography', 'PUBLIC', 'USAGE', false)" in sql
     assert "postgis" in sql.lower()
 
 
@@ -697,7 +705,7 @@ def test_disposable_postgis_adoption_and_rerun_guard(
             "(SELECT count(*) FROM pg_roles WHERE rolname IN ("
             "'rds_iam','rds_superuser','nova_toll_admin','pricing_loader_writer',"
             "'pricing_reader','tollchat_agent','pricing_caller','report_publisher',"
-            "'oracle_owner','pricing_owner','schema_migrator_production'));"
+            "'oracle_owner','rdsadmin','pricing_owner','schema_migrator_production'));"
         ),
     )
     assert clean.returncode == 0
@@ -714,6 +722,7 @@ def test_disposable_postgis_adoption_and_rerun_guard(
         "CREATE ROLE pricing_caller LOGIN;"
         "CREATE ROLE report_publisher LOGIN;"
         "CREATE ROLE oracle_owner NOLOGIN;"
+        "CREATE ROLE rdsadmin NOLOGIN SUPERUSER;"
         "GRANT rds_superuser TO nova_toll_admin;"
         "GRANT rds_iam TO rds_superuser WITH ADMIN TRUE;"
         "GRANT oracle_owner TO rds_superuser WITH ADMIN TRUE;"
@@ -731,15 +740,58 @@ def test_disposable_postgis_adoption_and_rerun_guard(
     )
     assert database_result.returncode == 0, database_result.stderr
     for filename in ("v2/db/schema.sql", "v2/db/oracle/schema.sql", "v2/db/roles.sql"):
+        input_sql = None
+        if filename == "v2/db/oracle/schema.sql":
+            # This test-only superuser fixture creates PostGIS as the observed
+            # platform owner. It does not prove RDS authority.
+            input_sql = (
+                (adopt.ROOT / filename)
+                .read_text()
+                .replace(
+                    "CREATE EXTENSION postgis WITH SCHEMA oracle;",
+                    "SET ROLE rdsadmin;\nCREATE EXTENSION postgis WITH SCHEMA oracle;\nRESET ROLE;",
+                    1,
+                )
+                .replace("\\ir data.sql", f"\\i {adopt.ROOT / 'v2/db/oracle/data.sql'}")
+            )
         result = run_psql(
             "--username",
             "postgres",
             "--dbname",
             "nova_toll",
-            "--file",
-            str(adopt.ROOT / filename),
+            *([] if input_sql is not None else ["--file", str(adopt.ROOT / filename)]),
+            input_sql=input_sql,
         )
         assert result.returncode == 0, result.stderr
+    image_version = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        "--tuples-only",
+        "--no-align",
+        input_sql="SELECT extversion FROM pg_extension WHERE extname='postgis';",
+    )
+    assert image_version.returncode == 0, image_version.stderr
+    fixture_postgis_version = image_version.stdout.strip()
+    assert fixture_postgis_version
+    # The disposable image can differ from production. This substitution is
+    # fixture-only and must never relax adoption_sql()'s literal 3.5.6 guard.
+    fixture_sql = adopt.adoption_sql().replace("'3.5.6'", repr(fixture_postgis_version))
+    assert "extension.extversion = '3.5.6'" in adopt.adoption_sql()
+    assert f"extension.extversion = {fixture_postgis_version!r}" in fixture_sql
+    rds_fixture = (
+        "REVOKE ALL PRIVILEGES ON TYPE oracle.geometry FROM PUBLIC, oracle_owner;"
+        "REVOKE ALL PRIVILEGES ON TYPE oracle.geography FROM PUBLIC, oracle_owner;"
+        "ALTER TYPE oracle.geometry OWNER TO rdsadmin;"
+        "ALTER TYPE oracle.geography OWNER TO rdsadmin;"
+        "UPDATE pg_type SET typacl = ARRAY['=U/rdsadmin'::aclitem, 'rdsadmin=U/rdsadmin'::aclitem] "
+        "WHERE oid IN ('oracle.geometry'::regtype, 'oracle.geography'::regtype);"
+    )
+    rds_fixture_result = run_psql(
+        "--username", "postgres", "--dbname", "nova_toll", input_sql=rds_fixture
+    )
+    assert rds_fixture_result.returncode == 0, rds_fixture_result.stderr
     prepare = (
         "REVOKE CONNECT ON DATABASE nova_toll FROM PUBLIC;"
         "GRANT TEMPORARY ON DATABASE nova_toll TO PUBLIC;"
@@ -872,8 +924,40 @@ def test_disposable_postgis_adoption_and_rerun_guard(
         assert state.returncode == 0, state.stderr
         return state.stdout.strip()
 
+    def target_acl_state() -> list[str]:
+        state = run_psql(
+            "--username",
+            "postgres",
+            "--dbname",
+            "nova_toll",
+            "--tuples-only",
+            "--no-align",
+            input_sql="""
+SELECT type.typname, owner.rolname,
+       CASE WHEN privilege.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
+       grantor.rolname, privilege.privilege_type, privilege.is_grantable
+FROM pg_type type
+JOIN pg_roles owner ON owner.oid = type.typowner
+CROSS JOIN LATERAL aclexplode(type.typacl) privilege
+LEFT JOIN pg_roles grantee ON grantee.oid = privilege.grantee
+LEFT JOIN pg_roles grantor ON grantor.oid = privilege.grantor
+WHERE type.typnamespace = 'oracle'::regnamespace
+  AND type.typname IN ('geometry', 'geography')
+ORDER BY type.typname, privilege.grantee;
+""",
+        )
+        assert state.returncode == 0, state.stderr
+        return state.stdout.splitlines()
+
     before_boundary = boundary_state()
     before_stable_boundary = stable_boundary_state()
+    before_target_acl = target_acl_state()
+    assert before_target_acl == [
+        "geography|rdsadmin|PUBLIC|rdsadmin|USAGE|f",
+        "geography|rdsadmin|rdsadmin|rdsadmin|USAGE|f",
+        "geometry|rdsadmin|PUBLIC|rdsadmin|USAGE|f",
+        "geometry|rdsadmin|rdsadmin|rdsadmin|USAGE|f",
+    ]
 
     def assert_propagated_failure(result: subprocess.CompletedProcess[str]) -> None:
         """Feed real disposable SQL failure through the public entrypoint."""
@@ -937,7 +1021,7 @@ def test_disposable_postgis_adoption_and_rerun_guard(
         "nova_toll_admin",
         "--dbname",
         "nova_toll",
-        input_sql=adopt.adoption_sql(),
+        input_sql=fixture_sql,
     )
     assert drift.returncode != 0
     assert_propagated_failure(drift)
@@ -956,6 +1040,106 @@ def test_disposable_postgis_adoption_and_rerun_guard(
         ),
     )
     assert view_restore.returncode == 0, view_restore.stderr
+
+    def reject_target_drift(
+        setup_sql: str,
+        restore_sql: str,
+        sql: str = fixture_sql,
+        expected_error: str = "RDS PostGIS type ACL is outside the exact adoption exception",
+    ) -> None:
+        changed = run_psql(
+            "--username", "postgres", "--dbname", "nova_toll", input_sql=setup_sql
+        )
+        assert changed.returncode == 0, changed.stderr
+        drift = run_psql(
+            "--username", "nova_toll_admin", "--dbname", "nova_toll", input_sql=sql
+        )
+        assert drift.returncode != 0
+        assert expected_error in drift.stderr
+        assert_propagated_failure(drift)
+        assert "TOLLCHAT_PRODUCTION_BASELINE_ADOPTED" not in drift.stdout
+        assert adoption_state() == "0,none,nova_toll_admin"
+        restored = run_psql(
+            "--username", "postgres", "--dbname", "nova_toll", input_sql=restore_sql
+        )
+        assert restored.returncode == 0, restored.stderr
+        assert boundary_state() == before_boundary
+        assert target_acl_state() == before_target_acl
+
+    exact_geometry_acl = (
+        "UPDATE pg_type SET typacl = ARRAY['=U/rdsadmin'::aclitem, 'rdsadmin=U/rdsadmin'::aclitem] "
+        "WHERE oid = 'oracle.geometry'::regtype;"
+    )
+    reject_target_drift(
+        "ALTER TYPE oracle.geometry OWNER TO postgres;",
+        "ALTER TYPE oracle.geometry OWNER TO rdsadmin;" + exact_geometry_acl,
+    )
+    # These synthetic catalog drifts are test-fixture-only. PostgreSQL's
+    # supported ownership and GRANT commands cannot represent them otherwise.
+    reject_target_drift(
+        "UPDATE pg_extension SET extowner = 'postgres'::regrole WHERE extname = 'postgis';",
+        "UPDATE pg_extension SET extowner = 'rdsadmin'::regrole WHERE extname = 'postgis';",
+    )
+    reject_target_drift(
+        "UPDATE pg_extension SET extnamespace = 'public'::regnamespace WHERE extname = 'postgis';",
+        "UPDATE pg_extension SET extnamespace = 'oracle'::regnamespace WHERE extname = 'postgis';",
+        expected_error="extensions or foreign access are outside the canonical contract",
+    )
+    reject_target_drift(
+        "UPDATE pg_extension SET extversion = '0.0.0' WHERE extname = 'postgis';",
+        f"UPDATE pg_extension SET extversion = {fixture_postgis_version!r} WHERE extname = 'postgis';",
+        expected_error="extensions or foreign access are outside the canonical contract",
+    )
+    reject_target_drift(
+        "ALTER EXTENSION postgis DROP TYPE oracle.geometry;",
+        "ALTER EXTENSION postgis ADD TYPE oracle.geometry;",
+    )
+    reject_target_drift(
+        "INSERT INTO pg_depend SELECT classid, objid, objsubid, refclassid, refobjid, refobjsubid, deptype "
+        "FROM pg_depend WHERE classid = 'pg_type'::regclass AND objid = 'oracle.geometry'::regtype "
+        "AND refclassid = 'pg_extension'::regclass;",
+        "DELETE FROM pg_depend WHERE ctid IN (SELECT ctid FROM pg_depend WHERE classid = 'pg_type'::regclass "
+        "AND objid = 'oracle.geometry'::regtype AND refclassid = 'pg_extension'::regclass LIMIT 1);",
+    )
+    reject_target_drift(
+        "UPDATE pg_depend SET refobjid = (SELECT oid FROM pg_extension WHERE extname = 'plpgsql') WHERE classid = 'pg_type'::regclass "
+        "AND objid = 'oracle.geometry'::regtype AND refclassid = 'pg_extension'::regclass;",
+        "UPDATE pg_depend SET refobjid = (SELECT oid FROM pg_extension WHERE extname = 'postgis') WHERE classid = 'pg_type'::regclass "
+        "AND objid = 'oracle.geometry'::regtype AND refclassid = 'pg_extension'::regclass;",
+    )
+    reject_target_drift(
+        "UPDATE pg_depend SET deptype = 'n' WHERE classid = 'pg_type'::regclass "
+        "AND objid = 'oracle.geometry'::regtype AND refclassid = 'pg_extension'::regclass;",
+        "UPDATE pg_depend SET deptype = 'e' WHERE classid = 'pg_type'::regclass "
+        "AND objid = 'oracle.geometry'::regtype AND refclassid = 'pg_extension'::regclass;",
+    )
+    reject_target_drift(
+        "SET ROLE rdsadmin; REVOKE USAGE ON TYPE oracle.geometry FROM PUBLIC; RESET ROLE;",
+        exact_geometry_acl,
+    )
+    reject_target_drift(
+        "SET ROLE rdsadmin; REVOKE USAGE ON TYPE oracle.geometry FROM PUBLIC; "
+        "GRANT USAGE ON TYPE oracle.geometry TO pricing_reader; RESET ROLE;",
+        exact_geometry_acl,
+    )
+    reject_target_drift(
+        "SET ROLE rdsadmin; GRANT USAGE ON TYPE oracle.geometry TO pricing_reader WITH GRANT OPTION; RESET ROLE;",
+        exact_geometry_acl,
+    )
+    reject_target_drift(
+        "UPDATE pg_type SET typacl = ARRAY['rdsadmin=U/rdsadmin'::aclitem, '=U/postgres'::aclitem] "
+        "WHERE oid = 'oracle.geometry'::regtype;",
+        exact_geometry_acl,
+    )
+    reject_target_drift(
+        "SET ROLE rdsadmin; GRANT USAGE ON TYPE oracle.geometry TO pricing_reader; RESET ROLE;",
+        exact_geometry_acl,
+    )
+    reject_target_drift(
+        "SELECT 1;",
+        "SELECT 1;",
+        fixture_sql.replace(repr(fixture_postgis_version), "'0.0.0'", 1),
+    )
 
     # Preflight ACL drift must fail before creating any adoption principal.
     for drift_setup_sql, drift_restore_sql in (
@@ -1020,8 +1204,8 @@ def test_disposable_postgis_adoption_and_rerun_guard(
             "REVOKE EXECUTE ON FUNCTION oracle.postgis_full_version() FROM PUBLIC;",
         ),
         (
-            "GRANT USAGE ON TYPE oracle.geography TO PUBLIC;",
-            "REVOKE USAGE ON TYPE oracle.geography FROM PUBLIC;",
+            "SET ROLE rdsadmin; GRANT USAGE ON TYPE oracle.geography TO pricing_reader; RESET ROLE;",
+            "SET ROLE rdsadmin; REVOKE USAGE ON TYPE oracle.geography FROM pricing_reader; RESET ROLE;",
         ),
         (
             "GRANT SELECT ON oracle.spatial_ref_sys TO PUBLIC;",
@@ -1088,7 +1272,7 @@ def test_disposable_postgis_adoption_and_rerun_guard(
             "nova_toll_admin",
             "--dbname",
             "nova_toll",
-            input_sql=adopt.adoption_sql(),
+            input_sql=fixture_sql,
         )
         assert drift.returncode != 0
         assert_propagated_failure(drift)
@@ -1107,7 +1291,7 @@ def test_disposable_postgis_adoption_and_rerun_guard(
 
     # Force an error after role creation, ownership transfer, and history
     # insertion.  The transaction must remove every adoption-side effect.
-    rollback_sql = adopt.adoption_sql().replace(
+    rollback_sql = fixture_sql.replace(
         "REVOKE SELECT ON tollchat_migration.schema_history FROM nova_toll_admin;",
         "SELECT 1 / 0;\n"
         "REVOKE SELECT ON tollchat_migration.schema_history FROM nova_toll_admin;",
@@ -1200,7 +1384,7 @@ def test_disposable_postgis_adoption_and_rerun_guard(
             "application trigger, policy, row-security, or rewrite-rule inventory is outside the canonical contract",
         ),
     ):
-        sql = adopt.adoption_sql().replace(
+        sql = fixture_sql.replace(
             "DO $$\nDECLARE\n  expected_count integer;",
             postcondition_drift + "\nDO $$\nDECLARE\n  expected_count integer;",
             1,
@@ -1219,11 +1403,9 @@ def test_disposable_postgis_adoption_and_rerun_guard(
     # postcondition. A second session's privileged Oracle RLS DDL must time
     # out rather than commit between the final guard and COMMIT.
     lock_statement = next(
-        line
-        for line in adopt.adoption_sql().splitlines()
-        if line.startswith("LOCK TABLE ")
+        line for line in fixture_sql.splitlines() if line.startswith("LOCK TABLE ")
     )
-    adoption_script = adopt.adoption_sql()
+    adoption_script = fixture_sql
     prefix, suffix = adoption_script.split(lock_statement, 1)
     held_prefix = prefix + lock_statement + "\nSELECT 'LOCK_HELD';\n"
     held_suffix = suffix.replace("COMMIT;", "SELECT 1 / 0;\nCOMMIT;", 1)
@@ -1322,7 +1504,7 @@ def test_disposable_postgis_adoption_and_rerun_guard(
         "nova_toll_admin",
         "--dbname",
         "nova_toll",
-        input_sql=adopt.adoption_sql(),
+        input_sql=fixture_sql,
     )
     assert adoption.returncode == 0, adoption.stderr
     assert adoption.stdout.count("TOLLCHAT_PRODUCTION_BASELINE_ADOPTED") == 1
@@ -1425,7 +1607,7 @@ SELECT has_database_privilege('schema_migrator_production', current_database(), 
         "nova_toll_admin",
         "--dbname",
         "nova_toll",
-        input_sql=adopt.adoption_sql(),
+        input_sql=fixture_sql,
     )
     assert rerun.returncode != 0
     assert_propagated_failure(rerun)
