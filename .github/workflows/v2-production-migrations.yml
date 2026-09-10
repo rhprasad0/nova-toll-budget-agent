@@ -1,0 +1,181 @@
+name: v2 production migrations
+
+on:
+  workflow_call:
+    inputs:
+      admission:
+        required: true
+        type: string
+    secrets:
+      TS_PRODUCTION_OAUTH_CLIENT_ID:
+        required: true
+      TS_PRODUCTION_OAUTH_SECRET:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: refs/heads/main
+          path: trusted
+          persist-credentials: false
+      - id: admission
+        env:
+          ADMISSION: ${{ inputs.admission }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          source trusted/v2/scripts/run_private_stage.sh
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_SUMMARY_FAILED=0
+          PRIVATE_STAGE_FALLBACK_STAGE=release-verification
+          step_exit() {
+            local status=$?
+            trap - EXIT
+            if (( status != 0 && PRIVATE_STAGE_REPORTED == 0 )); then
+              _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"
+            fi
+            exit "$status"
+          }
+          trap step_exit EXIT
+          bind_admission() {
+            printf '%s' "$ADMISSION" | jq -e 'select(
+              type == "object" and
+              (keys | sort) == ["bundle_digest","bundle_id","candidate","claim_id","consumer_attempt","consumer_run","development_attempt","development_deployment","development_run","evidence_artifact","listener_attempt","listener_run","release_id","schema_versions","tag"] and
+              (.candidate | test("^[0-9a-f]{40}$")) and
+              (.claim_id | type == "number") and
+              (.schema_versions | keys == ["oracle", "pricing"])
+            )' >"$RUNNER_TEMP/admission.json" || return
+            test "$GITHUB_RUN_ID" = "$(jq -r .consumer_run "$RUNNER_TEMP/admission.json")" || return
+            test "$GITHUB_RUN_ATTEMPT" = "$(jq -r .consumer_attempt "$RUNNER_TEMP/admission.json")" || return
+            jq -r '"candidate=\(.candidate)"' "$RUNNER_TEMP/admission.json" >>"$GITHUB_OUTPUT" || return
+          }
+          run_private_stage release-verification "$RUNNER_TEMP/production-bind.out" "$RUNNER_TEMP/production-bind.err" bind_admission
+      - name: Revalidate release claim and exact candidate before credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          source trusted/v2/scripts/run_private_stage.sh
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_SUMMARY_FAILED=0
+          PRIVATE_STAGE_FALLBACK_STAGE=release-verification
+          step_exit() {
+            local status=$?
+            trap - EXIT
+            if (( status != 0 && PRIVATE_STAGE_REPORTED == 0 )); then
+              _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"
+            fi
+            exit "$status"
+          }
+          trap step_exit EXIT
+          run_private_stage release-verification "$RUNNER_TEMP/production-revalidation.out" "$RUNNER_TEMP/production-revalidation.err" python3 trusted/v2/scripts/check_production_release.py revalidate --admission "$RUNNER_TEMP/admission.json" --output "$RUNNER_TEMP/revalidated.json"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ steps.admission.outputs.candidate }}
+          path: candidate
+          persist-credentials: false
+      - name: Verify exact candidate migration sources before credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLE_ID: ${{ fromJSON(inputs.admission).bundle_id }}
+          BUNDLE_DIGEST: ${{ fromJSON(inputs.admission).bundle_digest }}
+          CANDIDATE: ${{ steps.admission.outputs.candidate }}
+          PRICING: ${{ fromJSON(inputs.admission).schema_versions.pricing }}
+          ORACLE: ${{ fromJSON(inputs.admission).schema_versions.oracle }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          bundle="$RUNNER_TEMP/production-migration-release.zip"
+          overlay="$RUNNER_TEMP/production-migration-release-overlay"
+          source trusted/v2/scripts/run_private_stage.sh
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_SUMMARY_FAILED=0
+          PRIVATE_STAGE_FALLBACK_STAGE=artifact-download
+          step_exit() {
+            local status=$?
+            trap - EXIT
+            if (( status != 0 && PRIVATE_STAGE_REPORTED == 0 )); then
+              _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"
+            fi
+            exit "$status"
+          }
+          trap step_exit EXIT
+          verify_bundle() {
+            gh api --method GET "repos/$GITHUB_REPOSITORY/actions/artifacts/$BUNDLE_ID/zip" | dd of="$bundle" bs=1048576 count=513 iflag=fullblock status=none || return
+            test "$(stat -c %s "$bundle")" -le 536870912 || return
+            test "sha256:$(sha256sum "$bundle" | awk '{print $1}')" = "$BUNDLE_DIGEST" || return
+            python3 -c 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); sizes=[item.file_size for item in z.infolist()]; raise SystemExit(not sizes or max(sizes)>268435456 or sum(sizes)>536870912)' "$bundle" || return
+            python3 trusted/v2/scripts/verify_release_bundle.py verify --archive "$bundle" --output "$overlay" --root "$GITHUB_WORKSPACE/candidate" --expected-digest "$BUNDLE_DIGEST" --commit "$CANDIDATE" --pricing-version "$PRICING" --oracle-version "$ORACLE" --verify-checkout || return
+            test "$(git -C candidate rev-parse HEAD)" = "$(jq -r .candidate "$RUNNER_TEMP/admission.json")" || return
+            git -C trusted ls-tree -r -z HEAD -- v2/scripts >"$RUNNER_TEMP/trusted-scripts.tree" || return
+            git -C candidate ls-tree -r -z HEAD -- v2/scripts >"$RUNNER_TEMP/candidate-scripts.tree" || return
+            cmp -s "$RUNNER_TEMP/trusted-scripts.tree" "$RUNNER_TEMP/candidate-scripts.tree" || return
+            git -C candidate status --porcelain=v1 --untracked-files=all --ignored=matching -- v2/scripts >"$RUNNER_TEMP/candidate-scripts.status" || return
+            test ! -s "$RUNNER_TEMP/candidate-scripts.status" || return
+          }
+          run_private_stage artifact-download "$RUNNER_TEMP/production-bundle.out" "$RUNNER_TEMP/production-bundle.err" verify_bundle
+      - uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888
+        with:
+          oauth-client-id: ${{ secrets.TS_PRODUCTION_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_PRODUCTION_OAUTH_SECRET }}
+          tags: tag:ci
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        with:
+          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-v2-production-migrations
+          aws-region: us-east-1
+      - name: Fetch pinned RDS CA bundle
+        working-directory: candidate/v2
+        run: |
+          set -euo pipefail
+          set +x
+          source "$GITHUB_WORKSPACE/trusted/v2/scripts/run_private_stage.sh"
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_SUMMARY_FAILED=0
+          PRIVATE_STAGE_FALLBACK_STAGE=rds-ca
+          step_exit() {
+            local status=$?
+            trap - EXIT
+            if (( status != 0 && PRIVATE_STAGE_REPORTED == 0 )); then
+              _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"
+            fi
+            exit "$status"
+          }
+          trap step_exit EXIT
+          fetch_ca() {
+            mkdir -p infra/build/ca || return
+            curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o infra/build/ca/rds-ca-bundle.pem || return
+            echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status || return
+            chmod 600 infra/build/ca/rds-ca-bundle.pem || return
+          }
+          run_private_stage rds-ca "$RUNNER_TEMP/production-ca.out" "$RUNNER_TEMP/production-ca.err" fetch_ca
+      - name: Run fixed production migrations
+        working-directory: candidate
+        env:
+          PRODUCTION_MIGRATION_CANDIDATE: ${{ steps.admission.outputs.candidate }}
+          PRODUCTION_MIGRATION_ADMISSION: ${{ inputs.admission }}
+        run: bash v2/scripts/run_production_migrations_workflow.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: success()
+        with:
+          name: v2-production-migrations-evidence
+          path: ${{ runner.temp }}/v2-production-migrations-evidence.json
+          if-no-files-found: error
+          retention-days: 7

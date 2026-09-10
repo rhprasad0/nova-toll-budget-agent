@@ -19,6 +19,7 @@ from typing import Final
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import adopt_production_baseline as adoption
 import bootstrap_development_database as bootstrap
 import check_schema_versions as schema_checks
 
@@ -60,6 +61,10 @@ SUPPORTED_PSQL_PREFIX: Final = re.compile(
     r"(?is)(?:\s|\\set[ \t]+ON_ERROR_STOP[ \t]+on[ \t]*(?:\r?\n|$))*\Z"
 )
 DEVELOPMENT_TRANSPORT_NETWORK: Final = ipaddress.ip_network("fd7a:115c:a1e0:b1a::/64")
+PRODUCTION_RDS_ENDPOINT: Final = re.compile(
+    r"^nova-toll-db[.][a-z0-9-]+[.]us-east-1[.]rds[.]amazonaws[.]com$"
+)
+PRODUCTION_RDS_PORT: Final = "5432"
 
 
 @dataclass(frozen=True)
@@ -71,6 +76,39 @@ class Migration:
     migration_id: str
     number: int
     source_sha256: str
+
+
+@dataclass(frozen=True)
+class MigrationProfile:
+    """The only two fixed database identities supported by this runner."""
+
+    name: str
+    database: str
+    user: str
+    lock_name: str
+    owners: dict[str, str]
+    environment: str
+    transport_network: ipaddress.IPv4Network | ipaddress.IPv6Network
+
+
+DEVELOPMENT_PROFILE: Final = MigrationProfile(
+    "development",
+    DATABASE,
+    USER,
+    LOCK_NAME,
+    OWNER_BY_SCHEMA,
+    "environment=development",
+    DEVELOPMENT_TRANSPORT_NETWORK,
+)
+PRODUCTION_PROFILE: Final = MigrationProfile(
+    "production",
+    "nova_toll",
+    "schema_migrator_production",
+    "tollchat-production-schema-migrations",
+    {"pricing": "pricing_owner", "oracle": "oracle_owner"},
+    "environment=production",
+    ipaddress.ip_network("172.31.0.0/16"),
+)
 
 
 class MigrationError(RuntimeError):
@@ -219,11 +257,13 @@ def _migration_candidates(
     return tuple(migrations)
 
 
-def _registry() -> tuple[tuple[schema_checks.RegisteredSchema, ...], dict[str, str]]:
+def _registry(
+    profile: MigrationProfile = DEVELOPMENT_PROFILE,
+) -> tuple[tuple[schema_checks.RegisteredSchema, ...], dict[str, str]]:
     schemas = schema_checks.load_registry(REGISTRY_PATH.read_text(encoding="utf-8"))
-    if {schema.name for schema in schemas} != set(OWNER_BY_SCHEMA):
+    if {schema.name for schema in schemas} != set(profile.owners):
         raise MigrationError(
-            "development migration registry does not match fixed schemas"
+            f"{profile.name} migration registry does not match fixed schemas"
         )
     versions: dict[str, str] = {}
     for registered in schemas:
@@ -398,7 +438,9 @@ def _remove_terminal_commit(path: Path) -> None:
     )
 
 
-def _identity_sql() -> str:
+def _identity_sql(profile: MigrationProfile = DEVELOPMENT_PROFILE) -> str:
+    if profile is PRODUCTION_PROFILE:
+        return _production_identity_sql()
     return rf"""
 DO $$
 DECLARE
@@ -498,6 +540,14 @@ BEGIN
     JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
     CROSS JOIN LATERAL aclexplode(procedure.proacl) privilege
     WHERE namespace.nspname IN ('pricing', 'oracle', 'tollchat_migration')
+      AND privilege.grantee = migrator
+  ) OR EXISTS (
+    SELECT 1 FROM pg_attribute attribute
+    JOIN pg_class relation ON relation.oid = attribute.attrelid
+    JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+    CROSS JOIN LATERAL aclexplode(attribute.attacl) privilege
+    WHERE namespace.nspname IN ('pricing', 'oracle', 'tollchat_migration')
+      AND attribute.attnum > 0 AND NOT attribute.attisdropped
       AND privilege.grantee = migrator
   ) OR EXISTS (
     SELECT 1 FROM pg_type type
@@ -698,6 +748,7 @@ def _history_preflight_sql(
     migrations: tuple[Migration, ...],
     canonical_versions: dict[str, str],
     baselines: tuple[bootstrap.Baseline, ...] | None = None,
+    profile: MigrationProfile = DEVELOPMENT_PROFILE,
 ) -> str:
     del canonical_versions
     if baselines is None:
@@ -705,7 +756,7 @@ def _history_preflight_sql(
     expected = _expected_values(migrations)
     recognized_baselines = _baseline_values(baselines)
     return rf"""
-SET ROLE pricing_owner_development;
+SET ROLE {profile.owners["pricing"]};
 DO $$
 BEGIN
   IF (SELECT count(*) FROM {HISTORY_TABLE} WHERE is_baseline) <> 2
@@ -730,7 +781,7 @@ BEGIN
          )
      )
   THEN
-    RAISE EXCEPTION 'development migration baseline is not exact';
+    RAISE EXCEPTION '{profile.name} migration baseline is not exact';
   END IF;
 END $$;
 DO $$
@@ -767,7 +818,7 @@ BEGIN
   END IF;
 END $$;
 RESET ROLE;
-SET ROLE pricing_owner_development;
+SET ROLE {profile.owners["pricing"]};
 {_history_chain_sql("pricing", "SELECT version FROM pricing.schema_version WHERE singleton", expected)}
 {_history_chain_sql("oracle", "VALUES (:'oracle_before')", expected)}
 RESET ROLE;
@@ -775,13 +826,20 @@ RESET ROLE;
 
 
 def _migration_sql(
-    migration: Migration, rendered_path: Path, commit: str, run_id: str
+    migration: Migration,
+    rendered_path: Path,
+    commit: str,
+    run_id: str,
+    profile: MigrationProfile = DEVELOPMENT_PROFILE,
 ) -> str:
-    owner = OWNER_BY_SCHEMA[migration.schema]
+    owner = profile.owners[migration.schema]
     apply_variable = f"apply_{migration.number}"
     evidence = f"commit={commit};run={run_id}"
+    post_migration_guard = (
+        _production_postgis_type_guard() if profile is PRODUCTION_PROFILE else ""
+    )
     return rf"""
-SET ROLE pricing_owner_development;
+SET ROLE {profile.owners["pricing"]};
 SELECT NOT EXISTS (
   SELECT 1 FROM {HISTORY_TABLE}
   WHERE schema_name = {_sql_literal(migration.schema)}
@@ -793,8 +851,9 @@ SELECT (SELECT version FROM {migration.schema}.schema_version WHERE singleton)
     AND (:'no_history_{migration.number}' = 't') AS {apply_variable}\gset
 \if :{apply_variable}
 \ir {_psql_path(rendered_path)}
+{post_migration_guard}
 RESET ROLE;
-SET ROLE pricing_owner_development;
+SET ROLE {profile.owners["pricing"]};
 INSERT INTO {HISTORY_TABLE} (
   schema_name, schema_version, migration_id, source_path, source_sha256, evidence, is_baseline
 ) VALUES (
@@ -810,11 +869,14 @@ RESET ROLE;
 
 
 def _final_sql(
-    migrations: tuple[Migration, ...], canonical_versions: dict[str, str], run_id: str
+    migrations: tuple[Migration, ...],
+    canonical_versions: dict[str, str],
+    run_id: str,
+    profile: MigrationProfile = DEVELOPMENT_PROFILE,
 ) -> str:
     expected = _expected_values(migrations)
     return rf"""
-SET ROLE pricing_owner_development;
+SET ROLE {profile.owners["pricing"]};
 DO $$
 BEGIN
   IF (SELECT version FROM pricing.schema_version WHERE singleton) <> {_sql_literal(canonical_versions["pricing"])}
@@ -836,7 +898,7 @@ BEGIN
   END IF;
 END $$;
 RESET ROLE;
-SET ROLE oracle_owner_development;
+SET ROLE {profile.owners["oracle"]};
 DO $$
 BEGIN
   IF (SELECT version FROM oracle.schema_version WHERE singleton) <> {_sql_literal(canonical_versions["oracle"])} THEN
@@ -845,13 +907,13 @@ BEGIN
 END $$;
 SELECT version AS oracle_after FROM oracle.schema_version WHERE singleton\gset
 RESET ROLE;
-SET ROLE pricing_owner_development;
+SET ROLE {profile.owners["pricing"]};
 SELECT version AS pricing_after FROM pricing.schema_version WHERE singleton\gset
 {_history_chain_sql("pricing", "SELECT version FROM pricing.schema_version WHERE singleton", expected)}
 {_history_chain_sql("oracle", "VALUES (:'oracle_after')", expected)}
 RESET ROLE;
 \echo TOLLCHAT_RESULT_{run_id} :pricing_before :oracle_before :pricing_after :oracle_after
-SELECT pg_advisory_unlock(hashtext({_sql_literal(LOCK_NAME)}));
+SELECT pg_advisory_unlock(hashtext({_sql_literal(profile.lock_name)}));
 """
 
 
@@ -862,47 +924,78 @@ def _session_sql(
     commit: str,
     run_id: str,
     baselines: tuple[bootstrap.Baseline, ...] | None = None,
+    profile: MigrationProfile = DEVELOPMENT_PROFILE,
 ) -> str:
     if baselines is None:
         baselines = bootstrap.load_baseline_manifest()
     lines = [
         "\\pset pager off",
         "\\set ON_ERROR_STOP on",
-        _identity_sql(),
-        f"SELECT pg_advisory_lock(hashtext({_sql_literal(LOCK_NAME)}));",
-        "SET ROLE pricing_owner_development;",
+        _identity_sql(profile),
+        f"SELECT pg_advisory_lock(hashtext({_sql_literal(profile.lock_name)}));",
+        f"SET ROLE {profile.owners['pricing']};",
         "SELECT version AS pricing_before FROM pricing.schema_version WHERE singleton\\gset",
         "RESET ROLE;",
-        "SET ROLE oracle_owner_development;",
+        f"SET ROLE {profile.owners['oracle']};",
         "SELECT version AS oracle_before FROM oracle.schema_version WHERE singleton\\gset",
         "RESET ROLE;",
-        _history_preflight_sql(migrations, canonical_versions, baselines),
+        _history_preflight_sql(migrations, canonical_versions, baselines, profile),
     ]
+    if profile is PRODUCTION_PROFILE:
+        lines.insert(3, _production_postgis_type_guard())
     lines.extend(
-        _migration_sql(migration, rendered[migration.path], commit, run_id)
+        _migration_sql(migration, rendered[migration.path], commit, run_id, profile)
         for migration in migrations
     )
-    lines.append(_final_sql(migrations, canonical_versions, run_id))
+    # Keep the established development hook signature used by the disposable
+    # atomicity probe; production needs its distinct baseline evidence.
+    if profile is DEVELOPMENT_PROFILE:
+        lines.append(_final_sql(migrations, canonical_versions, run_id))
+    else:
+        lines.append(_final_sql(migrations, canonical_versions, run_id, profile))
     return "\n".join(lines)
 
 
-def _psql_environment() -> dict[str, str]:
+def _psql_environment(
+    profile: MigrationProfile = DEVELOPMENT_PROFILE,
+) -> dict[str, str]:
     environment = os.environ.copy()
     transport = environment.pop("PGHOSTADDR", None)
     for key in ("PGDATABASE", "PGUSER", "PGSERVICE", "PGSERVICEFILE"):
         environment.pop(key, None)
-    if transport is not None:
+    if profile is PRODUCTION_PROFILE:
+        production_host = environment.pop("PGHOST", None)
+        production_port = environment.pop("PGPORT", None)
+        if (
+            not isinstance(production_host, str)
+            or not PRODUCTION_RDS_ENDPOINT.fullmatch(production_host)
+            or production_port != PRODUCTION_RDS_PORT
+            or transport is None
+        ):
+            raise MigrationError("production transport is not the fixed RDS endpoint")
+        try:
+            address = ipaddress.ip_address(transport)
+        except ValueError as error:
+            raise MigrationError(
+                "production transport is not a private IPv4 address"
+            ) from error
+        if address not in profile.transport_network:
+            raise MigrationError("production transport is not a private IPv4 address")
+        environment.update(
+            {
+                "PGHOST": production_host,
+                "PGHOSTADDR": transport,
+                "PGPORT": PRODUCTION_RDS_PORT,
+            }
+        )
+    elif transport is not None:
         try:
             address = ipaddress.ip_address(transport)
         except ValueError:
             address = None
-        if (
-            address is not None
-            and address.version == 6
-            and address in DEVELOPMENT_TRANSPORT_NETWORK
-        ):
+        if address is not None and address in profile.transport_network:
             environment["PGHOSTADDR"] = transport
-    environment.update({"PGDATABASE": DATABASE, "PGUSER": USER})
+    environment.update({"PGDATABASE": profile.database, "PGUSER": profile.user})
     return environment
 
 
@@ -930,9 +1023,17 @@ def _parse_result(stdout: str, run_id: str) -> tuple[dict[str, str], list[str]]:
     }, applied
 
 
-def run() -> dict[str, object]:
-    bootstrap.load_baseline_manifest()
-    schemas, canonical_versions = _registry()
+def run(profile: MigrationProfile = DEVELOPMENT_PROFILE) -> dict[str, object]:
+    if profile not in (DEVELOPMENT_PROFILE, PRODUCTION_PROFILE):
+        raise MigrationError("migration profile is not fixed")
+    baselines = (
+        bootstrap.load_baseline_manifest()
+        if profile is DEVELOPMENT_PROFILE
+        else _production_baselines()
+    )
+    schemas, canonical_versions = (
+        _registry() if profile is DEVELOPMENT_PROFILE else _registry(profile)
+    )
     migrations = _migration_candidates(schemas)
     commit = _run_capture("git", "rev-parse", "HEAD")
     if not COMMIT_PATTERN.fullmatch(commit):
@@ -942,7 +1043,7 @@ def run() -> dict[str, object]:
     if not EVIDENCE_PATTERN.fullmatch(evidence):
         raise MigrationError("run evidence did not match the fixed grammar")
     with tempfile.TemporaryDirectory(
-        prefix="nova-toll-development-migrations-"
+        prefix=f"nova-toll-{profile.name}-migrations-"
     ) as directory:
         rendered: dict[str, Path] = {}
         captured_sources: dict[str, bytes] = {}
@@ -963,7 +1064,10 @@ def run() -> dict[str, object]:
             _assert_source_bytes(migration.path, source, committed)
             captured_source.write_bytes(committed)
             captured_source.chmod(0o600)
-            bootstrap.render(captured_source, destination)
+            if profile is DEVELOPMENT_PROFILE:
+                bootstrap.render(captured_source, destination)
+            else:
+                destination.write_bytes(committed)
             _remove_terminal_commit(destination)
             destination.chmod(0o600)
             rendered[migration.path] = destination
@@ -974,29 +1078,45 @@ def run() -> dict[str, object]:
             _assert_source_bytes(
                 migration.path, ROOT / migration.path, captured_sources[migration.path]
             )
-        session = _session_sql(migrations, canonical_versions, rendered, commit, run_id)
+        session = (
+            _session_sql(migrations, canonical_versions, rendered, commit, run_id)
+            if profile is DEVELOPMENT_PROFILE
+            else _session_sql(
+                migrations,
+                canonical_versions,
+                rendered,
+                commit,
+                run_id,
+                baselines,
+                profile,
+            )
+        )
         result = subprocess.run(
             ["psql", "-X", "--no-psqlrc", "-v", "ON_ERROR_STOP=1"],
             input=session,
             text=True,
             capture_output=True,
-            env=_psql_environment(),
+            env=(
+                _psql_environment()
+                if profile is DEVELOPMENT_PROFILE
+                else _psql_environment(profile)
+            ),
             cwd=ROOT,
             check=False,
         )
         if result.returncode != 0:
-            raise MigrationError("development migration session failed")
+            raise MigrationError(f"{profile.name} migration session failed")
         versions, applied = _parse_result(result.stdout, run_id)
     if (
         versions["pricing_after"] != canonical_versions["pricing"]
         or versions["oracle_after"] != canonical_versions["oracle"]
     ):
         raise MigrationError(
-            "development migration session ended before canonical versions"
+            f"{profile.name} migration session ended before canonical versions"
         )
     return {
-        "database": DATABASE,
-        "user": USER,
+        "database": profile.database,
+        "user": profile.user,
         "before": {
             "pricing": versions["pricing_before"],
             "oracle": versions["oracle_before"],
@@ -1010,6 +1130,180 @@ def run() -> dict[str, object]:
         "run_id": run_id,
         "status": "ok",
     }
+
+
+def _production_baselines() -> tuple[bootstrap.Baseline, ...]:
+    """Bind the recurring runner to the two immutable adopted rows."""
+    return tuple(
+        bootstrap.Baseline(
+            schema=baseline.schema,
+            version=baseline.version,
+            migration_id=baseline.migration_id,
+            source_path=baseline.source_path,
+            source_sha256=baseline.source_sha256,
+            evidence=adoption.ADOPTION_EVIDENCE,
+        )
+        for baseline in bootstrap.load_baseline_manifest()
+    )
+
+
+def _production_identity_sql() -> str:
+    """Check only recurring-production invariants, never adoption inventories."""
+    return r"""
+DO $$
+DECLARE
+  migrator oid;
+  pricing_owner oid;
+  oracle_owner oid;
+BEGIN
+  IF current_database() <> 'nova_toll'
+     OR current_user <> 'schema_migrator_production'
+     OR (SELECT shobj_description(oid, 'pg_database') FROM pg_database
+         WHERE datname = current_database()) IS DISTINCT FROM 'environment=production' THEN
+    RAISE EXCEPTION 'production migration identity is not exact';
+  END IF;
+  SELECT oid INTO STRICT migrator FROM pg_roles WHERE rolname = 'schema_migrator_production';
+  SELECT oid INTO STRICT pricing_owner FROM pg_roles WHERE rolname = 'pricing_owner';
+  SELECT oid INTO STRICT oracle_owner FROM pg_roles WHERE rolname = 'oracle_owner';
+  IF NOT EXISTS (
+       SELECT 1 FROM pg_roles WHERE oid = migrator
+       AND rolcanlogin AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole
+       AND NOT rolinherit AND NOT rolreplication AND NOT rolbypassrls
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM pg_roles WHERE oid = pricing_owner
+       AND NOT rolcanlogin AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole
+       AND NOT rolinherit AND NOT rolreplication AND NOT rolbypassrls
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM pg_roles WHERE oid = oracle_owner
+       AND NOT rolcanlogin AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole
+       AND rolinherit AND NOT rolreplication AND NOT rolbypassrls
+     )
+     OR (SELECT count(*) FROM pg_auth_members WHERE member = migrator) <> 3
+     OR EXISTS (
+       SELECT 1 FROM pg_auth_members membership
+       JOIN pg_roles granted ON granted.oid = membership.roleid
+       WHERE membership.member = migrator
+         AND granted.rolname NOT IN ('rds_iam', 'pricing_owner', 'oracle_owner')
+     )
+     OR EXISTS (
+       SELECT 1 FROM pg_auth_members membership JOIN pg_roles granted ON granted.oid = membership.roleid
+       WHERE membership.member = migrator AND granted.rolname = 'rds_iam'
+         AND (NOT membership.inherit_option OR NOT membership.set_option OR membership.admin_option)
+     )
+     OR EXISTS (
+       SELECT 1 FROM pg_auth_members membership JOIN pg_roles granted ON granted.oid = membership.roleid
+       WHERE membership.member = migrator AND granted.rolname IN ('pricing_owner', 'oracle_owner')
+         AND (membership.inherit_option OR NOT membership.set_option OR membership.admin_option)
+     )
+     OR NOT has_database_privilege(current_user, 'nova_toll', 'CONNECT')
+     OR EXISTS (
+       SELECT 1 FROM pg_database
+       WHERE datname = 'nova_toll_development'
+         AND has_database_privilege(current_user, datname, 'CONNECT')
+     ) THEN
+    RAISE EXCEPTION 'production migration roles or memberships are not exact';
+  END IF;
+  IF NOT EXISTS (
+       SELECT 1 FROM pg_class relation JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+       WHERE namespace.nspname = 'tollchat_migration' AND relation.relname = 'schema_history'
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM pg_class relation JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+       WHERE namespace.nspname = 'tollchat_migration' AND relation.relname = 'schema_history'
+         AND relation.relowner = pricing_owner
+     )
+     OR EXISTS (
+       SELECT 1 FROM pg_namespace namespace CROSS JOIN LATERAL aclexplode(namespace.nspacl) privilege
+       WHERE namespace.nspname IN ('pricing', 'oracle', 'tollchat_migration') AND privilege.grantee = migrator
+       UNION ALL
+       SELECT 1 FROM pg_class relation JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+       CROSS JOIN LATERAL aclexplode(relation.relacl) privilege
+       WHERE namespace.nspname IN ('pricing', 'oracle', 'tollchat_migration') AND privilege.grantee = migrator
+       UNION ALL
+       SELECT 1 FROM pg_attribute attribute JOIN pg_class relation ON relation.oid = attribute.attrelid
+       JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+       CROSS JOIN LATERAL aclexplode(attribute.attacl) privilege
+       WHERE namespace.nspname IN ('pricing', 'oracle', 'tollchat_migration')
+         AND attribute.attnum > 0 AND NOT attribute.attisdropped AND privilege.grantee = migrator
+       UNION ALL
+       SELECT 1 FROM pg_proc procedure JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+       CROSS JOIN LATERAL aclexplode(procedure.proacl) privilege
+       WHERE namespace.nspname IN ('pricing', 'oracle', 'tollchat_migration') AND privilege.grantee = migrator
+       UNION ALL
+       SELECT 1 FROM pg_type type JOIN pg_namespace namespace ON namespace.oid = type.typnamespace
+       CROSS JOIN LATERAL aclexplode(type.typacl) privilege
+       WHERE namespace.nspname IN ('pricing', 'oracle', 'tollchat_migration') AND privilege.grantee = migrator
+     )
+     OR EXISTS (
+       SELECT 1 FROM pg_namespace namespace CROSS JOIN LATERAL aclexplode(namespace.nspacl) privilege
+       WHERE namespace.nspname = 'tollchat_migration' AND privilege.grantee = 0
+       UNION ALL
+       SELECT 1 FROM pg_class relation JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+       CROSS JOIN LATERAL aclexplode(relation.relacl) privilege
+       WHERE namespace.nspname = 'tollchat_migration' AND relation.relname = 'schema_history'
+         AND privilege.grantee = 0
+     )
+     OR NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'pricing' AND nspowner = pricing_owner)
+     OR NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'oracle' AND nspowner = oracle_owner)
+     OR NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'tollchat_migration' AND nspowner = pricing_owner)
+     OR EXISTS (
+       SELECT 1 FROM pg_namespace WHERE nspname IN ('pricing', 'oracle', 'tollchat_migration') AND nspowner = migrator
+     ) OR EXISTS (
+       SELECT 1 FROM pg_class relation JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+       WHERE namespace.nspname IN ('pricing', 'oracle', 'tollchat_migration') AND relation.relowner = migrator
+     ) OR EXISTS (
+       SELECT 1 FROM pg_proc procedure JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+       WHERE namespace.nspname IN ('pricing', 'oracle', 'tollchat_migration') AND procedure.proowner = migrator
+     ) OR EXISTS (
+       SELECT 1 FROM pg_type type JOIN pg_namespace namespace ON namespace.oid = type.typnamespace
+       WHERE namespace.nspname IN ('pricing', 'oracle', 'tollchat_migration') AND type.typowner = migrator
+     ) OR EXISTS (
+       SELECT 1 FROM pg_class relation JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+       WHERE namespace.nspname = 'pricing' AND relation.relowner <> pricing_owner
+     ) OR EXISTS (
+       SELECT 1 FROM pg_proc procedure JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+       WHERE namespace.nspname = 'pricing' AND procedure.proowner <> pricing_owner
+     ) OR EXISTS (
+       SELECT 1 FROM pg_type type JOIN pg_namespace namespace ON namespace.oid = type.typnamespace
+       WHERE namespace.nspname = 'pricing' AND type.typowner <> pricing_owner
+     ) OR EXISTS (
+       SELECT 1 FROM pg_class relation JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+       WHERE namespace.nspname = 'oracle' AND relation.relkind IN ('r', 'v', 'm', 'f', 'p')
+         AND NOT EXISTS (
+           SELECT 1 FROM pg_depend dependency JOIN pg_extension extension ON extension.oid = dependency.refobjid
+           WHERE dependency.classid = 'pg_class'::regclass AND dependency.objid = relation.oid
+             AND dependency.deptype = 'e'
+         ) AND relation.relowner <> oracle_owner
+     ) OR EXISTS (
+       SELECT 1 FROM pg_proc procedure JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+       WHERE namespace.nspname = 'oracle' AND NOT EXISTS (
+         SELECT 1 FROM pg_depend dependency JOIN pg_extension extension ON extension.oid = dependency.refobjid
+         WHERE dependency.classid = 'pg_proc'::regclass AND dependency.objid = procedure.oid
+           AND dependency.deptype = 'e'
+       ) AND procedure.proowner <> oracle_owner
+     ) OR EXISTS (
+       SELECT 1 FROM pg_type type JOIN pg_namespace namespace ON namespace.oid = type.typnamespace
+       WHERE namespace.nspname = 'oracle' AND NOT EXISTS (
+         SELECT 1 FROM pg_depend dependency JOIN pg_extension extension ON extension.oid = dependency.refobjid
+         WHERE dependency.classid = 'pg_type'::regclass AND dependency.objid = type.oid
+           AND dependency.deptype = 'e'
+       ) AND type.typowner <> oracle_owner
+     ) THEN
+    RAISE EXCEPTION 'production migration ownership or direct ACL is not exact';
+  END IF;
+END $$;
+"""
+
+
+def _production_postgis_type_guard() -> str:
+    """The approved RDS-owned PostGIS type exception, and nothing else."""
+    return "DO $$\nBEGIN\n" + adoption.production_rds_postgis_type_guard() + "END $$;\n"
+
+
+def run_production() -> dict[str, object]:
+    return run(PRODUCTION_PROFILE)
 
 
 def main() -> int:

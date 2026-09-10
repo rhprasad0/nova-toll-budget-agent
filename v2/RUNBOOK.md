@@ -42,6 +42,20 @@ recurring migrations require the later protected delivery workflow.
 Application release
 artifacts do not apply schema changes; this procedure is separate.
 
+### Protected production migration component (issue 304, slice 4)
+
+`.github/workflows/v2-production-migrations.yml` is a main-only reusable
+component for the later protected delivery sequence. It accepts only the
+verified release admission, rechecks the durable claim and active caller,
+verifies the exact candidate bundle before OIDC or private-network access, and
+runs the fixed `nova-toll-db` / `nova_toll` production profile. The wrapper
+requires private IPv4/Tailscale connectivity, pinned `verify-full` TLS, IAM
+database authentication, encrypted available RDS metadata, seven-day backup
+retention, and a timezone-aware `LatestRestorableTime` no more than 30 minutes
+old and never in the future. This is admission evidence, not a recovery
+rehearsal. Slice 4 does not invoke the component or authorize generic/manual
+production migrations; slice 5 binds it to the exact saved-plan apply.
+
 The current production baseline is AWS account `920534282028` in `us-east-1`:
 
 - Foundation state: `s3://nova-toll-tfstate-920534282028/nova-toll/terraform.tfstate`.

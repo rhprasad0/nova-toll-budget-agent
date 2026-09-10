@@ -1682,6 +1682,18 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
     assert "postgis/postgis" in CI_WORKFLOW
     assert "python3 v2/scripts/check_schema_versions.py" in CI_WORKFLOW
     assert "v2/scripts/run_db_tests.sh" in CI_WORKFLOW
+    ci_jobs = cast(dict[str, dict[str, object]], yaml.safe_load(CI_WORKFLOW)["jobs"])
+    database_setup_uv = [
+        step
+        for step in cast(list[dict[str, object]], ci_jobs["v2-database"]["steps"])
+        if cast(str, step.get("uses", "")).startswith("astral-sh/setup-uv@")
+    ]
+    assert database_setup_uv == [
+        {
+            "uses": "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d",
+            "with": {"python-version": "3.13"},
+        }
+    ]
     for forbidden in (
         "terraform plan",
         "terraform apply",
@@ -1695,8 +1707,10 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
         "never mutate deployed databases or schemas",
         "protected `development` migration workflow",
         "refs/heads/main",
-        "For production, only the reviewed, explicitly authorized Oracle migration",
-        "Generic or future manual migrations are not authorized for",
+        "reviewed protected fixed-target",
+        "v2-production-migrations.yml",
+        "manually authorized production migration",
+        "Generic or future manual migrations are not authorized.",
     ):
         assert text in AGENTS
     for text in (

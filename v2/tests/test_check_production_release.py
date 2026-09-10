@@ -34,7 +34,9 @@ def test_claim_rejects_prior_release_or_tag(monkeypatch: pytest.MonkeyPatch) -> 
         "tag": "v1.2.3",
         "candidate": "a" * 40,
         "listener_run": 1,
+        "listener_attempt": 1,
         "consumer_run": 2,
+        "consumer_attempt": 1,
     }
     monkeypatch.setattr(
         release,
@@ -53,7 +55,9 @@ def test_claim_paginates_before_one_validated_create(
         "tag": "v1.2.3",
         "candidate": "a" * 40,
         "listener_run": 1,
+        "listener_attempt": 1,
         "consumer_run": 2,
+        "consumer_attempt": 1,
     }
     calls: list[str] = []
 
@@ -73,7 +77,9 @@ def test_claim_paginates_before_one_validated_create(
                 "tag": "v1.2.3",
                 "candidate": "a" * 40,
                 "listener_run": 1,
+                "listener_attempt": 1,
                 "consumer_run": 2,
+                "consumer_attempt": 1,
             },
         }
         return {
@@ -390,6 +396,112 @@ def test_revalidate_rejects_changed_evidence_or_current_development_failure_with
     with pytest.raises(release.AdmissionError, match=message):
         release.revalidate(admission)
     assert not calls
+
+
+@pytest.mark.parametrize(
+    ("kind", "message"),
+    [
+        ("success", None),
+        ("json-payload", None),
+        ("consumer-attempt", "replay"),
+        ("consumer-provenance", "replay"),
+        ("claim-environment", "revalidation"),
+        ("claim-task", "revalidation"),
+        ("claim-sha", "revalidation"),
+        ("claim-payload-id", "revalidation"),
+        ("claim-payload-attempt", "revalidation"),
+        ("claim-payload-candidate", "revalidation"),
+    ],
+)
+def test_revalidate_binds_current_consumer_and_durable_claim(
+    monkeypatch: pytest.MonkeyPatch, kind: str, message: str | None
+) -> None:
+    admission = _revalidation_admission()
+    admission["claim_id"] = 15
+    candidate = admission["candidate"]
+    assert isinstance(candidate, str)
+    required_claim = {
+        "release_id": 7,
+        "tag": "v1.2.3",
+        "candidate": candidate,
+        "listener_run": 11,
+        "listener_attempt": 1,
+        "consumer_run": 14,
+        "consumer_attempt": 1,
+    }
+    consumer: dict[str, Any] = {
+        "repository": {"full_name": release.REPOSITORY},
+        "path": ".github/workflows/v2-production-plan.yml@refs/heads/main",
+        "event": "workflow_run",
+        "run_attempt": 1,
+        "status": "in_progress",
+        "conclusion": None,
+    }
+    claim: dict[str, Any] = {
+        "environment": release.PRODUCTION_ENVIRONMENT,
+        "task": "production-release-plan",
+        "sha": candidate,
+        "payload": required_claim,
+    }
+    if kind == "consumer-attempt":
+        consumer["run_attempt"] = 2
+    elif kind == "consumer-provenance":
+        consumer["repository"] = {"full_name": "wrong/repository"}
+    elif kind == "claim-environment":
+        claim["environment"] = "wrong"
+    elif kind == "claim-task":
+        claim["task"] = "wrong"
+    elif kind == "claim-sha":
+        claim["sha"] = "b" * 40
+    elif kind == "claim-payload-id":
+        required_claim["consumer_run"] = 99
+    elif kind == "claim-payload-attempt":
+        required_claim["consumer_attempt"] = 2
+    elif kind == "claim-payload-candidate":
+        required_claim["candidate"] = "b" * 40
+    if kind == "json-payload":
+        claim["payload"] = json.dumps(required_claim)
+
+    monkeypatch.setattr(
+        release,
+        "_listener_event",
+        lambda _run: ({"id": 11, "head_sha": candidate}, {"id": 7}),
+    )
+    monkeypatch.setattr(release, "_release", lambda _release: (7, "v1.2.3", candidate))
+    monkeypatch.setattr(
+        release,
+        "_development",
+        lambda _candidate: (
+            {"id": 12, "run_attempt": 2},
+            {
+                "deployment_id": 9,
+                "artifact_id": 10,
+                "artifact_digest": "sha256:" + "b" * 64,
+            },
+            {"pricing": "1.3.0", "oracle": "1.14.0"},
+        ),
+    )
+    monkeypatch.setattr(
+        release,
+        "_artifacts",
+        lambda _run, _name: {"id": 13, "digest": "sha256:" + "c" * 64},
+    )
+    monkeypatch.setattr(
+        release,
+        "api",
+        lambda _method, path, _payload=None: (
+            consumer
+            if path == "actions/runs/14"
+            else claim
+            if path == "deployments/15"
+            else (_ for _ in ()).throw(AssertionError(path))
+        ),
+    )
+    if message is None:
+        assert release.revalidate(admission) == admission
+    else:
+        with pytest.raises(release.AdmissionError, match=message):
+            release.revalidate(admission)
 
 
 def test_claim_rejects_failed_prior_claim_without_creating_another(

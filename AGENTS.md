@@ -85,12 +85,14 @@ unchanged unless the user explicitly requests an application-agent change.
   manual workflow remains main-only from `refs/heads/main` for approved recovery; both paths use the
   fixed development database, role, registered migration set, and sanitized
   evidence. Neither accepts arbitrary target or migration inputs.
-- For production, only the reviewed, explicitly authorized Oracle migration
-  `v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql` may be applied to
-  a deployed database, and only by following its bounded procedure in
-  `v2/RUNBOOK.md`. Generic or future manual migrations are not authorized for
-  production; other production schema-changing work remains blocked pending
-  approved deployment automation.
+- For production, the reviewed protected fixed-target
+  `v2-production-migrations.yml` workflow may apply the registered migration set
+  only through its bounded release, provenance, identity, private-connectivity,
+  and database gates; it accepts no arbitrary target, SQL, or migration input.
+  The reviewed Oracle migration
+  `v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql` remains the only
+  manually authorized production migration and only by its bounded procedure in
+  `v2/RUNBOOK.md`. Generic or future manual migrations are not authorized.
 
 # Eval graph
 
