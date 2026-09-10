@@ -33,6 +33,14 @@ CANARY_MARKER = "greenway-canary-v1"
 CANARY_DISCLAIMER = (
     "Estimates only. Verify current rates with the toll operator before travel."
 )
+_CANARY_MONEY = re.compile(
+    r"(?i)(?<![\w.\-\u2212])(?:\$|usd\s*)(\d+(?:\.\d+)?)(?![\w]|\.\d)|"
+    r"(?<![\w.\-\u2212])(\d+(?:\.\d+)?)\s*(?:usd|dollars?)\b"
+)
+_CURRENCY_CUE = re.compile(r"(?i)(?:\$|¢|\b(?:usd|dollars?|cents?)\b)")
+_CANARY_DISCLAIMER_SUFFIX = re.compile(
+    r"(?:^|\n[ \t]*\n)" + re.escape(CANARY_DISCLAIMER) + r"\s*\Z"
+)
 MAX_BODY = 8 * 1024 * 1024
 profile_functions = {
     "loader": ("toll-v2-pricing-loader-dev", "loader.zip"),
@@ -587,13 +595,11 @@ def canary(values: dict[str, Any]) -> dict[str, Any]:
                 evidence = cast(dict[str, Any], evidence)
                 try:
                     expected_total = Decimal(evidence["total_usd"])
+                    money_tokens = list(_CANARY_MONEY.finditer(item["text"]))
                     amounts = [
                         Decimal(amount)
-                        for captures in re.findall(
-                            r"(?i)(?<![\w.])(?:\$|usd\s*)(\d+(?:\.\d+)?)(?![\w]|\.\d)|(?<![\w.])(\d+(?:\.\d+)?)\s*(?:usd|dollars?)\b",
-                            item["text"],
-                        )
-                        for amount in captures
+                        for match in money_tokens
+                        for amount in match.groups()
                         if amount
                     ]
                 except (InvalidOperation, ValueError):
@@ -602,7 +608,14 @@ def canary(values: dict[str, Any]) -> dict[str, Any]:
                     bool(amounts) and all(value == expected_total for value in amounts),
                     "canary_grounding",
                 )
-                require(CANARY_DISCLAIMER in item["text"], "canary_disclaimer")
+                require(
+                    _CURRENCY_CUE.search(_CANARY_MONEY.sub("", item["text"])) is None,
+                    "canary_grounding",
+                )
+                require(
+                    _CANARY_DISCLAIMER_SUFFIX.search(item["text"]) is not None,
+                    "canary_disclaimer",
+                )
                 terminal = item
             elif item.get("type") == "tool":
                 continue

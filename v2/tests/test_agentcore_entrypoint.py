@@ -230,6 +230,15 @@ def test_runtime_canary_is_bounded_and_fails_bad_tool_facts():
     assert _canary_event(messages)["success"] is False
 
 
+def test_runtime_appends_a_terminal_disclaimer_after_an_inline_mention():
+    answer = f"$4.25. Do not rely on this statement: {DISCLAIMER}"
+    events = collect(
+        TollChatRuntime(lambda: FakeAgent(answer), FakeGuardrail()),
+        {"prompt": CANARY_PROMPT, "canary_marker": CANARY_MARKER},
+    )
+    assert events[-1]["text"] == f"{answer}\n\n{DISCLAIMER}"
+
+
 def test_runtime_treats_blank_final_results_as_safe_failures():
     for answer in ("", "   \t\n"):
         guardrail = FakeGuardrail()

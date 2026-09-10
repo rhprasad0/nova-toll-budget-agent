@@ -373,7 +373,8 @@ def test_canary_requires_all_observed_evidence_and_grounded_money(
             200,
             "application/x-ndjson",
             _canary_body(
-                "$4.25. Estimates only. Verify current rates with the toll operator before travel.",
+                "The most recent toll is $4.25 (4.25 dollars).\n\n"
+                + check.CANARY_DISCLAIMER,
                 valid,
             ),
         )
@@ -387,7 +388,33 @@ def test_canary_requires_all_observed_evidence_and_grounded_money(
         (valid, "$4.25 plus $99999.00. " + check.CANARY_DISCLAIMER, "canary_grounding"),
         (valid, "$4.25 plus $4.251. " + check.CANARY_DISCLAIMER, "canary_grounding"),
         (valid, "$4.25 plus usd 5.00. " + check.CANARY_DISCLAIMER, "canary_grounding"),
+        (
+            valid,
+            "$4.25, plus fifty cents. Do not rely on this statement: "
+            + check.CANARY_DISCLAIMER,
+            "canary_grounding",
+        ),
+        (
+            valid,
+            "$4.25, plus four dollars.\n\n" + check.CANARY_DISCLAIMER,
+            "canary_grounding",
+        ),
+        (
+            valid,
+            "$4.25, plus 50¢.\n\n" + check.CANARY_DISCLAIMER,
+            "canary_grounding",
+        ),
+        (
+            valid,
+            "-$4.25.\n\n" + check.CANARY_DISCLAIMER,
+            "canary_grounding",
+        ),
         (valid, "$4.25", "canary_disclaimer"),
+        (
+            valid,
+            "$4.25.\n\n" + check.CANARY_DISCLAIMER + "\n\nAdditional text.",
+            "canary_disclaimer",
+        ),
         (
             {**valid, "result_success": False, "success": False},
             "$4.25. " + check.CANARY_DISCLAIMER,
@@ -623,7 +650,7 @@ def test_public_smoke_and_two_session_lifecycle(
                 return (
                     200,
                     "application/x-ndjson",
-                    b'{"type":"canary","schema_version":1,"call_count":1,"tool_name_match":true,"route_profile_match":true,"correlation_match":true,"result_success":true,"total_usd":"4.25","success":true}\n{"type":"answer","text":"$4.25. Estimates only. Verify current rates with the toll operator before travel.","blocked":false}',
+                    b'{"type":"canary","schema_version":1,"call_count":1,"tool_name_match":true,"route_profile_match":true,"correlation_match":true,"result_success":true,"total_usd":"4.25","success":true}\n{"type":"answer","text":"$4.25.\\n\\nEstimates only. Verify current rates with the toll operator before travel.","blocked":false}',
                 )
             if cookie is not None:
                 return (
@@ -742,7 +769,7 @@ def test_main_preserves_original_smoke_diagnostic_after_cleanup(
                 return (
                     200,
                     "application/x-ndjson",
-                    b'{"type":"canary","schema_version":1,"call_count":1,"tool_name_match":true,"route_profile_match":true,"correlation_match":true,"result_success":true,"total_usd":"4.25","success":true}\n{"type":"answer","text":"$4.25. Estimates only. Verify current rates with the toll operator before travel.","blocked":false}',
+                    b'{"type":"canary","schema_version":1,"call_count":1,"tool_name_match":true,"route_profile_match":true,"correlation_match":true,"result_success":true,"total_usd":"4.25","success":true}\n{"type":"answer","text":"$4.25.\\n\\nEstimates only. Verify current rates with the toll operator before travel.","blocked":false}',
                 )
             if cookie is not None:
                 if failure_kind == "revoked":

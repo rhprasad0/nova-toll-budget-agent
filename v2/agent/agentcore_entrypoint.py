@@ -28,6 +28,7 @@ _INVOCATION_LIMITS: Limits = {
 DISCLAIMER = (
     "Estimates only. Verify current rates with the toll operator before travel."
 )
+_DISCLAIMER_SUFFIX = re.compile(r"(?:^|\n[ \t]*\n)" + re.escape(DISCLAIMER) + r"\s*\Z")
 BLOCKED_MESSAGE = "I can only help with Northern Virginia toll road estimates."
 _FAILURE_MODE = "runtime_exception_v2"
 CANARY_MARKER = "greenway-canary-v1"
@@ -283,8 +284,8 @@ class TollChatRuntime:
             if self._is_blocked(answer, "OUTPUT"):
                 yield _blocked()
                 return
-            if DISCLAIMER not in answer:
-                answer = f"{answer}\n\n{DISCLAIMER}"
+            if not _DISCLAIMER_SUFFIX.search(answer):
+                answer = f"{answer.rstrip()}\n\n{DISCLAIMER}"
             if canary:
                 yield _canary_event(canary_messages)
             yield {"type": "answer", "text": answer, "blocked": False}

@@ -38,7 +38,7 @@
     "infra/versions.tf": "f36522386a6e5e733d6d0ed5b61cccb33ba5e08737233da00698682beae671a5",
     "v2/agent-sops/nova-toll-pricing-assistant.sop.md": "f40f59316a44bf344ab8642adef363123874a2858557e44bc16875c0ab573ae3",
     "v2/agent/__init__.py": "9a7c5def20c27bee02ace31193aa0ab9b8548e1502db2f894fcf67d3b86a5e88",
-    "v2/agent/agentcore_entrypoint.py": "7af6898937717a23fcdb7bc80b4527ce90b937f63949fb3da1c718d5475dd3d9",
+    "v2/agent/agentcore_entrypoint.py": "59bded15cb0dda332588306adb79242258aeee74b79710a911948fab9ff356f6",
     "v2/agent/assets/LICENSE.txt": "792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473",
     "v2/agent/assets/chat-markdown.mjs": "693ec770b15a5b6a822ae37dab40e7d052ddc526ef2e96282a06c2328d99b32d",
     "v2/agent/assets/commute-estimates.json": "8174f18481adbc5d32505fa6290a318a83e4926b49b287451db07dc3b3552558",
@@ -140,7 +140,7 @@
     "v2/scripts/build_release_bundle.sh": "40bf8759eddb5b75a5b0e44b3fbd568f2252f1e5fa034163da8111c444a5c6e8",
     "v2/scripts/build_timed_checks_zip.sh": "c51b3e752ace8ecc34ff5e6964739d167f0edc61ebeffbcd4ca595fe9359dab1",
     "v2/scripts/check_development_admission.py": "60222d03555f2dad9373947b7fa1dbb0db817e78300c9fe373db37afd21f972b",
-    "v2/scripts/check_development_release.py": "31f4ea51203ed7c443f9b4e0eb5f1238dc720c2bbd764d5549f0b16f7f28fe21",
+    "v2/scripts/check_development_release.py": "e521609f1cee61fe2d5cfc5747ea57583dbfcd4a33233f491021f2d707397d6c",
     "v2/scripts/check_production_release.py": "fcf2c5ecedc50e1fe15d8205528b3f0509089377d52b99f8bd97ba52fa7a4888",
     "v2/scripts/classify_deployment_error.py": "8c736cbd2a8957f347408b92553efd0971bb50d42e6c8f658f5ff7602079b405",
     "v2/scripts/development_deployment_status.py": "83a129eb0d0769c9e91b6b3a0c8ba1ad8cf375b24285cf4c4a6070a67bb7ecc1",
@@ -160,7 +160,7 @@
     "v2/uv.lock": "a4fe1765a080d8c07154e28265c125fe1b2ceaf2d9f7d353e255e3988e0ce137"
   },
   "packages": {
-    "agentcore.zip": "a5c27c5b8fcf71493ba5b640fa9092e22ad9b1414facec20a886723afc74c3de",
+    "agentcore.zip": "66c4ec12657a09d61fdf9aef6a97cfd8442c4ba000b4fac6f117ecccfa406875",
     "chat-proxy.zip": "44d27f8bd6015085c75aca087ef2d4a9941f5403364654c7cf83f6959087a319",
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
     "publisher.zip": "0d7e95193f2d6deb9816b132b7bb6774e932f643d237aac0d7a8e1aab8245064",
