@@ -2,17 +2,13 @@
 
 import base64
 from fnmatch import fnmatchcase
-import hashlib
 import json
 import os
 from pathlib import Path
 import re
-import stat
 import subprocess
-import sys
 import tempfile
 from textwrap import dedent
-import textwrap
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -367,225 +363,30 @@ def rendered_production_migration_identity() -> tuple[dict[str, object], dict[st
         )
 
 
-def _gate_source() -> str:
-    marker = '          python3 - "$PLAN_JSON" <<\'PY\'\n'
-    start = PRODUCTION_PLAN.index(marker) + len(marker)
-    end = PRODUCTION_PLAN.index("\n          PY", start)
-    return textwrap.dedent(PRODUCTION_PLAN[start:end])
-
-
-def _target_change(action: list[str] | None = None) -> dict[str, object]:
-    defaults = {
-        "project": "nova-toll-budget-agent",
-        "version": "v2",
-        "environment": "production",
-    }
-    after_tags = {**defaults, "delivery_proof": "issue-301"}
-    return {
-        "address": "aws_cloudwatch_log_group.tollchat_proxy",
-        "mode": "managed",
-        "change": {
-            "before": {"name": "/aws/lambda/tollchat-v2-chat-proxy", "retention_in_days": 30, "tags": defaults, "tags_all": defaults},
-            "after": {"name": "/aws/lambda/tollchat-v2-chat-proxy", "retention_in_days": 30, "tags": after_tags, "tags_all": after_tags},
-            "after_unknown": {},
-            "actions": action or ["update"],
-        },
-    }
-
-
-def _valid_plan() -> dict[str, object]:
-    return {
-        "resource_changes": [
-            _target_change(),
-            {
-                "address": "data.aws_region.current",
-                "mode": "data",
-                "change": {"before": None, "after": {"name": "us-east-1"}, "after_unknown": {}, "actions": ["read"]},
-            },
-            {
-                "address": "aws_cloudwatch_log_group.loader",
-                "mode": "managed",
-                "change": {"before": {"name": "loader"}, "after": {"name": "loader"}, "after_unknown": {}, "actions": ["no-op"]},
-            },
-        ],
-        "output_changes": {},
-    }
-
-
-def _gate_result(plan: object | str) -> subprocess.CompletedProcess[str]:
-    with tempfile.TemporaryDirectory() as directory:
-        plan_file = Path(directory) / "plan.json"
-        if isinstance(plan, str):
-            plan_file.write_text(plan)
-        else:
-            plan_file.write_text(json.dumps(plan))
-        return subprocess.run(
-            [sys.executable, "-", str(plan_file)],
-            cwd=ROOT,
-            input=_gate_source(),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-def _assert_gate_fixtures() -> None:
-    accepted_plans = [_valid_plan()]
-    absent_output = _valid_plan()
-    del absent_output["output_changes"]
-    accepted_plans.append(absent_output)
-    for accepted_plan in accepted_plans:
-        accepted = _gate_result(accepted_plan)
-        assert accepted.returncode == 0
-        assert accepted.stdout == "production plan gate: approved exact delivery_proof update\n"
-        assert accepted.stderr == ""
-
-    extra_update = _valid_plan()
-    extra_update["resource_changes"].append(
-        {
-            "address": "aws_cloudwatch_log_group.loader",
-            "mode": "managed",
-            "change": {"before": {"name": "loader"}, "after": {"name": "loader2"}, "after_unknown": {}, "actions": ["update"]},
-        }
-    )
-    invalid = [extra_update]
-    for action in (["create"], ["delete"], ["delete", "create"]):
-        invalid.append({**_valid_plan(), "resource_changes": [_target_change(list(action))]})
-
-    wrong_address = _valid_plan()
-    wrong_address["resource_changes"][0]["address"] = "aws_cloudwatch_log_group.loader"
-    invalid.append(wrong_address)
-
-    bad_tags = _valid_plan()
-    bad_tags["resource_changes"][0]["change"]["after"]["tags"]["project"] = "changed"
-    invalid.append(bad_tags)
-
-    missing_tag = _valid_plan()
-    del missing_tag["resource_changes"][0]["change"]["after"]["tags_all"]["delivery_proof"]
-    invalid.append(missing_tag)
-
-    data_write = _valid_plan()
-    data_write["resource_changes"][1]["change"]["actions"] = ["update"]
-    invalid.append(data_write)
-
-    unknown_address = _valid_plan()
-    unknown_address["resource_changes"].append(
-        {
-            "address": "aws_unknown_resource.example",
-            "mode": "managed",
-            "change": {"before": {}, "after": {}, "after_unknown": {}, "actions": ["no-op"]},
-        }
-    )
-    invalid.append(unknown_address)
-
-    drift = _valid_plan()
-    drift["resource_changes"][2]["change"]["after"]["name"] = "changed"
-    invalid.append(drift)
-
-    deposed = _valid_plan()
-    deposed["resource_changes"][0]["deposed"] = "old"
-    invalid.append(deposed)
-
-    previous = _valid_plan()
-    previous["resource_changes"][0]["previous_address"] = "old.address"
-    invalid.append(previous)
-
-    unknown_value = _valid_plan()
-    unknown_value["resource_changes"][0]["change"]["after_unknown"] = {"retention_in_days": True}
-    invalid.append(unknown_value)
-
-    missing_unknown = _valid_plan()
-    del missing_unknown["resource_changes"][0]["change"]["after_unknown"]
-    invalid.append(missing_unknown)
-
-    malformed_unknown = _valid_plan()
-    malformed_unknown["resource_changes"][0]["change"]["after_unknown"] = False
-    invalid.append(malformed_unknown)
-
-    malformed_unknown_leaf = _valid_plan()
-    malformed_unknown_leaf["resource_changes"][0]["change"]["after_unknown"] = {"retention_in_days": "not-a-bool"}
-    invalid.append(malformed_unknown_leaf)
-
-    replacement = _valid_plan()
-    replacement["resource_changes"][0]["change"]["replace_paths"] = [["tags"]]
-    invalid.append(replacement)
-
-    malformed_replacement = _valid_plan()
-    malformed_replacement["resource_changes"][0]["change"]["replace_paths"] = None
-    invalid.append(malformed_replacement)
-
-    indexed_target = _valid_plan()
-    indexed_target["resource_changes"][0]["address"] = 'aws_cloudwatch_log_group.tollchat_proxy["unexpected"]'
-    invalid.append(indexed_target)
-
-    for actions in (["delete"], ["delete", "create"], ["create", "delete"]):
-        publisher_change = _valid_plan()
-        publisher_change["resource_changes"].append(
-            {
-                "address": "aws_lambda_function.usage_publisher",
-                "mode": "managed",
-                "change": {
-                    "before": {"function_name": "tollchat-v2-usage-publisher"},
-                    "after": None,
-                    "after_unknown": {},
-                    "actions": actions,
-                },
-            }
-        )
-        invalid.append(publisher_change)
-
-    deleted_tag = _valid_plan()
-    del deleted_tag["resource_changes"][0]["change"]["after"]["tags_all"]["project"]
-    invalid.append(deleted_tag)
-
-    resource_drift = _valid_plan()
-    resource_drift["resource_drift"] = [_target_change()]
-    invalid.append(resource_drift)
-
-    for output_changes in (None, [], "unexpected", 1, False, {"unexpected": {}}):
-        invalid_output = _valid_plan()
-        invalid_output["output_changes"] = output_changes
-        invalid.append(invalid_output)
-
-    for rejected in invalid:
-        result = _gate_result(rejected)
-        assert result.returncode != 0
-        assert result.stdout == ""
-        assert result.stderr == "production plan gate: rejected\n"
-
-    malformed = _gate_result("not json")
-    assert malformed.returncode != 0
-    assert malformed.stdout == ""
-    assert malformed.stderr == "production plan gate: rejected\n"
-
-
 def _check_production_planner() -> None:
-    planner = PRODUCTION_PLAN[: PRODUCTION_PLAN.index("\n  deploy:")]
-    require("workflow_dispatch:", PRODUCTION_PLAN)
-    assert PRODUCTION_PLAN.count("workflow_dispatch:") == 1
-    assert PRODUCTION_PLAN.count("jobs:") == 1
-    for forbidden in (
-        "push:",
-        "pull_request:",
-        "schedule:",
-        "workflow_call:",
-        "actions/upload-artifact",
-        "actions/download-artifact",
-        "terraform apply",
-        "aws s3api put-object",
-        "aws s3api get-object",
-        "aws s3api head-object",
-        "aws s3api delete-object",
-        "aws cloudformation",
-    ):
-        assert forbidden not in planner, forbidden
-    require("release_id:", PRODUCTION_PLAN)
-    require("required: true", PRODUCTION_PLAN)
-    require("type: string", PRODUCTION_PLAN)
-    require("if: github.repository == 'rhprasad0/nova-toll-budget-agent' && github.ref == 'refs/heads/main'", PRODUCTION_PLAN)
-    require("contents: read\n      id-token: write", PRODUCTION_PLAN)
-    require("RELEASE_ID: ${{ inputs.release_id }}", PRODUCTION_PLAN)
-    require("RELEASE_ID: ${{ steps.validate.outputs.release_id }}", PRODUCTION_PLAN)
-    assert PRODUCTION_PLAN.count("^[A-Za-z0-9._-]{1,64}$") >= 2
-    require('PLAN_KEY="plans/${RELEASE_ID}/${GITHUB_RUN_ID}/release.tfplan"', PRODUCTION_PLAN)
+    require("workflow_run:", PRODUCTION_PLAN)
+    require("workflows:\n    - v2-production-release", PRODUCTION_PLAN)
+    require("types:\n    - completed", PRODUCTION_PLAN)
+    assert "workflow_dispatch:" not in PRODUCTION_PLAN
+    assert "push:" not in PRODUCTION_PLAN
+    assert "pull_request:" not in PRODUCTION_PLAN
+    assert "schedule:" not in PRODUCTION_PLAN
+    assert "workflow_call:" not in PRODUCTION_PLAN
+    require("group: v2-production-release-delivery", PRODUCTION_PLAN)
+    require("cancel-in-progress: false", PRODUCTION_PLAN)
+
+    for job in ("admission", "claim", "planner"):
+        require(f"  {job}:\n", PRODUCTION_PLAN)
+    assert "\n  deploy:" not in PRODUCTION_PLAN
+    require(
+        "contents: read\n      actions: read\n      deployments: read", PRODUCTION_PLAN
+    )
+    require("contents: read\n      deployments: write", PRODUCTION_PLAN)
+    require(
+        "contents: read\n      actions: read\n      deployments: read\n      id-token: write",
+        PRODUCTION_PLAN,
+    )
+    assert "environment: production" not in PRODUCTION_PLAN
 
     actions = re.findall(r"uses:\s+([^@\s]+)@([0-9a-f]{40})", PRODUCTION_PLAN)
     assert {name for name, _ in actions} == {
@@ -596,34 +397,75 @@ def _check_production_planner() -> None:
     }
     assert len(actions) == 7
     require("persist-credentials: false", PRODUCTION_PLAN)
-    require('python-version: "3.13"', PRODUCTION_PLAN)
+    require("path: trusted", PRODUCTION_PLAN)
+    require("path: candidate", PRODUCTION_PLAN)
+    require("ref: ${{ steps.admitted.outputs.candidate }}", PRODUCTION_PLAN)
+    require("python-version: '3.13'", PRODUCTION_PLAN)
     require("terraform_wrapper: false", PRODUCTION_PLAN)
-    require('terraform_version: "1.15.8"', PRODUCTION_PLAN)
+    require("terraform_version: 1.15.8", PRODUCTION_PLAN)
 
-    require("umask 077", PRODUCTION_PLAN)
-    require("set +x", PRODUCTION_PLAN)
-    require("role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-planner", PRODUCTION_PLAN)
-    require("aws sts get-caller-identity", PRODUCTION_PLAN)
-    require("test \"$ACCOUNT\" = \"$EXPECTED_ACCOUNT\"", PRODUCTION_PLAN)
-    require("--name /nova-toll/cloudflare-read-api-token --with-decryption", PRODUCTION_PLAN)
-    require("--query Parameter.Value --output text", PRODUCTION_PLAN)
+    for command in (
+        "check_production_release.py admit",
+        "check_production_release.py claim",
+        "check_production_release.py revalidate",
+        "verify_release_bundle.py verify",
+        "validate_production_plan.py --plan",
+        "run_private_stage",
+    ):
+        require(command, PRODUCTION_PLAN)
+    for forbidden in (
+        "terraform apply",
+        "-target",
+        "nova-toll-production-deploy",
+        "uv sync --locked",
+        "build_loader_zip.sh",
+        "build_publisher_zip.sh",
+        "build_agentcore_zips.sh",
+        "actions/upload-artifact",
+        "actions/download-artifact",
+    ):
+        assert forbidden not in PRODUCTION_PLAN, forbidden
+
+    require("Verify exact candidate bundle before OIDC", PRODUCTION_PLAN)
+    require("Revalidate mutable release evidence before OIDC", PRODUCTION_PLAN)
+    require("aws-actions/configure-aws-credentials@", PRODUCTION_PLAN)
+    assert (
+        PRODUCTION_PLAN.index("Verify exact candidate bundle before OIDC")
+        < PRODUCTION_PLAN.index("Revalidate mutable release evidence before OIDC")
+        < PRODUCTION_PLAN.index("aws-actions/configure-aws-credentials@")
+    )
+    require(
+        "role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-planner",
+        PRODUCTION_PLAN,
+    )
+    require("actions/artifacts/$BUNDLE_ID/zip", PRODUCTION_PLAN)
+    require('--expected-digest "$BUNDLE_DIGEST"', PRODUCTION_PLAN)
+    require("--verify-checkout", PRODUCTION_PLAN)
+    require("$overlay/v2/infra/build/loader.zip", PRODUCTION_PLAN)
+    require("$overlay/v2/infra/build/publisher.zip", PRODUCTION_PLAN)
+    require("$overlay/v2/infra/build/agentcore.zip", PRODUCTION_PLAN)
+    require("$overlay/v2/infra/build/chat-proxy.zip", PRODUCTION_PLAN)
+    require("$overlay/v2/infra/build/timed-checks.zip", PRODUCTION_PLAN)
+
+    require(
+        "terraform -chdir=candidate/infra init -input=false -backend-config=backend.production.hcl",
+        PRODUCTION_PLAN,
+    )
+    require("terraform -chdir=candidate/infra output -json foundation", PRODUCTION_PLAN)
+    require(
+        "terraform -chdir=candidate/v2/infra init -input=false -backend-config=backend.production.hcl",
+        PRODUCTION_PLAN,
+    )
+    require(
+        'terraform -chdir=candidate/v2/infra plan -input=false -out="$plan"',
+        PRODUCTION_PLAN,
+    )
+    require('terraform -chdir=candidate/v2/infra show -json "$plan"', PRODUCTION_PLAN)
+    require(
+        "--name /nova-toll/cloudflare-read-api-token --with-decryption", PRODUCTION_PLAN
+    )
     require("export CLOUDFLARE_API_TOKEN", PRODUCTION_PLAN)
     assert "GITHUB_ENV" not in PRODUCTION_PLAN
-    assert "add-mask" not in PRODUCTION_PLAN
-
-    require("uv sync --locked", PRODUCTION_PLAN)
-    for script in ("build_loader_zip.sh", "build_publisher_zip.sh", "build_agentcore_zips.sh"):
-        require(f"./scripts/{script}", PRODUCTION_PLAN)
-    for package in ("loader.zip", "publisher.zip", "agentcore.zip", "chat-proxy.zip"):
-        require(f"infra/build/{package}", PRODUCTION_PLAN)
-    require("-var loader_package_path=build/loader.zip", PRODUCTION_PLAN)
-    require("-var publisher_package_path=build/publisher.zip", PRODUCTION_PLAN)
-    require("-var agentcore_package_path=build/agentcore.zip", PRODUCTION_PLAN)
-    require("-var chat_proxy_package_path=build/chat-proxy.zip", PRODUCTION_PLAN)
-    assert planner.count("-target=aws_cloudwatch_log_group.tollchat_proxy") == 1
-    require("terraform -chdir=infra init -input=false -backend-config=backend.production.hcl", PRODUCTION_PLAN)
-    require("terraform -chdir=infra output -json foundation", PRODUCTION_PLAN)
-    require("jq -n --slurpfile foundation", PRODUCTION_PLAN)
     for field in (
         "vpc_id",
         "vpc_cidr_block",
@@ -641,306 +483,36 @@ def _check_production_planner() -> None:
         "alerts_topic_arn",
     ):
         require(field, PRODUCTION_PLAN)
-    require('exact_keys(["a", "c"])', PRODUCTION_PLAN)
-    require('exact_keys(["identifier", "resource_id", "address", "port"])', PRODUCTION_PLAN)
-    require('chmod 600 -- "$FOUNDATION_VARS"', PRODUCTION_PLAN)
-    require("terraform -chdir=v2/infra init -input=false -backend-config=backend.production.hcl", PRODUCTION_PLAN)
-    require("-var-file=production.tfvars", PRODUCTION_PLAN)
-    require('python3 - "$PLAN_JSON" <<\'PY\'', PRODUCTION_PLAN)
-    require('TARGET = "aws_cloudwatch_log_group.tollchat_proxy"', PRODUCTION_PLAN)
-    require('APPROVED_TAG = ("delivery_proof", "issue-301")', PRODUCTION_PLAN)
-    require('"after_unknown"', PRODUCTION_PLAN)
-    require('drift = plan.get("resource_drift", [])', PRODUCTION_PLAN)
-    require('if plan.get("output_changes", {}) != {}:', PRODUCTION_PLAN)
-    require('replace_paths = change.get("replace_paths", [])', PRODUCTION_PLAN)
-    require('"deposed" in item or "previous_address" in item', PRODUCTION_PLAN)
-    require('print("production plan gate: approved exact delivery_proof update")', PRODUCTION_PLAN)
 
-    upload_marker = 'uv run --project v2 python - "$PLAN" "$PUT_RESPONSE"'
-    require(upload_marker, PRODUCTION_PLAN)
-    require("import boto3", PRODUCTION_PLAN)
-    assert PRODUCTION_PLAN.count("aws s3api put-object") == 0
-    assert PRODUCTION_PLAN.count(".put_object(") == 1
-    assert planner.index('print("production plan gate: approved exact delivery_proof update")') < planner.index(upload_marker)
-    for argument in (
-        'Bucket=os.environ["PLAN_BUCKET"]',
-        'Key=os.environ["PLAN_KEY"]',
-        "Body=plan",
-        'ExpectedBucketOwner="920534282028"',
-        'IfNoneMatch="*"',
-        'ServerSideEncryption="aws:kms"',
-        'SSEKMSKeyId=os.environ["TFSTATE_KMS_KEY_ARN"]',
-        'ChecksumSHA256=os.environ["EXPECTED_S3_SHA256"]',
-    ):
-        require(argument, PRODUCTION_PLAN)
-    require('PLAN_KEY="$PLAN_KEY"', PRODUCTION_PLAN)
-    require('EXPECTED_S3_SHA256="$EXPECTED_S3_SHA256"', PRODUCTION_PLAN)
-    assert "ChecksumAlgorithm" not in planner
-    require("from collections.abc import Mapping", PRODUCTION_PLAN)
-    require("import re", PRODUCTION_PLAN)
-    require('if not isinstance(response, Mapping):', PRODUCTION_PLAN)
-    require('version_id = response.get("VersionId")', PRODUCTION_PLAN)
-    require('version_pattern = r"[A-Za-z0-9._+/=-]{1,256}"', PRODUCTION_PLAN)
-    require('if not isinstance(version_id, str):', PRODUCTION_PLAN)
-    require('re.fullmatch(version_pattern, version_id)', PRODUCTION_PLAN)
-    require('"VersionId": version_id', PRODUCTION_PLAN)
-    require('"ServerSideEncryption": "aws:kms"', PRODUCTION_PLAN)
-    require('"SSEKMSKeyId": os.environ["TFSTATE_KMS_KEY_ARN"]', PRODUCTION_PLAN)
-    require('"ChecksumSHA256": os.environ["EXPECTED_S3_SHA256"]', PRODUCTION_PLAN)
-    for forbidden in (
-        'response["VersionId"]',
-        "ResponseMetadata",
-        "HTTPHeaders",
-        "x-amz-version-id",
-        'response.get("ServerSideEncryption"',
-        'response.get("SSEKMSKeyId"',
-        'response.get("ChecksumSHA256"',
-    ):
-        assert forbidden not in planner, forbidden
-    require('>/dev/null 2>"$PUT_ERROR"', PRODUCTION_PLAN)
-    require("os.fchmod(response_fd, 0o600)", PRODUCTION_PLAN)
-    for field in ("VersionId", "ServerSideEncryption", "SSEKMSKeyId", "ChecksumSHA256"):
-        require(field, PRODUCTION_PLAN)
-    require('[[ "$S3_SHA256" == "$EXPECTED_S3_SHA256" ]]', PRODUCTION_PLAN)
-    require("trap cleanup EXIT", PRODUCTION_PLAN)
-    for code in ("71", "72", "73"):
-        require(f"failure_status = {code}", planner)
-    require("except Exception:", planner)
-    require("raise SystemExit(failure_status)", planner)
-    assert "BaseException" not in planner
-    require('case "$upload_status" in', planner)
-    require('upload_status=$?', planner)
-    require("set +e", planner)
-    require("set -e", planner)
-    for phase in ("jq_response_check", "manifest_check", "outputs_summary"):
-        require(f"PHASE={phase}", planner)
-    for message in (
-        "production planner failed during upload request",
-        "production planner failed during response validation",
-        "production planner failed during response file write",
-        "production planner failed during jq response check",
-        "production planner failed during manifest check",
-        "production planner failed during outputs or summary",
-        "production planner failed during unknown post-gate stage",
-    ):
-        require(message, planner)
-    require("planner_failure() {", planner)
-    require("trap planner_failure ERR", planner)
-    require("status=$?", planner)
-    require('exit "$status"', planner)
-    for forbidden in (
-        "checkpoint:",
-        "grep",
-        "shlex",
-        'cat "$PUT_ERROR"',
-        'printf "$PUT_ERROR"',
-        'echo "$PUT_ERROR"',
-    ):
-        assert forbidden not in planner, forbidden
-    assert not any(
-        "$PUT_ERROR" in line and any(command in line for command in ("cat", "echo", "printf"))
-        for line in planner.splitlines()
-    )
-    for path in ("$FOUNDATION_VARS", "$PLAN", "$PLAN_JSON", "$SSM_ERROR", "$PUT_RESPONSE", "$PUT_ERROR", "$MANIFEST"):
-        require(path, PRODUCTION_PLAN)
-
-    for output in (
-        "bucket",
-        "key",
-        "version_id",
-        "local_sha256",
-        "s3_sha256",
-        "kms_key_arn",
-        "release_id",
-        "run_id",
-        "repository",
-        "commit_sha",
-        "account",
-        "region",
-        "resource",
-        "action",
-        "tag_key",
-        "tag_value",
-    ):
-        require(f"{output}: ${{{{ steps.store.outputs.{output} }}}}", PRODUCTION_PLAN)
-        require(f'"{output}="', PRODUCTION_PLAN)
+    require("aws s3api put-object", PRODUCTION_PLAN)
+    require('--expected-bucket-owner "$EXPECTED_ACCOUNT"', PRODUCTION_PLAN)
+    require("--if-none-match '*'", PRODUCTION_PLAN)
+    require("--server-side-encryption aws:kms", PRODUCTION_PLAN)
+    require('--ssekms-key-id "$TFSTATE_KMS_KEY_ARN"', PRODUCTION_PLAN)
+    require("--checksum-algorithm SHA256", PRODUCTION_PLAN)
+    require('--checksum-sha256 "$s3_sha"', PRODUCTION_PLAN)
+    require('.VersionId|type == "string"', PRODUCTION_PLAN)
+    require(".ChecksumSHA256 == $checksum", PRODUCTION_PLAN)
+    require(".SSEKMSKeyId == $key", PRODUCTION_PLAN)
     require("GITHUB_STEP_SUMMARY", PRODUCTION_PLAN)
-    manifest_object = re.search(r"'\{schema_version: 1, ([^']+)\}'", planner)
-    manifest_predicate = re.search(r"\(keys_unsorted \| sort\) == \[([^]]+)\]", planner)
-    if manifest_object is None or manifest_predicate is None:
-        raise AssertionError("manifest schema/predicate missing")
-    generated_manifest_keys = re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\s*:", manifest_object.group(0))
-    predicate_manifest_keys = re.findall(r'"([^"]+)"', manifest_predicate.group(1))
-    assert predicate_manifest_keys == sorted(generated_manifest_keys)
-    require('tags              = local.is_production ? { delivery_proof = "issue-301" } : {}', (ROOT / "v2" / "infra" / "agentcore.tf").read_text())
-    v2_readme = (ROOT / "v2" / "README.md").read_text()
-    runbook = (ROOT / "v2" / "RUNBOOK.md").read_text()
-    require("credential-free PR CI never runs `terraform", v2_readme)
-    require("protected, manually\ndispatched [development migration workflow]", v2_readme)
-    require("manual production planner stores only a gated", runbook)
-    require("Production schema changes remain limited to the separately authorized", runbook)
-
-
-def _check_production_upload_stub() -> None:
-    marker = 'uv run --project v2 python - "$PLAN" "$PUT_RESPONSE"'
-    source = PRODUCTION_PLAN[PRODUCTION_PLAN.index(marker) :]
-    source = source.split("<<'PY'\n", 1)[1].split("\n          PY\n", 1)[0]
-    source = textwrap.dedent(source)
-    body = b"immutable reviewed plan"
-    kms_key_arn = "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7"
-    expected_checksum = base64.b64encode(hashlib.sha256(body).digest()).decode()
-    expected_metadata = {
-        "VersionId": "version-301",
-        "ServerSideEncryption": "aws:kms",
-        "SSEKMSKeyId": kms_key_arn,
-        "ChecksumSHA256": expected_checksum,
-    }
-
-    class MockS3:
-        def __init__(self, response: object, fail_upload: bool = False) -> None:
-            self.calls: list[dict[str, object]] = []
-            self.response = response
-            self.fail_upload = fail_upload
-
-        def put_object(self, **kwargs: object) -> object:
-            self.calls.append(kwargs)
-            assert set(kwargs) == {
-                "Bucket",
-                "Key",
-                "Body",
-                "ExpectedBucketOwner",
-                "IfNoneMatch",
-                "ServerSideEncryption",
-                "SSEKMSKeyId",
-                "ChecksumSHA256",
-            }
-            assert kwargs["Bucket"] == "nova-toll-tfstate-920534282028"
-            assert kwargs["Key"] == "plans/release-301/12345/release.tfplan"
-            assert kwargs["ExpectedBucketOwner"] == "920534282028"
-            assert kwargs["IfNoneMatch"] == "*"
-            assert kwargs["ServerSideEncryption"] == "aws:kms"
-            assert kwargs["SSEKMSKeyId"] == kms_key_arn
-            assert kwargs["ChecksumSHA256"] == expected_checksum
-            plan = kwargs["Body"]
-            assert getattr(plan, "mode", None) == "rb"
-            assert hasattr(plan, "read")
-            assert plan.read() == body
-            if self.fail_upload:
-                raise RuntimeError("simulated upload failure")
-            return self.response
-
-    class MockBoto3:
-        def __init__(self, client: MockS3) -> None:
-            self.client_instance = client
-
-        def client(self, service_name: str, *, region_name: str) -> MockS3:
-            assert service_name == "s3"
-            assert region_name == "us-east-1"
-            return self.client_instance
-
-    previous_boto3 = sys.modules.get("boto3")
-    had_boto3 = "boto3" in sys.modules
-    previous_environment = os.environ.copy()
-    previous_argv = sys.argv
-    try:
-        os.environ.update(
-            {
-                "AWS_REGION": "us-east-1",
-                "PLAN_BUCKET": "nova-toll-tfstate-920534282028",
-                "PLAN_KEY": "plans/release-301/12345/release.tfplan",
-                "TFSTATE_KMS_KEY_ARN": kms_key_arn,
-                "EXPECTED_S3_SHA256": expected_checksum,
-            }
-        )
-        with tempfile.TemporaryDirectory(prefix="nova-toll-upload-") as directory:
-            plan_path = Path(directory) / "release.tfplan"
-            plan_path.write_bytes(body)
-
-            def run(
-                response: object,
-                name: str,
-                expected: dict[str, str] | None,
-                expected_status: int | None = None,
-                fail_upload: bool = False,
-                fail_write: bool = False,
-            ) -> None:
-                client = MockS3(response, fail_upload=fail_upload)
-                sys.modules["boto3"] = MockBoto3(client)
-                response_path = Path(directory) / f"{name}.json"
-                sys.argv = ["workflow-upload.py", str(plan_path), str(response_path)]
-                previous_open = os.open
-                if fail_write:
-                    def fail_open(*args: object, **kwargs: object) -> int:
-                        raise OSError("simulated response write failure")
-
-                    os.open = fail_open  # type: ignore[assignment]
-                try:
-                    try:
-                        exec(compile(source, f"<workflow upload {name}>", "exec"), {"__name__": "__main__"})
-                    except SystemExit as error:
-                        if expected is not None or expected_status is None:
-                            raise
-                        assert error.code == expected_status
-                    else:
-                        if expected is None:
-                            raise AssertionError(f"{name} response must fail closed")
-                        assert stat.S_IMODE(response_path.stat().st_mode) == 0o600
-                        assert json.loads(response_path.read_text(encoding="utf-8")) == expected
-                finally:
-                    os.open = previous_open  # type: ignore[assignment]
-                assert len(client.calls) == 1
-                if expected is None:
-                    assert not response_path.exists()
-
-            run(
-                {"VersionId": "version-301"},
-                "modeled",
-                expected_metadata,
-            )
-            run(
-                {
-                    "VersionId": "version-301",
-                    "ServerSideEncryption": "AES256",
-                    "SSEKMSKeyId": "misleading-model-kms",
-                    "ChecksumSHA256": "misleading-model-checksum",
-                    "ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "misleading-header-version"}},
-                },
-                "misleading-echoes",
-                expected_metadata,
-            )
-            run(
-                {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "version-301"}}},
-                "upload-failure",
-                None,
-                expected_status=71,
-                fail_upload=True,
-            )
-            run(
-                {"VersionId": "version-301"},
-                "write-failure",
-                None,
-                expected_status=73,
-                fail_write=True,
-            )
-            for name, invalid_response in (
-                ("missing", {}),
-                ("response-non-mapping", []),
-                ("modeled-null", {"VersionId": None}),
-                ("modeled-non-string", {"VersionId": 301}),
-                ("invalid-character", {"VersionId": "version 301"}),
-                ("empty", {"VersionId": ""}),
-                ("overlong", {"VersionId": "v" * 257}),
-            ):
-                run(invalid_response, name, None, expected_status=72)
-    finally:
-        sys.argv = previous_argv
-        os.environ.clear()
-        os.environ.update(previous_environment)
-        if had_boto3:
-            sys.modules["boto3"] = previous_boto3
-        else:
-            sys.modules.pop("boto3", None)
-
+    for field in (
+        "listener_run",
+        "listener_attempt",
+        "development_run",
+        "development_attempt",
+        "development_deployment",
+        "evidence_artifact",
+        "evidence_digest",
+        "bundle_id",
+        "bundle_digest",
+        "schema_versions",
+        "claim_id",
+        "saved_plan",
+        "version_id",
+        "checksum",
+        "kms_key_arn",
+    ):
+        require(field, PRODUCTION_PLAN)
 
 def _valid_deploy_metadata() -> dict[str, str]:
     local_sha256 = "0123456789abcdef" * 4
@@ -1027,177 +599,6 @@ def _allows(
         else:
             return True
     return False
-
-
-def _check_production_deploy() -> None:
-    deploy = PRODUCTION_PLAN[PRODUCTION_PLAN.index("\n  deploy:") :]
-    require("needs: planner", deploy)
-    require("if: needs.planner.result == 'success' && github.repository == 'rhprasad0/nova-toll-budget-agent' && github.ref == 'refs/heads/main'", deploy)
-    require("environment: production", deploy)
-    require("contents: read\n      id-token: write", deploy)
-    require("ref: ${{ steps.bind.outputs.commit_sha }}", deploy)
-    require("persist-credentials: false", deploy)
-    require("role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-deploy", deploy)
-    require("inline-session-policy: >-", deploy)
-    assert "steps.bind.outputs.session_policy" not in deploy
-    policy_template = deploy[deploy.index("inline-session-policy: >-") : deploy.index("\n\n      - name: Download")]
-    assert "needs.planner.outputs" not in policy_template
-    for field in ("bucket", "key", "version_id", "kms_key_arn"):
-        require(f"steps.bind.outputs.{field}", policy_template)
-    observability_arn = (
-        "arn:aws:iam::920534282028:policy/nova-toll/production/"
-        "nova-toll-production-deploy-observability"
-    )
-    state_arn = (
-        "arn:aws:iam::920534282028:policy/nova-toll/production/"
-        "nova-toll-production-deploy-state"
-    )
-    assert deploy.count(observability_arn) == 1
-    assert deploy.count(state_arn) == 1
-    for policy in ("compute", "storage", "data", "runtime", "edge", "release"):
-        assert f"nova-toll-production-deploy-{policy}" not in deploy
-    for action in ("s3:ListBucket", "s3:PutObject", "s3:DeleteObject", "kms:GenerateDataKey"):
-        assert f'"{action}"' not in policy_template
-
-    for output in (
-        "bucket", "key", "version_id", "local_sha256", "s3_sha256", "kms_key_arn",
-        "release_id", "run_id", "repository", "commit_sha", "account", "region",
-        "resource", "action", "tag_key", "tag_value",
-    ):
-        require(f"PLANNER_{output.upper()}: ${{{{ needs.planner.outputs.{output} }}}}", deploy)
-    for output in ("bucket", "key", "version_id", "local_sha256", "s3_sha256", "kms_key_arn", "release_id", "run_id", "commit_sha"):
-        require(f"steps.bind.outputs.{output}", deploy)
-    for check in (
-        '[[ "$PLANNER_REPOSITORY" == "rhprasad0/nova-toll-budget-agent" ]]',
-        '[[ "$PLANNER_ACCOUNT" == "$EXPECTED_ACCOUNT" ]]',
-        '[[ "$PLANNER_REGION" == "$AWS_REGION" ]]',
-        '[[ "$PLANNER_BUCKET" == "$PLAN_BUCKET" ]]',
-        '[[ "$PLANNER_KMS_KEY_ARN" == "$TFSTATE_KMS_KEY_ARN" ]]',
-        '[[ "$PLANNER_COMMIT_SHA" == "$GITHUB_SHA" ]]',
-        '[[ "$PLANNER_RESOURCE" == "aws_cloudwatch_log_group.tollchat_proxy" ]]',
-        '[[ "$PLANNER_ACTION" == update ]]',
-        '[[ "$PLANNER_TAG_KEY" == delivery_proof ]]',
-        '[[ "$PLANNER_TAG_VALUE" == issue-301 ]]',
-        '[[ "$PLANNER_RUN_ID" =~ ^[0-9]{1,20}$ ]]',
-        '[[ "$PLANNER_RUN_ID" == "$GITHUB_RUN_ID" ]]',
-        '[[ "$PLANNER_LOCAL_SHA256" =~ ^[0-9a-f]{64}$ ]]',
-        '[[ "$PLANNER_S3_SHA256" =~ ^[A-Za-z0-9+/]{43}=$ ]]',
-        '[[ "$PLANNER_KEY" == "$EXPECTED_KEY" ]]',
-    ):
-        require(check, deploy)
-    run_id_pattern = re.compile(r"^[0-9]{1,20}$")
-    for valid in ("1", "9" * 20):
-        assert run_id_pattern.fullmatch(valid)
-    for invalid in ("", "a", "1-2", "9" * 21, "١"):
-        assert not run_id_pattern.fullmatch(invalid)
-    require('"s3:VersionId":"${{ steps.bind.outputs.version_id }}"', policy_template)
-    require('"Action":"s3:GetObjectVersion"', deploy)
-    require('"Action":"kms:Decrypt"', deploy)
-    require('"kms:EncryptionContext:aws:s3:arn"', deploy)
-    require('"arn:aws:s3:::${{ steps.bind.outputs.bucket }}/${{ steps.bind.outputs.key }}"', policy_template)
-    assert "plans/*" not in deploy
-    assert '"s3:GetObject"], Resource: [$plan_arn]' not in deploy
-
-    assert deploy.count("aws s3api get-object") == 3
-    require("--expected-bucket-owner 903859731897", deploy)
-    require("--expected-bucket-owner \"$EXPECTED_ACCOUNT\"", deploy)
-    require("--checksum-mode ENABLED", deploy)
-    require('[[ "$WRONG_OWNER_STATUS" -ne 0 ]]', deploy)
-    require('[[ "$UNVERSIONED_STATUS" -ne 0 ]]', deploy)
-    assert deploy.count("--checksum-mode ENABLED") == 1
-    for field in ("VersionId", "ServerSideEncryption", "SSEKMSKeyId", "ChecksumSHA256"):
-        require(field, deploy)
-    for check in (
-        '[[ "$RESPONSE_VERSION_ID" == "$VERSION_ID" ]]',
-        '[[ "$RESPONSE_SSE" == aws:kms ]]',
-        '[[ "$RESPONSE_KMS_KEY_ARN" == "$EXPECTED_KMS_KEY_ARN" ]]',
-        '[[ "$RESPONSE_S3_SHA256" == "$EXPECTED_S3_SHA256" ]]',
-        '[[ "$LOCAL_SHA256" == "$EXPECTED_LOCAL_SHA256" ]]',
-        '[[ "$LOCAL_S3_SHA256" == "$EXPECTED_S3_SHA256" ]]',
-    ):
-        require(check, deploy)
-    require("terraform -chdir=v2/infra init -input=false -backend-config=backend.production.hcl", deploy)
-    require('terraform -chdir=v2/infra apply -input=false "$PLAN"', deploy)
-    assert "terraform plan" not in deploy
-    assert "terraform refresh" not in deploy
-    for forbidden in (
-        "actions/upload-artifact",
-        "actions/download-artifact",
-        "terraform output",
-        "aws s3api head-object",
-        "aws s3api list-objects",
-        "aws s3api delete-object",
-        "aws s3api put-object",
-        "aws ssm",
-        "get-parameter",
-    ):
-        assert forbidden not in deploy, forbidden
-    require("trap cleanup EXIT", deploy)
-    for path in (
-        "$PLAN", "$WRONG_OWNER_RESPONSE", "$WRONG_OWNER_ERROR", "$UNVERSIONED_RESPONSE",
-        "$UNVERSIONED_ERROR", "$GET_RESPONSE", "$GET_ERROR", "$INIT_LOG", "$APPLY_LOG",
-        "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
-    ):
-        require(path, deploy)
-    require("GITHUB_STEP_SUMMARY", deploy)
-    require("wrong_owner_denied=true", deploy)
-    require("unversioned_denied=true", deploy)
-    require("apply_succeeded=true", deploy)
-
-    metadata = _valid_deploy_metadata()
-    body = b"immutable reviewed plan"
-    metadata["local_sha256"] = hashlib.sha256(body).hexdigest()
-    metadata["s3_sha256"] = base64.b64encode(hashlib.sha256(body).digest()).decode()
-    policy = _synthetic_session_policy(metadata)
-    statements = policy["Statement"]
-    assert isinstance(statements, list)
-    plan_statement = next(item for item in statements if item["Action"] == "s3:GetObjectVersion")
-    assert plan_statement["Resource"] == f"arn:aws:s3:::{metadata['bucket']}/{metadata['key']}"
-    assert plan_statement["Condition"] == {"StringEquals": {"s3:VersionId": metadata["version_id"]}}
-    assert all("plans/*" not in json.dumps(item) for item in statements)
-    max_metadata = dict(metadata, release_id="r" * 64, run_id="9" * 20, version_id="v" * 256)
-    max_metadata["key"] = f"plans/{max_metadata['release_id']}/{max_metadata['run_id']}/release.tfplan"
-    assert len(json.dumps(_synthetic_session_policy(max_metadata), separators=(",", ":"))) <= 2048
-
-    class MockS3:
-        def __init__(self) -> None:
-            self.calls: list[tuple[str, str | None]] = []
-
-        def get_object(self, owner: str, version_id: str | None) -> tuple[dict[str, str], bytes]:
-            self.calls.append((owner, version_id))
-            if owner != metadata["account"] or version_id != metadata["version_id"]:
-                raise PermissionError("denied")
-            return {
-                "VersionId": metadata["version_id"],
-                "ServerSideEncryption": "aws:kms",
-                "SSEKMSKeyId": metadata["kms_key_arn"],
-                "ChecksumSHA256": base64.b64encode(hashlib.sha256(body).digest()).decode(),
-            }, body
-
-    s3 = MockS3()
-    try:
-        s3.get_object("903859731897", metadata["version_id"])
-    except PermissionError:
-        pass
-    else:
-        raise AssertionError("wrong-owner read must fail")
-    try:
-        s3.get_object(metadata["account"], None)
-    except PermissionError:
-        pass
-    else:
-        raise AssertionError("unversioned read must fail")
-    response, body = s3.get_object(metadata["account"], metadata["version_id"])
-    assert len(s3.calls) == 3
-    assert response["VersionId"] == metadata["version_id"]
-    assert response["ServerSideEncryption"] == "aws:kms"
-    assert response["SSEKMSKeyId"] == metadata["kms_key_arn"]
-    assert response["ChecksumSHA256"] == base64.b64encode(hashlib.sha256(body).digest()).decode()
-    assert response["ChecksumSHA256"] == metadata["s3_sha256"]
-    assert hashlib.sha256(body).hexdigest() == metadata["local_sha256"]
-    mismatched = dict(response, VersionId="wrong-version")
-    assert mismatched["VersionId"] != metadata["version_id"]
-
 
 def main() -> None:
     production = IAM[IAM.index("# --- GitHub Actions production planner/deploy identities") :]
@@ -1642,9 +1043,6 @@ def main() -> None:
     assert "terraform apply" not in WORKFLOW
 
     _check_production_planner()
-    _check_production_upload_stub()
-    _check_production_deploy()
-    _assert_gate_fixtures()
 
     print("delivery identity contract: ok")
 
