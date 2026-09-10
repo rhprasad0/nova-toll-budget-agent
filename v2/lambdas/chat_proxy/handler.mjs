@@ -19,6 +19,8 @@ const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const PUBLIC_ORIGINS = new Set((process.env.PUBLIC_ORIGINS ?? "https://tollchat.ai,https://www.tollchat.ai")
   .split(",").filter(Boolean));
 const DRILL_MODE = "runtime_exception_v2";
+const CANARY_MARKER = "greenway-canary-v1";
+const CANARY_PROMPT = "What is the current toll from the Leesburg Bypass entrance to Route 28 for a two-axle vehicle with E-ZPass?";
 const SAFE_ERROR = {
   type: "error",
   code: "agent_unavailable",
@@ -197,7 +199,7 @@ const releaseSession = async (dependencies, token, leaseId) => {
   }
 };
 
-const validEvent = (value) => {
+const validEvent = (value, allowCanary = false) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   if (value.type === "tool") {
     return exactKeys(value, ["type", "index", "label", "status"])
@@ -208,6 +210,13 @@ const validEvent = (value) => {
     return exactKeys(value, ["type", "text", "blocked"])
       && typeof value.text === "string" && typeof value.blocked === "boolean";
   }
+  if (value.type === "canary") {
+    return allowCanary
+      && exactKeys(value, ["type", "schema_version", "call_count", "tool_name_match", "route_profile_match", "correlation_match", "result_success", "total_usd", "success"])
+      && value.schema_version === 1 && Number.isInteger(value.call_count) && value.call_count >= 0
+      && ["tool_name_match", "route_profile_match", "correlation_match", "result_success", "success"].every((key) => typeof value[key] === "boolean")
+      && (value.total_usd === null || (typeof value.total_usd === "string" && /^\d{1,4}\.\d{2}$/.test(value.total_usd)));
+  }
   return value.type === "error"
     && exactKeys(value, ["type", "code", "message"])
     && ERROR_CODES.has(value.code) && ERROR_MESSAGES.has(value.message);
@@ -216,6 +225,7 @@ const validEvent = (value) => {
 async function* ndjsonFromSse(
   stream,
   release = async () => {},
+  allowCanary = false,
 ) {
   const decoder = new TextDecoder();
   let buffer = "";
@@ -231,7 +241,7 @@ async function* ndjsonFromSse(
         const lines = frame.split("\n");
         if (lines.some((line) => !line.startsWith("data: "))) throw new Error("invalid SSE frame");
         const value = JSON.parse(lines.map((line) => line.slice(6)).join("\n"));
-        if (!validEvent(value)) throw new Error("invalid stream event");
+        if (!validEvent(value, allowCanary)) throw new Error("invalid stream event");
         if (terminal) throw new Error("event after terminal");
         if (value.type === "answer" || value.type === "error") terminal = value;
         else yield `${JSON.stringify(value)}\n`;
@@ -304,16 +314,19 @@ export async function route(event, dependencies) {
       leaseHeld = false;
       await releaseSession(dependencies, sessionToken, leaseId);
     };
+    const canary = header(event, "x-tollchat-canary") === CANARY_MARKER
+      && body.message.trim() === CANARY_PROMPT;
     const result = await client.send(new InvokeAgentRuntimeCommand({
       agentRuntimeArn: runtimeArn,
       runtimeSessionId,
       qualifier: "preview",
       payload: new TextEncoder().encode(JSON.stringify({
         prompt: body.message.trim(),
-        ...(validPost(event)
+          ...(validPost(event)
           && header(event, "x-tollchat-drill") === "runtime-exception-v2"
           ? { failure_mode: DRILL_MODE }
           : {}),
+        ...(canary ? { canary_marker: CANARY_MARKER } : {}),
       })),
     }));
     if (!result.contentType?.includes("text/event-stream") || !result.response?.[Symbol.asyncIterator]) throw new Error("invalid upstream response");
@@ -328,6 +341,7 @@ export async function route(event, dependencies) {
       body: ndjsonFromSse(
         result.response,
         release,
+        canary,
       ),
     };
   } catch (error) {

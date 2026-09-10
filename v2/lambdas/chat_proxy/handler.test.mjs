@@ -78,6 +78,24 @@ test("private same-origin chat streams only approved v2 events", async () => {
   assert.equal(new TextDecoder().decode(calls[0].payload), '{"prompt":"Price it"}');
 });
 
+test("the exact marker carries one bounded canary event and rejects it otherwise", async () => {
+  const prompt = "What is the current toll from the Leesburg Bypass entrance to Route 28 for a two-axle vehicle with E-ZPass?";
+  const canary = '{"type":"canary","schema_version":1,"call_count":1,"tool_name_match":true,"route_profile_match":true,"correlation_match":true,"result_success":true,"total_usd":"4.25","success":true}';
+  const calls = [];
+  const client = { async send(command) {
+    calls.push(command.input);
+    return { contentType: "text/event-stream", response: chunks(`data: ${canary}\n\n`, 'data: {"type":"answer","text":"$4.25","blocked":false}\n\n') };
+  } };
+  const request = event("/api/chat", { message: prompt });
+  request.headers["x-tollchat-canary"] = "greenway-canary-v1";
+  const response = await route(request, dependencies(client));
+  assert.match(await bodyText(response.body), /"type":"canary"/);
+  assert.equal(new TextDecoder().decode(calls[0].payload), JSON.stringify({ prompt, canary_marker: "greenway-canary-v1" }));
+
+  const unmarked = await route(event("/api/chat", { message: prompt }), dependencies(client));
+  assert.equal(await bodyText(unmarked.body), '{"type":"error","code":"agent_unavailable","message":"TollChat is temporarily unavailable. Please try again."}\n');
+});
+
 test("public CloudFront origin can invoke the Function URL", async () => {
   const client = { async send() {
     return {

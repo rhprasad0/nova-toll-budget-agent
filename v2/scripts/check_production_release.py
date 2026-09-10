@@ -330,6 +330,7 @@ def _development(
         "artifact_digest",
         "schema_versions",
         "readiness",
+        "canary",
     }
     if (
         set(evidence) != expected
@@ -343,6 +344,55 @@ def _development(
     ):
         raise AdmissionError("evidence")
     schemas = _mapping(evidence.get("schema_versions"))
+    canary = _mapping(evidence.get("canary"))
+    if (
+        set(canary)
+        != {
+            "schema_version",
+            "runtime_version",
+            "proxy_version",
+            "call_count",
+            "total_usd",
+            "elapsed_ms",
+            "model",
+            "tool_contract",
+            "prompt_version",
+            "renderer_version",
+            "success",
+            "commit",
+            "run_id",
+            "attempt",
+            "deployment_id",
+            "artifact_id",
+            "artifact_digest",
+        }
+        or type(canary.get("schema_version")) is not int
+        or canary.get("schema_version") != 1
+        or not isinstance(canary.get("runtime_version"), str)
+        or re.fullmatch(r"[1-9][0-9]*", canary["runtime_version"]) is None
+        or not isinstance(canary.get("proxy_version"), str)
+        or re.fullmatch(r"[1-9][0-9]*", canary["proxy_version"]) is None
+        or type(canary.get("call_count")) is not int
+        or canary.get("call_count") != 1
+        or not isinstance(canary.get("total_usd"), str)
+        or not re.fullmatch(r"\d{1,4}\.\d{2}", canary["total_usd"])
+        or type(canary.get("elapsed_ms")) is not int
+        or not 0 <= canary["elapsed_ms"] <= 60_000
+        or canary.get("model") != "gpt-5.6-luna"
+        or canary.get("tool_contract") != "1.5.0"
+        or canary.get("prompt_version") != "2.0.2"
+        or canary.get("renderer_version") != "1.0.0"
+        or canary.get("success") is not True
+        or canary.get("commit") != candidate
+        or _positive(canary.get("run_id")) != run_id
+        or _positive(canary.get("attempt")) != attempt
+        or _positive(canary.get("deployment_id"))
+        != _positive(evidence.get("deployment_id"))
+        or _positive(canary.get("artifact_id"))
+        != _positive(evidence.get("artifact_id"))
+        or canary.get("artifact_digest") != evidence.get("artifact_digest")
+    ):
+        raise AdmissionError("evidence")
     declared, installed = (
         _mapping(schemas.get("declared")),
         _mapping(schemas.get("installed")),

@@ -38,8 +38,13 @@ the reviewer-protected reusable delivery job from `main`. It stores one gated
 plan in the existing private versioned state bucket's `plans/` prefix, verifies
 its immutable version/checksum, state binding, and 24-hour age before deploy
 preflight, fixed migrations, re-assumed deploy apply, and fixed readiness.
-Terminal evidence is sanitized. Root's IAM-only reconciliation and the slice-6
-Greenway canary remain required before the first production release.
+Terminal evidence is sanitized. The same protected readiness step runs the
+fixed Greenway public-session canary before development and production success:
+it requires one exact current-price call, a correlated successful result, a
+grounded amount, the required disclaimer, and completion within 60 seconds.
+Only its bounded, candidate-bound record reaches delivery evidence; raw stream
+and provider data stay private. Root's IAM-only reconciliation remains required
+before the first production release.
 Production schema changes remain limited to the separately authorized, reviewed
 procedures below. The one-time baseline adoption path is described next; future
 recurring migrations require the later protected delivery workflow.

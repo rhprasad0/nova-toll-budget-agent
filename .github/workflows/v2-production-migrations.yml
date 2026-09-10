@@ -309,6 +309,7 @@ jobs:
         env:
           CANDIDATE: ${{ steps.admission.outputs.candidate }}
           STATE: ${{ steps.saved-plan.outputs.state }}
+          ADMISSION: ${{ inputs.admission }}
         working-directory: candidate
         run: |
           set -euo pipefail
@@ -334,7 +335,7 @@ jobs:
           run_private_stage readiness-state "$RUNNER_TEMP/production-state-after-match.out" "$RUNNER_TEMP/production-readiness.err" jq -ne --argjson expected "$STATE" --slurpfile state "$RUNNER_TEMP/production-state-after.json" --slurpfile head "$RUNNER_TEMP/production-state-after-head.json" '$state[0].lineage == $expected.lineage and ($state[0].serial >= $expected.serial) and ($head[0].VersionId != $expected.version_id or $state[0].serial > $expected.serial)'
           lock_released() { if aws s3api head-object --bucket nova-toll-tfstate-920534282028 --key nova-toll/v2/terraform.tfstate.tflock --expected-bucket-owner 920534282028 >"$RUNNER_TEMP/production-lock-private.out" 2>"$RUNNER_TEMP/production-lock-private.err"; then return 1; fi; grep -Eq '(404|Not Found)' "$RUNNER_TEMP/production-lock-private.err"; }
           run_private_stage readiness-state "$RUNNER_TEMP/production-lock.out" "$RUNNER_TEMP/production-readiness.err" lock_released
-          GITHUB_SHA="$CANDIDATE" run_private_stage readiness-check "$RUNNER_TEMP/production-readiness.out" "$RUNNER_TEMP/production-readiness.err" python3 v2/scripts/check_development_release.py --profile production "$RUNNER_TEMP/production-readiness-state.json" release-overlay/release-manifest.json
+          CANARY_EVIDENCE_FILE="$RUNNER_TEMP/production-canary-evidence.json" CANARY_COMMIT="$CANDIDATE" CANARY_RUN_ID="$GITHUB_RUN_ID" CANARY_ATTEMPT="$GITHUB_RUN_ATTEMPT" CANARY_DEPLOYMENT_ID="$(jq -er .claim_id <<<"$ADMISSION")" CANARY_ARTIFACT_ID="$(jq -er .bundle_id <<<"$ADMISSION")" CANARY_ARTIFACT_DIGEST="$(jq -er .bundle_digest <<<"$ADMISSION")" GITHUB_SHA="$CANDIDATE" run_private_stage readiness-check "$RUNNER_TEMP/production-readiness.out" "$RUNNER_TEMP/production-readiness.err" python3 v2/scripts/check_development_release.py --profile production "$RUNNER_TEMP/production-readiness-state.json" release-overlay/release-manifest.json
       - name: Clear deploy credentials before evidence upload
         if: always()
         run: |
@@ -348,6 +349,8 @@ jobs:
         env:
           CANDIDATE: ${{ steps.admission.outputs.candidate }}
           ADMISSION: ${{ inputs.admission }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -euo pipefail
           set +x
@@ -360,7 +363,9 @@ jobs:
           trap finish EXIT
           evidence() {
             jq -e --arg candidate "$CANDIDATE" --argjson admission "$ADMISSION" 'type == "object" and .candidate == $candidate and .release_id == $admission.release_id and .claim_id == $admission.claim_id and .status == "ok"' "$RUNNER_TEMP/v2-production-migrations-evidence.json" >/dev/null || return
-            jq -cn --arg candidate "$CANDIDATE" --argjson admission "$ADMISSION" '{schema_version:1,candidate:$candidate,release_id:$admission.release_id,claim_id:$admission.claim_id,migration:"success",apply:"success",readiness:"success"}' | sed 's/^/delivery_evidence=/' >>"$GITHUB_OUTPUT" || return
+            jq -es --arg candidate "$CANDIDATE" --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" --argjson admission "$ADMISSION" 'length == 1 and (.[0] | type == "object" and (keys | sort) == ["artifact_digest","artifact_id","attempt","call_count","commit","deployment_id","elapsed_ms","model","prompt_version","proxy_version","renderer_version","run_id","runtime_version","schema_version","success","tool_contract","total_usd"] and .schema_version == 1 and (.runtime_version | type == "string" and test("^[1-9][0-9]*$")) and (.proxy_version | type == "string" and test("^[1-9][0-9]*$")) and .call_count == 1 and (.total_usd | type == "string" and test("^[0-9]{1,4}\\.[0-9]{2}$")) and (.elapsed_ms | type == "number" and . >= 0 and . <= 60000) and .model == "gpt-5.6-luna" and .tool_contract == "1.5.0" and .prompt_version == "2.0.2" and .renderer_version == "1.0.0" and .success == true and .commit == $candidate and .run_id == $run and .attempt == $attempt and .deployment_id == ($admission.claim_id | tostring) and .artifact_id == ($admission.bundle_id | tostring) and .artifact_digest == $admission.bundle_digest)' "$RUNNER_TEMP/production-canary-evidence.json" >/dev/null || return
+            jq -cn --arg candidate "$CANDIDATE" --argjson admission "$ADMISSION" --slurpfile canary "$RUNNER_TEMP/production-canary-evidence.json" '{schema_version:1,candidate:$candidate,release_id:$admission.release_id,claim_id:$admission.claim_id,migration:"success",apply:"success",readiness:"success",canary:$canary[0]}' | sed 's/^/delivery_evidence=/' >>"$GITHUB_OUTPUT" || return
+            rm -f -- "$RUNNER_TEMP/production-canary-evidence.json" || return
           }
           run_private_stage migration-evidence "$RUNNER_TEMP/delivery-evidence.out" "$RUNNER_TEMP/delivery-evidence.err" evidence
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

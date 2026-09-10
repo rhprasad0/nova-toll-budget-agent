@@ -6,7 +6,7 @@ import subprocess
 import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -309,8 +309,14 @@ def test_admission_accepts_a_current_full_development_rerun(
     assert admitted["evidence_artifact"] == full_artifact
 
 
+@pytest.mark.parametrize(
+    "canary_change",
+    [None, ("schema_version", True), ("call_count", True), ("runtime_version", "v8")],
+)
 def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    canary_change: tuple[str, object] | None,
 ) -> None:
     candidate = "a" * 40
     evidence = {
@@ -328,7 +334,29 @@ def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
             "installed": {"pricing": "1.3.0", "oracle": "1.14.0"},
         },
         "readiness": "success",
+        "canary": {
+            "schema_version": 1,
+            "runtime_version": "8",
+            "proxy_version": "12",
+            "call_count": 1,
+            "total_usd": "4.25",
+            "elapsed_ms": 10,
+            "model": "gpt-5.6-luna",
+            "tool_contract": "1.5.0",
+            "prompt_version": "2.0.2",
+            "renderer_version": "1.0.0",
+            "success": True,
+            "commit": candidate,
+            "run_id": 12,
+            "attempt": 2,
+            "deployment_id": 9,
+            "artifact_id": 10,
+            "artifact_digest": "sha256:" + "b" * 64,
+        },
     }
+    if canary_change:
+        canary = cast(dict[str, Any], evidence["canary"])
+        canary[canary_change[0]] = canary_change[1]
     archive = tmp_path / "evidence.zip"
     with zipfile.ZipFile(archive, "w") as output:
         output.writestr("development-release-evidence.json", json.dumps(evidence))
@@ -402,6 +430,10 @@ def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
 
     monkeypatch.setattr(release, "api", api)
     monkeypatch.setattr(release, "download", download)
+    if canary_change:
+        with pytest.raises(release.AdmissionError, match="evidence"):
+            release._development(candidate)
+        return
     run, actual, versions = release._development(candidate)
     assert run["run_attempt"] == 2
     assert actual == evidence

@@ -40,6 +40,27 @@ def context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Any, ...]:
     needs["release-record"]["outputs"] = {"deployment_id": "7"}
     needs["deploy"]["outputs"] = {
         "verified": "success",
+        "canary": json.dumps(
+            {
+                "schema_version": 1,
+                "runtime_version": "8",
+                "proxy_version": "12",
+                "call_count": 1,
+                "total_usd": "4.25",
+                "elapsed_ms": 10,
+                "model": "gpt-5.6-luna",
+                "tool_contract": "1.5.0",
+                "prompt_version": "2.0.2",
+                "renderer_version": "1.0.0",
+                "success": True,
+                "commit": sha,
+                "run_id": 123,
+                "attempt": 2,
+                "deployment_id": 7,
+                "artifact_id": 99,
+                "artifact_digest": "sha256:" + "b" * 64,
+            }
+        ),
         "verified_pricing_schema": "1.2.3",
         "verified_oracle_schema": "1.14.0",
     }
@@ -101,6 +122,25 @@ def test_prepare_writes_exact_versioned_evidence_then_finish_publishes_success(
             "installed": {"pricing": "1.2.3", "oracle": "1.14.0"},
         },
         "readiness": "success",
+        "canary": {
+            "schema_version": 1,
+            "runtime_version": "8",
+            "proxy_version": "12",
+            "call_count": 1,
+            "total_usd": "4.25",
+            "elapsed_ms": 10,
+            "model": "gpt-5.6-luna",
+            "tool_contract": "1.5.0",
+            "prompt_version": "2.0.2",
+            "renderer_version": "1.0.0",
+            "success": True,
+            "commit": "a" * 40,
+            "run_id": 123,
+            "attempt": 2,
+            "deployment_id": 7,
+            "artifact_id": 99,
+            "artifact_digest": "sha256:" + "b" * 64,
+        },
     }
     assert calls == []
     _finish(monkeypatch, needs)
@@ -157,6 +197,8 @@ def test_failed_publication_stage_never_passes(
         "publication_id",
         "publication_digest",
         "publication_name",
+        "canary_bool",
+        "canary_version",
     ],
 )
 def test_wrong_identity_or_evidence_fails_closed(
@@ -181,6 +223,12 @@ def test_wrong_identity_or_evidence_fails_closed(
         needs["deploy"]["outputs"]["verified_pricing_schema"] = "9.9.9"
     elif wrong == "readiness":
         needs["deploy"]["outputs"].pop("verified")
+    elif wrong in {"canary_bool", "canary_version"}:
+        canary = json.loads(needs["deploy"]["outputs"]["canary"])
+        canary["elapsed_ms" if wrong == "canary_bool" else "runtime_version"] = (
+            True if wrong == "canary_bool" else "v8"
+        )
+        needs["deploy"]["outputs"]["canary"] = json.dumps(canary)
     elif wrong == "publication_id":
         monkeypatch.setenv("EVIDENCE_ARTIFACT_ID", "0")
     elif wrong == "publication_digest":

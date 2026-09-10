@@ -8,10 +8,10 @@
     "lock_identity": "V2-AWS60"
   },
   "deployment_inputs": {
-    ".github/workflows/v2-development-delivery.yml": "c7972bbeaeeabc75907b6e59a2ba6d534ac4de757de9302de01584f1a484886e",
+    ".github/workflows/v2-development-delivery.yml": "10bac6fb0bcafb5b3b142a2381da6ba0bca8f36d47595017edb6f8a7a5c25277",
     ".github/workflows/v2-development-migrations.yml": "06f7d3d432f77dac9fb6c680752918e6def5af0cff4b52349a8cddb098dd217a",
     ".github/workflows/v2-development-plan.yml": "5b6a20804dde0bcd1b906262e2b43aac0389dc580c6aea7a73d54d84d0d009b8",
-    ".github/workflows/v2-production-migrations.yml": "0619691b18e745f7798b6cdaf8f1232ce7bea10e04cfe0c15b67c3428a343168",
+    ".github/workflows/v2-production-migrations.yml": "0278cdd24f5786df661c323e100be60b8e5b1270b34c620a0f97968be388abee",
     "infra/.terraform.lock.hcl": "798415e2b72a761023f0ee096521a29223173428c99de7e4c50103e726eef4d8",
     "infra/account-contract.json": "c5959d0778042c89768547979937d789d454a9b2d36db2e77f35147e0ab1e8fa",
     "infra/agentcore.tf": "cfe196ec653cf2b903375c8a4fc64411f53d578c663e8549c79926049a64f9c2",
@@ -38,7 +38,7 @@
     "infra/versions.tf": "f36522386a6e5e733d6d0ed5b61cccb33ba5e08737233da00698682beae671a5",
     "v2/agent-sops/nova-toll-pricing-assistant.sop.md": "f40f59316a44bf344ab8642adef363123874a2858557e44bc16875c0ab573ae3",
     "v2/agent/__init__.py": "9a7c5def20c27bee02ace31193aa0ab9b8548e1502db2f894fcf67d3b86a5e88",
-    "v2/agent/agentcore_entrypoint.py": "901686c67f0a47d25cb3eac72acb5a7f552904baea9584cf95a87f1e5849bce9",
+    "v2/agent/agentcore_entrypoint.py": "59bded15cb0dda332588306adb79242258aeee74b79710a911948fab9ff356f6",
     "v2/agent/assets/LICENSE.txt": "792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473",
     "v2/agent/assets/chat-markdown.mjs": "693ec770b15a5b6a822ae37dab40e7d052ddc526ef2e96282a06c2328d99b32d",
     "v2/agent/assets/commute-estimates.json": "8174f18481adbc5d32505fa6290a318a83e4926b49b287451db07dc3b3552558",
@@ -123,7 +123,7 @@
     "v2/infra/timed_checks.tf": "40a6f5817147335e309f5bcc195f7cb23d8fa11e270362f1c38d1aaa170b12bd",
     "v2/infra/variables.tf": "c054a672130eb9a10e6340c610e9b864c422455440b1554c182ef76122771f73",
     "v2/infra/versions.tf": "e08079981fe5f42c0af5906a3710c635d03e346e2724811d02cb8528bb5ad32d",
-    "v2/lambdas/chat_proxy/handler.mjs": "c1d6dfcdc6b71be2d8ad25e51d2ba16f2944c449234b442a4373e053ad8dcdf2",
+    "v2/lambdas/chat_proxy/handler.mjs": "af9237b02affe83f4b4f056d0b93759e38e304c7eeb1b157235304b76398b3e2",
     "v2/lambdas/chat_proxy/package-lock.json": "247f0d8b76dc17b79c2c626f8cb5b50deb404cc500fe89fc11e4df3725aabd69",
     "v2/lambdas/chat_proxy/package.json": "ae2c05e77896c541f9b3564751c79cd497387e45ec9b3bf84e410206536feb8b",
     "v2/lambdas/loader/_bounds.py": "43b5b930347b8773ca86a26aabf1560acaba418ec0994732dbc15e61e36eef5d",
@@ -140,10 +140,10 @@
     "v2/scripts/build_release_bundle.sh": "40bf8759eddb5b75a5b0e44b3fbd568f2252f1e5fa034163da8111c444a5c6e8",
     "v2/scripts/build_timed_checks_zip.sh": "c51b3e752ace8ecc34ff5e6964739d167f0edc61ebeffbcd4ca595fe9359dab1",
     "v2/scripts/check_development_admission.py": "60222d03555f2dad9373947b7fa1dbb0db817e78300c9fe373db37afd21f972b",
-    "v2/scripts/check_development_release.py": "306225d768aa111cc5a280e543bf9333342f821817318e9624951bc3aba752a0",
-    "v2/scripts/check_production_release.py": "37788a07c75e6a0a71b1c5aee0c58b6f18db768d6fc62e9d1bd8d5957ff4a47d",
+    "v2/scripts/check_development_release.py": "e521609f1cee61fe2d5cfc5747ea57583dbfcd4a33233f491021f2d707397d6c",
+    "v2/scripts/check_production_release.py": "fcf2c5ecedc50e1fe15d8205528b3f0509089377d52b99f8bd97ba52fa7a4888",
     "v2/scripts/classify_deployment_error.py": "8c736cbd2a8957f347408b92553efd0971bb50d42e6c8f658f5ff7602079b405",
-    "v2/scripts/development_deployment_status.py": "38d0f3e1e51d47885c3611d477b2f3ee13b759494048d26dc42795c3bd6e4fd2",
+    "v2/scripts/development_deployment_status.py": "83a129eb0d0769c9e91b6b3a0c8ba1ad8cf375b24285cf4c4a6070a67bb7ecc1",
     "v2/scripts/loader-requirements.in": "38c314f1e9470587a6b566f2c8ed28cdf2ed3df2d87d349c3cbfc9f5a707230e",
     "v2/scripts/loader-requirements.txt": "7e35ab33589fae931d8bac07a7e32f868c02c4f37b629eb4208075a98fd918b4",
     "v2/scripts/publisher-requirements.in": "443323b60ce646abe57f80efe6a842af9467d089d73459b84830450825fabdcc",
@@ -160,8 +160,8 @@
     "v2/uv.lock": "a4fe1765a080d8c07154e28265c125fe1b2ceaf2d9f7d353e255e3988e0ce137"
   },
   "packages": {
-    "agentcore.zip": "d391659d32f46c418b23104b8ea103679000cb7077309d3684d83e0d953f490f",
-    "chat-proxy.zip": "de0a8bcaa0a01fb993c11f9550ee75aa08578838889d3e4145fd0044dfb9afff",
+    "agentcore.zip": "66c4ec12657a09d61fdf9aef6a97cfd8442c4ba000b4fac6f117ecccfa406875",
+    "chat-proxy.zip": "44d27f8bd6015085c75aca087ef2d4a9941f5403364654c7cf83f6959087a319",
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
     "publisher.zip": "0d7e95193f2d6deb9816b132b7bb6774e932f643d237aac0d7a8e1aab8245064",
     "timed-checks.zip": "f318421d40047bd57a1bd9c0cd6eab961d7281a66595bf883616b7468b0b8fff"
@@ -190,7 +190,6 @@
       "action": "update",
       "operation_class": "artifact-upload",
       "changed_fields": [
-        "source",
         "source_hash"
       ]
     },
@@ -199,7 +198,6 @@
       "action": "update",
       "operation_class": "artifact-upload",
       "changed_fields": [
-        "source",
         "source_hash"
       ]
     },

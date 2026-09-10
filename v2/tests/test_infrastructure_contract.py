@@ -4088,6 +4088,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
     )
     assert jobs["deploy"]["outputs"] == {
         "verified": "${{ steps.verify-release.outputs.verified }}",
+        "canary": "${{ steps.verify-release.outputs.canary }}",
         "verified_pricing_schema": "${{ steps.migration-schema.outputs.verified_pricing_schema }}",
         "verified_oracle_schema": "${{ steps.migration-schema.outputs.verified_oracle_schema }}",
     }
@@ -4107,6 +4108,17 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "v2-development-migrations-evidence.json" in extraction_source
     assert ".after" in extraction_source
     assert "development-readiness-state.json" in deploy_source
+    assert (
+        'CANARY_DEPLOYMENT_ID="${{ needs.release-record.outputs.deployment_id }}"'
+        in deploy_source
+    )
+    assert (
+        'CANARY_ARTIFACT_ID="${{ needs.build.outputs.artifact_id }}"' in deploy_source
+    )
+    assert (
+        'CANARY_ARTIFACT_DIGEST="${{ needs.build.outputs.artifact_digest }}"'
+        in deploy_source
+    )
 
     admission = jobs["admission"]
     assert admission["permissions"] == {"contents": "read", "actions": "read"}
@@ -4252,7 +4264,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "full claims" not in proof_source.lower()
 
     deploy = jobs["deploy"]
-    assert deploy["needs"] == ["admission", "build", "oidc-proof"]
+    assert deploy["needs"] == ["admission", "release-record", "build", "oidc-proof"]
     assert deploy["if"] == (
         "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' "
         "&& github.triggering_actor == github.actor"

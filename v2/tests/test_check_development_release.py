@@ -5,6 +5,9 @@ import hashlib
 import http.cookiejar
 import importlib.util
 import json
+import signal
+import socket
+import time
 from email.message import Message
 from pathlib import Path
 from typing import Any
@@ -337,6 +340,172 @@ def test_answer_failures_have_fixed_reasons(
     assert "sentinel-answer" not in output
 
 
+def _canary_body(answer: str, evidence: dict[str, Any] | None = None) -> bytes:
+    values = [] if evidence is None else [evidence]
+    values.append({"type": "answer", "text": answer, "blocked": False})
+    return b"\n".join(json.dumps(value).encode() for value in values)
+
+
+def test_canary_requires_all_observed_evidence_and_grounded_money(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompt_calls: list[tuple[dict[str, Any] | None, bool]] = []
+    valid = {
+        "type": "canary",
+        "schema_version": 1,
+        "call_count": 1,
+        "tool_name_match": True,
+        "route_profile_match": True,
+        "correlation_match": True,
+        "result_success": True,
+        "total_usd": "4.25",
+        "success": True,
+    }
+
+    def request(
+        _jar: http.cookiejar.CookieJar,
+        _path: str,
+        body: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> tuple[int, str, bytes]:
+        prompt_calls.append((body, kwargs["canary"]))
+        return (
+            200,
+            "application/x-ndjson",
+            _canary_body(
+                "The most recent toll is $4.25 (4.25 dollars).\n\n"
+                + check.CANARY_DISCLAIMER,
+                valid,
+            ),
+        )
+
+    monkeypatch.setattr(check, "request", request)
+    result = check.canary({"version": "8", "alias_version": "12"})
+    assert prompt_calls == [({"message": check.CANARY_PROMPT}, True)]
+    assert result["total_usd"] == "4.25" and result["success"] is True
+
+    for evidence, answer, reason in (
+        (valid, "$4.25 plus $99999.00. " + check.CANARY_DISCLAIMER, "canary_grounding"),
+        (valid, "$4.25 plus $4.251. " + check.CANARY_DISCLAIMER, "canary_grounding"),
+        (valid, "$4.25 plus usd 5.00. " + check.CANARY_DISCLAIMER, "canary_grounding"),
+        (
+            valid,
+            "$4.25, plus fifty cents. Do not rely on this statement: "
+            + check.CANARY_DISCLAIMER,
+            "canary_grounding",
+        ),
+        (
+            valid,
+            "$4.25, plus four dollars.\n\n" + check.CANARY_DISCLAIMER,
+            "canary_grounding",
+        ),
+        (
+            valid,
+            "$4.25, plus 50¢.\n\n" + check.CANARY_DISCLAIMER,
+            "canary_grounding",
+        ),
+        (
+            valid,
+            "-$4.25.\n\n" + check.CANARY_DISCLAIMER,
+            "canary_grounding",
+        ),
+        (valid, "$4.25", "canary_disclaimer"),
+        (
+            valid,
+            "$4.25.\n\n" + check.CANARY_DISCLAIMER + "\n\nAdditional text.",
+            "canary_disclaimer",
+        ),
+        (
+            {**valid, "result_success": False, "success": False},
+            "$4.25. " + check.CANARY_DISCLAIMER,
+            "canary_evidence",
+        ),
+        (None, "$4.25. " + check.CANARY_DISCLAIMER, "canary_evidence"),
+    ):
+
+        def failed_request(
+            _jar: http.cookiejar.CookieJar,
+            _path: str,
+            _body: dict[str, Any] | None = None,
+            *,
+            origin: str | None = None,
+            cookie: str | None = None,
+            canary: bool = False,
+            answer: str = answer,
+            evidence: dict[str, Any] | None = evidence,
+        ) -> tuple[int, str, bytes]:
+            del _jar, _path, _body, origin, cookie, canary
+            return 200, "application/x-ndjson", _canary_body(answer, evidence)
+
+        monkeypatch.setattr(
+            check,
+            "request",
+            failed_request,
+        )
+        with pytest.raises(check.CheckFailure, match=reason):
+            check.canary({"version": "8", "alias_version": "12"})
+
+
+def test_canary_signal_interrupts_a_blocked_read_and_restores_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    timers: list[tuple[int, float, float]] = []
+    reader, writer = socket.socketpair()
+    real_setitimer = signal.setitimer
+
+    class Response:
+        status = 200
+        headers = Message()
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> bool:
+            return False
+
+        def read(self, _size: int) -> bytes:
+            return reader.recv(_size)
+
+    class Opener:
+        def open(self, _request: Request, timeout: int) -> Response:
+            assert timeout == 90
+            return Response()
+
+    def build_opener(*_handlers: object) -> Opener:
+        return Opener()
+
+    monkeypatch.setattr(check.urllib.request, "build_opener", build_opener)
+
+    def short_timer(
+        which: int, seconds: float, interval: float = 0.0
+    ) -> tuple[float, float]:
+        timers.append((which, seconds, interval))
+        return real_setitimer(which, 0.05 if seconds == 60 else seconds, interval)
+
+    monkeypatch.setattr(check.signal, "setitimer", short_timer)
+    started = time.monotonic()
+    try:
+        with pytest.raises(check.CheckFailure, match="canary_timeout"):
+            check.canary({"version": "8", "alias_version": "12"})
+    finally:
+        reader.close()
+        writer.close()
+    assert time.monotonic() - started < 1
+    assert signal.getsignal(signal.SIGALRM) == previous_handler
+    assert timers[0] == (signal.ITIMER_REAL, 60, 0.0)
+    assert timers[-1] == (signal.ITIMER_REAL, 0.0, 0.0)
+
+
+def test_canary_contract_versions_match_trusted_runtime_sources() -> None:
+    assert check._canary_contract() == {
+        "model": "gpt-5.6-luna",
+        "tool_contract": "1.5.0",
+        "prompt_version": "2.0.2",
+        "renderer_version": "1.0.0",
+    }
+
+
 def cookie(value: str, *, http_only: bool = True) -> http.cookiejar.Cookie:
     return http.cookiejar.Cookie(
         0,
@@ -399,6 +568,7 @@ def test_reset_failures_have_fixed_reasons(
         *,
         origin: str = check.profile_site,
         cookie: str | None = None,
+        canary: bool = False,
     ) -> tuple[int, str, bytes]:
         del origin, cookie
         return code, "application/json", body
@@ -447,6 +617,7 @@ def test_public_smoke_and_two_session_lifecycle(
         *,
         origin: str = check.profile_site,
         cookie: str | None = None,
+        canary: bool = False,
     ) -> tuple[int, str, bytes]:
         if path == "/robots.txt":
             return (
@@ -475,6 +646,12 @@ def test_public_smoke_and_two_session_lifecycle(
         if path == "/api/chat":
             if origin != check.profile_site:
                 return 200 if wrong == "origin" else 403, "application/json", b"{}"
+            if canary:
+                return (
+                    200,
+                    "application/x-ndjson",
+                    b'{"type":"canary","schema_version":1,"call_count":1,"tool_name_match":true,"route_profile_match":true,"correlation_match":true,"result_success":true,"total_usd":"4.25","success":true}\n{"type":"answer","text":"$4.25.\\n\\nEstimates only. Verify current rates with the toll operator before travel.","blocked":false}',
+                )
             if cookie is not None:
                 return (
                     200 if wrong == "revoked" else 401,
@@ -568,6 +745,7 @@ def test_main_preserves_original_smoke_diagnostic_after_cleanup(
         *,
         origin: str = check.profile_site,
         cookie: str | None = None,
+        canary: bool = False,
     ) -> tuple[int, str, bytes]:
         nonlocal created
         if path == "/robots.txt":
@@ -587,6 +765,12 @@ def test_main_preserves_original_smoke_diagnostic_after_cleanup(
         if path == "/api/chat":
             if origin != check.profile_site:
                 return 403, "application/json", b"{}"
+            if canary:
+                return (
+                    200,
+                    "application/x-ndjson",
+                    b'{"type":"canary","schema_version":1,"call_count":1,"tool_name_match":true,"route_profile_match":true,"correlation_match":true,"result_success":true,"total_usd":"4.25","success":true}\n{"type":"answer","text":"$4.25.\\n\\nEstimates only. Verify current rates with the toll operator before travel.","blocked":false}',
+                )
             if cookie is not None:
                 if failure_kind == "revoked":
                     raise json.JSONDecodeError(sentinel, sentinel, 0)
