@@ -3165,17 +3165,10 @@ def test_timed_package_is_threaded_through_all_plan_paths():
         in DEVELOPMENT_DELIVERY_WORKFLOW
     )
     assert (
-        "-var timed_checks_package_path=build/timed-checks.zip"
+        '-var timed_checks_package_path="$overlay/v2/infra/build/timed-checks.zip"'
         in PRODUCTION_PLAN_WORKFLOW
     )
-    for address in (
-        "aws_lambda_function.timed_checks",
-        "aws_scheduler_schedule.timed_checks",
-        "aws_s3_object.timed_checks",
-        "aws_security_group.timed_checks",
-        "aws_sqs_queue.timed_checks_invoke_failure",
-    ):
-        assert address in PRODUCTION_PLAN_WORKFLOW
+    assert "-target" not in PRODUCTION_PLAN_WORKFLOW
 
 
 def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
@@ -3718,83 +3711,106 @@ def _workflow_run_source(job: dict[str, object]) -> str:
     )
 
 
-def test_production_deploy_session_policy_payload_stays_within_sts_limit():
-    workflow = cast(dict[str, object], yaml.safe_load(PRODUCTION_PLAN_WORKFLOW))
-    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
-    steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
-    credentials = next(
-        step
-        for step in steps
+def test_production_release_plan_workflows_keep_trust_before_credentials_and_apply_disabled():
+    listener = cast(
+        dict[str, object],
+        yaml.safe_load(
+            (
+                REPO_ROOT / ".github" / "workflows" / "v2-production-release.yml"
+            ).read_text()
+        ),
+    )
+    planner = cast(dict[str, object], yaml.safe_load(PRODUCTION_PLAN_WORKFLOW))
+    assert _workflow_trigger(listener) == {"release": {"types": ["published"]}}
+    assert _workflow_trigger(planner) == {
+        "workflow_run": {
+            "workflows": ["v2-production-release"],
+            "types": ["completed"],
+        }
+    }
+    for workflow in (listener, planner):
+        assert workflow["concurrency"] == {
+            "group": "v2-production-release-delivery",
+            "cancel-in-progress": False,
+        }
+
+    listener_source = "\n".join(
+        _workflow_run_source(job)
+        for job in cast(dict[str, dict[str, object]], listener["jobs"]).values()
+    )
+    assert "aws-actions/configure-aws-credentials@" not in listener_source
+    assert "terraform" not in listener_source
+    assert (
+        "v2-production-release-${{ github.run_id }}-${{ github.run_attempt }}"
+        in str(listener)
+    )
+
+    jobs = cast(dict[str, dict[str, object]], planner["jobs"])
+    assert set(jobs) == {"admission", "claim", "planner"}
+    assert jobs["admission"]["permissions"] == {
+        "contents": "read",
+        "actions": "read",
+        "deployments": "read",
+    }
+    assert jobs["claim"]["permissions"] == {"contents": "read", "deployments": "write"}
+    assert jobs["planner"]["permissions"] == {
+        "contents": "read",
+        "actions": "read",
+        "deployments": "read",
+        "id-token": "write",
+    }
+    assert all(job.get("environment") is None for job in jobs.values())
+
+    admission_source = _workflow_run_source(jobs["admission"])
+    claim_source = _workflow_run_source(jobs["claim"])
+    planner_source = _workflow_run_source(jobs["planner"])
+    assert (
+        "aws-actions/configure-aws-credentials@" not in admission_source + claim_source
+    )
+    assert "check_production_release.py admit" in admission_source
+    assert "check_production_release.py claim" in claim_source
+    assert "check_production_release.py revalidate" in planner_source
+    planner_steps = cast(list[dict[str, object]], jobs["planner"]["steps"])
+    bundle_index = next(
+        index
+        for index, step in enumerate(planner_steps)
+        if step.get("name") == "Verify exact candidate bundle before OIDC"
+    )
+    revalidation_index = next(
+        index
+        for index, step in enumerate(planner_steps)
+        if step.get("name") == "Revalidate mutable release evidence before OIDC"
+    )
+    credentials_index = next(
+        index
+        for index, step in enumerate(planner_steps)
         if str(step.get("uses", "")).startswith(
             "aws-actions/configure-aws-credentials@"
         )
     )
-    with_values = cast(dict[str, object], credentials["with"])
-    inline_template = cast(str, with_values["inline-session-policy"])
-    inline_policy = cast(dict[str, object], json.loads(inline_template))
-    inline_statements = cast(list[dict[str, object]], inline_policy["Statement"])
-    assert inline_policy["Version"] == "2012-10-17"
-    assert len(inline_statements) == 2
-    assert [statement["Action"] for statement in inline_statements] == [
-        "s3:GetObjectVersion",
-        "kms:Decrypt",
-    ]
-    assert all(
-        action not in json.dumps(inline_policy)
-        for action in (
-            "s3:ListBucket",
-            "s3:PutObject",
-            "s3:DeleteObject",
-            "kms:GenerateDataKey",
-        )
-    )
-    managed_session_policies = [
-        arn
-        for arn in cast(str, with_values["managed-session-policies"]).splitlines()
-        if arn
-    ]
-    assert managed_session_policies == [
-        "arn:aws:iam::920534282028:policy/nova-toll/production/"
-        "nova-toll-production-deploy-observability",
-        "arn:aws:iam::920534282028:policy/nova-toll/production/"
-        "nova-toll-production-deploy-state",
-    ]
+    assert bundle_index < revalidation_index < credentials_index
+    assert "terraform apply" not in planner_source
+    assert "nova-toll-production-deploy" not in planner_source
+    assert "-target" not in planner_source
 
-    def payload_size(metadata: Mapping[str, str], managed: list[str]) -> int:
-        inline = inline_template
-        for field in ("bucket", "key", "version_id", "kms_key_arn"):
-            inline = inline.replace(
-                f"${{{{ steps.bind.outputs.{field} }}}}", metadata[field]
-            )
-        return len(inline.encode("utf-8")) + sum(
-            len(arn.encode("utf-8")) for arn in managed
-        )
-
-    representative = {
-        "bucket": "nova-toll-tfstate-920534282028",
-        "release_id": "release-301",
-        "run_id": "12345",
-        "version_id": "version-301",
-        "kms_key_arn": "arn:aws:kms:us-east-1:920534282028:key/"
-        "8fc1450b-0b5c-4afe-8c0a-cb150aab5da7",
-    }
-    representative["key"] = (
-        f"plans/{representative['release_id']}/{representative['run_id']}/release.tfplan"
-    )
-    maximum = dict(
-        representative,
-        release_id="r" * 64,
-        run_id="9" * 20,
-        version_id="v" * 256,
-    )
-    maximum["key"] = f"plans/{maximum['release_id']}/{maximum['run_id']}/release.tfplan"
-
-    split_sizes = (
-        payload_size(representative, managed_session_policies),
-        payload_size(maximum, managed_session_policies),
-    )
-    assert split_sizes == (757, 1138)
-    assert (2048 - split_sizes[0], 2048 - split_sizes[1]) == (1291, 910)
+    for field in (
+        "listener_run",
+        "listener_attempt",
+        "development_run",
+        "development_attempt",
+        "development_deployment",
+        "evidence_artifact",
+        "evidence_digest",
+        "bundle_id",
+        "bundle_digest",
+        "schema_versions",
+        "claim_id",
+        "saved_plan",
+        "VersionId",
+        "ChecksumSHA256",
+        "SSEKMSKeyId",
+    ):
+        assert field in planner_source
 
 
 def _development_foundation_validator(source: str) -> str:

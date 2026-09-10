@@ -1,0 +1,60 @@
+name: v2-production-release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v2-production-release-delivery
+  cancel-in-progress: false
+
+jobs:
+  record:
+    if: github.repository == 'rhprasad0/nova-toll-budget-agent'
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    steps:
+      - name: Retain only the bounded published-release event
+        env:
+          EVENT: ${{ toJSON(github.event) }}
+        run: |
+          set -euo pipefail
+          umask 077
+          set +x
+          marker="$RUNNER_TEMP/v2-production-release-event-status"
+          emit() { printf '%s\n' "$1" >&2; printf '%s\n' "$1" >>"$GITHUB_STEP_SUMMARY"; }
+          failed() {
+            status=$?
+            if test ! -e "$marker"; then
+              : >"$marker"
+              emit "stage=release-event status=fail elapsed=0 exit=$status reason=malformed_input"
+            fi
+            exit "$status"
+          }
+          trap failed ERR
+          emit 'stage=release-event status=start elapsed=0 exit=0 reason=unclassified'
+          printf '%s' "$EVENT" | jq -ce '{action:.action,repository:{full_name:.repository.full_name},release:{id:.release.id,tag_name:.release.tag_name,draft:.release.draft,prerelease:.release.prerelease,published_at:.release.published_at}}' >release-event.json 2>"$RUNNER_TEMP/v2-production-release-event.err"
+          : >"$marker"
+          emit 'stage=release-event status=pass elapsed=0 exit=0 reason=unclassified'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        id: upload
+        with:
+          name: v2-production-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-event.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Record immutable event publication outcome
+        if: always()
+        run: |
+          set -euo pipefail
+          marker="$RUNNER_TEMP/v2-production-release-event-status"
+          emit() { printf '%s\n' "$1" >&2; printf '%s\n' "$1" >>"$GITHUB_STEP_SUMMARY"; }
+          if [[ "${{ steps.upload.outcome }}" == success ]]; then
+            emit 'stage=artifact-metadata status=pass elapsed=0 exit=0 reason=unclassified'
+          else
+            emit 'stage=artifact-metadata status=fail elapsed=0 exit=1 reason=publisher_failed'
+            exit 1
+          fi
