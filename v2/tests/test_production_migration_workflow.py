@@ -168,6 +168,68 @@ def test_actual_workflow_admission_binds_object_and_sanitizes_failure(
         assert "candidate=" + "b" * 40 in (tmp_path / "output").read_text()
 
 
+def test_actual_delivery_evidence_emits_the_validated_canary_once(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "trusted").symlink_to(ROOT, target_is_directory=True)
+    runner = tmp_path / "runner"
+    runner.mkdir()
+    admission = _admission()
+    (runner / "v2-production-migrations-evidence.json").write_text(
+        json.dumps(
+            {
+                "candidate": "b" * 40,
+                "release_id": 7,
+                "claim_id": 15,
+                "status": "ok",
+            }
+        )
+    )
+    canary = {
+        "schema_version": 1,
+        "runtime_version": "8",
+        "proxy_version": "8",
+        "call_count": 1,
+        "total_usd": "4.25",
+        "elapsed_ms": 1,
+        "model": "gpt-5.6-luna",
+        "tool_contract": "1.5.0",
+        "prompt_version": "2.0.2",
+        "renderer_version": "1.0.0",
+        "success": True,
+        "commit": "b" * 40,
+        "run_id": "14",
+        "attempt": "1",
+        "deployment_id": "15",
+        "artifact_id": "10",
+        "artifact_digest": "sha256:" + "d" * 64,
+    }
+    (runner / "production-canary-evidence.json").write_text(json.dumps(canary))
+    output = tmp_path / "output"
+    result = subprocess.run(
+        ["bash", "-c", _workflow_step("delivery-evidence")],
+        cwd=tmp_path,
+        env={
+            "PATH": os.defpath,
+            "RUNNER_TEMP": str(runner),
+            "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+            "GITHUB_OUTPUT": str(output),
+            "GITHUB_RUN_ID": "14",
+            "GITHUB_RUN_ATTEMPT": "1",
+            "CANDIDATE": "b" * 40,
+            "ADMISSION": json.dumps(admission),
+        },
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    delivery = json.loads(output.read_text().split("=", 1)[1])
+    assert delivery["canary"] == canary
+    assert not (runner / "production-canary-evidence.json").exists()
+
+
 @pytest.mark.parametrize(
     "step,failure,stage",
     [
@@ -775,6 +837,8 @@ elif name == "python3":
         "GITHUB_WORKSPACE": str(tmp_path),
         "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
         "GITHUB_OUTPUT": str(tmp_path / "output"),
+        "GITHUB_RUN_ID": "14",
+        "GITHUB_RUN_ATTEMPT": "1",
         "CANDIDATE": "b" * 40,
         "APPLY_MARKER": str(tmp_path / "applied"),
         "AWS_MARKER": str(tmp_path / "aws-called"),

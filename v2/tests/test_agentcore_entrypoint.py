@@ -1,3 +1,4 @@
+# pyright: reportUnknownVariableType=false, reportUnknownMemberType=false
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +8,14 @@ from typing import cast
 from pytest import LogCaptureFixture
 from strands.types.agent import Limits
 
-from agent.agentcore_entrypoint import BLOCKED_MESSAGE, DISCLAIMER, TollChatRuntime
+from agent.agentcore_entrypoint import (
+    BLOCKED_MESSAGE,
+    CANARY_MARKER,
+    CANARY_PROMPT,
+    DISCLAIMER,
+    TollChatRuntime,
+    _canary_event,  # pyright: ignore[reportPrivateUsage]
+)
 
 
 class FakeGuardrail:
@@ -44,6 +52,15 @@ class FakeAgent:
                         "toolUse": {
                             "toolUseId": "tool-1",
                             "name": "get_current_toll_price",
+                            "input": {
+                                "origin_point_id": "greenway:1:entry:EB",
+                                "destination_point_id": "greenway:28:exit:EB",
+                                "pricing_profile": {
+                                    "vehicle_class": "two_axle_passenger",
+                                    "payment_method": "e_zpass",
+                                    "transponder_mode": "toll",
+                                },
+                            },
                         }
                     }
                 ]
@@ -52,7 +69,13 @@ class FakeAgent:
         yield {
             "message": {
                 "content": [
-                    {"toolResult": {"toolUseId": "tool-1", "status": "success"}}
+                    {
+                        "toolResult": {
+                            "toolUseId": "tool-1",
+                            "status": "success",
+                            "content": [{"json": {"total_usd": "4.25"}}],
+                        }
+                    }
                 ]
             },
             "result": self.answer,
@@ -111,6 +134,100 @@ def test_runtime_rejects_invalid_input_and_enforces_turn_limit():
         "code": "turn_limit",
         "message": "Start a new chat to continue.",
     }
+
+
+def test_runtime_canary_is_bounded_and_fails_bad_tool_facts():
+    events = collect(
+        TollChatRuntime(FakeAgent, FakeGuardrail()),
+        {"prompt": CANARY_PROMPT, "canary_marker": CANARY_MARKER},
+    )
+    assert events[-2] == {
+        "type": "canary",
+        "schema_version": 1,
+        "call_count": 1,
+        "tool_name_match": True,
+        "route_profile_match": True,
+        "correlation_match": True,
+        "result_success": True,
+        "total_usd": "4.25",
+        "success": True,
+    }
+    assert "toolUseId" not in str(events[-2]) and "pricing_profile" not in str(
+        events[-2]
+    )
+
+    class BadAgent(FakeAgent):
+        async def stream_async(
+            self, prompt: str, *, limits: Limits | None = None
+        ) -> AsyncIterator[dict[str, object]]:
+            async for event in super().stream_async(prompt, limits=limits):
+                message = event.get("message")
+                if isinstance(message, dict):
+                    content = message.get("content")
+                    if (
+                        isinstance(content, list)
+                        and content
+                        and isinstance(content[0], dict)
+                    ):
+                        tool_use = content[0].get("toolUse")
+                        if isinstance(tool_use, dict) and isinstance(
+                            tool_use.get("input"), dict
+                        ):
+                            tool_use["input"]["origin_point_id"] = "wrong"
+                yield event
+
+    assert (
+        collect(
+            TollChatRuntime(BadAgent, FakeGuardrail()),
+            {"prompt": CANARY_PROMPT, "canary_marker": CANARY_MARKER},
+        )[-2]["success"]
+        is False
+    )
+
+    for result in (
+        {
+            "toolUseId": "other",
+            "status": "success",
+            "content": [{"json": {"total_usd": "4.25"}}],
+        },
+        {
+            "toolUseId": "tool-1",
+            "status": "error",
+            "content": [{"json": {"total_usd": "4.25"}}],
+        },
+        {
+            "toolUseId": "tool-1",
+            "status": "success",
+            "content": [{"json": {"total_usd": "4.257"}}],
+        },
+    ):
+        messages = [
+            {
+                "content": [
+                    {
+                        "toolUse": {
+                            "toolUseId": "tool-1",
+                            "name": "get_current_toll_price",
+                            "input": {
+                                "origin_point_id": "greenway:1:entry:EB",
+                                "destination_point_id": "greenway:28:exit:EB",
+                                "pricing_profile": {
+                                    "vehicle_class": "two_axle_passenger",
+                                    "payment_method": "e_zpass",
+                                    "transponder_mode": "toll",
+                                },
+                            },
+                        }
+                    }
+                ]
+            },
+            {"content": [{"toolResult": result}]},
+        ]
+        assert _canary_event(messages)["success"] is False
+
+    messages[0]["content"][0]["toolUse"]["toolUseId"] = ""
+    messages[1]["content"][0]["toolResult"]["toolUseId"] = ""
+    assert _canary_event(messages)["success"] is False
 
 
 def test_runtime_treats_blank_final_results_as_safe_failures():

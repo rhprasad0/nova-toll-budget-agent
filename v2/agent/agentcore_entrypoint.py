@@ -6,6 +6,7 @@ import logging
 import os
 import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol, cast
 
 import boto3
@@ -29,6 +30,8 @@ DISCLAIMER = (
 )
 BLOCKED_MESSAGE = "I can only help with Northern Virginia toll road estimates."
 _FAILURE_MODE = "runtime_exception_v2"
+CANARY_MARKER = "greenway-canary-v1"
+CANARY_PROMPT = "What is the current toll from the Leesburg Bypass entrance to Route 28 for a two-axle vehicle with E-ZPass?"
 _CREDENTIAL = re.compile(
     r"(?i)(?:authorization\s*[:=]|password\s*[:=]|api[_-]?key\s*[:=]|"
     r"bearer\s+\S+|(?:AKIA|ASIA)[0-9A-Z]{16}|(?:sk|gh[pousr]_)[A-Za-z0-9_-]{8,}|"
@@ -109,6 +112,98 @@ def _activity_events(
     return events
 
 
+def _canary_event(messages: Sequence[object]) -> dict[str, object]:
+    """Return the bounded, record-once evidence for the fixed synthetic probe."""
+    calls: list[Mapping[str, object]] = []
+    results: dict[str, Mapping[str, object]] = {}
+    duplicate_result = False
+    for message in messages:
+        if not isinstance(message, Mapping):
+            continue
+        content = cast(Mapping[object, object], message).get("content", [])
+        if not isinstance(content, Sequence):
+            continue
+        for block in cast(Sequence[object], content):
+            if not isinstance(block, Mapping):
+                continue
+            data = cast(Mapping[str, object], block)
+            if isinstance(data.get("toolUse"), Mapping):
+                calls.append(cast(Mapping[str, object], data["toolUse"]))
+            if isinstance(data.get("toolResult"), Mapping):
+                result = cast(Mapping[str, object], data["toolResult"])
+                tool_id = result.get("toolUseId")
+                if not isinstance(tool_id, str) or not tool_id or tool_id in results:
+                    duplicate_result = True
+                else:
+                    results[tool_id] = result
+    call: Mapping[str, object] = calls[0] if len(calls) == 1 else {}
+    tool_id = call.get("toolUseId")
+    tool_name = call.get("name")
+    raw_inputs = call.get("input")
+    inputs: Mapping[str, object] = (
+        cast(Mapping[str, object], raw_inputs)
+        if isinstance(raw_inputs, Mapping)
+        else {}
+    )
+    raw_profile = inputs.get("pricing_profile")
+    profile: Mapping[str, object] = (
+        cast(Mapping[str, object], raw_profile)
+        if isinstance(raw_profile, Mapping)
+        else {}
+    )
+    route_profile_match = (
+        inputs.get("origin_point_id") == "greenway:1:entry:EB"
+        and inputs.get("destination_point_id") == "greenway:28:exit:EB"
+        and profile.get("vehicle_class") == "two_axle_passenger"
+        and profile.get("payment_method") == "e_zpass"
+        and profile.get("transponder_mode") == "toll"
+    )
+    result = results.get(tool_id) if isinstance(tool_id, str) and tool_id else None
+    total_usd: str | None = None
+    if isinstance(result, Mapping) and result.get("status") == "success":
+        content = result.get("content")
+        entries: list[object] = (
+            cast(list[object], content) if isinstance(content, list) else []
+        )
+        if len(entries) == 1 and isinstance(entries[0], Mapping):
+            payload = cast(Mapping[str, object], entries[0]).get("json")
+            if isinstance(payload, Mapping):
+                try:
+                    raw_total = str(
+                        cast(Mapping[str, object], payload).get("total_usd")
+                    )
+                    total = Decimal(raw_total)
+                    if (
+                        re.fullmatch(r"\d{1,4}\.\d{2}", raw_total)
+                        and total.is_finite()
+                        and Decimal("0") <= total <= Decimal("1000")
+                    ):
+                        total_usd = raw_total
+                except (InvalidOperation, ValueError):
+                    pass
+    result_match = (
+        result is not None
+        and len(results) == 1
+        and not duplicate_result
+        and total_usd is not None
+    )
+    return {
+        "type": "canary",
+        "schema_version": 1,
+        "call_count": len(calls),
+        "tool_name_match": tool_name == "get_current_toll_price",
+        "route_profile_match": route_profile_match,
+        "correlation_match": result_match,
+        "result_success": isinstance(result, Mapping)
+        and result.get("status") == "success",
+        "total_usd": total_usd,
+        "success": len(calls) == 1
+        and tool_name == "get_current_toll_price"
+        and route_profile_match
+        and result_match,
+    }
+
+
 class TollChatRuntime:
     def __init__(
         self,
@@ -166,9 +261,16 @@ class TollChatRuntime:
             self._turns += 1
             result: object | None = None
             activities: dict[str, dict[str, object]] = {}
+            canary_messages: list[object] = []
+            canary = (
+                request.get("canary_marker") == CANARY_MARKER
+                and prompt == CANARY_PROMPT
+            )
             async for event in self._agent.stream_async(
                 prompt, limits=_INVOCATION_LIMITS
             ):
+                if canary and "message" in event:
+                    canary_messages.append(event["message"])
                 for activity in _activity_events(event.get("message"), activities):
                     yield activity
                 if "result" in event:
@@ -183,6 +285,8 @@ class TollChatRuntime:
                 return
             if DISCLAIMER not in answer:
                 answer = f"{answer}\n\n{DISCLAIMER}"
+            if canary:
+                yield _canary_event(canary_messages)
             yield {"type": "answer", "text": answer, "blocked": False}
         except Exception as error:  # Provider boundary returns one safe error contract.
             logger.error(

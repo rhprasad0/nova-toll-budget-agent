@@ -311,7 +311,7 @@ jobs:
           jq -n --argjson release_id "$RELEASE_ID" --arg tag "$RELEASE_TAG" --arg candidate "$CANDIDATE" --argjson listener_run "$LISTENER_RUN" --argjson listener_attempt "$LISTENER_ATTEMPT" --argjson development_run "$DEVELOPMENT_RUN" --argjson development_attempt "$DEVELOPMENT_ATTEMPT" --argjson development_deployment "$DEVELOPMENT_DEPLOYMENT" --argjson evidence_artifact "$EVIDENCE_ARTIFACT" --arg evidence_digest "$EVIDENCE_DIGEST" --argjson bundle_id "$BUNDLE_ID" --arg bundle_digest "$BUNDLE_DIGEST" --argjson planner_run "$GITHUB_RUN_ID" --argjson planner_attempt "$GITHUB_RUN_ATTEMPT" --argjson consumer_run "$GITHUB_RUN_ID" --argjson consumer_attempt "$GITHUB_RUN_ATTEMPT" --argjson claim_id "$CLAIM_ID" --arg created "$created" --arg expires "$expires" --argjson schemas "$SCHEMA_VERSIONS" --argjson counts "$counts" --slurpfile saved "$result" --slurpfile state "$state_after" '{schema_version:1,release_id:$release_id,tag:$tag,candidate:$candidate,listener_run:$listener_run,listener_attempt:$listener_attempt,development_run:$development_run,development_attempt:$development_attempt,development_deployment:$development_deployment,evidence_artifact:{id:$evidence_artifact,digest:$evidence_digest},evidence_digest:$evidence_digest,bundle_id:$bundle_id,bundle_digest:$bundle_digest,consumer_run:$consumer_run,consumer_attempt:$consumer_attempt,planner_run:$planner_run,planner_attempt:$planner_attempt,claim_id:$claim_id,schema_versions:$schemas,plan_counts:$counts,created_at:$created,expires_at:$expires,state:$state[0],saved_plan:{bucket:"nova-toll-tfstate-920534282028",key:("plans/release-" + ($release_id|tostring) + "-" + $tag + "/" + ($planner_run|tostring) + "/release.tfplan"),version_id:$saved[0].VersionId,checksum:$saved[0].ChecksumSHA256,kms_key_arn:$saved[0].SSEKMSKeyId}}' >"$saved_plan" || return
           python3 trusted/v2/scripts/check_production_release.py validate-saved-plan --admission "$RUNNER_TEMP/admission.json" --saved-plan "$saved_plan" --output "$RUNNER_TEMP/production-saved-plan-validated.json" || return
           jq -c . "$RUNNER_TEMP/production-saved-plan-validated.json" | sed 's/^/saved_plan=/' >>"$GITHUB_OUTPUT" || return
-          printf 'saved-plan=status=ready\n' >>"$GITHUB_STEP_SUMMARY" || return
+          jq -r '"### Saved production plan\n\n```json\n" + ({candidate,bundle_id,bundle_digest,evidence_artifact,plan_counts,expires_at,state,saved_plan:{bucket:.saved_plan.bucket,key:.saved_plan.key,version_id:.saved_plan.version_id,checksum:.saved_plan.checksum}} | tojson) + "\n```"' "$RUNNER_TEMP/production-saved-plan-validated.json" >>"$GITHUB_STEP_SUMMARY" || return
         }
         run_private_stage release-status "$RUNNER_TEMP/production-summary.out" "$error" publish_saved_plan
   migrate:
@@ -347,6 +347,8 @@ jobs:
         MIGRATE: ${{ needs.migrate.result }}
         MIGRATION_EVIDENCE: ${{ needs.migrate.outputs.delivery_evidence }}
         CANCELLED: ${{ job.status == 'cancelled' }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
       run: |
         set -euo pipefail
         umask 077
@@ -367,12 +369,16 @@ jobs:
         result="$RUNNER_TEMP/production-release-evidence.json"
         publish() {
           migration_evidence=failed
-          if printf '%s' "$MIGRATION_EVIDENCE" | jq -e --argjson admission "$ADMISSION" 'type == "object" and (keys | sort) == ["apply","candidate","claim_id","migration","readiness","release_id","schema_version"] and .schema_version == 1 and .candidate == $admission.candidate and .release_id == $admission.release_id and .claim_id == $admission.claim_id and .migration == "success" and .apply == "success" and .readiness == "success"' >/dev/null; then
+          migration=null
+          if candidate_migration="$(printf '%s' "$MIGRATION_EVIDENCE" | jq -ce 'select(type == "object")')"; then
+            migration="$candidate_migration"
+          fi
+          if printf '%s' "$migration" | jq -e --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" --argjson admission "$ADMISSION" 'type == "object" and (keys | sort) == ["apply","canary","candidate","claim_id","migration","readiness","release_id","schema_version"] and .schema_version == 1 and .candidate == $admission.candidate and .release_id == $admission.release_id and .claim_id == $admission.claim_id and .migration == "success" and .apply == "success" and .readiness == "success" and (.canary | type == "object" and (keys | sort) == ["artifact_digest","artifact_id","attempt","call_count","commit","deployment_id","elapsed_ms","model","prompt_version","proxy_version","renderer_version","run_id","runtime_version","schema_version","success","tool_contract","total_usd"] and .schema_version == 1 and (.runtime_version | type == "string" and test("^[1-9][0-9]*$")) and (.proxy_version | type == "string" and test("^[1-9][0-9]*$")) and .commit == $admission.candidate and (.artifact_id | type == "string" and . == ($admission.bundle_id | tostring)) and .artifact_digest == $admission.bundle_digest and (.deployment_id | type == "string" and . == ($admission.claim_id | tostring)) and .run_id == $run and .attempt == $attempt and .call_count == 1 and (.elapsed_ms | type == "number" and . >= 0 and . <= 60000) and .model == "gpt-5.6-luna" and .tool_contract == "1.5.0" and .prompt_version == "2.0.2" and .renderer_version == "1.0.0" and .success == true and (.total_usd | type == "string" and test("^[0-9]{1,4}\\.[0-9]{2}$")))' >/dev/null; then
             migration_evidence=success
           fi
           outcome=failed
           test "$CANCELLED" != true && test "$PLANNER" = success && test "$MIGRATE" = success && test "$migration_evidence" = success && outcome=success
-          jq -n --arg outcome "$outcome" --arg planner "$PLANNER" --arg migrate "$MIGRATE" --arg migration_evidence "$migration_evidence" --arg cancelled "$CANCELLED" --argjson admission "$ADMISSION" '{schema_version:1,environment:"production-release",outcome:$outcome,planner:$planner,migrate:$migrate,migration_evidence:$migration_evidence,cancelled:$cancelled,release_id:$admission.release_id,claim_id:$admission.claim_id,candidate:$admission.candidate}' >"$result" || return
+          jq -n --arg outcome "$outcome" --arg planner "$PLANNER" --arg migrate "$MIGRATE" --arg migration_evidence "$migration_evidence" --arg cancelled "$CANCELLED" --argjson migration "$migration" --argjson admission "$ADMISSION" '{schema_version:1,environment:"production-release",outcome:$outcome,planner:$planner,migrate:$migrate,migration_evidence:$migration_evidence,canary:(if $migration_evidence == "success" then $migration.canary else null end),cancelled:$cancelled,release_id:$admission.release_id,claim_id:$admission.claim_id,candidate:$admission.candidate}' >"$result" || return
           printf 'outcome=%s\n' "$outcome" >>"$GITHUB_OUTPUT" || return
         }
         run_private_stage release-status "$RUNNER_TEMP/production-result.out" "$RUNNER_TEMP/production-result.err" publish

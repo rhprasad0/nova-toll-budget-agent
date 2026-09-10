@@ -15,6 +15,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
@@ -27,6 +28,11 @@ profile_runtime_arn = (
 )
 COOKIE = "__Host-tollchat-session"
 PROMPT = "Briefly explain what information you need to estimate a toll budget."
+CANARY_PROMPT = "What is the current toll from the Leesburg Bypass entrance to Route 28 for a two-axle vehicle with E-ZPass?"
+CANARY_MARKER = "greenway-canary-v1"
+CANARY_DISCLAIMER = (
+    "Estimates only. Verify current rates with the toll operator before travel."
+)
 MAX_BODY = 8 * 1024 * 1024
 profile_functions = {
     "loader": ("toll-v2-pricing-loader-dev", "loader.zip"),
@@ -399,6 +405,7 @@ def request(
     *,
     origin: str | None = None,
     cookie: str | None = None,
+    canary: bool = False,
 ) -> tuple[int, str, bytes]:
     require(
         path.startswith("/") and not path.startswith("//"),
@@ -412,6 +419,8 @@ def request(
     }
     if cookie is not None:
         headers["Cookie"] = f"{COOKIE}={cookie}"
+    if canary:
+        headers["x-tollchat-canary"] = CANARY_MARKER
     data = None if body is None else json.dumps(body).encode()
     if data is not None:
         headers["Content-Type"] = "application/json"
@@ -441,18 +450,18 @@ def request(
         return code, kind, content
 
 
-def answer(response: tuple[int, str, bytes]) -> None:
+def answer(response: tuple[int, str, bytes]) -> dict[str, Any]:
     code, content_type, body = response
     require(code == 200, "answer_status")
     require(content_type == "application/x-ndjson", "answer_content_type")
     lines = body.decode().splitlines()
     require(0 < len(lines) <= 1000, "answer_lines")
-    terminal = False
+    terminal: dict[str, Any] | None = None
     for line in lines:
         value = json.loads(line)
         require(isinstance(value, dict), "answer_event")
         item = cast(dict[str, Any], value)
-        require(isinstance(item.get("type"), str) and not terminal, "answer_event")
+        require(isinstance(item.get("type"), str) and terminal is None, "answer_event")
         require(item["type"] != "error", "answer_event")
         if item["type"] == "answer":
             require(
@@ -461,8 +470,174 @@ def answer(response: tuple[int, str, bytes]) -> None:
                 and item.get("blocked") is False,
                 "answer_content",
             )
-            terminal = True
-    require(terminal, "answer_terminal")
+            terminal = item
+    require(terminal is not None, "answer_terminal")
+    return cast(dict[str, Any], terminal)
+
+
+def _canary_contract() -> dict[str, str]:
+    """Read the deployed source contracts that the candidate artifact binds."""
+    root = Path(__file__).parents[1]
+    source = (root / "agent" / "toll_agent.py").read_text(encoding="utf-8")
+    manifest = cast(
+        dict[str, object],
+        json.loads(
+            (root / "agent_tools" / "contract-manifest.json").read_text(
+                encoding="utf-8"
+            )
+        ),
+    )
+    matches = {
+        key: re.search(pattern, source)
+        for key, pattern in {
+            "model": r'model_id="([^"]+)"',
+            "prompt_version": r'SYSTEM_PROMPT_VERSION = "([^"]+)"',
+            "renderer_version": r'SYSTEM_PROMPT_RENDERER_VERSION = "([^"]+)"',
+        }.items()
+    }
+    raw_tool = manifest.get("get_current_toll_price")
+    tool = cast(dict[str, object], raw_tool) if isinstance(raw_tool, dict) else None
+    require(
+        all(match is not None for match in matches.values())
+        and tool is not None
+        and isinstance(tool.get("current"), str),
+        "canary_contract",
+    )
+    if tool is None:
+        _fail("canary_contract")
+    return {
+        "model": cast(re.Match[str], matches["model"]).group(1),
+        "tool_contract": cast(str, tool["current"]),
+        "prompt_version": cast(re.Match[str], matches["prompt_version"]).group(1),
+        "renderer_version": cast(re.Match[str], matches["renderer_version"]).group(1),
+    }
+
+
+def canary(values: dict[str, Any]) -> dict[str, Any]:
+    """Run the one fixed synthetic request and return bounded release evidence."""
+    started = time.monotonic()
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.getitimer(signal.ITIMER_REAL)
+
+    def expired(_signum: int, _frame: object) -> None:
+        raise TimeoutError("canary deadline exceeded")
+
+    try:
+        signal.signal(signal.SIGALRM, expired)
+        signal.setitimer(signal.ITIMER_REAL, 60)
+        jar = http.cookiejar.CookieJar()
+        code, content_type, body = request(
+            jar, "/api/chat", {"message": CANARY_PROMPT}, canary=True
+        )
+        require(code == 200 and content_type == "application/x-ndjson", "canary_http")
+        evidence: dict[str, Any] | None = None
+        terminal: dict[str, Any] | None = None
+        for line in body.decode().splitlines():
+            value = json.loads(line)
+            require(isinstance(value, dict) and terminal is None, "canary_event")
+            item = cast(dict[str, Any], value)
+            if item.get("type") == "canary":
+                require(evidence is None, "canary_event")
+                expected = {
+                    "type",
+                    "schema_version",
+                    "call_count",
+                    "tool_name_match",
+                    "route_profile_match",
+                    "correlation_match",
+                    "result_success",
+                    "total_usd",
+                    "success",
+                }
+                require(
+                    set(item) == expected
+                    and type(item.get("schema_version")) is int
+                    and item.get("schema_version") == 1,
+                    "canary_evidence",
+                )
+                require(
+                    type(item.get("call_count")) is int and item.get("call_count") == 1,
+                    "canary_evidence",
+                )
+                require(
+                    all(
+                        item.get(key) is True
+                        for key in (
+                            "tool_name_match",
+                            "route_profile_match",
+                            "correlation_match",
+                            "result_success",
+                            "success",
+                        )
+                    ),
+                    "canary_evidence",
+                )
+                require(
+                    isinstance(item.get("total_usd"), str)
+                    and re.fullmatch(r"\d{1,4}\.\d{2}", item["total_usd"]) is not None,
+                    "canary_evidence",
+                )
+                evidence = item
+            elif item.get("type") == "answer":
+                require(
+                    isinstance(item.get("text"), str) and item.get("blocked") is False,
+                    "canary_answer",
+                )
+                require(evidence is not None, "canary_evidence")
+                evidence = cast(dict[str, Any], evidence)
+                try:
+                    expected_total = Decimal(evidence["total_usd"])
+                    amounts = [
+                        Decimal(amount)
+                        for captures in re.findall(
+                            r"(?i)(?<![\w.])(?:\$|usd\s*)(\d+(?:\.\d+)?)(?![\w]|\.\d)|(?<![\w.])(\d+(?:\.\d+)?)\s*(?:usd|dollars?)\b",
+                            item["text"],
+                        )
+                        for amount in captures
+                        if amount
+                    ]
+                except (InvalidOperation, ValueError):
+                    _fail("canary_grounding")
+                require(
+                    bool(amounts) and all(value == expected_total for value in amounts),
+                    "canary_grounding",
+                )
+                require(CANARY_DISCLAIMER in item["text"], "canary_disclaimer")
+                terminal = item
+            elif item.get("type") == "tool":
+                continue
+            else:
+                _fail("canary_event")
+        require(evidence is not None and terminal is not None, "canary_terminal")
+        evidence = cast(dict[str, Any], evidence)
+        elapsed = time.monotonic() - started
+        require(elapsed <= 60, "canary_timeout")
+        record: dict[str, Any] = {
+            "schema_version": 1,
+            "runtime_version": values["version"],
+            "proxy_version": values["alias_version"],
+            "call_count": evidence["call_count"],
+            "total_usd": evidence["total_usd"],
+            "elapsed_ms": max(0, int(elapsed * 1000)),
+            **_canary_contract(),
+            "success": True,
+        }
+        identity = {
+            "commit": os.environ.get("CANARY_COMMIT"),
+            "run_id": os.environ.get("CANARY_RUN_ID"),
+            "attempt": os.environ.get("CANARY_ATTEMPT"),
+            "deployment_id": os.environ.get("CANARY_DEPLOYMENT_ID"),
+            "artifact_id": os.environ.get("CANARY_ARTIFACT_ID"),
+            "artifact_digest": os.environ.get("CANARY_ARTIFACT_DIGEST"),
+        }
+        if all(value is not None for value in identity.values()):
+            record.update(identity)
+        return record
+    except TimeoutError:
+        _fail("canary_timeout")
+    finally:
+        signal.signal(signal.SIGALRM, previous_handler)
+        signal.setitimer(signal.ITIMER_REAL, *previous_timer)
 
 
 def token(jar: http.cookiejar.CookieJar) -> str:
@@ -555,6 +730,14 @@ def smoke(values: dict[str, Any]) -> None:
         == 403,
         "http",
     )
+    _diagnostic("pass", "validated")
+    select("canary")
+    evidence = canary(values)
+    output = os.environ.get("CANARY_EVIDENCE_FILE")
+    if output:
+        Path(output).write_text(
+            json.dumps(evidence, sort_keys=True) + "\n", encoding="utf-8"
+        )
     _diagnostic("pass", "validated")
     if profile_production:
         return

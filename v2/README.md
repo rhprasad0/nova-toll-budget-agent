@@ -111,8 +111,11 @@ development candidate and privately saves one versioned, checksummed KMS plan
 under the existing state bucket's private `plans/` prefix. The one protected
 production reusable job verifies that immutable version, checksum, state binding
 and 24-hour age before deploy preflight, fixed migrations, re-assumed deploy
-apply, and fixed production readiness. It records sanitized terminal evidence;
-the Greenway conversation canary remains the separate slice-6 success gate.
+apply, and fixed production readiness. It records sanitized terminal evidence.
+Readiness also runs the fixed Greenway canary through the normal public session
+path: one current-price call for the required route/profile, a grounded amount,
+and the standard disclaimer must complete within 60 seconds. Its marker-gated
+record is bounded release evidence, never a browser event for ordinary chat.
 
 Development delivery reports an explicit `development-release` GitHub result
 only after exact-version readiness and bounded static/API/two-session agent

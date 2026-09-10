@@ -430,13 +430,14 @@ jobs:
 
   deploy:
     name: Deploy v2 to development
-    needs: [admission, build, oidc-proof]
+    needs: [admission, release-record, build, oidc-proof]
     # Repository variable: environment variables are unavailable to this pre-job gate.
     if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor
     runs-on: ubuntu-latest
     environment: development
     outputs:
       verified: ${{ steps.verify-release.outputs.verified }}
+      canary: ${{ steps.verify-release.outputs.canary }}
       verified_pricing_schema: ${{ steps.migration-schema.outputs.verified_pricing_schema }}
       verified_oracle_schema: ${{ steps.migration-schema.outputs.verified_oracle_schema }}
     permissions:
@@ -1003,8 +1004,9 @@ jobs:
           run_private_stage "readiness-state" "$state" "$error_log" \
             terraform -chdir="$RUNNER_TEMP/release-overlay/v2/infra" show -json
           PRIVATE_STAGE_FALLBACK_STAGE=readiness-check
-          python3 v2/scripts/check_development_release.py \
+          CANARY_EVIDENCE_FILE="$RUNNER_TEMP/development-canary-evidence.json" CANARY_COMMIT="$GITHUB_SHA" CANARY_RUN_ID="$GITHUB_RUN_ID" CANARY_ATTEMPT="$GITHUB_RUN_ATTEMPT" CANARY_DEPLOYMENT_ID="${{ needs.release-record.outputs.deployment_id }}" CANARY_ARTIFACT_ID="${{ needs.build.outputs.artifact_id }}" CANARY_ARTIFACT_DIGEST="${{ needs.build.outputs.artifact_digest }}" python3 v2/scripts/check_development_release.py \
             "$state" "$RUNNER_TEMP/release-overlay/release-manifest.json"
+          jq -c . "$RUNNER_TEMP/development-canary-evidence.json" | sed 's/^/canary=/' >>"$GITHUB_OUTPUT"
           echo 'verified=success' >>"$GITHUB_OUTPUT"
 
       - name: Cleanup private delivery files
@@ -1036,6 +1038,7 @@ jobs:
             "$RUNNER_TEMP/development-release-verification.json" "$RUNNER_TEMP/v2-development-migrations-evidence.json" \
             "$RUNNER_TEMP/development-migration-schema.log" \
             "$RUNNER_TEMP/development-readiness-state.json" "$RUNNER_TEMP/development-readiness-state.log" \
+            "$RUNNER_TEMP/development-canary-evidence.json" \
             "$RUNNER_TEMP/development-readiness-cleanup.log" \
             "$RUNNER_TEMP/development-plan-cleanup.log" "$RUNNER_TEMP/development-migration-stage.stdout" \
             "$RUNNER_TEMP/development-migration-stage.stderr" "$RUNNER_TEMP/development-migration-control.stdout" \

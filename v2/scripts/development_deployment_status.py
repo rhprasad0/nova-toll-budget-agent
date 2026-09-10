@@ -143,6 +143,70 @@ def _prefixed_digest(value: object) -> str:
     return value
 
 
+def _canary(
+    value: object,
+    sha: str,
+    run: int,
+    attempt: int,
+    deployment: int,
+    artifact: int,
+    digest: str,
+) -> dict[str, Any]:
+    if not isinstance(value, str):
+        raise DeploymentStatusError("malformed_evidence")
+    try:
+        record = _mapping(json.loads(value))
+    except (TypeError, json.JSONDecodeError) as error:
+        raise DeploymentStatusError("malformed_evidence") from error
+    expected = {
+        "schema_version",
+        "runtime_version",
+        "proxy_version",
+        "call_count",
+        "total_usd",
+        "elapsed_ms",
+        "model",
+        "tool_contract",
+        "prompt_version",
+        "renderer_version",
+        "success",
+        "commit",
+        "run_id",
+        "attempt",
+        "deployment_id",
+        "artifact_id",
+        "artifact_digest",
+    }
+    if (
+        set(record) != expected
+        or type(record.get("schema_version")) is not int
+        or record.get("schema_version") != 1
+        or not isinstance(record.get("runtime_version"), str)
+        or re.fullmatch(r"[1-9][0-9]*", record["runtime_version"]) is None
+        or not isinstance(record.get("proxy_version"), str)
+        or re.fullmatch(r"[1-9][0-9]*", record["proxy_version"]) is None
+        or type(record.get("call_count")) is not int
+        or record.get("call_count") != 1
+        or not isinstance(record.get("total_usd"), str)
+        or not re.fullmatch(r"\d{1,4}\.\d{2}", record["total_usd"])
+        or type(record.get("elapsed_ms")) is not int
+        or not 0 <= record["elapsed_ms"] <= 60_000
+        or record.get("model") != "gpt-5.6-luna"
+        or record.get("tool_contract") != "1.5.0"
+        or record.get("prompt_version") != "2.0.2"
+        or record.get("renderer_version") != "1.0.0"
+        or record.get("success") is not True
+        or record.get("commit") != sha
+        or _positive(record.get("run_id")) != run
+        or _positive(record.get("attempt")) != attempt
+        or _positive(record.get("deployment_id")) != deployment
+        or _positive(record.get("artifact_id")) != artifact
+        or record.get("artifact_digest") != digest
+    ):
+        raise DeploymentStatusError("malformed_evidence")
+    return record
+
+
 def _needs() -> dict[str, Any]:
     try:
         return _mapping(json.loads(os.environ["NEEDS_JSON"]))
@@ -176,6 +240,9 @@ def _prerequisites(
         raise DeploymentStatusError("upstream_failed")
     artifact_id = _positive(build.get("artifact_id"))
     artifact_digest = _prefixed_digest(build.get("artifact_digest"))
+    canary = _canary(
+        deploy.get("canary"), sha, run, attempt, record, artifact_id, artifact_digest
+    )
     declared = {
         "pricing": _version(build.get("pricing_schema")),
         "oracle": _version(build.get("oracle_schema")),
@@ -198,6 +265,7 @@ def _prerequisites(
         "artifact_digest": artifact_digest,
         "schema_versions": {"declared": declared, "installed": installed},
         "readiness": "success",
+        "canary": canary,
     }
 
 

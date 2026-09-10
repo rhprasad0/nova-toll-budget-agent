@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import yaml
@@ -31,6 +31,15 @@ def _result_step(name: str) -> str:
     return next(
         step["run"]
         for step in workflow["jobs"]["release-result"]["steps"]
+        if step.get("name", step.get("id")) == name
+    )
+
+
+def _migration_step(name: str) -> str:
+    workflow: dict[str, Any] = yaml.safe_load(MIGRATION_WORKFLOW.read_text())
+    return next(
+        step["run"]
+        for step in workflow["jobs"]["migrate"]["steps"]
         if step.get("name", step.get("id")) == name
     )
 
@@ -233,7 +242,32 @@ def test_actual_planner_shell_fails_privately_and_saves_exact_evidence(
         assert result.returncode == 0, result.stderr
         summary = (tmp_path / "summary").read_text()
         assert "PRIVATE_" not in summary
+        published = json.loads(summary.split("```json\n", 1)[1].split("\n```", 1)[0])
         evidence = json.loads((tmp_path / "output").read_text().split("=", 1)[1])
+        assert set(published) == {
+            "candidate",
+            "bundle_id",
+            "bundle_digest",
+            "evidence_artifact",
+            "plan_counts",
+            "expires_at",
+            "state",
+            "saved_plan",
+        }
+        for field in (
+            "candidate",
+            "bundle_id",
+            "bundle_digest",
+            "evidence_artifact",
+            "plan_counts",
+            "expires_at",
+            "state",
+        ):
+            assert published[field] == evidence[field]
+        assert published["saved_plan"] == {
+            field: evidence["saved_plan"][field]
+            for field in ("bucket", "key", "version_id", "checksum")
+        }
         assert evidence["listener_attempt"] == 1
         assert evidence["development_attempt"] == 2
         assert evidence["evidence_artifact"] == {
@@ -287,7 +321,10 @@ def test_actual_admission_binding_preserves_json_object_and_records_output_failu
         ("success", "success", "false", "valid", "success"),
         ("success", "success", "true", "valid", "failed"),
         ("success", "success", "false", "missing", "failed"),
+        ("success", "success", "false", "malformed", "failed"),
         ("success", "success", "false", "wrong", "failed"),
+        ("success", "success", "false", "wrong-run", "failed"),
+        ("success", "success", "false", "wrong-attempt", "failed"),
         ("skipped", "skipped", "false", "valid", "failed"),
     ],
 )
@@ -301,7 +338,13 @@ def test_finalizer_evidence_derives_explicit_success_or_failure(
 ) -> None:
     (tmp_path / "v2").symlink_to(ROOT / "v2", target_is_directory=True)
     (tmp_path / "runner").mkdir()
-    admission = {"release_id": 7, "claim_id": 14, "candidate": "a" * 40}
+    admission = {
+        "release_id": 7,
+        "claim_id": 14,
+        "candidate": "a" * 40,
+        "bundle_id": 10,
+        "bundle_digest": "sha256:" + "b" * 64,
+    }
     migration_evidence: object = {
         "schema_version": 1,
         "candidate": admission["candidate"],
@@ -310,11 +353,51 @@ def test_finalizer_evidence_derives_explicit_success_or_failure(
         "migration": "success",
         "apply": "success",
         "readiness": "success",
+        "canary": {
+            "schema_version": 1,
+            "runtime_version": "8",
+            "proxy_version": "12",
+            "call_count": 1,
+            "total_usd": "4.25",
+            "elapsed_ms": 10,
+            "model": "gpt-5.6-luna",
+            "tool_contract": "1.5.0",
+            "prompt_version": "2.0.2",
+            "renderer_version": "1.0.0",
+            "success": True,
+            "commit": admission["candidate"],
+            "run_id": "15",
+            "attempt": "1",
+            "deployment_id": "14",
+            "artifact_id": "10",
+            "artifact_digest": admission["bundle_digest"],
+        },
     }
     if evidence == "missing":
         migration_evidence = ""
     elif evidence == "wrong":
         migration_evidence = {**migration_evidence, "claim_id": 99}
+    elif evidence == "wrong-run":
+        canary = dict(cast(dict[str, object], migration_evidence["canary"]))
+        canary["run_id"] = "16"
+        migration_evidence = {
+            **migration_evidence,
+            "canary": canary,
+        }
+    elif evidence == "wrong-attempt":
+        canary = dict(cast(dict[str, object], migration_evidence["canary"]))
+        canary["attempt"] = "2"
+        migration_evidence = {
+            **migration_evidence,
+            "canary": canary,
+        }
+    raw_evidence = (
+        "{"
+        if evidence == "malformed"
+        else json.dumps(migration_evidence)
+        if migration_evidence
+        else ""
+    )
     result = subprocess.run(
         ["bash", "-c", _result_step("evidence")],
         cwd=tmp_path,
@@ -326,10 +409,10 @@ def test_finalizer_evidence_derives_explicit_success_or_failure(
             "ADMISSION": json.dumps(admission),
             "PLANNER": planner,
             "MIGRATE": migrate,
-            "MIGRATION_EVIDENCE": json.dumps(migration_evidence)
-            if migration_evidence
-            else "",
+            "MIGRATION_EVIDENCE": raw_evidence,
             "CANCELLED": cancelled,
+            "GITHUB_RUN_ID": "15",
+            "GITHUB_RUN_ATTEMPT": "1",
         },
         capture_output=True,
         text=True,
@@ -338,6 +421,104 @@ def test_finalizer_evidence_derives_explicit_success_or_failure(
     )
     assert result.returncode == 0, result.stderr
     assert "outcome=" + outcome in (tmp_path / "output").read_text()
+    artifact = json.loads(
+        (tmp_path / "runner/production-release-evidence.json").read_text()
+    )
+    assert artifact["outcome"] == outcome
+    assert (artifact["canary"] is not None) == (evidence == "valid")
+
+
+def test_actual_delivery_emitter_reaches_the_parent_finalizer(tmp_path: Path) -> None:
+    (tmp_path / "trusted").symlink_to(ROOT, target_is_directory=True)
+    (tmp_path / "v2").symlink_to(ROOT / "v2", target_is_directory=True)
+    runner = tmp_path / "runner"
+    runner.mkdir()
+    admission = {
+        "release_id": 7,
+        "claim_id": 14,
+        "candidate": "a" * 40,
+        "bundle_id": 10,
+        "bundle_digest": "sha256:" + "b" * 64,
+    }
+    (runner / "v2-production-migrations-evidence.json").write_text(
+        json.dumps(
+            {
+                "candidate": admission["candidate"],
+                "release_id": 7,
+                "claim_id": 14,
+                "status": "ok",
+            }
+        )
+    )
+    (runner / "production-canary-evidence.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "runtime_version": "8",
+                "proxy_version": "12",
+                "call_count": 1,
+                "total_usd": "4.25",
+                "elapsed_ms": 10,
+                "model": "gpt-5.6-luna",
+                "tool_contract": "1.5.0",
+                "prompt_version": "2.0.2",
+                "renderer_version": "1.0.0",
+                "success": True,
+                "commit": admission["candidate"],
+                "run_id": "15",
+                "attempt": "1",
+                "deployment_id": "14",
+                "artifact_id": "10",
+                "artifact_digest": admission["bundle_digest"],
+            }
+        )
+    )
+    child_output = tmp_path / "child-output"
+    child_env: dict[str, str] = {
+        "PATH": os.defpath,
+        "RUNNER_TEMP": str(runner),
+        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+        "GITHUB_OUTPUT": str(child_output),
+        "GITHUB_RUN_ID": "15",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "CANDIDATE": str(admission["candidate"]),
+        "ADMISSION": json.dumps(admission),
+    }
+    child = subprocess.run(
+        ["bash", "-c", _migration_step("delivery-evidence")],
+        cwd=tmp_path,
+        env=child_env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert child.returncode == 0, child.stderr
+    parent = subprocess.run(
+        ["bash", "-c", _result_step("evidence")],
+        cwd=tmp_path,
+        env={
+            "PATH": os.defpath,
+            "RUNNER_TEMP": str(runner),
+            "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+            "GITHUB_OUTPUT": str(tmp_path / "parent-output"),
+            "ADMISSION": json.dumps(admission),
+            "PLANNER": "success",
+            "MIGRATE": "success",
+            "MIGRATION_EVIDENCE": child_output.read_text().split("=", 1)[1],
+            "CANCELLED": "false",
+            "GITHUB_RUN_ID": "15",
+            "GITHUB_RUN_ATTEMPT": "1",
+        },
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert parent.returncode == 0, parent.stderr
+    artifact = json.loads((runner / "production-release-evidence.json").read_text())
+    assert artifact["outcome"] == "success"
+    assert artifact["canary"]["run_id"] == "15"
 
 
 def test_finalizer_upload_is_always_required_and_terminal_status_is_always_run() -> (
