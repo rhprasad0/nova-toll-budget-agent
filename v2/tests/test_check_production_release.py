@@ -778,7 +778,12 @@ def test_plan_gate_rejects_the_complete_negative_boundary_matrix(
 
 @pytest.mark.parametrize(
     ("kind", "reason"),
-    [("persistent", "persistent"), ("drift", "drift"), ("io", "io")],
+    [
+        ("persistent", "persistent"),
+        ("drift", "drift"),
+        ("io", "io"),
+        ("invalid-utf8", "shape"),
+    ],
 )
 def test_plan_gate_cli_reports_only_a_finite_summary_reason(
     tmp_path: Path, kind: str, reason: str
@@ -799,7 +804,9 @@ def test_plan_gate_cli_reports_only_a_finite_summary_reason(
             {"private-malicious-value": "private-malicious-value"}
         ]
     plan_path = tmp_path / "plan.json"
-    if kind != "io":
+    if kind == "invalid-utf8":
+        plan_path.write_bytes(b"\xff")
+    elif kind != "io":
         plan_path.write_text(json.dumps(plan))
     summary = tmp_path / "summary"
     counts = tmp_path / "counts"

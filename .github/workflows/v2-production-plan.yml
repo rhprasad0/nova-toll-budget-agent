@@ -297,7 +297,10 @@ jobs:
         run_private_stage release-init "$state_after" "$error" state_identity
         run_private_stage release-init "$RUNNER_TEMP/production-state-match.out" "$error" cmp -s "$state_before" "$state_after"
         run_private_stage show "$plan_json" "$error" terraform -chdir=candidate/v2/infra show -json "$plan"
-        run_private_stage validator "$RUNNER_TEMP/production-counts.json" "$error" python3 trusted/v2/scripts/validate_production_plan.py --plan "$plan_json" --inventory-root trusted/v2/infra
+        if ! run_private_stage validator "$RUNNER_TEMP/production-counts.json" "$error" python3 trusted/v2/scripts/validate_production_plan.py --plan "$plan_json" --inventory-root trusted/v2/infra; then
+          sed -nE '/^production_plan_rejection=(action|actions|address|data|drift|inventory|io|managed|moved|output|outputs|persistent|provider|replacement|shape|unknown-shape)$/p' "$GITHUB_STEP_SUMMARY"
+          exit 1
+        fi
         counts="$(<"$RUNNER_TEMP/production-counts.json")"
         local_sha="$(sha256sum "$plan" | awk '{print $1}')"; s3_sha="$(printf '%s' "$local_sha" | xxd -r -p | base64 -w0)"; key="plans/release-${RELEASE_ID}-${RELEASE_TAG}/${GITHUB_RUN_ID}/release.tfplan"
         run_private_stage artifact-metadata "$result" "$RUNNER_TEMP/production-upload.err" aws s3api put-object --bucket "$PLAN_BUCKET" --key "$key" --body "$plan" --expected-bucket-owner "$EXPECTED_ACCOUNT" --if-none-match '*' --server-side-encryption aws:kms --ssekms-key-id "$TFSTATE_KMS_KEY_ARN" --checksum-algorithm SHA256 --checksum-sha256 "$s3_sha"

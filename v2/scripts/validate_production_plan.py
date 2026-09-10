@@ -196,7 +196,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 sort_keys=True,
             )
         )
-    except (OSError, json.JSONDecodeError, PlanError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, PlanError) as error:
         reason = "io" if isinstance(error, OSError) else "shape"
         if isinstance(error, PlanError):
             reason = str(error)
