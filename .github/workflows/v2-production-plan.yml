@@ -114,6 +114,8 @@ jobs:
       actions: read
       deployments: read
       id-token: write
+    outputs:
+      saved_plan: ${{ steps.saved-plan.outputs.saved_plan }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
@@ -178,7 +180,7 @@ jobs:
         set -euo pipefail
         umask 077
         set +x
-        bundle="$RUNNER_TEMP/production-release.zip"; overlay="$RUNNER_TEMP/production-release-overlay"
+        bundle="$RUNNER_TEMP/production-release.zip"; overlay="$GITHUB_WORKSPACE/candidate/release-overlay"
         source trusted/v2/scripts/run_private_stage.sh
         PRIVATE_STAGE_REPORTED=0
         PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -232,7 +234,8 @@ jobs:
       with:
         role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-planner
         aws-region: us-east-1
-    - name: Plan and save the complete application candidate
+    - id: saved-plan
+      name: Plan and save the complete application candidate
       env:
         RELEASE_ID: ${{ steps.admitted.outputs.release_id }}
         RELEASE_TAG: ${{ steps.admitted.outputs.tag }}
@@ -266,10 +269,10 @@ jobs:
           exit "$status"
         }
         trap step_exit EXIT
-        foundation="$RUNNER_TEMP/foundation.json"; vars="$RUNNER_TEMP/foundation.tfvars.json"; token="$RUNNER_TEMP/cloudflare-token"; account="$RUNNER_TEMP/production-account"; plan="$RUNNER_TEMP/production.tfplan"; plan_json="$RUNNER_TEMP/production.tfplan.json"; result="$RUNNER_TEMP/production-result.json"; error="$RUNNER_TEMP/production-private.err"; overlay="$RUNNER_TEMP/production-release-overlay"
+        foundation="$RUNNER_TEMP/foundation.json"; vars="$RUNNER_TEMP/foundation.tfvars.json"; token="$RUNNER_TEMP/cloudflare-token"; account="$RUNNER_TEMP/production-account"; plan="$RUNNER_TEMP/production.tfplan"; plan_json="$RUNNER_TEMP/production.tfplan.json"; result="$RUNNER_TEMP/production-result.json"; saved_plan="$RUNNER_TEMP/production-saved-plan.json"; state_before="$RUNNER_TEMP/production-state-before.json"; state_after="$RUNNER_TEMP/production-state-after.json"; state_raw="$RUNNER_TEMP/production-state.raw"; state_head="$RUNNER_TEMP/production-state-head.json"; error="$RUNNER_TEMP/production-private.err"; overlay="$GITHUB_WORKSPACE/candidate/release-overlay"
         cleanup() {
           unset CLOUDFLARE_API_TOKEN
-          rm -rf -- "$foundation" "$vars" "$token" "$account" "$plan" "$plan_json" "$result" "$error" "$overlay" "$RUNNER_TEMP/production-release.zip"
+          rm -rf -- "$foundation" "$vars" "$token" "$account" "$plan" "$plan_json" "$result" "$saved_plan" "$state_before" "$state_after" "$state_raw" "$state_head" "$error" "$overlay" "$RUNNER_TEMP/production-release.zip"
           rm -f -- "$RUNNER_TEMP"/production-*.out "$RUNNER_TEMP"/production-*.err "$RUNNER_TEMP/production-counts.json"
         }
         run_private_stage account-identity "$account" "$error" aws sts get-caller-identity --query Account --output text
@@ -279,12 +282,20 @@ jobs:
         run_private_stage foundation-output-validation "$RUNNER_TEMP/production-foundation-validation.out" "$error" jq -e 'type == "object" and (keys|sort) == ["agentcore_artifacts_bucket_name","agentcore_endpoint_security_group_id","agentcore_vpc_endpoint_dns_name","agentcore_vpc_endpoint_id","alerts_topic_arn","db_instance","eventbridge_endpoint_security_group_id","private_subnet_ids","raw_bucket_name","raw_kms_key_arn","rds_security_group_id","tollchat_api_vpc_endpoint_id","vpc_cidr_block","vpc_id"] and ([.vpc_id,.vpc_cidr_block,.rds_security_group_id,.agentcore_endpoint_security_group_id,.eventbridge_endpoint_security_group_id,.agentcore_vpc_endpoint_id,.agentcore_vpc_endpoint_dns_name,.tollchat_api_vpc_endpoint_id,.raw_bucket_name,.raw_kms_key_arn,.agentcore_artifacts_bucket_name,.alerts_topic_arn]|all(type == "string" and length > 0)) and (.private_subnet_ids|keys|sort == ["a","c"]) and (.db_instance|keys|sort == ["address","identifier","port","resource_id"])' "$foundation"
         run_private_stage foundation-vars "$vars" "$error" jq -n --slurpfile foundation "$foundation" '{foundation:$foundation[0]}'
         run_private_stage release-init "$RUNNER_TEMP/production-release-init.out" "$error" terraform -chdir=candidate/v2/infra init -input=false -backend-config=backend.production.hcl
+        state_identity() {
+          terraform -chdir=candidate/v2/infra state pull >"$state_raw" || return
+          aws s3api head-object --bucket "$PLAN_BUCKET" --key nova-toll/v2/terraform.tfstate --expected-bucket-owner "$EXPECTED_ACCOUNT" >"$state_head" || return
+          jq -en --slurpfile state "$state_raw" --slurpfile head "$state_head" '{lineage:$state[0].lineage,serial:$state[0].serial,version_id:$head[0].VersionId}' || return
+        }
+        run_private_stage release-init "$state_before" "$error" state_identity
         run_private_stage artifact-metadata "$token" "$error" aws ssm get-parameter --name /nova-toll/cloudflare-read-api-token --with-decryption --query Parameter.Value --output text
         CLOUDFLARE_API_TOKEN="$(<"$token")"
         run_private_stage artifact-metadata "$RUNNER_TEMP/production-token-check.out" "$error" test -n "$CLOUDFLARE_API_TOKEN"
         export CLOUDFLARE_API_TOKEN
         run_private_stage plan "$RUNNER_TEMP/production-plan.out" "$error" terraform -chdir=candidate/v2/infra plan -input=false -out="$plan" -var-file=production.tfvars -var-file="$vars" -var loader_package_path="$overlay/v2/infra/build/loader.zip" -var publisher_package_path="$overlay/v2/infra/build/publisher.zip" -var agentcore_package_path="$overlay/v2/infra/build/agentcore.zip" -var chat_proxy_package_path="$overlay/v2/infra/build/chat-proxy.zip" -var timed_checks_package_path="$overlay/v2/infra/build/timed-checks.zip"
         unset CLOUDFLARE_API_TOKEN
+        run_private_stage release-init "$state_after" "$error" state_identity
+        run_private_stage release-init "$RUNNER_TEMP/production-state-match.out" "$error" cmp -s "$state_before" "$state_after"
         run_private_stage show "$plan_json" "$error" terraform -chdir=candidate/v2/infra show -json "$plan"
         run_private_stage validator "$RUNNER_TEMP/production-counts.json" "$error" python3 trusted/v2/scripts/validate_production_plan.py --plan "$plan_json" --inventory-root trusted/v2/infra
         counts="$(<"$RUNNER_TEMP/production-counts.json")"
@@ -294,7 +305,117 @@ jobs:
           jq -e --arg checksum "$s3_sha" --arg key "$TFSTATE_KMS_KEY_ARN" '(.VersionId|type == "string" and length > 0) and .ChecksumSHA256 == $checksum and .SSEKMSKeyId == $key and .ServerSideEncryption == "aws:kms"' "$result" >/dev/null || return
         }
         run_private_stage artifact-metadata "$RUNNER_TEMP/production-upload-validation.out" "$error" validate_upload
-        publish_summary() {
-          jq -n --arg release_id "$RELEASE_ID" --arg tag "$RELEASE_TAG" --arg candidate "$CANDIDATE" --arg listener_run "$LISTENER_RUN" --arg listener_attempt "$LISTENER_ATTEMPT" --arg development_run "$DEVELOPMENT_RUN" --arg development_attempt "$DEVELOPMENT_ATTEMPT" --arg development_deployment "$DEVELOPMENT_DEPLOYMENT" --arg evidence_artifact "$EVIDENCE_ARTIFACT" --arg evidence_digest "$EVIDENCE_DIGEST" --arg bundle_id "$BUNDLE_ID" --arg bundle_digest "$BUNDLE_DIGEST" --arg local_sha256 "$local_sha" --arg planner_run "$GITHUB_RUN_ID" --arg planner_attempt "$GITHUB_RUN_ATTEMPT" --arg claim_id "$CLAIM_ID" --argjson schemas "$SCHEMA_VERSIONS" --argjson counts "$counts" --slurpfile saved "$result" '{schema_version:1,release_id:$release_id,tag:$tag,candidate:$candidate,listener_run:$listener_run,listener_attempt:$listener_attempt,development_run:$development_run,development_attempt:$development_attempt,development_deployment:$development_deployment,evidence_artifact:$evidence_artifact,evidence_digest:$evidence_digest,bundle_id:$bundle_id,bundle_digest:$bundle_digest,local_sha256:$local_sha256,planner_run:$planner_run,planner_attempt:$planner_attempt,claim_id:$claim_id,schema_versions:$schemas,plan_counts:$counts,saved_plan:{bucket:"nova-toll-tfstate-920534282028",key:("plans/release-" + $release_id + "-" + $tag + "/" + $planner_run + "/release.tfplan"),version_id:$saved[0].VersionId,checksum:$saved[0].ChecksumSHA256,kms_key_arn:$saved[0].SSEKMSKeyId}}' >>"$GITHUB_STEP_SUMMARY" || return
+        publish_saved_plan() {
+          created="$(date -u +%Y-%m-%dT%H:%M:%SZ)" || return
+          expires="$(python3 -c 'from datetime import datetime,timedelta; import sys; print((datetime.fromisoformat(sys.argv[1].replace("Z","+00:00"))+timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ"))' "$created")" || return
+          jq -n --argjson release_id "$RELEASE_ID" --arg tag "$RELEASE_TAG" --arg candidate "$CANDIDATE" --argjson listener_run "$LISTENER_RUN" --argjson listener_attempt "$LISTENER_ATTEMPT" --argjson development_run "$DEVELOPMENT_RUN" --argjson development_attempt "$DEVELOPMENT_ATTEMPT" --argjson development_deployment "$DEVELOPMENT_DEPLOYMENT" --argjson evidence_artifact "$EVIDENCE_ARTIFACT" --arg evidence_digest "$EVIDENCE_DIGEST" --argjson bundle_id "$BUNDLE_ID" --arg bundle_digest "$BUNDLE_DIGEST" --argjson planner_run "$GITHUB_RUN_ID" --argjson planner_attempt "$GITHUB_RUN_ATTEMPT" --argjson consumer_run "$GITHUB_RUN_ID" --argjson consumer_attempt "$GITHUB_RUN_ATTEMPT" --argjson claim_id "$CLAIM_ID" --arg created "$created" --arg expires "$expires" --argjson schemas "$SCHEMA_VERSIONS" --argjson counts "$counts" --slurpfile saved "$result" --slurpfile state "$state_after" '{schema_version:1,release_id:$release_id,tag:$tag,candidate:$candidate,listener_run:$listener_run,listener_attempt:$listener_attempt,development_run:$development_run,development_attempt:$development_attempt,development_deployment:$development_deployment,evidence_artifact:{id:$evidence_artifact,digest:$evidence_digest},evidence_digest:$evidence_digest,bundle_id:$bundle_id,bundle_digest:$bundle_digest,consumer_run:$consumer_run,consumer_attempt:$consumer_attempt,planner_run:$planner_run,planner_attempt:$planner_attempt,claim_id:$claim_id,schema_versions:$schemas,plan_counts:$counts,created_at:$created,expires_at:$expires,state:$state[0],saved_plan:{bucket:"nova-toll-tfstate-920534282028",key:("plans/release-" + ($release_id|tostring) + "-" + $tag + "/" + ($planner_run|tostring) + "/release.tfplan"),version_id:$saved[0].VersionId,checksum:$saved[0].ChecksumSHA256,kms_key_arn:$saved[0].SSEKMSKeyId}}' >"$saved_plan" || return
+          python3 trusted/v2/scripts/check_production_release.py validate-saved-plan --admission "$RUNNER_TEMP/admission.json" --saved-plan "$saved_plan" --output "$RUNNER_TEMP/production-saved-plan-validated.json" || return
+          jq -c . "$RUNNER_TEMP/production-saved-plan-validated.json" | sed 's/^/saved_plan=/' >>"$GITHUB_OUTPUT" || return
+          printf 'saved-plan=status=ready\n' >>"$GITHUB_STEP_SUMMARY" || return
         }
-        run_private_stage release-status "$RUNNER_TEMP/production-summary.out" "$error" publish_summary
+        run_private_stage release-status "$RUNNER_TEMP/production-summary.out" "$error" publish_saved_plan
+  migrate:
+    needs: [claim, planner]
+    if: needs.planner.result == 'success'
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+      id-token: write
+    uses: rhprasad0/nova-toll-budget-agent/.github/workflows/v2-production-migrations.yml@refs/heads/main
+    with:
+      admission: ${{ needs.claim.outputs.admission }}
+      saved_plan: ${{ needs.planner.outputs.saved_plan }}
+    secrets:
+      TS_PRODUCTION_OAUTH_CLIENT_ID: ${{ secrets.TS_PRODUCTION_OAUTH_CLIENT_ID }}
+      TS_PRODUCTION_OAUTH_SECRET: ${{ secrets.TS_PRODUCTION_OAUTH_SECRET }}
+  release-result:
+    needs: [claim, planner, migrate]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - id: evidence
+      env:
+        ADMISSION: ${{ needs.claim.outputs.admission }}
+        PLANNER: ${{ needs.planner.result }}
+        MIGRATE: ${{ needs.migrate.result }}
+        MIGRATION_EVIDENCE: ${{ needs.migrate.outputs.delivery_evidence }}
+        CANCELLED: ${{ job.status == 'cancelled' }}
+      run: |
+        set -euo pipefail
+        umask 077
+        set +x
+        source v2/scripts/run_private_stage.sh
+        PRIVATE_STAGE_REPORTED=0
+        PRIVATE_STAGE_SUMMARY_FAILED=0
+        PRIVATE_STAGE_FALLBACK_STAGE=release-status
+        finish() {
+          status=$?
+          trap - EXIT
+          if (( status != 0 && PRIVATE_STAGE_REPORTED == 0 )); then
+            _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"
+          fi
+          exit "$status"
+        }
+        trap finish EXIT
+        result="$RUNNER_TEMP/production-release-evidence.json"
+        publish() {
+          migration_evidence=failed
+          if printf '%s' "$MIGRATION_EVIDENCE" | jq -e --argjson admission "$ADMISSION" 'type == "object" and (keys | sort) == ["apply","candidate","claim_id","migration","readiness","release_id","schema_version"] and .schema_version == 1 and .candidate == $admission.candidate and .release_id == $admission.release_id and .claim_id == $admission.claim_id and .migration == "success" and .apply == "success" and .readiness == "success"' >/dev/null; then
+            migration_evidence=success
+          fi
+          outcome=failed
+          test "$CANCELLED" != true && test "$PLANNER" = success && test "$MIGRATE" = success && test "$migration_evidence" = success && outcome=success
+          jq -n --arg outcome "$outcome" --arg planner "$PLANNER" --arg migrate "$MIGRATE" --arg migration_evidence "$migration_evidence" --arg cancelled "$CANCELLED" --argjson admission "$ADMISSION" '{schema_version:1,environment:"production-release",outcome:$outcome,planner:$planner,migrate:$migrate,migration_evidence:$migration_evidence,cancelled:$cancelled,release_id:$admission.release_id,claim_id:$admission.claim_id,candidate:$admission.candidate}' >"$result" || return
+          printf 'outcome=%s\n' "$outcome" >>"$GITHUB_OUTPUT" || return
+        }
+        run_private_stage release-status "$RUNNER_TEMP/production-result.out" "$RUNNER_TEMP/production-result.err" publish
+    - id: upload
+      if: ${{ always() }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: v2-production-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/production-release-evidence.json
+        if-no-files-found: error
+        retention-days: 7
+    - name: Record terminal release status
+      if: ${{ always() }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ADMISSION: ${{ needs.claim.outputs.admission }}
+        OUTCOME: ${{ steps.evidence.outputs.outcome }}
+        UPLOAD: ${{ steps.upload.outcome }}
+        CANCELLED: ${{ job.status == 'cancelled' }}
+      run: |
+        set -euo pipefail
+        umask 077
+        set +x
+        source v2/scripts/run_private_stage.sh
+        PRIVATE_STAGE_REPORTED=0
+        PRIVATE_STAGE_SUMMARY_FAILED=0
+        PRIVATE_STAGE_FALLBACK_STAGE=release-status
+        finish() {
+          status=$?
+          trap - EXIT
+          if (( status != 0 && PRIVATE_STAGE_REPORTED == 0 )); then
+            _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"
+          fi
+          exit "$status"
+        }
+        trap finish EXIT
+        publish() {
+          printf '%s' "$ADMISSION" >"$RUNNER_TEMP/terminal-admission.json" || return
+          python3 v2/scripts/check_production_release.py revalidate --admission "$RUNNER_TEMP/terminal-admission.json" --output "$RUNNER_TEMP/terminal-revalidated.json" || return
+          claim="$(jq -er '.claim_id|select(type == "number")' "$RUNNER_TEMP/terminal-revalidated.json")" || return
+          state=failure
+          test "$CANCELLED" != true && test "$OUTCOME" = success && test "$UPLOAD" = success && state=success
+          gh api --method POST "repos/$GITHUB_REPOSITORY/deployments/$claim/statuses" -f state="$state" -f environment=production-release -f log_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT" || return
+          test "$state" = success
+        }
+        run_private_stage release-status "$RUNNER_TEMP/terminal-status.out" "$RUNNER_TEMP/terminal-status.err" publish

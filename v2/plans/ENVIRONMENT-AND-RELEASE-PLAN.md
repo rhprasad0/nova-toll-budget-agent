@@ -65,7 +65,7 @@ expensive shared foundations or adding tools that TollChat does not need.
 | Timed deterministic probes | EventBridge Scheduler invokes separate development and production Lambda functions built from one artifact | AWS owns the clock while environment-specific functions, roles, databases, result prefixes, and failure handling preserve least privilege. |
 | Timed agent evaluations | Run selectively in development; use only a small post-release production canary | Full Strands evaluations are CI/release work, not a continuously duplicated Lambda workload. |
 | Production trigger | Published GitHub Release with an allowed `v*` tag | Creates an auditable promotion event distinct from merging code. |
-| Saved production plans | Dedicated short-lived S3 bucket managed by the production foundation | Keeps sensitive plans separate from durable Terraform state and runtime artifacts with their different access, encryption, immutability, and lifecycle requirements. |
+| Saved production plans | Existing private versioned Terraform state bucket under `plans/` | The release job verifies one immutable object version, checksum, state binding, and 24-hour eligibility window; it does not create a bucket or promise Object Lock. |
 | Production canary | One Dulles Greenway current-price conversation after every production apply | Exercises the public endpoint, agent, pricing tool, and production database without I-95 direction or feed-freshness instability. |
 | Evaluation | Retain cheap PR checks and a basic split smoke test; add the release ceremony after the environment split | Isolation needs a working-dev check, not the full promotion gate. |
 | Rollback | Roll Lambda and AgentCore versions back | Deployed schema changes are outside this plan. |
@@ -256,23 +256,14 @@ may create read-only plans after the reviewed foundation handoff. Saved binary
 plans can contain sensitive values and must not be published as artifacts from
 a public repository.
 
-For a production release, upload the exact saved plan to a unique versioned key
-such as `production/<release-tag>/<run-id>/release.tfplan` in a dedicated private
-release-plan S3 bucket managed by the production foundation. Do not store plans in
-the Terraform state or AgentCore runtime-artifact buckets. Enable Bucket Owner
-Enforced ownership, Block Public Access, versioning, SSE-KMS with a dedicated
-customer-managed key, and bucket-default Object Lock Compliance retention of
-two days. Require the exact KMS key, an S3 SHA-256 object checksum, and a locally
-computed plaintext SHA-256. Do not set retention headers per upload or grant CI
-`s3:PutObjectRetention`; the bucket default supplies the immutable retention.
-Record the object version, both checksums, KMS key ARN, creation time, retain-
-until time, and expected state serial in the deployment manifest. The apply job
-must fetch that exact version and verify every value before running Terraform.
-
-Plans are eligible for approval for 24 hours, immutable for 48 hours, and
-expired by lifecycle after three days. S3 lifecycle is day-granular and Object
-Lock retention wins if expiration runs earlier. Do not use the SSE-KMS ETag as
-an integrity digest; it is not a reliable MD5 of either plaintext or ciphertext.
+For a production release, upload the exact saved plan to a unique versioned
+`plans/release-<id>-<tag>/<run-id>/release.tfplan` key in the existing private
+state bucket. Record the object version, S3 SHA-256 checksum, KMS encryption
+identity, creation and expiry times, and expected state lineage/serial/version in the
+sanitized job contract. The protected reusable migration job verifies those
+values before migrations and again before applying that one saved binary plan.
+Plans are eligible for 24 hours and are never replanned during apply. This
+retained state-bucket design does not promise Object Lock or a new bucket.
 
 The trusted plan job may read the exact production state object, manage its
 exact lockfile, and write and encrypt only a unique plan object; it cannot write

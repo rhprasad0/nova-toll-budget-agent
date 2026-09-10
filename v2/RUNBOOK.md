@@ -33,9 +33,13 @@ post-merge delivery path is separate from the explicit manual development
 migration workflow, which may be dispatched from `refs/heads/main` for the
 fixed development target and accepts no arbitrary target or migration-path
 inputs. See the [protected development migration workflow](runbooks/development-foundation-replacement.md#protected-development-migration-workflow-305-slice-3)
-for its foundation, bootstrap, identity, and evidence gates. Production
-releases remain manual, reviewed deployments from `main`.
-The manual production planner stores only a gated saved plan.
+for its foundation, bootstrap, identity, and evidence gates. Production uses
+the reviewer-protected reusable delivery job from `main`. It stores one gated
+plan in the existing private versioned state bucket's `plans/` prefix, verifies
+its immutable version/checksum, state binding, and 24-hour age before deploy
+preflight, fixed migrations, re-assumed deploy apply, and fixed readiness.
+Terminal evidence is sanitized. Root's IAM-only reconciliation and the slice-6
+Greenway canary remain required before the first production release.
 Production schema changes remain limited to the separately authorized, reviewed
 procedures below. The one-time baseline adoption path is described next; future
 recurring migrations require the later protected delivery workflow.

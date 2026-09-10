@@ -3721,7 +3721,7 @@ def _workflow_trigger(workflow: dict[str, object]) -> object:
 def _workflow_run_source(job: dict[str, object]) -> str:
     return "\n".join(
         cast(str, step.get("run", ""))
-        for step in cast(list[dict[str, object]], job["steps"])
+        for step in cast(list[dict[str, object]], job.get("steps", []))
     )
 
 
@@ -3760,7 +3760,7 @@ def test_production_release_plan_workflows_keep_trust_before_credentials_and_app
     )
 
     jobs = cast(dict[str, dict[str, object]], planner["jobs"])
-    assert set(jobs) == {"admission", "claim", "planner"}
+    assert set(jobs) == {"admission", "claim", "planner", "migrate", "release-result"}
     assert jobs["admission"]["permissions"] == {
         "contents": "read",
         "actions": "read",
@@ -3773,7 +3773,14 @@ def test_production_release_plan_workflows_keep_trust_before_credentials_and_app
         "deployments": "read",
         "id-token": "write",
     }
-    assert all(job.get("environment") is None for job in jobs.values())
+    assert all(
+        jobs[name].get("environment") is None
+        for name in ("admission", "claim", "planner", "release-result")
+    )
+    assert str(jobs["migrate"]["uses"]).endswith(
+        "v2-production-migrations.yml@refs/heads/main"
+    )
+    assert jobs["release-result"]["if"] == "${{ always() }}"
 
     admission_source = _workflow_run_source(jobs["admission"])
     claim_source = _workflow_run_source(jobs["claim"])
@@ -3991,7 +3998,7 @@ def test_setup_uv_v10_pins_version_and_checksum() -> None:
         setup_uv_steps = [
             step
             for job in jobs.values()
-            for step in cast(list[dict[str, object]], job["steps"])
+            for step in cast(list[dict[str, object]], job.get("steps", []))
             if cast(str, step.get("uses", "")).startswith("astral-sh/setup-uv@")
         ]
         assert setup_uv_steps

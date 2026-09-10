@@ -4,6 +4,7 @@ import importlib.util
 import json
 import subprocess
 import zipfile
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,79 @@ gate = _module("validate_production_plan.py")
 def test_stable_tag_rejects_prerelease_suffixes() -> None:
     assert release.TAG.fullmatch("v1.2.3")
     assert not release.TAG.fullmatch("v1.2.3-rc.1")
+
+
+def test_saved_plan_rejects_valid_looking_wrong_bindings() -> None:
+    now = datetime.now(UTC).replace(microsecond=0)
+    admission: dict[str, Any] = {
+        "release_id": 7,
+        "tag": "v1.2.3",
+        "candidate": "a" * 40,
+        "listener_run": 11,
+        "listener_attempt": 1,
+        "development_run": 12,
+        "development_attempt": 1,
+        "development_deployment": 13,
+        "evidence_artifact": {
+            "id": 14,
+            "name": "v2-development-evidence-12-1",
+            "size_in_bytes": 4096,
+            "archive_download_url": "https://api.github.test/artifacts/14/zip",
+            "expired": False,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:01:00Z",
+            "expires_at": "2999-01-01T00:00:00Z",
+            "workflow_run": {"id": 12},
+            "digest": "sha256:" + "b" * 64,
+        },
+        "bundle_id": 15,
+        "bundle_digest": "sha256:" + "c" * 64,
+        "schema_versions": {"pricing": "1.3.0", "oracle": "1.14.0"},
+        "consumer_run": 16,
+        "consumer_attempt": 1,
+        "claim_id": 17,
+    }
+    saved = {
+        **admission,
+        "evidence_artifact": {"id": 14, "digest": "sha256:" + "b" * 64},
+        "schema_version": 1,
+        "evidence_digest": admission["evidence_artifact"]["digest"],
+        "planner_run": 16,
+        "planner_attempt": 1,
+        "plan_counts": {},
+        "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "expires_at": (now + timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "state": {
+            "lineage": "11111111-1111-1111-1111-111111111111",
+            "serial": 1,
+            "version_id": "state",
+        },
+        "saved_plan": {
+            "bucket": release.PLAN_BUCKET,
+            "key": "plans/release-7-v1.2.3/16/release.tfplan",
+            "version_id": "plan",
+            "checksum": "A" * 43 + "=",
+            "kms_key_arn": release.PLAN_KMS_KEY,
+        },
+    }
+    assert release.validate_saved_plan(saved, admission, now=now) == saved
+    for path, value in (
+        (("saved_plan", "key"), "plans/release-8-v1.2.3/16/release.tfplan"),
+        (("evidence_artifact", "id"), 99),
+        (("evidence_artifact", "digest"), "sha256:" + "d" * 64),
+        (("evidence_digest",), "sha256:" + "d" * 64),
+    ):
+        altered = json.loads(json.dumps(saved))
+        target: dict[str, Any] = altered
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+        with pytest.raises(release.AdmissionError):
+            release.validate_saved_plan(altered, admission, now=now)
+    expired = json.loads(json.dumps(saved))
+    expired["expires_at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    with pytest.raises(release.AdmissionError):
+        release.validate_saved_plan(expired, admission, now=now)
 
 
 def test_claim_rejects_prior_release_or_tag(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -214,12 +288,25 @@ def test_admission_accepts_a_current_full_development_rerun(
             {"pricing": "1.3.0", "oracle": "1.14.0"},
         ),
     )
-    monkeypatch.setattr(
-        release, "_artifacts", lambda *_args: {"id": 13, "digest": "sha256:" + "c" * 64}
-    )
+    full_artifact = {
+        "id": 13,
+        "node_id": "MDg6QXJ0aWZhY3QxMw==",
+        "name": "v2-development-evidence-12-2",
+        "size_in_bytes": 4096,
+        "url": "https://api.github.test/artifacts/13",
+        "archive_download_url": "https://api.github.test/artifacts/13/zip",
+        "expired": False,
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:01:00Z",
+        "expires_at": "2999-01-01T00:00:00Z",
+        "workflow_run": {"id": 12, "head_sha": candidate},
+        "digest": "sha256:" + "c" * 64,
+    }
+    monkeypatch.setattr(release, "_artifacts", lambda *_args: full_artifact)
     admitted = release.admit(event, 11, 14, 1)
     assert admitted["candidate"] == candidate
     assert admitted["development_attempt"] == 2
+    assert admitted["evidence_artifact"] == full_artifact
 
 
 def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
@@ -567,6 +654,16 @@ def test_plan_gate_allows_only_the_two_stateless_replacements(tmp_path: Path) ->
     )
     with pytest.raises(gate.PlanError, match="persistent"):
         gate.validate(_plan("aws_s3_bucket.site", ["delete", "create"]), tmp_path)
+
+
+def test_plan_gate_admits_real_format_data_addresses(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_s3_bucket" "site" {}\n'
+        'data "aws_iam_policy_document" "timed_checks_lambda" {}\n'
+    )
+    plan = _plan("data.aws_iam_policy_document.timed_checks_lambda", ["read"])
+    plan["resource_changes"][0]["mode"] = "data"
+    assert gate.validate(plan, tmp_path)["read"] == 1
 
 
 def test_plan_gate_requires_api_order_and_guardrail_skip_destroy(

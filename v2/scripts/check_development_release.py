@@ -18,19 +18,60 @@ import urllib.request
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
-SITE = "https://dev.tollchat.ai"
-ACCOUNT = "903859731897"
-DISTRIBUTION = "E33DVF3KT7BTAC"
-RUNTIME = "nova_toll_v2_development-Y69XBf88Bl"
-RUNTIME_ARN = f"arn:aws:bedrock-agentcore:us-east-1:{ACCOUNT}:runtime/{RUNTIME}"
+profile_site = "https://dev.tollchat.ai"
+profile_account = "903859731897"
+profile_distribution = "E33DVF3KT7BTAC"
+profile_runtime = "nova_toll_v2_development-Y69XBf88Bl"
+profile_runtime_arn = (
+    f"arn:aws:bedrock-agentcore:us-east-1:{profile_account}:runtime/{profile_runtime}"
+)
 COOKIE = "__Host-tollchat-session"
 PROMPT = "Briefly explain what information you need to estimate a toll budget."
 MAX_BODY = 8 * 1024 * 1024
-FUNCTIONS = {
+profile_functions = {
     "loader": ("toll-v2-pricing-loader-dev", "loader.zip"),
     "publisher": ("toll-v2-report-publisher-dev", "publisher.zip"),
     "tollchat_proxy": ("tollchat-v2-chat-proxy-dev", "chat-proxy.zip"),
 }
+profile_production = False
+
+
+def configure(profile: str) -> None:
+    """Select one reviewed readiness target; callers cannot supply identifiers."""
+    global \
+        profile_site, \
+        profile_account, \
+        profile_distribution, \
+        profile_runtime, \
+        profile_runtime_arn, \
+        profile_functions, \
+        profile_production
+    if profile not in {"development", "production"}:
+        _fail("contract")
+    profile_site = "https://dev.tollchat.ai"
+    profile_account = "903859731897"
+    profile_distribution = "E33DVF3KT7BTAC"
+    profile_runtime = "nova_toll_v2_development-Y69XBf88Bl"
+    profile_runtime_arn = f"arn:aws:bedrock-agentcore:us-east-1:{profile_account}:runtime/{profile_runtime}"
+    profile_functions = {
+        "loader": ("toll-v2-pricing-loader-dev", "loader.zip"),
+        "publisher": ("toll-v2-report-publisher-dev", "publisher.zip"),
+        "tollchat_proxy": ("tollchat-v2-chat-proxy-dev", "chat-proxy.zip"),
+    }
+    profile_production = False
+    if profile == "development":
+        return
+    profile_site = "https://tollchat.ai"
+    profile_account = "920534282028"
+    profile_distribution = "E16XVTXNFUS8T4"
+    profile_runtime = "nova_toll_v2-W6989LEw44"
+    profile_runtime_arn = f"arn:aws:bedrock-agentcore:us-east-1:{profile_account}:runtime/{profile_runtime}"
+    profile_functions = {
+        "loader": ("toll-v2-pricing-loader", "loader.zip"),
+        "publisher": ("toll-v2-report-publisher", "publisher.zip"),
+        "tollchat_proxy": ("tollchat-v2-chat-proxy", "chat-proxy.zip"),
+    }
+    profile_production = True
 
 
 _current_stage = "startup"
@@ -133,34 +174,38 @@ def expected(state: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
     }
     require(manifest["commit_sha"] == os.environ["GITHUB_SHA"])
     hashes = {entry["path"]: entry["sha256"] for entry in manifest["files"]}
-    for _, (name, package) in FUNCTIONS.items():
-        require(name.endswith("-dev"))
+    for _, (name, package) in profile_functions.items():
+        if not profile_production:
+            require(name.endswith("-dev"))
         require(
             re.fullmatch(r"[0-9a-f]{64}", hashes[f"v2/infra/build/{package}"])
             is not None
         )
-    distribution = resources["aws_cloudfront_distribution.site"]
-    runtime = resources["aws_bedrockagentcore_agent_runtime.tollchat"]
+    distribution_resource = resources["aws_cloudfront_distribution.site"]
+    runtime_resource = resources["aws_bedrockagentcore_agent_runtime.tollchat"]
     endpoint = resources["aws_bedrockagentcore_agent_runtime_endpoint.tollchat"]
     alias = resources["aws_lambda_alias.tollchat_live"]
-    require(distribution["id"] == DISTRIBUTION)
+    require(distribution_resource["id"] == profile_distribution)
     require(
-        runtime["agent_runtime_id"] == RUNTIME
-        and runtime["agent_runtime_arn"] == RUNTIME_ARN
+        runtime_resource["agent_runtime_id"] == profile_runtime
+        and runtime_resource["agent_runtime_arn"] == profile_runtime_arn
     )
-    version = runtime["agent_runtime_version"]
+    version = runtime_resource["agent_runtime_version"]
     require(isinstance(version, str) and version.isdecimal() and int(version) > 0)
-    require(endpoint["agent_runtime_id"] == RUNTIME and endpoint["name"] == "preview")
+    require(
+        endpoint["agent_runtime_id"] == profile_runtime
+        and endpoint["name"] == "preview"
+    )
     require(endpoint["agent_runtime_version"] == version)
     require(
         alias["name"] == "live"
-        and alias["function_name"] == FUNCTIONS["tollchat_proxy"][0]
+        and alias["function_name"] == profile_functions["tollchat_proxy"][0]
     )
     require(
         isinstance(alias["function_version"], str)
         and alias["function_version"].isdecimal()
     )
-    for resource, (name, package) in FUNCTIONS.items():
+    for resource, (name, package) in profile_functions.items():
         function = resources[f"aws_lambda_function.{resource}"]
         digest = base64.b64encode(
             bytes.fromhex(hashes[f"v2/infra/build/{package}"])
@@ -170,9 +215,10 @@ def expected(state: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
         )
         if resource == "tollchat_proxy":
             require(function["version"] == alias["function_version"])
-    require(state["values"]["outputs"]["public_site"]["value"]["url"] == SITE)
+    require(state["values"]["outputs"]["public_site"]["value"]["url"] == profile_site)
     values = {
         "hashes": hashes,
+        "robots_hash": hashes.get("v2/agent/robots.txt"),
         "version": version,
         "alias_version": alias["function_version"],
     }
@@ -182,8 +228,11 @@ def expected(state: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
 
 def readiness(values: dict[str, Any]) -> None:
     _select("readiness", "identity", 1)
-    account = _field(aws("sts", "get-caller-identity"), "Account")
-    require(isinstance(account, str) and account == ACCOUNT, "identity_mismatch")
+    caller_account = _field(aws("sts", "get-caller-identity"), "Account")
+    require(
+        isinstance(caller_account, str) and caller_account == profile_account,
+        "identity_mismatch",
+    )
     _diagnostic("pass", "validated")
     started = time.monotonic()
     deadline = started + 600
@@ -191,7 +240,7 @@ def readiness(values: dict[str, Any]) -> None:
         now = time.monotonic()
         elapsed = max(0, min(int(now - started), 900))
         ready = True
-        for resource, (name, package) in FUNCTIONS.items():
+        for resource, (name, package) in profile_functions.items():
             subcheck = f"lambda:{resource}"
             _select("readiness", subcheck, attempt, elapsed)
             function = aws(
@@ -206,7 +255,7 @@ def readiness(values: dict[str, Any]) -> None:
             require(
                 isinstance(function_arn, str)
                 and function_arn
-                == f"arn:aws:lambda:us-east-1:{ACCOUNT}:function:{name}",
+                == f"arn:aws:lambda:us-east-1:{profile_account}:function:{name}",
                 "identity_mismatch",
             )
             state = _field(function, "State")
@@ -237,7 +286,7 @@ def readiness(values: dict[str, Any]) -> None:
             "lambda",
             "get-alias",
             "--function-name",
-            FUNCTIONS["tollchat_proxy"][0],
+            profile_functions["tollchat_proxy"][0],
             "--name",
             "live",
         )
@@ -260,17 +309,18 @@ def readiness(values: dict[str, Any]) -> None:
         )
         _select("readiness", "cloudfront", attempt, elapsed)
         distribution_response = aws(
-            "cloudfront", "get-distribution", "--id", DISTRIBUTION
+            "cloudfront", "get-distribution", "--id", profile_distribution
         )
-        distribution = _field(distribution_response, "Distribution")
-        require(isinstance(distribution, dict), "malformed_response")
-        distribution = cast(dict[str, Any], distribution)
-        distribution_id = _field(distribution, "Id")
+        deployed_distribution = _field(distribution_response, "Distribution")
+        require(isinstance(deployed_distribution, dict), "malformed_response")
+        deployed_distribution = cast(dict[str, Any], deployed_distribution)
+        distribution_id = _field(deployed_distribution, "Id")
         require(
-            isinstance(distribution_id, str) and distribution_id == DISTRIBUTION,
+            isinstance(distribution_id, str)
+            and distribution_id == profile_distribution,
             "identity_mismatch",
         )
-        status = _field(distribution, "Status")
+        status = _field(deployed_distribution, "Status")
         require(isinstance(status, str), "malformed_response")
         require(status in {"InProgress", "Deployed"}, "invalid_state")
         distribution_ready = status == "Deployed"
@@ -284,14 +334,15 @@ def readiness(values: dict[str, Any]) -> None:
             "bedrock-agentcore-control",
             "get-agent-runtime-endpoint",
             "--agent-runtime-id",
-            RUNTIME,
+            profile_runtime,
             "--endpoint-name",
             "preview",
         )
-        runtime_arn = _field(endpoint, "agentRuntimeArn")
+        endpoint_runtime_arn = _field(endpoint, "agentRuntimeArn")
         endpoint_name = _field(endpoint, "name")
         require(
-            isinstance(runtime_arn, str) and runtime_arn == RUNTIME_ARN,
+            isinstance(endpoint_runtime_arn, str)
+            and endpoint_runtime_arn == profile_runtime_arn,
             "identity_mismatch",
         )
         require(
@@ -346,13 +397,14 @@ def request(
     path: str,
     body: dict[str, Any] | None = None,
     *,
-    origin: str = SITE,
+    origin: str | None = None,
     cookie: str | None = None,
 ) -> tuple[int, str, bytes]:
     require(
         path.startswith("/") and not path.startswith("//"),
         "request_path",
     )
+    origin = profile_site if origin is None else origin
     headers = {
         "Origin": origin,
         "Sec-Fetch-Site": "same-origin",
@@ -367,7 +419,7 @@ def request(
     opener = urllib.request.build_opener(
         NoRedirect(), urllib.request.HTTPCookieProcessor(jar)
     )
-    req = urllib.request.Request(SITE + path, data=data, headers=headers)
+    req = urllib.request.Request(profile_site + path, data=data, headers=headers)
     try:
         response = opener.open(req, timeout=90 if path == "/api/chat" else 20)
     except urllib.error.HTTPError as error:
@@ -467,7 +519,15 @@ def smoke(values: dict[str, Any]) -> None:
             time.sleep(5)
     select("robots")
     code, _, body = request(jar, "/robots.txt")
-    require(code == 200 and body == b"User-agent: *\nDisallow: /\n", "http")
+    expected_robots = b"User-agent: *\nDisallow: /\n"
+    if profile_production:
+        expected_robots = Path("v2/agent/robots.txt").read_bytes()
+        require(
+            isinstance(values["robots_hash"], str)
+            and hashlib.sha256(expected_robots).hexdigest() == values["robots_hash"],
+            "http",
+        )
+    require(code == 200 and body == expected_robots, "http")
     _diagnostic("pass", "validated")
     select("config")
     code, kind, body = request(jar, "/api/config")
@@ -496,6 +556,8 @@ def smoke(values: dict[str, Any]) -> None:
         "http",
     )
     _diagnostic("pass", "validated")
+    if profile_production:
+        return
     first, second = http.cookiejar.CookieJar(), http.cookiejar.CookieJar()
     try:
         select("session_first")
@@ -566,7 +628,13 @@ def main() -> int:
     signal.signal(signal.SIGALRM, expired)
     signal.alarm(900)
     try:
-        state_path, manifest_path = map(Path, sys.argv[1:])
+        profile = "development"
+        arguments = sys.argv[1:]
+        if arguments[:2] == ["--profile", "production"]:
+            profile, arguments = "production", arguments[2:]
+        require(len(arguments) == 2, "contract")
+        configure(profile)
+        state_path, manifest_path = map(Path, arguments)
         require(state_path.stat().st_size <= 32 * 1024 * 1024)
         values = expected(
             json.loads(state_path.read_text()), json.loads(manifest_path.read_text())
