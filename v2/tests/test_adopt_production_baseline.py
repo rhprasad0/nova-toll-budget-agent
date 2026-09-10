@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import select
 import shutil
 import subprocess
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import NoReturn, cast
@@ -16,6 +18,7 @@ from typing import NoReturn, cast
 import pytest
 
 from scripts import adopt_production_baseline as adopt
+from scripts import run_development_migrations as runner
 from scripts.adopt_production_baseline import (
     AdminSecret,
     Baseline,
@@ -590,6 +593,8 @@ def test_no_live_endpoint_or_credential_is_used_by_contract_suite() -> None:
 def test_disposable_postgis_adoption_and_rerun_guard(
     request: pytest.FixtureRequest,
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Run the actual transaction only against a test-owned fresh fixture."""
 
@@ -812,6 +817,7 @@ def test_disposable_postgis_adoption_and_rerun_guard(
         "ALTER VIEW pricing.i95_i495_pricing_comparisons OWNER TO nova_toll_admin;"
         "ALTER VIEW pricing.i66_ballpark_samples OWNER TO nova_toll_admin;"
         "ALTER VIEW pricing.i95_i495_ballpark_samples OWNER TO nova_toll_admin;"
+        "COMMENT ON DATABASE nova_toll IS 'environment=production';"
     )
     prepare_result = run_psql(
         "--username", "postgres", "--dbname", "nova_toll", input_sql=prepare
@@ -1524,6 +1530,211 @@ ORDER BY type.typname, privilege.grantee;
     assert state.returncode == 0
     assert state.stdout.strip() == "2,2,pricing_owner"
     assert stable_boundary_state() == before_stable_boundary
+
+    # The image's patch release is fixture-only. Production keeps the literal
+    # 3.5.6 exception supplied by the shared adoption guard.
+    fixture_guard = adopt.production_rds_postgis_type_guard().replace(
+        "'3.5.6'", repr(fixture_postgis_version)
+    )
+    monkeypatch.setattr(
+        runner.adoption, "production_rds_postgis_type_guard", lambda: fixture_guard
+    )
+    monkeypatch.setattr(
+        runner,
+        "PRODUCTION_PROFILE",
+        replace(
+            runner.PRODUCTION_PROFILE,
+            transport_network=runner.ipaddress.ip_network("127.0.0.0/8"),
+        ),
+    )
+    monkeypatch.setattr(
+        runner, "PRODUCTION_RDS_ENDPOINT", re.compile(r"^127[.]0[.]0[.]1$")
+    )
+    monkeypatch.setattr(runner, "PRODUCTION_RDS_PORT", port)
+    monkeypatch.setenv("PGHOST", host)
+    monkeypatch.setenv("PGPORT", port)
+    monkeypatch.setenv("PGHOSTADDR", host)
+    no_op = runner.run_production()
+    assert (
+        no_op["before"]
+        == no_op["after"]
+        == {
+            "pricing": "1.3.0",
+            "oracle": "1.14.0",
+        }
+    )
+    assert no_op["applied"] == []
+
+    def production_migration(sql: str, migration_id: str, *, succeeds: bool) -> None:
+        rendered = tmp_path / f"{migration_id}.sql"
+        rendered.write_text(sql, encoding="utf-8")
+        runner._remove_terminal_commit(rendered)  # pyright: ignore[reportPrivateUsage]
+        migration = runner.Migration(
+            path=f"v2/db/migrations/{migration_id}.sql",
+            schema="pricing",
+            previous="1.3.0",
+            target="1.3.1",
+            migration_id=f"{migration_id}.sql",
+            number=31,
+            source_sha256="a" * 64,
+        )
+        session = runner._session_sql(  # pyright: ignore[reportPrivateUsage]
+            (migration,),
+            {"pricing": "1.3.1", "oracle": "1.14.0"},
+            {migration.path: rendered},
+            "a" * 40,
+            "12345678-1234-4234-8234-123456789abc",
+            runner._production_baselines(),  # pyright: ignore[reportPrivateUsage]
+            runner.PRODUCTION_PROFILE,
+        )
+        result = subprocess.run(
+            [psql, "-X", "--no-psqlrc", "-v", "ON_ERROR_STOP=1"],
+            input=session,
+            capture_output=True,
+            text=True,
+            env=runner._psql_environment(runner.PRODUCTION_PROFILE),  # pyright: ignore[reportPrivateUsage]
+            check=False,
+        )
+        assert (result.returncode == 0) is succeeds, result.stderr
+        if succeeds:
+            assert result.stdout.count("TOLLCHAT_RESULT_") == 1
+            return
+        assert "TOLLCHAT_RESULT_" not in result.stdout
+        unchanged = run_psql(
+            "--username",
+            "postgres",
+            "--dbname",
+            "nova_toll",
+            "--tuples-only",
+            "--no-align",
+            input_sql=(
+                "SELECT version FROM pricing.schema_version WHERE singleton; "
+                f"SELECT count(*) FROM tollchat_migration.schema_history WHERE migration_id={migration.migration_id!r}; "
+                "SELECT pg_try_advisory_lock(hashtext('tollchat-production-schema-migrations'));"
+            ),
+        )
+        assert unchanged.returncode == 0, unchanged.stderr
+        assert unchanged.stdout.splitlines() == ["1.3.0", "0", "t"]
+
+    production_migration(
+        "BEGIN;\nUPDATE pricing.schema_version SET version = '1.3.1' WHERE singleton;\nSELECT 1 / 0;\nCOMMIT;\n",
+        "031_production_sql_failure",
+        succeeds=False,
+    )
+    trigger = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        input_sql="""
+CREATE FUNCTION public.fail_production_history() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION 'injected history failure'; END $$;
+CREATE TRIGGER fail_production_history BEFORE INSERT ON tollchat_migration.schema_history
+FOR EACH ROW EXECUTE FUNCTION public.fail_production_history();
+""",
+    )
+    assert trigger.returncode == 0, trigger.stderr
+    production_migration(
+        "BEGIN;\nUPDATE pricing.schema_version SET version = '1.3.1' WHERE singleton;\nCOMMIT;\n",
+        "032_production_history_failure",
+        succeeds=False,
+    )
+    removed = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        input_sql="DROP TRIGGER fail_production_history ON tollchat_migration.schema_history; DROP FUNCTION public.fail_production_history();",
+    )
+    assert removed.returncode == 0, removed.stderr
+    postflight = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        input_sql="""
+CREATE FUNCTION public.add_production_postgis_acl() RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $function$
+BEGIN GRANT USAGE ON TYPE oracle.geometry TO schema_migrator_production; END $function$;
+""",
+    )
+    assert postflight.returncode == 0, postflight.stderr
+    production_migration(
+        "BEGIN;\nSELECT public.add_production_postgis_acl();\nUPDATE pricing.schema_version SET version = '1.3.1' WHERE singleton;\nCOMMIT;\n",
+        "033_production_postflight_guard",
+        succeeds=False,
+    )
+    cleanup_postflight = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        input_sql="DROP FUNCTION public.add_production_postgis_acl();",
+    )
+    assert cleanup_postflight.returncode == 0, cleanup_postflight.stderr
+    production_migration(
+        "BEGIN;\nUPDATE pricing.schema_version SET version = '1.3.1' WHERE singleton;\nCOMMIT;\n",
+        "034_production_success",
+        succeeds=True,
+    )
+    production_migration(
+        "BEGIN;\nUPDATE pricing.schema_version SET version = '1.3.1' WHERE singleton;\nCOMMIT;\n",
+        "034_production_success",
+        succeeds=True,
+    )
+    contiguous = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        "--tuples-only",
+        "--no-align",
+        input_sql="""
+SELECT version FROM pricing.schema_version WHERE singleton;
+SELECT count(*) FROM tollchat_migration.schema_history WHERE migration_id = '034_production_success.sql';
+UPDATE pricing.schema_version SET version = '1.3.0' WHERE singleton;
+DELETE FROM tollchat_migration.schema_history WHERE migration_id = '034_production_success.sql';
+""",
+    )
+    assert contiguous.returncode == 0, contiguous.stderr
+    assert contiguous.stdout.splitlines()[:2] == ["1.3.1", "1"]
+    wrong_owner = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        input_sql="ALTER TABLE tollchat_migration.schema_history OWNER TO postgres;",
+    )
+    assert wrong_owner.returncode == 0, wrong_owner.stderr
+    with pytest.raises(runner.MigrationError):
+        runner.run_production()
+    restored_owner = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        input_sql="ALTER TABLE tollchat_migration.schema_history OWNER TO pricing_owner;",
+    )
+    assert restored_owner.returncode == 0, restored_owner.stderr
+    public_history = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        input_sql="GRANT SELECT ON tollchat_migration.schema_history TO PUBLIC;",
+    )
+    assert public_history.returncode == 0, public_history.stderr
+    with pytest.raises(runner.MigrationError):
+        runner.run_production()
+    private_history = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        input_sql="REVOKE ALL ON tollchat_migration.schema_history FROM PUBLIC;",
+    )
+    assert private_history.returncode == 0, private_history.stderr
+    assert runner.run_production()["status"] == "ok"
     history = run_psql(
         "--username",
         "postgres",

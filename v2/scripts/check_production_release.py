@@ -407,18 +407,7 @@ def admit(
     if _sha(listener.get("head_sha")) != candidate:
         raise AdmissionError("provenance")
     consumer = _run(consumer_run)
-    repository = _mapping(consumer.get("repository"))
-    if (
-        repository.get("full_name") != REPOSITORY
-        or consumer.get("path", "").split("@", 1)[0]
-        != ".github/workflows/v2-production-plan.yml"
-        or consumer.get("event") != "workflow_run"
-        or _positive(consumer.get("run_attempt")) != consumer_attempt
-        or consumer.get("status") not in {"queued", "in_progress"}
-        or consumer.get("conclusion") is not None
-        or consumer_attempt != 1
-    ):
-        raise AdmissionError("replay")
+    _consumer(consumer, consumer_attempt)
     development, evidence, versions = _development(candidate)
     return {
         "release_id": release_id,
@@ -439,6 +428,21 @@ def admit(
         "consumer_run": consumer_run,
         "consumer_attempt": consumer_attempt,
     }
+
+
+def _consumer(consumer: dict[str, Any], attempt: int) -> None:
+    repository = _mapping(consumer.get("repository"))
+    if (
+        repository.get("full_name") != REPOSITORY
+        or consumer.get("path", "").split("@", 1)[0]
+        != ".github/workflows/v2-production-plan.yml"
+        or consumer.get("event") != "workflow_run"
+        or _positive(consumer.get("run_attempt")) != attempt
+        or consumer.get("status") not in {"queued", "in_progress"}
+        or consumer.get("conclusion") is not None
+        or attempt != 1
+    ):
+        raise AdmissionError("replay")
 
 
 def claim(admission: dict[str, Any]) -> dict[str, Any]:
@@ -479,7 +483,9 @@ def claim(admission: dict[str, Any]) -> dict[str, Any]:
         "tag": tag,
         "candidate": candidate,
         "listener_run": _positive(admission.get("listener_run")),
+        "listener_attempt": _positive(admission.get("listener_attempt")),
         "consumer_run": _positive(admission.get("consumer_run")),
+        "consumer_attempt": _positive(admission.get("consumer_attempt")),
     }
     created = _mapping(
         api(
@@ -518,6 +524,8 @@ def revalidate(admission: dict[str, Any]) -> dict[str, Any]:
     release_id, tag, candidate = _release(release)
     if _sha(listener.get("head_sha")) != candidate:
         raise AdmissionError("provenance")
+    if admission.get("listener_attempt") != 1:
+        raise AdmissionError("revalidation")
     development, evidence, versions = _development(candidate)
     development_run = _positive(development.get("id"))
     development_attempt = _positive(development.get("run_attempt"))
@@ -548,6 +556,33 @@ def revalidate(admission: dict[str, Any]) -> dict[str, Any]:
     for key, value in expected.items():
         if admission.get(key) != value:
             raise AdmissionError("revalidation")
+    _consumer(
+        _run(_positive(admission.get("consumer_run"))),
+        _positive(admission.get("consumer_attempt")),
+    )
+    claim = _mapping(api("GET", f"deployments/{_positive(admission.get('claim_id'))}"))
+    claim_payload = claim.get("payload")
+    if isinstance(claim_payload, str):
+        try:
+            claim_payload = json.loads(claim_payload, object_pairs_hook=_object)
+        except (json.JSONDecodeError, AdmissionError) as error:
+            raise AdmissionError("revalidation") from error
+    required_claim = {
+        "release_id": release_id,
+        "tag": tag,
+        "candidate": candidate,
+        "listener_run": _positive(admission.get("listener_run")),
+        "listener_attempt": 1,
+        "consumer_run": _positive(admission.get("consumer_run")),
+        "consumer_attempt": _positive(admission.get("consumer_attempt")),
+    }
+    if (
+        claim.get("environment") != PRODUCTION_ENVIRONMENT
+        or claim.get("task") != "production-release-plan"
+        or _sha(claim.get("sha")) != candidate
+        or _mapping(claim_payload) != required_claim
+    ):
+        raise AdmissionError("revalidation")
     return admission
 
 

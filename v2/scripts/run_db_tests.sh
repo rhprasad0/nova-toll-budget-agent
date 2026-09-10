@@ -1040,3 +1040,9 @@ if psql --dbname "$unsafe_agent_db" \
   echo "oracle unexpectedly accepted a pricing caller with direct privileges" >&2
   exit 1
 fi
+
+# This test owns a second, empty PostGIS 17-3.5 fixture. It exercises the
+# production profile after adoption, including the test-only local patch guard.
+uv run --project v2 pytest \
+  v2/tests/test_adopt_production_baseline.py::test_disposable_postgis_adoption_and_rerun_guard \
+  -m live -q

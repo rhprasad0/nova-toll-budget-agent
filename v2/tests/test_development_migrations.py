@@ -364,6 +364,38 @@ def test_environment_only_preserves_development_transport(
     assert environment.get("PGHOSTADDR") == expected
 
 
+def test_production_environment_uses_only_bounded_wrapper_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PGHOST", "nova-toll-db.fixture.us-east-1.rds.amazonaws.com")
+    monkeypatch.setenv("PGPORT", "5432")
+    monkeypatch.setenv("PGHOSTADDR", "172.31.83.200")
+    environment = runner._psql_environment(runner.PRODUCTION_PROFILE)
+    assert environment["PGHOST"] == "nova-toll-db.fixture.us-east-1.rds.amazonaws.com"
+    assert environment["PGHOSTADDR"] == "172.31.83.200"
+    assert environment["PGPORT"] == "5432"
+
+
+@pytest.mark.parametrize(
+    ("host", "port", "address"),
+    [
+        ("attacker.example", "5432", "172.31.83.200"),
+        ("nova-toll-db.fixture.us-east-1.rds.amazonaws.com", "15432", "172.31.83.200"),
+        ("nova-toll-db.fixture.us-east-1.rds.amazonaws.com", "5432", "127.0.0.1"),
+    ],
+)
+def test_production_environment_rejects_unbounded_transport(
+    monkeypatch: pytest.MonkeyPatch, host: str, port: str, address: str
+) -> None:
+    monkeypatch.setenv("PGHOST", "attacker.example")
+    monkeypatch.setenv("PGPORT", "15432")
+    monkeypatch.setenv("PGHOSTADDR", address)
+    monkeypatch.setenv("PGHOST", host)
+    monkeypatch.setenv("PGPORT", port)
+    with pytest.raises(runner.MigrationError, match="production transport"):
+        runner._psql_environment(runner.PRODUCTION_PROFILE)
+
+
 def test_psql_include_path_opens_exact_file(tmp_path: Path) -> None:
     """Exercise psql's actual \\ir lexer against a disposable local fixture only."""
     psql = shutil.which("psql")
