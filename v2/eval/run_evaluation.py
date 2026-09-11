@@ -105,13 +105,21 @@ class EvaluationFailure(EvaluationFailed):
         failure_count: int,
         failure_summaries: list[dict[str, str]],
         summaries_truncated: bool,
+        *,
+        passed_count: int = 0,
+        case_count: int | None = None,
+        failures: tuple[tuple[str, str], ...] | None = None,
     ) -> None:
         super().__init__(
-            passed_count=0,
-            case_count=failure_count,
-            failures=tuple(
-                (summary["case_id"], summary["reason"])
-                for summary in failure_summaries
+            passed_count=passed_count,
+            case_count=failure_count if case_count is None else case_count,
+            failures=(
+                tuple(
+                    (summary["case_id"], summary["reason"])
+                    for summary in failure_summaries
+                )
+                if failures is None
+                else failures
             ),
         )
         object.__setattr__(self, "failure_count", failure_count)
@@ -170,30 +178,6 @@ def _failure_summary(report: object, index: int) -> dict[str, str]:
             _EVALUATION_FAILED,
         ),
     }
-
-
-@dataclass(frozen=True)
-class EvaluationFailed(SystemExit):
-    """A completed evaluation report containing one or more failed cases."""
-
-    passed_count: int
-    case_count: int
-    failures: tuple[tuple[str, str], ...]
-
-    def __post_init__(self) -> None:
-        SystemExit.__init__(self, "TollChat evaluation failed")
-        object.__setattr__(
-            self,
-            "failures",
-            tuple(
-                (case_id, " ".join(reason.split())[:300])
-                for case_id, reason in self.failures
-            ),
-        )
-
-
-class EvaluationExecutionError(RuntimeError):
-    """An unscored task or evaluator error that must use operational alarms."""
 
 
 def load_rows(path: Path = _CASES_PATH) -> list[dict[str, Any]]:
@@ -1413,6 +1397,18 @@ def main(window: str, suite: str = "all", output_dir: Path | str | None = None) 
         failed_indexes = [
             index for index, passed in enumerate(report.test_passes) if not passed
         ]
+        reasons = _report_field(report, "reasons")
+        legacy_failures = (
+            tuple(
+                (cast(str, case["name"]), reason)
+                for case, passed, reason in zip(
+                    report.cases, report.test_passes, reasons, strict=True
+                )
+                if not passed
+            )
+            if isinstance(reasons, (list, tuple))
+            else None
+        )
         raise EvaluationFailure(
             failure_count=len(failed_indexes),
             failure_summaries=[
@@ -1420,6 +1416,9 @@ def main(window: str, suite: str = "all", output_dir: Path | str | None = None) 
                 for index in failed_indexes[:_MAX_FAILURE_SUMMARIES]
             ],
             summaries_truncated=len(failed_indexes) > _MAX_FAILURE_SUMMARIES,
+            passed_count=sum(report.test_passes),
+            case_count=len(report.test_passes),
+            failures=legacy_failures,
         )
 
 

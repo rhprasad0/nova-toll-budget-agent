@@ -614,11 +614,19 @@ def test_tool_price_is_excluded_from_evaluation_failure_and_alert(
 
     monkeypatch.setattr(cast(Any, runner.boto3), "client", client)
 
-    with caplog.at_level(logging.INFO):
-        assert runner.handler(_alert_event(), _AlertContext()) == {
-            "status": "failed",
-            "window_id": "i95_reversal",
+    with (
+        caplog.at_level(logging.INFO),
+        pytest.raises(run_evaluation.EvaluationFailure) as raised,
+    ):
+        runner.handler(_alert_event(), _AlertContext())
+
+    assert raised.value.failure_summaries == [
+        {
+            "case_id": "reagan-airport-to-westpark",
+            "label": "ungrounded_price",
+            "reason": "response omitted the current toll",
         }
+    ]
 
     assert len(published) == 1
     assert "response omitted the current toll" in published[0]["Message"]
@@ -1004,3 +1012,78 @@ def test_handler_propagates_structured_evaluation_failure_once(
         == failure.failure_summaries
     )
     assert _record_value(records[0], "evaluation_summaries_truncated") is True
+
+
+def _prepare_structured_evaluation_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> run_evaluation.EvaluationFailure:
+    failure = run_evaluation.EvaluationFailure(
+        failure_count=1,
+        failure_summaries=[{"case_id": "case", "label": "label", "reason": "bounded"}],
+        summaries_truncated=False,
+    )
+    monkeypatch.setattr(runner, "scheduled_run_is_fresh", _always_fresh)
+    monkeypatch.setattr(runner, "run_route_checks", _noop)
+    monkeypatch.setattr(runner, "run_annual_checks", _noop)
+
+    def fail_evaluation(**_kwargs: object) -> None:
+        raise failure
+
+    monkeypatch.setattr(
+        runner.run_evaluation,
+        "main",
+        fail_evaluation,
+    )
+    return failure
+
+
+def test_structured_evaluation_failure_reraises_when_alerts_disabled(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    failure = _prepare_structured_evaluation_failure(monkeypatch)
+    monkeypatch.setenv("TIMED_CHECK_ALERTS_ENABLED", "false")
+
+    with (
+        caplog.at_level(logging.INFO),
+        pytest.raises(run_evaluation.EvaluationFailure) as raised,
+    ):
+        runner.handler(_alert_event(), object())
+
+    assert raised.value is failure
+    records = _records(caplog)
+    assert len(records) == 1
+    assert _record_field(records[0], "notification") == "disabled"
+    assert _record_value(records[0], "evaluation_failure_count") == 1
+
+
+def test_structured_evaluation_failure_reraises_after_alert_publish(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    failure = _prepare_structured_evaluation_failure(monkeypatch)
+    monkeypatch.setenv("TIMED_CHECK_ALERTS_ENABLED", "true")
+    monkeypatch.setenv("ALERTS_TOPIC_ARN", "arn:aws:sns:us-east-1:123:alerts")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    published: list[dict[str, str]] = []
+
+    class Client:
+        def publish(self, **kwargs: str) -> None:
+            published.append(kwargs)
+
+    def client(*_args: object, **_kwargs: object) -> Client:
+        return Client()
+
+    monkeypatch.setattr(cast(Any, runner.boto3), "client", client)
+
+    with (
+        caplog.at_level(logging.INFO),
+        pytest.raises(run_evaluation.EvaluationFailure) as raised,
+    ):
+        runner.handler(_alert_event(), _AlertContext())
+
+    assert raised.value is failure
+    assert len(published) == 1
+    records = _records(caplog)
+    assert len(records) == 1
+    assert _record_field(records[0], "notification") == "sent"
+    assert _record_value(records[0], "evaluation_failure_count") == 1
