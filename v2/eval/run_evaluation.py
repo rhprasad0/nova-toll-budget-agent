@@ -62,6 +62,114 @@ _MOVEMENT_EMOJIS = {
     "unchanged": "➡️",
     "mixed": "🔄",
 }
+_MAX_FAILURE_SUMMARIES = 10
+_MAX_FAILURE_TEXT_LENGTH = 128
+_UNKNOWN_CASE = "unknown_case"
+_UNKNOWN_LABEL = "unknown_label"
+_EVALUATION_FAILED = "evaluation_failed"
+
+
+@dataclass(frozen=True)
+class EvaluationFailed(SystemExit):
+    """A completed evaluation report containing one or more failed cases."""
+
+    passed_count: int
+    case_count: int
+    failures: tuple[tuple[str, str], ...]
+
+    def __post_init__(self) -> None:
+        SystemExit.__init__(self, "TollChat evaluation failed")
+        object.__setattr__(
+            self,
+            "failures",
+            tuple(
+                (case_id, " ".join(reason.split())[:300])
+                for case_id, reason in self.failures
+            ),
+        )
+
+
+class EvaluationExecutionError(RuntimeError):
+    """An unscored task or evaluator error that must use operational alarms."""
+
+
+class EvaluationFailure(EvaluationFailed):
+    """A failed evaluation with bounded metadata for the Lambda boundary."""
+
+    failure_count: int
+    failure_summaries: list[dict[str, str]]
+    summaries_truncated: bool
+
+    def __init__(
+        self,
+        failure_count: int,
+        failure_summaries: list[dict[str, str]],
+        summaries_truncated: bool,
+    ) -> None:
+        super().__init__(
+            passed_count=0,
+            case_count=failure_count,
+            failures=tuple(
+                (summary["case_id"], summary["reason"])
+                for summary in failure_summaries
+            ),
+        )
+        object.__setattr__(self, "failure_count", failure_count)
+        object.__setattr__(self, "failure_summaries", failure_summaries)
+        object.__setattr__(self, "summaries_truncated", summaries_truncated)
+
+
+def _report_field(value: object, field: str) -> object:
+    if type(value) is dict:
+        return value.get(field)
+    try:
+        return getattr(value, field)
+    except Exception:
+        return None
+
+
+def _indexed(value: object, index: int) -> object:
+    if type(value) is list:
+        values = cast(list[object], value)
+    elif type(value) is tuple:
+        values = cast(tuple[object, ...], value)
+    else:
+        return None
+    return values[index] if 0 <= index < len(values) else None
+
+
+def _bounded_text(value: object, fallback: str) -> str:
+    return value[:_MAX_FAILURE_TEXT_LENGTH] if type(value) is str else fallback
+
+
+def _failure_summary(report: object, index: int) -> dict[str, str]:
+    case = _indexed(_report_field(report, "cases"), index)
+    details = _indexed(_report_field(report, "detailed_results"), index)
+    failed_detail = None
+    if type(details) is list:
+        detail_values = cast(list[object], details)
+    elif type(details) is tuple:
+        detail_values = cast(tuple[object, ...], details)
+    else:
+        detail_values = ()
+    for detail in detail_values:
+        if _report_field(detail, "test_pass") is False:
+            failed_detail = detail
+            break
+    return {
+        "case_id": _bounded_text(
+            _report_field(case, "name"),
+            _UNKNOWN_CASE,
+        ),
+        "label": _bounded_text(
+            _report_field(failed_detail, "label"),
+            _UNKNOWN_LABEL,
+        ),
+        "reason": _bounded_text(
+            _report_field(failed_detail, "reason"),
+            _EVALUATION_FAILED,
+        ),
+    }
 
 
 @dataclass(frozen=True)
@@ -613,7 +721,7 @@ def evaluate_fallback_turns(
         or initial_payload.get("general_purpose_gaps")
         != [
             {
-                "connection_id": "i495_to_i95_south",
+                "connection_id": "source:i95_shared:Southbound:182SO:205SD",
                 "boundary_point_id": "i495:192SD",
                 "role": "suffix",
                 "i95_direction": "SB",
@@ -1302,16 +1410,16 @@ def main(window: str, suite: str = "all", output_dir: Path | str | None = None) 
             )
         ):
             raise EvaluationExecutionError("TollChat evaluation execution failed")
-        raise EvaluationFailed(
-            passed_count=sum(report.test_passes),
-            case_count=len(report.test_passes),
-            failures=tuple(
-                (cast(str, case["name"]), reason)
-                for case, passed, reason in zip(
-                    report.cases, report.test_passes, report.reasons, strict=True
-                )
-                if not passed
-            ),
+        failed_indexes = [
+            index for index, passed in enumerate(report.test_passes) if not passed
+        ]
+        raise EvaluationFailure(
+            failure_count=len(failed_indexes),
+            failure_summaries=[
+                _failure_summary(report, index)
+                for index in failed_indexes[:_MAX_FAILURE_SUMMARIES]
+            ],
+            summaries_truncated=len(failed_indexes) > _MAX_FAILURE_SUMMARIES,
         )
 
 
@@ -1719,7 +1827,7 @@ def _self_check() -> None:
                         },
                         "general_purpose_gaps": [
                             {
-                                "connection_id": "i495_to_i95_south",
+                                "connection_id": "source:i95_shared:Southbound:182SO:205SD",
                                 "boundary_point_id": "i495:192SD",
                                 "role": "suffix",
                                 "i95_direction": "SB",
@@ -1748,6 +1856,14 @@ def _self_check() -> None:
         },
     ]
     assert evaluate_fallback_turns(fallback_turns, fallback)[0].test_pass
+    wrong_fallback_connection = json.loads(json.dumps(fallback_turns))
+    wrong_fallback_connection[0]["calls"][0]["tool_result"]["general_purpose_gaps"][0][
+        "connection_id"
+    ] = "wrong"
+    assert (
+        evaluate_fallback_turns(wrong_fallback_connection, fallback)[0].label
+        == "bad_route"
+    )
     wrong_fallback = json.loads(json.dumps(fallback_turns))
     wrong_fallback[1]["calls"][0]["input"]["destination_point_id"] = "wrong"
     assert (

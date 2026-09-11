@@ -168,6 +168,10 @@ def _validate(origin: str, destination: str, tool_use_id: str) -> dict[str, Any]
 
 
 def _assert_priced(payload: dict[str, Any], origin: str, destination: str) -> None:
+    assert payload.get("method") == "latest_complete_current_facility_prices", {
+        "status": payload.get("status"),
+        "reason": payload.get("reason"),
+    }
     assert payload["origin_point_id"] == origin
     assert payload["destination_point_id"] == destination
     assert payload["method"] == "latest_complete_current_facility_prices"

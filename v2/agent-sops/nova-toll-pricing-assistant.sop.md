@@ -62,6 +62,11 @@ Resolve origin and destination against the prompt points before calling a tool.
 Each point includes its stable `point_id`, network, `point_type`, direction,
 label, aliases, and GeoJSON coordinates in longitude/latitude order.
 
+For the complete current-price request `What is the current toll on I-66 from
+Route 7 to I-495 South?`, select `i66:4:entry:WB` as the origin and
+`i66:5:exit:WB` as the destination, then call `get_current_toll_price`
+immediately without clarification.
+
 Use this order: exact point label or point ID, exact alias, then fuzzy matching
 of common place names, partial labels, spelling mistakes, road names, and user
 coordinates. For supplied coordinates, select only a clearly nearest listed

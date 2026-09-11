@@ -138,19 +138,33 @@ def handler(event: object, context: object) -> dict[str, str]:
     except TimedChecksStaleError:
         raise
     except run_evaluation.EvaluationFailed as error:
-        terminal.update(
-            {
-                "status": "failed",
-                "evaluation": "failed",
-                "failure_type": "EvaluationFailed",
-            }
-        )
+        if isinstance(error, run_evaluation.EvaluationFailure):
+            terminal.update(
+                {
+                    "evaluation": "failed",
+                    "status": "failed",
+                    "failure_type": "EvaluationFailure",
+                    "evaluation_failure_count": error.failure_count,
+                    "evaluation_failure_summaries": error.failure_summaries,
+                    "evaluation_summaries_truncated": error.summaries_truncated,
+                }
+            )
+        else:
+            terminal.update(
+                {
+                    "status": "failed",
+                    "evaluation": "failed",
+                    "failure_type": "EvaluationFailed",
+                }
+            )
         enabled = os.environ.get("TIMED_CHECK_ALERTS_ENABLED")
         if enabled is None:
             terminal["notification"] = "legacy"
             raise
         if enabled == "false":
             terminal["notification"] = "disabled"
+            if isinstance(error, run_evaluation.EvaluationFailure):
+                raise
             assert window_id is not None
             return {"status": "failed", "window_id": window_id}
         if enabled != "true":
@@ -214,6 +228,8 @@ def handler(event: object, context: object) -> dict[str, str]:
             terminal["notification"] = "failed"
             raise
         terminal["notification"] = "sent"
+        if isinstance(error, run_evaluation.EvaluationFailure):
+            raise
         assert window_id is not None
         return {"status": "failed", "window_id": window_id}
     except (Exception, SystemExit) as error:
