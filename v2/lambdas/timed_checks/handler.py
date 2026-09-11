@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
+from urllib.parse import quote
+
+import boto3
 
 from eval import run_evaluation
 from timed_checks import (
@@ -67,7 +71,18 @@ def _emit_result(result: dict[str, object]) -> None:
     logger.info(json.dumps(record, sort_keys=True, separators=(",", ":")), extra=record)
 
 
-def handler(event: object, _context: object) -> dict[str, str]:
+def _log_stream_url(region: str, log_group: str, log_stream: str) -> str:
+    def console_path(value: str) -> str:
+        return quote(quote(value, safe=""), safe="").replace("%", "$")
+
+    return (
+        f"https://{region}.console.aws.amazon.com/cloudwatch/home?region={region}"
+        "#logsV2:log-groups/log-group/"
+        f"{console_path(log_group)}/log-events/{console_path(log_stream)}"
+    )
+
+
+def handler(event: object, context: object) -> dict[str, str]:
     """Validate and run one timed-check window."""
     window_id: str | None = None
     schedule: str | None = None
@@ -122,6 +137,85 @@ def handler(event: object, _context: object) -> dict[str, str]:
         raise
     except TimedChecksStaleError:
         raise
+    except run_evaluation.EvaluationFailed as error:
+        terminal.update(
+            {
+                "status": "failed",
+                "evaluation": "failed",
+                "failure_type": "EvaluationFailed",
+            }
+        )
+        enabled = os.environ.get("TIMED_CHECK_ALERTS_ENABLED")
+        if enabled is None:
+            terminal["notification"] = "legacy"
+            raise
+        if enabled == "false":
+            terminal["notification"] = "disabled"
+            assert window_id is not None
+            return {"status": "failed", "window_id": window_id}
+        if enabled != "true":
+            terminal["notification"] = "failed"
+            raise ValueError("invalid timed-check alert configuration") from None
+        try:
+            topic = os.environ.get("ALERTS_TOPIC_ARN")
+            environment = os.environ.get("ENVIRONMENT")
+            region = os.environ.get("AWS_REGION") or os.environ.get(
+                "AWS_DEFAULT_REGION"
+            )
+            request_id: object = getattr(context, "aws_request_id", None)
+            log_group: object = getattr(context, "log_group_name", None)
+            log_stream: object = getattr(context, "log_stream_name", None)
+            if not all(
+                isinstance(value, str) and value
+                for value in (
+                    topic,
+                    environment,
+                    region,
+                    request_id,
+                    log_group,
+                    log_stream,
+                )
+            ):
+                raise ValueError("invalid timed-check alert configuration")
+            assert isinstance(topic, str)
+            assert isinstance(environment, str)
+            assert isinstance(region, str)
+            assert isinstance(request_id, str)
+            assert isinstance(log_group, str)
+            assert isinstance(log_stream, str)
+            subject = (
+                f"TollChat {environment} eval failed: {window_id} "
+                f"({error.passed_count}/{error.case_count} passed)"
+            )
+            body = "\n".join(
+                [
+                    f"Environment: {environment}",
+                    f"Window: {window_id}",
+                    f"Passed: {error.passed_count}/{error.case_count}",
+                    "Failed cases:",
+                    *(f"- {case_id}: {reason}" for case_id, reason in error.failures),
+                    f"Request ID: {request_id}",
+                    f"Log stream: {_log_stream_url(region, log_group, log_stream)}",
+                ]
+            )
+            if (
+                len(subject.encode("utf-8")) >= 100
+                or any(
+                    ord(character) < 32 or ord(character) == 127
+                    for character in subject
+                )
+                or len(body.encode("utf-8")) > 262_144
+            ):
+                raise ValueError("invalid timed-check alert message")
+            cast(Any, boto3).client("sns", region_name=region).publish(
+                TopicArn=topic, Subject=subject, Message=body
+            )
+        except (Exception, SystemExit):
+            terminal["notification"] = "failed"
+            raise
+        terminal["notification"] = "sent"
+        assert window_id is not None
+        return {"status": "failed", "window_id": window_id}
     except (Exception, SystemExit) as error:
         if phase is not None:
             terminal[phase] = "failed"

@@ -370,9 +370,13 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
         FOUNDATION_IAM,
         'data "aws_iam_policy_document" "development_delivery"',
     )
-    policy_data = policy_data.replace(
-        "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
-    ).replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
+    policy_data = (
+        policy_data.replace(
+            "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
+        )
+        .replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
+        .replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
+    )
     configuration = dedent(
         f"""
         terraform {{
@@ -396,6 +400,7 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
         locals {{
           test_tfstate_bucket_arn = "arn:aws:s3:::nova-toll-tfstate-903859731897"
           test_tfstate_kms_key_arn = "arn:aws:kms:us-east-1:903859731897:key/00000000-0000-0000-0000-000000000000"
+          test_alerts_kms_key_arn = "arn:aws:kms:us-east-1:903859731897:key/11111111-1111-1111-1111-111111111111"
         }}
 
         {first_locals}
@@ -505,9 +510,13 @@ def _terraform_rendered_development_plan_policies() -> tuple[
         if "development_plan_policy_documents"
         in _top_level_terraform_block(FOUNDATION_IAM, "locals", occurrence)
     )
-    policy_data = policy_data.replace(
-        "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
-    ).replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
+    policy_data = (
+        policy_data.replace(
+            "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
+        )
+        .replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
+        .replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
+    )
     configuration = dedent(
         f"""
         terraform {{
@@ -536,6 +545,7 @@ def _terraform_rendered_development_plan_policies() -> tuple[
         locals {{
           test_tfstate_bucket_arn = "arn:aws:s3:::nova-toll-tfstate-903859731897"
           test_tfstate_kms_key_arn = "arn:aws:kms:us-east-1:903859731897:key/00000000-0000-0000-0000-000000000000"
+          test_alerts_kms_key_arn = "arn:aws:kms:us-east-1:903859731897:key/11111111-1111-1111-1111-111111111111"
         }}
 
         {first_locals}
@@ -888,13 +898,15 @@ def test_v2_uses_the_typed_boundary_without_foundation_discovery():
         'data "aws_vpc_endpoint"',
         'data "aws_security_group"',
         'data "aws_s3_bucket"',
-        'data "aws_kms_alias"',
         'data "aws_db_instance"',
         'data "aws_sns_topic"',
         "nova-toll-raw-920534282028",
         "nova-toll-agentcore-920534282028",
     ):
         assert forbidden not in terraform_sources
+    assert terraform_sources.count('data "aws_kms_alias"') == 1
+    assert 'data "aws_kms_alias" "alerts"' in TIMED_CHECKS_TF
+    assert 'name = "alias/nova-toll-alerts"' in TIMED_CHECKS_TF
     for field in (
         "vpc_id",
         "vpc_cidr_block",
@@ -3070,7 +3082,9 @@ def test_timed_builder_import_smoke_is_secret_isolated():
     )
     assert "uv run --python 3.13 --no-project python" in script
     assert "global-bundle.pem" in script
-    assert 'DB_CA_BUNDLE_PATH = "/var/task/rds-ca-bundle.pem"' in TIMED_CHECKS_TF
+    assert (
+        'DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"' in TIMED_CHECKS_TF
+    )
 
 
 def test_timed_lambda_scheduler_and_failure_contract():
@@ -3109,6 +3123,14 @@ def test_timed_lambda_scheduler_and_failure_contract():
         assert_assignment(lambda_block, name, value)
     assert "filename" not in lambda_block
     assert "subnet_ids         = local.private_subnets" in lambda_block
+    assert (
+        "TIMED_CHECK_ALERTS_ENABLED = tostring(local.timed_check_alerts_enabled)"
+        in lambda_block
+    )
+    assert "ENVIRONMENT                = var.environment" in lambda_block
+    assert "ALERTS_TOPIC_ARN = var.foundation.alerts_topic_arn" in lambda_block
+    assert 'data "aws_kms_alias" "alerts"' in TIMED_CHECKS_TF
+    assert 'name = "alias/nova-toll-alerts"' in TIMED_CHECKS_TF
 
     schedule = terraform_block(
         TIMED_CHECKS_TF, 'resource "aws_scheduler_schedule" "timed_checks"'
@@ -3159,7 +3181,31 @@ def test_timed_lambda_scheduler_and_failure_contract():
     assert "/${local.database_roles.pricing_caller}" in lambda_policy
     assert 'actions   = ["ssm:GetParameter"]' in lambda_policy
     assert 'actions   = ["sqs:SendMessage"]' in lambda_policy
+    assert 'actions   = ["sns:Publish"]' in lambda_policy
+    assert "resources = [var.foundation.alerts_topic_arn]" in lambda_policy
+    assert 'actions   = ["kms:Decrypt", "kms:GenerateDataKey*"]' in lambda_policy
+    assert "resources = [data.aws_kms_alias.alerts.target_key_arn]" in lambda_policy
     assert 'resources = ["*"]' not in lambda_policy
+    assert (
+        "local.is_production || var.enable_development_timed_check_alerts"
+        in TIMED_CHECKS_TF
+    )
+    assert 'variable "enable_development_timed_check_alerts"' in APPLICATION_VARIABLES
+    assert "default     = false" in APPLICATION_VARIABLES
+    assert (
+        'var.environment == "development" || !var.enable_development_timed_check_alerts'
+        in APPLICATION_VARIABLES
+    )
+    assert "enable_development_timed_check_alerts = true" in DEVELOPMENT_TFVARS.replace(
+        "      ", " "
+    )
+    errors_alarm = terraform_block(
+        TIMED_CHECKS_TF, 'resource "aws_cloudwatch_metric_alarm" "timed_checks_errors"'
+    )
+    assert (
+        "Unexpected timed-check failures and evaluation alert delivery failures"
+        in errors_alarm
+    )
 
     assert 'cidr_ipv4         = "0.0.0.0/0"' in TIMED_CHECKS_TF
     assert "from_port         = 443" in TIMED_CHECKS_TF
@@ -6372,6 +6418,12 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     assert "ManageNewApplicationKmsKeys" not in by_sid
     assert by_sid["ReadApplicationKmsAliases"]["actions"] == ["kms:ListAliases"]
     assert by_sid["ReadApplicationKmsAliases"]["resources"] == ["*"]
+    assert by_sid["ReadAlertsKeyForTimedChecks"] == {
+        "sid": "ReadAlertsKeyForTimedChecks",
+        "actions": ["kms:DescribeKey"],
+        "resources": ["aws_kms_key.alerts.arn"],
+        "conditions": [],
+    }
     assert by_sid["ReadRetainedMeasurementKey"]["actions"] == [
         "kms:Decrypt",
         "kms:DescribeKey",
@@ -6875,6 +6927,7 @@ DEVELOPMENT_PLAN_SIDS = [
     "ReadManagedCloudFrontPolicy",
     "ReadApplicationWaf",
     "ReadDevelopmentCertificate",
+    "ReadAlertsKeyForTimedChecks",
 ]
 
 _NO_PLAN_CONDITIONS = ()
@@ -7257,6 +7310,11 @@ DEVELOPMENT_PLAN_REFRESH_TUPLES = {
         ),
         _NO_PLAN_CONDITIONS,
     ),
+    "ReadAlertsKeyForTimedChecks": (
+        ("kms:DescribeKey",),
+        ("aws_kms_key.alerts.arn",),
+        _NO_PLAN_CONDITIONS,
+    ),
 }
 
 
@@ -7316,7 +7374,7 @@ def _assert_development_plan_policy(source: str) -> None:
     )
     statements = _parsed_policy_document(source, "development_plan")
     assert [statement["sid"] for statement in statements] == DEVELOPMENT_PLAN_SIDS
-    assert len(statements) == 43
+    assert len(statements) == 44
     by_sid = _policy_by_sid(statements)
     parsed_tuples = _parsed_policy_tuple_map(source, "development_plan")
     assert set(parsed_tuples) == set(DEVELOPMENT_PLAN_SIDS)
@@ -7502,7 +7560,19 @@ def test_development_plan_policy_set_is_deterministic_and_bounded():
         "runtime",
         "edge",
     }
-    assert len(aggregate) == 43
+    assert len(aggregate) == 44
+    assert [
+        statement
+        for statement in aggregate
+        if statement["Sid"] == "ReadAlertsKeyForTimedChecks"
+    ] == [
+        {
+            "Action": "kms:DescribeKey",
+            "Effect": "Allow",
+            "Resource": "arn:aws:kms:us-east-1:903859731897:key/11111111-1111-1111-1111-111111111111",
+            "Sid": "ReadAlertsKeyForTimedChecks",
+        }
+    ]
     rendered_statements: list[dict[str, object]] = []
     for key in (
         "state",
@@ -7673,7 +7743,7 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
 
 def test_development_delivery_policy_set_is_deterministic_and_bounded():
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 53
+    assert len(statements) == 54
     expected_groups = {
         "state": (
             0,
@@ -7758,7 +7828,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         ),
         "edge": (
             45,
-            53,
+            54,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -7768,6 +7838,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
                 "ReadManagedCloudFrontPolicy",
                 "ManageApplicationWaf",
                 "ReadDevelopmentCertificate",
+                "ReadAlertsKeyForTimedChecks",
             ],
         ),
     }
@@ -7776,10 +7847,16 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
     )
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups)
-    assert len(rendered_aggregate) == len(statements) == 53
+    assert len(rendered_aggregate) == len(statements) == 54
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
         "StringEquals": {"aws:RequestedRegion": "us-east-1"}
+    }
+    assert rendered_by_sid["ReadAlertsKeyForTimedChecks"] == {
+        "Action": "kms:DescribeKey",
+        "Effect": "Allow",
+        "Resource": "arn:aws:kms:us-east-1:903859731897:key/11111111-1111-1111-1111-111111111111",
+        "Sid": "ReadAlertsKeyForTimedChecks",
     }
     assert rendered_by_sid["PassExistingAgentCoreRuntimeRole"]["Condition"] == {
         "StringEquals": {"iam:PassedToService": "bedrock-agentcore.amazonaws.com"}
@@ -10766,7 +10843,9 @@ def test_slice_3_development_custom_domain_is_explicit_and_production_preserving
     )
     assert "default     = false" in variable
     assert 'environment == "development"' in variable
-    assert "enable_development_custom_domain = true" in DEVELOPMENT_TFVARS
+    assert "enable_development_custom_domain = true" in DEVELOPMENT_TFVARS.replace(
+        "      ", " "
+    )
     assert "development_custom_domain_enabled" in ENVIRONMENT_TF
     assert "https://${local.domains[0]}" in ENVIRONMENT_TF
     assert "-var enable_development_custom_domain=" not in DEVELOPMENT_DELIVERY_WORKFLOW

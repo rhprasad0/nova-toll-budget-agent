@@ -118,12 +118,13 @@ def rendered_production_policies() -> tuple[
     policy_data = terraform_block(IAM, 'data "aws_iam_policy_document" "development_delivery"')
     test_bucket_arn = "arn:aws:s3:::nova-toll-tfstate-920534282028"
     test_kms_arn = "arn:aws:kms:us-east-1:920534282028:key/00000000-0000-0000-0000-000000000000"
+    test_alerts_kms_arn = "arn:aws:kms:us-east-1:920534282028:key/11111111-1111-1111-1111-111111111111"
     policy_data = policy_data.replace("aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn").replace(
         "aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn"
-    )
+    ).replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
     production_locals = production_locals.replace("aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn").replace(
         "aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn"
-    )
+    ).replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
     configuration = dedent(
         f"""
         terraform {{
@@ -147,6 +148,7 @@ def rendered_production_policies() -> tuple[
         locals {{
           test_tfstate_bucket_arn = "{test_bucket_arn}"
           test_tfstate_kms_key_arn = "{test_kms_arn}"
+          test_alerts_kms_key_arn = "{test_alerts_kms_arn}"
         }}
 
         {first_locals}
@@ -158,7 +160,7 @@ def rendered_production_policies() -> tuple[
         }}
 
         output "production_delivery_planner_statements" {{
-          value = concat(local.production_delivery_planner_state_statements, local.production_delivery_discovery_statements, [local.production_delivery_dynamodb_default_key_statement, local.production_delivery_agentcore_default_statement])
+          value = concat(local.production_delivery_planner_state_statements, local.production_delivery_discovery_statements, [local.production_delivery_dynamodb_default_key_statement, local.production_delivery_alerts_key_statement, local.production_delivery_agentcore_default_statement])
         }}
 
         output "production_delivery_application_policy_statements" {{
@@ -775,6 +777,7 @@ def main() -> None:
         application_slice,
         "application refresh statements must retain ReadPreprovisionedApplicationRoles",
     )
+    require('"ReadAlertsKeyForTimedChecks",', application_slice)
     assert '"s3:GetObjectVersion"' not in planner
     assert '"s3:DeleteObject"]\n      Resource = ["${aws_s3_bucket.tfstate.arn}/plans/' not in planner
     require("ReadCloudflareProviderToken", planner)
@@ -842,12 +845,34 @@ def main() -> None:
         ],
         "Sid": "ReadProductionDynamoDBDefaultKey",
     }
+    expected_alerts_key_read = {
+        "Action": ["kms:DescribeKey"],
+        "Effect": "Allow",
+        "Resource": [
+            "arn:aws:kms:us-east-1:920534282028:key/11111111-1111-1111-1111-111111111111"
+        ],
+        "Sid": "ReadProductionAlertsKeyForTimedChecks",
+    }
     for documents in (planner_documents, deploy_documents):
         assert [
             statement
             for statement in documents["data"]["Statement"]
             if statement["Sid"] == "ReadProductionDynamoDBDefaultKey"
         ] == [expected_dynamodb_default_key_read]
+    assert [
+        statement
+        for statement in planner_documents["data"]["Statement"]
+        if statement["Sid"] == "ReadProductionAlertsKeyForTimedChecks"
+    ] == [expected_alerts_key_read]
+    assert not any(
+        statement["Sid"] == "ReadProductionAlertsKeyForTimedChecks"
+        for policy in deploy_documents.values()
+        for statement in policy["Statement"]
+    )
+    assert not any(
+        statement["Sid"] == "ReadAlertsKeyForTimedChecks"
+        for statement in application_statements
+    )
     for statement in split_statements:
         if "s3:GetObjectVersion" in statement.get("Action", []):
             assert all("/plans/" not in resource for resource in statement["Resource"])

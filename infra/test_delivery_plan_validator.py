@@ -704,7 +704,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "aws_s3_object.agentcore": ("artifact-upload", ("source_hash",)),
             "aws_s3_object.tollchat_proxy": ("artifact-upload", ("source_hash",)),
             "aws_lambda_function.tollchat_proxy": ("lambda-code", ("s3_object_version", "source_code_hash")),
-            "aws_s3_object.timed_checks": ("artifact-upload", ("source", "source_hash")),
+            "aws_s3_object.timed_checks": ("artifact-upload", ("source_hash",)),
             "aws_lambda_function.timed_checks": ("lambda-code", ("s3_object_version", "source_code_hash")),
             "aws_lambda_alias.tollchat_live": ("lambda-alias", ("function_version",)),
             "aws_bedrockagentcore_agent_runtime.tollchat": (

@@ -20,7 +20,7 @@
     "infra/budget.tf": "01980ebb992a5256e5cdb3ae4b3da19a197e5011b83551d94b638d0dfc1d3ec7",
     "infra/data.tf": "e8e443e33a9d908f405eec54fa6bee2075fa8c228e293d734d1b0a5fc0428bc1",
     "infra/delivery_plan_validator.py": "6a5c5b27504cd9bb87f3e4be5736a01b3ce16b9b4da5972f72f366a5120342d3",
-    "infra/iam.tf": "0a6e9c78c8747b0b03affbd0a6140e18af67823cdf13ad7b9b2161a52ea78c4f",
+    "infra/iam.tf": "9aea890dbd9a75b09dfed73fcd1a0c935e6364d39567bf2af8c71cee69936598",
     "infra/kms.tf": "be9512e49926805d56b6c521793c08880929948b820f943f0a2c5a0f9e589168",
     "infra/lambda-stub/handler.py": "d86cf7746868e087960da8c551496bcf21aa71d79baf4d910e60fb3f43a05868",
     "infra/lambda.tf": "c95fafdc5f815820273eb9f314787532e8b6e5c1f601f50c2481f51b5c48ce0c",
@@ -107,21 +107,21 @@
     "v2/db/oracle/schema.sql": "2634341b7c84ed42c0cd56fe94532cbe6e6b49ae9a2f81245635cb7b659d8911",
     "v2/db/roles.sql": "7657a7e48f1c4f580a9c8c467c7972d58154f1560b21ed18015a968e23c20de6",
     "v2/db/schema.sql": "fbfe52f47d1cc1f88d97e9e2f9b641f73f2798ecf9bc88e4abc9897c9190bddf",
-    "v2/eval/run_evaluation.py": "20594845ec7dcacdf5d3f8056e166d96fd2fb46892230f8662d21fd2f2baac31",
+    "v2/eval/run_evaluation.py": "7694e0aec47e5934975c0f0a5764645182a0fffe400906b345f73a214134d90c",
     "v2/eval/test-cases.jsonl": "6cb6bffebe10469bf86ae6482ed39f088e2b7a94203910630660d6afe09e1cbe",
     "v2/infra/.terraform.lock.hcl": "fd42f83e883fe5b260118f566eeb4f4a918f6c68dd791bcf7a3e5677f3830fad",
     "v2/infra/agent_measurement.tf": "d748c5b5dc8aeb30d9bdd96c322388526c1ea18d0174c55d5aa1705607c189a6",
     "v2/infra/agentcore.tf": "2b46984936dfd56459b19d145e18be7370477196f23ac1fbf285d79b536bc313",
     "v2/infra/backend.development.hcl": "e9140a8f8120f479e04d22def7149d32e63fd34d5e82d04db9bda51e4ccbf313",
     "v2/infra/data.tf": "6288fa2b14e10e503499a59a8cca7a763d4f23ea9d27f167d922ae41cd24569b",
-    "v2/infra/development.tfvars": "f3f734cb3f489d5cb5e30fc5f22d6826d47d1981efe7d0cf993ed61fca1662a3",
+    "v2/infra/development.tfvars": "73f91fa50c80c95491b83d664d7a7b1f9661198026b94977e10c63b36f475fff",
     "v2/infra/environment.tf": "ef2d5db8e58b72bf603b0c65fff677ffd0d7c956dc4241ac922d3e66db76d7dc",
     "v2/infra/lambda-stub/handler.py": "b012092f485d3ed57d93e39b65c57af4a34c4b03b8586c00dd1c39c088484327",
     "v2/infra/main.tf": "1e3d9b326841dc9fdd1fce7b7a0f2cd44632019067761c25f78f68af84583331",
     "v2/infra/providers.tf": "b5fc8bb0f92ed4990625aebbe95811d683f36d48a9f18ad3520238d79b95e4aa",
     "v2/infra/site.tf": "dad79b68b07ba405562adce53da900c8b7241650bf20e056014f9ea1436c43b2",
-    "v2/infra/timed_checks.tf": "40a6f5817147335e309f5bcc195f7cb23d8fa11e270362f1c38d1aaa170b12bd",
-    "v2/infra/variables.tf": "c054a672130eb9a10e6340c610e9b864c422455440b1554c182ef76122771f73",
+    "v2/infra/timed_checks.tf": "7f047507cf0355a5eeaf4dea4cea91106ec38ea19f01f1c38bb2b81732616e36",
+    "v2/infra/variables.tf": "42754ba6a341f2a09f0673ee1ffad18c47f035ef1dfe643dc936e60c2bd2efc1",
     "v2/infra/versions.tf": "e08079981fe5f42c0af5906a3710c635d03e346e2724811d02cb8528bb5ad32d",
     "v2/lambdas/chat_proxy/handler.mjs": "af9237b02affe83f4b4f056d0b93759e38e304c7eeb1b157235304b76398b3e2",
     "v2/lambdas/chat_proxy/package-lock.json": "247f0d8b76dc17b79c2c626f8cb5b50deb404cc500fe89fc11e4df3725aabd69",
@@ -131,7 +131,7 @@
     "v2/lambdas/loader/parse_csv.py": "313d5d0843f9e884e7649dc66da3ebc5cdb015e2484899f4152d5ab9fb7b19ac",
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
     "v2/lambdas/publisher/handler.py": "4d3570e0c014301dc4cf20d93a0d9f8ebdac5ce9e073bcb25be138331b2db396",
-    "v2/lambdas/timed_checks/handler.py": "c1a3d697d99becd89b00ad45bd04ff36904541e1ee528a7402711d72410294bf",
+    "v2/lambdas/timed_checks/handler.py": "cbed0dd09afb9d852e86824b406363bcca55559f7b37b4806afdfb923e9a318e",
     "v2/pyproject.toml": "f10d2072ae861df7b129813407c61b7b846639c0a67ba1a67b9a5833c4f5d4b1",
     "v2/scripts/adopt_production_baseline.py": "1017ac5ec820c0b4a7a062813c650f709e8ddc6606be7433a12199c3eecbfa89",
     "v2/scripts/build_agentcore_zips.sh": "d731301c6d376a6af9a5fe9091e991326e671aeaa62b1969fd8a124bb8aecc9e",
@@ -164,7 +164,7 @@
     "chat-proxy.zip": "44d27f8bd6015085c75aca087ef2d4a9941f5403364654c7cf83f6959087a319",
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
     "publisher.zip": "0d7e95193f2d6deb9816b132b7bb6774e932f643d237aac0d7a8e1aab8245064",
-    "timed-checks.zip": "f318421d40047bd57a1bd9c0cd6eab961d7281a66595bf883616b7468b0b8fff"
+    "timed-checks.zip": "ada946bb0ce1877ecb0565452b408b379c06d78242f75d8d380041e1001df58c"
   },
   "mutations": [
     {
@@ -215,7 +215,6 @@
       "action": "update",
       "operation_class": "artifact-upload",
       "changed_fields": [
-        "source",
         "source_hash"
       ]
     },

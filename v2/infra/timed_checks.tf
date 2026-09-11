@@ -1,5 +1,6 @@
 locals {
-  timed_checks_zip_hash = var.timed_checks_package_path != "" ? filebase64sha256(var.timed_checks_package_path) : ""
+  timed_checks_zip_hash      = var.timed_checks_package_path != "" ? filebase64sha256(var.timed_checks_package_path) : ""
+  timed_check_alerts_enabled = local.is_production || var.enable_development_timed_check_alerts
   timed_check_schedules = {
     "i95-northbound-mon-0617" = { schedule = "17 6 * * 1", expression = "cron(17 6 ? * MON *)", window_id = "i95_northbound" }
     "i95-northbound-tue-0617" = { schedule = "17 6 * * 2", expression = "cron(17 6 ? * TUE *)", window_id = "i95_northbound" }
@@ -30,6 +31,10 @@ locals {
     "greenway-wb-thu-1723"    = { schedule = "23 17 * * 4", expression = "cron(23 17 ? * THU *)", window_id = "greenway_wb_peak" }
     "greenway-wb-fri-1723"    = { schedule = "23 17 * * 5", expression = "cron(23 17 ? * FRI *)", window_id = "greenway_wb_peak" }
   }
+}
+
+data "aws_kms_alias" "alerts" {
+  name = "alias/nova-toll-alerts"
 }
 
 resource "aws_s3_object" "timed_checks" {
@@ -97,6 +102,18 @@ data "aws_iam_policy_document" "timed_checks_lambda" {
     sid       = "SendInvokeFailure"
     actions   = ["sqs:SendMessage"]
     resources = [aws_sqs_queue.timed_checks_invoke_failure.arn]
+  }
+
+  statement {
+    sid       = "PublishEvaluationFailureAlert"
+    actions   = ["sns:Publish"]
+    resources = [var.foundation.alerts_topic_arn]
+  }
+
+  statement {
+    sid       = "UseEvaluationFailureAlertKey"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey*"]
+    resources = [data.aws_kms_alias.alerts.target_key_arn]
   }
 }
 
@@ -211,14 +228,18 @@ resource "aws_lambda_function" "timed_checks" {
   }
 
   environment {
-    variables = {
-      DB_HOST           = var.foundation.db_instance.address
-      DB_PORT           = tostring(var.foundation.db_instance.port)
-      DB_NAME           = local.database_name
-      DB_USER           = local.database_roles.agent
-      PRICING_DB_USER   = local.database_roles.pricing_caller
-      DB_CA_BUNDLE_PATH = "/var/task/rds-ca-bundle.pem"
-    }
+    variables = merge({
+      DB_HOST                    = var.foundation.db_instance.address
+      DB_PORT                    = tostring(var.foundation.db_instance.port)
+      DB_NAME                    = local.database_name
+      DB_USER                    = local.database_roles.agent
+      PRICING_DB_USER            = local.database_roles.pricing_caller
+      DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"
+      TIMED_CHECK_ALERTS_ENABLED = tostring(local.timed_check_alerts_enabled)
+      ENVIRONMENT                = var.environment
+      }, local.timed_check_alerts_enabled ? {
+      ALERTS_TOPIC_ARN = var.foundation.alerts_topic_arn
+    } : {})
   }
 
   lifecycle {
@@ -282,6 +303,7 @@ resource "aws_scheduler_schedule" "timed_checks" {
 
 resource "aws_cloudwatch_metric_alarm" "timed_checks_errors" {
   alarm_name          = "nova-toll-v2-timed-checks-errors${local.suffix}"
+  alarm_description   = "Unexpected timed-check failures and evaluation alert delivery failures"
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.timed_checks.function_name }
