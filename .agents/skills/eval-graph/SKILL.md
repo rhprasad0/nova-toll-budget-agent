@@ -10,7 +10,16 @@ gate. Do not use for feature implementation, ordinary code review, speculative
 case generation, or installing this skill. Installation never starts trials.
 The graph is the harness around the agent, not another agent.
 
-Parent: **gpt-5.6-sol, medium**. Every spawned leaf: **gpt-5.6-luna, medium**.
+Root model and reasoning effort are selected by the host/user and are never
+pinned in this repository. Spawn leaves with this exact matrix:
+
+| role | model | effort |
+| --- | --- | --- |
+| `case_miner` | `gpt-5.6-terra` | `high` |
+| `eval_runner` | `gpt-5.6-terra` | `high` |
+| `eval_reviewer` | `gpt-5.6-sol` | `high` |
+| `eval_fixer` | `gpt-5.6-sol` | `high` |
+
 Reuse [project-graph](../project-graph/SKILL.md)'s registration, worktrees,
 five-line `.graph/STATE.md`, and one-writer discipline. Do not start its
 explorer/pre-checker/builder/checker sequence or add another orchestrator.
@@ -81,25 +90,26 @@ existing JSONL corpora, batch evaluation, and results. Do not duplicate them in
 
 ### Exact spawn text
 
-Use tool arguments `agent_type=<role>`, `model="gpt-5.6-luna"`,
-`reasoning_effort="medium"`, `fork_turns="none"`. If the host uses configured
-roles without overrides, the role TOML must supply the same model and effort.
-Replace placeholders; never inherit the parent conversation.
+Use `fork_turns="none"` and the matrix above: `case_miner` and `eval_runner`
+use `model="gpt-5.6-terra"`, `reasoning_effort="high"`; `eval_reviewer` and
+`eval_fixer` use `model="gpt-5.6-sol"`, `reasoning_effort="high"`. If the host
+uses configured roles without overrides, the role TOML must supply the same
+model and effort. Replace placeholders; never inherit the parent conversation.
 
 **First spawn, mode=pin:**
 
-> Spawn `case_miner` with `model="gpt-5.6-luna"`, `model_reasoning_effort="medium"`, and `fork_turns="none"` for mode=pin in `<absolute-worktree>`. Your only write target is `<absolute-worktree>/v2/eval/cases/<case-id>.json`. Use the supplied sanitized concrete miss and human-defined behavior to propose one case; do not invent product behavior or read held-out data. Before using any tool, report your native SubagentStart `agent_id` and wait. The parent registers it using `python3 <active-checkout>/.codex/hooks/graph-write-guard.py register <agent-id> case_miner <absolute-worktree>` when that hook exists, then explicitly acknowledges registration. Missing native identity or failed registration blocks tools. After acknowledgement, confirm the worktree with `cd <absolute-worktree> && git rev-parse --show-toplevel`; prefix every Bash command with that directory. Do not spawn children, commit, push, or open a PR. Return sanitized JSON identifying the case artifact, evidence, and `failure_class`.
+> Spawn `case_miner` with `model="gpt-5.6-terra"`, `reasoning_effort="high"`, and `fork_turns="none"` for mode=pin in `<absolute-worktree>`. Your only write target is `<absolute-worktree>/v2/eval/cases/<case-id>.json`. Use only the supplied sanitized packet evidence and human-defined behavior to propose one case; do not invent product behavior or read held-out data. Before using any tool, report your native SubagentStart `agent_id` and wait. The parent registers it using `python3 <active-checkout>/.codex/hooks/graph-write-guard.py register <agent-id> case_miner <absolute-worktree>` when that hook exists, then explicitly acknowledges registration. Missing native identity or failed registration blocks tools. After acknowledgement, confirm the worktree with `cd <absolute-worktree> && git rev-parse --show-toplevel`; prefix every Bash command with that directory. Do not spawn children, commit, push, or open a PR. Return sanitized JSON identifying the case artifact, evidence, and `failure_class`.
 
 For subsequent spawns, use this exact shared paragraph followed by one role
 paragraph and the named sanitized inputs:
 
-> You are `<role>`, gpt-5.6-luna at medium effort, spawned with fork_turns="none", in `<absolute-worktree>`. Before tools, report your native SubagentStart agent_id and wait for the parent's registration acknowledgement. The parent registers using `python3 <active-checkout>/.codex/hooks/graph-write-guard.py register <agent-id> <role> <absolute-worktree>` if the hook exists. Missing identity or failed registration blocks tools. After acknowledgement run `cd <absolute-worktree> && git rev-parse --show-toplevel` and confirm that exact path; prefix all Bash with `cd <absolute-worktree> &&`. Follow your role TOML and the approved sealed view. You are not alone; preserve existing edits. Do not spawn children, commit, push, or open a PR. Return the sanitized JSON report required by the skill.
+> You are `<role>`, spawned with fork_turns="none", in `<absolute-worktree>`. Before tools, report your native SubagentStart agent_id and wait for the parent's registration acknowledgement. The parent registers using `python3 <active-checkout>/.codex/hooks/graph-write-guard.py register <agent-id> <role> <absolute-worktree>` if the hook exists. Missing identity or failed registration blocks tools. After acknowledgement run `cd <absolute-worktree> && git rev-parse --show-toplevel` and confirm that exact path; prefix all Bash with `cd <absolute-worktree> &&`. Follow your role TOML and the approved sealed view. You are not alone; preserve existing edits. Do not spawn children, commit, push, or open a PR. Return the sanitized JSON report required by the skill.
 
-> eval_runner: Execute `<public-input-packet>` for `<mode>` using `<approved-entrypoint-and-fixtures>`. Write only the declared raw artifacts under `<artifact-directory>`. For gate execute exactly `<case/trial-list>`, each with independent agent and tool state. Do not read full cases, expected checks, rubric, grader, or held-out. Do not grade. Missing real-entrypoint fixture support is infra_dependency.
+> eval_runner: You are `gpt-5.6-terra` at high effort. Execute `<public-input-packet>` for `<mode>` using `<approved-entrypoint-and-fixtures>`. Write only the declared raw artifacts under `<artifact-directory>`. For gate execute exactly `<case/trial-list>`, each with independent agent and tool state. Do not read full cases, expected checks, rubric, grader, or held-out. Do not grade. Missing real-entrypoint fixture support is infra_dependency.
 
-> eval_reviewer: Falsify `<frozen-public-evidence>` against `<human-contract>` and `<scorecards>`. Read only; no patches or file writes. Wait for completed scorecards before final findings. Return findings and reasons, plus up to five public human-sample references when identity or grader changed. Scripts own pass/fail; do not recompute pass^k by vibes.
+> eval_reviewer: You are `gpt-5.6-sol` at high effort. Falsify `<frozen-public-evidence>` against `<human-contract>` and `<scorecards>`. Read only; no patches or file writes. Wait for completed scorecards before final findings. Return findings and reasons, plus up to five public human-sample references when identity or grader changed. Scripts own pass/fail; do not recompute pass^k by vibes.
 
-> eval_fixer: Make one bounded change to `<allowlisted-candidate-file>` for `<public-compare/reviewer-reason>`. Do not read held-out or sealed reports. Refuse edits to eval/cases/held_out/schema/script paths, graders, copied metrics, or permissions. Do not grade or approve yourself. Return changed paths and reason; stop if more than one bounded change is needed.
+> eval_fixer: You are `gpt-5.6-sol` at high effort. Make one bounded change to `<allowlisted-candidate-file>` for `<public-compare/reviewer-reason>`. Do not read held-out or sealed reports. Refuse edits to eval/cases/held_out/schema/script paths, graders, copied metrics, or permissions. Do not grade or approve yourself. Return changed paths and reason; stop if more than one bounded change is needed.
 
 ## Legal edges and stops
 
@@ -116,7 +126,21 @@ reviewer waits for scorecards before finalizing. No other concurrent writers.
 Parent persists read-only reviewer JSON unchanged after grading ends. Never
 write checklist/verdict analogues on a leaf's behalf or approve your own repair.
 
-- **pin:** sanitized concrete prod miss → case_miner → frozen proposed case →
+### Pin intake boundary
+
+For `pin`, a trusted human or Root exports exactly one CloudWatch failure packet
+and sanitizes it before any leaf can access it. It may contain only
+behavior-needed sanitized evidence and human-defined expected behavior; it must
+exclude credentials (including tokens, keys, and connection strings), PII, raw
+CloudWatch logs/traces, and any additional packet. Leaves never query
+CloudWatch or retrieve deployed credentials. CloudWatch masking is not a
+substitute for this pre-leaf sanitization. If redaction changes the behavior
+under test, stop for a human-approved safe fixture. The runner receives only
+the derived `case_id`, `prompt`, `setup`, and approved entrypoint/fixture
+instructions, never expected checks, rubrics, full cases, held-out inputs, or
+the original packet/traces.
+
+- **pin:** trusted sanitized packet → case_miner → frozen proposed case →
   runner expecting failure → grade.sh → critic → compare if a baseline exists →
   human accepts the case. Without baseline, record reproduction only. Stop if the
   case passes, evidence is missing, or failure is infra/dependency. Only a
@@ -146,8 +170,8 @@ Trigger on repeated failed approach without new evidence, no artifact across
 two follow-ups, sandbox escape, missing identity, or a done claim with no report.
 Contain an escape immediately. Request evidence and give **one concrete
 correction**. If unresolved, interrupt the leaf, confirm its commands and pending
-writes stopped, preserve artifacts, update STATE, and respawn the **same Luna
-role** with fresh context/UUID/registration. For a fixer, replacement continues
+writes stopped, preserve artifacts, update STATE, and respawn the same role with
+its exact model and effort from the role matrix, fresh context/UUID/registration. For a fixer, replacement continues
 the same one-change allowance; it does not earn another pass. If the required
 boundary or identity remains unavailable, record blocked and stop. Astra may
 diagnose read-only but never completes the leaf's job and blesses it.

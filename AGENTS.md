@@ -99,10 +99,21 @@ unchanged unless the user explicitly requests an application-agent change.
 Use [.agents/skills/eval-graph/SKILL.md](.agents/skills/eval-graph/SKILL.md)
 for `$eval-graph`, eval loops, pinning a case, fixture runs, and pass^k gates.
 The eval root is `v2/eval/`; preserve the existing harness and corpus.
-Sol medium orchestrates; case_miner, eval_runner, eval_reviewer, and
-eval_fixer use Luna medium and the existing native-ID/worktree registry.
+Root model and reasoning effort remain host/user-selected. case_miner and
+eval_runner use `gpt-5.6-terra` at high effort; eval_reviewer and eval_fixer
+use `gpt-5.6-sol` at high effort, with the existing native-ID/worktree registry.
 Keep one writer; grade.sh and compare.sh own the metric. The critic never
 patches, and gate never starts a fixer. Require sealed runtime access for
-runner inputs; the worktree hook does not isolate reads. Humans control
-correctness, sealed held-out execution, case acceptance, and merge.
+runner inputs; the worktree hook does not isolate reads. For pin, only a trusted
+human or Root exports exactly one CloudWatch failure packet and sanitizes it
+before any leaf receives it; it supplies the miner only behavior-needed
+sanitized evidence plus human-defined expected behavior. Exclude credentials
+(tokens, keys, and connection strings), PII, raw CloudWatch logs/traces, and
+additional packets; leaves never query CloudWatch or retrieve deployed
+credentials, and CloudWatch masking alone is insufficient. The runner receives
+only the derived `case_id`, `prompt`, `setup`, and approved entrypoint/fixture
+instructions—not expectations, rubrics, full cases, held-out inputs, or source
+packets/traces. If redaction changes behavior, require a human-approved safe
+fixture. Humans control correctness, sealed held-out execution, case acceptance,
+and merge.
 Do not start trials merely by installing or editing the graph.
