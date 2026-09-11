@@ -1,5 +1,21 @@
 ### Timed-check Scheduler bootstrap and verification (#345)
 
+#### Descriptive evaluation-alert configuration
+
+Descriptive evaluation alerts are a separate **administrator-reviewed**
+configuration/IAM change. After the code is deployed, save an exact plan limited
+to `aws_iam_role_policy.timed_checks_lambda`, `aws_lambda_function.timed_checks`,
+and `aws_cloudwatch_metric_alarm.timed_checks_errors`; inspect the resolved
+`alias/nova-toll-alerts` key, topic scope, literal alert flag, and environment,
+then apply only that saved plan. Ordinary recurring timed package delivery cannot
+apply IAM or Lambda-environment changes.
+
+Until this administrator step, a missing alert flag deliberately preserves the
+generic Lambda error path. Inspect configuration and the existing terminal
+records without sending a test email or logging payloads/secrets. The email's
+CloudWatch log-stream URL is a best-effort console convenience link, not a
+stable AWS API contract.
+
 The first development deployment is **administrator-owned** because the recurring
 delivery role cannot create IAM roles, Lambda configuration, queues, security
 groups, alarms, or schedules. Build all five reviewed packages and the reviewed

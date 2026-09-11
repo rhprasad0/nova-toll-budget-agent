@@ -809,6 +809,12 @@ data "aws_iam_policy_document" "development_delivery" {
     actions   = ["acm:DescribeCertificate", "acm:ListTagsForCertificate"]
     resources = ["arn:aws:acm:us-east-1:903859731897:certificate/0c2c3578-fee5-41b3-9985-ea7465c16a20"]
   }
+
+  statement {
+    sid       = "ReadAlertsKeyForTimedChecks"
+    actions   = ["kms:DescribeKey"]
+    resources = [aws_kms_key.alerts.arn]
+  }
 }
 
 resource "aws_iam_role" "development_delivery" {
@@ -850,7 +856,7 @@ locals {
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 45, 53)
+      Statement = slice(local.development_delivery_policy_statements, 45, 54)
     })
   }
 }
@@ -1281,6 +1287,12 @@ data "aws_iam_policy_document" "development_plan" {
     actions   = ["acm:DescribeCertificate", "acm:ListTagsForCertificate"]
     resources = ["arn:aws:acm:${local.development_delivery_region}:${local.development_delivery_account_id}:certificate/0c2c3578-fee5-41b3-9985-ea7465c16a20"]
   }
+
+  statement {
+    sid       = "ReadAlertsKeyForTimedChecks"
+    actions   = ["kms:DescribeKey"]
+    resources = [aws_kms_key.alerts.arn]
+  }
 }
 
 resource "aws_iam_role" "development_plan" {
@@ -1465,6 +1477,7 @@ locals {
     ) : statement
     if !contains([
       "PassExistingAgentCoreRuntimeRole",
+      "ReadAlertsKeyForTimedChecks",
     ], statement.Sid)
   ]
 
@@ -1473,6 +1486,13 @@ locals {
     Effect   = "Allow"
     Action   = ["kms:DescribeKey"]
     Resource = ["arn:aws:kms:us-east-1:920534282028:key/52601535-3171-4f21-af72-125daaf1347d"]
+  }
+
+  production_delivery_alerts_key_statement = {
+    Sid      = "ReadProductionAlertsKeyForTimedChecks"
+    Effect   = "Allow"
+    Action   = ["kms:DescribeKey"]
+    Resource = [aws_kms_key.alerts.arn]
   }
 
   production_delivery_read_prefixes = ["Get", "List", "Describe", "GET"]
@@ -1756,7 +1776,7 @@ locals {
     })
     data = jsonencode({
       Version   = "2012-10-17"
-      Statement = concat(slice(local.production_delivery_discovery_statements, 17, 24), [local.production_delivery_dynamodb_default_key_statement])
+      Statement = concat(slice(local.production_delivery_discovery_statements, 17, 24), [local.production_delivery_dynamodb_default_key_statement, local.production_delivery_alerts_key_statement])
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
@@ -1802,7 +1822,7 @@ locals {
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_plan_policy_statements, 36, 43)
+      Statement = slice(local.development_plan_policy_statements, 36, 44)
     })
   } : {}
 }

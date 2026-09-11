@@ -9,6 +9,7 @@ import re
 import sys
 from argparse import ArgumentParser
 from calendar import monthcalendar
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -61,6 +62,30 @@ _MOVEMENT_EMOJIS = {
     "unchanged": "➡️",
     "mixed": "🔄",
 }
+
+
+@dataclass(frozen=True)
+class EvaluationFailed(SystemExit):
+    """A completed evaluation report containing one or more failed cases."""
+
+    passed_count: int
+    case_count: int
+    failures: tuple[tuple[str, str], ...]
+
+    def __post_init__(self) -> None:
+        SystemExit.__init__(self, "TollChat evaluation failed")
+        object.__setattr__(
+            self,
+            "failures",
+            tuple(
+                (case_id, " ".join(reason.split())[:300])
+                for case_id, reason in self.failures
+            ),
+        )
+
+
+class EvaluationExecutionError(RuntimeError):
+    """An unscored task or evaluator error that must use operational alarms."""
 
 
 def load_rows(path: Path = _CASES_PATH) -> list[dict[str, Any]]:
@@ -382,7 +407,7 @@ def evaluate_westpark_turn(
         )
     expected_price = f"${payload['total_usd']}"
     if expected_price not in response:
-        return _result(False, f"response omitted {expected_price}", "ungrounded_price")
+        return _result(False, "response omitted the current toll", "ungrounded_price")
     if len(payload.get("components", [])) != metadata.get(
         "expected_component_count", 2
     ):
@@ -1270,7 +1295,24 @@ def main(window: str, suite: str = "all", output_dir: Path | str | None = None) 
     report.to_file(str(results_dir / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
     report.display(include_input=False)
     if not all(report.test_passes):
-        raise SystemExit("TollChat evaluation failed")
+        if any(
+            not passed and not detailed_results
+            for passed, detailed_results in zip(
+                report.test_passes, report.detailed_results, strict=True
+            )
+        ):
+            raise EvaluationExecutionError("TollChat evaluation execution failed")
+        raise EvaluationFailed(
+            passed_count=sum(report.test_passes),
+            case_count=len(report.test_passes),
+            failures=tuple(
+                (cast(str, case["name"]), reason)
+                for case, passed, reason in zip(
+                    report.cases, report.test_passes, report.reasons, strict=True
+                )
+                if not passed
+            ),
+        )
 
 
 def _self_check() -> None:
