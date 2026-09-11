@@ -24,6 +24,9 @@ config_file = "agents/checker.toml"
 [agents.security_reviewer]
 config_file = "agents/security_reviewer.toml"
 
+[agents.advisor]
+config_file = "agents/advisor.toml"
+
 [agents.case_miner]
 config_file = "agents/case_miner.toml"
 
@@ -45,7 +48,7 @@ async = false
 timeout = 10
 
 [[hooks.PreToolUse]]
-matcher = "Bash|apply_patch"
+matcher = "*"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"

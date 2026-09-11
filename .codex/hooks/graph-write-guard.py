@@ -16,6 +16,7 @@ from typing import Any
 GUARDED_ROLES = frozenset({
     "explorer", "researcher", "pre_checker", "builder", "checker",
     "security_reviewer",
+    "advisor",
     "case_miner", "eval_runner", "eval_reviewer", "eval_fixer",
 })
 OWNED_GRAPH_ARTIFACTS = {
@@ -415,19 +416,23 @@ def _pre_tool_use(payload: Any) -> None:
     role = payload.get("agent_type")
     if not isinstance(role, str) or role not in GUARDED_ROLES:
         return
-    agent_id = payload.get("agent_id")
     tool_name = payload.get("tool_name")
-    tool_input = payload.get("tool_input")
-    payload_cwd = payload.get("cwd")
+    if role != "advisor" and tool_name not in {"Bash", "apply_patch"}:
+        return
+    agent_id = payload.get("agent_id")
     if not isinstance(agent_id, str) or not agent_id.strip():
         raise GuardError("guarded PreToolUse requires a registered agent_id")
+    assignment = _validate_assignment(agent_id, role, _repo_context(_script_repo_root()))
+    if role == "advisor":
+        raise GuardError("advisor is packet-only and cannot use tools")
+    tool_input = payload.get("tool_input")
+    payload_cwd = payload.get("cwd")
     if not isinstance(tool_name, str) or not tool_name:
         raise GuardError("guarded PreToolUse requires tool_name")
     if not isinstance(tool_input, dict):
         raise GuardError("guarded PreToolUse requires tool_input")
     if not isinstance(payload_cwd, str) or not payload_cwd:
         raise GuardError("guarded PreToolUse requires cwd for destination validation")
-    assignment = _validate_assignment(agent_id, role, _repo_context(_script_repo_root()))
     command = tool_input.get("command")
     if tool_name in {"Bash", "apply_patch"} and not isinstance(command, str):
         raise GuardError(f"guarded {tool_name} call requires tool_input.command")

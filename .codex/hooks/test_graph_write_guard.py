@@ -121,6 +121,69 @@ class GraphWriteGuardTests(unittest.TestCase):
             self.assertIn("outside", self.denied_reason(
                 self.invoke("pre-tool-use", payload=payload)[1]))
 
+    def test_advisor_is_registered_and_packet_only(self) -> None:
+        role = "advisor"
+        agent_id = "native-advisor"
+        _, started, _ = self.invoke(
+            "subagent-start", payload={"agent_type": role, "agent_id": agent_id}
+        )
+        self.assertIn(agent_id, started["hookSpecificOutput"]["additionalContext"])
+        unregistered = self.payload(role=role, agent_id=agent_id, tool="future.tool")
+        unregistered["tool_input"] = {}
+        self.assertIn("register", self.denied_reason(
+            self.invoke("pre-tool-use", payload=unregistered)[1]))
+        self.assertEqual(self.register(agent_id=agent_id, role=role)[0], 0)
+        for tool in (
+            "Bash", "apply_patch", "send_message", "functions.exec",
+            "mcp__example__tool", "app.plugin", "future.tool",
+        ):
+            packet = self.payload(role=role, agent_id=agent_id, tool=tool)
+            packet["tool_input"] = {}
+            self.assert_patch_denied(
+                packet, "advisor is packet-only and cannot use tools"
+            )
+        for payload in (
+            {"agent_type": role, "agent_id": agent_id},
+            {"agent_type": role, "agent_id": agent_id, "tool_name": None},
+            {"agent_type": role, "agent_id": agent_id, "tool_input": []},
+            {"agent_type": role, "agent_id": agent_id, "cwd": None},
+        ):
+            self.assert_patch_denied(
+                payload, "advisor is packet-only and cannot use tools"
+            )
+        self.assert_patch_denied([], "PreToolUse payload must be a JSON object")
+        sibling = self.payload(role=role, agent_id=agent_id, tool="future.tool", payload_cwd=self.sibling)
+        sibling["tool_input"] = {}
+        self.assert_patch_denied(sibling, "advisor is packet-only and cannot use tools")
+        builder_id = "native-builder-passthrough"
+        self.assertEqual(self.register(agent_id=builder_id, role="builder")[0], 0)
+        self.assertIsNone(self.invoke("pre-tool-use", payload=self.payload(
+            role="builder", agent_id=builder_id, command=f"cd {self.target} && pwd"
+        ))[1])
+        self.assertIsNone(self.invoke("pre-tool-use", payload=self.payload(
+            role="builder", agent_id=builder_id, tool="apply_patch",
+            command=f"*** Update File: {self.target}/tracked.txt",
+        ))[1])
+        for tool in ("send_message", "functions.exec", "mcp__example__tool", "future.tool"):
+            passthrough = self.payload(role="builder", agent_id=builder_id, tool=tool)
+            passthrough["tool_input"] = {}
+            self.assertIsNone(self.invoke("pre-tool-use", payload=passthrough)[1])
+        for tool in ("functions.exec", "future.tool"):
+            unregistered_builder = self.payload(
+                role="builder", agent_id="native-unregistered-builder", tool=tool
+            )
+            unregistered_builder["tool_input"] = {}
+            self.assertIsNone(self.invoke("pre-tool-use", payload=unregistered_builder)[1])
+        unguarded = self.payload(role="unrelated", agent_id="", tool="future.tool")
+        unguarded["tool_input"] = {}
+        self.assertIsNone(self.invoke("pre-tool-use", payload=unguarded)[1])
+        mismatch_id = "native-advisor-mismatch"
+        self.assertEqual(self.register(agent_id=mismatch_id, role="builder")[0], 0)
+        self.assertIn("does not match", self.denied_reason(self.invoke(
+            "pre-tool-use", payload=self.payload(role=role, agent_id=mismatch_id,
+                                                   command=f"cd {self.target} && pwd"),
+        )[1]))
+
     def test_researcher_uses_existing_identity_and_worktree_guard(self) -> None:
         role = "researcher"
         agent_id = "native-researcher"
