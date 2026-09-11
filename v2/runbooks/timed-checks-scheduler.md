@@ -3,12 +3,31 @@
 #### Descriptive evaluation-alert configuration
 
 Descriptive evaluation alerts are a separate **administrator-reviewed**
-configuration/IAM change. After the code is deployed, save an exact plan limited
-to `aws_iam_role_policy.timed_checks_lambda`, `aws_lambda_function.timed_checks`,
-and `aws_cloudwatch_metric_alarm.timed_checks_errors`; inspect the resolved
-`alias/nova-toll-alerts` key, topic scope, literal alert flag, and environment,
-then apply only that saved plan. Ordinary recurring timed package delivery cannot
-apply IAM or Lambda-environment changes.
+configuration/IAM change. First, an administrator must separately authorize and
+apply the exact account-local foundation planner-IAM plan before any application
+plan resolves `data.aws_kms_alias.alerts`: development plan and development
+delivery, plus the production planner where applicable, receive the exact
+alert-key read. The production saved-plan apply-only identity does not re-plan
+and receives no new read.
+
+Second, an administrator must privately save and review an exact application
+plan limited to `aws_iam_role_policy.timed_checks_lambda`,
+`aws_lambda_function.timed_checks`, and
+`aws_cloudwatch_metric_alarm.timed_checks_errors`. It must contain only the
+approved IAM, literal environment, and alarm changes; the old handler safely
+ignores the new variables. The plan must remain private, saved, and reviewed.
+Stop and report the operational gate if alias
+resolution lacks the foundation read, any unrelated or dependency-expanded
+address appears, `aws_s3_object.timed_checks` has an action, the Lambda changes
+`s3_key`, `filename`, `source_code_hash`, an equivalent package/code field, or
+removes an existing environment variable, or the plan is not private, saved,
+and reviewed. Do not widen the validator, add a path, or deliver code early to
+bypass a stop. Only after that exact private saved plan is separately authorized
+and applied may ordinary protected timed package delivery proceed.
+
+Package delivery runs last and activates the reviewed handler; it cannot apply
+IAM or Lambda-environment changes. This PR and runbook do not themselves
+authorize either prerequisite apply.
 
 Until this administrator step, a missing alert flag deliberately preserves the
 generic Lambda error path. Inspect configuration and the existing terminal
