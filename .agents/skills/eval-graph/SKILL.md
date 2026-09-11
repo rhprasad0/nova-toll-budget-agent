@@ -116,20 +116,23 @@ existing JSONL corpora, batch evaluation, and results. Do not duplicate them in
 
 ### Exact spawn text
 
-Use `fork_turns="none"` and the matrix above: `case_miner` and `eval_runner`
-use `model="gpt-5.6-terra"`, `reasoning_effort="high"`; `eval_reviewer` and
-`eval_fixer` use `model="gpt-5.6-sol"`, `reasoning_effort="high"`. If the host
-uses configured roles without overrides, the role TOML must supply the same
-model and effort. Replace placeholders; never inherit the parent conversation.
+Every spawn passes its registered role explicitly: `agent_type="case_miner"`,
+`agent_type="eval_runner"`, `agent_type="eval_reviewer"`, or
+`agent_type="eval_fixer"`. Also use `fork_turns="none"` and the matrix above:
+`case_miner` and `eval_runner` use `model="gpt-5.6-terra"`,
+`reasoning_effort="high"`; `eval_reviewer` and `eval_fixer` use
+`model="gpt-5.6-sol"`, `reasoning_effort="high"`. If the host uses configured
+roles without overrides, the role TOML must supply the same model and effort.
+Replace placeholders; never inherit the parent conversation.
 
 **First spawn, mode=pin:**
 
-> Spawn `case_miner` with `model="gpt-5.6-terra"`, `reasoning_effort="high"`, and `fork_turns="none"` for mode=pin in `<absolute-worktree>`. Your only write target is `<absolute-worktree>/v2/eval/cases/<case-id>.json`. Use only the supplied sanitized packet evidence and human-defined behavior to propose one case; do not invent product behavior or read held-out data. Before using any tool, report your native SubagentStart `agent_id` and wait. The parent registers it using `python3 <active-checkout>/.codex/hooks/graph-write-guard.py register <agent-id> case_miner <absolute-worktree>` when that hook exists, then explicitly acknowledges registration. Missing native identity or failed registration blocks tools. After acknowledgement, confirm the worktree with `cd <absolute-worktree> && git rev-parse --show-toplevel`; prefix every Bash command with that directory. Do not spawn children, commit, push, or open a PR. Return sanitized JSON identifying the case artifact, evidence, and `failure_class`.
+> Spawn `case_miner` with `agent_type="case_miner"`, `model="gpt-5.6-terra"`, `reasoning_effort="high"`, and `fork_turns="none"` for mode=pin in `<absolute-worktree>`. Your only write target is `<absolute-worktree>/v2/eval/cases/<case-id>.json`. Use only the supplied sanitized packet evidence and human-defined behavior to propose one case; do not invent product behavior or read held-out data. Before using any tool, report your native SubagentStart `agent_id` and wait. The parent registers it using `python3 <active-checkout>/.codex/hooks/graph-write-guard.py register <agent-id> case_miner <absolute-worktree>` when that hook exists, then explicitly acknowledges registration. Missing native identity or failed registration blocks tools. After acknowledgement, confirm the worktree with `cd <absolute-worktree> && git rev-parse --show-toplevel`; prefix every Bash command with that directory. Do not spawn children, commit, push, or open a PR. Return sanitized JSON identifying the case artifact, evidence, and `failure_class`.
 
 For subsequent spawns, use this exact shared paragraph followed by one role
 paragraph and the named sanitized inputs:
 
-> You are `<role>`, spawned with fork_turns="none", in `<absolute-worktree>`. Before tools, report your native SubagentStart agent_id and wait for the parent's registration acknowledgement. The parent registers using `python3 <active-checkout>/.codex/hooks/graph-write-guard.py register <agent-id> <role> <absolute-worktree>` if the hook exists. Missing identity or failed registration blocks tools. After acknowledgement run `cd <absolute-worktree> && git rev-parse --show-toplevel` and confirm that exact path; prefix all Bash with `cd <absolute-worktree> &&`. Follow your role TOML and the approved sealed view. You are not alone; preserve existing edits. Do not spawn children, commit, push, or open a PR. Return the sanitized JSON report required by the skill.
+> You are `<role>`, spawned with `agent_type="<role>"` and `fork_turns="none"`, in `<absolute-worktree>`. Before tools, report your native SubagentStart agent_id and wait for the parent's registration acknowledgement. The parent registers using `python3 <active-checkout>/.codex/hooks/graph-write-guard.py register <agent-id> <role> <absolute-worktree>` if the hook exists. Missing identity or failed registration blocks tools. After acknowledgement run `cd <absolute-worktree> && git rev-parse --show-toplevel` and confirm that exact path; prefix all Bash with `cd <absolute-worktree> &&`. Follow your role TOML and the approved sealed view. You are not alone; preserve existing edits. Do not spawn children, commit, push, or open a PR. Return the sanitized JSON report required by the skill.
 
 > eval_runner: You are `gpt-5.6-terra` at high effort. Execute `<public-input-packet>` for `<mode>` using `<approved-entrypoint-and-fixtures>`. Write only the declared raw artifacts under `<artifact-directory>`. For gate execute exactly `<case/trial-list>`, each with independent agent and tool state. Do not read full cases, expected checks, rubric, grader, or held-out. Do not grade. Missing real-entrypoint fixture support is infra_dependency.
 
