@@ -73,6 +73,20 @@ def test_configured_database_endpoint_is_not_replaced(
     timed_checks._configure_rds_endpoint()  # pyright: ignore[reportPrivateUsage]
 
 
+def test_assert_priced_reports_non_priced_status_and_reason() -> None:
+    payload = {"status": "currently_unavailable", "reason": "closed"}
+
+    with pytest.raises(AssertionError) as exc_info:
+        timed_checks._assert_priced(  # pyright: ignore[reportPrivateUsage]
+            payload, "i95:203NO", "airport_dca"
+        )
+
+    assert exc_info.value.args[0] == {
+        "status": "currently_unavailable",
+        "reason": "closed",
+    }
+
+
 def test_route_checks_cover_all_windows(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(timed_checks, "_configure_rds_endpoint", lambda: None)
 

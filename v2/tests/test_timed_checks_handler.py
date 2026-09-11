@@ -48,6 +48,10 @@ def _record_field(record: logging.LogRecord, field: str) -> str:
     return cast(str, getattr(record, field))
 
 
+def _record_value(record: logging.LogRecord, field: str) -> Any:
+    return getattr(record, field)
+
+
 def _schedule(window_id: str) -> str:
     return next(
         schedule for schedule, window in SCHEDULE_WINDOW_PAIRS if window == window_id
@@ -610,11 +614,19 @@ def test_tool_price_is_excluded_from_evaluation_failure_and_alert(
 
     monkeypatch.setattr(cast(Any, runner.boto3), "client", client)
 
-    with caplog.at_level(logging.INFO):
-        assert runner.handler(_alert_event(), _AlertContext()) == {
-            "status": "failed",
-            "window_id": "i95_reversal",
+    with (
+        caplog.at_level(logging.INFO),
+        pytest.raises(run_evaluation.EvaluationFailure) as raised,
+    ):
+        runner.handler(_alert_event(), _AlertContext())
+
+    assert raised.value.failure_summaries == [
+        {
+            "case_id": "reagan-airport-to-westpark",
+            "label": "ungrounded_price",
+            "reason": "response omitted the current toll",
         }
+    ]
 
     assert len(published) == 1
     assert "response omitted the current toll" in published[0]["Message"]
@@ -840,3 +852,238 @@ def test_evaluation_default_destination_is_preserved_when_read_only(
     reports = list(override_dir.glob("*.json"))
     assert len(reports) == 1
     assert reports[0].read_text() == "{}"
+
+
+def test_failed_evaluation_has_bounded_summaries_after_report_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    events: list[object] = []
+
+    class FakeReport:
+        def __init__(self) -> None:
+            self.test_passes = [False] * 12
+            self.cases = [{"name": f"case-{index}-" + "c" * 180} for index in range(12)]
+            self.detailed_results = [
+                [
+                    run_evaluation.EvaluationOutput(
+                        score=1,
+                        test_pass=True,
+                        reason="passing detail",
+                        label="passed",
+                    ),
+                    run_evaluation.EvaluationOutput(
+                        score=0,
+                        test_pass=False,
+                        reason="reason-" + "r" * 180,
+                        label="label-" + "l" * 180,
+                    ),
+                ]
+                for _ in range(12)
+            ]
+
+        def to_file(self, path: str) -> None:
+            events.append("write")
+            Path(path).write_text("{}")
+
+        def display(self, *, include_input: bool) -> None:
+            events.append(("display", include_input))
+
+    class FakeExperiment:
+        @classmethod
+        def __class_getitem__(cls, _item: object) -> type["FakeExperiment"]:
+            return cls
+
+        def __init__(self, **_: object) -> None: ...
+
+        def run_evaluations(self, _task: object) -> FakeReport:
+            return FakeReport()
+
+    monkeypatch.setattr(run_evaluation, "_configure_database", lambda: None)
+    monkeypatch.setattr(run_evaluation, "load_cases", _no_cases)
+    monkeypatch.setattr(run_evaluation, "Experiment", FakeExperiment)
+
+    with pytest.raises(run_evaluation.EvaluationFailure) as raised:
+        run_evaluation.main("i95_northbound", output_dir=tmp_path)
+
+    failure = raised.value
+    assert str(failure) == "TollChat evaluation failed"
+    assert failure.failure_count == 12
+    assert len(failure.failure_summaries) == 10
+    assert failure.summaries_truncated is True
+    assert events == ["write", ("display", False)]
+    assert failure.failure_summaries[0]["label"].startswith("label-")
+    assert failure.failure_summaries[0]["reason"].startswith("reason-")
+    assert all(
+        set(summary) == {"case_id", "label", "reason"}
+        for summary in failure.failure_summaries
+    )
+    assert all(
+        all(len(value) <= 128 for value in summary.values())
+        for summary in failure.failure_summaries
+    )
+    assert len(list(tmp_path.glob("*.json"))) == 1
+
+
+def test_failed_evaluation_uses_fixed_fallbacks_without_string_coercion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class LeakyValue:
+        def __str__(self) -> str:
+            raise AssertionError("must not stringify report values")
+
+    class FakeReport:
+        def __init__(self) -> None:
+            self.test_passes = [False]
+            self.cases = [{"name": LeakyValue()}]
+            self.detailed_results = [
+                [{"test_pass": False, "label": LeakyValue(), "reason": LeakyValue()}]
+            ]
+
+        def to_file(self, path: str) -> None:
+            Path(path).write_text("{}")
+
+        def display(self, *, include_input: bool) -> None:
+            assert include_input is False
+
+    class FakeExperiment:
+        @classmethod
+        def __class_getitem__(cls, _item: object) -> type["FakeExperiment"]:
+            return cls
+
+        def __init__(self, **_: object) -> None: ...
+
+        def run_evaluations(self, _task: object) -> FakeReport:
+            return FakeReport()
+
+    monkeypatch.setattr(run_evaluation, "_configure_database", lambda: None)
+    monkeypatch.setattr(run_evaluation, "load_cases", _no_cases)
+    monkeypatch.setattr(run_evaluation, "Experiment", FakeExperiment)
+
+    with pytest.raises(run_evaluation.EvaluationFailure) as raised:
+        run_evaluation.main("i95_northbound", output_dir=tmp_path)
+
+    assert raised.value.failure_count == 1
+    assert raised.value.failure_summaries == [
+        {
+            "case_id": "unknown_case",
+            "label": "unknown_label",
+            "reason": "evaluation_failed",
+        }
+    ]
+    assert raised.value.summaries_truncated is False
+
+
+def test_handler_propagates_structured_evaluation_failure_once(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    failure = run_evaluation.EvaluationFailure(
+        failure_count=11,
+        failure_summaries=[{"case_id": "case", "label": "label", "reason": "reason"}],
+        summaries_truncated=True,
+    )
+
+    monkeypatch.setattr(runner, "scheduled_run_is_fresh", _always_fresh)
+    monkeypatch.setattr(runner, "run_route_checks", _noop)
+    monkeypatch.setattr(runner, "run_annual_checks", _noop)
+
+    def fail_evaluation(*_args: object, **_kwargs: object) -> None:
+        raise failure
+
+    monkeypatch.setattr(runner.run_evaluation, "main", fail_evaluation)
+
+    with (
+        caplog.at_level(logging.INFO),
+        pytest.raises(run_evaluation.EvaluationFailure) as raised,
+    ):
+        runner.handler(
+            {"window_id": "i95_northbound", "schedule": _schedule("i95_northbound")},
+            object(),
+        )
+
+    assert raised.value is failure
+    records = _records(caplog)
+    assert len(records) == 1
+    assert _record_field(records[0], "status") == "failed"
+    assert _record_field(records[0], "evaluation") == "failed"
+    assert _record_field(records[0], "failure_type") == "EvaluationFailure"
+    assert _record_value(records[0], "evaluation_failure_count") == 11
+    assert (
+        _record_value(records[0], "evaluation_failure_summaries")
+        == failure.failure_summaries
+    )
+    assert _record_value(records[0], "evaluation_summaries_truncated") is True
+
+
+def _prepare_structured_evaluation_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> run_evaluation.EvaluationFailure:
+    failure = run_evaluation.EvaluationFailure(
+        failure_count=1,
+        failure_summaries=[{"case_id": "case", "label": "label", "reason": "bounded"}],
+        summaries_truncated=False,
+    )
+    monkeypatch.setattr(runner, "scheduled_run_is_fresh", _always_fresh)
+    monkeypatch.setattr(runner, "run_route_checks", _noop)
+    monkeypatch.setattr(runner, "run_annual_checks", _noop)
+
+    def fail_evaluation(**_kwargs: object) -> None:
+        raise failure
+
+    monkeypatch.setattr(
+        runner.run_evaluation,
+        "main",
+        fail_evaluation,
+    )
+    return failure
+
+
+def test_structured_evaluation_failure_reraises_when_alerts_disabled(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    failure = _prepare_structured_evaluation_failure(monkeypatch)
+    monkeypatch.setenv("TIMED_CHECK_ALERTS_ENABLED", "false")
+
+    with (
+        caplog.at_level(logging.INFO),
+        pytest.raises(run_evaluation.EvaluationFailure) as raised,
+    ):
+        runner.handler(_alert_event(), object())
+
+    assert raised.value is failure
+    records = _records(caplog)
+    assert len(records) == 1
+    assert _record_field(records[0], "notification") == "disabled"
+    assert _record_value(records[0], "evaluation_failure_count") == 1
+
+
+def test_structured_evaluation_failure_reraises_after_alert_publish(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    failure = _prepare_structured_evaluation_failure(monkeypatch)
+    monkeypatch.setenv("TIMED_CHECK_ALERTS_ENABLED", "true")
+    monkeypatch.setenv("ALERTS_TOPIC_ARN", "arn:aws:sns:us-east-1:123:alerts")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    published: list[dict[str, str]] = []
+
+    class Client:
+        def publish(self, **kwargs: str) -> None:
+            published.append(kwargs)
+
+    def client(*_args: object, **_kwargs: object) -> Client:
+        return Client()
+
+    monkeypatch.setattr(cast(Any, runner.boto3), "client", client)
+
+    with (
+        caplog.at_level(logging.INFO),
+        pytest.raises(run_evaluation.EvaluationFailure) as raised,
+    ):
+        runner.handler(_alert_event(), _AlertContext())
+
+    assert raised.value is failure
+    assert len(published) == 1
+    records = _records(caplog)
+    assert len(records) == 1
+    assert _record_field(records[0], "notification") == "sent"
+    assert _record_value(records[0], "evaluation_failure_count") == 1
