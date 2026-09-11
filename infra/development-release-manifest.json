@@ -36,7 +36,7 @@
     "infra/triggers.tf": "2a696983ca5d0503bfb542e6ccf3365d90e05d32276c04ee075c4ac2df06f607",
     "infra/variables.tf": "6972b85878fea014e2375ba05815bd9902cc722695d50c913d639e344559c881",
     "infra/versions.tf": "f36522386a6e5e733d6d0ed5b61cccb33ba5e08737233da00698682beae671a5",
-    "v2/agent-sops/nova-toll-pricing-assistant.sop.md": "f40f59316a44bf344ab8642adef363123874a2858557e44bc16875c0ab573ae3",
+    "v2/agent-sops/nova-toll-pricing-assistant.sop.md": "3e4269b3bd6b14d5335013c94a69203ea7173ecfbff2fffa6a08020757c38417",
     "v2/agent/__init__.py": "9a7c5def20c27bee02ace31193aa0ab9b8548e1502db2f894fcf67d3b86a5e88",
     "v2/agent/agentcore_entrypoint.py": "59bded15cb0dda332588306adb79242258aeee74b79710a911948fab9ff356f6",
     "v2/agent/assets/LICENSE.txt": "792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473",
@@ -62,7 +62,7 @@
     "v2/agent/public_chat.mjs": "8302f3dae650dcfdaa45c49438a6b061bf301e71ee7fc684cca3bb4b6f9bea39",
     "v2/agent/robots.txt": "006953aa1ea1e823fdbde642b82832eca750db1ef7d22edffee8d8a7deabf879",
     "v2/agent/terms.txt": "8fe686b47200732c6d823a43ae214d9113849f53f2dd9f84e65a82c62f4f46af",
-    "v2/agent/toll_agent.py": "fd6f3350f915c4dfbd4d1c3e58749a10a99ea2e569db6f44b28d28bc4daee777",
+    "v2/agent/toll_agent.py": "34b633097965877b2b436aa65ffd31dbf65a2bd3f60263e697b02ec0e4ef33bd",
     "v2/agent_tools/contract-manifest.json": "9e926ccdc216dbcf314fc35330bfe723f374d4566e74708242a602d2511db132",
     "v2/agent_tools/current_price_domain.py": "28518a483c442266a8db9a780af09bc625151b79bb673c1c9a3f9f382be45cd7",
     "v2/agent_tools/get_annual_toll_ballpark.py": "5ee06fa1af46e03c4305a5412e33306008fca0a129a7d33063b23a868966b61f",
@@ -107,7 +107,7 @@
     "v2/db/oracle/schema.sql": "2634341b7c84ed42c0cd56fe94532cbe6e6b49ae9a2f81245635cb7b659d8911",
     "v2/db/roles.sql": "7657a7e48f1c4f580a9c8c467c7972d58154f1560b21ed18015a968e23c20de6",
     "v2/db/schema.sql": "fbfe52f47d1cc1f88d97e9e2f9b641f73f2798ecf9bc88e4abc9897c9190bddf",
-    "v2/eval/run_evaluation.py": "7694e0aec47e5934975c0f0a5764645182a0fffe400906b345f73a214134d90c",
+    "v2/eval/run_evaluation.py": "9dcfcabc6b089f0376043439bbc99d3b391489584140958959085651899dfea8",
     "v2/eval/test-cases.jsonl": "6cb6bffebe10469bf86ae6482ed39f088e2b7a94203910630660d6afe09e1cbe",
     "v2/infra/.terraform.lock.hcl": "fd42f83e883fe5b260118f566eeb4f4a918f6c68dd791bcf7a3e5677f3830fad",
     "v2/infra/agent_measurement.tf": "d748c5b5dc8aeb30d9bdd96c322388526c1ea18d0174c55d5aa1705607c189a6",
@@ -131,7 +131,7 @@
     "v2/lambdas/loader/parse_csv.py": "313d5d0843f9e884e7649dc66da3ebc5cdb015e2484899f4152d5ab9fb7b19ac",
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
     "v2/lambdas/publisher/handler.py": "4d3570e0c014301dc4cf20d93a0d9f8ebdac5ce9e073bcb25be138331b2db396",
-    "v2/lambdas/timed_checks/handler.py": "cbed0dd09afb9d852e86824b406363bcca55559f7b37b4806afdfb923e9a318e",
+    "v2/lambdas/timed_checks/handler.py": "6b49da94c6866c71308f3d70fb758fc056df4abfe08763bd3cf9951a421eed15",
     "v2/pyproject.toml": "f10d2072ae861df7b129813407c61b7b846639c0a67ba1a67b9a5833c4f5d4b1",
     "v2/scripts/adopt_production_baseline.py": "1017ac5ec820c0b4a7a062813c650f709e8ddc6606be7433a12199c3eecbfa89",
     "v2/scripts/build_agentcore_zips.sh": "d731301c6d376a6af9a5fe9091e991326e671aeaa62b1969fd8a124bb8aecc9e",
@@ -143,7 +143,7 @@
     "v2/scripts/check_development_release.py": "e521609f1cee61fe2d5cfc5747ea57583dbfcd4a33233f491021f2d707397d6c",
     "v2/scripts/check_production_release.py": "fcf2c5ecedc50e1fe15d8205528b3f0509089377d52b99f8bd97ba52fa7a4888",
     "v2/scripts/classify_deployment_error.py": "8c736cbd2a8957f347408b92553efd0971bb50d42e6c8f658f5ff7602079b405",
-    "v2/scripts/development_deployment_status.py": "83a129eb0d0769c9e91b6b3a0c8ba1ad8cf375b24285cf4c4a6070a67bb7ecc1",
+    "v2/scripts/development_deployment_status.py": "87b7a92bac782f71e5a6e8d61b56220d600fd4f4dc636f84117a4d31a10f7c02",
     "v2/scripts/loader-requirements.in": "38c314f1e9470587a6b566f2c8ed28cdf2ed3df2d87d349c3cbfc9f5a707230e",
     "v2/scripts/loader-requirements.txt": "7e35ab33589fae931d8bac07a7e32f868c02c4f37b629eb4208075a98fd918b4",
     "v2/scripts/publisher-requirements.in": "443323b60ce646abe57f80efe6a842af9467d089d73459b84830450825fabdcc",
@@ -156,15 +156,15 @@
     "v2/scripts/timed-checks-requirements.in": "8218bd738a1337e889d04756b2f7c53f1693503b97c519dcc8a10a423b2837e5",
     "v2/scripts/timed-checks-requirements.txt": "c7f9d037e3fb740603863c144cfc053ebb4e52b25024318b68390bf1518e0515",
     "v2/scripts/verify_release_bundle.py": "a0773f48ad37509f571176e2ec6f758763ac749e523482264a99976607f7ca80",
-    "v2/timed_checks.py": "835aec120c4d47f44aa8e88990eb3642fc3adb114d41e89a1d4e5d064df76ac8",
+    "v2/timed_checks.py": "97fe53756b8ef3fd9cf5b17a8b00d3c5d59496030ce955ea40a90b3271d1d6cf",
     "v2/uv.lock": "a4fe1765a080d8c07154e28265c125fe1b2ceaf2d9f7d353e255e3988e0ce137"
   },
   "packages": {
-    "agentcore.zip": "66c4ec12657a09d61fdf9aef6a97cfd8442c4ba000b4fac6f117ecccfa406875",
+    "agentcore.zip": "fc420f6166dd10c5894f50085fdf96096cf58b367c1219278b0fed56511052a5",
     "chat-proxy.zip": "44d27f8bd6015085c75aca087ef2d4a9941f5403364654c7cf83f6959087a319",
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
     "publisher.zip": "0d7e95193f2d6deb9816b132b7bb6774e932f643d237aac0d7a8e1aab8245064",
-    "timed-checks.zip": "ada946bb0ce1877ecb0565452b408b379c06d78242f75d8d380041e1001df58c"
+    "timed-checks.zip": "ec66694c31de419d85419212283f15252615b4dd7d776f6f3f9894aa8afaf1c5"
   },
   "mutations": [
     {
