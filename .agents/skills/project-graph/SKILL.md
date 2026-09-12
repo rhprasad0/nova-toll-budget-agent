@@ -106,8 +106,11 @@ Root repair → original Builder → same review stage
    `fork_turns: "none"`, the intent, `.graph/contract.md`, `explore.md`, and worktree.
    Repeat the UUID report, CLI registration, and acknowledgement before tools.
    Researcher must complete `research.md` before pre-checking or building;
-   there is no skip edge. Researcher must test and use Context7, the AWS
-   documentation MCP, and Exa for bounded in-scope lookups. If a required
+   there is no skip edge. Researcher must test and use each server applicable to
+   the approved scope: the AWS documentation MCP for AWS documentation or
+   regional availability, Context7 for non-AWS library, framework, SDK, API, or
+   CLI documentation, and Exa for other web research. A server is not required
+   when its research category is outside the approved scope. If an applicable
    server reports an auth blocker, report only its name and a sanitized blocker,
    never include tokens or raw error/query payloads in the parent handoff or
    `research.md`, update `STATE.md` `Blocked by`, pause for authentication, and
