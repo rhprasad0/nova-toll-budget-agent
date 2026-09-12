@@ -426,8 +426,8 @@ data "aws_iam_policy_document" "publisher" {
   }
 
   statement {
-    sid       = "DeleteStalePublicReports"
-    actions   = ["s3:DeleteObject"]
+    sid     = "DeleteStalePublicReports"
+    actions = ["s3:DeleteObject"]
     resources = [
       "${aws_s3_bucket.site.arn}/tolls/i95-i495/*",
       "${aws_s3_bucket.site.arn}/tolls/i66/*",
