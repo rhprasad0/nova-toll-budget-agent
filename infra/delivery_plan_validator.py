@@ -61,6 +61,7 @@ class Mutation:
     operation_class: str
     permissions: tuple[Permission, ...]
     create_identity: tuple[tuple[str, Any], ...] = ()
+    provider_change_identity: tuple[tuple[str, str], ...] = ()
 
 
 def _permission(action: str, *resources: str, conditions: Mapping[str, str] | None = None) -> Permission:
@@ -73,8 +74,9 @@ def _mutation(
     operation_class: str,
     *permissions: Permission,
     create_identity: tuple[tuple[str, Any], ...] = (),
+    provider_change_identity: tuple[tuple[str, str], ...] = (),
 ) -> Mutation:
-    return Mutation(fields, actions, operation_class, permissions, create_identity)
+    return Mutation(fields, actions, operation_class, permissions, create_identity, provider_change_identity)
 
 
 ACCOUNT = "903859731897"
@@ -141,6 +143,11 @@ ARTIFACT_OBJECTS = (
     "arn:aws:s3:::nova-toll-agentcore-903859731897/lambda/v2/*",
 )
 SITE_BUCKET = f"arn:aws:s3:::{SITE_BUCKET_NAME}"
+PUBLISHER_ROLE_NAME = "toll-v2-report-publisher-dev"
+PUBLISHER_ROLE_ARN = f"arn:aws:iam::{ACCOUNT}:role/{PUBLISHER_ROLE_NAME}"
+REPORT_FRESHNESS_ALARM_NAME = "toll-v2-report-generation-freshness-dev"
+REPORT_FRESHNESS_ALARM_ARN = f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{REPORT_FRESHNESS_ALARM_NAME}"
+PUBLISHER_SITE_KEY_ARN = "arn:aws:kms:us-east-1:903859731897:key/3bc78b60-9cbe-4abd-9744-8772c78d8379"
 
 
 def _build_contract() -> dict[str, Mutation]:
@@ -257,7 +264,6 @@ def _build_contract() -> dict[str, Mutation]:
         'aws_cloudwatch_metric_alarm.freshness["i66"]': "toll-v2-pricing-freshness-i66-dev",
         'aws_cloudwatch_metric_alarm.failure_queues["invoke"]': "toll-v2-pricing-loader-invoke-failure-queue-dev",
         'aws_cloudwatch_metric_alarm.failure_queues["delivery"]': "toll-v2-pricing-loader-delivery-failure-queue-dev",
-        "aws_cloudwatch_metric_alarm.report_generation_freshness": "toll-v2-report-generation-freshness-dev",
         "aws_cloudwatch_metric_alarm.publisher_errors": "toll-v2-report-publisher-errors-dev",
         'aws_cloudwatch_metric_alarm.publisher_failure_queues["invoke"]': "toll-v2-report-publisher-invoke-failure-queue-dev",
         'aws_cloudwatch_metric_alarm.publisher_failure_queues["delivery"]': "toll-v2-report-publisher-delivery-failure-queue-dev",
@@ -274,6 +280,22 @@ def _build_contract() -> dict[str, Mutation]:
             _permission("cloudwatch:TagResource", f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{name}"),
             _permission("cloudwatch:UntagResource", f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{name}"),
         )
+    result["aws_iam_role_policy.publisher"] = _mutation(
+        ("policy",),
+        ("update",),
+        "publisher-inline-policy",
+        _permission("iam:PutRolePolicy", PUBLISHER_ROLE_ARN),
+        create_identity=(("name", PUBLISHER_ROLE_NAME), ("role", PUBLISHER_ROLE_NAME)),
+        provider_change_identity=(("account_id", ACCOUNT), ("name", PUBLISHER_ROLE_NAME), ("role", PUBLISHER_ROLE_NAME)),
+    )
+    result["aws_cloudwatch_metric_alarm.report_generation_freshness"] = _mutation(
+        ("alarm_description", "dimensions"),
+        ("update",),
+        "report-freshness-alarm",
+        _permission("cloudwatch:PutMetricAlarm", REPORT_FRESHNESS_ALARM_ARN),
+        create_identity=(("alarm_name", REPORT_FRESHNESS_ALARM_NAME),),
+        provider_change_identity=(("account_id", ACCOUNT), ("alarm_name", REPORT_FRESHNESS_ALARM_NAME), ("region", REGION)),
+    )
     result["aws_dynamodb_table.tollchat_sessions"] = _mutation(
         ("ttl.enabled",),
         ("update",),
@@ -628,6 +650,7 @@ def _metadata_authorized(path: str, spec: Mutation) -> bool:
     return (
         _path_allowed(path, spec.fields)
         or any(_path_allowed(path, (field,)) for field, _ in spec.create_identity)
+        or any(_path_allowed(path, (field,)) for field, _ in spec.provider_change_identity)
         or _path_root(path) in _AUTHORIZATION_FIELDS
     )
 
@@ -642,6 +665,115 @@ def _validate_s3_identity(before: dict[str, Any] | None, after: dict[str, Any], 
         for value in values
     ):
         _reject("invalid_resource_identity", address=address, action=action, operation_class=spec.operation_class)
+
+
+def _publisher_policy(value: Any, address: str, action: str, operation_class: str) -> dict[str, dict[str, Any]]:
+    try:
+        policy = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+    if not isinstance(policy, dict) or set(policy) != {"Version", "Statement"} or policy["Version"] != "2012-10-17" or not isinstance(policy["Statement"], list):
+        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+    statements = policy["Statement"]
+    if any(not isinstance(statement, dict) or not isinstance(statement.get("Sid"), str) for statement in statements):
+        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+    by_sid = {statement["Sid"]: copy.deepcopy(statement) for statement in statements}
+    if len(by_sid) != len(statements):
+        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+    for statement in by_sid.values():
+        for field in ("Action", "Resource"):
+            value = statement.get(field)
+            if isinstance(value, str):
+                value = [value]
+            if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+                _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+            statement[field] = sorted(value)
+        condition = statement.get("Condition")
+        if isinstance(condition, dict):
+            for operator, values in condition.items():
+                if not isinstance(values, dict):
+                    _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+                for variable, items in values.items():
+                    if isinstance(items, str):
+                        items = [items]
+                    if not isinstance(items, list) or any(not isinstance(item, str) for item in items):
+                        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+                    values[variable] = sorted(items)
+    return by_sid
+
+
+def _publisher_statement(sid: str, action_name: str, resources: tuple[str, ...], *, condition: tuple[str, tuple[str, ...]] | None = None) -> dict[str, Any]:
+    statement: dict[str, Any] = {"Sid": sid, "Effect": "Allow", "Action": [action_name], "Resource": sorted(resources)}
+    if condition is not None:
+        variable, values = condition
+        statement["Condition"] = {"StringEquals": {variable: sorted(values)}}
+    return statement
+
+
+def _validate_publisher_policy(before: Any, after: Any, address: str, action: str, operation_class: str) -> None:
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+    old, new = (_publisher_policy(value.get("policy"), address, action, operation_class) for value in (before, after))
+    bucket = f"arn:aws:s3:::{SITE_BUCKET_NAME}"
+    expected_old = {
+        "ReadPublicationManifest": _publisher_statement("ReadPublicationManifest", "s3:GetObject", (f"{bucket}/tolls/i95-i495/manifest.json",)),
+        "FindPublicationManifest": _publisher_statement("FindPublicationManifest", "s3:ListBucket", (bucket,), condition=("s3:prefix", ("tolls/i95-i495/manifest.json",))),
+        "WritePublicReports": _publisher_statement("WritePublicReports", "s3:PutObject", (f"{bucket}/tolls/i95-i495/*", f"{bucket}/sitemap.xml")),
+    }
+    expected_new = {
+        "ListPublicReports": _publisher_statement("ListPublicReports", "s3:ListBucket", (bucket,), condition=("s3:prefix", ("tolls/i95-i495/", "tolls/i66/"))),
+        "WritePublicReports": _publisher_statement("WritePublicReports", "s3:PutObject", (f"{bucket}/tolls/i95-i495/*", f"{bucket}/tolls/i66/*", f"{bucket}/sitemap.xml")),
+        "DeleteStalePublicReports": _publisher_statement("DeleteStalePublicReports", "s3:DeleteObject", (f"{bucket}/tolls/i95-i495/*", f"{bucket}/tolls/i66/*")),
+    }
+    retained_sids = {"ConnectRdsIam", "SendInvokeFailure", "UseSiteKey"}
+    if set(old) != retained_sids | set(expected_old) or set(new) != retained_sids | set(expected_new):
+        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+    old_s3 = {sid: old.pop(sid, None) for sid in expected_old}
+    new_s3 = {sid: new.pop(sid, None) for sid in expected_new}
+    expected_retained = {
+        "SendInvokeFailure": _publisher_statement(
+            "SendInvokeFailure", "sqs:SendMessage",
+            (f"arn:aws:sqs:{REGION}:{ACCOUNT}:toll-v2-report-publisher-invoke-failure-dev",),
+        ),
+    }
+    rds = old.get("ConnectRdsIam")
+    site_key = old.get("UseSiteKey")
+    if (
+        old_s3 != expected_old
+        or new_s3 != expected_new
+        or old != new
+        or old.get("SendInvokeFailure") != expected_retained["SendInvokeFailure"]
+        or not isinstance(rds, dict)
+        or set(rds) != {"Sid", "Effect", "Action", "Resource"}
+        or rds.get("Effect") != "Allow"
+        or rds.get("Action") != ["rds-db:connect"]
+        or rds.get("Resource") != sorted([
+            f"arn:aws:rds-db:{REGION}:{ACCOUNT}:dbuser:db-DMHPVKTM5V5HN3QJG2UKFDEGTI/report_publisher_development",
+            f"arn:aws:rds-db:{REGION}:{ACCOUNT}:dbuser:db-DMHPVKTM5V5HN3QJG2UKFDEGTI/report_reader_development",
+        ])
+        or not isinstance(site_key, dict)
+        or set(site_key) != {"Sid", "Effect", "Action", "Resource"}
+        or site_key.get("Effect") != "Allow"
+        or site_key.get("Action") != ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
+        or site_key.get("Resource") != [PUBLISHER_SITE_KEY_ARN]
+    ):
+        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+
+
+def _validate_report_freshness_alarm(before: Any, after: Any, address: str, action: str, operation_class: str) -> None:
+    expected_before = {
+        "alarm_description": "No complete I-95/I-495 report generation in the trailing seven-day sliding window.",
+        "dimensions": {"facility": "i95_i495", "Environment": "development"},
+    }
+    expected_after = {
+        "alarm_description": "No complete I-95/I-495 and I-66 report generation in the trailing seven-day sliding window.",
+        "dimensions": {"facility_scope": "both", "Environment": "development"},
+    }
+    if not isinstance(before, dict) or not isinstance(after, dict) or any(
+        value.get(field) != expected for value, expected_values in ((before, expected_before), (after, expected_after))
+        for field, expected in expected_values.items()
+    ):
+        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
 
 
 def _unknown_paths(value: Any, prefix: str = "") -> tuple[str, ...]:
@@ -959,6 +1091,12 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
     for resource in plan["resource_changes"]:
         address, mode, change, metadata_paths = _validate_resource_shape(resource)
         spec = CONTRACT.get(address)
+        if spec is not None and spec.provider_change_identity:
+            if set(resource) != {"address", "mode", "type", "name", "provider_name", "change"} or set(change) != {"actions", "before", "after", "after_unknown", "before_sensitive", "after_sensitive", "before_identity", "after_identity"}:
+                _reject("malformed_input", address=address)
+            expected_identity = dict(spec.provider_change_identity)
+            if any(not isinstance(change.get(side), dict) or change[side] != expected_identity for side in ("before_identity", "after_identity")):
+                _reject("invalid_resource_identity", address=address)
         pending_unknowns.append((
             address,
             change["actions"][0],
@@ -1012,6 +1150,15 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             _reject("malformed_input", address=address, action=action)
         if action == "create" and (before is not None or after is None):
             _reject("malformed_input", address=address, action=action)
+        if spec.operation_class in {"publisher-inline-policy", "report-freshness-alarm"}:
+            if metadata_paths.get("after_unknown", ()):
+                _reject("unknown_authorization_value", address=address, action=action, operation_class=spec.operation_class)
+            if any(
+                _metadata_authorized(path, spec)
+                for key in ("before_sensitive", "after_sensitive")
+                for path in metadata_paths.get(key, ())
+            ):
+                _reject("sensitive_authorization_value", address=address, action=action, operation_class=spec.operation_class)
         _validate_s3_identity(before, after, spec, address, action)
         if action == "create":
             unknown_paths = metadata_paths.get("after_unknown", ())
@@ -1039,6 +1186,10 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 and bool(changed_set & {"s3_bucket", "s3_key", "s3_object_version"})
             ):
                 _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
+        if spec.operation_class == "publisher-inline-policy":
+            _validate_publisher_policy(before, after, address, action, spec.operation_class)
+        if spec.operation_class == "report-freshness-alarm":
+            _validate_report_freshness_alarm(before, after, address, action, spec.operation_class)
         if any(
             _metadata_authorized(path, spec)
             for key in ("before_sensitive", "after_sensitive")

@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import subprocess
 import tempfile
@@ -79,6 +80,13 @@ def _resource_change(
     }
     if index_text:
         record["index"] = json.loads("[" + index_text[:-1] + "]")[0]
+    identities = {
+        "aws_iam_role_policy.publisher": {"account_id": "903859731897", "name": "toll-v2-report-publisher-dev", "role": "toll-v2-report-publisher-dev"},
+        "aws_cloudwatch_metric_alarm.report_generation_freshness": {"account_id": "903859731897", "alarm_name": "toll-v2-report-generation-freshness-dev", "region": "us-east-1"},
+    }
+    if address in identities:
+        record["change"]["before_identity"] = copy.deepcopy(identities[address])
+        record["change"]["after_identity"] = copy.deepcopy(identities[address])
     return record
 
 
@@ -117,6 +125,77 @@ def lambda_manifest(changed_fields=("filename", "source_code_hash")):
             "conditions": {},
         }],
     }
+
+
+PUBLISHER_ADDRESS = "aws_iam_role_policy.publisher"
+PUBLISHER_ROLE = "toll-v2-report-publisher-dev"
+ALARM_ADDRESS = "aws_cloudwatch_metric_alarm.report_generation_freshness"
+ALARM_NAME = "toll-v2-report-generation-freshness-dev"
+SITE_BUCKET = "arn:aws:s3:::tollchat-site-903859731897-dev"
+SITE_KEY = "arn:aws:kms:us-east-1:903859731897:key/3bc78b60-9cbe-4abd-9744-8772c78d8379"
+
+PUBLISHER_AND_ALARM_FIXTURE = br'''[{"address":"aws_cloudwatch_metric_alarm.report_generation_freshness","change":{"actions":["update"],"after":{"actions_enabled":true,"alarm_actions":[],"alarm_description":"No complete I-95/I-495 and I-66 report generation in the trailing seven-day sliding window.","alarm_name":"toll-v2-report-generation-freshness-dev","arn":"arn:aws:cloudwatch:us-east-1:903859731897:alarm:toll-v2-report-generation-freshness-dev","comparison_operator":"LessThanThreshold","datapoints_to_alarm":7,"dimensions":{"Environment":"development","facility_scope":"both"},"evaluate_low_sample_count_percentiles":null,"evaluation_criteria":[],"evaluation_interval":null,"evaluation_periods":7,"extended_statistic":null,"id":"toll-v2-report-generation-freshness-dev","insufficient_data_actions":[],"metric_name":"V2ReportGenerationSuccess","metric_query":[],"namespace":"NovaToll","ok_actions":[],"period":86400,"region":"us-east-1","statistic":"Sum","tags":{},"tags_all":{},"threshold":1,"threshold_metric_id":null,"treat_missing_data":"breaching","unit":null},"after_identity":{"account_id":"903859731897","alarm_name":"toll-v2-report-generation-freshness-dev","region":"us-east-1"},"after_sensitive":{"alarm_actions":[],"dimensions":{},"evaluation_criteria":[],"insufficient_data_actions":[],"metric_query":[],"ok_actions":[],"tags":{},"tags_all":{}},"after_unknown":{},"before":{"actions_enabled":true,"alarm_actions":[],"alarm_description":"No complete I-95/I-495 report generation in the trailing seven-day sliding window.","alarm_name":"toll-v2-report-generation-freshness-dev","arn":"arn:aws:cloudwatch:us-east-1:903859731897:alarm:toll-v2-report-generation-freshness-dev","comparison_operator":"LessThanThreshold","datapoints_to_alarm":7,"dimensions":{"Environment":"development","facility":"i95_i495"},"evaluate_low_sample_count_percentiles":null,"evaluation_criteria":[],"evaluation_interval":null,"evaluation_periods":7,"extended_statistic":null,"id":"toll-v2-report-generation-freshness-dev","insufficient_data_actions":[],"metric_name":"V2ReportGenerationSuccess","metric_query":[],"namespace":"NovaToll","ok_actions":[],"period":86400,"region":"us-east-1","statistic":"Sum","tags":{},"tags_all":{},"threshold":1,"threshold_metric_id":null,"treat_missing_data":"breaching","unit":null},"before_identity":{"account_id":"903859731897","alarm_name":"toll-v2-report-generation-freshness-dev","region":"us-east-1"},"before_sensitive":{"alarm_actions":[],"dimensions":{},"evaluation_criteria":[],"insufficient_data_actions":[],"metric_query":[],"ok_actions":[],"tags":{},"tags_all":{}}},"mode":"managed","name":"report_generation_freshness","provider_name":"registry.terraform.io/hashicorp/aws","type":"aws_cloudwatch_metric_alarm"},{"address":"aws_iam_role_policy.publisher","change":{"actions":["update"],"after":{"id":"toll-v2-report-publisher-dev:toll-v2-report-publisher-dev","name":"toll-v2-report-publisher-dev","name_prefix":null,"policy":"{\"Version\":\"2012-10-17\",\"Statement\":[{\"Action\":[\"rds-db:connect\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:rds-db:us-east-1:903859731897:dbuser:db-DMHPVKTM5V5HN3QJG2UKFDEGTI/report_publisher_development\",\"arn:aws:rds-db:us-east-1:903859731897:dbuser:db-DMHPVKTM5V5HN3QJG2UKFDEGTI/report_reader_development\"],\"Sid\":\"ConnectRdsIam\"},{\"Action\":[\"sqs:SendMessage\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:sqs:us-east-1:903859731897:toll-v2-report-publisher-invoke-failure-dev\"],\"Sid\":\"SendInvokeFailure\"},{\"Action\":[\"s3:ListBucket\"],\"Condition\":{\"StringEquals\":{\"s3:prefix\":[\"tolls/i95-i495/\",\"tolls/i66/\"]}},\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::tollchat-site-903859731897-dev\"],\"Sid\":\"ListPublicReports\"},{\"Action\":[\"s3:PutObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::tollchat-site-903859731897-dev/tolls/i95-i495/*\",\"arn:aws:s3:::tollchat-site-903859731897-dev/tolls/i66/*\",\"arn:aws:s3:::tollchat-site-903859731897-dev/sitemap.xml\"],\"Sid\":\"WritePublicReports\"},{\"Action\":[\"s3:DeleteObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::tollchat-site-903859731897-dev/tolls/i95-i495/*\",\"arn:aws:s3:::tollchat-site-903859731897-dev/tolls/i66/*\"],\"Sid\":\"DeleteStalePublicReports\"},{\"Action\":[\"kms:Decrypt\",\"kms:Encrypt\",\"kms:GenerateDataKey\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:kms:us-east-1:903859731897:key/3bc78b60-9cbe-4abd-9744-8772c78d8379\"],\"Sid\":\"UseSiteKey\"}]}","role":"toll-v2-report-publisher-dev"},"after_identity":{"account_id":"903859731897","name":"toll-v2-report-publisher-dev","role":"toll-v2-report-publisher-dev"},"after_sensitive":{},"after_unknown":{},"before":{"id":"toll-v2-report-publisher-dev:toll-v2-report-publisher-dev","name":"toll-v2-report-publisher-dev","name_prefix":null,"policy":"{\"Statement\":[{\"Action\":[\"rds-db:connect\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:rds-db:us-east-1:903859731897:dbuser:db-DMHPVKTM5V5HN3QJG2UKFDEGTI/report_publisher_development\",\"arn:aws:rds-db:us-east-1:903859731897:dbuser:db-DMHPVKTM5V5HN3QJG2UKFDEGTI/report_reader_development\"],\"Sid\":\"ConnectRdsIam\"},{\"Action\":[\"sqs:SendMessage\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:sqs:us-east-1:903859731897:toll-v2-report-publisher-invoke-failure-dev\"],\"Sid\":\"SendInvokeFailure\"},{\"Action\":[\"s3:GetObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::tollchat-site-903859731897-dev/tolls/i95-i495/manifest.json\"],\"Sid\":\"ReadPublicationManifest\"},{\"Action\":[\"s3:ListBucket\"],\"Condition\":{\"StringEquals\":{\"s3:prefix\":[\"tolls/i95-i495/manifest.json\"]}},\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::tollchat-site-903859731897-dev\"],\"Sid\":\"FindPublicationManifest\"},{\"Action\":[\"s3:PutObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::tollchat-site-903859731897-dev/tolls/i95-i495/*\",\"arn:aws:s3:::tollchat-site-903859731897-dev/sitemap.xml\"],\"Sid\":\"WritePublicReports\"},{\"Action\":[\"kms:Decrypt\",\"kms:Encrypt\",\"kms:GenerateDataKey\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:kms:us-east-1:903859731897:key/3bc78b60-9cbe-4abd-9744-8772c78d8379\"],\"Sid\":\"UseSiteKey\"}],\"Version\":\"2012-10-17\"}","role":"toll-v2-report-publisher-dev"},"before_identity":{"account_id":"903859731897","name":"toll-v2-report-publisher-dev","role":"toll-v2-report-publisher-dev"},"before_sensitive":{}},"mode":"managed","name":"publisher","provider_name":"registry.terraform.io/hashicorp/aws","type":"aws_iam_role_policy"}]'''
+PUBLISHER_AND_ALARM_FIXTURE_SHA256 = "e67dd33af92288935e32891ffd9d83cd1cd63a9b120bc23b207c8a9451e693b0"
+PUBLISHER_AND_ALARM_FINGERPRINT = "574558f761ed7200fb3a21ab28976a709291a5ac957c2d82006f8107d8b0ec03"
+PUBLISHER_AND_ALARM_TUPLE = (
+    (ALARM_ADDRESS, "update", "report-freshness-alarm"),
+    (PUBLISHER_ADDRESS, "update", "publisher-inline-policy"),
+)
+
+
+def _publisher_policy(*, i66=False):
+    statements = [
+        {
+            "Sid": "ConnectRdsIam", "Effect": "Allow", "Action": ["rds-db:connect"],
+            "Resource": [
+                "arn:aws:rds-db:us-east-1:903859731897:dbuser:db-DMHPVKTM5V5HN3QJG2UKFDEGTI/report_publisher_development",
+                "arn:aws:rds-db:us-east-1:903859731897:dbuser:db-DMHPVKTM5V5HN3QJG2UKFDEGTI/report_reader_development",
+            ],
+        },
+        {
+            "Sid": "SendInvokeFailure", "Effect": "Allow", "Action": ["sqs:SendMessage"],
+            "Resource": ["arn:aws:sqs:us-east-1:903859731897:toll-v2-report-publisher-invoke-failure-dev"],
+        },
+        {
+            "Sid": "WritePublicReports", "Effect": "Allow", "Action": ["s3:PutObject"],
+            "Resource": [f"{SITE_BUCKET}/tolls/i95-i495/*", *([f"{SITE_BUCKET}/tolls/i66/*"] if i66 else []), f"{SITE_BUCKET}/sitemap.xml"],
+        },
+        {
+            "Sid": "UseSiteKey", "Effect": "Allow", "Action": ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"],
+            "Resource": [SITE_KEY],
+        },
+    ]
+    if i66:
+        statements.extend([
+            {
+                "Sid": "ListPublicReports", "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": [SITE_BUCKET],
+                "Condition": {"StringEquals": {"s3:prefix": ["tolls/i95-i495/", "tolls/i66/"]}},
+            },
+            {
+                "Sid": "DeleteStalePublicReports", "Effect": "Allow", "Action": ["s3:DeleteObject"],
+                "Resource": [f"{SITE_BUCKET}/tolls/i95-i495/*", f"{SITE_BUCKET}/tolls/i66/*"],
+            },
+        ])
+    else:
+        statements.extend([
+            {
+                "Sid": "ReadPublicationManifest", "Effect": "Allow", "Action": ["s3:GetObject"],
+                "Resource": [f"{SITE_BUCKET}/tolls/i95-i495/manifest.json"],
+            },
+            {
+                "Sid": "FindPublicationManifest", "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": [SITE_BUCKET],
+                "Condition": {"StringEquals": {"s3:prefix": ["tolls/i95-i495/manifest.json"]}},
+            },
+        ])
+    return json.dumps({"Version": "2012-10-17", "Statement": statements})
+
+
+def publisher_and_alarm_plan():
+    return _plan(json.loads(PUBLISHER_AND_ALARM_FIXTURE))
+
+
+def publisher_and_alarm_manifest():
+    return _mutation_manifest(((PUBLISHER_ADDRESS, "update", ("policy",)), (ALARM_ADDRESS, "update", ("alarm_description", "dimensions"))))
 
 
 def _set_path(target, path, value):
@@ -240,6 +319,287 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         self.assertEqual(result["operation_classes"], ["lambda-code"])
         self.assertEqual(len(result["fingerprint"]), 64)
         self.assertEqual(set(result), {"status", "reason_code", "addresses", "actions", "operation_classes", "fingerprint"})
+
+    def test_accepts_only_reviewed_publisher_and_report_freshness_updates(self):
+        self.assertEqual(
+            hashlib.sha256(PUBLISHER_AND_ALARM_FIXTURE).hexdigest(),
+            PUBLISHER_AND_ALARM_FIXTURE_SHA256,
+        )
+        plan, manifest = publisher_and_alarm_plan(), publisher_and_alarm_manifest()
+        self.assertEqual(plan["resource_changes"], json.loads(PUBLISHER_AND_ALARM_FIXTURE))
+        result = validate_plan(plan, manifest)
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(result["addresses"], [ALARM_ADDRESS, PUBLISHER_ADDRESS])
+        self.assertEqual(result["actions"], ["update", "update"])
+        self.assertEqual(result["operation_classes"], ["report-freshness-alarm", "publisher-inline-policy"])
+        self.assertEqual(result["fingerprint"], PUBLISHER_AND_ALARM_FINGERPRINT)
+        self.assertEqual(
+            tuple(zip(result["addresses"], result["actions"], result["operation_classes"])),
+            PUBLISHER_AND_ALARM_TUPLE,
+        )
+        expected = {
+            PUBLISHER_ADDRESS: ("aws_iam_role_policy", "publisher", {"name", "role", "id", "name_prefix", "policy"}),
+            ALARM_ADDRESS: ("aws_cloudwatch_metric_alarm", "report_generation_freshness", {
+                "actions_enabled", "alarm_actions", "alarm_description", "alarm_name", "arn", "comparison_operator",
+                "datapoints_to_alarm", "dimensions", "evaluate_low_sample_count_percentiles", "evaluation_criteria",
+                "evaluation_interval", "evaluation_periods", "extended_statistic", "id", "insufficient_data_actions",
+                "metric_name", "metric_query", "namespace", "ok_actions", "period", "region", "statistic", "tags",
+                "tags_all", "threshold", "threshold_metric_id", "treat_missing_data", "unit",
+            }),
+        }
+        for resource in plan["resource_changes"]:
+            resource_type, name, fields = expected[resource["address"]]
+            self.assertEqual(set(resource), {"address", "mode", "type", "name", "provider_name", "change"})
+            self.assertEqual((resource["mode"], resource["type"], resource["name"], resource["provider_name"]), ("managed", resource_type, name, EXPECTED_PROVIDER_NAME))
+            change = resource["change"]
+            self.assertEqual(change["actions"], ["update"])
+            self.assertEqual(set(change), {"actions", "before", "after", "after_unknown", "before_sensitive", "after_sensitive", "before_identity", "after_identity"})
+            self.assertEqual(set(change["before"]), fields)
+            self.assertEqual(set(change["after"]), fields)
+            self.assertEqual(change["before_identity"], change["after_identity"])
+        publisher = next(item for item in plan["resource_changes"] if item["address"] == PUBLISHER_ADDRESS)["change"]
+        policy_by_sid = lambda value: {statement["Sid"]: statement for statement in json.loads(value)["Statement"]}
+        self.assertEqual(policy_by_sid(publisher["before"]["policy"]), policy_by_sid(_publisher_policy()))
+        self.assertEqual(policy_by_sid(publisher["after"]["policy"]), policy_by_sid(_publisher_policy(i66=True)))
+        alarm = next(item for item in plan["resource_changes"] if item["address"] == ALARM_ADDRESS)["change"]
+        self.assertEqual(alarm["before"]["dimensions"], {"Environment": "development", "facility": "i95_i495"})
+        self.assertEqual(alarm["after"]["dimensions"], {"Environment": "development", "facility_scope": "both"})
+
+    def test_target_provider_identity_and_envelopes_are_exact(self):
+        plan, manifest = publisher_and_alarm_plan(), publisher_and_alarm_manifest()
+        expected_identities = {
+            PUBLISHER_ADDRESS: {
+                "account_id": "903859731897",
+                "name": PUBLISHER_ROLE,
+                "role": PUBLISHER_ROLE,
+            },
+            ALARM_ADDRESS: {
+                "account_id": "903859731897",
+                "alarm_name": ALARM_NAME,
+                "region": "us-east-1",
+            },
+        }
+        for resource in plan["resource_changes"]:
+            for side in ("before_identity", "after_identity"):
+                self.assertEqual(resource["change"][side], expected_identities[resource["address"]])
+                for field in tuple(resource["change"][side]):
+                    rejected = copy.deepcopy(plan)
+                    target = next(item for item in rejected["resource_changes"] if item["address"] == resource["address"])
+                    target["change"][side][field] = "wrong"
+                    self.assertNotEqual(validate_plan(rejected, manifest)["status"], "accepted")
+                rejected = copy.deepcopy(plan)
+                target = next(item for item in rejected["resource_changes"] if item["address"] == resource["address"])
+                target["change"].pop(side)
+                self.assertNotEqual(validate_plan(rejected, manifest)["status"], "accepted")
+            for container in (resource, resource["change"]):
+                rejected = copy.deepcopy(plan)
+                target = next(item for item in rejected["resource_changes"] if item["address"] == resource["address"])
+                (target if container is resource else target["change"])["unexpected"] = None
+                self.assertNotEqual(validate_plan(rejected, manifest)["status"], "accepted")
+
+            for side in ("before_identity", "after_identity"):
+                for value in (None, "identity", [], {**expected_identities[resource["address"]], "extra": "value"}):
+                    rejected = copy.deepcopy(plan)
+                    target = next(item for item in rejected["resource_changes"] if item["address"] == resource["address"])
+                    target["change"][side] = value
+                    self.assertNotEqual(validate_plan(rejected, manifest)["status"], "accepted")
+                for field in expected_identities[resource["address"]]:
+                    for value in (None, 1):
+                        rejected = copy.deepcopy(plan)
+                        target = next(item for item in rejected["resource_changes"] if item["address"] == resource["address"])
+                        target["change"][side][field] = value
+                        self.assertNotEqual(validate_plan(rejected, manifest)["status"], "accepted")
+                    rejected = copy.deepcopy(plan)
+                    target = next(item for item in rejected["resource_changes"] if item["address"] == resource["address"])
+                    target["change"][side].pop(field)
+                    self.assertNotEqual(validate_plan(rejected, manifest)["status"], "accepted")
+
+            for container_name, keys in (("resource", tuple(resource)), ("change", tuple(resource["change"]))):
+                for key in keys:
+                    rejected = copy.deepcopy(plan)
+                    target = next(item for item in rejected["resource_changes"] if item["address"] == resource["address"])
+                    (target if container_name == "resource" else target["change"]).pop(key)
+                    self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "malformed_input")
+
+        for address, field, value, reason in (
+            (PUBLISHER_ADDRESS, "name", "other", "invalid_resource_identity"),
+            (PUBLISHER_ADDRESS, "role", "other", "invalid_resource_identity"),
+            (ALARM_ADDRESS, "alarm_name", "other", "invalid_resource_identity"),
+        ):
+            rejected = copy.deepcopy(plan)
+            for resource in rejected["resource_changes"]:
+                if resource["address"] == address:
+                    resource["change"]["before"][field] = value
+                    resource["change"]["after"][field] = value
+            self.assertEqual(validate_plan(rejected, manifest)["reason_code"], reason)
+
+        for label, address, side, field in (
+            ("publisher equal-but-wrong", PUBLISHER_ADDRESS, "both", "name"),
+            ("alarm equal-but-wrong", ALARM_ADDRESS, "both", "alarm_name"),
+            ("publisher before name", PUBLISHER_ADDRESS, "before_identity", "name"),
+            ("publisher after name", PUBLISHER_ADDRESS, "after_identity", "name"),
+            ("publisher before role", PUBLISHER_ADDRESS, "before_identity", "role"),
+            ("publisher after role", PUBLISHER_ADDRESS, "after_identity", "role"),
+            ("alarm before name", ALARM_ADDRESS, "before_identity", "alarm_name"),
+            ("alarm after name", ALARM_ADDRESS, "after_identity", "alarm_name"),
+        ):
+            rejected = copy.deepcopy(plan)
+            change = next(
+                item for item in rejected["resource_changes"] if item["address"] == address
+            )["change"]
+            for identity_side in (("before_identity", "after_identity") if side == "both" else (side,)):
+                change[identity_side][field] = "equal-but-wrong"
+            self.assertNotEqual(validate_plan(rejected, manifest)["status"], "accepted", label)
+
+        for address, action in ((PUBLISHER_ADDRESS, "create"), (ALARM_ADDRESS, "delete")):
+            rejected = copy.deepcopy(plan)
+            next(item for item in rejected["resource_changes"] if item["address"] == address)["change"]["actions"] = [action]
+            self.assertNotEqual(validate_plan(rejected, manifest)["status"], "accepted")
+
+        rejected = copy.deepcopy(plan)
+        publisher = next(item for item in rejected["resource_changes"] if item["address"] == PUBLISHER_ADDRESS)
+        publisher["change"]["after"]["policy"] = "{not json"
+        self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "unsupported_field_delta")
+        rejected = copy.deepcopy(plan)
+        publisher = next(item for item in rejected["resource_changes"] if item["address"] == PUBLISHER_ADDRESS)
+        publisher["change"]["after"]["policy"] = _publisher_policy()
+        self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "unsupported_field_delta")
+        rejected = copy.deepcopy(plan)
+        alarm = next(item for item in rejected["resource_changes"] if item["address"] == ALARM_ADDRESS)
+        alarm["change"]["after"]["dimensions"]["unexpected"] = "value"
+        self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "unsupported_field_delta")
+
+        for address, field in ((PUBLISHER_ADDRESS, "policy"), (ALARM_ADDRESS, "alarm_name")):
+            rejected = copy.deepcopy(plan)
+            resource = next(item for item in rejected["resource_changes"] if item["address"] == address)
+            resource["change"]["after_unknown"] = {field: True}
+            self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "unknown_authorization_value")
+            resource["change"]["after_unknown"] = {}
+            resource["change"]["after_sensitive"] = {field: True}
+            self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "sensitive_authorization_value")
+
+        for field in ("actions_enabled", "alarm_actions", "metric_name", "threshold"):
+            rejected = copy.deepcopy(plan)
+            alarm = next(item for item in rejected["resource_changes"] if item["address"] == ALARM_ADDRESS)
+            alarm["change"]["after"][field] = None
+            alarm["change"]["after_unknown"] = {field: True}
+            self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "unknown_authorization_value")
+
+        for resource in manifest["permissions"]:
+            rejected_manifest = copy.deepcopy(manifest)
+            next(item for item in rejected_manifest["permissions"] if item["address"] == resource["address"])["resource"] = "*"
+            self.assertEqual(validate_plan(plan, rejected_manifest)["reason_code"], "invalid_permission")
+
+        def reject_policy_change(sid, field, value):
+            rejected = copy.deepcopy(plan)
+            publisher = next(item for item in rejected["resource_changes"] if item["address"] == PUBLISHER_ADDRESS)
+            policy = json.loads(publisher["change"]["after"]["policy"])
+            next(statement for statement in policy["Statement"] if statement["Sid"] == sid)[field] = value
+            publisher["change"]["after"]["policy"] = json.dumps(policy)
+            self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "unsupported_field_delta")
+
+        for sid, field, value in (
+            ("ListPublicReports", "Action", ["s3:GetObject"]),
+            ("ListPublicReports", "Resource", [f"{SITE_BUCKET}/*"]),
+            ("ListPublicReports", "Condition", {"StringEquals": {"s3:prefix": ["tolls/*"]}}),
+            ("WritePublicReports", "Action", ["s3:DeleteObject"]),
+            ("WritePublicReports", "Resource", [f"{SITE_BUCKET}/tolls/i95-i495/*", f"{SITE_BUCKET}/tolls/other/*"]),
+            ("DeleteStalePublicReports", "Action", ["s3:PutObject"]),
+            ("DeleteStalePublicReports", "Resource", [f"{SITE_BUCKET}/tolls/i95-i495/*", f"{SITE_BUCKET}/*"]),
+            ("ConnectRdsIam", "Resource", ["arn:aws:rds-db:us-east-1:903859731897:dbuser:db-OTHER/report_reader_development"]),
+            ("SendInvokeFailure", "Resource", ["arn:aws:sqs:us-east-1:903859731897:unrelated"]),
+            ("UseSiteKey", "Action", ["kms:Decrypt"]),
+            ("UseSiteKey", "Resource", ["arn:aws:kms:us-east-1:903859731897:key/00000000-0000-0000-0000-000000000000"]),
+            ("UseSiteKey", "Resource", ["arn:aws:kms:us-east-1:903859731897:key/not-a-uuid"]),
+        ):
+            reject_policy_change(sid, field, value)
+
+        for side in ("before", "after"):
+            rejected = copy.deepcopy(plan)
+            publisher = next(item for item in rejected["resource_changes"] if item["address"] == PUBLISHER_ADDRESS)
+            policy = json.loads(publisher["change"][side]["policy"])
+            next(statement for statement in policy["Statement"] if statement["Sid"] == "UseSiteKey")["Resource"] = []
+            publisher["change"][side]["policy"] = json.dumps(policy)
+            self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "unsupported_field_delta")
+
+        rejected = copy.deepcopy(plan)
+        for resource in rejected["resource_changes"]:
+            if resource["address"] == PUBLISHER_ADDRESS:
+                for side in ("before", "after"):
+                    policy = json.loads(resource["change"][side]["policy"])
+                    policy["Statement"].append({"Sid": "UnreviewedPrivilege", "Effect": "Allow", "Action": ["iam:*"], "Resource": ["*"]})
+                    resource["change"][side]["policy"] = json.dumps(policy)
+        self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "unsupported_field_delta")
+
+        for field, value in (
+            ("alarm_description", "other"),
+            ("dimensions", {"facility_scope": "other", "Environment": "development"}),
+            ("dimensions", {"facility_scope": "both"}),
+            ("dimensions", {"facility_scope": "both", "Environment": "development", "extra": "value"}),
+            ("metric_name", "other"),
+        ):
+            rejected = copy.deepcopy(plan)
+            alarm = next(item for item in rejected["resource_changes"] if item["address"] == ALARM_ADDRESS)
+            alarm["change"]["after"][field] = value
+            self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "unsupported_field_delta")
+
+        for address, field in (
+            (PUBLISHER_ADDRESS, "name"),
+            (PUBLISHER_ADDRESS, "role"),
+            (ALARM_ADDRESS, "alarm_name"),
+        ):
+            for side in ("before", "after"):
+                rejected = copy.deepcopy(plan)
+                resource = next(item for item in rejected["resource_changes"] if item["address"] == address)
+                resource["change"][side][field] = "independently-wrong"
+                self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "invalid_resource_identity")
+
+        for address, fields in ((PUBLISHER_ADDRESS, ("policy", "name", "role")), (ALARM_ADDRESS, ("alarm_name", "alarm_description", "dimensions"))):
+            for field in fields:
+                rejected = copy.deepcopy(plan)
+                resource = next(item for item in rejected["resource_changes"] if item["address"] == address)
+                resource["change"]["after"][field] = None
+                resource["change"]["after_unknown"] = {field: True}
+                self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "unknown_authorization_value")
+                resource["change"]["after_unknown"] = {}
+                for sensitive_side in ("before_sensitive", "after_sensitive"):
+                    resource["change"][sensitive_side] = {field: True}
+                    self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "sensitive_authorization_value")
+                    resource["change"][sensitive_side] = {}
+
+        for address in (PUBLISHER_ADDRESS, ALARM_ADDRESS):
+            rejected = copy.deepcopy(plan)
+            next(item for item in rejected["resource_changes"] if item["address"] == address)["change"]["replace_paths"] = [["policy"]]
+            self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "malformed_input")
+        for mutation in ("mutations", "permissions"):
+            rejected_manifest = copy.deepcopy(manifest)
+            rejected_manifest[mutation].append(copy.deepcopy(rejected_manifest[mutation][0]))
+            self.assertNotEqual(validate_plan(plan, rejected_manifest)["status"], "accepted")
+            for index in range(len(rejected_manifest[mutation]) - 1):
+                for key in tuple(rejected_manifest[mutation][index]):
+                    candidate = copy.deepcopy(manifest)
+                    candidate[mutation][index].pop(key)
+                    self.assertNotEqual(validate_plan(plan, candidate)["status"], "accepted")
+
+    def test_publisher_policy_rejections_are_sanitized_in_api_and_cli(self):
+        plan, manifest = publisher_and_alarm_plan(), publisher_and_alarm_manifest()
+        sentinel = "publisher-policy-sentinel-do-not-leak"
+        publisher = next(item for item in plan["resource_changes"] if item["address"] == PUBLISHER_ADDRESS)
+        publisher["change"]["after"]["policy"] = _publisher_policy(i66=True).replace("sitemap.xml", sentinel)
+        result = validate_plan(plan, manifest)
+        self.assertEqual(result["reason_code"], "unsupported_field_delta")
+        self.assertNotIn(sentinel, json.dumps(result))
+        self.assertFalse({"before", "after", "policy"} & set(result))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plan_path, manifest_path, identity_path = (root / name for name in ("plan.json", "manifest.json", "identity.json"))
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            identity_path.write_text(json.dumps(dict(EXPECTED_IDENTITY)), encoding="utf-8")
+            cli = subprocess.run(["python3", "infra/delivery_plan_validator.py", str(plan_path), str(manifest_path), "--identity", str(identity_path)], capture_output=True, text=True, check=False)
+            self.assertNotEqual(cli.returncode, 0)
+            self.assertNotIn(sentinel, cli.stdout + cli.stderr)
+            self.assertEqual(json.loads(cli.stdout)["reason_code"], "unsupported_field_delta")
 
     def test_manifest_package_order_follows_reviewed_timed_marker(self):
         legacy = lambda_manifest()
@@ -633,6 +993,8 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 fields = ("s3_object_version", "source_code_hash")
             elif spec.operation_class == "lambda-code":
                 fields = ("filename", "source_code_hash")
+            elif address == ALARM_ADDRESS:
+                fields = spec.fields
             else:
                 fields = (spec.fields[0],)
             before = None if action == "create" else {}
@@ -651,7 +1013,15 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 if before is not None:
                     before[field] = value
                 after[field] = value
-            plan = _plan([_resource_change(address, action, before, after)])
+            if address in {PUBLISHER_ADDRESS, ALARM_ADDRESS}:
+                plan = _plan([
+                    copy.deepcopy(next(
+                        record for record in publisher_and_alarm_plan()["resource_changes"]
+                        if record["address"] == address
+                    ))
+                ])
+            else:
+                plan = _plan([_resource_change(address, action, before, after)])
             manifest = {
                 **manifest_header(timed=timed),
                 "mutations": [{

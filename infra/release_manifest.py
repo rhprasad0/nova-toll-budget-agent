@@ -65,6 +65,12 @@ TIMED_INPUTS = frozenset(
         "v2/timed_checks.py",
     }
 )
+PRIVILEGED_WORKFLOW_TRANSITION_INPUT = (
+    ".github/workflows/v2-development-delivery-privileged.yml"
+)
+PRIVILEGED_WORKFLOW_TRANSITION_DIGEST = (
+    "16de8c9bf99986c1d2117441da6f43bd09fc652fbfaad0e9592b53c10f76f910"
+)
 EXACT_INPUTS = {
     ".github/workflows/v2-development-delivery.yml",
     ".github/workflows/v2-development-plan.yml",
@@ -235,7 +241,8 @@ def _selected(
     if path in TIMED_INPUTS:
         return timed_enabled
     selected = (
-        path in EXACT_INPUTS
+        path == PRIVILEGED_WORKFLOW_TRANSITION_INPUT
+        or path in EXACT_INPUTS
         or any(path.startswith(prefix) for prefix in INPUT_PREFIXES)
         or (path.startswith("infra/") and path.endswith(".tf"))
         or (path.startswith("v2/infra/") and path.endswith(".tf"))
@@ -340,8 +347,15 @@ def _verify_inputs(repo_root: Path, expected: dict[str, str]) -> None:
     if not timed_enabled and set(expected) & TIMED_INPUTS:
         _reject("inventory_invalid")
     actual_paths = _tracked_inputs(repo_root, timed_enabled)
-    if actual_paths != list(expected):
+    transition_omitted = actual_paths == sorted(
+        [*expected, PRIVILEGED_WORKFLOW_TRANSITION_INPUT]
+    )
+    if actual_paths != list(expected) and not transition_omitted:
         _reject("inventory_mismatch")
+    if transition_omitted and _digest_file(
+        repo_root / PRIVILEGED_WORKFLOW_TRANSITION_INPUT, "input_unreadable"
+    ) != PRIVILEGED_WORKFLOW_TRANSITION_DIGEST:
+        _reject("input_digest_mismatch")
     for relative, digest in expected.items():
         if _digest_file(repo_root / relative, "input_unreadable") != digest:
             _reject("input_digest_mismatch")
