@@ -3608,7 +3608,7 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
         assert training_agent not in robots
     assert "cloudfront wait distribution-deployed" in DEPLOYMENT
     assert "aws_lambda_function.publisher" in DEPLOYMENT
-    assert 'test "$(wc -l <"$REPORT_URLS")" -eq 246' in DEPLOYMENT
+    assert 'test "$(wc -l <"$REPORT_URLS")" -eq 262' in DEPLOYMENT
     assert (
         "Disabling publication does not withdraw existing report objects" in DEPLOYMENT
     )
@@ -3641,8 +3641,9 @@ def test_public_report_launch_is_selected_environment_and_correlated():
         "V2_REPORT_SMOKE_OK $REPORT_SMOKE_ID",
         "(published|unchanged)",
         'schema_version == "3.0.0"',
-        'facility == "i95_i495"',
-        "route_count == 246",
+        "facility == $facility",
+        "route_count == $routes",
+        "report_manifest_is_valid i66 16",
         'test("^[a-f0-9]{64}$")',
         "trap 'rm -f --",
     ):
@@ -3779,7 +3780,7 @@ def test_public_report_launch_is_selected_environment_and_correlated():
                     [
                         "bash",
                         "-c",
-                        f'set -euo pipefail; {manifest_check}; report_manifest_is_valid "$REPORT_MANIFEST"',
+                        f'set -euo pipefail; {manifest_check}; report_manifest_is_valid i95_i495 246 "$REPORT_MANIFEST"',
                     ],
                     check=False,
                     env={**os.environ, "REPORT_MANIFEST": fixture.name},
@@ -4437,13 +4438,15 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
     assert "s3:GetObject" not in policy
     assert 'actions   = ["s3:ListBucket"]' in policy
     assert 'variable = "s3:prefix"' in policy
-    assert 'values   = ["tolls/i95-i495/"]' in policy
+    assert 'values   = ["tolls/i95-i495/", "tolls/i66/"]' in policy
     assert re.search(r'actions\s+= \["s3:PutObject"\]', policy)
     assert "tolls/i95-i495/*" in policy
+    assert "tolls/i66/*" in policy
     assert "sitemap.xml" in policy
     assert 'actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]' in policy
     assert 'actions   = ["s3:DeleteObject"]' in policy
-    assert 'resources = ["${aws_s3_bucket.site.arn}/tolls/i95-i495/*"]' in policy
+    assert '"${aws_s3_bucket.site.arn}/tolls/i95-i495/*"' in policy
+    assert '"${aws_s3_bucket.site.arn}/tolls/i66/*"' in policy
     assert "s3:DeleteObjectVersion" not in policy
     assert 'resource "aws_vpc_security_group_egress_rule" "publisher_to_s3"' in MAIN_TF
     publisher_lambda = MAIN_TF.split(
@@ -4494,7 +4497,7 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
     assert "threshold           = 1" in freshness_alarm
     assert 'comparison_operator = "LessThanThreshold"' in freshness_alarm
     assert 'treat_missing_data  = "breaching"' in freshness_alarm
-    assert 'facility = "i95_i495"' in freshness_alarm
+    assert 'facility_scope = "both"' in freshness_alarm
     assert "Environment = var.environment" in freshness_alarm
     assert "alarm_actions       = local.alarm_actions" in freshness_alarm
     assert (V2_ROOT / "scripts" / "build_publisher_zip.sh").exists()
