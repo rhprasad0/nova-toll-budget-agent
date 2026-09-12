@@ -27,7 +27,7 @@ model and reasoning effort explicitly from the profile table below.
 
 Authority is explicit: Root writes and owns `.graph/contract.md`,
 `.graph/acceptance.md`, and `.graph/STATE.md`. The Root contract records the
-risk class, selected child profile, authoritative scope, and acceptance rules;
+risk class, fixed child profile, authoritative scope, and acceptance rules;
 the acceptance artifact records Root's rationale and disposition. The intent,
 Root contract, and `.graph/explore.md` define approved scope, and the numbered
 requirements in `.graph/checklist.md` define acceptance. `.graph/research.md`
@@ -36,33 +36,21 @@ research conflict with an authoritative artifact blocks pre-checking and must
 return to the explorer.
 
 Root model and reasoning effort remain user/host-selected and are never pinned
-in repository config or this graph. Root chooses exactly one deterministic
-child profile for every spawn and passes `model`, `reasoning_effort`, and
-`fork_turns: "none"` explicitly. The standard profile is:
+in repository config or this graph. Root uses this fixed child profile and
+passes `model`, `reasoning_effort`, and `fork_turns: "none"` explicitly for
+every spawn:
 
 | role | model | effort |
 | --- | --- | --- |
-| Explorer | `gpt-5.6-luna` | `high` |
-| Researcher | `gpt-5.6-luna` | `high` |
-| Pre-checker | `gpt-5.6-terra` | `high` |
-| Builder | `gpt-5.6-luna` | `xhigh` |
-| Checker | `gpt-5.6-luna` | `high` |
-| Security | `gpt-5.6-luna` | `high` |
-
-The `production-high` profile is:
-
-| role | model | effort |
-| --- | --- | --- |
-| Explorer | `gpt-5.6-luna` | `max` |
-| Researcher | `gpt-5.6-luna` | `max` |
-| Pre-checker | `gpt-5.6-terra` | `high` |
+| Explorer | `gpt-5.6-terra` | `high` |
+| Researcher | `gpt-5.6-terra` | `high` |
+| Pre-checker | `gpt-5.6-sol` | `high` |
 | Builder | `gpt-5.6-terra` | `high` |
-| Checker | `gpt-5.6-terra` | `high` |
+| Checker | `gpt-5.6-sol` | `high` |
 | Security | `gpt-5.6-sol` | `high` |
 
-The current host contract accepts `max` for Luna in this workflow. If the
-active spawn surface hides or rejects an explicit override, Root records a
-host-capability block; it never silently substitutes a role-file or Root
+If the active spawn surface hides or rejects an explicit override, Root records
+a host-capability block; it never silently substitutes a role-file or Root
 default.
 
 ## Optional advisor escalation
@@ -93,17 +81,18 @@ boundary; worktrees and the hook do not seal reads.
 
 ```text
 intent → explorer → researcher → pre-checker → builder → review 1
-review 1 PASS → Root accept → human review
-review 1 FAIL → original Builder → review 2
-review 2/critical recheck → Root repair | Root accept | Root block
+review 1 PASS → review 2
+review 1 FAIL → Root repair | Root block
+review 2 PASS → Root accept → human review
+review 2 FAIL → Root repair | Root block
 Root repair → original Builder → same review stage
 ```
 
 1. Create or reuse an isolated project-root `.worktrees/` path. Keep `.graph/`
    inside that worktree gitignored and free of secrets. Root first writes or
    refreshes `.graph/contract.md`, `.graph/acceptance.md`, and the five-line
-   `.graph/STATE.md`, selecting either `standard` or `production-high`.
-2. Update `.graph/STATE.md`, then spawn `explorer` with the selected profile's
+   `.graph/STATE.md`, recording the fixed child profile.
+2. Update `.graph/STATE.md`, then spawn `explorer` with the fixed profile's
    explicit `model`, `reasoning_effort`, and `fork_turns: "none"`, the intent,
    `.graph/contract.md`, and absolute worktree path. The synchronous `SubagentStart`
    hook supplies the child's native UUID; wait for the child to report it,
@@ -113,7 +102,7 @@ Root repair → original Builder → same review stage
    from available evidence. Ask the user only when missing intent, information,
    or authority prevents progress.
 4. Update `STATE.md`, then spawn the mandatory sequential `researcher` with the
-   selected profile's explicit `model`, `reasoning_effort`, and
+   fixed profile's explicit `model`, `reasoning_effort`, and
    `fork_turns: "none"`, the intent, `.graph/contract.md`, `explore.md`, and worktree.
    Repeat the UUID report, CLI registration, and acknowledgement before tools.
    Researcher must complete `research.md` before pre-checking or building;
@@ -125,7 +114,7 @@ Root repair → original Builder → same review stage
    resume the same registered researcher after confirmation. Do not silently
    fall back or claim completion. Treat non-auth outages as explicit research
    gaps under the existing blocker rules.
-5. Update `STATE.md`, then spawn `pre_checker` with the selected profile's
+5. Update `STATE.md`, then spawn `pre_checker` with the fixed profile's
    explicit `model`, `reasoning_effort`, and `fork_turns: "none"`,
    `.graph/contract.md`, `explore.md`, `research.md`, and the worktree. Repeat the UUID report, CLI
    registration, and acknowledgement before tools. Builder
@@ -136,7 +125,7 @@ Root repair → original Builder → same review stage
    pre-checker. If that fresh pre-checker reports any blocking gap, update
    `STATE.md` `Blocked by` with the remaining gap and stop for user direction;
    never spawn a third pre-checker.
-6. Update `STATE.md`, then spawn one `builder` with the selected profile's
+6. Update `STATE.md`, then spawn one `builder` with the fixed profile's
    explicit `model`, `reasoning_effort`, and `fork_turns: "none"`, the worktree,
    `.graph/contract.md`, `explore.md`, `research.md`, and `checklist.md`. Register and
    acknowledge its hook UUID before tools; retain the original assignment for
@@ -144,7 +133,7 @@ Root repair → original Builder → same review stage
    and may write only `.graph/change.md` among graph artifacts; it cannot write
    Root authority or another child's evidence artifact.
 7. For review 1, update `STATE.md`, then spawn a fresh `checker` and a fresh
-   `security_reviewer`, each with its selected profile's explicit `model`,
+   `security_reviewer`, each with the fixed profile's explicit `model`,
    `reasoning_effort`, and `fork_turns: "none"`, and identify the review stage
    in each task before waiting for either result. They review the same builder
    output concurrently. Pass `.graph/contract.md` to both reviewers, register and acknowledge both native UUIDs before tools
@@ -153,7 +142,7 @@ Root repair → original Builder → same review stage
    `.graph/security-verdict.md`. Both are source-read-only, Security is guarded
    by native-ID/worktree registration, and its verdict is evidence—not deploy
    authority. The Root parent is outside the guard and never implements source.
-8. Review 1 keeps the full existing gate: PASS requires checker PASS, no
+8. Review 1 uses the full gate: PASS requires checker PASS, no
    actionable Security findings, and complete/readable required review
    artifacts. If either lane fails, update `STATE.md`. A
    checker-found conflict between research and the authoritative intent,
@@ -163,42 +152,32 @@ Root repair → original Builder → same review stage
    non-blocking checklist, return any other failing-lane evidence to the original
    builder; otherwise return every failing-lane finding directly to that builder.
    Never include evidence from a passing lane. Do not restart exploration or
-   pre-checking for implementation or security findings. A review-1 PASS must
-   receive an explicit Root `accept` disposition with rationale in
-   `.graph/acceptance.md` before human review. For a review-1 failure, return
-   the failing evidence to the original Builder, then advance the repaired run
-   to review 2 with fresh Checker and Security lanes as in step 7; do not loop
-   the repaired run through review 1.
-9. Review 2 is a Root disposition gate. A completed review advances only when
-   Root explicitly chooses `repair`, `accept`, or `block` and records the choice
-   plus rationale in `.graph/acceptance.md`. `repair` returns to the original
-   Builder; `block` stops for user or authority input. Root may choose `accept`
-   only for noncritical findings after every required artifact and evidence item
-   is complete. Critical findings, missing required artifacts, incomplete
-   required evidence, and any failed instrumentation status force `repair` or
-   `block`; they cannot be accepted or represented as PASS. Security's durable
-   verdict must be present and readable before acceptance. A review-2 repair
-   returns to the original Builder and reruns fresh Checker and Security lanes
-   at review 2.
-10. Review 2 and every critical recheck fail for a critical issue—an exploitable
-    security vulnerability, potential data or secret loss or exposure, or
-    inability to perform the requested core function—or for either graph-
-    integrity exception: missing failure-boundary instrumentation evidence as
-    specified below, or a conflict between research and an authoritative
-    artifact. Return those findings to the original Builder or planning-repair
-    edge as applicable. After implementation repair from review 2 or a critical
-    recheck, run a fresh Checker and Security reviewer over the complete
-    repaired diff at that same stage. Repeat until PASS or until repair needs
-    user input or authority.
-11. On Root acceptance/PASS, update `STATE.md` and summarize files, checks,
-    remaining risk, and non-blocking notes for human review. Human review and
-    every existing production, credential, migration, and deployment gate still
-    apply; graph acceptance never authorizes production mutation.
+   pre-checking for implementation or security findings. On review-1 PASS, Root
+   records the completed round in `.graph/acceptance.md`, then advances to
+   review 2 with fresh Checker and Security lanes as in step 7. A review-1
+   failure returns its failing evidence to the original Builder and reruns
+   fresh review-1 lanes after repair.
+9. Review 2 uses the same full gate as review 1: every actionable Checker or
+   Security finding fails the round, as do missing or unreadable required
+   artifacts, incomplete required evidence, failed instrumentation status, or a
+   planning conflict. Non-actionable observations may be recorded for human
+   review but cannot hide a failing finding.
+10. After either review fails, Root records `repair` or `block` plus rationale
+    in `.graph/acceptance.md`. `repair` returns the failing-lane evidence to the
+    original Builder, then runs fresh Checker and Security lanes over the
+    complete repaired diff at the same review stage. `block` stops for user or
+    authority input. Root records `accept` only after both review rounds PASS
+    and Security's durable verdict is present and readable.
+11. On Root acceptance after both review rounds PASS, update `STATE.md` and
+    summarize files, checks, remaining risk, and non-blocking notes for human
+    review. Human review and every existing production, credential, migration,
+    and deployment gate still apply; graph acceptance never authorizes
+    production mutation.
 
 Before every spawn or handoff, and on every blocker, FAIL, PASS, or Root
 disposition, rewrite `STATE.md` to match the current node and next legal edge.
 Keep its exactly five lines—Intent, Worktree, Current node, Next legal edge
-(including the review round or critical recheck), Blocked by. Never run parallel
+(including the review round), Blocked by. Never run parallel
 writers or allow subagents to spawn subagents; Root alone writes `contract.md`,
 `acceptance.md`, and `STATE.md`; each child writes only its owned artifact;
 checker and Security are the only concurrent review lanes. The parent may
@@ -207,9 +186,7 @@ inspect evidence while a subagent runs.
 At every checker stage, derive changed executable paths from the final diff and
 require observable, record-once-and-propagated failure evidence at each relevant
 entrypoint, I/O, tool, or phase boundary. Missing instrumentation evidence or a
-failure-boundary violation is blocking in review 1, review 2, and every critical
-recheck; this is the explicit exception to the review-2 critical-only threshold,
-which remains unchanged for unrelated findings.
+failure-boundary violation is blocking in both review rounds.
 
 The hook's leading literal assigned-worktree `cd` check is best-effort Bash
 enforcement, not a complete shell sandbox: redirects and compound commands are
@@ -252,7 +229,7 @@ check whether a long-running command is making useful progress.
    the review round, weaken acceptance criteria, or
    bypass security, data-safety, or authorization boundaries to make progress.
 
-The pre-checker and review-1 checker must require a ponytail review before
+The pre-checker and both review checkers must require a ponytail review before
 completion: the pre-checker reviews the explored design and draft checklist;
 the checker reviews the implementation diff. Look for unnecessary abstractions,
 dependencies, configurability, operational machinery, and code replaced by the
@@ -271,11 +248,11 @@ security, data safety, credential handling, or migration authorization.
 
 All paths are relative to the assigned worktree:
 
-- `.graph/contract.md`: Root-owned risk class, selected child profile,
+- `.graph/contract.md`: Root-owned risk class, fixed child profile,
   authoritative scope, and acceptance rules. Children may read but never write.
-- `.graph/acceptance.md`: Root-owned disposition record with rationale and
-  repair, accept, or block status. Acceptance cannot override critical findings
-  or incomplete required evidence.
+- `.graph/acceptance.md`: Root-owned review-round and disposition record with
+  rationale and repair, accept, or block status. Acceptance cannot override a
+  failed review or incomplete required evidence.
 - `.graph/STATE.md`: exactly five lines—Intent, Worktree, Current node, Next
   legal edge, Blocked by.
 - `.graph/explore.md`: question, owners/entrypoints, current behavior, files in
@@ -305,5 +282,5 @@ but never determines the current node.
 
 Continue until:
 
-- review 1 passes, or review 2 and any focused rechecks have no critical issues
+- both review rounds pass
 - a blocking gap requires user input or authority
