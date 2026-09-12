@@ -168,7 +168,14 @@ def test_critical_dca_window_matrix_and_prompt_counts() -> None:
 
 @pytest.mark.parametrize(
     "invented_toll",
-    ["$999.00", "USD 999.00", "999 dollars", "\uff04999.00", "$about 999.00"],
+    [
+        "$999.00",
+        "USD 999.00",
+        "999.00 USD",
+        "999 dollars",
+        "\uff04999.00",
+        "$about 999.00",
+    ],
 )
 def test_dulles_incomplete_price_rejects_invented_money(invented_toll: str) -> None:
     metadata = next(

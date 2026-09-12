@@ -13128,6 +13128,15 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
         "group": "v2-development-apply",
         "queue": "max",
     }
+    migration_step = next(
+        step
+        for step in cast(list[dict[str, object]], job["steps"])
+        if step.get("name") == "Run fixed-target migrations and emit sanitized evidence"
+    )
+    assert migration_step["env"] == {
+        "EXPECTED_PRICING_VERSION": "1.3.0",
+        "EXPECTED_ORACLE_VERSION": "1.14.1",
+    }
     defaults = cast(dict[str, object], job["defaults"])
     run_defaults = cast(dict[str, object], defaults["run"])
     assert run_defaults["working-directory"] == "v2"

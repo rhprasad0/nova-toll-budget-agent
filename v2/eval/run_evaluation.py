@@ -63,7 +63,7 @@ _CURRENCY_PATTERN = re.compile(
 _UNPRICED_CURRENCY_PATTERN = re.compile(
     r"(?:[$\uFF04]\s*(?:about\s+)?[\d,]+(?:\.\d+)?"
     r"|\bUSD\b\s*(?:about\s+)?[\d,]+(?:\.\d+)?"
-    r"|\b[\d,]+(?:\.\d+)?\s+dollars?\b)",
+    r"|\b[\d,]+(?:\.\d+)?\s+(?:dollars?|USD)\b)",
     re.IGNORECASE,
 )
 _MOVEMENT_EMOJIS = {
@@ -2457,6 +2457,7 @@ def _self_check() -> None:
     for invented_toll in (
         "$999.00",
         "USD 999.00",
+        "999.00 USD",
         "999 dollars",
         "\uff04999.00",
         "$about 999.00",
