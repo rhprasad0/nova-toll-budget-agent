@@ -241,6 +241,15 @@ design satisfies the intent; name its location, what to remove, and the
 replacement. Complexity required by the user, an existing contract, security,
 or data safety is exempt. Each checker records its findings or `Lean already`.
 
+Every exploration records, with cited evidence, whether the change affects
+deployment to development and production. For each applicable environment it
+maps the affected delivery contracts, environment differences, prerequisites,
+sequencing or compatibility concerns, permissions and configuration,
+validation, and recovery constraints. The pre-checker converts those findings
+into numbered, safely verifiable acceptance requirements and blocks on missing,
+unsupported, or conflicting applicability. Evidence-backed `Not applicable` is
+valid; the graph never requires a live deployment or credentials for proof.
+
 Temporary downtime is acceptable because this reference project has no users.
 Pre-checking and both review rounds must not block or require high availability,
 zero-downtime deployment, staged rollout, or rollback machinery solely to avoid
@@ -259,12 +268,13 @@ All paths are relative to the assigned worktree:
 - `.graph/STATE.md`: exactly five lines—Intent, Worktree, Current node, Next
   legal edge, Blocked by.
 - `.graph/explore.md`: question, owners/entrypoints, current behavior, files in
-  scope, assumptions, falsifiers, out of scope, gaps.
+  scope, development and production deployment impact, assumptions, falsifiers,
+  out of scope, gaps.
 - `.graph/research.md`: question, evidence and sources, relevant contracts,
   failure-boundary findings, recommendation, gaps.
 - `.graph/checklist.md`: preconditions, numbered acceptance requirements,
-  required commands and pass conditions, risk-focused checks, ponytail findings,
-  blocking gaps.
+  required commands and pass conditions, risk-focused and deployment checks,
+  ponytail findings, blocking gaps.
 - `.graph/change.md`: intent, files touched, assumptions accepted, commands
   run, instrumentation evidence/status for every changed executable path and
   relevant boundary, how to verify, what was not done.

@@ -24,6 +24,7 @@ Write `.graph/explore.md` (create `.graph/` if needed) with exactly this shape:
 ## Files in scope
 ## Smallest change that could work
 ## Affected contracts
+## Development and production deployment impact
 ## Assumptions the builder may rely on
 ## Falsifiers (how checker can prove this wrong)
 ## Checks the builder must run
@@ -33,6 +34,7 @@ Write `.graph/explore.md` (create `.graph/` if needed) with exactly this shape:
 Rules:
 - Cite paths. If you did not read it, do not claim it.
 - Distinguish confirmed facts from validation gaps.
+- For both development and production, record `Applicable` or `Not applicable` with cited evidence. When applicable, map affected delivery entrypoints and contracts, environment differences, prerequisites, compatibility or sequencing concerns, permissions and configuration, validation, and recovery constraints. Put unresolved deployment decisions in Open gaps.
 - Write only `.graph/explore.md`.
 - Do not edit application code.
 - Do not write `.graph/checklist.md`, `.graph/change.md`, or `.graph/verdict.md`.
