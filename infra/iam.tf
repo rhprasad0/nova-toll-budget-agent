@@ -290,6 +290,18 @@ data "aws_iam_policy_document" "development_delivery_assume" {
       variable = "token.actions.githubusercontent.com:sub"
       values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"]
     }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:ref"
+      values   = ["refs/heads/main"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:job_workflow_ref"
+      values   = ["rhprasad0/nova-toll-budget-agent/.github/workflows/v2-development-delivery-privileged.yml@refs/heads/main"]
+    }
   }
 }
 
@@ -936,6 +948,18 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
+    sid       = "UpdateReportPublisherInlinePolicy"
+    actions   = ["iam:PutRolePolicy"]
+    resources = ["arn:aws:iam::${local.development_delivery_account_id}:role/toll-v2-report-publisher-dev"]
+  }
+
+  statement {
+    sid       = "UpdateReportGenerationFreshnessAlarm"
+    actions   = ["cloudwatch:PutMetricAlarm"]
+    resources = ["arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:toll-v2-report-generation-freshness-dev"]
+  }
+
+  statement {
     sid       = "ReadAlertsKeyForTimedChecks"
     actions   = ["kms:DescribeKey"]
     resources = [aws_kms_key.alerts.arn]
@@ -981,7 +1005,7 @@ locals {
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 48, 57)
+      Statement = slice(local.development_delivery_policy_statements, 48, 59)
     })
   }
 }

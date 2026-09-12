@@ -73,6 +73,7 @@ PRIVILEGED_WORKFLOW_TRANSITION_DIGEST = (
 )
 EXACT_INPUTS = {
     ".github/workflows/v2-development-delivery.yml",
+    ".github/workflows/v2-development-delivery-privileged.yml",
     ".github/workflows/v2-development-plan.yml",
     "infra/account-contract.json",
     "infra/.terraform.lock.hcl",

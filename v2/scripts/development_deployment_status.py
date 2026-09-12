@@ -229,7 +229,7 @@ def _record(needs: dict[str, Any]) -> int:
 def _prerequisites(
     sha: str, run: int, attempt: int, needs: dict[str, Any]
 ) -> dict[str, Any]:
-    jobs = ("admission", "release-record", "build", "oidc-proof", "deploy")
+    jobs = ("admission", "release-record", "build", "deploy")
     entries = {name: _job(needs, name) for name in jobs}
     if any(entry.get("result") != "success" for entry in entries.values()):
         raise DeploymentStatusError("upstream_failed")

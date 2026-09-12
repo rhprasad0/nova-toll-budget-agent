@@ -8,7 +8,8 @@
     "lock_identity": "V2-AWS60"
   },
   "deployment_inputs": {
-    ".github/workflows/v2-development-delivery.yml": "10bac6fb0bcafb5b3b142a2381da6ba0bca8f36d47595017edb6f8a7a5c25277",
+    ".github/workflows/v2-development-delivery-privileged.yml": "ef54118a1ee6cf9c61768cfbb929d597fa23b81144c44da86a024d0983933ba7",
+    ".github/workflows/v2-development-delivery.yml": "e817305c2a2b02be080df82249b0bb0f4f53f0644c2b5fc72a583a2838ab0b23",
     ".github/workflows/v2-development-migrations.yml": "06f7d3d432f77dac9fb6c680752918e6def5af0cff4b52349a8cddb098dd217a",
     ".github/workflows/v2-development-plan.yml": "5b6a20804dde0bcd1b906262e2b43aac0389dc580c6aea7a73d54d84d0d009b8",
     ".github/workflows/v2-production-migrations.yml": "0278cdd24f5786df661c323e100be60b8e5b1270b34c620a0f97968be388abee",
@@ -19,8 +20,8 @@
     "infra/backend.development.hcl": "a3ae667db1382bdffc851cffcc29f3d127df34d3ce31179e75758b2eda5526cf",
     "infra/budget.tf": "01980ebb992a5256e5cdb3ae4b3da19a197e5011b83551d94b638d0dfc1d3ec7",
     "infra/data.tf": "e8e443e33a9d908f405eec54fa6bee2075fa8c228e293d734d1b0a5fc0428bc1",
-    "infra/delivery_plan_validator.py": "129dddb98df94fc5a7bc675dbd2394f7faa030ebe070c04094a928e47d485346",
-    "infra/iam.tf": "c681d78c5a41b74952e13011c89e9fc07761b59096d619836f7e3d14643dd79b",
+    "infra/delivery_plan_validator.py": "bdcbbd81774f092329b292c489d5ae1d702eaa8fe1c77c9730cb6497a5b33dc5",
+    "infra/iam.tf": "33181d2ab5dd4354867e62876bc1136e33e4b6252b9da3dad1df8b7f0ddf21d2",
     "infra/kms.tf": "be9512e49926805d56b6c521793c08880929948b820f943f0a2c5a0f9e589168",
     "infra/lambda-stub/handler.py": "d86cf7746868e087960da8c551496bcf21aa71d79baf4d910e60fb3f43a05868",
     "infra/lambda.tf": "c95fafdc5f815820273eb9f314787532e8b6e5c1f601f50c2481f51b5c48ce0c",
@@ -29,7 +30,7 @@
     "infra/outputs.tf": "22cefa1936b1c41a9b41146bf7210c7d42b9f4666c775bfa77b5940e1a8efb74",
     "infra/providers.tf": "698c60284f5f3621a8fdd47ae29684254d54bb1b57db4fbe5aa42f453a8b57e5",
     "infra/rds.tf": "52085157d4398808227e100f56481ceae1669a8394f98b326fa219c1413a4d40",
-    "infra/release_manifest.py": "5acc97417dc3d339a1b744408b8d7b8854097ccdbff9429ffba8852b3ccd5b7d",
+    "infra/release_manifest.py": "066e5487c177e178d60d3ac436e344ff53940e375d461ca752e267aa1a3c9d85",
     "infra/s3.tf": "e74b230347830bd268099bdacad255656f4c60d68d53159e1240a8b56dbc2d6d",
     "infra/ssm.tf": "84d24c7793f7ac21208a7a67b4796cd4a107dd22ff4d01d6ae05c3390e88c68e",
     "infra/tailscale.tf": "2b306a832a00b1d63b48a16c1ec63c13f3f18ab9f7ccec770230d6e1c43e6a4c",
@@ -143,7 +144,7 @@
     "v2/scripts/check_development_release.py": "e521609f1cee61fe2d5cfc5747ea57583dbfcd4a33233f491021f2d707397d6c",
     "v2/scripts/check_production_release.py": "fcf2c5ecedc50e1fe15d8205528b3f0509089377d52b99f8bd97ba52fa7a4888",
     "v2/scripts/classify_deployment_error.py": "8c736cbd2a8957f347408b92553efd0971bb50d42e6c8f658f5ff7602079b405",
-    "v2/scripts/development_deployment_status.py": "f70e3b96f609a54df956e5bdfad6d78722e0701adb4d6e682f514530dc13e1b8",
+    "v2/scripts/development_deployment_status.py": "dd694f4417a61ba4e51dad9f414b2e096aeb7bd5660cd9a53016c6b445b8ce8f",
     "v2/scripts/loader-requirements.in": "38c314f1e9470587a6b566f2c8ed28cdf2ed3df2d87d349c3cbfc9f5a707230e",
     "v2/scripts/loader-requirements.txt": "7e35ab33589fae931d8bac07a7e32f868c02c4f37b629eb4208075a98fd918b4",
     "v2/scripts/publisher-requirements.in": "443323b60ce646abe57f80efe6a842af9467d089d73459b84830450825fabdcc",
@@ -250,6 +251,23 @@
       "changed_fields": [
         "agent_runtime_version"
       ]
+    },
+    {
+      "address": "aws_iam_role_policy.publisher",
+      "action": "update",
+      "operation_class": "publisher-inline-policy",
+      "changed_fields": [
+        "policy"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.report_generation_freshness",
+      "action": "update",
+      "operation_class": "report-freshness-alarm",
+      "changed_fields": [
+        "alarm_description",
+        "dimensions"
+      ]
     }
   ],
   "permissions": [
@@ -319,6 +337,18 @@
       "address": "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
       "action": "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
       "resource": "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview",
+      "conditions": {}
+    },
+    {
+      "address": "aws_iam_role_policy.publisher",
+      "action": "iam:PutRolePolicy",
+      "resource": "arn:aws:iam::903859731897:role/toll-v2-report-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.report_generation_freshness",
+      "action": "cloudwatch:PutMetricAlarm",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:toll-v2-report-generation-freshness-dev",
       "conditions": {}
     }
   ]

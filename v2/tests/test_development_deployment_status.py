@@ -35,7 +35,7 @@ def context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Any, ...]:
         monkeypatch.setenv(key, value)
     needs: dict[str, Any] = {
         job: {"result": "success", "outputs": {}}
-        for job in ("admission", "release-record", "build", "oidc-proof", "deploy")
+        for job in ("admission", "release-record", "build", "deploy")
     }
     needs["release-record"]["outputs"] = {"deployment_id": "7"}
     needs["deploy"]["outputs"] = {

@@ -420,7 +420,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                     target = next(item for item in rejected["resource_changes"] if item["address"] == resource["address"])
                     (target if container_name == "resource" else target["change"]).pop(key)
                     self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "malformed_input")
-
         for address, field, value, reason in (
             (PUBLISHER_ADDRESS, "name", "other", "invalid_resource_identity"),
             (PUBLISHER_ADDRESS, "role", "other", "invalid_resource_identity"),
@@ -450,7 +449,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             for identity_side in (("before_identity", "after_identity") if side == "both" else (side,)):
                 change[identity_side][field] = "equal-but-wrong"
             self.assertNotEqual(validate_plan(rejected, manifest)["status"], "accepted", label)
-
         for address, action in ((PUBLISHER_ADDRESS, "create"), (ALARM_ADDRESS, "delete")):
             rejected = copy.deepcopy(plan)
             next(item for item in rejected["resource_changes"] if item["address"] == address)["change"]["actions"] = [action]
@@ -484,7 +482,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             alarm["change"]["after"][field] = None
             alarm["change"]["after_unknown"] = {field: True}
             self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "unknown_authorization_value")
-
         for resource in manifest["permissions"]:
             rejected_manifest = copy.deepcopy(manifest)
             next(item for item in rejected_manifest["permissions"] if item["address"] == resource["address"])["resource"] = "*"
@@ -553,7 +550,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 resource = next(item for item in rejected["resource_changes"] if item["address"] == address)
                 resource["change"][side][field] = "independently-wrong"
                 self.assertEqual(validate_plan(rejected, manifest)["reason_code"], "invalid_resource_identity")
-
         for address, fields in ((PUBLISHER_ADDRESS, ("policy", "name", "role")), (ALARM_ADDRESS, ("alarm_name", "alarm_description", "dimensions"))):
             for field in fields:
                 rejected = copy.deepcopy(plan)
@@ -1085,6 +1081,11 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "agentcore-endpoint",
                 ("agent_runtime_version",),
             ),
+            "aws_iam_role_policy.publisher": ("publisher-inline-policy", ("policy",)),
+            "aws_cloudwatch_metric_alarm.report_generation_freshness": (
+                "report-freshness-alarm",
+                ("alarm_description", "dimensions"),
+            ),
         }
         actual_mutations = {
             record["address"]: (record["operation_class"], tuple(record["changed_fields"]))
@@ -1159,6 +1160,18 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview",
                 (),
             ),
+            (
+                "aws_iam_role_policy.publisher",
+                "iam:PutRolePolicy",
+                "arn:aws:iam::903859731897:role/toll-v2-report-publisher-dev",
+                (),
+            ),
+            (
+                "aws_cloudwatch_metric_alarm.report_generation_freshness",
+                "cloudwatch:PutMetricAlarm",
+                "arn:aws:cloudwatch:us-east-1:903859731897:alarm:toll-v2-report-generation-freshness-dev",
+                (),
+            ),
         }
         actual_permissions = {
             (
@@ -1173,6 +1186,11 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         self.assertEqual(actual_permissions, expected_permissions)
 
         def update(address):
+            if address in {PUBLISHER_ADDRESS, ALARM_ADDRESS}:
+                return copy.deepcopy(next(
+                    record for record in publisher_and_alarm_plan()["resource_changes"]
+                    if record["address"] == address
+                ))
             fields = expected_mutations[address][1]
             spec = CONTRACT[address]
             before, after = {}, {}

@@ -768,8 +768,24 @@ def main() -> None:
     )
     require('variable = "iam:PassedToService"', development_delivery)
     require('values   = ["scheduler.amazonaws.com"]', development_delivery)
+    require('sid       = "UpdateReportPublisherInlinePolicy"', development_delivery)
+    require('actions   = ["iam:PutRolePolicy"]', development_delivery)
+    require(
+        'arn:aws:iam::${local.development_delivery_account_id}:role/toll-v2-report-publisher-dev',
+        development_delivery,
+    )
+    require('sid       = "UpdateReportGenerationFreshnessAlarm"', development_delivery)
+    require('actions   = ["cloudwatch:PutMetricAlarm"]', development_delivery)
+    require(
+        'arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:toll-v2-report-generation-freshness-dev',
+        development_delivery,
+    )
     require(
         "Statement = slice(local.development_delivery_policy_statements, 38, 48)",
+        development_shards,
+    )
+    require(
+        "Statement = slice(local.development_delivery_policy_statements, 45, 56)",
         development_shards,
     )
 
