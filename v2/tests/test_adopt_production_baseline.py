@@ -1567,7 +1567,7 @@ ORDER BY type.typname, privilege.grantee;
         == no_op["after"]
         == {
             "pricing": "1.3.0",
-            "oracle": "1.14.0",
+            "oracle": "1.14.1",
         }
     )
     assert no_op["applied"] == []
@@ -1587,7 +1587,7 @@ ORDER BY type.typname, privilege.grantee;
         )
         session = runner._session_sql(  # pyright: ignore[reportPrivateUsage]
             (migration,),
-            {"pricing": "1.3.1", "oracle": "1.14.0"},
+            {"pricing": "1.3.1", "oracle": "1.14.1"},
             {migration.path: rendered},
             "a" * 40,
             "12345678-1234-4234-8234-123456789abc",
