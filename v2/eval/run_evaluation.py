@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 from calendar import monthcalendar
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -59,6 +59,12 @@ _EASTERN_TIME = re.compile(r"\b(?:1[0-2]|[1-9]):[0-5]\d [AP]M E(?:S|D)T\b")
 _CURRENCY_PATTERN = re.compile(
     r"(?P<sign_before>[+\-\u2212]?)\s*\$\s*"
     r"(?P<sign_after>[+\-\u2212]?)\s*(?P<amount>[\d,]+(?:\.\d+)?)"
+)
+_UNPRICED_CURRENCY_PATTERN = re.compile(
+    r"(?:[$\uFF04]\s*(?:about\s+)?[\d,]+(?:\.\d+)?"
+    r"|\bUSD\b\s*(?:about\s+)?[\d,]+(?:\.\d+)?"
+    r"|\b[\d,]+(?:\.\d+)?\s+(?:dollars?|USD)\b)",
+    re.IGNORECASE,
 )
 _MOVEMENT_EMOJIS = {
     "rising": "📈",
@@ -489,6 +495,12 @@ def evaluate_westpark_turn(
         return _result(False, "tool result endpoints did not match", "result_mismatch")
 
     if "total_usd" not in payload:
+        if _UNPRICED_CURRENCY_PATTERN.search(response):
+            return _result(
+                False,
+                "response invented a toll for an unpriced route",
+                "invented_financials",
+            )
         if payload.get("status") in metadata.get("allowed_route_statuses", []):
             folded = response.casefold()
             terms = (
@@ -501,12 +513,6 @@ def evaluate_westpark_turn(
                     False,
                     "response did not explain route availability",
                     "ungrounded_unavailability",
-                )
-            if re.search(r"\$\s*\d", response):
-                return _result(
-                    False,
-                    "response invented a toll for an unpriced route",
-                    "invented_financials",
                 )
             if style_error := _response_style_error(response, "response"):
                 return style_error
@@ -589,6 +595,149 @@ def evaluate_westpark_turn(
     if context_error := _component_context_error(payload, response):
         return context_error
     return _result(True, "exact route call and grounded response passed", "passed")
+
+
+def _dca_pentagon_price_projection(
+    payload: dict[str, Any],
+) -> tuple[Decimal, tuple[tuple[object, ...], ...]] | None:
+    fields = (
+        "route_step_id",
+        "facility",
+        "source_kind",
+        "pricing_method",
+        "price_usd",
+        "od_pair_id",
+        "proxy_od_pair_id",
+    )
+    components = payload.get("components")
+    if (
+        not isinstance(components, list)
+        or len(components) != 2
+        or not all(isinstance(component, dict) for component in components)
+    ):
+        return None
+    try:
+        total = Decimal(str(payload["total_usd"]))
+    except (InvalidOperation, ValueError):
+        return None
+    if not total.is_finite() or total < 0:
+        return None
+
+    projection: list[tuple[object, ...]] = []
+    component_total = Decimal()
+    for component in components:
+        if any(
+            field not in component for field in fields if field != "proxy_od_pair_id"
+        ):
+            return None
+        if (
+            not all(
+                isinstance(component[field], str) and component[field]
+                for field in (
+                    "route_step_id",
+                    "facility",
+                    "source_kind",
+                    "pricing_method",
+                )
+            )
+            or type(component["od_pair_id"]) is not int
+            or component["od_pair_id"] <= 0
+        ):
+            return None
+        proxy_od_pair_id = component.get("proxy_od_pair_id")
+        if proxy_od_pair_id is not None and (
+            type(proxy_od_pair_id) is not int or proxy_od_pair_id <= 0
+        ):
+            return None
+        try:
+            price = Decimal(str(component["price_usd"]))
+        except (InvalidOperation, ValueError):
+            return None
+        if not price.is_finite():
+            return None
+        if (
+            price < 0
+            or component["facility"] != "i95_i495"
+            or (
+                component["source_kind"] == "observed"
+                and (
+                    component["pricing_method"] != "source_observation"
+                    or proxy_od_pair_id is not None
+                )
+            )
+            or (
+                component["source_kind"] == "modeled"
+                and (
+                    component["pricing_method"] != "identity_proxy_v1"
+                    or proxy_od_pair_id is None
+                )
+            )
+            or component["source_kind"] not in {"observed", "modeled"}
+        ):
+            return None
+        component_total += price
+        projection.append(
+            tuple(
+                price
+                if field == "price_usd"
+                else proxy_od_pair_id
+                if field == "proxy_od_pair_id"
+                else component[field]
+                for field in fields
+            )
+        )
+    return (total, tuple(projection)) if total == component_total else None
+
+
+def evaluate_dca_pentagon_parity_turns(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    expected_calls = cast(list[dict[str, Any]], metadata["expected_calls"])
+    if calls_error := _expected_calls_error(turns, expected_calls):
+        return calls_error
+
+    payloads: list[dict[str, Any]] = []
+    for turn, expected_call in zip(turns, expected_calls, strict=True):
+        call = cast(dict[str, Any], turn["calls"][0])
+        payload = call.get("tool_result")
+        if isinstance(payload, dict) and "error" not in payload:
+            components = payload.get("components")
+            if not isinstance(components, list):
+                return _result(
+                    False,
+                    "current-price parity projection was malformed",
+                    "malformed_projection",
+                )
+            if (
+                payload.get("origin_point_id") != expected_call["origin_point_id"]
+                or payload.get("destination_point_id")
+                != expected_call["destination_point_id"]
+            ):
+                return _result(
+                    False, "tool result endpoints did not match", "result_mismatch"
+                )
+        result = evaluate_westpark_turn(
+            cast(list[dict[str, Any]], turn["calls"]),
+            str(turn.get("response", "")),
+            {**metadata, "expected_call": expected_call},
+        )
+        if not result[0].test_pass:
+            return result
+        payloads.append(cast(dict[str, Any], payload))
+
+    first_projection = _dca_pentagon_price_projection(payloads[0])
+    second_projection = _dca_pentagon_price_projection(payloads[1])
+    if first_projection is None or second_projection is None:
+        return _result(
+            False,
+            "current-price parity projection was malformed",
+            "malformed_projection",
+        )
+    if first_projection != second_projection:
+        return _result(
+            False, "corrected route toll projection did not match", "parity_mismatch"
+        )
+    return _result(True, "corrected route toll parity passed", "passed")
 
 
 def evaluate_current_clarification_turns(
@@ -1631,6 +1780,8 @@ class TollChatEvaluator(Evaluator[str, str]):
                     return evaluate_annual_confirmation(turns, metadata)
                 return evaluate_annual_relaxed(turns, metadata)
             return evaluate_annual_turn(turns, metadata)
+        if metadata.get("dca_pentagon_parity"):
+            return evaluate_dca_pentagon_parity_turns(turns, metadata)
         if metadata.get("expected_clarification"):
             return evaluate_current_clarification_turns(turns, metadata)
         calls = turns[0].get("calls", []) if len(turns) == 1 else []
@@ -1710,8 +1861,7 @@ def _self_check() -> None:
     assert not _movement_value_is_reported("$0.50", "-0.50")
     rows = load_rows()
     assert [row["id"] for row in rows] == [
-        "reagan-airport-to-westpark",
-        "pentagon-eads-to-westpark",
+        "reagan-airport-pentagon-eads-westpark-parity",
         "springfield-franconia-to-westpark",
         "dulles-airport-to-backlick-tp1sb-fallback",
         "old-keene-mill-to-reagan-i95-unavailable",
@@ -1761,8 +1911,7 @@ def _self_check() -> None:
         "annual-ordinary-reversal-regression",
     ]
     assert [case.name for case in load_cases(window="i95_southbound")] == [
-        "reagan-airport-to-westpark",
-        "pentagon-eads-to-westpark",
+        "reagan-airport-pentagon-eads-westpark-parity",
         "old-keene-mill-to-reagan-i95-unavailable",
         "i66-west-to-route-7-current-price",
         "route-7-to-i495-south-current-price",
@@ -1780,7 +1929,7 @@ def _self_check() -> None:
     assert date(2026, 7, 3) in _i66_holidays(2026)
     assert date(2026, 7, 5) not in _i66_holidays(2026)
     assert date(2027, 7, 5) in _i66_holidays(2027)
-    i66_free = rows[12]
+    i66_free = rows[11]
     i66_free_call = {
         "name": "get_current_toll_price",
         "input": i66_free["expected_call"],
@@ -1851,7 +2000,7 @@ def _self_check() -> None:
         )[0].label
         == "state_mismatch"
     )
-    wb_active = rows[13]
+    wb_active = rows[12]
     i66_wb_active = json.loads(json.dumps(i66_active_call))
     i66_wb_active["input"] = wb_active["expected_call"]
     i66_wb_active["tool_result"].update(
@@ -1867,7 +2016,7 @@ def _self_check() -> None:
         "**$3.25 estimate** ✅ Observed pricing at 5:22 PM EDT.",
         wb_active,
     )[0].test_pass
-    metadata = rows[2]
+    metadata = rows[1]
     success = {
         "name": "get_current_toll_price",
         "input": metadata["expected_call"],
@@ -1929,7 +2078,252 @@ def _self_check() -> None:
         "range $11.25-$12.30"
     )
     assert evaluate_westpark_turn([success], good_response, metadata)[0].test_pass
-    washington_current = rows[14]
+    parity = rows[0]
+    parity_calls = []
+    for expected_call in parity["expected_calls"]:
+        call = json.loads(json.dumps(success))
+        call["input"] = expected_call
+        call["tool_result"].update(
+            origin_point_id=expected_call["origin_point_id"],
+            destination_point_id=expected_call["destination_point_id"],
+        )
+        for index, component in enumerate(call["tool_result"]["components"]):
+            component.update(
+                pricing_method="source_observation",
+                od_pair_id=index + 1,
+                proxy_od_pair_id=None,
+            )
+        parity_calls.append(call)
+    parity_turns = [
+        {"response": good_response, "calls": [call]} for call in parity_calls
+    ]
+    assert evaluate_dca_pentagon_parity_turns(parity_turns, parity)[0].test_pass
+    parity_observed_without_proxy = json.loads(json.dumps(parity_turns))
+    for turn in parity_observed_without_proxy:
+        for component in turn["calls"][0]["tool_result"]["components"]:
+            component.pop("proxy_od_pair_id")
+    assert evaluate_dca_pentagon_parity_turns(parity_observed_without_proxy, parity)[
+        0
+    ].test_pass
+    parity_modeled_component = json.loads(json.dumps(parity_turns))
+    modeled_component = parity_modeled_component[1]["calls"][0]["tool_result"][
+        "components"
+    ][0]
+    modeled_component.update(
+        source_kind="modeled", pricing_method="identity_proxy_v1", proxy_od_pair_id=3
+    )
+    parity_modeled_component[1]["response"] += "\n\nModeled pricing."
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_modeled_component, parity)[0].label
+        == "parity_mismatch"
+    )
+    parity_modeled_without_proxy = json.loads(json.dumps(parity_modeled_component))
+    parity_modeled_without_proxy[1]["calls"][0]["tool_result"]["components"][0].pop(
+        "proxy_od_pair_id"
+    )
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_modeled_without_proxy, parity)[
+            0
+        ].label
+        == "malformed_projection"
+    )
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_turns[:1], parity)[0].label
+        == "turn_count"
+    )
+    extra_parity_call = json.loads(json.dumps(parity_turns))
+    extra_parity_call[1]["calls"].append(parity_calls[1])
+    assert (
+        evaluate_dca_pentagon_parity_turns(extra_parity_call, parity)[0].label
+        == "tool_mismatch"
+    )
+    wrong_parity_input = json.loads(json.dumps(parity_turns))
+    wrong_parity_input[1]["calls"][0]["input"]["origin_point_id"] = "airport_dca"
+    assert (
+        evaluate_dca_pentagon_parity_turns(wrong_parity_input, parity)[0].label
+        == "input_mismatch"
+    )
+    wrong_parity_result = json.loads(json.dumps(parity_turns))
+    wrong_parity_result[1]["calls"][0]["tool_result"]["origin_point_id"] = "airport_dca"
+    assert (
+        evaluate_dca_pentagon_parity_turns(wrong_parity_result, parity)[0].label
+        == "result_mismatch"
+    )
+    parity_tool_error = json.loads(json.dumps(parity_turns))
+    parity_tool_error[1]["calls"][0]["is_error"] = True
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_tool_error, parity)[0].label
+        == "tool_error"
+    )
+    parity_bad_style = json.loads(json.dumps(parity_turns))
+    parity_bad_style[1]["response"] = "$16.40 at 9:30 AM EDT"
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_bad_style, parity)[0].label
+        == "missing_markdown"
+    )
+    parity_total_mismatch = json.loads(json.dumps(parity_turns))
+    parity_total_mismatch[1]["calls"][0]["tool_result"]["total_usd"] = "16.41"
+    parity_total_mismatch[1]["calls"][0]["tool_result"]["components"][1][
+        "price_usd"
+    ] = "11.61"
+    parity_total_mismatch[1]["response"] = parity_total_mismatch[1]["response"].replace(
+        "$16.40", "$16.41"
+    )
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_total_mismatch, parity)[0].label
+        == "parity_mismatch"
+    )
+    for field in (
+        "route_step_id",
+        "price_usd",
+        "od_pair_id",
+    ):
+        parity_component_mismatch = json.loads(json.dumps(parity_turns))
+        component = parity_component_mismatch[1]["calls"][0]["tool_result"][
+            "components"
+        ][0]
+        component[field] = (
+            "4.81"
+            if field == "price_usd"
+            else 3
+            if field in {"od_pair_id", "proxy_od_pair_id"}
+            else "changed"
+        )
+        if field == "price_usd":
+            parity_component_mismatch[1]["calls"][0]["tool_result"]["total_usd"] = (
+                "16.41"
+            )
+            parity_component_mismatch[1]["response"] = parity_component_mismatch[1][
+                "response"
+            ].replace("$16.40", "$16.41")
+        assert (
+            evaluate_dca_pentagon_parity_turns(parity_component_mismatch, parity)[
+                0
+            ].label
+            == "parity_mismatch"
+        )
+    parity_modeled_component = json.loads(json.dumps(parity_turns))
+    modeled_component = parity_modeled_component[1]["calls"][0]["tool_result"][
+        "components"
+    ][0]
+    modeled_component.update(
+        source_kind="modeled", pricing_method="identity_proxy_v1", proxy_od_pair_id=3
+    )
+    parity_modeled_component[1]["response"] += "\n\nModeled pricing."
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_modeled_component, parity)[0].label
+        == "parity_mismatch"
+    )
+    parity_advanced_time = json.loads(json.dumps(parity_turns))
+    parity_advanced_time[1]["calls"][0]["tool_result"]["components"][0][
+        "observed_at"
+    ] = "2026-08-22T10:51:00-04:00"
+    assert evaluate_dca_pentagon_parity_turns(parity_advanced_time, parity)[0].test_pass
+    parity_equal_omission = json.loads(json.dumps(parity_turns))
+    for turn in parity_equal_omission:
+        for component in turn["calls"][0]["tool_result"]["components"]:
+            component.pop("od_pair_id")
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_equal_omission, parity)[0].label
+        == "malformed_projection"
+    )
+    parity_non_mapping = json.loads(json.dumps(parity_turns))
+    parity_non_mapping[1]["calls"][0]["tool_result"]["components"] = [
+        "not",
+        "components",
+    ]
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_non_mapping, parity)[0].label
+        == "malformed_projection"
+    )
+    parity_non_finite = json.loads(json.dumps(parity_turns))
+    parity_non_finite[1]["calls"][0]["tool_result"]["components"][0]["price_usd"] = (
+        "Infinity"
+    )
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_non_finite, parity)[0].label
+        == "malformed_projection"
+    )
+    parity_fallback_endpoint = json.loads(json.dumps(parity_turns))
+    fallback_payload = parity_fallback_endpoint[1]["calls"][0]["tool_result"]
+    fallback_payload.pop("origin_point_id")
+    fallback_payload["point_ids"] = ["i95:2233SO", "i495:1859ND"]
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_fallback_endpoint, parity)[0].label
+        == "result_mismatch"
+    )
+    for invalid_components in (None, {}):
+        parity_invalid_components = json.loads(json.dumps(parity_turns))
+        parity_invalid_components[1]["calls"][0]["tool_result"]["components"] = (
+            invalid_components
+        )
+        assert (
+            evaluate_dca_pentagon_parity_turns(parity_invalid_components, parity)[
+                0
+            ].label
+            == "malformed_projection"
+        )
+    for field in ("route_step_id", "source_kind"):
+        parity_null_identity = json.loads(json.dumps(parity_turns))
+        parity_null_identity[1]["calls"][0]["tool_result"]["components"][0][field] = (
+            None
+        )
+        assert (
+            evaluate_dca_pentagon_parity_turns(parity_null_identity, parity)[0].label
+            == "malformed_projection"
+        )
+    for field in ("od_pair_id", "proxy_od_pair_id"):
+        parity_bool_identifier = json.loads(json.dumps(parity_turns))
+        parity_bool_identifier[1]["calls"][0]["tool_result"]["components"][0][field] = (
+            True
+        )
+        assert (
+            evaluate_dca_pentagon_parity_turns(parity_bool_identifier, parity)[0].label
+            == "malformed_projection"
+        )
+    parity_wrong_facility = json.loads(json.dumps(parity_turns))
+    parity_wrong_facility[1]["calls"][0]["tool_result"]["components"][0]["facility"] = (
+        "i66"
+    )
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_wrong_facility, parity)[0].label
+        == "malformed_projection"
+    )
+    parity_wrong_provenance = json.loads(json.dumps(parity_turns))
+    parity_wrong_provenance[1]["calls"][0]["tool_result"]["components"][0][
+        "pricing_method"
+    ] = "identity_proxy_v1"
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_wrong_provenance, parity)[0].label
+        == "malformed_projection"
+    )
+    parity_negative_total = json.loads(json.dumps(parity_turns))
+    parity_negative_total[1]["calls"][0]["tool_result"]["total_usd"] = "-1.00"
+    parity_negative_total[1]["response"] = parity_negative_total[1]["response"].replace(
+        "$16.40", "$-1.00"
+    )
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_negative_total, parity)[0].label
+        == "malformed_projection"
+    )
+    parity_negative_component = json.loads(json.dumps(parity_turns))
+    parity_negative_component[1]["calls"][0]["tool_result"]["components"][0][
+        "price_usd"
+    ] = "-4.80"
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_negative_component, parity)[0].label
+        == "malformed_projection"
+    )
+    parity_mismatched_sum = json.loads(json.dumps(parity_turns))
+    parity_mismatched_sum[1]["calls"][0]["tool_result"]["total_usd"] = "16.41"
+    parity_mismatched_sum[1]["response"] = parity_mismatched_sum[1]["response"].replace(
+        "$16.40", "$16.41"
+    )
+    assert (
+        evaluate_dca_pentagon_parity_turns(parity_mismatched_sum, parity)[0].label
+        == "malformed_projection"
+    )
+    washington_current = rows[13]
     washington_current_call = json.loads(json.dumps(success))
     washington_current_call["input"] = washington_current["expected_call"]
     washington_current_call["tool_result"].update(
@@ -2039,7 +2433,7 @@ def _self_check() -> None:
         evaluate_westpark_turn([error], good_response, metadata)[0].label
         == "tool_error"
     )
-    unavailable_metadata = rows[11]
+    unavailable_metadata = rows[10]
     unavailable = {
         **success,
         "input": unavailable_metadata["expected_call"],
@@ -2051,12 +2445,31 @@ def _self_check() -> None:
             "unavailable_components": [{"observed_at": "2026-08-22T15:40:00-04:00"}],
         },
     }
+    unavailable_response = (
+        "### 🚫 Current toll unavailable\n\nThe complete price cannot be provided as "
+        "of 3:40 PM EDT."
+    )
     assert evaluate_westpark_turn(
         [unavailable],
-        "### 🚫 Current toll unavailable\n\nThe complete price cannot be provided as "
-        "of 3:40 PM EDT.",
+        unavailable_response,
         unavailable_metadata,
     )[0].test_pass
+    for invented_toll in (
+        "$999.00",
+        "USD 999.00",
+        "999.00 USD",
+        "999 dollars",
+        "\uff04999.00",
+        "$about 999.00",
+    ):
+        assert (
+            evaluate_westpark_turn(
+                [unavailable],
+                unavailable_response + f" It would cost {invented_toll}.",
+                unavailable_metadata,
+            )[0].label
+            == "invented_financials"
+        )
     unknown = {
         **unavailable,
         "tool_result": {
@@ -2110,7 +2523,7 @@ def _self_check() -> None:
         evaluate_westpark_turn([closure], "### 🚧 Closed", metadata)[0].label
         == "tool_unavailable"
     )
-    fallback = {**rows[3], "active_window": "i95_northbound"}
+    fallback = {**rows[2], "active_window": "i95_northbound"}
     fallback_turns = [
         {
             "response": (
@@ -2207,7 +2620,7 @@ def _self_check() -> None:
         == "result_mismatch"
     )
 
-    unavailable = {**rows[4], "active_window": "i95_southbound"}
+    unavailable = {**rows[3], "active_window": "i95_southbound"}
     unavailable_turns = [
         {
             "response": (
@@ -2266,7 +2679,7 @@ def _self_check() -> None:
         evaluate_unavailable_turn(wrong_unavailable_result, unavailable)[0].label
         == "result_mismatch"
     )
-    annual = rows[5]
+    annual = rows[4]
     annual_call = {
         "name": "get_annual_toll_ballpark",
         "input": annual["expected_call"],
@@ -2346,7 +2759,7 @@ def _self_check() -> None:
     )
     annual_turns = [{"response": annual_response, "calls": [annual_call]}]
     assert evaluate_annual_turn(annual_turns, annual)[0].test_pass
-    washington_annual = rows[15]
+    washington_annual = rows[14]
     washington_annual_call = json.loads(json.dumps(annual_call))
     washington_annual_call["input"] = washington_annual["expected_call"]
     washington_annual_call["tool_result"] = {
@@ -2516,7 +2929,7 @@ def _self_check() -> None:
         evaluate_annual_turn(missing_method_turns, annual)[0].label
         == "missing_affordability_context"
     )
-    tysons = rows[6]
+    tysons = rows[5]
     tysons_call = {**annual_call, "input": tysons["expected_call"]}
     tysons_turns = [
         {
@@ -2533,7 +2946,7 @@ def _self_check() -> None:
     premature_call[0]["calls"] = [tysons_call]
     assert evaluate_annual_turn(premature_call, tysons)[0].label == "bad_clarification"
 
-    missing = rows[7]
+    missing = rows[6]
     missing_turns = [
         {
             "response": (
@@ -2575,7 +2988,7 @@ def _self_check() -> None:
         == "missing_required_input"
     )
 
-    estimate_case = rows[10]
+    estimate_case = rows[9]
     estimate_call = {**annual_call, "input": estimate_case["expected_call"]}
     estimate_turns = [
         {
@@ -2602,7 +3015,7 @@ def _self_check() -> None:
         == "bad_annual_day_estimate"
     )
 
-    income = rows[8]
+    income = rows[7]
     income_call = {**annual_call, "input": income["expected_call"]}
     income_turns = [
         {
@@ -2628,7 +3041,7 @@ def _self_check() -> None:
         == "premature_call"
     )
 
-    unavailable_annual = rows[9]
+    unavailable_annual = rows[8]
     unavailable_call = {
         "name": "get_annual_toll_ballpark",
         "input": unavailable_annual["expected_call"],

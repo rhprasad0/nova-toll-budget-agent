@@ -65,6 +65,7 @@ PRODUCTION_RDS_ENDPOINT: Final = re.compile(
     r"^nova-toll-db[.][a-z0-9-]+[.]us-east-1[.]rds[.]amazonaws[.]com$"
 )
 PRODUCTION_RDS_PORT: Final = "5432"
+PRODUCTION_MAX_MIGRATION_NUMBER: Final = 30
 
 
 @dataclass(frozen=True)
@@ -255,6 +256,16 @@ def _migration_candidates(
     if numbers != sorted(set(numbers)):
         raise MigrationError("migration filename numbers must strictly increase")
     return tuple(migrations)
+
+
+def _production_migrations(
+    migrations: tuple[Migration, ...],
+) -> tuple[Migration, ...]:
+    return tuple(
+        migration
+        for migration in migrations
+        if migration.number <= PRODUCTION_MAX_MIGRATION_NUMBER
+    )
 
 
 def _registry(
@@ -1035,6 +1046,8 @@ def run(profile: MigrationProfile = DEVELOPMENT_PROFILE) -> dict[str, object]:
         _registry() if profile is DEVELOPMENT_PROFILE else _registry(profile)
     )
     migrations = _migration_candidates(schemas)
+    if profile is PRODUCTION_PROFILE:
+        migrations = _production_migrations(migrations)
     commit = _run_capture("git", "rev-parse", "HEAD")
     if not COMMIT_PATTERN.fullmatch(commit):
         raise MigrationError("current checkout commit is not a canonical SHA-1")

@@ -1,6 +1,7 @@
 import logging
 import subprocess
 import sys
+from copy import deepcopy
 from dataclasses import FrozenInstanceError
 from datetime import datetime
 from pathlib import Path
@@ -56,6 +57,435 @@ def _schedule(window_id: str) -> str:
     return next(
         schedule for schedule, window in SCHEDULE_WINDOW_PAIRS if window == window_id
     )
+
+
+_PARITY_RESPONSE = (
+    "### 🚗 Current toll\n\n**Estimate: $16.40** at 9:30 AM EDT.\n\n"
+    "**Provenance:** Observed pricing."
+)
+
+
+def _parity_turn(expected_call: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "response": _PARITY_RESPONSE,
+        "calls": [
+            {
+                "name": "get_current_toll_price",
+                "input": expected_call,
+                "tool_result": {
+                    "origin_point_id": expected_call["origin_point_id"],
+                    "destination_point_id": expected_call["destination_point_id"],
+                    "source_kind": "observed",
+                    "total_usd": "16.40",
+                    "components": [
+                        {
+                            "route_step_id": "step-1",
+                            "facility": "i95_i495",
+                            "source_kind": "observed",
+                            "pricing_method": "source_observation",
+                            "price_usd": "4.80",
+                            "od_pair_id": 1,
+                            "proxy_od_pair_id": None,
+                            "source_status": "SOUTHBOUND_OPEN",
+                            "observed_at": "2026-08-22T10:50:00-04:00",
+                        },
+                        {
+                            "route_step_id": "step-2",
+                            "facility": "i95_i495",
+                            "source_kind": "observed",
+                            "pricing_method": "source_observation",
+                            "price_usd": "11.60",
+                            "od_pair_id": 2,
+                            "proxy_od_pair_id": None,
+                            "source_status": "SOUTHBOUND_OPEN",
+                            "observed_at": "2026-08-22T10:50:00-04:00",
+                        },
+                    ],
+                },
+                "is_error": False,
+            }
+        ],
+    }
+
+
+def test_critical_dca_window_matrix_and_prompt_counts() -> None:
+    rows = {row["id"]: row for row in run_evaluation.load_rows()}
+    dulles = rows["dulles-to-reagan-current-price"]
+    old_keene_mill = rows["old-keene-mill-to-reagan-i95-unavailable"]
+
+    assert dulles["suite"] == "direct"
+    assert dulles["expected_call"]["origin_point_id"] == "airport_iad"
+    assert dulles["expected_call"]["destination_point_id"] == "airport_dca"
+    assert dulles["expected_component_count"] == 2
+    assert dulles["allow_pricing_unavailable"] is True
+    assert dulles["allowed_route_statuses"] == ["unknown_availability"]
+
+    assert old_keene_mill["suite"] == "unavailable"
+    assert old_keene_mill["expected_call"]["origin_point_id"] == "i95:203NO"
+    assert old_keene_mill["expected_call"]["destination_point_id"] == "airport_dca"
+    assert old_keene_mill["expected_reasons"] == {
+        "i95_reversal": "i95_fully_closed",
+        "i95_southbound": "i95_opposite_direction_open",
+    }
+    assert old_keene_mill["expected_availability"] == {
+        "i95_reversal": "closed",
+        "i95_southbound": "southbound",
+    }
+    assert old_keene_mill["expected_required_i95_directions"] == ["NB"]
+
+    for weekday, expected_counts in (
+        (3, {"i95_northbound": 11, "i95_reversal": 10, "i95_southbound": 14}),
+        (6, {"i95_northbound": 10, "i95_reversal": 10, "i95_southbound": 14}),
+    ):
+        selected = {
+            window: run_evaluation.load_cases(window=window, weekday=weekday)
+            for window in expected_counts
+        }
+        names = {
+            window: [case.name for case in cases] for window, cases in selected.items()
+        }
+        assert {
+            window: ids.count("dulles-to-reagan-current-price")
+            for window, ids in names.items()
+        } == {"i95_northbound": 1, "i95_reversal": 0, "i95_southbound": 0}
+        assert {
+            window: ids.count("old-keene-mill-to-reagan-i95-unavailable")
+            for window, ids in names.items()
+        } == {"i95_northbound": 0, "i95_reversal": 1, "i95_southbound": 1}
+        assert {
+            window: ids.count("reagan-airport-pentagon-eads-westpark-parity")
+            for window, ids in names.items()
+        } == {"i95_northbound": 0, "i95_reversal": 0, "i95_southbound": 1}
+        assert {
+            window: sum(
+                len(list((case.metadata or {}).get("conversation", [str(case.input)])))
+                + int(bool((case.metadata or {}).get("follow_up")))
+                for case in cases
+            )
+            for window, cases in selected.items()
+        } == expected_counts
+
+
+@pytest.mark.parametrize(
+    "invented_toll",
+    [
+        "$999.00",
+        "USD 999.00",
+        "999.00 USD",
+        "999 dollars",
+        "\uff04999.00",
+        "$about 999.00",
+    ],
+)
+def test_dulles_incomplete_price_rejects_invented_money(invented_toll: str) -> None:
+    metadata = next(
+        row
+        for row in run_evaluation.load_rows()
+        if row["id"] == "dulles-to-reagan-current-price"
+    )
+    unavailable = {
+        "name": "get_current_toll_price",
+        "input": metadata["expected_call"],
+        "tool_result": {
+            "origin_point_id": "airport_iad",
+            "destination_point_id": "airport_dca",
+            "error": "pricing_unavailable",
+            "reason": "incomplete_route_price",
+            "unavailable_components": [{"observed_at": "2026-08-22T15:40:00-04:00"}],
+        },
+        "is_error": False,
+    }
+    response = (
+        "### 🚫 Current toll unavailable\n\nThe complete price cannot be provided as "
+        "of 3:40 PM EDT."
+    )
+
+    assert run_evaluation.evaluate_westpark_turn([unavailable], response, metadata)[
+        0
+    ].test_pass
+    assert (
+        run_evaluation.evaluate_westpark_turn(
+            [unavailable], response + f" It would cost {invented_toll}.", metadata
+        )[0].label
+        == "invented_financials"
+    )
+
+
+def test_dca_pentagon_parity_case_and_evaluator() -> None:
+    metadata = next(
+        row
+        for row in run_evaluation.load_rows()
+        if row["id"] == "reagan-airport-pentagon-eads-westpark-parity"
+    )
+    expected_calls = cast(list[dict[str, Any]], metadata["expected_calls"])
+    assert metadata["conversation"] == [
+        "What is the current toll from Reagan Airport to Westpark Drive?",
+        "I meant the origin should be I-395 Pentagon/Eads Street; what is the current toll to Westpark Drive?",
+    ]
+    assert [call["origin_point_id"] for call in expected_calls] == [
+        "airport_dca",
+        "i95:2233SO",
+    ]
+    assert [
+        case.name for case in run_evaluation.load_cases(window="i95_southbound")
+    ].count(metadata["id"]) == 1
+    turns = [_parity_turn(call) for call in expected_calls]
+    assert run_evaluation.evaluate_dca_pentagon_parity_turns(turns, metadata)[
+        0
+    ].test_pass
+
+    observed_without_proxy = deepcopy(turns)
+    for turn in observed_without_proxy:
+        for component in turn["calls"][0]["tool_result"]["components"]:
+            component.pop("proxy_od_pair_id")
+    assert run_evaluation.evaluate_dca_pentagon_parity_turns(
+        observed_without_proxy, metadata
+    )[0].test_pass
+
+    modeled_component = deepcopy(turns)
+    modeled_component[1]["calls"][0]["tool_result"]["components"][0].update(
+        source_kind="modeled", pricing_method="identity_proxy_v1", proxy_od_pair_id=3
+    )
+    modeled_component[1]["response"] += "\n\nModeled pricing."
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(modeled_component, metadata)[
+            0
+        ].label
+        == "parity_mismatch"
+    )
+
+    modeled_without_proxy = deepcopy(modeled_component)
+    modeled_without_proxy[1]["calls"][0]["tool_result"]["components"][0].pop(
+        "proxy_od_pair_id"
+    )
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(
+            modeled_without_proxy, metadata
+        )[0].label
+        == "malformed_projection"
+    )
+
+    malformed = deepcopy(turns)
+    malformed[1]["calls"].append(deepcopy(malformed[1]["calls"][0]))
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(malformed, metadata)[0].label
+        == "tool_mismatch"
+    )
+
+    wrong_origin = deepcopy(turns)
+    wrong_origin[1]["calls"][0]["input"]["origin_point_id"] = "airport_dca"
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(wrong_origin, metadata)[
+            0
+        ].label
+        == "input_mismatch"
+    )
+
+    wrong_result = deepcopy(turns)
+    wrong_result[1]["calls"][0]["tool_result"]["origin_point_id"] = "airport_dca"
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(wrong_result, metadata)[
+            0
+        ].label
+        == "result_mismatch"
+    )
+
+    total_mismatch = deepcopy(turns)
+    total_mismatch[1]["calls"][0]["tool_result"]["total_usd"] = "16.41"
+    total_mismatch[1]["calls"][0]["tool_result"]["components"][1]["price_usd"] = "11.61"
+    total_mismatch[1]["response"] = total_mismatch[1]["response"].replace(
+        "$16.40", "$16.41"
+    )
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(total_mismatch, metadata)[
+            0
+        ].label
+        == "parity_mismatch"
+    )
+
+    projection_mismatch = deepcopy(turns)
+    projection_mismatch[1]["calls"][0]["tool_result"]["components"][0]["od_pair_id"] = 3
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(
+            projection_mismatch, metadata
+        )[0].label
+        == "parity_mismatch"
+    )
+
+    equal_omission = deepcopy(turns)
+    for turn in equal_omission:
+        for component in turn["calls"][0]["tool_result"]["components"]:
+            component.pop("od_pair_id")
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(equal_omission, metadata)[
+            0
+        ].label
+        == "malformed_projection"
+    )
+
+    non_mapping = deepcopy(turns)
+    non_mapping[1]["calls"][0]["tool_result"]["components"] = ["not", "components"]
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(non_mapping, metadata)[
+            0
+        ].label
+        == "malformed_projection"
+    )
+
+    non_finite_total = deepcopy(turns)
+    non_finite_total[1]["calls"][0]["tool_result"]["total_usd"] = "NaN"
+    non_finite_total[1]["response"] = non_finite_total[1]["response"].replace(
+        "$16.40", "$NaN"
+    )
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(non_finite_total, metadata)[
+            0
+        ].label
+        == "malformed_projection"
+    )
+
+    non_finite_price = deepcopy(turns)
+    non_finite_price[1]["calls"][0]["tool_result"]["components"][0]["price_usd"] = (
+        "Infinity"
+    )
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(non_finite_price, metadata)[
+            0
+        ].label
+        == "malformed_projection"
+    )
+
+    fallback_endpoint = deepcopy(turns)
+    payload = fallback_endpoint[1]["calls"][0]["tool_result"]
+    payload.pop("origin_point_id")
+    payload["point_ids"] = ["i95:2233SO", "i495:1859ND"]
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(fallback_endpoint, metadata)[
+            0
+        ].label
+        == "result_mismatch"
+    )
+
+    for invalid_components in (None, dict[str, Any]()):
+        malformed_components = deepcopy(turns)
+        malformed_components[1]["calls"][0]["tool_result"]["components"] = (
+            invalid_components
+        )
+        assert (
+            run_evaluation.evaluate_dca_pentagon_parity_turns(
+                malformed_components, metadata
+            )[0].label
+            == "malformed_projection"
+        )
+
+    for field in ("route_step_id", "source_kind"):
+        null_identity = deepcopy(turns)
+        null_identity[1]["calls"][0]["tool_result"]["components"][0][field] = None
+        assert (
+            run_evaluation.evaluate_dca_pentagon_parity_turns(null_identity, metadata)[
+                0
+            ].label
+            == "malformed_projection"
+        )
+
+    for field in ("od_pair_id", "proxy_od_pair_id"):
+        bool_identifier = deepcopy(turns)
+        bool_identifier[1]["calls"][0]["tool_result"]["components"][0][field] = True
+        assert (
+            run_evaluation.evaluate_dca_pentagon_parity_turns(
+                bool_identifier, metadata
+            )[0].label
+            == "malformed_projection"
+        )
+
+    wrong_facility = deepcopy(turns)
+    wrong_facility[1]["calls"][0]["tool_result"]["components"][0]["facility"] = "i66"
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(wrong_facility, metadata)[
+            0
+        ].label
+        == "malformed_projection"
+    )
+
+    wrong_provenance = deepcopy(turns)
+    wrong_provenance[1]["calls"][0]["tool_result"]["components"][0][
+        "pricing_method"
+    ] = "identity_proxy_v1"
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(wrong_provenance, metadata)[
+            0
+        ].label
+        == "malformed_projection"
+    )
+
+    negative_total = deepcopy(turns)
+    negative_total[1]["calls"][0]["tool_result"]["total_usd"] = "-1.00"
+    negative_total[1]["response"] = negative_total[1]["response"].replace(
+        "$16.40", "$-1.00"
+    )
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(negative_total, metadata)[
+            0
+        ].label
+        == "malformed_projection"
+    )
+
+    negative_component = deepcopy(turns)
+    negative_component[1]["calls"][0]["tool_result"]["components"][0]["price_usd"] = (
+        "-4.80"
+    )
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(negative_component, metadata)[
+            0
+        ].label
+        == "malformed_projection"
+    )
+
+    mismatched_sum = deepcopy(turns)
+    mismatched_sum[1]["calls"][0]["tool_result"]["total_usd"] = "16.41"
+    mismatched_sum[1]["response"] = mismatched_sum[1]["response"].replace(
+        "$16.40", "$16.41"
+    )
+    assert (
+        run_evaluation.evaluate_dca_pentagon_parity_turns(mismatched_sum, metadata)[
+            0
+        ].label
+        == "malformed_projection"
+    )
+
+
+def test_dca_pentagon_parity_reuses_one_agent_for_two_turns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = next(
+        case
+        for case in run_evaluation.load_cases(window="i95_southbound")
+        if case.name == "reagan-airport-pentagon-eads-westpark-parity"
+    )
+    metadata = case.metadata or {}
+    expected_calls = cast(list[dict[str, Any]], metadata["expected_calls"])
+    prompts: list[str] = []
+    calls: list[dict[str, Any]] = [
+        {"name": "get_current_toll_price", "input": expected_calls[0]},
+        {"name": "get_current_toll_price", "input": expected_calls[1]},
+    ]
+
+    def agent(prompt: str) -> str:
+        prompts.append(prompt)
+        return prompt
+
+    def extracted(_response: object) -> list[dict[str, Any]]:
+        return calls[: len(prompts)]
+
+    monkeypatch.setattr(run_evaluation, "build_agent", lambda: agent)
+    monkeypatch.setattr(run_evaluation, "_calls", extracted)
+
+    trajectory = run_evaluation.task_function(case)["trajectory"]
+    assert prompts == metadata["conversation"]
+    assert trajectory == [
+        {"response": prompts[0], "calls": [calls[0]]},
+        {"response": prompts[1], "calls": [calls[1]]},
+    ]
 
 
 def test_schedule_window_contract_has_28_unique_pairs() -> None:
@@ -543,7 +973,7 @@ def test_tool_price_is_excluded_from_evaluation_failure_and_alert(
     metadata = next(
         row
         for row in run_evaluation.load_rows()
-        if row["id"] == "reagan-airport-to-westpark"
+        if row["id"] == "springfield-franconia-to-westpark"
     )
     expected = cast(dict[str, str], metadata["expected_call"])
     price = "9876.54"
@@ -566,7 +996,7 @@ def test_tool_price_is_excluded_from_evaluation_failure_and_alert(
 
     class FakeReport:
         def __init__(self) -> None:
-            self.cases = [{"name": "reagan-airport-to-westpark"}]
+            self.cases = [{"name": "springfield-franconia-to-westpark"}]
             self.test_passes = [False]
             self.reasons = [output[0].reason]
             self.detailed_results = [output]
@@ -592,7 +1022,7 @@ def test_tool_price_is_excluded_from_evaluation_failure_and_alert(
     with pytest.raises(run_evaluation.EvaluationFailed) as raised:
         run_evaluation.main("i95_southbound", output_dir=tmp_path / "direct")
     assert raised.value.failures == (
-        ("reagan-airport-to-westpark", "response omitted the current toll"),
+        ("springfield-franconia-to-westpark", "response omitted the current toll"),
     )
     assert price not in str(raised.value.failures)
 
@@ -622,7 +1052,7 @@ def test_tool_price_is_excluded_from_evaluation_failure_and_alert(
 
     assert raised.value.failure_summaries == [
         {
-            "case_id": "reagan-airport-to-westpark",
+            "case_id": "springfield-franconia-to-westpark",
             "label": "ungrounded_price",
             "reason": "response omitted the current toll",
         }

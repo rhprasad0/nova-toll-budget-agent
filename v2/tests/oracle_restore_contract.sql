@@ -54,7 +54,7 @@ END $$;
 DO $$
 BEGIN
     IF (SELECT count(*) FROM oracle.schema_version) <> 1
-       OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.14.0' THEN
+       OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.14.1' THEN
         RAISE EXCEPTION 'oracle schema version is invalid';
     END IF;
     IF (SELECT count(*) FROM oracle.toll_connection
@@ -125,11 +125,11 @@ BEGIN
         WHERE location IS NULL) <> 0
        OR (SELECT count(*) FROM oracle.toll_route_point
            WHERE source_metadata->>'coordinate_quality' =
-                 'provisional_generalized') <> 107
+                 'provisional_generalized') <> 97
        OR (SELECT count(*) FROM oracle.toll_route_point
            WHERE source_metadata->>'coordinate_quality' =
                  'approximate_interchange'
-             AND source_metadata->'coordinate_source' IS NOT NULL) <> 111
+             AND source_metadata->'coordinate_source' IS NOT NULL) <> 121
        OR (SELECT count(*) FROM oracle.toll_route_point
            WHERE source_metadata->>'coordinate_quality' =
                  'official_reference_point'

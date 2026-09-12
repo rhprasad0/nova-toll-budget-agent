@@ -28,12 +28,12 @@ on PostgreSQL 17.9.
 The development-only bootstrap also creates the short-lived
 `schema_migrator_development` IAM login, the `pricing_owner_development` stable
 owner, and private `tollchat_migration.schema_history` metadata seeded with the
-1.3.0 pricing and 1.14.0 Oracle canonical baselines. It remains
+1.3.0 pricing and 1.14.1 Oracle canonical baselines. It remains
 canonical-schema-only: no released application migration is applied by the
 bootstrap, and this groundwork does not make hard-coded-owner migrations
 portable to development.
 
-The independently versioned `oracle` schema is at **1.14.0**. It installs
+The independently versioned `oracle` schema is at **1.14.1**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
 exposes route validation plus bounded prompt-point retrieval to `tollchat_agent`
 and internal pricing operations to `pricing_caller`.

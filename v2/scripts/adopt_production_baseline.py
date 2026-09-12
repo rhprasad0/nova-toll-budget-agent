@@ -323,19 +323,27 @@ def _sql_literal(value: str) -> str:
 
 
 def load_baseline_manifest() -> tuple[Baseline, ...]:
-    """Read only the checked-in, fixed production baseline manifest."""
+    """Read the checked-in manifest and select its current canonical rows."""
 
     try:
         baselines = bootstrap.load_baseline_manifest(
             ROOT / "v2/db/migration-baselines.json"
         )
-    except (OSError, UnicodeError, ValueError) as error:
+        selected = tuple(
+            baseline
+            for schema, relative in (
+                ("pricing", "v2/db/schema.sql"),
+                ("oracle", "v2/db/oracle/schema.sql"),
+            )
+            for baseline in (bootstrap.baseline_for_canonical(schema, relative),)
+        )
+    except (OSError, RuntimeError, UnicodeError, ValueError) as error:
         raise AdoptionError("canonical baseline manifest is invalid") from error
-    if len(baselines) != 2:
+    if len(selected) != 2 or any(baseline not in baselines for baseline in selected):
         raise AdoptionError(
             "canonical baseline manifest is not the singleton production set"
         )
-    return tuple(baselines)
+    return selected
 
 
 def _canonical_baselines() -> tuple[Baseline, ...]:

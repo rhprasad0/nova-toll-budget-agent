@@ -26,6 +26,26 @@
       "source_feature_name": "R-VA   IS00066EB",
       "source_url": "https://services.arcgis.com/p5v98VHDX9Atv3l7/arcgis/rest/services/LRS_Route_Master/FeatureServer/0"
     },
+    "vdot_i395_northern_access": {
+      "coordinate_quality": "approximate_interchange",
+      "evidence_urls": [
+        "https://p3.virginia.gov/media/p3/documents/p3-agreements/i-95i-395fredex/02C3_C-3-Attach_1-0a_395_Express_Lanes_SOW.pdf",
+        "https://www.vdot.virginia.gov/media/vdotvirginiagov/projects/northern-virginia/395-express-lanes-extension-in-the-city-/BoardsforWeb.pdf",
+        "https://www.expresslanes.com/images/flash/access-maps/washignton-boulevard/large-access-static.png",
+        "https://www.transurban.com/content/dam/transurban-pdfs/02/news/TCL_395_Express_Lanes_Project_Approved.pdf"
+      ],
+      "method": "reviewed_operator_access_point_with_vdot_route_context",
+      "provider": "Virginia Department of Transportation",
+      "retrieved_at": "2026-09-11",
+      "source_feature_common_name": "I-395R",
+      "source_feature_id": 96035,
+      "source_feature_name": "R-VA   IS00395RV",
+      "source_jurisdiction_code": null,
+      "source_jurisdiction_name": null,
+      "source_route_number": "395",
+      "source_route_type": "Interstate",
+      "source_url": "https://services.arcgis.com/p5v98VHDX9Atv3l7/arcgis/rest/services/LRS_Route_Master/FeatureServer/0"
+    },
     "vdot_sr267_dtr": {
       "coordinate_quality": "approximate_interchange",
       "evidence_url": "https://www.dullestollroad.com/maps-interchanges",
@@ -97,6 +117,16 @@
     "i66:6": {"latitude": "38.9001038", "longitude": "-77.1850131", "source": "vdot_i66"},
     "i66:7": {"latitude": "38.9285321", "longitude": "-77.2035113", "source": "vdot_sr267_i66"},
     "i66:8": {"latitude": "38.8856285", "longitude": "-77.1563453", "source": "vdot_i66"},
-    "i66:9": {"latitude": "38.8865049", "longitude": "-77.1176218", "source": "vdot_i66"}
+    "i66:9": {"latitude": "38.8865049", "longitude": "-77.1176218", "source": "vdot_i66"},
+    "i95:22329ND": {"latitude": "38.8663530000000", "longitude": "-77.0659710000000", "source": "vdot_i395_northern_access"},
+    "i95:2232ND": {"latitude": "38.8663530000000", "longitude": "-77.0659710000000", "source": "vdot_i395_northern_access"},
+    "i95:2232SO": {"latitude": "38.878511", "longitude": "-77.03933", "source": "vdot_i395_northern_access"},
+    "i95:2233SO": {"latitude": "38.8663900000000", "longitude": "-77.0574660000000", "source": "vdot_i395_northern_access"},
+    "i95:2239ND": {"latitude": "38.8663900000000", "longitude": "-77.0574660000000", "source": "vdot_i395_northern_access"},
+    "i95:223ND": {"latitude": "38.8663900000000", "longitude": "-77.0574660000000", "source": "vdot_i395_northern_access"},
+    "i95:223SO": {"latitude": "38.8663530000000", "longitude": "-77.0659710000000", "source": "vdot_i395_northern_access"},
+    "i95:2249ND": {"latitude": "38.8707667", "longitude": "-77.0461277", "source": "vdot_i395_northern_access"},
+    "i95:224ND": {"latitude": "38.8780160000000", "longitude": "-77.0396420000000", "source": "vdot_i395_northern_access"},
+    "i95:224NO": {"latitude": "38.865725", "longitude": "-77.052876", "source": "vdot_i395_northern_access"}
   }
 }
