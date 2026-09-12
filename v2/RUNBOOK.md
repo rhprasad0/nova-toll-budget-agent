@@ -689,7 +689,7 @@ report_smoke_succeeded() {
   return 1
 }
 report_manifest_is_valid() {
-  jq -e '.schema_version == "2.0.0" and .publication_format_version == "2.0.0" and .route_count == 685 and (.generation_id | type == "string" and length > 0) and (.published_at | type == "string" and length > 0) and (.result_sha256 | test("^[a-f0-9]{64}$"))' "$1"
+  jq -e '.schema_version == "3.0.0" and .facility == "i95_i495" and .route_count == 246 and (.week_end | type == "string" and length > 0) and (.result_sha256 | test("^[a-f0-9]{64}$"))' "$1"
 }
 AWS_PROFILE=nova-toll-prod aws --region us-east-1 lambda invoke \
   --function-name "$PUBLISHER_FUNCTION" --invocation-type Event \
@@ -740,7 +740,7 @@ test "$SITE_URL" = "https://tollchat.ai"
 REPORT_URLS="$(mktemp)"
 curl --fail-with-body --silent --show-error "$SITE_URL/sitemap.xml" \
   | grep -o '<loc>[^<]*</loc>' | sed 's#</\?loc>##g' >"$REPORT_URLS"
-test "$(wc -l <"$REPORT_URLS")" -eq 685
+test "$(wc -l <"$REPORT_URLS")" -eq 246
 xargs -P 8 -n 1 sh -c '
   html="$1"
   curl --fail --silent --show-error --head "$html" \
@@ -749,11 +749,11 @@ xargs -P 8 -n 1 sh -c '
     | grep -qi "^content-type: application/json"
 ' _ <"$REPORT_URLS"
 
-REPORT_URL="$SITE_URL/tolls/i95-i495/dumfries-dumfries-road-route-234-northbound/tysons-westpark-drive-tysons-corner-northbound/"
+REPORT_URL="$SITE_URL/tolls/i95-i495/northbound/dumfries-to-tysons/"
 REPORT_PAGE="$(mktemp)"
 curl --fail-with-body --silent --show-error "$REPORT_URL" >"$REPORT_PAGE"
 grep -F '<link rel="canonical" href="'"$REPORT_URL"'">' "$REPORT_PAGE"
-grep -F '<link rel="alternate" type="application/json" href="report.json">' "$REPORT_PAGE"
+grep -F '<table>' "$REPORT_PAGE"
 ! grep -qi 'noindex\|<script' "$REPORT_PAGE"
 curl --fail-with-body --silent --show-error "$SITE_URL/robots.txt" \
   | grep -F "Sitemap: $SITE_URL/sitemap.xml"

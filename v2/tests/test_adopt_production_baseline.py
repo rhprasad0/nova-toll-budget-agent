@@ -1623,10 +1623,10 @@ WHERE migration_id = '031_upgrade_oracle_1_14_0_to_1_15_0.sql';
     )
     assert no_op["applied"] == []
 
-    schemas, _ = runner._registry(runner.PRODUCTION_PROFILE)
+    schemas, _ = runner._registry(runner.PRODUCTION_PROFILE)  # pyright: ignore[reportPrivateUsage]
     oracle_031 = next(
         migration
-        for migration in runner._migration_candidates(schemas)
+        for migration in runner._migration_candidates(schemas)  # pyright: ignore[reportPrivateUsage]
         if migration.path == "v2/db/migrations/031_upgrade_oracle_1_14_0_to_1_15_0.sql"
     )
 

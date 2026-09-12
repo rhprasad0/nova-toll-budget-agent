@@ -404,20 +404,14 @@ data "aws_iam_policy_document" "publisher" {
   }
 
   statement {
-    sid       = "ReadPublicationManifest"
-    actions   = ["s3:GetObject"]
-    resources = ["${aws_s3_bucket.site.arn}/tolls/i95-i495/manifest.json"]
-  }
-
-  statement {
-    sid       = "FindPublicationManifest"
+    sid       = "ListPublicReports"
     actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.site.arn]
 
     condition {
       test     = "StringEquals"
       variable = "s3:prefix"
-      values   = ["tolls/i95-i495/manifest.json"]
+      values   = ["tolls/i95-i495/"]
     }
   }
 
@@ -428,6 +422,12 @@ data "aws_iam_policy_document" "publisher" {
       "${aws_s3_bucket.site.arn}/tolls/i95-i495/*",
       "${aws_s3_bucket.site.arn}/sitemap.xml",
     ]
+  }
+
+  statement {
+    sid       = "DeleteStalePublicReports"
+    actions   = ["s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.site.arn}/tolls/i95-i495/*"]
   }
 
   statement {

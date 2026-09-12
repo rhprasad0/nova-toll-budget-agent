@@ -1174,7 +1174,7 @@ def _recognized_baselines(
     )
 
 
-def _production_baselines() -> tuple[bootstrap.Baseline, ...]:
+def _production_baselines() -> tuple[bootstrap.Baseline, ...]:  # pyright: ignore[reportUnusedFunction]
     """Bind the recurring runner to exact recognized production rows."""
     return _recognized_baselines(PRODUCTION_PROFILE)
 
