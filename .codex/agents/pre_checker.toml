@@ -20,11 +20,14 @@ Write only `.graph/checklist.md`; do not edit application code or write explore.
 ## Acceptance requirements
 ## Required commands and pass conditions
 ## Risk-focused checks
+## Deployment checks
 ## Blocking gaps
 
 Rules:
 - Number every acceptance requirement.
 - Make each requirement objectively checkable by the checker.
+- Deployment checks must assess the explorer's development and production applicability separately. For each applicable environment, cite the numbered acceptance requirements and safe pass conditions that cover its deployment challenges; otherwise record `Not applicable` with the explorer's evidence. Missing, unsupported, or conflicting applicability is a blocking gap.
+- Never require a live deployment or credentials for verification. Use repository contracts, dry runs, or disposable checks, and do not invent high-availability, staged-rollout, or rollback machinery unless the intent or an existing contract requires it.
 - Blocking gaps must name the missing decision or evidence and return to the original explorer; if none, say `None`.
 - Builder may start only when Blocking gaps is `None`.
 - Checker must assess every checklist item as well as independently review regressions and trust boundaries.
