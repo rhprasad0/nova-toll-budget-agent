@@ -2,6 +2,7 @@
 
 import base64
 from fnmatch import fnmatchcase
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -106,16 +107,16 @@ def terraform_block(source: str, header: str, occurrence: int = 0) -> str:
     raise AssertionError(f"unclosed Terraform block {header!r}")
 
 
-def rendered_production_policies() -> tuple[
+def rendered_production_policies(iam: str = IAM) -> tuple[
     dict[str, dict[str, object]],
     list[dict[str, object]],
     list[dict[str, object]],
     dict[str, dict[str, object]],
 ]:
     """Render the production policy locals in an isolated, backend-free root."""
-    first_locals = terraform_block(IAM, "locals", 0)
-    production_locals = terraform_block(IAM, "locals", 3)
-    policy_data = terraform_block(IAM, 'data "aws_iam_policy_document" "development_delivery"')
+    first_locals = terraform_block(iam, "locals", 0)
+    production_locals = terraform_block(iam, "locals", 3)
+    policy_data = terraform_block(iam, 'data "aws_iam_policy_document" "development_delivery"')
     test_bucket_arn = "arn:aws:s3:::nova-toll-tfstate-920534282028"
     test_kms_arn = "arn:aws:kms:us-east-1:920534282028:key/00000000-0000-0000-0000-000000000000"
     test_alerts_kms_arn = "arn:aws:kms:us-east-1:920534282028:key/11111111-1111-1111-1111-111111111111"
@@ -235,6 +236,12 @@ def rendered_production_policies() -> tuple[
             application_statements,
             {key: json.loads(value) for key, value in deploy_documents.items()},
         )
+
+
+def production_policies_digest(policies: tuple[object, ...]) -> str:
+    return hashlib.sha256(
+        json.dumps(policies, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 def rendered_production_migration_identity() -> tuple[dict[str, object], dict[str, object]]:
@@ -762,7 +769,7 @@ def main() -> None:
     require('variable = "iam:PassedToService"', development_delivery)
     require('values   = ["scheduler.amazonaws.com"]', development_delivery)
     require(
-        "Statement = slice(local.development_delivery_policy_statements, 35, 45)",
+        "Statement = slice(local.development_delivery_policy_statements, 38, 48)",
         development_shards,
     )
 
@@ -790,6 +797,25 @@ def main() -> None:
         application_statements,
         deploy_documents,
     ) = rendered_production_policies()
+    assert production_policies_digest(
+        (planner_documents, planner_statements, application_statements, deploy_documents)
+    ) == (
+        "95f6e06f527fb1a393567480e8872faac95c5f47a2442f533fd0c26034879233"
+    )
+    production_locals = terraform_block(IAM, "locals", 3)
+    for sid in (
+        "ReadAgentCoreTraceSubscription",
+        "ReadAgentCoreTraceFirehose",
+        "ReadAgentCoreTraceXRaySettings",
+    ):
+        leaked_trace_sid = IAM.replace(
+            production_locals,
+            production_locals.replace(f'    "{sid}",\n', ""),
+            1,
+        )
+        assert production_policies_digest(rendered_production_policies(leaked_trace_sid)) != (
+            "95f6e06f527fb1a393567480e8872faac95c5f47a2442f533fd0c26034879233"
+        )
     assert len(planner_documents) == 9
     assert len(planner_documents) <= 10
     assert set(planner_documents) == {

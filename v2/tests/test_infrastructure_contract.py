@@ -38,6 +38,7 @@ FOUNDATION_ROOT = REPO_ROOT / "infra"
 FOUNDATION_TRIGGERS = (FOUNDATION_ROOT / "triggers.tf").read_text()
 FOUNDATION_LAMBDA = (FOUNDATION_ROOT / "lambda.tf").read_text()
 FOUNDATION_IAM = (FOUNDATION_ROOT / "iam.tf").read_text()
+MEASUREMENT_INFRA = (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
 FOUNDATION_AGENTCORE = (FOUNDATION_ROOT / "agentcore.tf").read_text()
 FOUNDATION_PROVIDER = (FOUNDATION_ROOT / "providers.tf").read_text()
 FOUNDATION_TAILSCALE = (FOUNDATION_ROOT / "tailscale.tf").read_text()
@@ -361,7 +362,7 @@ def _top_level_terraform_block(source: str, header: str, occurrence: int = 0) ->
 
 
 def _terraform_rendered_development_delivery_policies() -> tuple[
-    dict[str, dict[str, object]], list[dict[str, object]]
+    dict[str, dict[str, object]], list[dict[str, object]], dict[str, object]
 ]:
     """Render the policy locals in a backend-free, credential-free Terraform root."""
     first_locals = _top_level_terraform_block(FOUNDATION_IAM, "locals", 0)
@@ -369,6 +370,17 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
     policy_data = _top_level_terraform_block(
         FOUNDATION_IAM,
         'data "aws_iam_policy_document" "development_delivery"',
+    )
+    foundation_data = "\n".join(
+        _top_level_terraform_block(
+            FOUNDATION_IAM, f'data "aws_iam_policy_document" "{name}"'
+        )
+        for name in (
+            "development_agentcore_trace_logs_assume",
+            "development_agentcore_trace_logs",
+            "development_agentcore_trace_firehose_assume",
+            "development_agentcore_trace_firehose",
+        )
     )
     policy_data = (
         policy_data.replace(
@@ -388,6 +400,11 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
           }}
         }}
 
+        variable "environment" {{
+          type    = string
+          default = "development"
+        }}
+
         provider "aws" {{
           region                         = "us-east-1"
           access_key                     = "test"
@@ -405,6 +422,7 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
 
         {first_locals}
         {policy_data}
+        {foundation_data}
         {policy_locals}
 
         output "development_delivery_policy_documents" {{
@@ -413,6 +431,15 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
 
         output "development_delivery_aggregate" {{
           value = data.aws_iam_policy_document.development_delivery.json
+        }}
+
+        output "development_agentcore_trace_foundation_documents" {{
+          value = {{
+            logs_assume     = data.aws_iam_policy_document.development_agentcore_trace_logs_assume[0].json
+            logs            = data.aws_iam_policy_document.development_agentcore_trace_logs[0].json
+            firehose_assume = data.aws_iam_policy_document.development_agentcore_trace_firehose_assume[0].json
+            firehose        = data.aws_iam_policy_document.development_agentcore_trace_firehose[0].json
+          }}
         }}
         """
     )
@@ -484,6 +511,7 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
         values = json.loads(rendered.stdout)["planned_values"]["outputs"]
         documents = values["development_delivery_policy_documents"]["value"]
         aggregate = values["development_delivery_aggregate"]["value"]
+        foundation = values["development_agentcore_trace_foundation_documents"]["value"]
         assert isinstance(documents, dict)
         assert isinstance(aggregate, str)
         return (
@@ -492,6 +520,10 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
                 for key, value in cast(dict[str, str], documents).items()
             },
             cast(list[dict[str, object]], json.loads(aggregate)["Statement"]),
+            {
+                key: json.loads(value)
+                for key, value in cast(dict[str, str], foundation).items()
+            },
         )
 
 
@@ -7319,6 +7351,7 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "ListApplicationAthenaWorkGroups",
         "ReadManagedCloudFrontPolicies",
         "ReadApplicationKmsAliases",
+        "ReadAgentCoreTraceXRaySettings",
     }
     for sid in wildcard_statements:
         conditions = cast(list[dict[str, object]], by_sid[sid]["conditions"])
@@ -7887,6 +7920,9 @@ DEVELOPMENT_PLAN_SIDS = [
     "ReadRetainedRollupLogGroup",
     "DescribeApplicationLogPolicies",
     "DescribeApplicationLogGroups",
+    "ReadAgentCoreTraceSubscription",
+    "ReadAgentCoreTraceFirehose",
+    "ReadAgentCoreTraceXRaySettings",
     "ReadApplicationAlarms",
     "ReadRetainedRollupAlarms",
     "DescribeApplicationNetworking",
@@ -8005,6 +8041,21 @@ DEVELOPMENT_PLAN_REFRESH_TUPLES = {
     ),
     "DescribeApplicationLogGroups": (
         ("logs:DescribeLogGroups",),
+        ("*",),
+        _REGIONAL_PLAN_CONDITIONS,
+    ),
+    "ReadAgentCoreTraceSubscription": (
+        ("logs:DescribeSubscriptionFilters",),
+        ("${local.development_delivery_agentcore_trace_log_group_arn}:*",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadAgentCoreTraceFirehose": (
+        ("firehose:DescribeDeliveryStream",),
+        ("local.development_delivery_agentcore_trace_firehose_arn",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadAgentCoreTraceXRaySettings": (
+        ("xray:GetIndexingRules", "xray:GetTraceSegmentDestination"),
         ("*",),
         _REGIONAL_PLAN_CONDITIONS,
     ),
@@ -8364,7 +8415,7 @@ def _assert_development_plan_policy(source: str) -> None:
     )
     statements = _parsed_policy_document(source, "development_plan")
     assert [statement["sid"] for statement in statements] == DEVELOPMENT_PLAN_SIDS
-    assert len(statements) == 44
+    assert len(statements) == 47
     by_sid = _policy_by_sid(statements)
     parsed_tuples = _parsed_policy_tuple_map(source, "development_plan")
     assert set(parsed_tuples) == set(DEVELOPMENT_PLAN_SIDS)
@@ -8440,6 +8491,7 @@ def _assert_development_plan_policy(source: str) -> None:
         "ReadApplicationKmsAliases",
         "ListApplicationAthenaWorkGroups",
         "ReadManagedCloudFrontPolicies",
+        "ReadAgentCoreTraceXRaySettings",
     }
     for sid in wildcard_sids:
         assert by_sid[sid]["conditions"] == [
@@ -8550,7 +8602,7 @@ def test_development_plan_policy_set_is_deterministic_and_bounded():
         "runtime",
         "edge",
     }
-    assert len(aggregate) == 44
+    assert len(aggregate) == 47
     assert [
         statement
         for statement in aggregate
@@ -8587,6 +8639,196 @@ def _statement_allows(statement: dict[str, object], action: str, resource: str) 
     return action in cast(list[str], statement["actions"]) and resource in cast(
         list[str], statement["resources"]
     )
+
+
+def _assert_agentcore_trace_foundation_source(source: str) -> None:
+    logs_trust = _parsed_policy_document(
+        source, "development_agentcore_trace_logs_assume"
+    )
+    logs_policy = _parsed_policy_document(source, "development_agentcore_trace_logs")
+    firehose_trust = _parsed_policy_document(
+        source, "development_agentcore_trace_firehose_assume"
+    )
+    firehose_policy = _parsed_policy_document(
+        source, "development_agentcore_trace_firehose"
+    )
+    assert logs_trust == [
+        {
+            "sid": "",
+            "actions": ["sts:AssumeRole"],
+            "resources": [],
+            "conditions": [
+                {
+                    "test": "StringLike",
+                    "variable": "aws:SourceArn",
+                    "values": [
+                        "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:*"
+                    ],
+                }
+            ],
+        }
+    ]
+    assert logs_policy == [
+        {
+            "sid": "",
+            "actions": ["firehose:PutRecord"],
+            "resources": ["local.development_delivery_agentcore_trace_firehose_arn"],
+            "conditions": [],
+        }
+    ]
+    assert firehose_trust == [
+        {
+            "sid": "",
+            "actions": ["sts:AssumeRole"],
+            "resources": [],
+            "conditions": [
+                {"test": "StringEquals", "variable": "sts:ExternalId", "values": []}
+            ],
+        }
+    ]
+    assert firehose_policy == [
+        {
+            "sid": "",
+            "actions": [
+                "s3:GetBucketLocation",
+                "s3:ListBucket",
+                "s3:ListBucketMultipartUploads",
+            ],
+            "resources": ["local.development_delivery_measurement_bucket_arn"],
+            "conditions": [],
+        },
+        {
+            "sid": "",
+            "actions": ["s3:AbortMultipartUpload", "s3:GetObject", "s3:PutObject"],
+            "resources": [
+                "${local.development_delivery_measurement_bucket_arn}/agentcore-traces/*"
+            ],
+            "conditions": [],
+        },
+        {
+            "sid": "",
+            "actions": ["kms:Decrypt", "kms:GenerateDataKey"],
+            "resources": ["local.development_delivery_measurement_key_arn"],
+            "conditions": [
+                {
+                    "test": "StringEquals",
+                    "variable": "kms:ViaService",
+                    "values": ["s3.${local.development_delivery_region}.amazonaws.com"],
+                },
+                {
+                    "test": "StringEquals",
+                    "variable": "kms:EncryptionContext:aws:s3:arn",
+                    "values": [],
+                },
+            ],
+        },
+    ]
+    for name, service in (
+        ("development_agentcore_trace_logs_assume", "logs.amazonaws.com"),
+        ("development_agentcore_trace_firehose_assume", "firehose.amazonaws.com"),
+    ):
+        principals = _hcl_named_blocks(
+            terraform_block(source, f'data "aws_iam_policy_document" "{name}"'),
+            "principals",
+        )
+        assert len(principals) == 1
+        assert _hcl_scalar(principals[0], "type") == "Service"
+        assert _hcl_strings(_hcl_attribute(principals[0], "identifiers")) == [service]
+
+
+def _assert_agentcore_trace_bucket_key_contract(iam: str, measurement: str) -> None:
+    encryption = terraform_block(
+        measurement,
+        'resource "aws_s3_bucket_server_side_encryption_configuration" "agent_measurement"',
+    )
+    assert "bucket_key_enabled = true" in encryption
+    firehose = _policy_by_sid(
+        _parsed_policy_document(iam, "development_agentcore_trace_firehose")
+    )[""]
+    firehose_source = terraform_block(
+        iam, 'data "aws_iam_policy_document" "development_agentcore_trace_firehose"'
+    )
+    assert (
+        "values   = [local.development_delivery_measurement_bucket_arn]"
+        in firehose_source
+    )
+    assert firehose["resources"] == ["local.development_delivery_measurement_key_arn"]
+    assert firehose["conditions"] == [
+        {
+            "test": "StringEquals",
+            "variable": "kms:ViaService",
+            "values": ["s3.${local.development_delivery_region}.amazonaws.com"],
+        },
+        {
+            "test": "StringEquals",
+            "variable": "kms:EncryptionContext:aws:s3:arn",
+            "values": [],
+        },
+    ]
+
+
+def _assert_agentcore_trace_resource_headers(source: str) -> None:
+    headers = sorted(
+        set(
+            re.findall(
+                r'(?m)^resource "(aws_[^"]+)" "([^"]+)" \{',
+                source,
+            )
+        )
+    )
+    assert len(headers) == 28
+    assert (
+        hashlib.sha256(
+            json.dumps(headers, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        == "a00621201c851c38b78ec4f9cb75cd723c8bcf06145f6b9092a48a97f2c59824"
+    )
+    trace_headers = {
+        ("aws_iam_role", "development_agentcore_trace_logs"),
+        ("aws_iam_role_policy", "development_agentcore_trace_logs"),
+        ("aws_iam_role", "development_agentcore_trace_firehose"),
+        ("aws_iam_role_policy", "development_agentcore_trace_firehose"),
+    }
+    assert trace_headers <= set(headers)
+    for resource_type, name in trace_headers:
+        assert "count" in terraform_block(
+            source, f'resource "{resource_type}" "{name}"'
+        )
+        assert 'var.environment == "development" ? 1 : 0' in terraform_block(
+            source, f'resource "{resource_type}" "{name}"'
+        )
+
+
+def _assert_agentcore_trace_identity_reads(source: str) -> None:
+    expected: dict[
+        str, tuple[list[str], list[str], list[dict[str, str | list[str]]]]
+    ] = {
+        "ReadAgentCoreTraceSubscription": (
+            ["logs:DescribeSubscriptionFilters"],
+            ["${local.development_delivery_agentcore_trace_log_group_arn}:*"],
+            [],
+        ),
+        "ReadAgentCoreTraceFirehose": (
+            ["firehose:DescribeDeliveryStream"],
+            ["local.development_delivery_agentcore_trace_firehose_arn"],
+            [],
+        ),
+        "ReadAgentCoreTraceXRaySettings": (
+            ["xray:GetIndexingRules", "xray:GetTraceSegmentDestination"],
+            ["*"],
+            [{"test": "StringEquals", "variable": "aws:RequestedRegion", "values": []}],
+        ),
+    }
+    for document in ("development_delivery", "development_plan"):
+        statements = _policy_by_sid(_parsed_policy_document(source, document))
+        assert {
+            sid: (
+                statements[sid]["actions"],
+                statements[sid]["resources"],
+                statements[sid]["conditions"],
+            )
+            for sid in expected
+        } == expected
 
 
 def test_development_delivery_direct_api_denials_are_resource_scoped():
@@ -8731,9 +8973,347 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
     )
 
 
+def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
+    delivery = _policy_by_sid(
+        _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
+    )
+    assert {
+        sid: (
+            delivery[sid]["actions"],
+            delivery[sid]["resources"],
+            delivery[sid]["conditions"],
+        )
+        for sid in (
+            "ReadAgentCoreTraceSubscription",
+            "ReadAgentCoreTraceFirehose",
+            "ReadAgentCoreTraceXRaySettings",
+        )
+    } == {
+        "ReadAgentCoreTraceSubscription": (
+            ["logs:DescribeSubscriptionFilters"],
+            ["${local.development_delivery_agentcore_trace_log_group_arn}:*"],
+            [],
+        ),
+        "ReadAgentCoreTraceFirehose": (
+            ["firehose:DescribeDeliveryStream"],
+            ["local.development_delivery_agentcore_trace_firehose_arn"],
+            [],
+        ),
+        "ReadAgentCoreTraceXRaySettings": (
+            ["xray:GetIndexingRules", "xray:GetTraceSegmentDestination"],
+            ["*"],
+            [{"test": "StringEquals", "variable": "aws:RequestedRegion", "values": []}],
+        ),
+    }
+    _assert_agentcore_trace_identity_reads(FOUNDATION_IAM)
+    trace_actions = {
+        action
+        for sid in {
+            "ReadAgentCoreTraceSubscription",
+            "ReadAgentCoreTraceFirehose",
+            "ReadAgentCoreTraceXRaySettings",
+        }
+        for action in cast(list[str], delivery[sid]["actions"])
+    }
+    assert (
+        not {
+            "logs:PutSubscriptionFilter",
+            "logs:DeleteSubscriptionFilter",
+            "logs:PutResourcePolicy",
+            "logs:DeleteResourcePolicy",
+            "firehose:CreateDeliveryStream",
+            "firehose:DeleteDeliveryStream",
+            "firehose:UpdateDestination",
+            "xray:UpdateIndexingRule",
+            "xray:UpdateTraceSegmentDestination",
+            "s3:PutLifecycleConfiguration",
+            "glue:CreateTable",
+            "glue:DeleteTable",
+            "glue:UpdateTable",
+            "athena:CreateNamedQuery",
+            "athena:DeleteNamedQuery",
+            "athena:UpdateNamedQuery",
+            "iam:PassRole",
+        }
+        & trace_actions
+    )
+    production = _top_level_terraform_block(FOUNDATION_IAM, "locals", 3)
+    assert "development_delivery_trace_statement_sids = toset" in production
+    for sid in {
+        "ReadAgentCoreTraceSubscription",
+        "ReadAgentCoreTraceFirehose",
+        "ReadAgentCoreTraceXRaySettings",
+    }:
+        assert f'"{sid}"' in production
+    assert "production_delivery_trace_role_arns" not in production
+    role_discovery = _top_level_terraform_block(FOUNDATION_IAM, "locals", 0)
+    assert "nova-toll-v2-agentcore-traces-logs-dev" not in role_discovery
+    assert "nova-toll-v2-agentcore-traces-firehose-dev" not in role_discovery
+    _, rendered_delivery, foundation = (
+        _terraform_rendered_development_delivery_policies()
+    )
+    _assert_agentcore_trace_foundation_source(FOUNDATION_IAM)
+    _assert_agentcore_trace_bucket_key_contract(FOUNDATION_IAM, MEASUREMENT_INFRA)
+    _assert_agentcore_trace_resource_headers(FOUNDATION_IAM)
+    assert foundation["logs_assume"] == {
+        "Statement": [
+            {
+                "Action": "sts:AssumeRole",
+                "Condition": {
+                    "StringLike": {
+                        "aws:SourceArn": "arn:aws:logs:us-east-1:903859731897:*"
+                    }
+                },
+                "Effect": "Allow",
+                "Principal": {"Service": "logs.amazonaws.com"},
+            }
+        ],
+        "Version": "2012-10-17",
+    }
+    assert foundation["logs"] == {
+        "Statement": [
+            {
+                "Action": "firehose:PutRecord",
+                "Effect": "Allow",
+                "Resource": "arn:aws:firehose:us-east-1:903859731897:deliverystream/nova-toll-v2-agentcore-traces-dev",
+            }
+        ],
+        "Version": "2012-10-17",
+    }
+    assert foundation["firehose_assume"] == {
+        "Statement": [
+            {
+                "Action": "sts:AssumeRole",
+                "Condition": {"StringEquals": {"sts:ExternalId": "903859731897"}},
+                "Effect": "Allow",
+                "Principal": {"Service": "firehose.amazonaws.com"},
+            }
+        ],
+        "Version": "2012-10-17",
+    }
+    assert foundation["firehose"] == {
+        "Statement": [
+            {
+                "Action": [
+                    "s3:ListBucketMultipartUploads",
+                    "s3:ListBucket",
+                    "s3:GetBucketLocation",
+                ],
+                "Effect": "Allow",
+                "Resource": "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-903859731897-dev",
+            },
+            {
+                "Action": ["s3:PutObject", "s3:GetObject", "s3:AbortMultipartUpload"],
+                "Effect": "Allow",
+                "Resource": "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-903859731897-dev/agentcore-traces/*",
+            },
+            {
+                "Action": ["kms:GenerateDataKey", "kms:Decrypt"],
+                "Condition": {
+                    "StringEquals": {
+                        "kms:EncryptionContext:aws:s3:arn": "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-903859731897-dev",
+                        "kms:ViaService": "s3.us-east-1.amazonaws.com",
+                    },
+                },
+                "Effect": "Allow",
+                "Resource": "arn:aws:kms:us-east-1:903859731897:key/076e8341-894b-405c-96e9-2b037f96e2a6",
+            },
+        ],
+        "Version": "2012-10-17",
+    }
+    for name in (
+        "development_agentcore_trace_logs",
+        "development_agentcore_trace_firehose",
+    ):
+        role = terraform_block(FOUNDATION_IAM, f'resource "aws_iam_role" "{name}"')
+        policy = terraform_block(
+            FOUNDATION_IAM, f'resource "aws_iam_role_policy" "{name}"'
+        )
+        assert 'count                = var.environment == "development" ? 1 : 0' in role
+        assert 'count  = var.environment == "development" ? 1 : 0' in policy
+    assert (
+        FOUNDATION_IAM.count('resource "aws_iam_role" "development_agentcore_trace_')
+        == 2
+    )
+    assert (
+        FOUNDATION_IAM.count(
+            'resource "aws_iam_role_policy" "development_agentcore_trace_'
+        )
+        == 2
+    )
+    rendered_delivery_by_sid = {
+        statement["Sid"]: statement for statement in rendered_delivery
+    }
+    assert {
+        sid: {
+            key: rendered_delivery_by_sid[sid].get(key)
+            for key in ("Action", "Resource", "Condition")
+        }
+        for sid in (
+            "ReadAgentCoreTraceSubscription",
+            "ReadAgentCoreTraceFirehose",
+            "ReadAgentCoreTraceXRaySettings",
+        )
+    } == {
+        "ReadAgentCoreTraceSubscription": {
+            "Action": "logs:DescribeSubscriptionFilters",
+            "Resource": "arn:aws:logs:us-east-1:903859731897:log-group:aws/spans:*",
+            "Condition": None,
+        },
+        "ReadAgentCoreTraceFirehose": {
+            "Action": "firehose:DescribeDeliveryStream",
+            "Resource": "arn:aws:firehose:us-east-1:903859731897:deliverystream/nova-toll-v2-agentcore-traces-dev",
+            "Condition": None,
+        },
+        "ReadAgentCoreTraceXRaySettings": {
+            "Action": ["xray:GetTraceSegmentDestination", "xray:GetIndexingRules"],
+            "Resource": "*",
+            "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-1"}},
+        },
+    }
+    for marker, original, replacement in (
+        (
+            'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',
+            "logs.amazonaws.com",
+            "lambda.amazonaws.com",
+        ),
+        (
+            'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',
+            "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:*",
+            "arn:aws:logs:us-west-2:903859731897:*",
+        ),
+        (
+            'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',
+            "local.development_delivery_account_id",
+            '"000000000000"',
+        ),
+        (
+            'data "aws_iam_policy_document" "development_agentcore_trace_firehose_assume"',
+            "local.development_delivery_account_id",
+            '"000000000000"',
+        ),
+        (
+            'data "aws_iam_policy_document" "development_agentcore_trace_logs"',
+            "local.development_delivery_agentcore_trace_firehose_arn",
+            '"arn:aws:firehose:us-east-1:903859731897:deliverystream/unrelated"',
+        ),
+        (
+            'data "aws_iam_policy_document" "development_agentcore_trace_firehose"',
+            "/agentcore-traces/*",
+            "/*",
+        ),
+        (
+            'data "aws_iam_policy_document" "development_agentcore_trace_firehose"',
+            "local.development_delivery_measurement_key_arn",
+            '"arn:aws:kms:us-east-1:903859731897:key/unrelated"',
+        ),
+        (
+            'data "aws_iam_policy_document" "development_agentcore_trace_firehose"',
+            "kms:ViaService",
+            "kms:EncryptionContext:wrong",
+        ),
+        (
+            'data "aws_iam_policy_document" "development_agentcore_trace_firehose"',
+            "StringEquals",
+            "StringLike",
+        ),
+        (
+            'data "aws_iam_policy_document" "development_agentcore_trace_firehose"',
+            "local.development_delivery_measurement_bucket_arn",
+            '"arn:aws:s3:::wrong-bucket"',
+        ),
+        (
+            'data "aws_iam_policy_document" "development_agentcore_trace_firehose"',
+            "s3:GetObject",
+            "s3:DeleteObject",
+        ),
+    ):
+        _must_reject_after_marker(
+            _assert_agentcore_trace_foundation_source,
+            FOUNDATION_IAM,
+            marker,
+            original,
+            replacement,
+        )
+    _must_reject_after_marker(
+        lambda source: _assert_agentcore_trace_bucket_key_contract(
+            source, MEASUREMENT_INFRA
+        ),
+        FOUNDATION_IAM,
+        'data "aws_iam_policy_document" "development_agentcore_trace_firehose"',
+        "kms:EncryptionContext:aws:s3:arn",
+        "kms:EncryptionContext:wrong",
+    )
+    _must_reject(
+        lambda source: _assert_agentcore_trace_bucket_key_contract(
+            FOUNDATION_IAM, source
+        ),
+        MEASUREMENT_INFRA,
+        "bucket_key_enabled = true",
+        "bucket_key_enabled = false",
+    )
+    _must_reject(
+        lambda source: _assert_agentcore_trace_bucket_key_contract(
+            FOUNDATION_IAM, source
+        ),
+        MEASUREMENT_INFRA,
+        "bucket_key_enabled = true",
+        "",
+    )
+    _must_reject_after_marker(
+        _assert_agentcore_trace_foundation_source,
+        FOUNDATION_IAM,
+        'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',
+        '["logs.amazonaws.com"]',
+        '["logs.amazonaws.com", "lambda.amazonaws.com"]',
+    )
+    _must_reject_after_marker(
+        _assert_agentcore_trace_resource_headers,
+        FOUNDATION_IAM,
+        'resource "aws_iam_role" "development_agentcore_trace_logs"',
+        'var.environment == "development"',
+        "true",
+    )
+    for resource_type, label in (
+        ("aws_iam_role", "arbitrary_role"),
+        ("aws_iam_role_policy", "arbitrary_policy"),
+        ("aws_kms_key", "arbitrary_key"),
+    ):
+        with pytest.raises(AssertionError):
+            _assert_agentcore_trace_resource_headers(
+                FOUNDATION_IAM + f'\nresource "{resource_type}" "{label}" {{}}\n'
+            )
+    with pytest.raises(AssertionError):
+        _assert_agentcore_trace_resource_headers(
+            FOUNDATION_IAM
+            + '\nresource "aws_glue_catalog_table" "agentcore_traces" {}\n'
+        )
+    for resource_type in (
+        "aws_cloudwatch_log_subscription_filter",
+        "aws_cloudwatch_log_resource_policy",
+        "aws_kinesis_firehose_delivery_stream",
+        "aws_xray_trace_segment_destination",
+        "aws_athena_named_query",
+        "aws_s3_bucket_lifecycle_configuration",
+    ):
+        with pytest.raises(AssertionError):
+            _assert_agentcore_trace_resource_headers(
+                FOUNDATION_IAM
+                + f'\nresource "{resource_type}" "arbitrary_label" {{}}\n'
+            )
+    for document in ("development_delivery", "development_plan"):
+        _must_reject_after_marker(
+            _assert_agentcore_trace_identity_reads,
+            FOUNDATION_IAM,
+            f'data "aws_iam_policy_document" "{document}"',
+            "logs:DescribeSubscriptionFilters",
+            "logs:PutSubscriptionFilter",
+        )
+
+
 def test_development_delivery_policy_set_is_deterministic_and_bounded():
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 54
+    assert len(statements) == 57
     expected_groups = {
         "state": (
             0,
@@ -8762,7 +9342,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         ),
         "observability": (
             13,
-            22,
+            25,
             [
                 "ManageApplicationEventRules",
                 "ReadRetainedRollupEventRule",
@@ -8770,14 +9350,17 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
                 "ReadRetainedRollupLogGroup",
                 "DescribeApplicationLogPolicies",
                 "DescribeApplicationLogGroups",
+                "ReadAgentCoreTraceSubscription",
+                "ReadAgentCoreTraceXRaySettings",
+                "ReadAgentCoreTraceFirehose",
                 "ManageApplicationAlarms",
                 "ReadRetainedRollupAlarms",
                 "DescribeApplicationNetworking",
             ],
         ),
         "storage": (
-            22,
-            27,
+            25,
+            30,
             [
                 "ManageApplicationSiteBuckets",
                 "ManageApplicationMeasurementBucket",
@@ -8787,8 +9370,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
         "data": (
-            27,
-            35,
+            30,
+            38,
             [
                 "UseApplicationKmsKeys",
                 "ReadRetainedMeasurementKey",
@@ -8801,8 +9384,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
         "runtime": (
-            35,
-            45,
+            38,
+            48,
             [
                 "ManageApplicationSchedules",
                 "PassTimedChecksSchedulerRole",
@@ -8817,8 +9400,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
         "edge": (
-            45,
-            54,
+            48,
+            57,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -8832,12 +9415,12 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
     }
-    rendered_documents, rendered_aggregate = (
+    rendered_documents, rendered_aggregate, _ = (
         _terraform_rendered_development_delivery_policies()
     )
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups)
-    assert len(rendered_aggregate) == len(statements) == 54
+    assert len(rendered_aggregate) == len(statements) == 57
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
         "StringEquals": {"aws:RequestedRegion": "us-east-1"}
