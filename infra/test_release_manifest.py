@@ -1,10 +1,11 @@
 import argparse
 import hashlib
+import io
 import json
 import subprocess
 import tempfile
 import unittest
-from contextlib import ExitStack
+from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -238,6 +239,116 @@ class ReleaseManifestTests(unittest.TestCase):
             mock.patch.object(release_manifest, "INPUT_PREFIXES", ()),
         ):
             self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
+
+    def test_privileged_workflow_transition_accepts_only_absence_or_exact_digest(self) -> None:
+        transition = release_manifest.PRIVILEGED_WORKFLOW_TRANSITION_INPUT
+        self.assertEqual(
+            release_manifest.PRIVILEGED_WORKFLOW_TRANSITION_DIGEST,
+            "16de8c9bf99986c1d2117441da6f43bd09fc652fbfaad0e9592b53c10f76f910",
+        )
+        self.assertEqual(self.verify()["status"], "accepted")
+        (self.root / "evidence.json").unlink()
+
+        path = self.track(transition, b"privileged workflow\n")
+        with mock.patch.object(
+            release_manifest, "PRIVILEGED_WORKFLOW_TRANSITION_DIGEST", digest(path)
+        ):
+            self.assertEqual(self.verify()["status"], "accepted")
+            (self.root / "evidence.json").unlink()
+            path.write_bytes(b"wrong privileged workflow\n")
+            self.assert_rejected("input_digest_mismatch")
+        path.write_bytes(b"privileged workflow\n")
+
+        self.manifest_value["deployment_inputs"] = dict(
+            sorted({"input.txt": digest(self.input), transition: digest(path)}.items())
+        )
+        self.write_manifest()
+        self.assertEqual(self.verify()["status"], "accepted")
+        (self.root / "evidence.json").unlink()
+
+        self.manifest_value["deployment_inputs"][transition] = "0" * 64
+        self.write_manifest()
+        self.assert_rejected("input_digest_mismatch")
+
+    def test_privileged_workflow_transition_does_not_widen_inventory(self) -> None:
+        transition = release_manifest.PRIVILEGED_WORKFLOW_TRANSITION_INPUT
+        self.track(transition)
+        self.track("other.txt")
+        self.assert_rejected(
+            "inventory_mismatch", _exact_inputs={"input.txt", "other.txt"}
+        )
+
+        self.manifest_value["deployment_inputs"] = dict(
+            sorted({"input.txt": digest(self.input), "extra.txt": "0" * 64}.items())
+        )
+        self.write_manifest()
+        self.assert_rejected("inventory_mismatch")
+
+    def test_privileged_workflow_cli_rejection_is_sanitized(self) -> None:
+        transition = release_manifest.PRIVILEGED_WORKFLOW_TRANSITION_INPUT
+        sentinel = "privileged-workflow-sentinel-do-not-leak"
+        self.track(transition, sentinel.encode())
+        self.assertNotEqual(
+            hashlib.sha256(sentinel.encode()).hexdigest(),
+            release_manifest.PRIVILEGED_WORKFLOW_TRANSITION_DIGEST,
+        )
+        output = io.StringIO()
+        with (
+            mock.patch.object(release_manifest, "EXACT_INPUTS", {"input.txt"}),
+            mock.patch.object(release_manifest, "INPUT_PREFIXES", ()),
+            mock.patch.object(release_manifest, "FIXED_BACKENDS", {}),
+            redirect_stdout(output),
+        ):
+            exit_code = release_manifest.main(
+                [
+                    "--manifest",
+                    str(self.manifest),
+                    "--package-dir",
+                    str(self.packages),
+                    "--checksums",
+                    str(self.checksums),
+                    "--candidate-sha",
+                    SHA,
+                    "--run-id",
+                    RUN,
+                    "--repo-root",
+                    str(self.root),
+                    "--write-evidence",
+                    str(self.root / "evidence.json"),
+                ]
+            )
+        result = json.loads(output.getvalue())
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(
+            result, {"status": "rejected", "reason_code": "input_digest_mismatch"}
+        )
+        self.assertNotIn(transition, output.getvalue())
+        self.assertNotIn(sentinel, output.getvalue())
+
+    def test_privileged_workflow_transition_matches_no_path_variant(self) -> None:
+        transition = release_manifest.PRIVILEGED_WORKFLOW_TRANSITION_INPUT
+        for variant in (f"{transition}.bak", f"prefix/{transition}"):
+            self.assertFalse(release_manifest._selected(variant))
+            self.track(variant)
+        self.assertEqual(self.verify()["status"], "accepted")
+
+    def test_future_tightening_requires_and_accepts_privileged_workflow(self) -> None:
+        transition = release_manifest.PRIVILEGED_WORKFLOW_TRANSITION_INPUT
+        path = self.track(transition)
+        exact_inputs = {"input.txt", transition}
+        with mock.patch.object(
+            release_manifest, "PRIVILEGED_WORKFLOW_TRANSITION_INPUT", "bridge-removed"
+        ):
+            self.assert_rejected("inventory_mismatch", _exact_inputs=exact_inputs)
+            self.manifest_value["deployment_inputs"] = dict(
+                sorted(
+                    {"input.txt": digest(self.input), transition: digest(path)}.items()
+                )
+            )
+            self.write_manifest()
+            self.assertEqual(
+                self.verify(_exact_inputs=exact_inputs)["status"], "accepted"
+            )
 
     def test_production_control_inventory_is_feature_detected_and_complete(self):
         non_marker = next(
