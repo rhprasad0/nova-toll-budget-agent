@@ -63,6 +63,9 @@ FOUNDATION_FIELDS = (
 DEVELOPMENT_DELIVERY_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-development-delivery.yml"
 ).read_text()
+DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "v2-development-delivery-privileged.yml"
+).read_text()
 DEVELOPMENT_PLAN_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-development-plan.yml"
 ).read_text()
@@ -4242,7 +4245,7 @@ def test_timed_package_is_threaded_through_all_plan_paths():
     )
     assert (
         '-var timed_checks_package_path="$PACKAGE_DIR/timed-checks.zip"'
-        in DEVELOPMENT_DELIVERY_WORKFLOW
+        in DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW
     )
     assert (
         '-var timed_checks_package_path="$overlay/v2/infra/build/timed-checks.zip"'
@@ -4941,11 +4944,13 @@ def _jq_validator_accepts(predicate: str, payload: object) -> bool:
 
 
 def test_development_foundation_output_validators_fail_closed_and_match():
-    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    workflow = cast(
+        dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    )
     workflow_jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     deploy_source = _workflow_run_source(workflow_jobs["deploy"])
     workflow_predicate = _development_foundation_validator(
-        DEVELOPMENT_DELIVERY_WORKFLOW
+        DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW
     )
     runbook_predicate = _development_cutover_foundation_validator(DEPLOYMENT)
 
@@ -5077,7 +5082,7 @@ def test_setup_uv_v10_pins_version_and_checksum() -> None:
             )
 
 
-def _assert_development_delivery_workflow(source: str) -> None:
+def _assert_development_delivery_caller(source: str) -> None:
     workflow = cast(dict[str, object], yaml.safe_load(source))
     assert _workflow_trigger(workflow) == {"push": {"branches": ["main"]}}
     assert workflow["permissions"] == {"contents": "read"}
@@ -5086,513 +5091,168 @@ def _assert_development_delivery_workflow(source: str) -> None:
         "admission",
         "release-record",
         "build",
-        "oidc-proof",
         "deploy",
         "release-result",
     }
     record = jobs["release-record"]
     assert record["needs"] == "admission"
-    assert record["permissions"] == {"contents": "read", "deployments": "write"}
-    assert "development_deployment_status.py create" in _workflow_run_source(record)
-    result = jobs["release-result"]
-    assert result["needs"] == [
-        "admission",
-        "release-record",
-        "build",
-        "oidc-proof",
-        "deploy",
-    ]
-    assert result["if"] == "always() && needs.admission.result == 'success'"
-    assert result["permissions"] == {
-        "contents": "read",
-        "actions": "read",
-        "deployments": "write",
-    }
-    result_steps = cast(list[dict[str, object]], result["steps"])
-    prepare = next(
-        step for step in result_steps if step.get("id") == "prepare-evidence"
-    )
-    upload = next(step for step in result_steps if step.get("id") == "upload-evidence")
-    finalize = next(
-        step
-        for step in result_steps
-        if step.get("name") == "Finalize sanitized release outcome"
-    )
-    assert prepare["if"] == "always()"
-    assert "development_deployment_status.py prepare" in cast(str, prepare["run"])
-    assert upload["if"] == "always() && steps.prepare-evidence.outcome == 'success'"
-    assert (
-        upload["uses"]
-        == "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
-    )
-    assert upload["with"] == {
-        "name": "v2-development-evidence-${{ github.run_id }}-${{ github.run_attempt }}",
-        "path": "${{ runner.temp }}/development-release-evidence.json",
-        "if-no-files-found": "error",
-        "retention-days": 90,
-        "overwrite": False,
-    }
-    assert finalize["if"] == "always()"
-    finalize_source = cast(str, finalize["run"])
-    assert "development_deployment_status.py finish" in finalize_source
-    for required in (
-        "PREPARE_OUTCOME",
-        "UPLOAD_OUTCOME",
-        "EVIDENCE_ARTIFACT_NAME",
-        "EVIDENCE_ARTIFACT_ID",
-        "RAW_EVIDENCE_ARTIFACT_DIGEST",
-    ):
-        assert required in cast(dict[str, str], finalize["env"])
-    assert (
-        result_steps.index(prepare)
-        < result_steps.index(upload)
-        < result_steps.index(finalize)
-    )
-    deploy_source = _workflow_run_source(jobs["deploy"])
-    assert deploy_source.index('apply -input=false "$PLAN"') < deploy_source.index(
-        "check_development_release.py"
-    )
-    assert jobs["deploy"]["outputs"] == {
-        "verified": "${{ steps.verify-release.outputs.verified }}",
-        "canary": "${{ steps.verify-release.outputs.canary }}",
-        "verified_pricing_schema": "${{ steps.migration-schema.outputs.verified_pricing_schema }}",
-        "verified_oracle_schema": "${{ steps.migration-schema.outputs.verified_oracle_schema }}",
-    }
-    deploy_steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
-    deploy_names = [cast(str, step.get("name", "")) for step in deploy_steps]
-    extraction = next(
-        step
-        for step in deploy_steps
-        if step.get("name") == "Extract verified installed schema versions"
-    )
-    assert (
-        deploy_names.index("Run reviewed backward-compatible development migrations")
-        < deploy_names.index("Extract verified installed schema versions")
-        < deploy_names.index("Cleanup private delivery files")
-    )
-    extraction_source = cast(str, extraction["run"])
-    assert "v2-development-migrations-evidence.json" in extraction_source
-    assert ".after" in extraction_source
-    assert "development-readiness-state.json" in deploy_source
-    assert (
-        'CANARY_DEPLOYMENT_ID="${{ needs.release-record.outputs.deployment_id }}"'
-        in deploy_source
-    )
-    assert (
-        'CANARY_ARTIFACT_ID="${{ needs.build.outputs.artifact_id }}"' in deploy_source
-    )
-    assert (
-        'CANARY_ARTIFACT_DIGEST="${{ needs.build.outputs.artifact_digest }}"'
-        in deploy_source
-    )
-
-    admission = jobs["admission"]
-    assert admission["permissions"] == {"contents": "read", "actions": "read"}
-    admission_source = _workflow_run_source(admission)
-    assert "check_development_admission.py" in admission_source
-    assert "GITHUB_EVENT_PATH" in admission_source
-    assert "aws-actions/configure-aws-credentials@" not in admission_source
-    assert "timeout-seconds 900" in admission_source
-    assert "GITHUB_SHA" not in admission_source or "CANDIDATE_SHA" in admission_source
-
-    build = jobs["build"]
-    assert build["needs"] == ["admission", "release-record"]
-    assert build["permissions"] == {"contents": "read", "actions": "read"}
-    assert "id-token" not in cast(dict[str, str], build["permissions"])
-    build_steps = cast(list[dict[str, object]], build["steps"])
-    _assert_development_build_setup_uv(build)
-    build_source = _workflow_run_source(build)
-    assert all(
-        not cast(str, step.get("uses", "")).startswith(
-            "aws-actions/configure-aws-credentials@"
-        )
-        for step in build_steps
-    )
-    assert "./scripts/build_release_bundle.sh" in build_source
-    uploads = [
-        step
-        for step in build_steps
-        if cast(str, step.get("uses", "")).startswith("actions/upload-artifact@")
-    ]
-    upload_names = {cast(dict[str, str], step["with"])["name"] for step in uploads}
-    assert upload_names == {
-        "v2-development-packages-${{ github.run_id }}-${{ github.sha }}",
-        "v2-development-checksums-${{ github.run_id }}-${{ github.sha }}",
-        "v2-development-release-${{ github.sha }}",
-    }
-    release_upload = next(
-        step
-        for step in uploads
-        if cast(dict[str, object], step["with"])["name"]
-        == "v2-development-release-${{ github.sha }}"
-    )
-    upload = release_upload
-    assert upload["id"] == "upload-release"
-    assert cast(dict[str, object], upload["with"]) == {
-        "name": "v2-development-release-${{ github.sha }}",
-        "path": "v2/infra/build/release",
-        "if-no-files-found": "error",
-        "retention-days": 90,
-        "overwrite": False,
-    }
-    assert jobs["build"]["outputs"] == {
-        "artifact_id": "${{ steps.release-identity.outputs.artifact_id }}",
-        "artifact_digest": "${{ steps.release-identity.outputs.artifact_digest }}",
-        "pricing_schema": "${{ steps.release-identity.outputs.pricing_schema }}",
-        "oracle_schema": "${{ steps.release-identity.outputs.oracle_schema }}",
-    }
-    assert "RELEASE_ARTIFACT_ID" in build_source
-    assert "RELEASE_ARTIFACT_DIGEST" in build_source
-    assert "GITHUB_STEP_SUMMARY" in build_source
-
-    proof = jobs["oidc-proof"]
-    assert proof["needs"] == "admission"
-    assert (
-        proof["if"]
-        == "github.ref == 'refs/heads/main' && needs.admission.result == 'success'"
-    )
-    assert proof["environment"] == "development"
-    assert proof["permissions"] == {"contents": "read", "id-token": "write"}
-    assert proof["outputs"] == {
-        "artifact_id": "${{ steps.upload-proof.outputs.artifact-id }}"
-    }
-    proof_steps = cast(list[dict[str, object]], proof["steps"])
-    proof_source = _workflow_run_source(proof)
-    assert all(
-        not cast(str, step.get("uses", "")).startswith(
-            ("aws-actions/configure-aws-credentials@", "hashicorp/setup-terraform@")
-        )
-        for step in proof_steps
-    )
-    assert "ACTIONS_ID_TOKEN_REQUEST_URL" in proof_source
-    assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" in proof_source
-    assert re.findall(r'oidc_url="([^"]+)"', proof_source) == [
-        "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com",
-        "${ACTIONS_ID_TOKEN_REQUEST_URL}?audience=sts.amazonaws.com",
-    ]
-    validator_match = re.search(
-        r'python3 - "\$GITHUB_SHA" <<\x27PY\x27\n(.*?)\nPY',
-        proof_source,
-        flags=re.DOTALL,
-    )
-    assert validator_match is not None
-    validator_tree = ast.parse(dedent(validator_match.group(1)))
-    expected_assignment = next(
-        node
-        for node in ast.walk(validator_tree)
-        if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "expected"
-            for target in node.targets
-        )
-    )
-    expected_values = dict(
-        zip(
-            (
-                cast(ast.Constant, key).value
-                for key in cast(ast.Dict, expected_assignment.value).keys
-            ),
-            cast(ast.Dict, expected_assignment.value).values,
-            strict=True,
-        )
-    )
-    assert cast(ast.Constant, expected_values["aud"]).value == "sts.amazonaws.com"
-    assert (
-        cast(ast.Constant, expected_values["iss"]).value
-        == "https://token.actions.githubusercontent.com"
-    )
-    assert "base64.urlsafe_b64decode" in proof_source
-    assert (
-        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"
-        in proof_source
-    )
-    assert '"environment": "development"' in proof_source
-    assert '"repository": "rhprasad0/nova-toll-budget-agent"' in proof_source
-    assert '"ref": "refs/heads/main"' in proof_source
-    assert '"sha": expected_sha' in proof_source
-    assert '"$RUNNER_TEMP/protected-main-oidc.json"' in proof_source
-    proof_uploads = [
-        step
-        for step in proof_steps
-        if cast(str, step.get("uses", "")).startswith("actions/upload-artifact@")
-    ]
-    assert len(proof_uploads) == 1
-    assert proof_uploads[0]["id"] == "upload-proof"
-    assert cast(dict[str, object], proof_uploads[0]["with"]) == {
-        "name": "protected-main-oidc-proof",
-        "path": "${{ runner.temp }}/protected-main-oidc.json",
-        "if-no-files-found": "error",
-        "retention-days": 1,
-        "overwrite": False,
-        "include-hidden-files": False,
-    }
-    assert "oidc_token" in proof_source
-    assert "full claims" not in proof_source.lower()
-
     deploy = jobs["deploy"]
-    assert deploy["needs"] == ["admission", "release-record", "build", "oidc-proof"]
-    assert deploy["if"] == (
-        "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' "
-        "&& github.triggering_actor == github.actor"
+    assert (
+        deploy["if"]
+        == "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor"
     )
     assert (
-        "Repository variable: environment variables are unavailable to this pre-job gate."
-        in source
+        deploy["uses"] == "./.github/workflows/v2-development-delivery-privileged.yml"
     )
-    assert deploy["environment"] == "development"
+    assert deploy["needs"] == ["admission", "release-record", "build"]
     assert deploy["permissions"] == {
         "contents": "read",
         "actions": "read",
         "id-token": "write",
     }
+    assert "runs-on" not in deploy and "steps" not in deploy
+    assert deploy["with"] == {
+        "release_artifact_id": "${{ needs.build.outputs.artifact_id }}",
+        "release_artifact_digest": "${{ needs.build.outputs.artifact_digest }}",
+        "expected_pricing_schema": "${{ needs.build.outputs.pricing_schema }}",
+        "expected_oracle_schema": "${{ needs.build.outputs.oracle_schema }}",
+        "deployment_id": "${{ needs.release-record.outputs.deployment_id }}",
+    }
+    assert deploy["secrets"] == {
+        "TS_DEVELOPMENT_OAUTH_CLIENT_ID": "${{ secrets.TS_DEVELOPMENT_OAUTH_CLIENT_ID }}",
+        "TS_DEVELOPMENT_OAUTH_SECRET": "${{ secrets.TS_DEVELOPMENT_OAUTH_SECRET }}",
+    }
+    assert jobs["release-result"]["needs"] == [
+        "admission",
+        "release-record",
+        "build",
+        "deploy",
+    ]
+    setup_uv = next(
+        step
+        for step in cast(list[dict[str, object]], jobs["build"]["steps"])
+        if cast(str, step.get("uses", "")).startswith("astral-sh/setup-uv@")
+    )
+    assert setup_uv["with"] == {
+        "version": "0.12.5",
+        "checksum": "68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2",
+        "python-version": "3.13",
+    }
+
+
+def _assert_development_delivery_privileged(source: str) -> None:
+    workflow = cast(dict[str, object], yaml.safe_load(source))
+    trigger = cast(dict[str, object], _workflow_trigger(workflow))
+    assert set(trigger) == {"workflow_call"}
+    call = cast(dict[str, object], trigger["workflow_call"])
+    assert call["inputs"] == {
+        name: {"required": True, "type": "string"}
+        for name in (
+            "release_artifact_id",
+            "release_artifact_digest",
+            "expected_pricing_schema",
+            "expected_oracle_schema",
+            "deployment_id",
+        )
+    }
+    assert call["secrets"] == {
+        "TS_DEVELOPMENT_OAUTH_CLIENT_ID": {"required": True},
+        "TS_DEVELOPMENT_OAUTH_SECRET": {"required": True},
+    }
+    assert call["outputs"] == {
+        "verified": {"value": "${{ jobs.deploy.outputs.verified }}"},
+        "canary": {"value": "${{ jobs.deploy.outputs.canary }}"},
+        "verified_pricing_schema": {
+            "value": "${{ jobs.deploy.outputs.verified_pricing_schema }}"
+        },
+        "verified_oracle_schema": {
+            "value": "${{ jobs.deploy.outputs.verified_oracle_schema }}"
+        },
+    }
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    assert set(jobs) == {"oidc-proof", "deploy"}
+    proof = jobs["oidc-proof"]
+    assert proof["if"] == "github.ref == 'refs/heads/main'"
+    assert proof["environment"] == "development"
+    assert proof["permissions"] == {"contents": "read", "id-token": "write"}
+    proof_source = _workflow_run_source(proof)
+    for required in (
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development",
+        '"repository": "rhprasad0/nova-toll-budget-agent"',
+        "job_workflow_ref",
+        "set -euo pipefail",
+        "oidc_failure_emitted=0",
+        "oidc_fail",
+        '"$DEPLOYMENT_ID"',
+        "return 125",
+        "oidc-cleanup",
+    ):
+        assert required in proof_source
+    cleanup = next(
+        step
+        for step in cast(list[dict[str, object]], proof["steps"])
+        if step.get("name") == "Cleanup OIDC proof diagnostics"
+    )
+    cleanup_source = cast(str, cleanup["run"])
+    assert "if ! rm -f" in cleanup_source and "exit 125" in cleanup_source
+    deploy = jobs["deploy"]
+    assert deploy["needs"] == "oidc-proof"
+    assert (
+        deploy["if"]
+        == "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor"
+    )
+    assert deploy["environment"] == "development"
     assert deploy["concurrency"] == {"group": "v2-development-apply", "queue": "max"}
-    deploy_steps = cast(list[dict[str, object]], deploy["steps"])
     deploy_source = _workflow_run_source(deploy)
-    assert "check_development_admission.py" in deploy_source
-    assert "--recheck" in deploy_source
-    assert "Recheck admission before credentials" in "\n".join(
-        cast(str, step.get("name", "")) for step in deploy_steps
-    )
-    admission_recheck_source = cast(
-        str,
-        next(
-            step["run"]
-            for step in deploy_steps
-            if step.get("name") == "Recheck admission before credentials"
-        ),
-    )
-    assert "PRIVATE_STAGE_REPORTED=1" not in admission_recheck_source
-    downloads = [
-        step
-        for step in deploy_steps
-        if cast(str, step.get("uses", "")).startswith("actions/download-artifact@")
+    for required in (
+        "backend.development.hcl",
+        "build/loader.zip",
+    ):
+        assert required in deploy_source
+    assert deploy_source.count("backend.development.hcl") == 3
+    steps = cast(list[dict[str, object]], deploy["steps"])
+    credential_indexes = [
+        index
+        for index, step in enumerate(steps)
+        if cast(str, step.get("uses", "")).startswith(
+            "aws-actions/configure-aws-credentials@"
+        )
     ]
-    download_names = {
-        cast(dict[str, str], step["with"])["name"]
-        for step in downloads
-        if "name" in cast(dict[str, str], step["with"])
-    }
-    assert download_names == {
-        "v2-development-checksums-${{ github.run_id }}-${{ github.sha }}",
-    }
-    proof_downloads = [
+    proof_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") == "Validate protected-main OIDC proof"
+    )
+    admission_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") == "Recheck admission before credentials"
+    )
+    assert credential_indexes and admission_index < proof_index < credential_indexes[0]
+    terraform = next(
         step
-        for step in downloads
-        if "artifact-ids" in cast(dict[str, str], step["with"])
-    ]
-    assert len(proof_downloads) == 1
-    proof_download_with = cast(dict[str, str], proof_downloads[0]["with"])
-    assert proof_download_with == {
+        for step in steps
+        if cast(str, step.get("uses", "")).startswith("hashicorp/setup-terraform@")
+    )
+    assert terraform["with"] == {
+        "terraform_wrapper": False,
+        "terraform_version": "1.15.8",
+    }
+    proof_download = next(
+        step
+        for step in steps
+        if step.get("name") == "Download protected-main OIDC proof"
+    )
+    assert proof_download["with"] == {
         "artifact-ids": "${{ needs.oidc-proof.outputs.artifact_id }}",
         "path": "${{ runner.temp }}",
         "merge-multiple": True,
     }
-    assert "name" not in proof_download_with
-    assert "infra/release_manifest.py" in deploy_source
-    assert "development-release-evidence.json" in deploy_source
-    assert "--bundle-root v2/infra/build/release" in build_source
-    assert '--bundle-root "$RUNNER_TEMP/release-overlay"' in deploy_source
-    assert 'find "$GITHUB_WORKSPACE/v2/infra"' not in deploy_source
-    assert '"$GITHUB_WORKSPACE/v2/infra/"*.tf' in deploy_source
-    for reviewed_scaffold in (
-        '"$GITHUB_WORKSPACE/v2/infra/.terraform.lock.hcl"',
-        '"$GITHUB_WORKSPACE/v2/infra/backend.development.hcl"',
-        '"$GITHUB_WORKSPACE/v2/infra/development.tfvars"',
-    ):
-        assert reviewed_scaffold in deploy_source
-    assert "backend.production.hcl" not in deploy_source
-    assert "known_managed" not in deploy_source
-    assert "known_data" not in deploy_source
-    assert 'git show "${GITHUB_SHA}:infra/development-release-manifest.json"' in source
-    assert (
-        source.index("Build reviewed deployment packages")
-        < source.index("Checkout trusted manifest verifier after package build")
-        < source.index("Verify reviewed manifest and write runtime evidence")
+    assert all(
+        "${{ inputs." not in cast(str, step.get("run", ""))
+        for job in jobs.values()
+        for step in cast(list[dict[str, object]], job.get("steps", []))
     )
-    assert source.index(
-        "Verify immutable development release without credentials"
-    ) < source.index("aws-actions/configure-aws-credentials@")
-    assert (
-        "api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$RELEASE_ARTIFACT_ID"
-        in deploy_source
-    )
-    assert "--max-redirs 0" in deploy_source
-    assert "Authorization: Bearer $GH_TOKEN" in deploy_source
-    assert '--location "$download_url"' in deploy_source
-    assert "verify_release_bundle.py verify" in deploy_source
-    assert "--verify-checkout" in deploy_source
-    assert "git rev-parse HEAD" in deploy_source
-    assert "release-manifest.json" in deploy_source
-    assert "EXPECTED_PRICING_VERSION" in deploy_source
-    assert "EXPECTED_ORACLE_VERSION" in deploy_source
-    assert 'STAGED_PACKAGE_DIR="$RUNNER_TEMP/v2-development-packages"' in deploy_source
-    assert 'cp -P -- "$source" "$STAGED_PACKAGE_DIR/$package"' in deploy_source
-    assert 'sha256sum --check "$EVIDENCE_DIR/DEPLOYMENT_SHA256SUMS"' in deploy_source
-    assert "development-release-staging-verification.json" in deploy_source
-    deploy_step_names = "\n".join(
-        cast(str, step.get("name", "")) for step in deploy_steps
-    )
-    plan_index = deploy_step_names.index(
-        "Create and gate the saved development plan before migrations"
-    )
-    migration_index = deploy_step_names.index(
-        "Run reviewed backward-compatible development migrations"
-    )
-    re_assume_index = deploy_step_names.index(
-        "Confirm delivery role before applying saved plan"
-    )
-    apply_index = deploy_step_names.index("Apply the same saved development plan")
-    assert plan_index < migration_index < re_assume_index < apply_index
-    assert deploy_source.count('terraform -chdir="$RELEASE_ROOT/v2/infra" plan') == 1
-    assert deploy_source.count('terraform -chdir="$RELEASE_ROOT/v2/infra" apply') == 1
-    assert '--expected-digest "$RELEASE_ARTIFACT_DIGEST"' in deploy_source
-    assert "path: ${{ runner.temp }}/v2-development-checksums" in source
-    assert "aws-actions/configure-aws-credentials@" in "\n".join(
-        cast(str, step.get("uses", "")) for step in deploy_steps
-    )
-    assert "./scripts/build_" not in deploy_source
-    assert "arn:aws:iam::903859731897:role/nova-toll-v2-development-delivery" in source
-    assert "role-to-assume: arn:aws:iam::903859731897:role/" in source
-    assert "aws-region: us-east-1" in source
-    assert 'version: "0.12.5"' in source
-    assert 'terraform_version: "1.15.8"' in source
-    assert deploy_source.count("-lockfile=readonly") == 2
-
-    for job in jobs.values():
-        for step in cast(list[dict[str, object]], job["steps"]):
-            if "uses" in step:
-                assert re.fullmatch(r"[^@]+@[0-9a-f]{40}", cast(str, step["uses"]))
-            if cast(str, step.get("uses", "")).startswith("actions/checkout@"):
-                assert (
-                    cast(dict[str, object], step["with"])["persist-credentials"]
-                    is False
-                )
-
-    configure_index = next(
-        index
-        for index, step in enumerate(deploy_steps)
-        if cast(str, step.get("uses", "")).startswith(
-            "aws-actions/configure-aws-credentials@"
-        )
-    )
-    identity_step = deploy_steps[configure_index + 1]
-    assert identity_step["name"] == "Confirm development account"
-    assert "aws sts get-caller-identity --query Account --output text" in cast(
-        str, identity_step["run"]
-    )
-    assert '= "903859731897"' in cast(str, identity_step["run"])
-    assert "Record protected-main OIDC proof" not in source
-    assert (
-        "rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"
-        in proof_source
-    )
-    assert "protected-main-oidc.json" in deploy_source
-    assert 'PROOF="$RUNNER_TEMP/protected-main-oidc.json"' in deploy_source
-    assert '(.commit_sha | test("^[0-9a-f]{40}$"))' in deploy_source
-    assert ".commit_sha == $commit" in deploy_source
-    proof_validation_index = next(
-        index
-        for index, step in enumerate(deploy_steps)
-        if step.get("name") == "Validate protected-main OIDC proof"
-    )
-    assert proof_validation_index < configure_index
-    assert (
-        "terraform -chdir=infra init -input=false -lockfile=readonly" in deploy_source
-    )
-    assert "-backend-config=backend.development.hcl" in deploy_source
-    assert "terraform -chdir=infra output -json foundation" in deploy_source
-    assert (
-        "foundation.tfvars.json" in deploy_source
-        and "if: always()" in DEVELOPMENT_DELIVERY_WORKFLOW
-    )
-    assert (
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" init -input=false -lockfile=readonly'
-        in deploy_source
-    )
-    assert "-var-file=development.tfvars" in deploy_source
-    assert (
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
-        in deploy_source
-    )
-    assert 'PLAN_JSON="$RUNNER_TEMP/development.tfplan.json"' in deploy_source
-    assert (
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"' in deploy_source
-    )
-    assert (
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
-        in deploy_source
-    )
-    assert (
-        deploy_source.count(
-            'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
-        )
-        == 1
-    )
-    assert (
-        deploy_source.count(
-            'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
-        )
-        == 1
-    )
-    assert (
-        deploy_source.count(
-            'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"'
-        )
-        == 1
-    )
-    assert '"$RUNNER_TEMP/protected-main-oidc.json"; do' in deploy_source
-    assert deploy_source.index(
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
-    ) < deploy_source.rindex('cleanup_path "$cleanup_log"')
-    assert 'PACKAGE_DIR="$RUNNER_TEMP/v2-development-packages"' in deploy_source
-    assert 'PACKAGE_DIR="$RELEASE_ROOT/v2/infra/build"' in deploy_source
-    plan_index = deploy_source.index(
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
-    )
-    show_index = deploy_source.index(
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"'
-    )
-    apply_index = deploy_source.index(
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
-    )
-    for stage in (
-        "foundation-init",
-        "foundation-output",
-        "release-init",
-        "plan",
-        "show",
-        "apply",
-    ):
-        assert f'"$TF_LOG_DIR/{stage}.log"' in deploy_source
-    assert '"$RUNNER_TEMP/development-terraform-logs"' in source
-    assert deploy_source.index(
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"'
-    ) < deploy_source.index(
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
-    )
-    validator_index = deploy_source.index(
-        "python3 infra/delivery_plan_validator.py", show_index
-    )
-    assert plan_index < show_index < validator_index < apply_index
-    for package in (
-        "$PACKAGE_DIR/loader.zip",
-        "$PACKAGE_DIR/publisher.zip",
-        "$PACKAGE_DIR/agentcore.zip",
-        "$PACKAGE_DIR/chat-proxy.zip",
-    ):
-        assert package in deploy_source
-    for forbidden in (
-        "-target",
-        "-lock=false",
-        "backend.production.hcl",
-        "terraform_remote_state",
-        "AWS_PROFILE",
-        "pull_request",
-        "cloudflare",
-        "placeholder",
-        "920534282028",
-    ):
-        assert forbidden not in source
 
 
 def _assert_development_plan_workflow(source: str) -> None:
@@ -5833,6 +5493,24 @@ def test_development_plan_workflow_digest_matches_reviewed_manifest():
     )
 
 
+def test_development_delivery_selected_input_digests_match_reviewed_manifest():
+    manifest = json.loads(
+        (REPO_ROOT / "infra" / "development-release-manifest.json").read_text()
+    )
+    for relative in (
+        ".github/workflows/v2-development-delivery.yml",
+        ".github/workflows/v2-development-delivery-privileged.yml",
+        "infra/delivery_plan_validator.py",
+        "infra/iam.tf",
+        "infra/release_manifest.py",
+        "v2/scripts/development_deployment_status.py",
+    ):
+        assert (
+            hashlib.sha256((REPO_ROOT / relative).read_bytes()).hexdigest()
+            == manifest["deployment_inputs"][relative]
+        )
+
+
 def test_development_plan_workflow_is_reusable_and_fail_closed():
     _assert_development_plan_workflow(DEVELOPMENT_PLAN_WORKFLOW)
     for original, replacement in (
@@ -6040,7 +5718,9 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
 
 
 def test_development_delivery_staging_snippet_accepts_only_verified_package_bytes():
-    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    workflow = cast(
+        dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    )
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
     verify_source = cast(
@@ -6136,7 +5816,9 @@ def test_development_delivery_staging_snippet_accepts_only_verified_package_byte
 
 
 def test_development_delivery_private_stage_helper_sanitizes_mock_failures():
-    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    workflow = cast(
+        dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    )
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
     plan_source = cast(
@@ -6327,7 +6009,9 @@ def test_development_delivery_classifier_is_bounded_and_allowlisted():
 
 
 def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup():
-    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    workflow = cast(
+        dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    )
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
     plan_source = cast(
@@ -6581,7 +6265,9 @@ def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup()
 
 
 def test_development_delivery_apply_readiness_and_cleanup_failures_are_bounded():
-    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    workflow = cast(
+        dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    )
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
 
@@ -6715,7 +6401,9 @@ def test_development_delivery_apply_readiness_and_cleanup_failures_are_bounded()
 
 
 def test_development_delivery_extracts_only_validated_migration_after_versions():
-    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    workflow = cast(
+        dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    )
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
     source = cast(
@@ -6795,7 +6483,7 @@ def test_development_delivery_extracts_only_validated_migration_after_versions()
 
 
 def test_slice2_delivery_diagnostics_keep_machine_outputs_and_fixed_labels():
-    delivery = DEVELOPMENT_DELIVERY_WORKFLOW
+    delivery = DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW
     migration = (
         REPO_ROOT / "v2/scripts/run_development_migrations_workflow.sh"
     ).read_text(encoding="utf-8")
@@ -6908,7 +6596,9 @@ def test_retained_artifact_bootstrap_handles_jq_outcomes_without_public_errors(
 
 
 def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_plan():
-    _assert_development_delivery_validator_contract(DEVELOPMENT_DELIVERY_WORKFLOW)
+    _assert_development_delivery_validator_contract(
+        DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW
+    )
     validator_invocation = (
         'run_private_stage "validator" "$VALIDATION" "$VALIDATOR_LOG" '
         '\\\n            python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY"'
@@ -6935,13 +6625,13 @@ def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_pla
     ):
         _must_reject(
             _assert_development_delivery_validator_contract,
-            DEVELOPMENT_DELIVERY_WORKFLOW,
+            DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW,
             original,
             replacement,
         )
     _must_reject(
         _assert_development_delivery_validator_contract,
-        DEVELOPMENT_DELIVERY_WORKFLOW,
+        DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW,
         show_invocation + "\n          MANIFEST_VALID=true",
         'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"\n          '
         + show_invocation
@@ -6950,11 +6640,13 @@ def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_pla
 
 
 def test_development_oidc_validator_rejects_malformed_and_wrong_claim_fixtures():
-    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    workflow = cast(
+        dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    )
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     proof_source = _workflow_run_source(jobs["oidc-proof"])
     match = re.search(
-        r'python3 - "\$GITHUB_SHA" <<\x27PY\x27\n(.*?)\nPY',
+        r'python3 - "\$GITHUB_SHA" "\$DEPLOYMENT_ID" <<\x27PY\x27\n(.*?)\nPY',
         proof_source,
         flags=re.DOTALL,
     )
@@ -6969,6 +6661,7 @@ def test_development_oidc_validator_rejects_malformed_and_wrong_claim_fixtures()
         "repository": "rhprasad0/nova-toll-budget-agent",
         "ref": "refs/heads/main",
         "sha": expected_sha,
+        "job_workflow_ref": "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-development-delivery-privileged.yml@refs/heads/main",
     }
 
     def segment(value: object) -> bytes:
@@ -6981,11 +6674,13 @@ def test_development_oidc_validator_rejects_malformed_and_wrong_claim_fixtures()
             (segment({"alg": "RS256"}), segment(values), segment("signature"))
         ).decode()
 
-    def run(token: str, sha: str = expected_sha) -> subprocess.CompletedProcess[str]:
+    def run(
+        token: str, sha: str = expected_sha, deployment_id: str = "7"
+    ) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
         environment["OIDC_TOKEN"] = token
         return subprocess.run(
-            [sys.executable, "-", sha],
+            [sys.executable, "-", sha, deployment_id],
             input=validator,
             text=True,
             capture_output=True,
@@ -7003,11 +6698,19 @@ def test_development_oidc_validator_rejects_malformed_and_wrong_claim_fixtures()
         ("repository", "evil/fork"),
         ("ref", "refs/heads/release"),
         ("sha", "b" * 40),
+        ("job_workflow_ref", "wrong"),
     ):
         invalid_token = token_for({**claims, name: value})
         invalid = run(invalid_token)
         assert invalid.returncode != 0
         assert invalid_token not in invalid.stdout + invalid.stderr
+    for name in claims:
+        for value in (None, 1, cast(list[object], []), cast(dict[str, object], {})):
+            invalid = run(token_for({**claims, name: value}))
+            assert invalid.returncode != 0, (name, value)
+        without_claim = dict(claims)
+        without_claim.pop(name)
+        assert run(token_for(without_claim)).returncode != 0, name
     malformed_json = ".".join(
         (
             segment({"alg": "RS256"}).decode(),
@@ -7025,10 +6728,148 @@ def test_development_oidc_validator_rejects_malformed_and_wrong_claim_fixtures()
         assert invalid.returncode != 0
         assert malformed not in invalid.stdout + invalid.stderr
     assert run(token_for(claims), "A" * 40).returncode != 0
+    for deployment_id in ("0", "-1", "1.0", "seven", " 7", "7 "):
+        assert run(token_for(claims), deployment_id=deployment_id).returncode != 0
+
+
+def test_oidc_step_never_expands_workflow_inputs_as_shell_code(tmp_path: Path):
+    workflow = cast(
+        dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    )
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    steps = cast(list[dict[str, object]], jobs["oidc-proof"]["steps"])
+    proof = next(
+        step for step in steps if step["name"] == "Validate runner OIDC claims"
+    )
+    source = cast(str, proof["run"])
+    assert "${{ inputs." not in source
+    assert proof["env"] == {"DEPLOYMENT_ID": "${{ inputs.deployment_id }}"}
+    marker = tmp_path / "shell-expression-executed"
+    environment = os.environ | {
+        "RUNNER_TEMP": str(tmp_path),
+        "GITHUB_SHA": "a" * 40,
+        "ACTIONS_ID_TOKEN_REQUEST_URL": "https://example.invalid/token",
+        "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "test",
+        "DEPLOYMENT_ID": f"$(touch {marker}; printf 7)",
+    }
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "curl() { printf '%s' '{\"value\":\"not-a-jwt\"}'; }\n" + source,
+        ],
+        text=True,
+        capture_output=True,
+        env=environment,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert not marker.exists()
+    assert "shell-expression-executed" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_status"),
+    (("success", 0), ("upstream", 17), ("summary", 125), ("combined", 17)),
+)
+def test_oidc_step_records_bounded_failures_once(
+    tmp_path: Path, mode: str, expected_status: int
+) -> None:
+    workflow = cast(
+        dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    )
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    steps = cast(list[dict[str, object]], jobs["oidc-proof"]["steps"])
+    source = cast(
+        str,
+        next(step for step in steps if step["name"] == "Validate runner OIDC claims")[
+            "run"
+        ],
+    )
+
+    def segment(value: object) -> bytes:
+        return base64.urlsafe_b64encode(
+            json.dumps(value, separators=(",", ":")).encode()
+        ).rstrip(b"=")
+
+    token = b".".join(
+        (
+            segment({"alg": "RS256"}),
+            segment(
+                {
+                    "iss": "https://token.actions.githubusercontent.com",
+                    "aud": "sts.amazonaws.com",
+                    "sub": "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development",
+                    "environment": "development",
+                    "repository": "rhprasad0/nova-toll-budget-agent",
+                    "ref": "refs/heads/main",
+                    "sha": "a" * 40,
+                    "job_workflow_ref": "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-development-delivery-privileged.yml@refs/heads/main",
+                }
+            ),
+            segment("signature"),
+        )
+    ).decode()
+    summary = tmp_path / "summary"
+    environment = os.environ | {
+        "RUNNER_TEMP": str(tmp_path),
+        "GITHUB_SHA": "a" * 40,
+        "ACTIONS_ID_TOKEN_REQUEST_URL": "https://example.invalid/token",
+        "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "test",
+        "DEPLOYMENT_ID": "7",
+        "GITHUB_STEP_SUMMARY": str(summary),
+    }
+    if mode == "success":
+        prelude = f"curl() {{ printf '%s' '{{\"value\":\"{token}\"}}'; }}\n"
+    elif mode == "upstream":
+        prelude = "curl() { return 17; }\n"
+    elif mode == "summary":
+        summary.mkdir()
+        prelude = "curl() { return 17; }\n"
+    else:
+        prelude = 'curl() { rm -f -- "$GITHUB_STEP_SUMMARY"; mkdir "$GITHUB_STEP_SUMMARY"; return 17; }\n'
+    result = subprocess.run(
+        ["bash", "-c", prelude + source],
+        text=True,
+        capture_output=True,
+        env=environment,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == expected_status, output
+    assert output.count("stage=oidc-claims status=fail") == (
+        0 if mode == "success" else 1
+    )
+    assert "Is a directory" not in output
+
+
+def test_oidc_cleanup_failure_is_bounded_and_nonzero(tmp_path: Path) -> None:
+    workflow = cast(
+        dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    )
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    steps = cast(list[dict[str, object]], jobs["oidc-proof"]["steps"])
+    cleanup = cast(
+        str,
+        next(
+            step for step in steps if step["name"] == "Cleanup OIDC proof diagnostics"
+        )["run"],
+    )
+    result = subprocess.run(
+        ["bash", "-c", "rm() { return 17; }\n" + cleanup],
+        text=True,
+        capture_output=True,
+        env=os.environ | {"RUNNER_TEMP": str(tmp_path)},
+        check=False,
+    )
+    assert result.returncode == 125
+    assert (result.stdout + result.stderr).count("stage=oidc-cleanup status=fail") == 1
 
 
 def test_development_oidc_proof_schema_rejects_extra_fields_and_stale_sha():
-    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    workflow = cast(
+        dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    )
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     deploy_source = _workflow_run_source(jobs["deploy"])
     match = re.search(
@@ -7043,6 +6884,7 @@ def test_development_oidc_proof_schema_rejects_extra_fields_and_stale_sha():
         "account": "903859731897",
         "commit_sha": sha,
         "environment": "development",
+        "job_workflow_ref": "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-development-delivery-privileged.yml@refs/heads/main",
         "proof": "protected-main-oidc",
         "ref": "refs/heads/main",
         "repository": "rhprasad0/nova-toll-budget-agent",
@@ -7061,6 +6903,7 @@ def test_development_oidc_proof_schema_rejects_extra_fields_and_stale_sha():
     assert passes(proof)
     assert not passes({**proof, "extra": "rejected"})
     assert not passes({**proof, "commit_sha": "b" * 40})
+    assert not passes({**proof, "job_workflow_ref": "wrong"})
     assert not passes(proof, "b" * 40)
 
 
@@ -7091,6 +6934,18 @@ def _assert_development_delivery_trust(source: str) -> None:
             "variable": "token.actions.githubusercontent.com:sub",
             "values": [
                 "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"
+            ],
+        },
+        {
+            "test": "StringEquals",
+            "variable": "token.actions.githubusercontent.com:ref",
+            "values": ["refs/heads/main"],
+        },
+        {
+            "test": "StringEquals",
+            "variable": "token.actions.githubusercontent.com:job_workflow_ref",
+            "values": [
+                "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-development-delivery-privileged.yml@refs/heads/main"
             ],
         },
     ]
@@ -7181,7 +7036,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     )
     assert not {
         "iam:CreateRole",
-        "iam:PutRolePolicy",
         "iam:PutRolePermissionsBoundary",
         "iam:DeleteRolePermissionsBoundary",
         "iam:TagRole",
@@ -7212,6 +7066,19 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         ],
         "PassExistingAgentCoreRuntimeRole": ["iam:PassRole"],
         "PassTimedChecksSchedulerRole": ["iam:PassRole"],
+        "UpdateReportPublisherInlinePolicy": ["iam:PutRolePolicy"],
+    }
+    assert by_sid["UpdateReportPublisherInlinePolicy"]["resources"] == [
+        "arn:aws:iam::${local.development_delivery_account_id}:role/toll-v2-report-publisher-dev"
+    ]
+    assert by_sid["UpdateReportPublisherInlinePolicy"]["conditions"] == []
+    assert by_sid["UpdateReportGenerationFreshnessAlarm"] == {
+        "sid": "UpdateReportGenerationFreshnessAlarm",
+        "actions": ["cloudwatch:PutMetricAlarm"],
+        "resources": [
+            "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:toll-v2-report-generation-freshness-dev"
+        ],
+        "conditions": [],
     }
     temporary_sids = {
         "RetireUsagePublisherIam",
@@ -7256,6 +7123,12 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     assert by_sid["ReadRetiredUsagePublisherAlarms"]["actions"] == [
         "cloudwatch:DescribeAlarms",
         "cloudwatch:ListTagsForResource",
+    ]
+    assert by_sid["ManageApplicationAlarms"]["actions"] == [
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:ListTagsForResource",
+        "cloudwatch:TagResource",
+        "cloudwatch:UntagResource",
     ]
     assert by_sid["ReadRetiredUsagePublisherIam"]["resources"] == [
         "local.development_delivery_usage_publisher_role_arn"
@@ -7602,7 +7475,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     assert "vpc/*" not in source
     forbidden_mutations = {
         "iam:CreateRole",
-        "iam:PutRolePolicy",
         "iam:PutRolePermissionsBoundary",
         "iam:DeleteRolePermissionsBoundary",
         "iam:TagRole",
@@ -7628,7 +7500,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "kms:PutKeyPolicy",
         "events:PutRule",
         "logs:PutMetricFilter",
-        "cloudwatch:PutMetricAlarm",
         "wafv2:PutLoggingConfiguration",
     }
     assert not forbidden_mutations & set(all_actions)
@@ -7715,7 +7586,52 @@ def _must_reject_after_marker(
 
 
 def test_development_delivery_workflow_is_parsed_and_split_before_oidc():
-    _assert_development_delivery_workflow(DEVELOPMENT_DELIVERY_WORKFLOW)
+    _assert_development_delivery_caller(DEVELOPMENT_DELIVERY_WORKFLOW)
+    _assert_development_delivery_privileged(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    caller = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    assert _workflow_trigger(caller) == {"push": {"branches": ["main"]}}
+    caller_jobs = cast(dict[str, dict[str, object]], caller["jobs"])
+    assert set(caller_jobs) == {
+        "admission",
+        "release-record",
+        "build",
+        "deploy",
+        "release-result",
+    }
+    deploy = caller_jobs["deploy"]
+    assert (
+        deploy["uses"] == "./.github/workflows/v2-development-delivery-privileged.yml"
+    )
+    assert deploy["needs"] == ["admission", "release-record", "build"]
+    assert deploy["permissions"] == {
+        "contents": "read",
+        "actions": "read",
+        "id-token": "write",
+    }
+    assert deploy["with"] == {
+        "release_artifact_id": "${{ needs.build.outputs.artifact_id }}",
+        "release_artifact_digest": "${{ needs.build.outputs.artifact_digest }}",
+        "expected_pricing_schema": "${{ needs.build.outputs.pricing_schema }}",
+        "expected_oracle_schema": "${{ needs.build.outputs.oracle_schema }}",
+        "deployment_id": "${{ needs.release-record.outputs.deployment_id }}",
+    }
+    assert deploy["secrets"] == {
+        "TS_DEVELOPMENT_OAUTH_CLIENT_ID": "${{ secrets.TS_DEVELOPMENT_OAUTH_CLIENT_ID }}",
+        "TS_DEVELOPMENT_OAUTH_SECRET": "${{ secrets.TS_DEVELOPMENT_OAUTH_SECRET }}",
+    }
+    privileged = cast(
+        dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
+    )
+    assert set(cast(dict[str, object], _workflow_trigger(privileged))) == {
+        "workflow_call"
+    }
+    callee_jobs = cast(dict[str, dict[str, object]], privileged["jobs"])
+    assert set(callee_jobs) == {"oidc-proof", "deploy"}
+    assert callee_jobs["deploy"]["environment"] == "development"
+    assert callee_jobs["deploy"]["concurrency"] == {
+        "group": "v2-development-apply",
+        "queue": "max",
+    }
     for original, replacement in (
         ("push:\n    branches:", "pull_request:\n    branches:"),
         ("- main", "- release"),
@@ -7763,12 +7679,43 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc():
         ('python-version: "3.13"', ""),
         ('python-version: "3.13"', 'python-version: "3.12"'),
     ):
+        if original in DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW:
+            source, assertion = (
+                DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW,
+                _assert_development_delivery_privileged,
+            )
+        else:
+            source, assertion = (
+                DEVELOPMENT_DELIVERY_WORKFLOW,
+                _assert_development_delivery_caller,
+            )
+        assert original in source, original
+        _must_reject(assertion, source, original, replacement)
+    for source, assertion in (
+        (DEVELOPMENT_DELIVERY_WORKFLOW, _assert_development_delivery_caller),
+        (
+            DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW,
+            _assert_development_delivery_privileged,
+        ),
+    ):
         _must_reject(
-            _assert_development_delivery_workflow,
-            DEVELOPMENT_DELIVERY_WORKFLOW,
-            original,
-            replacement,
+            assertion,
+            source,
+            "if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor",
+            "if: true",
         )
+    _must_reject(
+        _assert_development_delivery_privileged,
+        DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW,
+        "deployment_id:\n        required: true",
+        "deployment_id:\n        required: false",
+    )
+    _must_reject(
+        _assert_development_delivery_privileged,
+        DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW,
+        "- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "- uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c",
+    )
 
 
 def test_development_delivery_iam_is_parsed_and_adversarial_mutations_fail():
@@ -7801,6 +7748,11 @@ def test_development_delivery_iam_is_parsed_and_adversarial_mutations_fail():
             "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development",
             "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main",
         ),
+        ("refs/heads/main", "refs/heads/release"),
+        (
+            "v2-development-delivery-privileged.yml@refs/heads/main",
+            "v2-development-connectivity-verification.yml@refs/heads/main",
+        ),
         (
             "token.actions.githubusercontent.com:aud",
             "token.actions.githubusercontent.com:evil",
@@ -7831,6 +7783,8 @@ def test_development_delivery_iam_is_parsed_and_adversarial_mutations_fail():
                 or original.startswith("sts:")
                 or "token.actions" in original
                 or "openid_connect_provider" in original
+                or original == "refs/heads/main"
+                or original == "v2-development-delivery-privileged.yml@refs/heads/main"
             )
             else _assert_development_delivery_state_and_application_policy
         )
@@ -8921,10 +8875,29 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
         not {
             "events:PutRule",
             "logs:PutMetricFilter",
-            "cloudwatch:PutMetricAlarm",
             "wafv2:PutLoggingConfiguration",
         }
         & all_actions
+    )
+    assert _statement_allows(
+        by_sid["UpdateReportPublisherInlinePolicy"],
+        "iam:PutRolePolicy",
+        "arn:aws:iam::${local.development_delivery_account_id}:role/toll-v2-report-publisher-dev",
+    )
+    assert not _statement_allows(
+        by_sid["UpdateReportPublisherInlinePolicy"],
+        "iam:PutRolePolicy",
+        "arn:aws:iam::903859731897:role/unrelated-dev",
+    )
+    assert _statement_allows(
+        by_sid["UpdateReportGenerationFreshnessAlarm"],
+        "cloudwatch:PutMetricAlarm",
+        "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:toll-v2-report-generation-freshness-dev",
+    )
+    assert not _statement_allows(
+        by_sid["UpdateReportGenerationFreshnessAlarm"],
+        "cloudwatch:PutMetricAlarm",
+        "arn:aws:cloudwatch:us-east-1:903859731897:alarm:unrelated-dev",
     )
     assert _statement_allows(
         by_sid["UpdateApplicationLambdaFunctions"],
@@ -9313,7 +9286,7 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
 
 def test_development_delivery_policy_set_is_deterministic_and_bounded():
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 57
+    assert len(statements) == 59
     expected_groups = {
         "state": (
             0,
@@ -9401,7 +9374,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         ),
         "edge": (
             48,
-            57,
+            59,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -9411,6 +9384,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
                 "ReadManagedCloudFrontPolicy",
                 "ManageApplicationWaf",
                 "ReadDevelopmentCertificate",
+                "UpdateReportPublisherInlinePolicy",
+                "UpdateReportGenerationFreshnessAlarm",
                 "ReadAlertsKeyForTimedChecks",
             ],
         ),
@@ -9420,7 +9395,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
     )
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups)
-    assert len(rendered_aggregate) == len(statements) == 57
+    assert len(rendered_aggregate) == len(statements) == 59
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
         "StringEquals": {"aws:RequestedRegion": "us-east-1"}
@@ -9440,6 +9415,18 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
     )
     assert rendered_by_sid["PassTimedChecksSchedulerRole"]["Condition"] == {
         "StringEquals": {"iam:PassedToService": "scheduler.amazonaws.com"}
+    }
+    assert rendered_by_sid["UpdateReportPublisherInlinePolicy"] == {
+        "Action": "iam:PutRolePolicy",
+        "Effect": "Allow",
+        "Resource": "arn:aws:iam::903859731897:role/toll-v2-report-publisher-dev",
+        "Sid": "UpdateReportPublisherInlinePolicy",
+    }
+    assert rendered_by_sid["UpdateReportGenerationFreshnessAlarm"] == {
+        "Action": "cloudwatch:PutMetricAlarm",
+        "Effect": "Allow",
+        "Resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:toll-v2-report-generation-freshness-dev",
+        "Sid": "UpdateReportGenerationFreshnessAlarm",
     }
     temporary_sids = {
         "RetireUsagePublisherIam",

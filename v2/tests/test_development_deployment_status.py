@@ -35,7 +35,7 @@ def context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Any, ...]:
         monkeypatch.setenv(key, value)
     needs: dict[str, Any] = {
         job: {"result": "success", "outputs": {}}
-        for job in ("admission", "release-record", "build", "oidc-proof", "deploy")
+        for job in ("admission", "release-record", "build", "deploy")
     }
     needs["release-record"]["outputs"] = {"deployment_id": "7"}
     needs["deploy"]["outputs"] = {
@@ -235,6 +235,40 @@ def test_wrong_identity_or_evidence_fails_closed(
         monkeypatch.setenv("RAW_EVIDENCE_ARTIFACT_DIGEST", "sha256:" + "c" * 64)
     else:
         monkeypatch.setenv("EVIDENCE_ARTIFACT_NAME", "prior-attempt-evidence")
+    monkeypatch.setenv("NEEDS_JSON", json.dumps(needs))
+    with pytest.raises(ValueError):
+        status.finish()
+    assert not any(
+        payload and payload.get("state") == "success" for _, _, payload in calls
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "value"),
+    (
+        ("record", "0"),
+        ("record", "-1"),
+        ("record", "seven"),
+        ("canary", 0),
+        ("canary", -1),
+        ("canary", "seven"),
+        ("canary", 8),
+        ("canary_missing", None),
+    ),
+)
+def test_deployment_id_zero_negative_malformed_or_unequal_fails_closed(
+    context: tuple[Any, ...], monkeypatch: pytest.MonkeyPatch, source: str, value: Any
+) -> None:
+    needs, _, _, calls, _ = context
+    if source == "record":
+        needs["release-record"]["outputs"]["deployment_id"] = value
+    else:
+        canary = json.loads(needs["deploy"]["outputs"]["canary"])
+        if source == "canary_missing":
+            canary.pop("deployment_id")
+        else:
+            canary["deployment_id"] = value
+        needs["deploy"]["outputs"]["canary"] = json.dumps(canary)
     monkeypatch.setenv("NEEDS_JSON", json.dumps(needs))
     with pytest.raises(ValueError):
         status.finish()

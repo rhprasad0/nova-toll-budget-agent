@@ -1085,6 +1085,11 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "agentcore-endpoint",
                 ("agent_runtime_version",),
             ),
+            "aws_iam_role_policy.publisher": ("publisher-inline-policy", ("policy",)),
+            "aws_cloudwatch_metric_alarm.report_generation_freshness": (
+                "report-freshness-alarm",
+                ("alarm_description", "dimensions"),
+            ),
         }
         actual_mutations = {
             record["address"]: (record["operation_class"], tuple(record["changed_fields"]))
@@ -1159,6 +1164,18 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview",
                 (),
             ),
+            (
+                "aws_iam_role_policy.publisher",
+                "iam:PutRolePolicy",
+                "arn:aws:iam::903859731897:role/toll-v2-report-publisher-dev",
+                (),
+            ),
+            (
+                "aws_cloudwatch_metric_alarm.report_generation_freshness",
+                "cloudwatch:PutMetricAlarm",
+                "arn:aws:cloudwatch:us-east-1:903859731897:alarm:toll-v2-report-generation-freshness-dev",
+                (),
+            ),
         }
         actual_permissions = {
             (
@@ -1173,6 +1190,11 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         self.assertEqual(actual_permissions, expected_permissions)
 
         def update(address):
+            if address in {PUBLISHER_ADDRESS, ALARM_ADDRESS}:
+                return copy.deepcopy(next(
+                    record for record in publisher_and_alarm_plan()["resource_changes"]
+                    if record["address"] == address
+                ))
             fields = expected_mutations[address][1]
             spec = CONTRACT[address]
             before, after = {}, {}
