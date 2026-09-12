@@ -656,6 +656,11 @@ def build_points() -> dict[str, Point]:
                     metadata.update(
                         _alternative_ranking(network_id, source_node_id, point_id)
                     )
+                    place_name = (
+                        I66_REPORT_POINT_PLACES[source_node_id]
+                        if network_id == "i66"
+                        else None
+                    )
                     points[point_id] = Point(
                         point_id=point_id,
                         network_id=network_id,
@@ -663,9 +668,15 @@ def build_points() -> dict[str, Point]:
                         point_type=point_type,
                         direction=direction,
                         label=point_label,
-                        place_name=None,
-                        region=None,
-                        country_code=None,
+                        place_name=place_name,
+                        region=(
+                            "District of Columbia"
+                            if network_id == "i66" and source_node_id == "16"
+                            else "Virginia"
+                            if network_id == "i66"
+                            else None
+                        ),
+                        country_code="US" if network_id == "i66" else None,
                         longitude=longitude,
                         latitude=latitude,
                         aliases=aliases,

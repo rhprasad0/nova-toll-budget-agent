@@ -763,7 +763,7 @@ def _history_preflight_sql(
 ) -> str:
     del canonical_versions
     if baselines is None:
-        baselines = bootstrap.load_baseline_manifest()
+        baselines = _recognized_baselines(profile)
     expected = _expected_values(migrations)
     recognized_baselines = _baseline_values(baselines)
     return rf"""
@@ -938,7 +938,7 @@ def _session_sql(
     profile: MigrationProfile = DEVELOPMENT_PROFILE,
 ) -> str:
     if baselines is None:
-        baselines = bootstrap.load_baseline_manifest()
+        baselines = _recognized_baselines(profile)
     lines = [
         "\\pset pager off",
         "\\set ON_ERROR_STOP on",
@@ -1037,11 +1037,7 @@ def _parse_result(stdout: str, run_id: str) -> tuple[dict[str, str], list[str]]:
 def run(profile: MigrationProfile = DEVELOPMENT_PROFILE) -> dict[str, object]:
     if profile not in (DEVELOPMENT_PROFILE, PRODUCTION_PROFILE):
         raise MigrationError("migration profile is not fixed")
-    baselines = (
-        bootstrap.load_baseline_manifest()
-        if profile is DEVELOPMENT_PROFILE
-        else _production_baselines()
-    )
+    baselines = _recognized_baselines(profile)
     schemas, canonical_versions = (
         _registry() if profile is DEVELOPMENT_PROFILE else _registry(profile)
     )
@@ -1145,19 +1141,42 @@ def run(profile: MigrationProfile = DEVELOPMENT_PROFILE) -> dict[str, object]:
     }
 
 
-def _production_baselines() -> tuple[bootstrap.Baseline, ...]:
-    """Bind the recurring runner to the two immutable adopted rows."""
-    return tuple(
+def _recognized_baselines(
+    profile: MigrationProfile = DEVELOPMENT_PROFILE,
+) -> tuple[bootstrap.Baseline, ...]:
+    """Recognize the current bootstrap or the exact prior Oracle baseline."""
+    evidence = (
+        adoption.ADOPTION_EVIDENCE
+        if profile is PRODUCTION_PROFILE
+        else bootstrap.BASELINE_EVIDENCE
+    )
+    current = tuple(
         bootstrap.Baseline(
             schema=baseline.schema,
             version=baseline.version,
             migration_id=baseline.migration_id,
             source_path=baseline.source_path,
             source_sha256=baseline.source_sha256,
-            evidence=adoption.ADOPTION_EVIDENCE,
+            evidence=evidence,
         )
         for baseline in bootstrap.load_baseline_manifest()
     )
+    return (
+        *current,
+        bootstrap.Baseline(
+            schema="oracle",
+            version="1.14.0",
+            migration_id="baseline",
+            source_path="v2/db/oracle/schema.sql",
+            source_sha256=ADOPTED_ORACLE_114_SHA256,
+            evidence=evidence,
+        ),
+    )
+
+
+def _production_baselines() -> tuple[bootstrap.Baseline, ...]:
+    """Bind the recurring runner to exact recognized production rows."""
+    return _recognized_baselines(PRODUCTION_PROFILE)
 
 
 def _production_identity_sql() -> str:

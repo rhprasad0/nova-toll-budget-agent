@@ -1538,6 +1538,25 @@ ORDER BY type.typname, privilege.grantee;
     assert state.stdout.strip() == "2,2,pricing_owner"
     assert stable_boundary_state() == before_stable_boundary
 
+    adopted_114 = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        input_sql=f"""
+DROP FUNCTION oracle.get_agent_report_routes();
+UPDATE oracle.toll_route_point
+SET place_name = NULL, region = NULL, country_code = NULL
+WHERE network_id = 'i66';
+UPDATE oracle.schema_version SET version = '1.14.0' WHERE singleton;
+UPDATE tollchat_migration.schema_history
+SET schema_version = '1.14.0',
+    source_sha256 = {runner.ADOPTED_ORACLE_114_SHA256!r}
+WHERE schema_name = 'oracle' AND is_baseline;
+""",
+    )
+    assert adopted_114.returncode == 0, adopted_114.stderr
+
     # The image's patch release is fixture-only. Production keeps the literal
     # 3.5.6 exception supplied by the shared adoption guard.
     fixture_guard = adopt.production_rds_postgis_type_guard().replace(
@@ -1561,6 +1580,38 @@ ORDER BY type.typname, privilege.grantee;
     monkeypatch.setenv("PGHOST", host)
     monkeypatch.setenv("PGPORT", port)
     monkeypatch.setenv("PGHOSTADDR", host)
+    upgrade = runner.run_production()
+    assert upgrade["before"] == {"pricing": "1.3.0", "oracle": "1.14.0"}
+    assert upgrade["after"] == {"pricing": "1.3.0", "oracle": "1.15.0"}
+    assert upgrade["applied"] == [
+        "v2/db/migrations/031_upgrade_oracle_1_14_0_to_1_15_0.sql"
+    ]
+    adopted_history = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        "--tuples-only",
+        "--no-align",
+        input_sql="""
+SELECT schema_version, source_sha256, evidence
+FROM tollchat_migration.schema_history
+WHERE schema_name = 'oracle' AND is_baseline;
+SELECT count(*) FROM tollchat_migration.schema_history
+WHERE migration_id = '031_upgrade_oracle_1_14_0_to_1_15_0.sql';
+""",
+    )
+    assert adopted_history.returncode == 0, adopted_history.stderr
+    assert adopted_history.stdout.splitlines() == [
+        "|".join(
+            (
+                "1.14.0",
+                runner.ADOPTED_ORACLE_114_SHA256,
+                adopt.ADOPTION_EVIDENCE,
+            )
+        ),
+        "1",
+    ]
     no_op = runner.run_production()
     assert (
         no_op["before"]
@@ -1571,6 +1622,13 @@ ORDER BY type.typname, privilege.grantee;
         }
     )
     assert no_op["applied"] == []
+
+    schemas, _ = runner._registry(runner.PRODUCTION_PROFILE)
+    oracle_031 = next(
+        migration
+        for migration in runner._migration_candidates(schemas)
+        if migration.path == "v2/db/migrations/031_upgrade_oracle_1_14_0_to_1_15_0.sql"
+    )
 
     def production_migration(sql: str, migration_id: str, *, succeeds: bool) -> None:
         rendered = tmp_path / f"{migration_id}.sql"
@@ -1752,7 +1810,8 @@ DELETE FROM tollchat_migration.schema_history WHERE migration_id = '034_producti
         input_sql="""
 SELECT schema_name, schema_version, migration_id, source_path, source_sha256,
        evidence, is_baseline, recorded_at IS NOT NULL
-FROM tollchat_migration.schema_history ORDER BY schema_name;
+FROM tollchat_migration.schema_history
+WHERE is_baseline ORDER BY schema_name;
 """,
     )
     assert history.returncode == 0, history.stderr
@@ -1770,7 +1829,22 @@ FROM tollchat_migration.schema_history ORDER BY schema_name;
             )
         )
         for baseline in sorted(
-            _canonical_baselines(), key=lambda baseline: baseline.schema
+            (
+                next(
+                    baseline
+                    for baseline in _canonical_baselines()
+                    if baseline.schema == "pricing"
+                ),
+                runner.bootstrap.Baseline(
+                    schema="oracle",
+                    version="1.14.0",
+                    migration_id="baseline",
+                    source_path="v2/db/oracle/schema.sql",
+                    source_sha256=runner.ADOPTED_ORACLE_114_SHA256,
+                    evidence=adopt.ADOPTION_EVIDENCE,
+                ),
+            ),
+            key=lambda baseline: baseline.schema,
         )
     ]
     memberships = run_psql(
@@ -1838,4 +1912,4 @@ SELECT has_database_privilege('schema_migrator_production', current_database(), 
         input_sql="SELECT count(*) FROM tollchat_migration.schema_history;",
     )
     assert unchanged.returncode == 0
-    assert unchanged.stdout.strip() == "2"
+    assert unchanged.stdout.strip() == "3"

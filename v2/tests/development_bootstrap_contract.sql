@@ -360,7 +360,9 @@ BEGIN
      OR NOT has_schema_privilege('report_publisher_development', 'oracle', 'USAGE')
      OR has_schema_privilege('report_publisher_development', 'oracle', 'CREATE')
      OR NOT has_function_privilege('report_publisher_development',
-          'oracle.get_i95_i495_report_inputs()', 'EXECUTE') THEN
+          'oracle.get_i95_i495_report_inputs()', 'EXECUTE')
+     OR NOT has_function_privilege('report_publisher_development',
+          'oracle.get_agent_report_routes()', 'EXECUTE') THEN
     RAISE EXCEPTION 'development Oracle runtime privileges are wrong';
   END IF;
   IF (SELECT pg_get_userbyid(nspowner)

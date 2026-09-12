@@ -67,8 +67,9 @@ migration principal retains ownership of the PostGIS extension and its objects.
 plus `USAGE` on `pricing` and `SELECT` on the five required availability,
 comparison, and ballpark sample views; it receives no other pricing privileges.
 
-`tollchat_agent` and `pricing_caller` are distinct IAM-authenticated login
-roles. The agent role can execute only `validate_toll_route` and the bounded
+`tollchat_agent`, `pricing_caller`, and `report_publisher` are distinct
+IAM-authenticated login roles. The agent role can execute only
+`validate_toll_route` and the bounded
 `get_toll_route_prompt_points` function; the Python-only pricing role can
 execute the eight endpoint-validation, current-price, and annual-ballpark
 operations. Both receive `rds_iam` and `USAGE` on `oracle`, but no direct table
@@ -89,7 +90,30 @@ revokes `PUBLIC` execution from every PostGIS function installed there and
 grants the required PostGIS execution privileges only to `oracle_owner`. This
 hardening is repeated after each PostGIS extension update. Schema `USAGE`
 therefore does not let either runtime role bypass its approved function
-interface by calling extension functions directly.
+interface by calling extension functions directly. The report publisher can
+execute only the retained legacy I-95/I-495 report input function and
+`get_agent_report_routes()`; it has no direct relation access.
+
+### Agent report routes
+
+Oracle `1.15.0` adds the no-argument `get_agent_report_routes()` descriptor for
+pure I-66 and I-95/I-495 priced paths. It returns only `facility`, a stable
+private `path_id`, contiguous `path_order`, ordered representative
+`pricing_legs`, broad origin and destination areas, and full-word direction.
+Each returned pricing leg retains only `route_step_id`, `facility`, and its
+complete executable `pricing_key`.
+
+Paths consolidate on ordered pricing lookup inputs, not source-route or route
+point identity. An I-66 leg uses direction, start/end zone IDs, and nullable
+charge index; an I-95/I-495 leg uses direction, target OD pair ID, and nullable
+charge index. One whole source candidate is selected deterministically for each
+normalized path. Every leg must match its row facility, so mixed-facility paths
+are excluded.
+
+The broad tuple `(facility, origin_area, destination_area, direction)` is a
+later publisher grouping key, not a unique path identity. Several internal
+paths may share it. The function never emits exact access names, technical
+qualifiers, numbered variants, or a `via_area` field.
 
 ### Bootstrap order
 
