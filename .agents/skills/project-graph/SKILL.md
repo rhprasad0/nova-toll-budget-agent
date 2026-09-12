@@ -163,11 +163,14 @@ Root repair → original Builder → same review stage
    planning conflict. Non-actionable observations may be recorded for human
    review but cannot hide a failing finding.
 10. After either review fails, Root records `repair` or `block` plus rationale
-    in `.graph/acceptance.md`. `repair` returns the failing-lane evidence to the
-    original Builder, then runs fresh Checker and Security lanes over the
-    complete repaired diff at the same review stage. `block` stops for user or
-    authority input. Root records `accept` only after both review rounds PASS
-    and Security's durable verdict is present and readable.
+    in `.graph/acceptance.md`. `repair` routes a planning conflict through the
+    explorer, researcher, and pre-checker path in step 8, then returns the
+    revised inputs to the original Builder; every other failure returns its
+    failing-lane evidence directly to that Builder. After repair, run fresh
+    Checker and Security lanes over the complete diff at the same review stage.
+    `block` stops for user or authority input. Root records `accept` only after
+    both review rounds PASS and Security's durable verdict is present and
+    readable.
 11. On Root acceptance after both review rounds PASS, update `STATE.md` and
     summarize files, checks, remaining risk, and non-blocking notes for human
     review. Human review and every existing production, credential, migration,
