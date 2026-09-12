@@ -382,18 +382,10 @@ review passes; never retain state, tokens, or raw plan JSON.
 ## Account-local foundation handoff
 
 The foundation and application roots have independent state. The guarded
-planned-output/temporary-`*.tfvars.json` handoff below is the production-only
-release path: it initializes the production foundation backend, makes a
-read-only production foundation plan, extracts only its reviewed non-secret
-`foundation` value from planned output, and passes that value to the matching
-production v2 plan with its reviewed package arguments. It asserts the
-production account, reviews only the approved object shape, and removes its
-distinct temporary file through an EXIT trap; no credentials or SSM values are
-included. Do not use that generic planned-output or tfvars flow for development.
-The current development foundation path is the authorized #327/#333
-replacement handoff documented below; the historical #330 exact-plan procedure
-remains below for audit context only. Development state is not discovered
-through a foundation output.
+production planner reads the current foundation output into a temporary tfvars
+file, validates its approved non-secret shape, passes it only to the matching
+v2 plan, and removes that file. This is a planner-owned production handoff, not
+a local release path or a development-state discovery mechanism.
 
 Application/database bootstrap remains #331. Cloudflare DNS reads and writes
 (zone lookup, ACM certificate-validation records, and apex/www records) are
@@ -419,26 +411,158 @@ npm test --prefix lambdas/chat_proxy
 (cd infra/build && sha256sum --check AGENTCORE_SHA256SUMS)
 ```
 
-Before applying, set `RELEASE_EVIDENCE` to a unique per-release path (for
-example, `build/release-evidence-20260829T120000Z.txt`). The file must be
-retained with that release; capture never overwrites an existing record.
+Before approving or deploying a production release, set `RELEASE_EVIDENCE` to
+a unique per-release path. This immutable, non-overwriting recovery record
+contains only the prior versions of the fixed `tollchat-v2-chat-proxy` `live`
+alias and fixed `nova_toll_v2-W6989LEw44` `preview` endpoint; retain it with the
+release and never publish it with credentials, raw logs, private state, or
+manifest contents.
 
 ```sh
 (
-  set -eu
-  : "${RELEASE_EVIDENCE:?set a unique release-evidence path}"
-  test ! -e "$RELEASE_EVIDENCE"
-  LAMBDA_LIVE_FUNCTION_VERSION="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 lambda get-alias \
-    --function-name tollchat-v2-chat-proxy --name live --query FunctionVersion --output text)"
-  AGENTCORE_RUNTIME_ID="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 bedrock-agentcore-control list-agent-runtimes \
-    --query "agentRuntimes[?agentRuntimeName=='nova_toll_v2'].agentRuntimeId | [0]" --output text)"
-  AGENTCORE_ENDPOINT_LIVE_VERSION="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 bedrock-agentcore-control get-agent-runtime-endpoint \
-    --agent-runtime-id "$AGENTCORE_RUNTIME_ID" --endpoint-name preview --query liveVersion --output text)"
-  case "$LAMBDA_LIVE_FUNCTION_VERSION" in ""|None|*[!0-9]*) exit 1 ;; esac
-  case "$AGENTCORE_RUNTIME_ID" in ""|None|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) exit 1 ;; esac
-  case "$AGENTCORE_ENDPOINT_LIVE_VERSION" in ""|None|*[!0-9]*) exit 1 ;; esac
-  printf 'lambda_live_function_version=%s\nagentcore_runtime_id=%s\nagentcore_endpoint_live_version=%s\n' \
-    "$LAMBDA_LIVE_FUNCTION_VERSION" "$AGENTCORE_RUNTIME_ID" "$AGENTCORE_ENDPOINT_LIVE_VERSION" >"$RELEASE_EVIDENCE"
+  set -euo pipefail
+  set +x
+  umask 077
+  EXPECTED_ACCOUNT=920534282028
+  EXPECTED_REGION=us-east-1
+  LAMBDA_FUNCTION=tollchat-v2-chat-proxy
+  LAMBDA_ALIAS=live
+  AGENTCORE_RUNTIME=nova_toll_v2-W6989LEw44
+  AGENTCORE_ENDPOINT=preview
+  export AWS_IGNORE_CONFIGURED_ENDPOINT_URLS=true
+  CURRENT_STAGE=record-path
+  FAILURE_REPORTED=0
+  PRIVATE_SINK=
+  cleanup() {
+    test -z "$PRIVATE_SINK" || rm -f -- "$PRIVATE_SINK" >/dev/null 2>&1 || :
+  }
+  finish() {
+    local status=$?
+    trap - EXIT
+    cleanup
+    if (( status != 0 && FAILURE_REPORTED == 0 )); then
+      printf 'stage=%s status=fail exit=%s reason=unclassified\n' "$CURRENT_STAGE" "$status" >&2 || :
+      FAILURE_REPORTED=1
+    fi
+    exit "$status"
+  }
+  trap finish EXIT
+  trap 'exit 130' HUP INT TERM
+  CURRENT_STAGE=private-sink
+  PRIVATE_SINK="$(mktemp 2>/dev/null)"
+  chmod 600 "$PRIVATE_SINK" >/dev/null 2>&1
+  CURRENT_STAGE=record-path
+  test -n "${RELEASE_EVIDENCE-}"
+  CURRENT_STAGE=account-identity
+  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" \
+    sts get-caller-identity --query Account --output text >"$PRIVATE_SINK" 2>&1
+  CALLER_ACCOUNT="$(<"$PRIVATE_SINK")"
+  test "$CALLER_ACCOUNT" = "$EXPECTED_ACCOUNT"
+  CURRENT_STAGE=lambda-read
+  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias \
+    --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" --output json >"$PRIVATE_SINK" 2>&1
+  LAMBDA_ALIAS_STATE="$(<"$PRIVATE_SINK")"
+  CURRENT_STAGE=agentcore-read
+  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" bedrock-agentcore-control get-agent-runtime-endpoint \
+    --agent-runtime-id "$AGENTCORE_RUNTIME" --endpoint-name "$AGENTCORE_ENDPOINT" --output json >"$PRIVATE_SINK" 2>&1
+  AGENTCORE_ENDPOINT_STATE="$(<"$PRIVATE_SINK")"
+  CURRENT_STAGE=lambda-validate
+  LAMBDA_LIVE_FUNCTION_VERSION="$(jq -ser '
+    select(length == 1) | .[0] | select(.AliasArn == "arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live" and .Name == "live" and
+      (.FunctionVersion | type == "string" and test("^[0-9]+$")) and
+      (.FunctionVersion | tonumber > 0) and
+      (if has("RoutingConfig") then
+        .RoutingConfig as $routing |
+        if ($routing | type) != "object" then false
+        elif ($routing | has("AdditionalVersionWeights")) then
+          ($routing.AdditionalVersionWeights | type == "object" and length == 0)
+        else true
+        end
+      else true
+      end))
+    | .FunctionVersion
+  ' <<<"$LAMBDA_ALIAS_STATE" 2>"$PRIVATE_SINK")"
+  CURRENT_STAGE=agentcore-validate
+  AGENTCORE_ENDPOINT_LIVE_VERSION="$(jq -ser '
+    select(length == 1) | .[0] | select(.agentRuntimeArn == "arn:aws:bedrock-agentcore:us-east-1:920534282028:runtime/nova_toll_v2-W6989LEw44" and
+      .name == "preview" and (.liveVersion | type == "string" and test("^[1-9][0-9]*$")))
+    | .liveVersion
+  ' <<<"$AGENTCORE_ENDPOINT_STATE" 2>"$PRIVATE_SINK")"
+  CURRENT_STAGE=record-write
+  if CAPTURE_WRITE_STAGE="$(
+    python3 -I -S - "$RELEASE_EVIDENCE" "$LAMBDA_LIVE_FUNCTION_VERSION" "$AGENTCORE_ENDPOINT_LIVE_VERSION" 2>"$PRIVATE_SINK" <<'PY'
+import os
+import stat
+import sys
+
+try:
+    path, lambda_version, agentcore_version = sys.argv[1:]
+    record = (
+        f"lambda_live_function_version={lambda_version}\n"
+        f"agentcore_endpoint_live_version={agentcore_version}\n"
+    ).encode("ascii")
+    if len(record) > 256:
+        raise ValueError
+    parent, basename = os.path.split(path)
+    if not basename:
+        raise ValueError
+    directory = os.open(
+        parent or ".", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    )
+    try:
+        parent_info = os.fstat(directory)
+        if parent_info.st_uid != os.geteuid() or parent_info.st_mode & 0o022:
+            sys.stdout.write("record-path")
+            raise SystemExit(1)
+        fd = os.open(
+            basename,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=directory,
+        )
+        try:
+            info = os.fstat(fd)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or stat.S_IMODE(info.st_mode) != 0o600
+                or info.st_uid != os.geteuid()
+            ):
+                raise ValueError
+            offset = 0
+            while offset < len(record):
+                written = os.write(fd, record[offset:])
+                if written <= 0:
+                    raise OSError
+                offset += written
+            named = os.stat(basename, dir_fd=directory, follow_symlinks=False)
+            if (
+                named.st_dev != info.st_dev
+                or named.st_ino != info.st_ino
+                or named.st_uid != os.geteuid()
+                or not stat.S_ISREG(named.st_mode)
+                or stat.S_IMODE(named.st_mode) != 0o600
+            ):
+                raise ValueError
+            if os.fstat(fd).st_nlink != 1:
+                raise ValueError
+        finally:
+            os.close(fd)
+    finally:
+        os.close(directory)
+except FileExistsError:
+    sys.stdout.write("record-path")
+    raise SystemExit(1)
+except (OSError, ValueError):
+    raise SystemExit(1)
+PY
+  )"; then
+    :
+  else
+    CAPTURE_WRITE_STATUS=$?
+    if test "$CAPTURE_WRITE_STAGE" = record-path; then CURRENT_STAGE=record-path; fi
+    exit "$CAPTURE_WRITE_STATUS"
+  fi
+  unset LAMBDA_ALIAS_STATE AGENTCORE_ENDPOINT_STATE LAMBDA_LIVE_FUNCTION_VERSION AGENTCORE_ENDPOINT_LIVE_VERSION
 )
 ```
 
@@ -485,104 +609,22 @@ covered by the contract tests.
 
 ### Guarded production release
 
-The production block independently creates and reviews its production-account
-foundation plan before wrapping its planned output. It then uses
-`backend.production.hcl`, `production.tfvars`,
-`build/production-release.tfplan`, and `production_plan_sha`; repeat the STS
-account check first and do not proceed if any development step failed.
+The only production path is the guarded published-release flow. A verified
+development candidate/bundle reaches a stable published `vX.Y.Z` event, whose
+listener has no AWS credentials. Admission records one durable claim. The
+planner validates the exact candidate bundle and revalidates mutable release
+evidence before planner OIDC credentials, then creates one encrypted,
+versioned, checksummed candidate/state-bound saved plan valid for 24 hours.
 
-```sh
-(
-set -euo pipefail
-ROOT="$(git rev-parse --show-toplevel)"
-PRODUCTION_FOUNDATION_PLAN="$(mktemp --suffix=.tfplan)"
-PRODUCTION_FOUNDATION_VARS="$(mktemp --suffix=.tfvars.json)"
-trap 'rm -f -- "$PRODUCTION_FOUNDATION_PLAN" "$PRODUCTION_FOUNDATION_VARS"' EXIT
-test "$(AWS_PROFILE=nova-toll-prod aws sts get-caller-identity --query Account --output text)" = "920534282028"
-: "${TF_VAR_budget_notification_email:?set the existing foundation budget notification input}"
-# #332 must supply separately trusted Cloudflare credentials before any
-# production DNS change; development DNS and certificate validation are gated
-# out of the v2 Terraform path until that handoff.
-AWS_PROFILE=nova-toll-prod terraform -chdir="$ROOT/infra" init -reconfigure -input=false \
-  -backend-config="$ROOT/infra/backend.production.hcl"
-rm -f -- "$PRODUCTION_FOUNDATION_PLAN"
-AWS_PROFILE=nova-toll-prod terraform -chdir="$ROOT/infra" plan \
-  -input=false -lock=false -var fetcher_package_path="$ROOT/infra/build/fetcher.zip" \
-  -out="$PRODUCTION_FOUNDATION_PLAN"
-AWS_PROFILE=nova-toll-prod terraform -chdir="$ROOT/infra" show -json "$PRODUCTION_FOUNDATION_PLAN" | jq -e '
-  def foundation_data_addresses: [
-    "data.aws_caller_identity.current", "data.aws_region.current",
-    "data.aws_vpc.default", "data.aws_subnets.default",
-    "data.aws_route_tables.default", "data.aws_iam_policy_document.agentcore_artifacts",
-    "data.aws_iam_policy_document.raw_bucket", "data.aws_iam_policy_document.tfstate_bucket",
-    "data.archive_file.placeholder", "data.aws_iam_policy_document.lambda_assume",
-    "data.aws_iam_policy_document.fetcher", "data.aws_iam_policy_document.replay_assume",
-    "data.aws_iam_policy_document.replay", "data.aws_iam_policy_document.audit_kms",
-    "data.aws_iam_policy_document.alerts_kms", "data.aws_iam_policy_document.audit_bucket",
-    "data.aws_prefix_list.s3", "data.aws_iam_policy_document.ec2_assume",
-    "data.aws_iam_policy_document.tailscale_router", "data.aws_subnet.tailscale_router"
-  ];
-  def exact_keys($keys): type == "object" and ((keys_unsorted | sort) == ($keys | sort));
-  def foundation_value_is_valid:
-    try (
-      . as $foundation |
-      exact_keys(["vpc_id", "vpc_cidr_block", "private_subnet_ids", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "db_instance", "alerts_topic_arn"]) and
-      all(["vpc_id", "vpc_cidr_block", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "alerts_topic_arn"][]; $foundation[.] | type == "string") and
-      ($foundation.private_subnet_ids | exact_keys(["a", "c"])) and
-      all(["a", "c"][]; $foundation.private_subnet_ids[.] | type == "string") and
-      ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"])) and
-      all(["identifier", "resource_id", "address"][]; $foundation.db_instance[.] | type == "string") and
-      ($foundation.db_instance.port | type == "number")
-    ) catch false;
-  (.resource_changes | type == "array") and
-  all(.resource_changes[];
-    type == "object" and
-    (.address | type == "string" and length > 0) and
-    (.mode | type == "string") and
-    (.change | type == "object") and
-    (.change.actions | type == "array") and
-    (.address as $address |
-      ((.mode == "managed" and .change.actions == ["no-op"]) or
-       (.mode == "data" and (foundation_data_addresses | index($address)) != null and .change.actions == ["read"])))
-  ) and
-  (.planned_values.outputs.foundation.value | foundation_value_is_valid)
-' >/dev/null
-production_foundation_json="$(AWS_PROFILE=nova-toll-prod terraform -chdir="$ROOT/infra" show -json "$PRODUCTION_FOUNDATION_PLAN" | jq -er '
-  def exact_keys($keys): type == "object" and ((keys_unsorted | sort) == ($keys | sort));
-  def foundation_value_is_valid:
-    try (
-      . as $foundation |
-      exact_keys(["vpc_id", "vpc_cidr_block", "private_subnet_ids", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "db_instance", "alerts_topic_arn"]) and
-      all(["vpc_id", "vpc_cidr_block", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "alerts_topic_arn"][]; $foundation[.] | type == "string") and
-      ($foundation.private_subnet_ids | exact_keys(["a", "c"])) and
-      all(["a", "c"][]; $foundation.private_subnet_ids[.] | type == "string") and
-      ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"])) and
-      all(["identifier", "resource_id", "address"][]; $foundation.db_instance[.] | type == "string") and
-      ($foundation.db_instance.port | type == "number")
-    ) catch false;
-  .planned_values.outputs.foundation.value | select(foundation_value_is_valid)
-')"
-rm -f -- "$PRODUCTION_FOUNDATION_PLAN"
-jq -n --argjson foundation "$production_foundation_json" '{"foundation": $foundation}' >"$PRODUCTION_FOUNDATION_VARS"
-jq -e 'has("foundation") and (.foundation | type == "object")' "$PRODUCTION_FOUNDATION_VARS" >/dev/null
-jq . "$PRODUCTION_FOUNDATION_VARS"  # review the production-account object
-cd "$ROOT/v2/infra"
-AWS_PROFILE=nova-toll-prod terraform init -reconfigure -input=false -backend-config=backend.production.hcl
-AWS_PROFILE=nova-toll-prod terraform plan -input=false -lock=false -var-file=production.tfvars -var-file="$PRODUCTION_FOUNDATION_VARS" -var loader_package_path=build/loader.zip -var publisher_package_path=build/publisher.zip -var agentcore_package_path=build/agentcore.zip -var chat_proxy_package_path=build/chat-proxy.zip -var timed_checks_package_path=build/timed-checks.zip -out=build/production-release.tfplan
-production_plan_sha="$(sha256sum build/production-release.tfplan | awk '{print $1}')"
-AWS_PROFILE=nova-toll-prod terraform show -json build/production-release.tfplan | jq -e '
-  def valid: (.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string"));
-  def creates: ["aws_iam_role.publisher_scheduler", "aws_iam_role_policy.publisher_scheduler", "aws_scheduler_schedule.publisher"]; def updates: ["aws_bedrockagentcore_agent_runtime.tollchat", "aws_bedrockagentcore_agent_runtime_endpoint.tollchat", "aws_cloudwatch_metric_alarm.report_generation_freshness", "aws_iam_role_policy.publisher", "aws_iam_role_policy.tollchat_proxy", "aws_iam_role_policy.tollchat_runtime", "aws_lambda_function.publisher", "aws_s3_object.agentcore", "aws_s3_object.usage"]; def deletes: ["aws_cloudwatch_event_rule.committed_i95_loads", "aws_cloudwatch_event_rule.report_watchdog", "aws_cloudwatch_event_target.publisher_load_event", "aws_cloudwatch_event_target.publisher_watchdog", "aws_cloudwatch_metric_alarm.publisher_failed_invocations[\"load_success\"]", "aws_cloudwatch_metric_alarm.publisher_failed_invocations[\"watchdog\"]", "aws_lambda_permission.publisher_load_event", "aws_lambda_permission.publisher_watchdog", "aws_sqs_queue_policy.publisher_delivery_failure"]; def reads: ["data.aws_iam_policy_document.publisher_scheduler", "data.aws_iam_policy_document.tollchat_proxy", "data.aws_iam_policy_document.tollchat_runtime"];
-  def approved: .address as $a | ((.mode == "managed" and (((creates | index($a)) != null and .change.actions == ["create"]) or ((updates | index($a)) != null and .change.actions == ["update"]) or ((deletes | index($a)) != null and .change.actions == ["delete"]))) or (.mode == "data" and ((reads | index($a)) != null) and .change.actions == ["read"]));
-  valid and all(.resource_changes[]; if .change.actions == ["no-op"] then true else approved end)'
-AWS_PROFILE=nova-toll-prod terraform show build/production-release.tfplan
-test "$(sha256sum build/production-release.tfplan | awk '{print $1}')" = "$production_plan_sha"
-AWS_PROFILE=nova-toll-prod terraform apply -input=false build/production-release.tfplan
-test "$(sha256sum build/production-release.tfplan | awk '{print $1}')" = "$production_plan_sha"
-rm -f -- "$PRODUCTION_FOUNDATION_VARS"
-trap - EXIT
-)
-```
+Reviewer approval of the protected `production` job occurs after that plan is
+saved and before the reusable job can access environment secrets or credentials.
+That job again revalidates admission/candidate and the exact saved plan/state
+before migration credentials and fixed migration, re-assumes the deploy role,
+then repeats exact plan/state validation before applying that same plan. Fixed
+readiness and exactly one bounded canary follow. A failed guard stops every
+later stage it protects; it never authorizes a direct, arbitrary, regenerated,
+stale, or caller-selected plan/apply. Terminal evidence remains sanitized and
+the canary record remains the single bounded candidate-bound record.
 
 The legacy development inventory is historical read-only cleanup context for
 #333. Development account ownership and account-local backends are current;
@@ -808,37 +850,276 @@ to delete the exact `tolls/i95-i495/` prefix and `sitemap.xml`, followed by a
 targeted CloudFront invalidation. Do not perform that destructive rollback as
 part of an ordinary application rollback.
 
-For immediate recovery, set `RELEASE_EVIDENCE` to the original failed release's
-pre-apply evidence file. Do not rerun capture. Restore its targets before
-running the Terraform rollback; this deliberately creates temporary drift that
-the saved-plan deployment below must reconcile:
+### Production canary failure: human stop and manual routing restore
+
+A production canary failure is a human stop: hold normal delivery, do not
+report success, and do not roll back automatically. A separately deliberate
+manual restore may change only application routing to the recorded previous
+versions of the fixed Lambda alias and AgentCore endpoint below. It is not a
+checked-in rollback executable. Do not rerun capture, modify a database,
+schema, shared polling/storage, Lambda concurrency, or production data. Any
+later Terraform reconciliation requires separate authorization and the normal
+protected saved-plan flow; it does not follow from this failed canary.
+
+Set `RELEASE_EVIDENCE` to the original failed release's recovery record. A
+precondition failure, identity mismatch, stale Lambda revision, unexpected
+response, or ambiguous result stops for a fresh read and escalation; do not
+blindly retry or treat it as success.
 
 ```sh
 (
-  set -eu
-  : "${RELEASE_EVIDENCE:?set the original failed release evidence path}"
-  test "$(wc -l <"$RELEASE_EVIDENCE")" -eq 3
-  grep -qx 'lambda_live_function_version=[0-9][0-9]*' "$RELEASE_EVIDENCE"
-  grep -qx 'agentcore_runtime_id=[A-Za-z0-9][A-Za-z0-9_-]*' "$RELEASE_EVIDENCE"
-  grep -qx 'agentcore_endpoint_live_version=[0-9][0-9]*' "$RELEASE_EVIDENCE"
-  LAMBDA_LIVE_FUNCTION_VERSION="$(sed -n 's/^lambda_live_function_version=//p' "$RELEASE_EVIDENCE")"
-  AGENTCORE_RUNTIME_ID="$(sed -n 's/^agentcore_runtime_id=//p' "$RELEASE_EVIDENCE")"
-  AGENTCORE_ENDPOINT_LIVE_VERSION="$(sed -n 's/^agentcore_endpoint_live_version=//p' "$RELEASE_EVIDENCE")"
-  AWS_PROFILE=nova-toll-prod aws --region us-east-1 lambda update-alias \
-    --function-name tollchat-v2-chat-proxy --name live \
-    --function-version "$LAMBDA_LIVE_FUNCTION_VERSION"
-  AWS_PROFILE=nova-toll-prod aws --region us-east-1 bedrock-agentcore-control update-agent-runtime-endpoint \
-    --agent-runtime-id "$AGENTCORE_RUNTIME_ID" --endpoint-name preview \
-    --agent-runtime-version "$AGENTCORE_ENDPOINT_LIVE_VERSION"
+  set -euo pipefail
+  set +x
+  umask 077
+  EXPECTED_ACCOUNT=920534282028
+  EXPECTED_REGION=us-east-1
+  LAMBDA_FUNCTION=tollchat-v2-chat-proxy
+  LAMBDA_ALIAS=live
+  AGENTCORE_RUNTIME=nova_toll_v2-W6989LEw44
+  AGENTCORE_ENDPOINT=preview
+  export AWS_IGNORE_CONFIGURED_ENDPOINT_URLS=true
+  RECOVERY_RECORD_MAX_BYTES=256
+  CURRENT_STAGE=record-path
+  FAILURE_REPORTED=0
+  PRIVATE_SINK=
+  AGENTCORE_UPDATE_AMBIGUOUS=0
+  AGENTCORE_UPDATE_STATUS=0
+  AGENTCORE_RETRY_USED=0
+  AGENTCORE_RESTORED=0
+  cleanup() {
+    test -z "$PRIVATE_SINK" || rm -f -- "$PRIVATE_SINK" >/dev/null 2>&1 || :
+  }
+  finish() {
+    local status=$?
+    trap - EXIT
+    cleanup
+    if (( status != 0 && status != 130 && AGENTCORE_UPDATE_AMBIGUOUS == 1 )); then
+      status=$AGENTCORE_UPDATE_STATUS
+    fi
+    if (( status != 0 && FAILURE_REPORTED == 0 )); then
+      printf 'stage=%s status=fail exit=%s reason=unclassified\n' "$CURRENT_STAGE" "$status" >&2 || :
+      FAILURE_REPORTED=1
+    fi
+    exit "$status"
+  }
+  trap finish EXIT
+  trap 'exit 130' HUP INT TERM
+  CURRENT_STAGE=private-sink
+  PRIVATE_SINK="$(mktemp 2>/dev/null)"
+  chmod 600 "$PRIVATE_SINK" >/dev/null 2>&1
+  CURRENT_STAGE=record-path
+  test -n "${RELEASE_EVIDENCE-}"
+  CURRENT_STAGE=record-snapshot
+  RECOVERY_VALUES="$(
+    python3 -I -S - "$RELEASE_EVIDENCE" "$RECOVERY_RECORD_MAX_BYTES" 2>"$PRIVATE_SINK" <<'PY'
+import os
+import re
+import stat
+import sys
+
+try:
+    path, raw_limit = sys.argv[1:]
+    limit = int(raw_limit)
+    if limit < 1 or not hasattr(os, "O_NOFOLLOW"):
+        raise ValueError
+    parent, basename = os.path.split(path)
+    if not basename:
+        raise ValueError
+    directory = os.open(
+        parent or ".", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    )
+    try:
+        parent_info = os.fstat(directory)
+        if parent_info.st_uid != os.geteuid() or parent_info.st_mode & 0o022:
+            raise ValueError
+        fd = os.open(
+            basename,
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+            dir_fd=directory,
+        )
+        try:
+            info = os.fstat(fd)
+            named = os.stat(basename, dir_fd=directory, follow_symlinks=False)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or stat.S_IMODE(info.st_mode) != 0o600
+                or info.st_uid != os.geteuid()
+                or info.st_size > limit
+                or named.st_dev != info.st_dev
+                or named.st_ino != info.st_ino
+                or named.st_uid != os.geteuid()
+                or not stat.S_ISREG(named.st_mode)
+                or stat.S_IMODE(named.st_mode) != 0o600
+            ):
+                raise ValueError
+            snapshot = os.read(fd, limit + 1)
+        finally:
+            os.close(fd)
+    finally:
+        os.close(directory)
+    if len(snapshot) > limit:
+        raise ValueError
+    lines = snapshot.splitlines(keepends=True)
+    if len(lines) != 2 or any(not line.endswith(b"\n") for line in lines):
+        raise ValueError
+    values = {}
+    for line in lines:
+        key, separator, value = line[:-1].partition(b"=")
+        if key not in {
+            b"lambda_live_function_version",
+            b"agentcore_endpoint_live_version",
+        } or separator != b"=" or key in values:
+            raise ValueError
+        value = value.decode("ascii")
+        if not re.fullmatch(r"[1-9][0-9]*", value):
+            raise ValueError
+        values[key] = value
+    if set(values) != {
+        b"lambda_live_function_version",
+        b"agentcore_endpoint_live_version",
+    }:
+        raise ValueError
+    sys.stdout.write(
+        f"{values[b'lambda_live_function_version']} "
+        f"{values[b'agentcore_endpoint_live_version']}"
+    )
+except (OSError, UnicodeDecodeError, ValueError):
+    raise SystemExit(1)
+PY
+)"
+  CURRENT_STAGE=record-validate
+  IFS=' ' read -r LAMBDA_LIVE_FUNCTION_VERSION AGENTCORE_ENDPOINT_LIVE_VERSION <<<"$RECOVERY_VALUES"
+  test -n "$LAMBDA_LIVE_FUNCTION_VERSION"
+  test -n "$AGENTCORE_ENDPOINT_LIVE_VERSION"
+  unset RECOVERY_VALUES
+  CURRENT_STAGE=account-identity
+  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" \
+    sts get-caller-identity --query Account --output text >"$PRIVATE_SINK" 2>&1
+  CALLER_ACCOUNT="$(<"$PRIVATE_SINK")"
+  test "$CALLER_ACCOUNT" = "$EXPECTED_ACCOUNT"
+
+  CURRENT_STAGE=lambda-read
+  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias \
+    --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" --output json >"$PRIVATE_SINK" 2>&1
+  LAMBDA_ALIAS_STATE="$(<"$PRIVATE_SINK")"
+  CURRENT_STAGE=lambda-validate
+  LAMBDA_ALIAS_REVISION="$(jq -ser '
+    select(length == 1) | .[0] | select(.AliasArn == "arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live" and .Name == "live" and
+      (.RevisionId | type == "string" and length > 0)) | .RevisionId
+  ' <<<"$LAMBDA_ALIAS_STATE" 2>"$PRIVATE_SINK")"
+  CURRENT_STAGE=lambda-update
+  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda update-alias \
+    --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" \
+    --function-version "$LAMBDA_LIVE_FUNCTION_VERSION" --revision-id "$LAMBDA_ALIAS_REVISION" >"$PRIVATE_SINK" 2>&1
+  CURRENT_STAGE=lambda-readback
+  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias \
+    --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" --output json >"$PRIVATE_SINK" 2>&1
+  LAMBDA_ALIAS_STATE="$(<"$PRIVATE_SINK")"
+  CURRENT_STAGE=lambda-readback-validate
+  jq -se --arg version "$LAMBDA_LIVE_FUNCTION_VERSION" '
+    select(length == 1) | .[0] | .AliasArn == "arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live" and .Name == "live" and .FunctionVersion == $version and
+    (if has("RoutingConfig") then
+      .RoutingConfig as $routing |
+      if ($routing | type) != "object" then false
+      elif ($routing | has("AdditionalVersionWeights")) then
+        ($routing.AdditionalVersionWeights | type == "object" and length == 0)
+      else true
+      end
+    else true
+    end)
+  ' <<<"$LAMBDA_ALIAS_STATE" >"$PRIVATE_SINK" 2>&1
+
+  CURRENT_STAGE=agentcore-token
+  AGENTCORE_RESTORE_TOKEN="$(python3 -I -S -c 'import uuid; print(uuid.uuid4())' 2>"$PRIVATE_SINK")"
+  update_agentcore() {
+    AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" bedrock-agentcore-control update-agent-runtime-endpoint \
+      --agent-runtime-id "$AGENTCORE_RUNTIME" --endpoint-name "$AGENTCORE_ENDPOINT" \
+      --agent-runtime-version "$AGENTCORE_ENDPOINT_LIVE_VERSION" \
+      --client-token "$AGENTCORE_RESTORE_TOKEN" >"$PRIVATE_SINK" 2>&1
+  }
+  CURRENT_STAGE=agentcore-update
+  if update_agentcore; then :; else
+    AGENTCORE_UPDATE_STATUS=$?
+    AGENTCORE_UPDATE_AMBIGUOUS=1
+  fi
+  for ((attempt = 1; attempt <= 60; attempt++)); do
+    CURRENT_STAGE=agentcore-readback
+    AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" \
+      bedrock-agentcore-control get-agent-runtime-endpoint --agent-runtime-id "$AGENTCORE_RUNTIME" \
+      --endpoint-name "$AGENTCORE_ENDPOINT" --output json >"$PRIVATE_SINK" 2>&1
+    AGENTCORE_ENDPOINT_STATE="$(<"$PRIVATE_SINK")"
+    CURRENT_STAGE=agentcore-validate
+    AGENTCORE_READBACK="$(jq -ser '
+      select(length == 1) | .[0] |
+      select(
+        .agentRuntimeArn == "arn:aws:bedrock-agentcore:us-east-1:920534282028:runtime/nova_toll_v2-W6989LEw44" and
+        .name == "preview" and
+        (.status | type == "string" and test("^(READY|CREATING|UPDATING|UPDATE_FAILED)$"))
+      ) |
+      .status as $status |
+      (if $status == "UPDATE_FAILED" then ""
+       else .liveVersion | select(type == "string" and test("^[1-9][0-9]*$"))
+       end) as $live |
+      (if has("targetVersion") then
+         .targetVersion | select(type == "string" and test("^[1-9][0-9]*$"))
+       else ""
+       end) as $target |
+      [$status, $live, $target] | @tsv
+    ' <<<"$AGENTCORE_ENDPOINT_STATE" 2>"$PRIVATE_SINK")"
+    AGENTCORE_STATUS=
+    AGENTCORE_LIVE_VERSION=
+    AGENTCORE_TARGET_VERSION=
+    IFS=$'\t' read -r AGENTCORE_STATUS AGENTCORE_LIVE_VERSION AGENTCORE_TARGET_VERSION <<<"$AGENTCORE_READBACK"
+    case "$AGENTCORE_STATUS" in
+      READY)
+        if test -z "$AGENTCORE_TARGET_VERSION"; then AGENTCORE_TARGET_VERSION=$AGENTCORE_LIVE_VERSION; fi
+        test "$AGENTCORE_TARGET_VERSION" = "$AGENTCORE_LIVE_VERSION"
+        if test "$AGENTCORE_LIVE_VERSION" = "$AGENTCORE_ENDPOINT_LIVE_VERSION"; then
+          AGENTCORE_RESTORED=1
+          break
+        fi
+        if (( AGENTCORE_UPDATE_AMBIGUOUS == 0 )); then exit 1; fi
+        if (( AGENTCORE_RETRY_USED == 1 )); then exit "$AGENTCORE_UPDATE_STATUS"; fi
+        AGENTCORE_RETRY_USED=1
+        CURRENT_STAGE=agentcore-retry
+        update_agentcore || :
+        ;;
+      CREATING|UPDATING)
+        test -n "$AGENTCORE_TARGET_VERSION"
+        test "$AGENTCORE_TARGET_VERSION" = "$AGENTCORE_ENDPOINT_LIVE_VERSION"
+        CURRENT_STAGE=agentcore-poll
+        if (( attempt == 60 )); then
+          if (( AGENTCORE_UPDATE_AMBIGUOUS == 1 )); then exit "$AGENTCORE_UPDATE_STATUS"; fi
+          exit 1
+        fi
+        sleep 5 >"$PRIVATE_SINK" 2>&1
+        ;;
+      UPDATE_FAILED) exit 1 ;;
+      *) exit 1 ;;
+    esac
+  done
+  if (( AGENTCORE_RESTORED == 0 && AGENTCORE_UPDATE_AMBIGUOUS == 1 )); then
+    exit "$AGENTCORE_UPDATE_STATUS"
+  fi
+  test "$AGENTCORE_RESTORED" -eq 1
 )
 ```
 
-After the immediate rollback smoke test passes, check out the last accepted
-release revision, rebuild it, verify its recorded SHA-256 manifest, and repeat
-the saved-plan deployment workflow without recapturing evidence. Restore the old
-proxy and public site together so the code and disclosure remain consistent.
-The apply must reconcile the Lambda alias and AgentCore endpoint with Terraform
-state; rerun the reviewed plan afterward and require it to report no changes.
+The restore token is generated for this restore and must be distinct from the
+forward update token. On an ambiguous AgentCore update return, retain that token
+and exact fixed request for the immediate read-back/poll; at most one identical
+same-token retry is allowed only when the endpoint remains `READY` on a
+different version. The immediate Lambda alias read-back and finite AgentCore
+`READY`/recorded-version read-back/poll are the complete post-restore production
+evidence. Do not run a Terraform-state-bound production checker after this
+deliberate prior-version routing restore.
+
+Rehearse recovery only in development, leaving production exactly unchanged.
+After the restore, a WAF/rate-limit response, including HTTP 429, is invalid
+public-check evidence: neither a pass nor an application failure. Wait until
+the currently configured WAF rate-based quiet/evaluation window has cleared,
+then run the unchanged development checker for full readiness, public, and
+two-session/reset verification.
 
 Deterministic builds restore the exact package bytes; bucket versioning retains
 the earlier runtime and proxy objects for 30 days. Historical usage aggregate,

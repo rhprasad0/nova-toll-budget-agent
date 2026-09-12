@@ -104,18 +104,16 @@ until docker exec "$container_id" pg_isready --username "$PGUSER" --dbname postg
 v2/scripts/run_db_tests.sh "$(git rev-parse HEAD^)"
 ```
 
-Credential-free PR CI never runs `terraform plan` or `apply`. A published stable
-`vX.Y.Z` release first records its bounded event without credentials. The
-main-resident production consumer independently admits the exact successful
-development candidate and privately saves one versioned, checksummed KMS plan
-under the existing state bucket's private `plans/` prefix. The one protected
-production reusable job verifies that immutable version, checksum, state binding
-and 24-hour age before deploy preflight, fixed migrations, re-assumed deploy
-apply, and fixed production readiness. It records sanitized terminal evidence.
-Readiness also runs the fixed Greenway canary through the normal public session
-path: one current-price call for the required route/profile, a grounded amount,
-and the standard disclaimer must complete within 60 seconds. Its marker-gated
-record is bounded release evidence, never a browser event for ordinary chat.
+Credential-free PR CI never runs `terraform plan` or `apply`. The protected
+production sequence is verified development bundle, stable `vX.Y.Z` admission
+and claim, exact candidate validation before planner credentials, one encrypted
+versioned/checksummed 24-hour saved plan, reviewer approval of the protected
+job, repeated plan/state validation before fixed migration and re-assumed deploy
+apply, fixed readiness, then one bounded canary. Guards fail closed before later
+stages and terminal evidence remains sanitized. Before approval, capture the
+fixed routing targets; a canary failure requires the human-operated manual
+restore in the [runbook](RUNBOOK.md#production-canary-failure-human-stop-and-manual-routing-restore),
+never an automatic rollback.
 
 Development delivery reports an explicit `development-release` GitHub result
 only after exact-version readiness and bounded static/API/two-session agent
