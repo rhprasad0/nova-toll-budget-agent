@@ -432,14 +432,9 @@ manifest contents.
   export AWS_IGNORE_CONFIGURED_ENDPOINT_URLS=true
   CURRENT_STAGE=record-path
   FAILURE_REPORTED=0
-  PRIVATE_SINK=
-  cleanup() {
-    test -z "$PRIVATE_SINK" || rm -f -- "$PRIVATE_SINK" >/dev/null 2>&1 || :
-  }
   finish() {
     local status=$?
     trap - EXIT
-    cleanup
     if (( status != 0 && FAILURE_REPORTED == 0 )); then
       printf 'stage=%s status=fail exit=%s reason=unclassified\n' "$CURRENT_STAGE" "$status" >&2 || :
       FAILURE_REPORTED=1
@@ -448,26 +443,21 @@ manifest contents.
   }
   trap finish EXIT
   trap 'exit 130' HUP INT TERM
-  CURRENT_STAGE=private-sink
-  PRIVATE_SINK="$(mktemp 2>/dev/null)"
-  chmod 600 "$PRIVATE_SINK" >/dev/null 2>&1
   CURRENT_STAGE=record-path
   test -n "${RELEASE_EVIDENCE-}"
   CURRENT_STAGE=account-identity
+  set +e
   AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" \
-    sts get-caller-identity --query Account --output text >"$PRIVATE_SINK" 2>&1
-  CALLER_ACCOUNT="$(<"$PRIVATE_SINK")"
-  test "$CALLER_ACCOUNT" = "$EXPECTED_ACCOUNT"
-  CURRENT_STAGE=lambda-read
-  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias \
-    --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" --output json >"$PRIVATE_SINK" 2>&1
-  LAMBDA_ALIAS_STATE="$(<"$PRIVATE_SINK")"
-  CURRENT_STAGE=agentcore-read
-  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" bedrock-agentcore-control get-agent-runtime-endpoint \
-    --agent-runtime-id "$AGENTCORE_RUNTIME" --endpoint-name "$AGENTCORE_ENDPOINT" --output json >"$PRIVATE_SINK" 2>&1
-  AGENTCORE_ENDPOINT_STATE="$(<"$PRIVATE_SINK")"
+    sts get-caller-identity --query Account --output text 2>&1 | cmp -s - <(printf '%s\n' "$EXPECTED_ACCOUNT") 2>/dev/null
+  statuses=("${PIPESTATUS[@]}")
+  set -e
+  (( statuses[0] == 0 )) || exit "${statuses[0]}"
+  (( statuses[1] == 0 )) || exit "${statuses[1]}"
   CURRENT_STAGE=lambda-validate
-  LAMBDA_LIVE_FUNCTION_VERSION="$(jq -ser '
+  LAMBDA_LIVE_FUNCTION_VERSION="$(
+    set +e
+    AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias \
+      --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" --output json 2>&1 | jq -ser '
     select(length == 1) | .[0] | select(.AliasArn == "arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live" and .Name == "live" and
       (.FunctionVersion | type == "string" and test("^[0-9]+$")) and
       (.FunctionVersion | tonumber > 0) and
@@ -481,16 +471,34 @@ manifest contents.
       else true
       end))
     | .FunctionVersion
-  ' <<<"$LAMBDA_ALIAS_STATE" 2>"$PRIVATE_SINK")"
+    ' 2>/dev/null
+    statuses=("${PIPESTATUS[@]}")
+    set -e
+    (( statuses[0] == 0 )) || exit "${statuses[0]}"
+    exit "${statuses[1]}"
+  )"
   CURRENT_STAGE=agentcore-validate
-  AGENTCORE_ENDPOINT_LIVE_VERSION="$(jq -ser '
+  AGENTCORE_ENDPOINT_LIVE_VERSION="$(
+    set +e
+    AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" bedrock-agentcore-control get-agent-runtime-endpoint \
+      --agent-runtime-id "$AGENTCORE_RUNTIME" --endpoint-name "$AGENTCORE_ENDPOINT" --output json 2>&1 | jq -ser '
     select(length == 1) | .[0] | select(.agentRuntimeArn == "arn:aws:bedrock-agentcore:us-east-1:920534282028:runtime/nova_toll_v2-W6989LEw44" and
-      .name == "preview" and (.liveVersion | type == "string" and test("^[1-9][0-9]*$")))
+      .name == "preview" and .status == "READY" and
+      (.liveVersion | type == "string" and test("^[1-9][0-9]*$")) and
+      (if has("targetVersion") then .targetVersion == .liveVersion else true end))
     | .liveVersion
-  ' <<<"$AGENTCORE_ENDPOINT_STATE" 2>"$PRIVATE_SINK")"
+    ' 2>/dev/null
+    statuses=("${PIPESTATUS[@]}")
+    set -e
+    (( statuses[0] == 0 )) || exit "${statuses[0]}"
+    exit "${statuses[1]}"
+  )"
   CURRENT_STAGE=record-write
   if CAPTURE_WRITE_STAGE="$(
-    python3 -I -S - "$RELEASE_EVIDENCE" "$LAMBDA_LIVE_FUNCTION_VERSION" "$AGENTCORE_ENDPOINT_LIVE_VERSION" 2>"$PRIVATE_SINK" <<'PY'
+    set +e
+    python3 -I -S - "$RELEASE_EVIDENCE" "$LAMBDA_LIVE_FUNCTION_VERSION" "$AGENTCORE_ENDPOINT_LIVE_VERSION" 2>/dev/null <<'PY' | jq -Rser '
+    select(. == "" or . == "record-path")
+    ' 2>/dev/null
 import os
 import stat
 import sys
@@ -555,6 +563,10 @@ except FileExistsError:
 except (OSError, ValueError):
     raise SystemExit(1)
 PY
+    statuses=("${PIPESTATUS[@]}")
+    set -e
+    (( statuses[0] == 0 )) || exit "${statuses[0]}"
+    exit "${statuses[1]}"
   )"; then
     :
   else
@@ -562,7 +574,7 @@ PY
     if test "$CAPTURE_WRITE_STAGE" = record-path; then CURRENT_STAGE=record-path; fi
     exit "$CAPTURE_WRITE_STATUS"
   fi
-  unset LAMBDA_ALIAS_STATE AGENTCORE_ENDPOINT_STATE LAMBDA_LIVE_FUNCTION_VERSION AGENTCORE_ENDPOINT_LIVE_VERSION
+  unset LAMBDA_LIVE_FUNCTION_VERSION AGENTCORE_ENDPOINT_LIVE_VERSION
 )
 ```
 
@@ -881,18 +893,13 @@ blindly retry or treat it as success.
   RECOVERY_RECORD_MAX_BYTES=256
   CURRENT_STAGE=record-path
   FAILURE_REPORTED=0
-  PRIVATE_SINK=
   AGENTCORE_UPDATE_AMBIGUOUS=0
   AGENTCORE_UPDATE_STATUS=0
   AGENTCORE_RETRY_USED=0
   AGENTCORE_RESTORED=0
-  cleanup() {
-    test -z "$PRIVATE_SINK" || rm -f -- "$PRIVATE_SINK" >/dev/null 2>&1 || :
-  }
   finish() {
     local status=$?
     trap - EXIT
-    cleanup
     if (( status != 0 && status != 130 && AGENTCORE_UPDATE_AMBIGUOUS == 1 )); then
       status=$AGENTCORE_UPDATE_STATUS
     fi
@@ -904,14 +911,14 @@ blindly retry or treat it as success.
   }
   trap finish EXIT
   trap 'exit 130' HUP INT TERM
-  CURRENT_STAGE=private-sink
-  PRIVATE_SINK="$(mktemp 2>/dev/null)"
-  chmod 600 "$PRIVATE_SINK" >/dev/null 2>&1
   CURRENT_STAGE=record-path
   test -n "${RELEASE_EVIDENCE-}"
   CURRENT_STAGE=record-snapshot
   RECOVERY_VALUES="$(
-    python3 -I -S - "$RELEASE_EVIDENCE" "$RECOVERY_RECORD_MAX_BYTES" 2>"$PRIVATE_SINK" <<'PY'
+    set +e
+    python3 -I -S - "$RELEASE_EVIDENCE" "$RECOVERY_RECORD_MAX_BYTES" 2>/dev/null <<'PY' | jq -Rser '
+    select(test("^[1-9][0-9]* [1-9][0-9]*$"))
+    ' 2>/dev/null
 import os
 import re
 import stat
@@ -986,6 +993,10 @@ try:
 except (OSError, UnicodeDecodeError, ValueError):
     raise SystemExit(1)
 PY
+    statuses=("${PIPESTATUS[@]}")
+    set -e
+    (( statuses[0] == 0 )) || exit "${statuses[0]}"
+    exit "${statuses[1]}"
 )"
   CURRENT_STAGE=record-validate
   IFS=' ' read -r LAMBDA_LIVE_FUNCTION_VERSION AGENTCORE_ENDPOINT_LIVE_VERSION <<<"$RECOVERY_VALUES"
@@ -993,30 +1004,36 @@ PY
   test -n "$AGENTCORE_ENDPOINT_LIVE_VERSION"
   unset RECOVERY_VALUES
   CURRENT_STAGE=account-identity
+  set +e
   AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" \
-    sts get-caller-identity --query Account --output text >"$PRIVATE_SINK" 2>&1
-  CALLER_ACCOUNT="$(<"$PRIVATE_SINK")"
-  test "$CALLER_ACCOUNT" = "$EXPECTED_ACCOUNT"
+    sts get-caller-identity --query Account --output text 2>&1 | cmp -s - <(printf '%s\n' "$EXPECTED_ACCOUNT") 2>/dev/null
+  statuses=("${PIPESTATUS[@]}")
+  set -e
+  (( statuses[0] == 0 )) || exit "${statuses[0]}"
+  (( statuses[1] == 0 )) || exit "${statuses[1]}"
 
-  CURRENT_STAGE=lambda-read
-  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias \
-    --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" --output json >"$PRIVATE_SINK" 2>&1
-  LAMBDA_ALIAS_STATE="$(<"$PRIVATE_SINK")"
   CURRENT_STAGE=lambda-validate
-  LAMBDA_ALIAS_REVISION="$(jq -ser '
+  LAMBDA_ALIAS_REVISION="$(
+    set +e
+    AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias \
+      --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" --output json 2>&1 | jq -ser '
     select(length == 1) | .[0] | select(.AliasArn == "arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live" and .Name == "live" and
-      (.RevisionId | type == "string" and length > 0)) | .RevisionId
-  ' <<<"$LAMBDA_ALIAS_STATE" 2>"$PRIVATE_SINK")"
+      (.RevisionId | type == "string" and length > 0 and length <= 256 and
+        (explode | all(. >= 32 and (. < 127 or . >= 160))))) | .RevisionId
+    ' 2>/dev/null
+    statuses=("${PIPESTATUS[@]}")
+    set -e
+    (( statuses[0] == 0 )) || exit "${statuses[0]}"
+    exit "${statuses[1]}"
+  )"
   CURRENT_STAGE=lambda-update
   AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda update-alias \
     --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" \
-    --function-version "$LAMBDA_LIVE_FUNCTION_VERSION" --revision-id "$LAMBDA_ALIAS_REVISION" >"$PRIVATE_SINK" 2>&1
-  CURRENT_STAGE=lambda-readback
-  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias \
-    --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" --output json >"$PRIVATE_SINK" 2>&1
-  LAMBDA_ALIAS_STATE="$(<"$PRIVATE_SINK")"
+    --function-version "$LAMBDA_LIVE_FUNCTION_VERSION" --revision-id "$LAMBDA_ALIAS_REVISION" >/dev/null 2>&1
   CURRENT_STAGE=lambda-readback-validate
-  jq -se --arg version "$LAMBDA_LIVE_FUNCTION_VERSION" '
+  set +e
+  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias \
+    --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" --output json 2>&1 | jq -se --arg version "$LAMBDA_LIVE_FUNCTION_VERSION" '
     select(length == 1) | .[0] | .AliasArn == "arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live" and .Name == "live" and .FunctionVersion == $version and
     (if has("RoutingConfig") then
       .RoutingConfig as $routing |
@@ -1027,15 +1044,28 @@ PY
       end
     else true
     end)
-  ' <<<"$LAMBDA_ALIAS_STATE" >"$PRIVATE_SINK" 2>&1
+  ' >/dev/null 2>&1
+  statuses=("${PIPESTATUS[@]}")
+  set -e
+  (( statuses[0] == 0 )) || exit "${statuses[0]}"
+  (( statuses[1] == 0 )) || exit "${statuses[1]}"
 
   CURRENT_STAGE=agentcore-token
-  AGENTCORE_RESTORE_TOKEN="$(python3 -I -S -c 'import uuid; print(uuid.uuid4())' 2>"$PRIVATE_SINK")"
+  AGENTCORE_RESTORE_TOKEN="$(
+    set +e
+    python3 -I -S -c 'import uuid; print(uuid.uuid4())' 2>/dev/null | jq -Rser '
+    select(test("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
+    ' 2>/dev/null
+    statuses=("${PIPESTATUS[@]}")
+    set -e
+    (( statuses[0] == 0 )) || exit "${statuses[0]}"
+    exit "${statuses[1]}"
+  )"
   update_agentcore() {
     AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" bedrock-agentcore-control update-agent-runtime-endpoint \
       --agent-runtime-id "$AGENTCORE_RUNTIME" --endpoint-name "$AGENTCORE_ENDPOINT" \
       --agent-runtime-version "$AGENTCORE_ENDPOINT_LIVE_VERSION" \
-      --client-token "$AGENTCORE_RESTORE_TOKEN" >"$PRIVATE_SINK" 2>&1
+      --client-token "$AGENTCORE_RESTORE_TOKEN" >/dev/null 2>&1
   }
   CURRENT_STAGE=agentcore-update
   if update_agentcore; then :; else
@@ -1043,13 +1073,12 @@ PY
     AGENTCORE_UPDATE_AMBIGUOUS=1
   fi
   for ((attempt = 1; attempt <= 60; attempt++)); do
-    CURRENT_STAGE=agentcore-readback
-    AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" \
-      bedrock-agentcore-control get-agent-runtime-endpoint --agent-runtime-id "$AGENTCORE_RUNTIME" \
-      --endpoint-name "$AGENTCORE_ENDPOINT" --output json >"$PRIVATE_SINK" 2>&1
-    AGENTCORE_ENDPOINT_STATE="$(<"$PRIVATE_SINK")"
     CURRENT_STAGE=agentcore-validate
-    AGENTCORE_READBACK="$(jq -ser '
+    AGENTCORE_READBACK="$(
+      set +e
+      AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" \
+        bedrock-agentcore-control get-agent-runtime-endpoint --agent-runtime-id "$AGENTCORE_RUNTIME" \
+        --endpoint-name "$AGENTCORE_ENDPOINT" --output json 2>&1 | jq -ser '
       select(length == 1) | .[0] |
       select(
         .agentRuntimeArn == "arn:aws:bedrock-agentcore:us-east-1:920534282028:runtime/nova_toll_v2-W6989LEw44" and
@@ -1065,7 +1094,12 @@ PY
        else ""
        end) as $target |
       [$status, $live, $target] | @tsv
-    ' <<<"$AGENTCORE_ENDPOINT_STATE" 2>"$PRIVATE_SINK")"
+      ' 2>/dev/null
+      statuses=("${PIPESTATUS[@]}")
+      set -e
+      (( statuses[0] == 0 )) || exit "${statuses[0]}"
+      exit "${statuses[1]}"
+    )"
     AGENTCORE_STATUS=
     AGENTCORE_LIVE_VERSION=
     AGENTCORE_TARGET_VERSION=
@@ -1092,7 +1126,7 @@ PY
           if (( AGENTCORE_UPDATE_AMBIGUOUS == 1 )); then exit "$AGENTCORE_UPDATE_STATUS"; fi
           exit 1
         fi
-        sleep 5 >"$PRIVATE_SINK" 2>&1
+        sleep 5 >/dev/null 2>&1
         ;;
       UPDATE_FAILED) exit 1 ;;
       *) exit 1 ;;

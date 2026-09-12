@@ -1826,8 +1826,11 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
             'AliasArn == "arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live"'
             in shell
         )
-        assert 'PRIVATE_SINK="$(mktemp 2>/dev/null)"' in shell
-        assert 'rm -f -- "$PRIVATE_SINK" >/dev/null 2>&1 || :' in shell
+        assert "PRIVATE_SINK" not in shell
+        assert "$(mktemp" not in shell
+        assert "2>&1 |" in shell
+        assert "cmp -s - <(printf '%s\\n' \"$EXPECTED_ACCOUNT\") 2>/dev/null" in shell
+        assert 'test "${statuses[1]}" -eq 0' not in shell
         assert 'aws --region "$EXPECTED_REGION"' in shell
         assert "export AWS_IGNORE_CONFIGURED_ENDPOINT_URLS=true" in shell
         assert 'test -n "${RELEASE_EVIDENCE-}"' in shell
@@ -1835,9 +1838,7 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
     for stage in (
         "record-path",
         "account-identity",
-        "lambda-read",
         "lambda-validate",
-        "agentcore-read",
         "agentcore-validate",
         "record-write",
     ):
@@ -1846,10 +1847,8 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
         "record-snapshot",
         "record-validate",
         "lambda-update",
-        "lambda-readback",
         "agentcore-token",
         "agentcore-update",
-        "agentcore-readback",
         "agentcore-poll",
         "agentcore-retry",
     ):
@@ -1862,7 +1861,10 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
     assert "^[1-9][0-9]*$" in capture
     assert "^[1-9][0-9]*$" in rollback
     assert "jq -ser" in capture
+    assert capture.count("jq -Rser") == 1
     assert "select(length == 1) | .[0]" in capture
+    assert '.status == "READY"' in capture
+    assert "then .targetVersion == .liveVersion else true end" in capture
     assert 'python3 -I -S - "$RELEASE_EVIDENCE"' in capture
     assert 'if CAPTURE_WRITE_STAGE="$(' in capture
     assert "os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW" in capture
@@ -1872,12 +1874,18 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
     assert 'chmod 600 "$RELEASE_EVIDENCE"' not in capture
     assert 'test ! -e "$RELEASE_EVIDENCE"' not in capture
     assert "jq -ser" in rollback
+    assert rollback.count("jq -Rser") == 2
     assert "jq -se --arg version" in rollback
+    assert "explode | all(. >= 32 and (. < 127 or . >= 160))" in rollback
     assert 'python3 -I -S - "$RELEASE_EVIDENCE"' in rollback
     assert "os.O_DIRECTORY | os.O_NOFOLLOW" in rollback
     assert "info.st_uid != os.geteuid()" in rollback
     assert rollback.count("select(length == 1) | .[0]") >= 3
-    assert 'AGENTCORE_RESTORE_TOKEN="$(python3 -I -S -c' in rollback
+    assert 'AGENTCORE_RESTORE_TOKEN="$(' in rollback
+    assert (
+        "python3 -I -S -c 'import uuid; print(uuid.uuid4())' 2>/dev/null | jq -Rser"
+        in rollback
+    )
     assert rollback.index("AGENTCORE_RESTORE_TOKEN") < rollback.index(
         "update_agentcore()"
     )
@@ -1906,7 +1914,10 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
     assert rollback.index("lambda get-alias") < rollback.index("lambda update-alias")
     lambda_update = rollback.index("lambda update-alias")
     assert (
-        rollback.find('LAMBDA_ALIAS_STATE="$(<"$PRIVATE_SINK")"', lambda_update)
+        rollback.find(
+            'AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias',
+            lambda_update,
+        )
         > lambda_update
     )
     assert rollback.index("update-agent-runtime-endpoint") < rollback.index(
@@ -1967,7 +1978,10 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
             test "${AWS_IGNORE_CONFIGURED_ENDPOINT_URLS:-}" = true || exit 71
             if [[ "$*" == *"sts get-caller-identity"* ]]; then
               if [[ "${FAIL_ACCOUNT:-}" == 1 ]]; then
-                if [[ "${SENTINEL_FAILURE:-}" == capture ]]; then
+                if [[ "${NUL_FAILURE:-}" == 1 ]]; then
+                  printf 'RAW\0SENTINEL\n'
+                  printf 'RAW\0SENTINEL\n' >&2
+                elif [[ "${SENTINEL_FAILURE:-}" == capture ]]; then
                   printf '%s\\n' RAW_PROVIDER_STDOUT
                   printf '%s\\n' RAW_PROVIDER_STDERR >&2
                 fi
@@ -1981,11 +1995,16 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
               count_file="$STATE/lambda-get"
               count=0; test -f "$count_file" && count="$(<"$count_file")"
               count=$((count + 1)); printf '%s' "$count" >"$count_file"
+              if [[ "${MODE:-}" == restore && "${LAMBDA_MALFORMED_READBACK:-}" == 1 && "$count" -gt 1 ]]; then
+                printf '{\\n'
+                exit 0
+              fi
               version=11; revision=revision-capture
               if [[ "${MODE:-}" == restore ]]; then
                 version=9; revision=revision-current
                 if (( count > 1 )); then version=7; revision=revision-readback; fi
               fi
+              if [[ "${LAMBDA_REVISION_NUL:-}" == 1 ]]; then revision='revision\\u0000'; fi
               routing="${LAMBDA_ROUTING:-}"
               if [[ -z "$routing" ]]; then routing='{"AdditionalVersionWeights":{}}'; fi
               if [[ "$routing" == absent ]]; then
@@ -2020,6 +2039,8 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
                 arn) runtime_arn=arn:aws:bedrock-agentcore:us-east-1:920534282028:runtime/wrong ;;
                 name) endpoint_name=wrong ;;
                 target) status=UPDATING; target_version=1 ;;
+                transition) status=UPDATING ;;
+                mismatch) target_version=9 ;;
               esac
               if [[ "${MODE:-}" == restore && "${MULTI_DOCUMENT:-}" == agent-restore-split ]]; then
                 printf '{"agentRuntimeArn":"%s","name":"%s","status":"%s"}\\n' "$runtime_arn" "$endpoint_name" "$status"
@@ -2048,12 +2069,18 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
             """\
             #!/usr/bin/env bash
             set -euo pipefail
+            python_is_code=0
             for argument in "$@"; do
-              if [[ "$argument" == -c ]]; then
-                printf '%s\\n' 00000000-0000-4000-8000-000000000000
-                exit 0
-              fi
+              [[ "$argument" == -c ]] && python_is_code=1
             done
+            if [[ "${PYTHON_BROKEN_NUL:-}" == stream && "$python_is_code" == 0 ]] || [[ "${PYTHON_BROKEN_NUL:-}" == token && "$python_is_code" == 1 ]]; then
+              printf 'RAW\\000PYTHON_SENTINEL\\n'
+              exit 43
+            fi
+            if [[ "$python_is_code" == 1 ]]; then
+              printf '%s\\n' 00000000-0000-4000-8000-000000000000
+              exit 0
+            fi
             if [[ -n "${CAPTURE_REPLACE_AFTER_OPEN:-}${CUSTODY_REPLACE_SOURCE:-}${REPLACE_AFTER_OPEN:-}" ]]; then
               while [[ "${1:-}" == -I || "${1:-}" == -S ]]; do shift; done
               test "${1:-}" = -; shift
@@ -2123,7 +2150,22 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
     )
     sleep = binary / "sleep"
     sleep.write_text("#!/usr/bin/env bash\nexit 0\n")
-    for command in (aws, python, sleep):
+    mktemp = binary / "mktemp"
+    mktemp.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' mktemp >>\"$LOG\"\n"
+        "printf '%s/victim\\n' \"$TMPDIR\"\n"
+    )
+    cmp = binary / "cmp"
+    cmp.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "${COMPARE_FAILURE:-}" == 1 ]]; then\n'
+        "  printf '%s\\n' RAW_COMPARATOR_SENTINEL >&2\n"
+        "  exit 43\n"
+        "fi\n"
+        'exec /usr/bin/cmp "$@"\n'
+    )
+    for command in (aws, python, sleep, mktemp, cmp):
         command.chmod(0o700)
 
     def run(shell: str, **environment: str) -> subprocess.CompletedProcess[str]:
@@ -2289,6 +2331,22 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
         )
         assert not multi_record.exists()
 
+    for invalid_endpoint in ("transition", "mismatch"):
+        failed_record = tmp_path / f"capture-{invalid_endpoint}-record"
+        failed = run(
+            capture_shell,
+            MODE="capture",
+            AGENT_BAD=invalid_endpoint,
+            RELEASE_EVIDENCE=str(failed_record),
+        )
+        assert failed.returncode != 0
+        assert failed.stdout == ""
+        assert re.fullmatch(
+            r"stage=agentcore-validate status=fail exit=[1-9][0-9]* reason=unclassified\n",
+            failed.stderr,
+        )
+        assert not failed_record.exists()
+
     capture_failure = run(
         capture_shell,
         MODE="capture",
@@ -2299,6 +2357,38 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
     assert capture_failure.stderr.splitlines() == [
         "stage=account-identity status=fail exit=17 reason=unclassified"
     ]
+    broken_capture = run(
+        capture_shell,
+        MODE="capture",
+        PYTHON_BROKEN_NUL="stream",
+        RELEASE_EVIDENCE=str(tmp_path / "broken-python-capture-record"),
+    )
+    assert broken_capture.returncode == 43
+    assert broken_capture.stdout == ""
+    assert broken_capture.stderr == (
+        "stage=record-write status=fail exit=43 reason=unclassified\n"
+    )
+    assert "RAW" not in broken_capture.stderr
+    assert not (tmp_path / "broken-python-capture-record").exists()
+    for shell, mode, evidence in (
+        (capture_shell, "capture", tmp_path / "comparator-capture-record"),
+        (restore_shell, "restore", record),
+    ):
+        log.write_text("")
+        comparator_failure = run(
+            shell,
+            MODE=mode,
+            COMPARE_FAILURE="1",
+            RELEASE_EVIDENCE=str(evidence),
+        )
+        assert comparator_failure.returncode == 43
+        assert comparator_failure.stdout == ""
+        assert comparator_failure.stderr == (
+            "stage=account-identity status=fail exit=43 reason=unclassified\n"
+        )
+        assert "RAW_COMPARATOR_SENTINEL" not in comparator_failure.stderr
+        assert "lambda get-alias" not in log.read_text()
+    assert not (tmp_path / "comparator-capture-record").exists()
     sentinel_capture = run(
         capture_shell,
         MODE="capture",
@@ -2311,6 +2401,82 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
     assert sentinel_capture.stderr == (
         "stage=account-identity status=fail exit=17 reason=unclassified\n"
     )
+
+    nul_capture = run(
+        capture_shell,
+        MODE="capture",
+        FAIL_ACCOUNT="1",
+        NUL_FAILURE="1",
+        RELEASE_EVIDENCE=str(tmp_path / "nul-capture-record"),
+    )
+    assert nul_capture.returncode == 17
+    assert nul_capture.stdout == ""
+    assert nul_capture.stderr == (
+        "stage=account-identity status=fail exit=17 reason=unclassified\n"
+    )
+
+    hostile_tmp = tmp_path / "hostile-tmp"
+    hostile_tmp.mkdir()
+    victim = hostile_tmp / "victim"
+    victim.write_text("do not clobber")
+    log.write_text("")
+    hostile_capture = run(
+        capture_shell,
+        MODE="capture",
+        FAIL_ACCOUNT="1",
+        SENTINEL_FAILURE="capture",
+        RELEASE_EVIDENCE=str(tmp_path / "hostile-tmp-capture-record"),
+        TMPDIR=str(hostile_tmp),
+    )
+    assert hostile_capture.returncode == 17
+    assert hostile_capture.stdout == ""
+    assert hostile_capture.stderr == (
+        "stage=account-identity status=fail exit=17 reason=unclassified\n"
+    )
+    assert victim.read_text() == "do not clobber"
+    assert "mktemp" not in log.read_text()
+
+    hostile_restore_record = tmp_path / "hostile-tmp-restore-record"
+    hostile_restore_record.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    hostile_restore_record.chmod(0o600)
+    nul_restore = run(
+        restore_shell,
+        MODE="restore",
+        FAIL_ACCOUNT="1",
+        NUL_FAILURE="1",
+        RELEASE_EVIDENCE=str(hostile_restore_record),
+        TMPDIR=str(hostile_tmp),
+    )
+    assert nul_restore.returncode == 17
+    assert nul_restore.stdout == ""
+    assert nul_restore.stderr == (
+        "stage=account-identity status=fail exit=17 reason=unclassified\n"
+    )
+    assert victim.read_text() == "do not clobber"
+
+    hostile_restore_record = tmp_path / "hostile-tmp-restore-record"
+    hostile_restore_record.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    hostile_restore_record.chmod(0o600)
+    log.write_text("")
+    hostile_restore = run(
+        restore_shell,
+        MODE="restore",
+        FAIL_LAMBDA="1",
+        SENTINEL_FAILURE="restore",
+        RELEASE_EVIDENCE=str(hostile_restore_record),
+        TMPDIR=str(hostile_tmp),
+    )
+    assert hostile_restore.returncode == 19
+    assert hostile_restore.stdout == ""
+    assert hostile_restore.stderr == (
+        "stage=lambda-update status=fail exit=19 reason=unclassified\n"
+    )
+    assert victim.read_text() == "do not clobber"
+    assert "mktemp" not in log.read_text()
 
     routing_failures = (
         "null",
@@ -2401,6 +2567,38 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
     assert linked.returncode != 0
     assert "lambda update-alias" not in log.read_text()
 
+    log.write_text("")
+    broken_snapshot = run(
+        restore_shell,
+        MODE="restore",
+        PYTHON_BROKEN_NUL="stream",
+        RELEASE_EVIDENCE=str(target),
+    )
+    assert broken_snapshot.returncode == 43
+    assert broken_snapshot.stdout == ""
+    assert broken_snapshot.stderr == (
+        "stage=record-snapshot status=fail exit=43 reason=unclassified\n"
+    )
+    assert "RAW" not in broken_snapshot.stderr
+    assert "lambda update-alias" not in log.read_text()
+
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    nul_revision = run(
+        restore_shell,
+        MODE="restore",
+        LAMBDA_REVISION_NUL="1",
+        RELEASE_EVIDENCE=str(target),
+    )
+    assert nul_revision.returncode != 0
+    assert nul_revision.stdout == ""
+    assert re.fullmatch(
+        r"stage=lambda-validate status=fail exit=[1-9][0-9]* reason=unclassified\n",
+        nul_revision.stderr,
+    )
+    assert "lambda update-alias" not in log.read_text()
+
     for document, stage, lambda_update_expected in (
         ("restore-initial", "lambda-validate", False),
         ("restore-readback", "lambda-readback-validate", True),
@@ -2427,6 +2625,51 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
         commands = log.read_text()
         assert ("lambda update-alias" in commands) is lambda_update_expected
         assert "update-agent-runtime-endpoint" not in commands
+
+    target.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    target.chmod(0o600)
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    malformed_readback = run(
+        restore_shell,
+        MODE="restore",
+        LAMBDA_MALFORMED_READBACK="1",
+        RELEASE_EVIDENCE=str(target),
+    )
+    assert malformed_readback.returncode == 5
+    assert malformed_readback.stdout == ""
+    assert malformed_readback.stderr == (
+        "stage=lambda-readback-validate status=fail exit=5 reason=unclassified\n"
+    )
+    commands = log.read_text()
+    assert "lambda update-alias" in commands
+    assert "update-agent-runtime-endpoint" not in commands
+
+    target.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    target.chmod(0o600)
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    broken_token = run(
+        restore_shell,
+        MODE="restore",
+        PYTHON_BROKEN_NUL="token",
+        RELEASE_EVIDENCE=str(target),
+    )
+    assert broken_token.returncode == 43
+    assert broken_token.stdout == ""
+    assert broken_token.stderr == (
+        "stage=agentcore-token status=fail exit=43 reason=unclassified\n"
+    )
+    assert "RAW" not in broken_token.stderr
+    commands = log.read_text()
+    assert "lambda update-alias" in commands
+    assert "update-agent-runtime-endpoint" not in commands
 
     hostile_targets = {
         "EXPECTED_ACCOUNT": "111111111111",
