@@ -216,12 +216,14 @@ locals {
     "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-usage-publisher-errors-dev",
     "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-usage-publisher-failed-invocations-dev",
   ]
-  development_delivery_athena_workgroup_arn   = "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
-  development_delivery_api_id                 = "ocw8sg0wlb"
-  development_delivery_distribution_arn       = "arn:aws:cloudfront::${local.development_delivery_account_id}:distribution/E33DVF3KT7BTAC"
-  development_delivery_guardrail_arn          = "arn:aws:bedrock:${local.development_delivery_region}:${local.development_delivery_account_id}:guardrail/vdyqrh31xgca"
-  development_delivery_agentcore_runtime_arn  = "arn:aws:bedrock-agentcore:${local.development_delivery_region}:${local.development_delivery_account_id}:runtime/nova_toll_v2_development-Y69XBf88Bl"
-  development_delivery_agentcore_endpoint_arn = "${local.development_delivery_agentcore_runtime_arn}/runtime-endpoint/preview"
+  development_delivery_athena_workgroup_arn          = "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
+  development_delivery_agentcore_trace_log_group_arn = "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:aws/spans"
+  development_delivery_agentcore_trace_firehose_arn  = "arn:aws:firehose:${local.development_delivery_region}:${local.development_delivery_account_id}:deliverystream/nova-toll-v2-agentcore-traces-dev"
+  development_delivery_api_id                        = "ocw8sg0wlb"
+  development_delivery_distribution_arn              = "arn:aws:cloudfront::${local.development_delivery_account_id}:distribution/E33DVF3KT7BTAC"
+  development_delivery_guardrail_arn                 = "arn:aws:bedrock:${local.development_delivery_region}:${local.development_delivery_account_id}:guardrail/vdyqrh31xgca"
+  development_delivery_agentcore_runtime_arn         = "arn:aws:bedrock-agentcore:${local.development_delivery_region}:${local.development_delivery_account_id}:runtime/nova_toll_v2_development-Y69XBf88Bl"
+  development_delivery_agentcore_endpoint_arn        = "${local.development_delivery_agentcore_runtime_arn}/runtime-endpoint/preview"
   development_delivery_api_deployment_arns = [
     "arn:aws:apigateway:${local.development_delivery_region}::/restapis/${local.development_delivery_api_id}/deployments",
     "arn:aws:apigateway:${local.development_delivery_region}::/restapis/${local.development_delivery_api_id}/deployments/*",
@@ -348,6 +350,106 @@ resource "aws_iam_role_policy" "development_migrations" {
   name   = "nova-toll-v2-development-migrations-dev"
   role   = aws_iam_role.development_migrations[0].id
   policy = data.aws_iam_policy_document.development_migrations[0].json
+}
+
+data "aws_iam_policy_document" "development_agentcore_trace_logs_assume" {
+  count = var.environment == "development" ? 1 : 0
+
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["logs.amazonaws.com"]
+    }
+    condition {
+      test     = "StringLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:*"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "development_agentcore_trace_logs" {
+  count = var.environment == "development" ? 1 : 0
+
+  statement {
+    actions   = ["firehose:PutRecord"]
+    resources = [local.development_delivery_agentcore_trace_firehose_arn]
+  }
+}
+
+resource "aws_iam_role" "development_agentcore_trace_logs" {
+  count                = var.environment == "development" ? 1 : 0
+  name                 = "nova-toll-v2-agentcore-traces-logs-dev"
+  assume_role_policy   = data.aws_iam_policy_document.development_agentcore_trace_logs_assume[0].json
+  max_session_duration = 3600
+}
+
+resource "aws_iam_role_policy" "development_agentcore_trace_logs" {
+  count  = var.environment == "development" ? 1 : 0
+  name   = "nova-toll-v2-agentcore-traces-logs-dev"
+  role   = aws_iam_role.development_agentcore_trace_logs[0].id
+  policy = data.aws_iam_policy_document.development_agentcore_trace_logs[0].json
+}
+
+data "aws_iam_policy_document" "development_agentcore_trace_firehose_assume" {
+  count = var.environment == "development" ? 1 : 0
+
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["firehose.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "sts:ExternalId"
+      values   = [local.development_delivery_account_id]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "development_agentcore_trace_firehose" {
+  count = var.environment == "development" ? 1 : 0
+
+  statement {
+    actions   = ["s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"]
+    resources = [local.development_delivery_measurement_bucket_arn]
+  }
+
+  statement {
+    actions   = ["s3:AbortMultipartUpload", "s3:GetObject", "s3:PutObject"]
+    resources = ["${local.development_delivery_measurement_bucket_arn}/agentcore-traces/*"]
+  }
+
+  statement {
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+    resources = [local.development_delivery_measurement_key_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["s3.${local.development_delivery_region}.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "kms:EncryptionContext:aws:s3:arn"
+      values   = [local.development_delivery_measurement_bucket_arn]
+    }
+  }
+}
+
+resource "aws_iam_role" "development_agentcore_trace_firehose" {
+  count                = var.environment == "development" ? 1 : 0
+  name                 = "nova-toll-v2-agentcore-traces-firehose-dev"
+  assume_role_policy   = data.aws_iam_policy_document.development_agentcore_trace_firehose_assume[0].json
+  max_session_duration = 3600
+}
+
+resource "aws_iam_role_policy" "development_agentcore_trace_firehose" {
+  count  = var.environment == "development" ? 1 : 0
+  name   = "nova-toll-v2-agentcore-traces-firehose-dev"
+  role   = aws_iam_role.development_agentcore_trace_firehose[0].id
+  policy = data.aws_iam_policy_document.development_agentcore_trace_firehose[0].json
 }
 
 data "aws_iam_policy_document" "development_delivery" {
@@ -513,6 +615,29 @@ data "aws_iam_policy_document" "development_delivery" {
       variable = "aws:RequestedRegion"
       values   = [local.development_delivery_region]
     }
+  }
+
+  statement {
+    sid       = "ReadAgentCoreTraceSubscription"
+    actions   = ["logs:DescribeSubscriptionFilters"]
+    resources = ["${local.development_delivery_agentcore_trace_log_group_arn}:*"]
+  }
+
+  statement {
+    sid       = "ReadAgentCoreTraceXRaySettings"
+    actions   = ["xray:GetIndexingRules", "xray:GetTraceSegmentDestination"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [local.development_delivery_region]
+    }
+  }
+
+  statement {
+    sid       = "ReadAgentCoreTraceFirehose"
+    actions   = ["firehose:DescribeDeliveryStream"]
+    resources = [local.development_delivery_agentcore_trace_firehose_arn]
   }
 
   statement {
@@ -840,23 +965,23 @@ locals {
     })
     observability = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 13, 22)
+      Statement = slice(local.development_delivery_policy_statements, 13, 25)
     })
     storage = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 22, 27)
+      Statement = slice(local.development_delivery_policy_statements, 25, 30)
     })
     data = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 27, 35)
+      Statement = slice(local.development_delivery_policy_statements, 30, 38)
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 35, 45)
+      Statement = slice(local.development_delivery_policy_statements, 38, 48)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 45, 54)
+      Statement = slice(local.development_delivery_policy_statements, 48, 57)
     })
   }
 }
@@ -1029,6 +1154,29 @@ data "aws_iam_policy_document" "development_plan" {
   statement {
     sid       = "DescribeApplicationLogGroups"
     actions   = ["logs:DescribeLogGroups"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [local.development_delivery_region]
+    }
+  }
+
+  statement {
+    sid       = "ReadAgentCoreTraceSubscription"
+    actions   = ["logs:DescribeSubscriptionFilters"]
+    resources = ["${local.development_delivery_agentcore_trace_log_group_arn}:*"]
+  }
+
+  statement {
+    sid       = "ReadAgentCoreTraceFirehose"
+    actions   = ["firehose:DescribeDeliveryStream"]
+    resources = [local.development_delivery_agentcore_trace_firehose_arn]
+  }
+
+  statement {
+    sid       = "ReadAgentCoreTraceXRaySettings"
+    actions   = ["xray:GetIndexingRules", "xray:GetTraceSegmentDestination"]
     resources = ["*"]
     condition {
       test     = "StringEquals"
@@ -1398,6 +1546,11 @@ locals {
   production_delivery_site_key_arn          = "arn:aws:kms:us-east-1:920534282028:key/e6413a73-bf0f-438e-88be-74070724d5a1"
   production_delivery_cloudflare_param_arn  = "arn:aws:ssm:us-east-1:920534282028:parameter/nova-toll/cloudflare-read-api-token"
   production_delivery_cloudflare_key_arn    = "arn:aws:kms:us-east-1:920534282028:key/49d9dfb4-f9a7-465a-a3a1-e7bb394dd0de"
+  development_delivery_trace_statement_sids = toset([
+    "ReadAgentCoreTraceSubscription",
+    "ReadAgentCoreTraceXRaySettings",
+    "ReadAgentCoreTraceFirehose",
+  ])
 
   # This is the existing reviewed development policy with only account-local
   # production identifiers changed. The first six state statements are
@@ -1475,10 +1628,13 @@ locals {
       6,
       length(jsondecode(local.production_delivery_application_policy_json).Statement),
     ) : statement
-    if !contains([
-      "PassExistingAgentCoreRuntimeRole",
-      "ReadAlertsKeyForTimedChecks",
-    ], statement.Sid)
+    if !contains(
+      setunion(local.development_delivery_trace_statement_sids, toset([
+        "PassExistingAgentCoreRuntimeRole",
+        "ReadAlertsKeyForTimedChecks",
+      ])),
+      statement.Sid,
+    )
   ]
 
   production_delivery_dynamodb_default_key_statement = {
@@ -1806,23 +1962,23 @@ locals {
     })
     observability = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_plan_policy_statements, 7, 16)
+      Statement = slice(local.development_plan_policy_statements, 7, 19)
     })
     storage = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_plan_policy_statements, 16, 21)
+      Statement = slice(local.development_plan_policy_statements, 19, 24)
     })
     data = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_plan_policy_statements, 21, 29)
+      Statement = slice(local.development_plan_policy_statements, 24, 32)
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_plan_policy_statements, 29, 36)
+      Statement = slice(local.development_plan_policy_statements, 32, 39)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_plan_policy_statements, 36, 44)
+      Statement = slice(local.development_plan_policy_statements, 39, 47)
     })
   } : {}
 }
