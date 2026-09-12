@@ -4444,7 +4444,7 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
     assert "tolls/i66/*" in policy
     assert "sitemap.xml" in policy
     assert 'actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]' in policy
-    assert 'actions   = ["s3:DeleteObject"]' in policy
+    assert re.search(r'actions\s+= \["s3:DeleteObject"\]', policy)
     assert '"${aws_s3_bucket.site.arn}/tolls/i95-i495/*"' in policy
     assert '"${aws_s3_bucket.site.arn}/tolls/i66/*"' in policy
     assert "s3:DeleteObjectVersion" not in policy
