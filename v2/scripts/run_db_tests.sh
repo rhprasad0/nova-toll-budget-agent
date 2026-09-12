@@ -252,7 +252,7 @@ assert set(result) == {
 }
 assert result["database"] == "nova_toll_development"
 assert result["user"] == "schema_migrator_development"
-assert result["before"] == result["after"] == {"pricing": "1.3.0", "oracle": "1.14.0"}
+assert result["before"] == result["after"] == {"pricing": "1.3.0", "oracle": "1.14.1"}
 assert result["applied"] == []
 assert re.fullmatch(r"[0-9a-f]{40}", result["commit"])
 assert re.fullmatch(
@@ -290,7 +290,7 @@ migration = runner.Migration(
     source_sha256=hashlib.sha256(Path(migration_path).read_bytes()).hexdigest(),
 )
 
-runner._registry = lambda: ((), {"pricing": "1.0.1", "oracle": "1.14.0"})
+runner._registry = lambda: ((), {"pricing": "1.0.1", "oracle": "1.14.1"})
 runner._migration_candidates = lambda _schemas: (migration,)
 runner._history_preflight_sql = lambda *_args, **_kwargs: ""
 
@@ -669,6 +669,39 @@ UPDATE oracle.schema_version SET version = '1.13.1' WHERE singleton;
 SQL
     fi
 
+    if [[ "$schema_name:$target_version" == "oracle:1.14.1" ]]; then
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "UPDATE oracle.schema_version SET version = '1.13.0' WHERE singleton"
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.14.1 upgrade accepted a wrong source version" >&2
+        exit 1
+      fi
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.13.0' THEN
+    RAISE EXCEPTION 'failed oracle 1.14.1 version guard changed the installed version';
+  END IF;
+END $$;
+UPDATE oracle.schema_version SET version = '1.14.0' WHERE singleton;
+UPDATE pricing.schema_version SET version = '1.2.3' WHERE singleton;
+SQL
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.14.1 upgrade accepted a wrong pricing version" >&2
+        exit 1
+      fi
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.14.0'
+     OR (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.2.3' THEN
+    RAISE EXCEPTION 'failed oracle 1.14.1 pricing guard changed state';
+  END IF;
+END $$;
+UPDATE pricing.schema_version SET version = '1.3.0' WHERE singleton;
+SQL
+    fi
+
     psql --dbname "$migration_db" --file "$migration"
 
     installed_version="$(
@@ -729,6 +762,22 @@ SQL
       fi
       psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
         --command "UPDATE oracle.toll_connection SET source_metadata = '{\"basis\":\"v2/db/oracle/CONTRACT.md\",\"curated\":true}'::jsonb WHERE connection_id = 'i495_1829_to_dulles_toll_road'"
+    fi
+
+    if [[ "$schema_name:$target_version" == "oracle:1.14.1" ]]; then
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 <<'SQL'
+UPDATE oracle.toll_connection
+SET source_metadata = jsonb_set(
+  source_metadata, '{general_purpose_fallback,i95_direction}', '"SB"'::jsonb
+)
+WHERE connection_id = 'source:i95_shared:Southbound:180SO:22329ND';
+SQL
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.14.1 rerun repaired northern fallback metadata" >&2
+        exit 1
+      fi
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "UPDATE oracle.toll_connection SET source_metadata = jsonb_set(source_metadata, '{general_purpose_fallback,i95_direction}', '\"NB\"'::jsonb) WHERE connection_id = 'source:i95_shared:Southbound:180SO:22329ND'"
     fi
 
     psql --dbname "$migration_db" --file "$migration"

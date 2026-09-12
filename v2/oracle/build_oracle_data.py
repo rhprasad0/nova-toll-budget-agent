@@ -364,6 +364,10 @@ I95_REPORT_POINT_PLACES = {
     "i95:236SO": "Dale City",
 }
 
+I95_REPORT_POINT_REGIONS = {
+    "i95:2249ND": "Virginia",
+}
+
 AIRPORT_ALIASES = {
     "airport_dca": (
         "DCA",
@@ -473,13 +477,8 @@ def _shared_network(node: dict[str, Any]) -> str:
     return "i495" if path.startswith("495") else "i95"
 
 
-def _shared_direction(node: dict[str, Any]) -> str:
-    path = str(node["path"])
-    if path.endswith("North"):
-        return "NB"
-    if path.endswith("South"):
-        return "SB"
-    return {"Northbound": "NB", "Southbound": "SB"}[str(node["direction"])]
+def _shared_direction(source_node_id: str) -> str:
+    return {"ND": "NB", "NO": "NB", "SD": "SB", "SO": "SB"}[source_node_id[-2:]]
 
 
 def _shared_role(node: dict[str, Any]) -> str:
@@ -550,6 +549,14 @@ def build_points() -> dict[str, Point]:
             raw_node,
             coordinate_quality="provisional_generalized",
         )
+        if point_id in locations:
+            longitude, latitude, location_metadata = _location(
+                location_sources, locations, _shared_network(raw_node), source_node_id
+            )
+            metadata.update(location_metadata)
+        else:
+            longitude = str(raw_node["longitude"])
+            latitude = str(raw_node["latitude"])
         if source_node_id == "192NO":
             label = "I-495 Express northbound start at I-95 (TP1NB)"
             aliases = ("TP1NB", "Springfield Interchange", str(raw_node["label"]))
@@ -593,6 +600,7 @@ def build_points() -> dict[str, Point]:
         if point_id in WASHINGTON_POINT_LABELS:
             label, aliases = WASHINGTON_POINT_LABELS[point_id]
         place_name = I95_REPORT_POINT_PLACES.get(point_id, place_name)
+        region = I95_REPORT_POINT_REGIONS.get(point_id, region)
         aliases = tuple(dict.fromkeys((*aliases, *place_aliases)))
         metadata["report_context"] = {
             "nearby_landmarks": list(nearby_landmarks),
@@ -602,13 +610,13 @@ def build_points() -> dict[str, Point]:
             network_id=_shared_network(raw_node),
             source_node_id=source_node_id,
             point_type=_shared_role(raw_node),
-            direction=_shared_direction(raw_node),
+            direction=_shared_direction(source_node_id),
             label=label,
             place_name=place_name,
             region=region,
             country_code="US",
-            longitude=str(raw_node["longitude"]),
-            latitude=str(raw_node["latitude"]),
+            longitude=longitude,
+            latitude=latitude,
             aliases=aliases,
             source_metadata=metadata,
         )
@@ -756,20 +764,17 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
         )
         required_i95_direction = None
         if connection_type == "within_facility" and points[from_id].network_id == "i95":
-            required_i95_direction = _shared_direction(shared_nodes[entry])
+            required_i95_direction = _shared_direction(entry)
         connection_id = _source_connection_id("i95_shared", direction, entry, exit_id)
         source_metadata = _metadata("i95_shared", shared, "source_pair", raw_pair)
         if connection_type == "general_purpose_gap":
-            i95_node = (
-                shared_nodes[entry]
-                if points[from_id].network_id == "i95"
-                else shared_nodes[exit_id]
-            )
             source_metadata["general_purpose_fallback"] = {
                 "boundary_point_id": (
                     "i495:192NO" if direction == "Northbound" else "i495:192SD"
                 ),
-                "i95_direction": _shared_direction(i95_node),
+                "i95_direction": _shared_direction(
+                    entry if points[from_id].network_id == "i95" else exit_id
+                ),
             }
         connections[connection_id] = Connection(
             connection_id=connection_id,
@@ -1009,9 +1014,7 @@ def _validate_connection(points: dict[str, Point], connection: Connection) -> No
             else "i495:192SD"
         )
         i95_point = from_point if from_point.network_id == "i95" else to_point
-        expected_i95_direction = _shared_direction(
-            cast(dict[str, Any], i95_point.source_metadata["source_node"])
-        )
+        expected_i95_direction = _shared_direction(i95_point.source_node_id)
         fallback = connection.source_metadata.get("general_purpose_fallback", {})
         if (
             fallback.get("boundary_point_id") != expected_boundary
@@ -1128,8 +1131,8 @@ def validate(points: dict[str, Point], connections: dict[str, Connection]) -> No
         ):
             raise ValueError(f"missing coordinate source on {point.point_id}")
     expected_quality_counts = {
-        "provisional_generalized": 107,
-        "approximate_interchange": 111,
+        "provisional_generalized": 97,
+        "approximate_interchange": 121,
         "official_reference_point": 2,
     }
     if dict(quality_counts) != expected_quality_counts:

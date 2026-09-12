@@ -61,9 +61,9 @@ def test_main_rejects_arguments_before_runner(monkeypatch: pytest.MonkeyPatch) -
 def test_migration_candidates_are_registered_and_exclude_bootstrap_files() -> None:
     schemas, _ = runner._registry()
     migrations: Any = runner._migration_candidates(schemas)
-    assert len(migrations) == 28
+    assert len(migrations) == 29
     assert migrations[0].number == 2
-    assert migrations[-1].number == 30
+    assert migrations[-1].number == 31
     assert all("rollback" not in migration.path for migration in migrations)
     assert all(
         re.fullmatch(r"[0-9a-f]{64}", migration.source_sha256)
@@ -74,17 +74,22 @@ def test_migration_candidates_are_registered_and_exclude_bootstrap_files() -> No
 def test_baseline_manifest_is_shared_and_matches_canonical_bytes() -> None:
     baselines = runner.bootstrap.load_baseline_manifest()
     assert {baseline.schema for baseline in baselines} == {"pricing", "oracle"}
-    assert all(
-        baseline
-        == runner.bootstrap.baseline_for_canonical(
-            baseline.schema, baseline.source_path
+    assert {
+        (baseline.schema, baseline.version, baseline.source_sha256)
+        for baseline in baselines
+    } >= {
+        (
+            "oracle",
+            "1.14.0",
+            "2634341b7c84ed42c0cd56fe94532cbe6e6b49ae9a2f81245635cb7b659d8911",
         )
-        for baseline in baselines
-    )
-    assert {baseline.source_sha256 for baseline in baselines} == {
-        hashlib.sha256((runner.ROOT / baseline.source_path).read_bytes()).hexdigest()
-        for baseline in baselines
     }
+    assert (
+        runner.bootstrap.baseline_for_canonical(
+            "oracle", "v2/db/oracle/schema.sql"
+        ).version
+        == "1.14.1"
+    )
 
 
 @pytest.mark.parametrize(
@@ -139,8 +144,11 @@ def test_bootstrap_uses_manifest_values_for_history_insert(
     assert variables["pricing_version"] == next(
         baseline.version for baseline in baselines if baseline.schema == "pricing"
     )
-    assert variables["oracle_sha256"] == next(
-        baseline.source_sha256 for baseline in baselines if baseline.schema == "oracle"
+    assert (
+        variables["oracle_sha256"]
+        == runner.bootstrap.baseline_for_canonical(
+            "oracle", "v2/db/oracle/schema.sql"
+        ).source_sha256
     )
 
 
@@ -175,39 +183,72 @@ def test_history_preflight_uses_recognized_baselines_not_current_targets() -> No
     sql = runner._history_preflight_sql((), {}, baselines)
     assert "canonical_versions" not in sql
     assert "schema_version <> '1.3.0'" not in sql
-    assert "schema_version <> '1.14.0'" not in sql
+    assert "schema_version <> '1.14.1'" not in sql
     assert all(baseline.source_sha256 in sql for baseline in baselines)
     assert "baseline.migration_id = history.migration_id" in sql
 
 
-def test_old_baseline_can_reach_new_target_while_final_requires_new_target() -> None:
-    migration: Any = _migration(previous="1.3.0", target="1.4.0")
-    old_baseline = runner.bootstrap.Baseline(
-        schema="pricing",
-        version="1.3.0",
-        migration_id="baseline",
-        source_path="v2/db/schema.sql",
-        source_sha256="a" * 64,
-        evidence=runner.bootstrap.BASELINE_EVIDENCE,
+def test_old_oracle_baseline_can_advance_through_031() -> None:
+    baselines = runner.bootstrap.load_baseline_manifest()
+    pricing_baseline = next(
+        baseline for baseline in baselines if baseline.schema == "pricing"
     )
-    oracle_baseline = runner.bootstrap.Baseline(
+    oracle_baseline = next(
+        baseline
+        for baseline in baselines
+        if baseline.schema == "oracle" and baseline.version == "1.14.0"
+    )
+    migration: Any = _migration(
+        path="v2/db/migrations/031_upgrade_oracle_1_14_0_to_1_14_1.sql",
         schema="oracle",
-        version="1.14.0",
-        migration_id="baseline",
-        source_path="v2/db/oracle/schema.sql",
-        source_sha256="b" * 64,
-        evidence=runner.bootstrap.BASELINE_EVIDENCE,
+        previous="1.14.0",
+        target="1.14.1",
+        number=31,
     )
     preflight = runner._history_preflight_sql(
         (migration,),
-        {"pricing": "1.4.0", "oracle": "1.14.0"},
-        (old_baseline, oracle_baseline),
+        {"pricing": "1.3.0", "oracle": "1.14.1"},
+        (pricing_baseline, oracle_baseline),
     )
     final = runner._final_sql(
-        (migration,), {"pricing": "1.4.0", "oracle": "1.14.0"}, "a" * 36
+        (migration,), {"pricing": "1.3.0", "oracle": "1.14.1"}, "a" * 36
     )
-    assert "'1.3.0', '1.4.0'" in preflight
-    assert "version FROM pricing.schema_version WHERE singleton) <> '1.4.0'" in final
+    assert oracle_baseline.source_sha256 in preflight
+    assert migration.path in preflight
+    assert "'1.14.0', '1.14.1'" in preflight
+    assert "version FROM oracle.schema_version WHERE singleton) <> '1.14.1'" in final
+
+
+def test_production_preflight_recognizes_each_immutable_oracle_baseline() -> None:
+    baselines = runner._production_baselines()  # pyright: ignore[reportPrivateUsage]
+    migration: Any = _migration(
+        path="v2/db/migrations/031_upgrade_oracle_1_14_0_to_1_14_1.sql",
+        schema="oracle",
+        previous="1.14.0",
+        target="1.14.1",
+        number=31,
+    )
+    sql = runner._history_preflight_sql(
+        (migration,),
+        {"pricing": "1.3.0", "oracle": "1.14.1"},
+        baselines,
+        runner.PRODUCTION_PROFILE,
+    )
+    assert {
+        (baseline.version, baseline.source_sha256)
+        for baseline in baselines
+        if baseline.schema == "oracle"
+    } == {
+        (
+            "1.14.0",
+            "2634341b7c84ed42c0cd56fe94532cbe6e6b49ae9a2f81245635cb7b659d8911",
+        ),
+        (
+            "1.14.1",
+            "02b742cbac045f993167cef446cad05e6f8e03f0270d6a1d799f232b3cd9c61c",
+        ),
+    }
+    assert all(baseline.source_sha256 in sql for baseline in baselines)
 
 
 def test_runner_keeps_psql_cwd_at_repository_root() -> None:

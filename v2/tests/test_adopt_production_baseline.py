@@ -101,6 +101,13 @@ def test_fixed_manifest_matches_canonical_sources() -> None:
     )
 
 
+def test_adoption_selects_only_current_canonical_rows() -> None:
+    assert {
+        (baseline.schema, baseline.version)
+        for baseline in adopt.load_baseline_manifest()
+    } == {("pricing", "1.3.0"), ("oracle", "1.14.1")}
+
+
 @pytest.mark.parametrize(
     "drift", ["manifest-path", "manifest-version", "manifest-hash", "source-bytes"]
 )

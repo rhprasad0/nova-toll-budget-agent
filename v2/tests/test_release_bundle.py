@@ -44,7 +44,7 @@ def fixture_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         if relative.endswith("schema.sql"):
             schema = "oracle" if "/oracle/" in relative else "pricing"
-            version = "1.14.0" if schema == "oracle" else "1.3.0"
+            version = "1.14.1" if schema == "oracle" else "1.3.0"
             path.write_text(
                 f"-- {schema} schema version: {version}\n", encoding="utf-8"
             )
@@ -264,7 +264,7 @@ def _verify_with_checkout(
         fixture_root,
         _digest(archive),
         expected_commit,
-        {"pricing": "1.3.0", "oracle": "1.14.0"},
+        {"pricing": "1.3.0", "oracle": "1.14.1"},
         verify_checkout=True,
     )
 
@@ -383,7 +383,7 @@ def test_valid_bundle_is_verified_and_extracted(
         fixture_root,
         _digest(archive),
         COMMIT,
-        {"pricing": "1.3.0", "oracle": "1.14.0"},
+        {"pricing": "1.3.0", "oracle": "1.14.1"},
     )
     assert (output / bundle.MANIFEST_NAME).is_file()
     assert (
@@ -426,7 +426,7 @@ def test_transport_valid_bundle_is_rejected_by_reviewed_payload_binding(
         fixture_root,
         _digest(archive),
         COMMIT,
-        {"pricing": "1.3.0", "oracle": "1.14.0"},
+        {"pricing": "1.3.0", "oracle": "1.14.1"},
     )
     with pytest.raises(
         release_manifest.Invalid, match=r"^bundle_payload_digest_mismatch$"
@@ -456,7 +456,7 @@ def test_bundle_trust_boundaries_fail_closed(
     archive, release = _bundle(fixture_root, tmp_path)
     expected_digest = "sha256:" + "0" * 64 if failure == "digest" else _digest(archive)
     expected_commit = COMMIT
-    schema_versions = {"pricing": "1.3.0", "oracle": "1.14.0"}
+    schema_versions = {"pricing": "1.3.0", "oracle": "1.14.1"}
 
     if failure in {"commit", "schema"}:
         manifest_path = release / bundle.MANIFEST_NAME

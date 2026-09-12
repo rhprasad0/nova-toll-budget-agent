@@ -55,7 +55,7 @@ def test_saved_plan_rejects_valid_looking_wrong_bindings() -> None:
         },
         "bundle_id": 15,
         "bundle_digest": "sha256:" + "c" * 64,
-        "schema_versions": {"pricing": "1.3.0", "oracle": "1.14.0"},
+        "schema_versions": {"pricing": "1.3.0", "oracle": "1.14.1"},
         "consumer_run": 16,
         "consumer_attempt": 1,
         "claim_id": 17,
@@ -286,7 +286,7 @@ def test_admission_accepts_a_current_full_development_rerun(
         lambda _candidate: (
             {"id": 12, "run_attempt": 2},
             evidence,
-            {"pricing": "1.3.0", "oracle": "1.14.0"},
+            {"pricing": "1.3.0", "oracle": "1.14.1"},
         ),
     )
     full_artifact = {
@@ -331,8 +331,8 @@ def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
         "artifact_id": 10,
         "artifact_digest": "sha256:" + "b" * 64,
         "schema_versions": {
-            "declared": {"pricing": "1.3.0", "oracle": "1.14.0"},
-            "installed": {"pricing": "1.3.0", "oracle": "1.14.0"},
+            "declared": {"pricing": "1.3.0", "oracle": "1.14.1"},
+            "installed": {"pricing": "1.3.0", "oracle": "1.14.1"},
         },
         "readiness": "success",
         "canary": {
@@ -438,7 +438,7 @@ def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
     run, actual, versions = release._development(candidate)
     assert run["run_attempt"] == 2
     assert actual == evidence
-    assert versions == {"pricing": "1.3.0", "oracle": "1.14.0"}
+    assert versions == {"pricing": "1.3.0", "oracle": "1.14.1"}
 
 
 def _revalidation_admission() -> dict[str, Any]:
@@ -454,7 +454,7 @@ def _revalidation_admission() -> dict[str, Any]:
         "evidence_artifact": {"id": 13, "digest": "sha256:" + "c" * 64},
         "bundle_id": 10,
         "bundle_digest": "sha256:" + "b" * 64,
-        "schema_versions": {"pricing": "1.3.0", "oracle": "1.14.0"},
+        "schema_versions": {"pricing": "1.3.0", "oracle": "1.14.1"},
         "consumer_run": 14,
         "consumer_attempt": 1,
     }
@@ -496,7 +496,7 @@ def test_revalidate_rejects_changed_evidence_or_current_development_failure_with
                 "artifact_id": 10,
                 "artifact_digest": "sha256:" + "b" * 64,
             },
-            {"pricing": "1.3.0", "oracle": "1.14.0"},
+            {"pricing": "1.3.0", "oracle": "1.14.1"},
         )
 
     def artifacts(_run: int, _name: str) -> dict[str, Any]:
@@ -598,7 +598,7 @@ def test_revalidate_binds_current_consumer_and_durable_claim(
                 "artifact_id": 10,
                 "artifact_digest": "sha256:" + "b" * 64,
             },
-            {"pricing": "1.3.0", "oracle": "1.14.0"},
+            {"pricing": "1.3.0", "oracle": "1.14.1"},
         ),
     )
     monkeypatch.setattr(

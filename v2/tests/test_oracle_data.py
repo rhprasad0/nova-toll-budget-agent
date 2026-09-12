@@ -36,8 +36,8 @@ def test_all_route_points_have_coordinate_provenance() -> None:
     assert Counter(
         point.source_metadata["coordinate_quality"] for point in points.values()
     ) == {
-        "provisional_generalized": 107,
-        "approximate_interchange": 111,
+        "provisional_generalized": 97,
+        "approximate_interchange": 121,
         "official_reference_point": 2,
     }
     locations: dict[tuple[str, str], set[tuple[str | None, str | None]]] = defaultdict(
@@ -78,6 +78,7 @@ def test_i95_i495_report_points_have_curated_geographic_context() -> None:
     assert points["i495:187SD"].place_name == "Dunn Loring"
     assert points["i495:188SO"].place_name == "Merrifield"
     assert points["i95:2249ND"].place_name == "Arlington"
+    assert points["i95:2249ND"].region == "Virginia"
     assert points["i95:236SO"].place_name == "Dale City"
     assert points["i95:216SD"].place_name == "Potomac Mills"
     assert points["i95:223ND"].source_metadata["report_context"][
@@ -214,7 +215,7 @@ def test_boundary_points_and_i95_requirements_are_explicit() -> None:
     assert dca_south.required_i95_direction == "SB"
 
 
-def test_shared_point_directions_follow_their_roadway_paths() -> None:
+def test_shared_point_directions_follow_terminal_movement_suffixes() -> None:
     points = build_points()
     corrected: list[str] = []
 
@@ -222,14 +223,9 @@ def test_shared_point_directions_follow_their_roadway_paths() -> None:
         if point.network_id not in {"i95", "i495"}:
             continue
         source_node = point.source_metadata["source_node"]
-        path = source_node["path"]
-        expected = (
-            "NB"
-            if path.endswith("North")
-            else "SB"
-            if path.endswith("South")
-            else {"Northbound": "NB", "Southbound": "SB"}[source_node["direction"]]
-        )
+        expected = {"ND": "NB", "NO": "NB", "SD": "SB", "SO": "SB"}[
+            point.source_node_id[-2:]
+        ]
         assert point.direction == expected
         if (
             source_node["direction"]
@@ -248,8 +244,39 @@ def test_shared_point_directions_follow_their_roadway_paths() -> None:
         "i495:1919ND",
         "i95:2229ND",
         "i95:2239ND",
+        "i95:22329ND",
         "i95:2249ND",
     }
+
+
+def test_i395_northern_access_provenance_is_bounded() -> None:
+    points = build_points()
+    expected_locations = {
+        "i95:22329ND": ("38.8663530000000", "-77.0659710000000"),
+        "i95:2232ND": ("38.8663530000000", "-77.0659710000000"),
+        "i95:2232SO": ("38.878511", "-77.03933"),
+        "i95:2233SO": ("38.8663900000000", "-77.0574660000000"),
+        "i95:2239ND": ("38.8663900000000", "-77.0574660000000"),
+        "i95:223ND": ("38.8663900000000", "-77.0574660000000"),
+        "i95:223SO": ("38.8663530000000", "-77.0659710000000"),
+        "i95:2249ND": ("38.8707667", "-77.0461277"),
+        "i95:224ND": ("38.8780160000000", "-77.0396420000000"),
+        "i95:224NO": ("38.865725", "-77.052876"),
+    }
+    assert {
+        point_id
+        for point_id, point in points.items()
+        if point.source_metadata.get("coordinate_source", {}).get("method")
+        == "reviewed_operator_access_point_with_vdot_route_context"
+    } == set(expected_locations)
+    for point_id, (latitude, longitude) in expected_locations.items():
+        point = points[point_id]
+        assert (point.latitude, point.longitude) == (latitude, longitude)
+        source = point.source_metadata["coordinate_source"]
+        assert point.source_metadata["coordinate_quality"] == "approximate_interchange"
+        assert source["source_jurisdiction_code"] is None
+        assert source["source_jurisdiction_name"] is None
+        assert len(source["evidence_urls"]) == 4
 
 
 def test_washington_points_have_route_qualified_labels_and_source_aliases() -> None:

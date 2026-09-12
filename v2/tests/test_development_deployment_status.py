@@ -62,13 +62,13 @@ def context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Any, ...]:
             }
         ),
         "verified_pricing_schema": "1.2.3",
-        "verified_oracle_schema": "1.14.0",
+        "verified_oracle_schema": "1.14.1",
     }
     needs["build"]["outputs"] = {
         "artifact_id": "99",
         "artifact_digest": "sha256:" + "b" * 64,
         "pricing_schema": "1.2.3",
-        "oracle_schema": "1.14.0",
+        "oracle_schema": "1.14.1",
     }
     record = {
         "id": 7,
@@ -118,8 +118,8 @@ def test_prepare_writes_exact_versioned_evidence_then_finish_publishes_success(
         "artifact_id": 99,
         "artifact_digest": "sha256:" + "b" * 64,
         "schema_versions": {
-            "declared": {"pricing": "1.2.3", "oracle": "1.14.0"},
-            "installed": {"pricing": "1.2.3", "oracle": "1.14.0"},
+            "declared": {"pricing": "1.2.3", "oracle": "1.14.1"},
+            "installed": {"pricing": "1.2.3", "oracle": "1.14.1"},
         },
         "readiness": "success",
         "canary": {
