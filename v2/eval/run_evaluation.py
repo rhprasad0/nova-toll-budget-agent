@@ -60,6 +60,12 @@ _CURRENCY_PATTERN = re.compile(
     r"(?P<sign_before>[+\-\u2212]?)\s*\$\s*"
     r"(?P<sign_after>[+\-\u2212]?)\s*(?P<amount>[\d,]+(?:\.\d+)?)"
 )
+_UNPRICED_CURRENCY_PATTERN = re.compile(
+    r"(?:[$\uFF04]\s*(?:about\s+)?[\d,]+(?:\.\d+)?"
+    r"|\bUSD\b\s*(?:about\s+)?[\d,]+(?:\.\d+)?"
+    r"|\b[\d,]+(?:\.\d+)?\s+dollars?\b)",
+    re.IGNORECASE,
+)
 _MOVEMENT_EMOJIS = {
     "rising": "📈",
     "falling": "📉",
@@ -489,6 +495,12 @@ def evaluate_westpark_turn(
         return _result(False, "tool result endpoints did not match", "result_mismatch")
 
     if "total_usd" not in payload:
+        if _UNPRICED_CURRENCY_PATTERN.search(response):
+            return _result(
+                False,
+                "response invented a toll for an unpriced route",
+                "invented_financials",
+            )
         if payload.get("status") in metadata.get("allowed_route_statuses", []):
             folded = response.casefold()
             terms = (
@@ -501,12 +513,6 @@ def evaluate_westpark_turn(
                     False,
                     "response did not explain route availability",
                     "ungrounded_unavailability",
-                )
-            if re.search(r"\$\s*\d", response):
-                return _result(
-                    False,
-                    "response invented a toll for an unpriced route",
-                    "invented_financials",
                 )
             if style_error := _response_style_error(response, "response"):
                 return style_error
@@ -2439,12 +2445,30 @@ def _self_check() -> None:
             "unavailable_components": [{"observed_at": "2026-08-22T15:40:00-04:00"}],
         },
     }
+    unavailable_response = (
+        "### 🚫 Current toll unavailable\n\nThe complete price cannot be provided as "
+        "of 3:40 PM EDT."
+    )
     assert evaluate_westpark_turn(
         [unavailable],
-        "### 🚫 Current toll unavailable\n\nThe complete price cannot be provided as "
-        "of 3:40 PM EDT.",
+        unavailable_response,
         unavailable_metadata,
     )[0].test_pass
+    for invented_toll in (
+        "$999.00",
+        "USD 999.00",
+        "999 dollars",
+        "\uff04999.00",
+        "$about 999.00",
+    ):
+        assert (
+            evaluate_westpark_turn(
+                [unavailable],
+                unavailable_response + f" It would cost {invented_toll}.",
+                unavailable_metadata,
+            )[0].label
+            == "invented_financials"
+        )
     unknown = {
         **unavailable,
         "tool_result": {

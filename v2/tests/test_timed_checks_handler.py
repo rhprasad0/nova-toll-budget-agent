@@ -108,6 +108,102 @@ def _parity_turn(expected_call: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def test_critical_dca_window_matrix_and_prompt_counts() -> None:
+    rows = {row["id"]: row for row in run_evaluation.load_rows()}
+    dulles = rows["dulles-to-reagan-current-price"]
+    old_keene_mill = rows["old-keene-mill-to-reagan-i95-unavailable"]
+
+    assert dulles["suite"] == "direct"
+    assert dulles["expected_call"]["origin_point_id"] == "airport_iad"
+    assert dulles["expected_call"]["destination_point_id"] == "airport_dca"
+    assert dulles["expected_component_count"] == 2
+    assert dulles["allow_pricing_unavailable"] is True
+    assert dulles["allowed_route_statuses"] == ["unknown_availability"]
+
+    assert old_keene_mill["suite"] == "unavailable"
+    assert old_keene_mill["expected_call"]["origin_point_id"] == "i95:203NO"
+    assert old_keene_mill["expected_call"]["destination_point_id"] == "airport_dca"
+    assert old_keene_mill["expected_reasons"] == {
+        "i95_reversal": "i95_fully_closed",
+        "i95_southbound": "i95_opposite_direction_open",
+    }
+    assert old_keene_mill["expected_availability"] == {
+        "i95_reversal": "closed",
+        "i95_southbound": "southbound",
+    }
+    assert old_keene_mill["expected_required_i95_directions"] == ["NB"]
+
+    for weekday, expected_counts in (
+        (3, {"i95_northbound": 11, "i95_reversal": 10, "i95_southbound": 14}),
+        (6, {"i95_northbound": 10, "i95_reversal": 10, "i95_southbound": 14}),
+    ):
+        selected = {
+            window: run_evaluation.load_cases(window=window, weekday=weekday)
+            for window in expected_counts
+        }
+        names = {
+            window: [case.name for case in cases] for window, cases in selected.items()
+        }
+        assert {
+            window: ids.count("dulles-to-reagan-current-price")
+            for window, ids in names.items()
+        } == {"i95_northbound": 1, "i95_reversal": 0, "i95_southbound": 0}
+        assert {
+            window: ids.count("old-keene-mill-to-reagan-i95-unavailable")
+            for window, ids in names.items()
+        } == {"i95_northbound": 0, "i95_reversal": 1, "i95_southbound": 1}
+        assert {
+            window: ids.count("reagan-airport-pentagon-eads-westpark-parity")
+            for window, ids in names.items()
+        } == {"i95_northbound": 0, "i95_reversal": 0, "i95_southbound": 1}
+        assert {
+            window: sum(
+                len(list((case.metadata or {}).get("conversation", [str(case.input)])))
+                + int(bool((case.metadata or {}).get("follow_up")))
+                for case in cases
+            )
+            for window, cases in selected.items()
+        } == expected_counts
+
+
+@pytest.mark.parametrize(
+    "invented_toll",
+    ["$999.00", "USD 999.00", "999 dollars", "\uff04999.00", "$about 999.00"],
+)
+def test_dulles_incomplete_price_rejects_invented_money(invented_toll: str) -> None:
+    metadata = next(
+        row
+        for row in run_evaluation.load_rows()
+        if row["id"] == "dulles-to-reagan-current-price"
+    )
+    unavailable = {
+        "name": "get_current_toll_price",
+        "input": metadata["expected_call"],
+        "tool_result": {
+            "origin_point_id": "airport_iad",
+            "destination_point_id": "airport_dca",
+            "error": "pricing_unavailable",
+            "reason": "incomplete_route_price",
+            "unavailable_components": [{"observed_at": "2026-08-22T15:40:00-04:00"}],
+        },
+        "is_error": False,
+    }
+    response = (
+        "### 🚫 Current toll unavailable\n\nThe complete price cannot be provided as "
+        "of 3:40 PM EDT."
+    )
+
+    assert run_evaluation.evaluate_westpark_turn([unavailable], response, metadata)[
+        0
+    ].test_pass
+    assert (
+        run_evaluation.evaluate_westpark_turn(
+            [unavailable], response + f" It would cost {invented_toll}.", metadata
+        )[0].label
+        == "invented_financials"
+    )
+
+
 def test_dca_pentagon_parity_case_and_evaluator() -> None:
     metadata = next(
         row

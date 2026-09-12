@@ -38,6 +38,16 @@ makes one current-price call per turn (two TollChat invocations total), requirin
 the exact distinct origins and equal public priced-toll projection; this is an
 offline contract, not a live-run result.
 
+## Critical DCA offline coverage
+
+| Behavior | I-95 window |
+| --- | --- |
+| Dulles Airport to Reagan Airport direct price | northbound only |
+| Old Keene Mill Road to Reagan Airport unavailable result | reversal and southbound only |
+| Reagan Airport to Pentagon/Eads to Westpark correction | southbound only |
+
+Slice 3 reuses these existing cases and adds no prompt or model invocation.
+
 The twelve annual cases are independent of the live I-95 direction:
 
 ```bash
