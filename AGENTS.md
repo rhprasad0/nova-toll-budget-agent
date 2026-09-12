@@ -83,8 +83,8 @@ sandbox metadata do not replace that enforcement.
 
 The Root model and reasoning effort remain selected by the host/user; do not pin
 them in repository config. Keep project-graph nodes and specialist reviewers on
-their configured instructions in `.codex/agents/`, with graph child profiles
-selected explicitly at spawn time by the project-graph skill.
+their configured instructions in `.codex/agents/`, with the graph's fixed child
+models and efforts selected explicitly at spawn time by the project-graph skill.
 
 TollChat's application agent stays on `gpt-5.6-luna`. Leave its model and prompt
 unchanged unless the user explicitly requests an application-agent change.
