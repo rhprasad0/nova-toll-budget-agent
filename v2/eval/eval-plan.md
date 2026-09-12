@@ -90,7 +90,7 @@ flowchart LR
 - **Ordinary annual reversal:** Infer the reversed return only when a separate return route is omitted.
 - **I-66 West to Route 7 / Route 7 to I-495 South:** Require observed tolls in
   the matching direction and schedule-derived `$0` in every free state.
-- **Total number of test cases:** 21; nine current-price and twelve annual-affordability cases.
+- **Total number of test cases:** 20; eight current-price and twelve annual-affordability cases. The southbound DCA/Pentagon-Eads case is a retained two-turn correction that preserves the prior two current-price invocations.
 
 The separate hallucination battery uses one canonical annual-ballpark context,
 five reviewed prompt variants, and 200 repeat generations per variant. Repeats
@@ -100,7 +100,7 @@ measure reliability for that context, not route coverage.
 | :-- | :-- |
 | `i95_northbound` | Direct Springfield-to-Westpark and Dulles-to-Reagan routes; TP1SB unavailable/fallback |
 | `i95_reversal` | TP1SB unavailable/fallback; northbound unavailable |
-| `i95_southbound` | Two direct Westpark prices; northbound unavailable; both I-66 directions free |
+| `i95_southbound` | Retained DCA→Pentagon/Eads Westpark correction (two direct-price turns); northbound unavailable; both I-66 directions free |
 | `greenway_eb_peak` | I-66 eastbound tolled and westbound free (both free on holidays) |
 | `greenway_wb_peak` | I-66 westbound tolled and eastbound free (both free on holidays) |
 | `all` with `annual` suite | Twelve annual success, independent-leg, confirmation, alternative-selection, clarification, annual-day estimation, input-acquisition, and unavailable-route behaviors |

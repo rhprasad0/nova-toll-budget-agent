@@ -1,6 +1,6 @@
 # TollChat v2 evaluation
 
-This code-graded Strands suite runs nine current-toll routing cases and twelve
+This code-graded Strands suite runs eight current-toll routing cases and twelve
 annual job-offer affordability cases through a fresh production agent. It
 verifies exact tool calls, route/fallback behavior, required-input and income
 clarification, adjustable 52-week commute-day estimates, safe annual route
@@ -31,6 +31,12 @@ Dulles-to-Reagan cross-direction route every northbound day:
 env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
   uv run python eval/run_evaluation.py --window i95_northbound --suite direct
 ```
+
+The southbound direct schedule retains one agent for a scripted Reagan Airport
+to Westpark request followed by an I-395 Pentagon/Eads origin correction. It
+makes one current-price call per turn (two TollChat invocations total), requiring
+the exact distinct origins and equal public priced-toll projection; this is an
+offline contract, not a live-run result.
 
 The twelve annual cases are independent of the live I-95 direction:
 
