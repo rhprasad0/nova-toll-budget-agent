@@ -785,7 +785,7 @@ def main() -> None:
         development_shards,
     )
     require(
-        "Statement = slice(local.development_delivery_policy_statements, 45, 56)",
+        "Statement = slice(local.development_delivery_policy_statements, 48, 59)",
         development_shards,
     )
 
@@ -816,7 +816,7 @@ def main() -> None:
     assert production_policies_digest(
         (planner_documents, planner_statements, application_statements, deploy_documents)
     ) == (
-        "95f6e06f527fb1a393567480e8872faac95c5f47a2442f533fd0c26034879233"
+        "d4d45fabe9af7a4176276b77da67f9041d3da2e9e95515cfadd3925e840b4263"
     )
     production_locals = terraform_block(IAM, "locals", 3)
     for sid in (
@@ -830,7 +830,7 @@ def main() -> None:
             1,
         )
         assert production_policies_digest(rendered_production_policies(leaked_trace_sid)) != (
-            "95f6e06f527fb1a393567480e8872faac95c5f47a2442f533fd0c26034879233"
+            "d4d45fabe9af7a4176276b77da67f9041d3da2e9e95515cfadd3925e840b4263"
         )
     assert len(planner_documents) == 9
     assert len(planner_documents) <= 10

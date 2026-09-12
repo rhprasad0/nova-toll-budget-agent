@@ -46,22 +46,32 @@ jobs:
       artifact_id: ${{ steps.upload-proof.outputs.artifact-id }}
     steps:
       - name: Validate runner OIDC claims
+        env:
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
         run: |
           set +x
           set -euo pipefail
           oidc_error="$RUNNER_TEMP/development-oidc-proof.error"
+          oidc_failure_emitted=0
           bootstrap_event() {
             local event="$1"
             printf '%s\n' "$event" >&2
             if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-              printf '%s\n' "$event" >>"$GITHUB_STEP_SUMMARY" 2>/dev/null ||
-                printf '%s\n' 'stage=oidc-claims status=fail elapsed=0 exit=125 reason=diagnostic_unavailable' >&2
+              (printf '%s\n' "$event" >>"$GITHUB_STEP_SUMMARY") 2>/dev/null || return 125
             fi
+          }
+          oidc_fail() {
+            local status="$1"
+            if test "$oidc_failure_emitted" -eq 0; then
+              oidc_failure_emitted=1
+              bootstrap_event "stage=oidc-claims status=fail elapsed=0 exit=$status reason=malformed_evidence" || :
+            fi
+            return "$status"
           }
           oidc_fallback() {
             local status=$?
             if test "$status" -ne 0; then
-              bootstrap_event "stage=oidc-claims status=fail elapsed=0 exit=$status reason=malformed_evidence"
+              oidc_fail "$status" || status=$?
             fi
             trap - EXIT
             exit "$status"
@@ -79,7 +89,7 @@ jobs:
             "$oidc_url" 2>"$oidc_error")"
           oidc_token="$(jq -er '.value | strings' <<<"$oidc_response" 2>>"$oidc_error")"
           {
-          OIDC_TOKEN="$oidc_token" python3 - "$GITHUB_SHA" "${{ inputs.deployment_id }}" <<'PY'
+          OIDC_TOKEN="$oidc_token" python3 - "$GITHUB_SHA" "$DEPLOYMENT_ID" <<'PY'
           import base64
           import binascii
           import json
@@ -155,9 +165,11 @@ jobs:
       - name: Cleanup OIDC proof diagnostics
         if: always()
         run: |
-          set +e
-          rm -f -- "$RUNNER_TEMP/protected-main-oidc.json" "$RUNNER_TEMP/development-oidc-proof.error"
-          exit 0
+          set -euo pipefail
+          if ! rm -f -- "$RUNNER_TEMP/protected-main-oidc.json" "$RUNNER_TEMP/development-oidc-proof.error"; then
+            printf '%s\n' 'stage=oidc-cleanup status=fail elapsed=0 exit=125 reason=cleanup_failed' >&2
+            exit 125
+          fi
 
   deploy:
     name: Deploy v2 to development
@@ -701,6 +713,10 @@ jobs:
 
       - name: Verify readiness and public release path
         id: verify-release
+        env:
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+          RELEASE_ARTIFACT_ID: ${{ inputs.release_artifact_id }}
+          RELEASE_ARTIFACT_DIGEST: ${{ inputs.release_artifact_digest }}
         run: |
           set -euo pipefail
           set +x
@@ -735,7 +751,7 @@ jobs:
           run_private_stage "readiness-state" "$state" "$error_log" \
             terraform -chdir="$RUNNER_TEMP/release-overlay/v2/infra" show -json
           PRIVATE_STAGE_FALLBACK_STAGE=readiness-check
-          CANARY_EVIDENCE_FILE="$RUNNER_TEMP/development-canary-evidence.json" CANARY_COMMIT="$GITHUB_SHA" CANARY_RUN_ID="$GITHUB_RUN_ID" CANARY_ATTEMPT="$GITHUB_RUN_ATTEMPT" CANARY_DEPLOYMENT_ID="${{ inputs.deployment_id }}" CANARY_ARTIFACT_ID="${{ inputs.release_artifact_id }}" CANARY_ARTIFACT_DIGEST="${{ inputs.release_artifact_digest }}" python3 v2/scripts/check_development_release.py \
+          CANARY_EVIDENCE_FILE="$RUNNER_TEMP/development-canary-evidence.json" CANARY_COMMIT="$GITHUB_SHA" CANARY_RUN_ID="$GITHUB_RUN_ID" CANARY_ATTEMPT="$GITHUB_RUN_ATTEMPT" CANARY_DEPLOYMENT_ID="$DEPLOYMENT_ID" CANARY_ARTIFACT_ID="$RELEASE_ARTIFACT_ID" CANARY_ARTIFACT_DIGEST="$RELEASE_ARTIFACT_DIGEST" python3 v2/scripts/check_development_release.py \
             "$state" "$RUNNER_TEMP/release-overlay/release-manifest.json"
           jq -c . "$RUNNER_TEMP/development-canary-evidence.json" | sed 's/^/canary=/' >>"$GITHUB_OUTPUT"
           echo 'verified=success' >>"$GITHUB_OUTPUT"
