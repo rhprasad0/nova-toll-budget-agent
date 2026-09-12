@@ -964,13 +964,10 @@ def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
     runbook = DEPLOYMENT
     plan = (V2_ROOT / "plans" / "ENVIRONMENT-AND-RELEASE-PLAN.md").read_text()
     for text in (
-        "terraform show -json",
-        "planned_values.outputs.foundation.value",
-        "*.tfvars.json",
-        "jq -n --argjson foundation",
-        '"foundation": $foundation',
-        "review",
-        "rm -f --",
+        "guarded\nproduction planner",
+        "current foundation output",
+        "validates its approved non-secret shape",
+        "planner-owned production handoff",
     ):
         assert text in runbook
     for document in (runbook, plan):
@@ -1067,22 +1064,16 @@ def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
     )
     assert second_assertion < later_apply.index(recovery_command)
 
-    assert 'PRODUCTION_FOUNDATION_PLAN="$(mktemp --suffix=.tfplan)"' in production
-    assert 'PRODUCTION_FOUNDATION_VARS="$(mktemp --suffix=.tfvars.json)"' in production
-    assert 'query Account --output text)" = "920534282028"' in production
-    assert "backend.production.hcl" in production
-    assert "planned_values.outputs.foundation.value" in production
-    assert "-var-file=production.tfvars" in production
-    for package_arg in (
-        "-var loader_package_path=build/loader.zip",
-        "-var publisher_package_path=build/publisher.zip",
-        "-var agentcore_package_path=build/agentcore.zip",
-        "-var chat_proxy_package_path=build/chat-proxy.zip",
+    for text in (
+        "guarded published-release flow",
+        "planner validates the exact candidate bundle",
+        "candidate/state-bound saved plan",
+        "Reviewer approval of the protected `production` job",
+        "before applying that same plan",
     ):
-        assert package_arg in production
-    assert '"$FOUNDATION_VARS"' not in runbook
-    assert "terraform output -json foundation" not in runbook
-    assert '"$PRODUCTION_FOUNDATION_VARS"' in production
+        assert text in production
+    assert "terraform plan" not in production
+    assert "terraform apply" not in production
 
 
 def test_development_foundation_shell_is_plan_only_and_retains_exact_handoff():
@@ -1725,46 +1716,1229 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
         "Generic or future manual migrations are not authorized.",
     ):
         assert text in AGENTS
+    guarded = RUNBOOK.split("### Guarded production release", maxsplit=1)[1].split(
+        "The legacy development inventory", maxsplit=1
+    )[0]
     for text in (
-        "PRs use disposable PostGIS migration validation only",
-        "checks are\ncredential-free",
-        "Production schema changes remain limited to the separately authorized, reviewed",
-        "Application release\nartifacts do not apply schema changes; this procedure is separate",
-        "protected development migration workflow",
-        "nova-toll-tfstate-920534282028",
-        "nova-toll/terraform.tfstate",
-        "nova-toll/v2/terraform.tfstate",
-        "920534282028",
-        "us-east-1",
-        "nova-toll-db",
-        "tollchat.ai",
-        "nova-toll-agentcore-920534282028",
-        "runtime/v2/agentcore.zip",
-        "lambda/v2/chat-proxy.zip",
-        "tollchat-v2-chat-proxy",
-        "AgentCore runtime `nova_toll_v2`",
-        "get-alias",
-        "list-agent-runtimes",
-        "liveVersion",
-        'test ! -e "$RELEASE_EVIDENCE"',
-        "set -eu",
-        "grep -qx 'lambda_live_function_version=[0-9][0-9]*'",
-        "sed -n 's/^agentcore_runtime_id=//p'",
-        "update-alias",
-        "update-agent-runtime-endpoint",
-        "project = nova-toll-budget-agent",
-        "version = v2",
-        "environment = production",
-        "foundation plan to be zero-change",
-        "unexplained action or any replacement",
+        "verified\ndevelopment candidate/bundle",
+        "stable published `vX.Y.Z` event",
+        "listener has no AWS credentials",
+        "one durable claim",
+        "before planner OIDC credentials",
+        "encrypted,\nversioned, checksummed candidate/state-bound saved plan valid for 24 hours",
+        "Reviewer approval of the protected `production` job occurs after that plan is\nsaved",
+        "before the reusable job can access environment secrets or credentials",
+        "before migration credentials and fixed migration",
+        "re-assumes the deploy role",
+        "before applying that same plan",
+        "exactly one bounded canary",
+        "direct, arbitrary, regenerated,\nstale, or caller-selected plan/apply",
+        "sanitized",
+        "single bounded candidate-bound record",
     ):
-        assert text in DEPLOYMENT
-    rollback = DEPLOYMENT.split("## Rollback", maxsplit=1)[1]
-    assert rollback.index("update-alias") < rollback.index(
-        "After the immediate rollback smoke test passes"
+        assert text in guarded
+    assert "terraform plan" not in guarded
+    assert "terraform apply" not in guarded
+    handoff = RUNBOOK.split("## Account-local foundation handoff", maxsplit=1)[1].split(
+        "Application/database bootstrap", maxsplit=1
+    )[0]
+    for text in (
+        "guarded\nproduction planner",
+        "current foundation output",
+        "validates its approved non-secret shape",
+        "planner-owned production handoff",
+    ):
+        assert text in handoff
+    assert "planned-output" not in handoff
+    assert "foundation-plan path" not in handoff
+
+    capture = RUNBOOK.split(
+        "Before approving or deploying a production release", maxsplit=1
+    )[1].split("Historical `usage.json`", maxsplit=1)[0]
+    rollback = RUNBOOK.split(
+        "### Production canary failure: human stop and manual routing restore",
+        maxsplit=1,
+    )[1].split("Deterministic builds", maxsplit=1)[0]
+    capture_shells = re.findall(r"```sh\n(.*?)\n```", capture, flags=re.DOTALL)
+    restore_shells = re.findall(r"```sh\n(.*?)\n```", rollback, flags=re.DOTALL)
+    assert len(capture_shells) == len(restore_shells) == 1
+    for shell in [*capture_shells, *restore_shells]:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as script:
+            script.write(shell)
+            script.flush()
+            assert (
+                subprocess.run(["bash", "-n", script.name], check=False).returncode == 0
+            )
+
+    for text in (
+        "set -euo pipefail",
+        "set +x",
+        "umask 077",
+        "920534282028",
+        "EXPECTED_REGION=us-east-1",
+        "tollchat-v2-chat-proxy",
+        "nova_toll_v2-W6989LEw44",
+        "os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW",
+        "stat.S_ISREG(info.st_mode)",
+        "stat.S_IMODE(info.st_mode) != 0o600",
+        "if os.fstat(fd).st_nlink != 1:",
+        "lambda_live_function_version",
+        "agentcore_endpoint_live_version",
+        "AdditionalVersionWeights",
+    ):
+        assert text in capture
+    for text in (
+        "set -euo pipefail",
+        "set +x",
+        "umask 077",
+        "920534282028",
+        "EXPECTED_REGION=us-east-1",
+        'python3 -I -S - "$RELEASE_EVIDENCE" "$RECOVERY_RECORD_MAX_BYTES"',
+        "os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,",
+        "info = os.fstat(fd)",
+        "stat.S_ISREG(info.st_mode)",
+        "stat.S_IMODE(info.st_mode) != 0o600",
+        "snapshot = os.read(fd, limit + 1)",
+        "snapshot.splitlines(keepends=True)",
+        '--revision-id "$LAMBDA_ALIAS_REVISION"',
+        '--client-token "$AGENTCORE_RESTORE_TOKEN"',
+        "for ((attempt = 1; attempt <= 60; attempt++))",
+        "UPDATE_FAILED",
+        "human stop",
+        "do not roll back automatically",
+        "distinct from the\nforward update token",
+        "WAF/rate-limit response",
+        "HTTP 429",
+        "currently configured WAF rate-based quiet/evaluation window",
+        "production exactly unchanged",
+        "two-session/reset verification",
+    ):
+        assert text in rollback
+    for shell in (capture, rollback):
+        assert "CURRENT_STAGE=" in shell
+        assert "FAILURE_REPORTED=0" in shell
+        assert "status=fail exit=%s reason=unclassified" in shell
+        assert ".FunctionName" not in shell
+        assert 'if has("RoutingConfig") then' in shell
+        assert '($routing | type) != "object" then false' in shell
+        assert "AdditionalVersionWeights? // {}" not in shell
+        assert (
+            'AliasArn == "arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live"'
+            in shell
+        )
+        assert "PRIVATE_SINK" not in shell
+        assert "$(mktemp" not in shell
+        assert "2>&1 |" in shell
+        assert "cmp -s - <(printf '%s\\n' \"$EXPECTED_ACCOUNT\") 2>/dev/null" in shell
+        assert 'test "${statuses[1]}" -eq 0' not in shell
+        assert 'aws --region "$EXPECTED_REGION"' in shell
+        assert "export AWS_IGNORE_CONFIGURED_ENDPOINT_URLS=true" in shell
+        assert 'test -n "${RELEASE_EVIDENCE-}"' in shell
+        assert "${RELEASE_EVIDENCE:?" not in shell
+    for stage in (
+        "record-path",
+        "account-identity",
+        "lambda-validate",
+        "agentcore-validate",
+        "record-write",
+    ):
+        assert f"CURRENT_STAGE={stage}" in capture
+    for stage in (
+        "record-snapshot",
+        "record-validate",
+        "lambda-update",
+        "agentcore-token",
+        "agentcore-update",
+        "agentcore-poll",
+        "agentcore-retry",
+    ):
+        assert f"CURRENT_STAGE={stage}" in rollback
+    assert rollback.count('"$RELEASE_EVIDENCE"') == 1
+    assert rollback.count('$(<"$RELEASE_EVIDENCE")') == 0
+    assert "stat -c " not in rollback
+    assert "grep -qx" not in rollback
+    assert "sed -n" not in rollback
+    assert "^[1-9][0-9]*$" in capture
+    assert "^[1-9][0-9]*$" in rollback
+    assert "jq -ser" in capture
+    assert capture.count("jq -Rser") == 1
+    assert "select(length == 1) | .[0]" in capture
+    assert '.status == "READY"' in capture
+    assert "then .targetVersion == .liveVersion else true end" in capture
+    assert 'python3 -I -S - "$RELEASE_EVIDENCE"' in capture
+    assert 'if CAPTURE_WRITE_STAGE="$(' in capture
+    assert "os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW" in capture
+    assert "os.O_DIRECTORY | os.O_NOFOLLOW" in capture
+    assert "dir_fd=directory" in capture
+    assert "named.st_dev != info.st_dev" in capture
+    assert 'chmod 600 "$RELEASE_EVIDENCE"' not in capture
+    assert 'test ! -e "$RELEASE_EVIDENCE"' not in capture
+    assert "jq -ser" in rollback
+    assert rollback.count("jq -Rser") == 2
+    assert "jq -se --arg version" in rollback
+    assert "explode | all(. >= 32 and (. < 127 or . >= 160))" in rollback
+    assert 'python3 -I -S - "$RELEASE_EVIDENCE"' in rollback
+    assert "os.O_DIRECTORY | os.O_NOFOLLOW" in rollback
+    assert "info.st_uid != os.geteuid()" in rollback
+    assert rollback.count("select(length == 1) | .[0]") >= 3
+    assert 'AGENTCORE_RESTORE_TOKEN="$(' in rollback
+    assert (
+        "python3 -I -S -c 'import uuid; print(uuid.uuid4())' 2>/dev/null | jq -Rser"
+        in rollback
     )
-    assert "temporary drift" in rollback
-    assert "require it to report no changes" in rollback
+    assert rollback.index("AGENTCORE_RESTORE_TOKEN") < rollback.index(
+        "update_agentcore()"
+    )
+    assert "AGENTCORE_UPDATE_AMBIGUOUS=1" in rollback
+    assert "AGENTCORE_UPDATE_STATUS=$?" in rollback
+    assert 'exit "$AGENTCORE_UPDATE_STATUS"' in rollback
+    assert "AGENTCORE_RETRY_USED=1" in rollback
+    assert (
+        'if (( AGENTCORE_RETRY_USED == 1 )); then exit "$AGENTCORE_UPDATE_STATUS"; fi'
+        in rollback
+    )
+    agent_identity = rollback.index('.agentRuntimeArn == "arn:aws:bedrock-agentcore')
+    agent_branch = rollback.index('case "$AGENTCORE_STATUS"')
+    assert agent_identity < agent_branch
+    assert 'test "$AGENTCORE_TARGET_VERSION" = "$AGENTCORE_LIVE_VERSION"' in rollback
+    assert (
+        'test "$AGENTCORE_TARGET_VERSION" = "$AGENTCORE_ENDPOINT_LIVE_VERSION"'
+        in rollback
+    )
+    assert "check_development_release.py --profile production" not in rollback
+    assert "fixed production readiness checker" not in rollback
+    assert "300 seconds" not in rollback
+    assert "5 minutes" not in rollback
+    assert "QUIET_WINDOW" not in rollback
+    assert 'sleep "$' not in rollback
+    assert rollback.index("lambda get-alias") < rollback.index("lambda update-alias")
+    lambda_update = rollback.index("lambda update-alias")
+    assert (
+        rollback.find(
+            'AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias',
+            lambda_update,
+        )
+        > lambda_update
+    )
+    assert rollback.index("update-agent-runtime-endpoint") < rollback.index(
+        "get-agent-runtime-endpoint"
+    )
+    assert "immediate Lambda alias read-back and finite AgentCore" in rollback
+    assert "Terraform-state-bound production checker" in rollback
+    fixed_targets = {
+        "EXPECTED_ACCOUNT": "920534282028",
+        "EXPECTED_REGION": "us-east-1",
+        "LAMBDA_FUNCTION": "tollchat-v2-chat-proxy",
+        "LAMBDA_ALIAS": "live",
+        "AGENTCORE_RUNTIME": "nova_toll_v2-W6989LEw44",
+        "AGENTCORE_ENDPOINT": "preview",
+    }
+    for shell in (capture, rollback):
+        for name, value in fixed_targets.items():
+            assert re.search(rf"(?m)^\s*{name}={re.escape(value)}$", shell)
+            assert not re.search(rf"(?m)^\s*{name}=.*(?:\$|`)", shell)
+
+    readme = (V2_ROOT / "README.md").read_text()
+    for text in (
+        "verified development bundle",
+        "admission\nand claim",
+        "saved plan",
+        "reviewer approval",
+        "Guards fail closed",
+        "capture the\nfixed routing targets",
+        "human-operated manual\nrestore",
+        "never an automatic rollback",
+        "sanitized",
+    ):
+        assert text in readme
+
+
+def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path):
+    capture = RUNBOOK.split(
+        "Before approving or deploying a production release", maxsplit=1
+    )[1].split("Historical `usage.json`", maxsplit=1)[0]
+    rollback = RUNBOOK.split(
+        "### Production canary failure: human stop and manual routing restore",
+        maxsplit=1,
+    )[1].split("Deterministic builds", maxsplit=1)[0]
+    capture_shell = re.findall(r"```sh\n(.*?)\n```", capture, flags=re.DOTALL)[0]
+    restore_shell = re.findall(r"```sh\n(.*?)\n```", rollback, flags=re.DOTALL)[0]
+    binary = tmp_path / "bin"
+    state = tmp_path / "state"
+    log = tmp_path / "commands.log"
+    binary.mkdir()
+    state.mkdir()
+    aws = binary / "aws"
+    aws.write_text(
+        dedent(
+            """\
+            #!/usr/bin/env bash
+            set -euo pipefail
+            printf '%s\\n' "$*" >>"$LOG"
+            test "${AWS_IGNORE_CONFIGURED_ENDPOINT_URLS:-}" = true || exit 71
+            if [[ "$*" == *"sts get-caller-identity"* ]]; then
+              if [[ "${FAIL_ACCOUNT:-}" == 1 ]]; then
+                if [[ "${NUL_FAILURE:-}" == 1 ]]; then
+                  printf 'RAW\0SENTINEL\n'
+                  printf 'RAW\0SENTINEL\n' >&2
+                elif [[ "${SENTINEL_FAILURE:-}" == capture ]]; then
+                  printf '%s\\n' RAW_PROVIDER_STDOUT
+                  printf '%s\\n' RAW_PROVIDER_STDERR >&2
+                fi
+                exit 17
+              fi
+              if [[ -n "${MUTATE_RECORD:-}" ]]; then
+                printf 'lambda_live_function_version=999\\nagentcore_endpoint_live_version=998\\n' >"$MUTATE_RECORD"
+              fi
+              printf '%s\\n' 920534282028
+            elif [[ "$*" == *"lambda get-alias"* ]]; then
+              count_file="$STATE/lambda-get"
+              count=0; test -f "$count_file" && count="$(<"$count_file")"
+              count=$((count + 1)); printf '%s' "$count" >"$count_file"
+              if [[ "${MODE:-}" == restore && "${LAMBDA_MALFORMED_READBACK:-}" == 1 && "$count" -gt 1 ]]; then
+                printf '{\\n'
+                exit 0
+              fi
+              version=11; revision=revision-capture
+              if [[ "${MODE:-}" == restore ]]; then
+                version=9; revision=revision-current
+                if (( count > 1 )); then version=7; revision=revision-readback; fi
+              fi
+              if [[ "${LAMBDA_REVISION_NUL:-}" == 1 ]]; then revision='revision\\u0000'; fi
+              routing="${LAMBDA_ROUTING:-}"
+              if [[ -z "$routing" ]]; then routing='{"AdditionalVersionWeights":{}}'; fi
+              if [[ "$routing" == absent ]]; then
+                printf '{"AliasArn":"arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live","Name":"live","FunctionVersion":"%s","RevisionId":"%s"}\\n' "$version" "$revision"
+              else
+                printf '{"AliasArn":"arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live","Name":"live","FunctionVersion":"%s","RevisionId":"%s","RoutingConfig":%s}\\n' "$version" "$revision" "$routing"
+              fi
+              duplicate=0
+              if [[ "${MULTI_DOCUMENT:-}" == lambda ]] || [[ "${MODE:-}" == restore && "${MULTI_DOCUMENT:-}" == restore-initial && "$count" -eq 1 ]] || [[ "${MODE:-}" == restore && "${MULTI_DOCUMENT:-}" == restore-readback && "$count" -gt 1 ]]; then duplicate=1; fi
+              if (( duplicate )); then
+                printf '{"AliasArn":"arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live","Name":"live","FunctionVersion":"%s","RevisionId":"%s","RoutingConfig":{"AdditionalVersionWeights":{}}}\\n' "$version" "$revision"
+              fi
+            elif [[ "$*" == *"lambda update-alias"* ]]; then
+              if [[ "${FAIL_LAMBDA:-}" == 1 ]]; then
+                if [[ "${SENTINEL_FAILURE:-}" == restore ]]; then
+                  printf '%s\\n' RAW_PROVIDER_STDOUT
+                  printf '%s\\n' RAW_PROVIDER_STDERR >&2
+                fi
+                exit 19
+              fi
+            elif [[ "$*" == *"bedrock-agentcore-control get-agent-runtime-endpoint"* ]]; then
+              count_file="$STATE/agent-get"
+              count=0; test -f "$count_file" && count="$(<"$count_file")"
+              count=$((count + 1)); printf '%s' "$count" >"$count_file"
+              version=8
+              if [[ "${MODE:-}" == restore && ( "${AGENT_MODE:-}" == unresolved || ( "${AGENT_MODE:-}" == ambiguous && "$count" -eq 1 ) ) ]]; then version=1; fi
+              runtime_arn=arn:aws:bedrock-agentcore:us-east-1:920534282028:runtime/nova_toll_v2-W6989LEw44
+              endpoint_name=preview
+              status=READY
+              target_version="$version"
+              case "${AGENT_BAD:-}" in
+                arn) runtime_arn=arn:aws:bedrock-agentcore:us-east-1:920534282028:runtime/wrong ;;
+                name) endpoint_name=wrong ;;
+                target) status=UPDATING; target_version=1 ;;
+                transition) status=UPDATING ;;
+                mismatch) target_version=9 ;;
+              esac
+              if [[ "${MODE:-}" == restore && "${MULTI_DOCUMENT:-}" == agent-restore-split ]]; then
+                printf '{"agentRuntimeArn":"%s","name":"%s","status":"%s"}\\n' "$runtime_arn" "$endpoint_name" "$status"
+                printf '{"liveVersion":"%s","targetVersion":"%s"}\\n' "$version" "$target_version"
+              else
+                printf '{"agentRuntimeArn":"%s","name":"%s","status":"%s","liveVersion":"%s","targetVersion":"%s"}\\n' "$runtime_arn" "$endpoint_name" "$status" "$version" "$target_version"
+              fi
+              if [[ "${MULTI_DOCUMENT:-}" == agent ]]; then
+                printf '{"agentRuntimeArn":"arn:aws:bedrock-agentcore:us-east-1:920534282028:runtime/nova_toll_v2-W6989LEw44","name":"preview","status":"READY","liveVersion":"8","targetVersion":"8"}\\n'
+              fi
+            elif [[ "$*" == *"bedrock-agentcore-control update-agent-runtime-endpoint"* ]]; then
+              count_file="$STATE/agent-update"
+              count=0; test -f "$count_file" && count="$(<"$count_file")"
+              count=$((count + 1)); printf '%s' "$count" >"$count_file"
+              if [[ "${AGENT_MODE:-}" == unresolved || ( "${AGENT_MODE:-}" == ambiguous && "$count" -eq 1 ) ]]; then exit 23; fi
+            else
+              exit 99
+            fi
+            """
+        ),
+        encoding="utf-8",
+    )
+    python = binary / "python3"
+    python.write_text(
+        dedent(
+            """\
+            #!/usr/bin/env bash
+            set -euo pipefail
+            python_is_code=0
+            for argument in "$@"; do
+              [[ "$argument" == -c ]] && python_is_code=1
+            done
+            if [[ "${PYTHON_BROKEN_NUL:-}" == stream && "$python_is_code" == 0 ]] || [[ "${PYTHON_BROKEN_NUL:-}" == token && "$python_is_code" == 1 ]]; then
+              printf 'RAW\\000PYTHON_SENTINEL\\n'
+              exit 43
+            fi
+            if [[ "$python_is_code" == 1 ]]; then
+              printf '%s\\n' 00000000-0000-4000-8000-000000000000
+              exit 0
+            fi
+            if [[ -n "${CAPTURE_REPLACE_AFTER_OPEN:-}${CUSTODY_REPLACE_SOURCE:-}${REPLACE_AFTER_OPEN:-}" ]]; then
+              while [[ "${1:-}" == -I || "${1:-}" == -S ]]; do shift; done
+              test "${1:-}" = -; shift
+              exec "$REAL_PYTHON" -I -S -c '
+            import os
+            import sys
+
+            capture_source = os.environ.get("CAPTURE_REPLACE_AFTER_OPEN")
+            capture_replacement = os.environ.get("CAPTURE_REPLACEMENT")
+            capture_moved = os.environ.get("CAPTURE_MOVED_RECORD")
+            if capture_source and capture_replacement:
+                original_write = os.write
+                replaced = False
+
+                def write(fd, data):
+                    global replaced
+                    if not replaced:
+                        replaced = True
+                        if capture_moved:
+                            os.replace(capture_source, capture_moved)
+                        os.replace(capture_replacement, capture_source)
+                    return original_write(fd, data)
+
+                os.write = write
+
+            custody_source = os.environ.get("CUSTODY_REPLACE_SOURCE")
+            custody_replacement = os.environ.get("CUSTODY_REPLACEMENT")
+            if custody_source and custody_replacement:
+                original_stat = os.stat
+                replaced = False
+
+                def stat(path, *args, **kwargs):
+                    global replaced
+                    if (
+                        not replaced
+                        and path == os.path.basename(custody_source)
+                        and kwargs.get("dir_fd") is not None
+                    ):
+                        replaced = True
+                        os.replace(custody_replacement, custody_source)
+                    return original_stat(path, *args, **kwargs)
+
+                os.stat = stat
+
+            snapshot_source = os.environ.get("REPLACE_AFTER_OPEN")
+            snapshot_replacement = os.environ.get("REPLACEMENT")
+            if snapshot_source and snapshot_replacement:
+                original_read = os.read
+                replaced = False
+
+                def read(fd, count):
+                    global replaced
+                    if not replaced:
+                        replaced = True
+                        os.replace(snapshot_replacement, snapshot_source)
+                    return original_read(fd, count)
+
+                os.read = read
+
+            exec(compile(sys.stdin.read(), "<stdin>", "exec"))
+            ' "$@"
+            fi
+            exec "$REAL_PYTHON" "$@"
+            """
+        ),
+        encoding="utf-8",
+    )
+    sleep = binary / "sleep"
+    sleep.write_text("#!/usr/bin/env bash\nexit 0\n")
+    mktemp = binary / "mktemp"
+    mktemp.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' mktemp >>\"$LOG\"\n"
+        "printf '%s/victim\\n' \"$TMPDIR\"\n"
+    )
+    cmp = binary / "cmp"
+    cmp.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "${COMPARE_FAILURE:-}" == 1 ]]; then\n'
+        "  printf '%s\\n' RAW_COMPARATOR_SENTINEL >&2\n"
+        "  exit 43\n"
+        "fi\n"
+        'exec /usr/bin/cmp "$@"\n'
+    )
+    for command in (aws, python, sleep, mktemp, cmp):
+        command.chmod(0o700)
+
+    def run(shell: str, **environment: str) -> subprocess.CompletedProcess[str]:
+        environment = dict(environment)
+        unset_release_evidence = environment.pop("UNSET_RELEASE_EVIDENCE", "") == "1"
+        child_environment = {
+            **os.environ,
+            "PATH": str(binary) + os.pathsep + os.defpath,
+            "LOG": str(log),
+            "STATE": str(state),
+            "REAL_PYTHON": sys.executable,
+            **environment,
+        }
+        if unset_release_evidence:
+            child_environment.pop("RELEASE_EVIDENCE", None)
+        return subprocess.run(
+            ["bash", "-c", shell],
+            env=child_environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    record = tmp_path / "recovery-record"
+    captured = run(
+        capture_shell, MODE="capture", RELEASE_EVIDENCE=str(record), LOG=str(log)
+    )
+    assert captured.returncode == 0, captured.stderr
+    assert record.read_text() == (
+        "lambda_live_function_version=11\nagentcore_endpoint_live_version=8\n"
+    )
+    assert record.stat().st_mode & 0o777 == 0o600
+
+    startup_hook = tmp_path / "startup-hook"
+    startup_hook.mkdir()
+    startup_sentinel = tmp_path / "startup-hook-ran"
+    (startup_hook / "sitecustomize.py").write_text(
+        'open(__import__("os").environ["STARTUP_HOOK_SENTINEL"], "w").write("ran")\n'
+    )
+    isolated_capture_record = tmp_path / "isolated-capture-record"
+    isolated_capture = run(
+        capture_shell,
+        MODE="capture",
+        RELEASE_EVIDENCE=str(isolated_capture_record),
+        PYTHONPATH=str(startup_hook),
+        STARTUP_HOOK_SENTINEL=str(startup_sentinel),
+    )
+    assert isolated_capture.returncode == 0, isolated_capture.stderr
+    assert not startup_sentinel.exists()
+    isolated_record = tmp_path / "isolated-recovery-record"
+    isolated_record.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    isolated_record.chmod(0o600)
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    isolated_restore = run(
+        restore_shell,
+        MODE="restore",
+        RELEASE_EVIDENCE=str(isolated_record),
+        PYTHONPATH=str(startup_hook),
+        STARTUP_HOOK_SENTINEL=str(startup_sentinel),
+    )
+    assert isolated_restore.returncode == 0, isolated_restore.stderr
+    assert not startup_sentinel.exists()
+
+    for shell, mode in ((capture_shell, "capture"), (restore_shell, "restore")):
+        unset_path = run(shell, MODE=mode, UNSET_RELEASE_EVIDENCE="1")
+        empty_path = run(shell, MODE=mode, RELEASE_EVIDENCE="")
+        for failed in (unset_path, empty_path):
+            assert failed.returncode == 1
+            assert failed.stdout == ""
+            assert failed.stderr == (
+                "stage=record-path status=fail exit=1 reason=unclassified\n"
+            )
+
+    existing_record = tmp_path / "existing-record"
+    existing_record.write_text("do not overwrite", encoding="utf-8")
+    existing = run(capture_shell, MODE="capture", RELEASE_EVIDENCE=str(existing_record))
+    assert existing.returncode == 1
+    assert existing.stdout == ""
+    assert (
+        existing.stderr == "stage=record-path status=fail exit=1 reason=unclassified\n"
+    )
+    assert existing_record.read_text(encoding="utf-8") == "do not overwrite"
+
+    unwritable_record = tmp_path / "missing-parent" / "recovery-record"
+    unwritable = run(
+        capture_shell, MODE="capture", RELEASE_EVIDENCE=str(unwritable_record)
+    )
+    assert unwritable.returncode == 1
+    assert unwritable.stdout == ""
+    assert (
+        unwritable.stderr
+        == "stage=record-write status=fail exit=1 reason=unclassified\n"
+    )
+    assert not unwritable_record.exists()
+
+    capture_target = tmp_path / "capture-race-record"
+    capture_replacement = tmp_path / "capture-race-fifo"
+    os.mkfifo(capture_replacement, 0o644)
+    capture_replacement.chmod(0o644)
+    raced_capture = run(
+        capture_shell,
+        MODE="capture",
+        RELEASE_EVIDENCE=str(capture_target),
+        CAPTURE_REPLACE_AFTER_OPEN=str(capture_target),
+        CAPTURE_REPLACEMENT=str(capture_replacement),
+    )
+    assert raced_capture.returncode == 1
+    assert raced_capture.stdout == ""
+    assert (
+        raced_capture.stderr
+        == "stage=record-write status=fail exit=1 reason=unclassified\n"
+    )
+    assert capture_target.is_fifo()
+    assert capture_target.stat().st_mode & 0o777 == 0o644
+
+    planted_capture = tmp_path / "planted-capture-record"
+    planted_replacement = tmp_path / "planted-capture-replacement"
+    planted_replacement.write_text(
+        "lambda_live_function_version=999\nagentcore_endpoint_live_version=998\n"
+    )
+    planted_replacement.chmod(0o600)
+    moved_capture = tmp_path / "moved-capture-record"
+    planted = run(
+        capture_shell,
+        MODE="capture",
+        RELEASE_EVIDENCE=str(planted_capture),
+        CAPTURE_REPLACE_AFTER_OPEN=str(planted_capture),
+        CAPTURE_REPLACEMENT=str(planted_replacement),
+        CAPTURE_MOVED_RECORD=str(moved_capture),
+    )
+    assert planted.returncode == 1
+    assert planted.stdout == ""
+    assert planted.stderr == (
+        "stage=record-write status=fail exit=1 reason=unclassified\n"
+    )
+    assert planted_capture.read_text() == (
+        "lambda_live_function_version=999\nagentcore_endpoint_live_version=998\n"
+    )
+    assert moved_capture.read_text() == (
+        "lambda_live_function_version=11\nagentcore_endpoint_live_version=8\n"
+    )
+
+    for document, stage in (
+        ("lambda", "lambda-validate"),
+        ("agent", "agentcore-validate"),
+    ):
+        multi_record = tmp_path / f"multi-{document}-record"
+        multi = run(
+            capture_shell,
+            MODE="capture",
+            MULTI_DOCUMENT=document,
+            RELEASE_EVIDENCE=str(multi_record),
+        )
+        assert multi.returncode != 0
+        assert multi.stdout == ""
+        assert re.fullmatch(
+            rf"stage={stage} status=fail exit=[1-9][0-9]* reason=unclassified\n",
+            multi.stderr,
+        )
+        assert not multi_record.exists()
+
+    for invalid_endpoint in ("transition", "mismatch"):
+        failed_record = tmp_path / f"capture-{invalid_endpoint}-record"
+        failed = run(
+            capture_shell,
+            MODE="capture",
+            AGENT_BAD=invalid_endpoint,
+            RELEASE_EVIDENCE=str(failed_record),
+        )
+        assert failed.returncode != 0
+        assert failed.stdout == ""
+        assert re.fullmatch(
+            r"stage=agentcore-validate status=fail exit=[1-9][0-9]* reason=unclassified\n",
+            failed.stderr,
+        )
+        assert not failed_record.exists()
+
+    capture_failure = run(
+        capture_shell,
+        MODE="capture",
+        FAIL_ACCOUNT="1",
+        RELEASE_EVIDENCE=str(tmp_path / "failed-record"),
+    )
+    assert capture_failure.returncode == 17
+    assert capture_failure.stderr.splitlines() == [
+        "stage=account-identity status=fail exit=17 reason=unclassified"
+    ]
+    broken_capture = run(
+        capture_shell,
+        MODE="capture",
+        PYTHON_BROKEN_NUL="stream",
+        RELEASE_EVIDENCE=str(tmp_path / "broken-python-capture-record"),
+    )
+    assert broken_capture.returncode == 43
+    assert broken_capture.stdout == ""
+    assert broken_capture.stderr == (
+        "stage=record-write status=fail exit=43 reason=unclassified\n"
+    )
+    assert "RAW" not in broken_capture.stderr
+    assert not (tmp_path / "broken-python-capture-record").exists()
+    for shell, mode, evidence in (
+        (capture_shell, "capture", tmp_path / "comparator-capture-record"),
+        (restore_shell, "restore", record),
+    ):
+        log.write_text("")
+        comparator_failure = run(
+            shell,
+            MODE=mode,
+            COMPARE_FAILURE="1",
+            RELEASE_EVIDENCE=str(evidence),
+        )
+        assert comparator_failure.returncode == 43
+        assert comparator_failure.stdout == ""
+        assert comparator_failure.stderr == (
+            "stage=account-identity status=fail exit=43 reason=unclassified\n"
+        )
+        assert "RAW_COMPARATOR_SENTINEL" not in comparator_failure.stderr
+        assert "lambda get-alias" not in log.read_text()
+    assert not (tmp_path / "comparator-capture-record").exists()
+    sentinel_capture = run(
+        capture_shell,
+        MODE="capture",
+        FAIL_ACCOUNT="1",
+        SENTINEL_FAILURE="capture",
+        RELEASE_EVIDENCE=str(tmp_path / "sentinel-capture-record"),
+    )
+    assert sentinel_capture.returncode == 17
+    assert sentinel_capture.stdout == ""
+    assert sentinel_capture.stderr == (
+        "stage=account-identity status=fail exit=17 reason=unclassified\n"
+    )
+
+    nul_capture = run(
+        capture_shell,
+        MODE="capture",
+        FAIL_ACCOUNT="1",
+        NUL_FAILURE="1",
+        RELEASE_EVIDENCE=str(tmp_path / "nul-capture-record"),
+    )
+    assert nul_capture.returncode == 17
+    assert nul_capture.stdout == ""
+    assert nul_capture.stderr == (
+        "stage=account-identity status=fail exit=17 reason=unclassified\n"
+    )
+
+    hostile_tmp = tmp_path / "hostile-tmp"
+    hostile_tmp.mkdir()
+    victim = hostile_tmp / "victim"
+    victim.write_text("do not clobber")
+    log.write_text("")
+    hostile_capture = run(
+        capture_shell,
+        MODE="capture",
+        FAIL_ACCOUNT="1",
+        SENTINEL_FAILURE="capture",
+        RELEASE_EVIDENCE=str(tmp_path / "hostile-tmp-capture-record"),
+        TMPDIR=str(hostile_tmp),
+    )
+    assert hostile_capture.returncode == 17
+    assert hostile_capture.stdout == ""
+    assert hostile_capture.stderr == (
+        "stage=account-identity status=fail exit=17 reason=unclassified\n"
+    )
+    assert victim.read_text() == "do not clobber"
+    assert "mktemp" not in log.read_text()
+
+    hostile_restore_record = tmp_path / "hostile-tmp-restore-record"
+    hostile_restore_record.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    hostile_restore_record.chmod(0o600)
+    nul_restore = run(
+        restore_shell,
+        MODE="restore",
+        FAIL_ACCOUNT="1",
+        NUL_FAILURE="1",
+        RELEASE_EVIDENCE=str(hostile_restore_record),
+        TMPDIR=str(hostile_tmp),
+    )
+    assert nul_restore.returncode == 17
+    assert nul_restore.stdout == ""
+    assert nul_restore.stderr == (
+        "stage=account-identity status=fail exit=17 reason=unclassified\n"
+    )
+    assert victim.read_text() == "do not clobber"
+
+    hostile_restore_record = tmp_path / "hostile-tmp-restore-record"
+    hostile_restore_record.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    hostile_restore_record.chmod(0o600)
+    log.write_text("")
+    hostile_restore = run(
+        restore_shell,
+        MODE="restore",
+        FAIL_LAMBDA="1",
+        SENTINEL_FAILURE="restore",
+        RELEASE_EVIDENCE=str(hostile_restore_record),
+        TMPDIR=str(hostile_tmp),
+    )
+    assert hostile_restore.returncode == 19
+    assert hostile_restore.stdout == ""
+    assert hostile_restore.stderr == (
+        "stage=lambda-update status=fail exit=19 reason=unclassified\n"
+    )
+    assert victim.read_text() == "do not clobber"
+    assert "mktemp" not in log.read_text()
+
+    routing_failures = (
+        "null",
+        '"not-an-object"',
+        "[]",
+        '{"AdditionalVersionWeights":null}',
+        '{"AdditionalVersionWeights":[]}',
+        '{"AdditionalVersionWeights":{"9":1}}',
+    )
+    for index, routing in enumerate(routing_failures):
+        failed_record = tmp_path / f"bad-routing-capture-{index}"
+        failed = run(
+            capture_shell,
+            MODE="capture",
+            LAMBDA_ROUTING=routing,
+            RELEASE_EVIDENCE=str(failed_record),
+        )
+        assert failed.returncode != 0
+        assert re.fullmatch(
+            r"stage=lambda-validate status=fail exit=[1-9][0-9]* reason=unclassified\n",
+            failed.stderr,
+        )
+        assert not failed_record.exists()
+
+    def invalid_record(name: str, contents: str | None = None) -> Path:
+        path = tmp_path / name
+        if contents is None:
+            os.mkfifo(path, 0o600)
+        else:
+            path.write_text(contents)
+            path.chmod(0o600)
+        return path
+
+    for name, contents in (
+        (
+            "zero",
+            "lambda_live_function_version=0\nagentcore_endpoint_live_version=8\n",
+        ),
+        ("missing", "lambda_live_function_version=7\n"),
+        (
+            "malformed",
+            "lambda_live_function_version=seven\nagentcore_endpoint_live_version=8\n",
+        ),
+        (
+            "duplicate",
+            "lambda_live_function_version=7\nlambda_live_function_version=7\nagentcore_endpoint_live_version=8\n",
+        ),
+        (
+            "extra",
+            "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\nextra=1\n",
+        ),
+        (
+            "oversized",
+            "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+            + "x" * 256,
+        ),
+        (
+            "trailing-blank",
+            "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n\n",
+        ),
+        ("fifo", None),
+    ):
+        path = invalid_record(name, contents)
+        log.write_text("")
+        failed = run(restore_shell, MODE="restore", RELEASE_EVIDENCE=str(path))
+        assert failed.returncode != 0
+        assert failed.stderr.count("status=fail") == 1
+        assert "lambda update-alias" not in log.read_text()
+
+    log.write_text("")
+    absent = run(
+        restore_shell,
+        MODE="restore",
+        RELEASE_EVIDENCE=str(tmp_path / "absent-record"),
+    )
+    assert absent.returncode != 0
+    assert absent.stderr.count("status=fail") == 1
+    assert "lambda update-alias" not in log.read_text()
+
+    target = invalid_record(
+        "target",
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n",
+    )
+    link = tmp_path / "record-link"
+    link.symlink_to(target)
+    log.write_text("")
+    linked = run(restore_shell, MODE="restore", RELEASE_EVIDENCE=str(link))
+    assert linked.returncode != 0
+    assert "lambda update-alias" not in log.read_text()
+
+    log.write_text("")
+    broken_snapshot = run(
+        restore_shell,
+        MODE="restore",
+        PYTHON_BROKEN_NUL="stream",
+        RELEASE_EVIDENCE=str(target),
+    )
+    assert broken_snapshot.returncode == 43
+    assert broken_snapshot.stdout == ""
+    assert broken_snapshot.stderr == (
+        "stage=record-snapshot status=fail exit=43 reason=unclassified\n"
+    )
+    assert "RAW" not in broken_snapshot.stderr
+    assert "lambda update-alias" not in log.read_text()
+
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    nul_revision = run(
+        restore_shell,
+        MODE="restore",
+        LAMBDA_REVISION_NUL="1",
+        RELEASE_EVIDENCE=str(target),
+    )
+    assert nul_revision.returncode != 0
+    assert nul_revision.stdout == ""
+    assert re.fullmatch(
+        r"stage=lambda-validate status=fail exit=[1-9][0-9]* reason=unclassified\n",
+        nul_revision.stderr,
+    )
+    assert "lambda update-alias" not in log.read_text()
+
+    for document, stage, lambda_update_expected in (
+        ("restore-initial", "lambda-validate", False),
+        ("restore-readback", "lambda-readback-validate", True),
+    ):
+        target.write_text(
+            "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+        )
+        target.chmod(0o600)
+        log.write_text("")
+        for path in state.iterdir():
+            path.unlink()
+        malformed_restore = run(
+            restore_shell,
+            MODE="restore",
+            MULTI_DOCUMENT=document,
+            RELEASE_EVIDENCE=str(target),
+        )
+        assert malformed_restore.returncode != 0
+        assert malformed_restore.stdout == ""
+        assert re.fullmatch(
+            rf"stage={stage} status=fail exit=[1-9][0-9]* reason=unclassified\n",
+            malformed_restore.stderr,
+        )
+        commands = log.read_text()
+        assert ("lambda update-alias" in commands) is lambda_update_expected
+        assert "update-agent-runtime-endpoint" not in commands
+
+    target.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    target.chmod(0o600)
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    malformed_readback = run(
+        restore_shell,
+        MODE="restore",
+        LAMBDA_MALFORMED_READBACK="1",
+        RELEASE_EVIDENCE=str(target),
+    )
+    assert malformed_readback.returncode == 5
+    assert malformed_readback.stdout == ""
+    assert malformed_readback.stderr == (
+        "stage=lambda-readback-validate status=fail exit=5 reason=unclassified\n"
+    )
+    commands = log.read_text()
+    assert "lambda update-alias" in commands
+    assert "update-agent-runtime-endpoint" not in commands
+
+    target.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    target.chmod(0o600)
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    broken_token = run(
+        restore_shell,
+        MODE="restore",
+        PYTHON_BROKEN_NUL="token",
+        RELEASE_EVIDENCE=str(target),
+    )
+    assert broken_token.returncode == 43
+    assert broken_token.stdout == ""
+    assert broken_token.stderr == (
+        "stage=agentcore-token status=fail exit=43 reason=unclassified\n"
+    )
+    assert "RAW" not in broken_token.stderr
+    commands = log.read_text()
+    assert "lambda update-alias" in commands
+    assert "update-agent-runtime-endpoint" not in commands
+
+    hostile_targets = {
+        "EXPECTED_ACCOUNT": "111111111111",
+        "EXPECTED_REGION": "eu-west-1",
+        "LAMBDA_FUNCTION": "wrong-function",
+        "LAMBDA_ALIAS": "wrong-alias",
+        "AGENTCORE_RUNTIME": "wrong-runtime",
+        "AGENTCORE_ENDPOINT": "wrong-endpoint",
+        "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS": "false",
+        "AWS_ENDPOINT_URL": "http://127.0.0.1:9",
+        "AWS_ENDPOINT_URL_STS": "http://127.0.0.1:9/sts",
+        "AWS_ENDPOINT_URL_LAMBDA": "http://127.0.0.1:9/lambda",
+        "AWS_ENDPOINT_URL_BEDROCK_AGENTCORE_CONTROL": "http://127.0.0.1:9/agentcore",
+    }
+    log.write_text("")
+    hostile_capture = run(
+        capture_shell,
+        MODE="capture",
+        RELEASE_EVIDENCE=str(tmp_path / "hostile-capture-record"),
+        **hostile_targets,
+    )
+    assert hostile_capture.returncode == 0, hostile_capture.stderr
+    commands = log.read_text()
+    for expected in (
+        "--region us-east-1",
+        "--function-name tollchat-v2-chat-proxy --name live",
+        "--agent-runtime-id nova_toll_v2-W6989LEw44 --endpoint-name preview",
+    ):
+        assert expected in commands
+    assert not any(value in commands for value in hostile_targets.values())
+
+    target.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    target.chmod(0o600)
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    hostile_restore = run(
+        restore_shell,
+        MODE="restore",
+        RELEASE_EVIDENCE=str(target),
+        **hostile_targets,
+    )
+    assert hostile_restore.returncode == 0, hostile_restore.stderr
+    commands = log.read_text()
+    for expected in (
+        "--region us-east-1",
+        "--function-name tollchat-v2-chat-proxy --name live",
+        "--agent-runtime-id nova_toll_v2-W6989LEw44 --endpoint-name preview",
+    ):
+        assert expected in commands
+    assert not any(value in commands for value in hostile_targets.values())
+
+    for routing in routing_failures:
+        target.write_text(
+            "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+        )
+        target.chmod(0o600)
+        log.write_text("")
+        for path in state.iterdir():
+            path.unlink()
+        failed = run(
+            restore_shell,
+            MODE="restore",
+            LAMBDA_ROUTING=routing,
+            RELEASE_EVIDENCE=str(target),
+        )
+        assert failed.returncode != 0
+        assert re.fullmatch(
+            r"stage=lambda-readback-validate status=fail exit=[1-9][0-9]* reason=unclassified\n",
+            failed.stderr,
+        )
+        commands = log.read_text()
+        assert "lambda update-alias" in commands
+        assert "update-agent-runtime-endpoint" not in commands
+
+    log.write_text("")
+    (state / "lambda-get").unlink(missing_ok=True)
+    (state / "agent-get").unlink(missing_ok=True)
+    snapshot = run(
+        restore_shell,
+        MODE="restore",
+        LAMBDA_ROUTING="absent",
+        RELEASE_EVIDENCE=str(target),
+        MUTATE_RECORD=str(target),
+    )
+    assert snapshot.returncode == 0, snapshot.stderr
+    assert "function-version 7" in log.read_text()
+    assert "lambda_live_function_version=999" in target.read_text()
+
+    target.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    target.chmod(0o600)
+    custody_replacement = invalid_record(
+        "custody-replacement-record",
+        "lambda_live_function_version=999\nagentcore_endpoint_live_version=998\n",
+    )
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    custody_replaced = run(
+        restore_shell,
+        MODE="restore",
+        RELEASE_EVIDENCE=str(target),
+        CUSTODY_REPLACE_SOURCE=str(target),
+        CUSTODY_REPLACEMENT=str(custody_replacement),
+    )
+    assert custody_replaced.returncode != 0
+    assert custody_replaced.stdout == ""
+    assert custody_replaced.stderr == (
+        "stage=record-snapshot status=fail exit=1 reason=unclassified\n"
+    )
+    assert "lambda update-alias" not in log.read_text()
+
+    target.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    target.chmod(0o600)
+    replacement = invalid_record(
+        "replacement-record",
+        "lambda_live_function_version=999\nagentcore_endpoint_live_version=998\n",
+    )
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    replaced_path = run(
+        restore_shell,
+        MODE="restore",
+        RELEASE_EVIDENCE=str(target),
+        REPLACE_AFTER_OPEN=str(target),
+        REPLACEMENT=str(replacement),
+    )
+    assert replaced_path.returncode == 0, replaced_path.stderr
+    assert "function-version 7" in log.read_text()
+    assert "lambda_live_function_version=999" in target.read_text()
+
+    target.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    target.chmod(0o600)
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    ambiguous = run(
+        restore_shell,
+        MODE="restore",
+        AGENT_MODE="ambiguous",
+        RELEASE_EVIDENCE=str(target),
+    )
+    assert ambiguous.returncode == 0, ambiguous.stderr
+    commands = log.read_text().splitlines()
+    updates = [line for line in commands if "update-agent-runtime-endpoint" in line]
+    assert len(updates) == 2 and updates[0] == updates[1]
+    assert "--client-token 00000000-0000-4000-8000-000000000000" in updates[0]
+    update_positions = [
+        index
+        for index, command in enumerate(commands)
+        if "update-agent-runtime-endpoint" in command
+    ]
+    endpoint_position = next(
+        index
+        for index, command in enumerate(commands)
+        if "get-agent-runtime-endpoint" in command
+    )
+    assert update_positions[0] < endpoint_position < update_positions[1]
+
+    target.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    target.chmod(0o600)
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    unresolved = run(
+        restore_shell,
+        MODE="restore",
+        AGENT_MODE="unresolved",
+        RELEASE_EVIDENCE=str(target),
+    )
+    assert unresolved.returncode == 23
+    assert unresolved.stdout == ""
+    assert unresolved.stderr == (
+        "stage=agentcore-validate status=fail exit=23 reason=unclassified\n"
+    )
+    commands = log.read_text().splitlines()
+    updates = [line for line in commands if "update-agent-runtime-endpoint" in line]
+    reads = [
+        index
+        for index, command in enumerate(commands)
+        if "get-agent-runtime-endpoint" in command
+    ]
+    update_positions = [
+        index
+        for index, command in enumerate(commands)
+        if "update-agent-runtime-endpoint" in command
+    ]
+    assert len(updates) == 2 and updates[0] == updates[1]
+    assert update_positions[0] < reads[0] < update_positions[1] < reads[1]
+
+    target.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    target.chmod(0o600)
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    split_readback = run(
+        restore_shell,
+        MODE="restore",
+        AGENT_MODE="ambiguous",
+        MULTI_DOCUMENT="agent-restore-split",
+        RELEASE_EVIDENCE=str(target),
+    )
+    assert split_readback.returncode == 23
+    assert split_readback.stdout == ""
+    assert split_readback.stderr == (
+        "stage=agentcore-validate status=fail exit=23 reason=unclassified\n"
+    )
+    commands = log.read_text().splitlines()
+    assert sum("update-agent-runtime-endpoint" in command for command in commands) == 1
+    assert any("get-agent-runtime-endpoint" in command for command in commands)
+
+    for bad_response in ("arn", "name", "target"):
+        target.write_text(
+            "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+        )
+        target.chmod(0o600)
+        log.write_text("")
+        for path in state.iterdir():
+            path.unlink()
+        rejected = run(
+            restore_shell,
+            MODE="restore",
+            AGENT_MODE="ambiguous",
+            AGENT_BAD=bad_response,
+            RELEASE_EVIDENCE=str(target),
+        )
+        assert rejected.returncode != 0
+        assert re.fullmatch(
+            r"stage=agentcore-validate status=fail exit=[1-9][0-9]* reason=unclassified\n",
+            rejected.stderr,
+        )
+        commands = log.read_text().splitlines()
+        assert (
+            sum("update-agent-runtime-endpoint" in command for command in commands) == 1
+        )
+        assert any("get-agent-runtime-endpoint" in command for command in commands)
+
+    target.write_text(
+        "lambda_live_function_version=7\nagentcore_endpoint_live_version=8\n"
+    )
+    target.chmod(0o600)
+    log.write_text("")
+    for path in state.iterdir():
+        path.unlink()
+    lambda_failure = run(
+        restore_shell,
+        MODE="restore",
+        FAIL_LAMBDA="1",
+        SENTINEL_FAILURE="restore",
+        RELEASE_EVIDENCE=str(target),
+    )
+    assert lambda_failure.returncode == 19
+    assert lambda_failure.stdout == ""
+    assert lambda_failure.stderr.splitlines() == [
+        "stage=lambda-update status=fail exit=19 reason=unclassified"
+    ]
 
 
 def test_manual_oracle_migration_030_contract_is_offline_guarded_and_syntax_checked():
@@ -2657,7 +3831,6 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed():
         'get-caller-identity --query Account --output text)" = "903859731897"',
         "backend.production.hcl",
         "production.tfvars",
-        "production-release.tfplan",
         "is the operative development release path",
         "#330",
         "#331",
@@ -2666,6 +3839,7 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed():
         "-lock=false",
     ):
         assert text in DEPLOYMENT
+    assert "guarded\nproduction planner" in RUNBOOK
     assert DEPLOYMENT.index(
         "### Development foundation handoff (#330; no application release)"
     ) < DEPLOYMENT.index("### Guarded production release")
@@ -2705,205 +3879,18 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed():
         in later_apply
     )
 
-    gates = re.findall(
-        r'show -json "\$(?:DEVELOPMENT|PRODUCTION)_FOUNDATION_PLAN"(?: 2>/dev/null)? \| jq -e \'\n(.*?)\n\' >/dev/null(?: 2>/dev/null; then)?',
-        DEPLOYMENT,
-        re.DOTALL,
-    )
-    assert len(gates) == 2
-    assert "foundation_create_addresses" in gates[0]
-    assert "foundation_create_addresses" not in gates[1]
-
-    data_addresses = (
-        "data.aws_caller_identity.current",
-        "data.aws_region.current",
-        "data.aws_vpc.default",
-        "data.aws_subnets.default",
-        "data.aws_route_tables.default",
-        "data.aws_iam_policy_document.agentcore_artifacts",
-        "data.aws_iam_policy_document.raw_bucket",
-        "data.aws_iam_policy_document.tfstate_bucket",
-        "data.archive_file.placeholder",
-        "data.aws_iam_policy_document.lambda_assume",
-        "data.aws_iam_policy_document.fetcher",
-        "data.aws_iam_policy_document.replay_assume",
-        "data.aws_iam_policy_document.replay",
-        "data.aws_iam_policy_document.audit_kms",
-        "data.aws_iam_policy_document.alerts_kms",
-        "data.aws_iam_policy_document.audit_bucket",
-        "data.aws_prefix_list.s3",
-        "data.aws_iam_policy_document.ec2_assume",
-        "data.aws_iam_policy_document.tailscale_router",
-        "data.aws_subnet.tailscale_router",
-    )
-
-    def foundation_value() -> dict[str, object]:
-        return {
-            "vpc_id": "vpc-123",
-            "vpc_cidr_block": "10.0.0.0/16",
-            "private_subnet_ids": {"a": "subnet-a", "c": "subnet-c"},
-            "rds_security_group_id": "sg-rds",
-            "agentcore_endpoint_security_group_id": "sg-agentcore",
-            "eventbridge_endpoint_security_group_id": "sg-eventbridge",
-            "agentcore_vpc_endpoint_id": "vpce-agentcore",
-            "agentcore_vpc_endpoint_dns_name": "vpce.example.com",
-            "tollchat_api_vpc_endpoint_id": "vpce-api",
-            "raw_bucket_name": "raw-bucket",
-            "raw_kms_key_arn": "arn:aws:kms:us-east-1:920534282028:key/raw",
-            "agentcore_artifacts_bucket_name": "agentcore-bucket",
-            "db_instance": {
-                "identifier": "nova-toll-db",
-                "resource_id": "db-123",
-                "address": "db.example.com",
-                "port": 5432,
-            },
-            "alerts_topic_arn": "arn:aws:sns:us-east-1:920534282028:alerts",
-        }
-
-    def foundation_plan(
-        changes: object, foundation: object | None = None
-    ) -> dict[str, object]:
-        if foundation is None:
-            foundation = foundation_value()
-        return {
-            "resource_changes": changes,
-            "planned_values": {"outputs": {"foundation": {"value": foundation}}},
-        }
-
-    def change(mode: str, address: str, actions: list[str]) -> dict[str, object]:
-        return {"mode": mode, "address": address, "change": {"actions": actions}}
-
-    def outcomes(plan: object | str) -> list[bool]:
-        input_data = plan if isinstance(plan, str) else json.dumps(plan)
-        results = [
-            subprocess.run(
-                ["jq", "-e", gate], input=input_data, text=True, check=False
-            ).returncode
-            == 0
-            for gate in gates
-        ]
-        return results
-
-    accepted = (
-        foundation_plan([]),
-        foundation_plan([change("managed", "aws_s3_bucket.tfstate", ["no-op"])]),
-        foundation_plan([change("data", "data.aws_vpc.default", ["read"])]),
-        foundation_plan(
-            [change("data", address, ["read"]) for address in data_addresses]
-        ),
-        foundation_plan(
-            [
-                change("managed", "aws_s3_bucket.tfstate", ["no-op"]),
-                change("data", "data.aws_vpc.default", ["read"]),
-            ]
-        ),
-    )
-    for plan in accepted:
-        assert outcomes(plan) == [False, True]
-    for address in (
-        "aws_s3_bucket.tfstate",
-        'aws_s3_bucket_versioning.hardened["tfstate"]',
+    handoff = DEPLOYMENT.split("## Account-local foundation handoff", maxsplit=1)[
+        1
+    ].split("Application/database bootstrap", maxsplit=1)[0]
+    for text in (
+        "guarded\nproduction planner",
+        "current foundation output",
+        "validates its approved non-secret shape",
+        "planner-owned production handoff",
     ):
-        assert outcomes(foundation_plan([change("managed", address, ["create"])])) == [
-            False,
-            False,
-        ]
-
-    malformed: tuple[object, ...] = (
-        "not json",
-        {},
-        foundation_plan({}),
-        foundation_plan(None),
-        foundation_plan({"resource_changes": []}),
-        foundation_plan([None]),
-        foundation_plan(["resource"]),
-        foundation_plan([1]),
-        foundation_plan([{**change("managed", "", ["no-op"])}]),
-        foundation_plan(
-            [
-                {
-                    key: value
-                    for key, value in change("managed", "x", ["no-op"]).items()
-                    if key != "address"
-                }
-            ]
-        ),
-        foundation_plan([{**change("managed", "x", ["no-op"]), "mode": None}]),
-        foundation_plan(
-            [{**change("managed", "x", ["no-op"]), "mode": cast(object, [])}]
-        ),
-        foundation_plan([{"address": "x", "change": {"actions": ["no-op"]}}]),
-        foundation_plan([{**change("managed", "x", ["no-op"]), "change": None}]),
-        foundation_plan(
-            [{**change("managed", "x", ["no-op"]), "change": cast(object, [])}]
-        ),
-        foundation_plan([{"mode": "managed", "address": "x"}]),
-        foundation_plan(
-            [
-                {
-                    "mode": "managed",
-                    "address": "x",
-                    "change": cast(object, {}),
-                }
-            ]
-        ),
-        foundation_plan(
-            [{**change("managed", "x", ["no-op"]), "change": {"actions": None}}]
-        ),
-        foundation_plan(
-            [
-                {
-                    **change("managed", "x", ["no-op"]),
-                    "change": {"actions": cast(object, {})},
-                }
-            ]
-        ),
-        foundation_plan(
-            [{**change("managed", "x", ["no-op"]), "change": {"actions": "no-op"}}]
-        ),
-    )
-    for plan in malformed:
-        assert not any(outcomes(plan))
-
-    extra_output = foundation_value()
-    extra_output["unexpected_secret"] = "should reject"
-    missing_output_key = foundation_value()
-    del missing_output_key["raw_kms_key_arn"]
-    nested_extra = foundation_value()
-    cast(dict[str, object], nested_extra["db_instance"])["password"] = "should reject"
-    nested_missing = foundation_value()
-    del cast(dict[str, object], nested_missing["private_subnet_ids"])["c"]
-    missing_foundation_output = foundation_plan([], foundation_value())
-    del cast(
-        dict[str, object],
-        cast(dict[str, object], missing_foundation_output["planned_values"])["outputs"],
-    )["foundation"]
-    disallowed = (
-        *(
-            foundation_plan([change("managed", "x", [action])])
-            for action in ("create", "update", "delete", "read")
-        ),
-        *(
-            foundation_plan([change("data", "x", [action])])
-            for action in ("no-op", "create", "update", "delete")
-        ),
-        foundation_plan([change("data", "x", ["read", "read"])]),
-        foundation_plan([change("unknown", "x", ["read"])]),
-        foundation_plan([change("managed", "x", ["no-op", "read"])]),
-        foundation_plan(
-            [change("data", "data.aws_ssm_parameter.production_secret", ["read"])]
-        ),
-    )
-    for plan in disallowed:
-        assert not any(outcomes(plan))
-    for plan in (
-        foundation_plan([], extra_output),
-        foundation_plan([], missing_output_key),
-        foundation_plan([], nested_extra),
-        foundation_plan([], nested_missing),
-        missing_foundation_output,
-    ):
-        assert outcomes(plan) == [False, False]
+        assert text in handoff
+    assert "planned-output" not in handoff
+    assert "foundation-plan path" not in handoff
 
 
 def test_agent_measurement_privacy_notice_precedes_logging():
@@ -3045,7 +4032,8 @@ def test_metrics_aware_rollback_preserves_the_aggregate():
     assert "toll-v2-report-watchdog" not in rollback
     assert "historical" in rollback.lower()
     assert "usage#all" not in rollback
-    assert re.search(r"proxy and\s+public site together", rollback)
+    assert "manual restore may change only application routing" in rollback
+    assert "do not roll back automatically" in rollback
 
 
 def test_v2_agent_packages_are_required_for_real_deployments():
@@ -3730,12 +4718,14 @@ def test_issue330_repairs_preserve_roles_and_migration_gate():
     normalized_handoff = " ".join(handoff.split())
     normalized_development = " ".join(development.split())
 
-    assert "production-only" in normalized_handoff
+    assert "guarded production planner" in normalized_handoff
+    assert "current foundation output" in normalized_handoff
+    assert "planner-owned production handoff" in normalized_handoff
+    assert "planned-output" not in normalized_handoff
     assert (
-        "Do not use that generic planned-output or tfvars flow for development"
+        "not a local release path or a development-state discovery mechanism"
         in normalized_handoff
     )
-    assert "state is not discovered through a foundation output" in normalized_handoff
     assert "approved protected exception" in normalized_development
     assert (
         "private reviewed plan and encrypted, access-controlled Terraform state"
