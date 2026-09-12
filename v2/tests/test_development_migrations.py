@@ -71,6 +71,17 @@ def test_migration_candidates_are_registered_and_exclude_bootstrap_files() -> No
     )
 
 
+def test_production_registry_stops_at_authorized_migration_030() -> None:
+    schemas, _ = runner._registry()
+    migrations: Any = runner._production_migrations(
+        runner._migration_candidates(schemas)
+    )
+    assert migrations[-1].path == (
+        "v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql"
+    )
+    assert all(migration.number <= 30 for migration in migrations)
+
+
 def test_baseline_manifest_is_shared_and_matches_canonical_bytes() -> None:
     baselines = runner.bootstrap.load_baseline_manifest()
     assert {baseline.schema for baseline in baselines} == {"pricing", "oracle"}

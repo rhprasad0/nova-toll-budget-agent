@@ -643,6 +643,7 @@ def test_third_party_actions_follow_explicit_deploy_credential_clears() -> None:
         ("account", "migration-identity"),
         ("role", "migration-identity"),
         ("arn-account", "migration-identity"),
+        ("schema-version", "migration-identity"),
         ("public", "migration-database"),
         ("resource", "migration-database"),
         ("region", "migration-database"),
@@ -722,6 +723,10 @@ def test_actual_production_wrapper_boundaries(
             }
         ),
     }
+    if failure == "schema-version":
+        admission = json.loads(env["PRODUCTION_MIGRATION_ADMISSION"])
+        admission["schema_versions"]["oracle"] = "1.14.1"
+        env["PRODUCTION_MIGRATION_ADMISSION"] = json.dumps(admission)
     result = subprocess.run(
         ["bash", str(scripts / "run_production_migrations_workflow.sh")],
         cwd=tmp_path,
