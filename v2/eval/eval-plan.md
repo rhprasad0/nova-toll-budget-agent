@@ -2,8 +2,8 @@
 
 ## 1. Evaluation Requirements
 
-- **User Input:** Add a 52-week annual commute-day proposal and bring annual-affordability coverage to parity with the six-case current-price suite.
-- **Interpreted Evaluation Requirements:** Code-grade six annual cases spanning grounded fixed and modeled results, route and income clarification, adjustable annual-day estimation, complete required-input acquisition, and safe route unavailability while retaining existing current-price coverage.
+- **User Input:** Add independent annual outbound/return ramps and deterministic daily coverage for alternative selection, divergent-area confirmation, and ordinary reverse inference.
+- **Interpreted Evaluation Requirements:** Code-grade twelve annual cases spanning grounded fixed and modeled results, independent legs, retained-input alternative selection, divergent-area confirmation, route and income clarification, adjustable annual-day estimation, complete required-input acquisition, and safe route unavailability while retaining existing current-price coverage.
 
 ---
 
@@ -83,9 +83,14 @@ flowchart LR
 - **Leesburg annual-day estimate:** Propose 260 for Monday-Friday, wait for confirmation or adjustment, then honor 240 in the exact annual call.
 - **Leesburg salary range:** Request one annual gross estimate, retain the supplied commute details, then make the exact annual call after selection.
 - **Dulles Airport to Reagan Airport:** Accept the cross-direction current-price route, then explain a deterministically unsupported annual return route without scenarios, totals, or a current-price restart.
+- **Independent annual ramps:** Preserve separate AM and PM endpoints, including an explicit southbound Backlick return.
+- **Backlick annual alternatives:** Present the two observed Oracle alternatives for an invalid AM Backlick role and wait for selection.
+- **Retained alternative selection:** Retry only the selected Backlick alternative while retaining the other leg, schedule, days, and income.
+- **Divergent annual areas:** Ask for confirmation when Pentagon and Westpark are different work areas, then honor the confirmed legs.
+- **Ordinary annual reversal:** Infer the reversed return only when a separate return route is omitted.
 - **I-66 West to Route 7 / Route 7 to I-495 South:** Require observed tolls in
   the matching direction and schedule-derived `$0` in every free state.
-- **Total number of test cases:** 14; eight current-price and six annual-affordability cases.
+- **Total number of test cases:** 21; nine current-price and twelve annual-affordability cases.
 
 The separate hallucination battery uses one canonical annual-ballpark context,
 five reviewed prompt variants, and 200 repeat generations per variant. Repeats
@@ -98,7 +103,7 @@ measure reliability for that context, not route coverage.
 | `i95_southbound` | Two direct Westpark prices; northbound unavailable; both I-66 directions free |
 | `greenway_eb_peak` | I-66 eastbound tolled and westbound free (both free on holidays) |
 | `greenway_wb_peak` | I-66 westbound tolled and eastbound free (both free on holidays) |
-| `all` with `annual` suite | Six annual success, clarification, annual-day estimation, input-acquisition, and unavailable-route behaviors |
+| `all` with `annual` suite | Twelve annual success, independent-leg, confirmation, alternative-selection, clarification, annual-day estimation, input-acquisition, and unavailable-route behaviors |
 
 ---
 
@@ -153,3 +158,4 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Final annual parity run | Completed | 5/5 passed against the final prompt contract. |
 | 2026-08-22 | Annual-day estimate and evaluator hardening | Completed | 6/6 passed live: the agent proposed 260, waited, honored 240, and the evaluator enforced scenario-row and P50-context money binding. |
 | 2026-08-22 | Ballpark hallucination packet | Completed | Batch `batch_6a8a15e8f5fc81909b45e7e5831d0917` returned 1,000/1,000 responses. Adjudication found 99.6% strict quantitative grounding, one genuinely incorrect fact, and 93.1% conservative end-to-end compliance. |
+| 2026-09-10 | Independent annual legs | Implemented | Added five deterministic annual behaviors, observed Backlick alternative fixtures from a fresh PostGIS source database, and selected every new case in all three I-95 windows. A bounded southbound package selection passed all five cases without an observed lane state; northbound and reversal remain pending. |

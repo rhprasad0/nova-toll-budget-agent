@@ -193,7 +193,7 @@ def _canary(
         or not 0 <= record["elapsed_ms"] <= 60_000
         or record.get("model") != "gpt-5.6-luna"
         or record.get("tool_contract") != "1.5.0"
-        or record.get("prompt_version") != "2.0.3"
+        or record.get("prompt_version") != "2.3.0"
         or record.get("renderer_version") != "1.0.0"
         or record.get("success") is not True
         or record.get("commit") != sha

@@ -219,6 +219,11 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "exact point_id returned in that alternative" in normalized
     assert "use the required endpoint role as the tie-breaker" in normalized
     assert "MUST immediately make one corrective retry" in normalized
+    assert "non-Washington annual route validation failure" in normalized
+    assert (
+        "qualified-Washington single-alternative immediate corrective retry above"
+        " remains higher precedence" in normalized
+    )
     assert "prices only the current toll" in normalized
     assert "offer to check the current toll" in normalized
     assert "not affiliated with, endorsed by, or acting for VDOT" in normalized
@@ -305,7 +310,7 @@ def test_system_prompt_matches_its_versioned_contract():
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
 
-    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.0.3" == prompt_contract["current"]
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.3.0" == prompt_contract["current"]
     assert (
         toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
         == "1.0.0"
@@ -331,8 +336,8 @@ def test_system_prompt_matches_its_versioned_contract():
 def test_system_prompt_manifest_accepts_one_monotonic_release():
     previous = _contract_manifest()
     current = copy.deepcopy(previous)
-    current["system_prompt"]["current"] = "2.1.0"
-    current["system_prompt"]["releases"]["2.1.0"] = "a" * 64
+    current["system_prompt"]["current"] = "2.4.0"
+    current["system_prompt"]["releases"]["2.4.0"] = "a" * 64
 
     version_check.validate_manifest_update(previous, current)
     version_check.validate_manifest_update({}, previous)
@@ -385,8 +390,8 @@ def test_system_prompt_manifest_rejects_rewrites_removals_and_extra_releases():
         version_check.validate_manifest_update(previous, {})
 
     advanced = copy.deepcopy(previous)
-    advanced["system_prompt"]["current"] = "2.2.0"
-    advanced["system_prompt"]["releases"].update({"2.1.0": "b" * 64, "2.2.0": "c" * 64})
+    advanced["system_prompt"]["current"] = "2.5.0"
+    advanced["system_prompt"]["releases"].update({"2.4.0": "b" * 64, "2.5.0": "c" * 64})
     with pytest.raises(ValueError, match="exactly the new current release"):
         version_check.validate_manifest_update(previous, advanced)
 
