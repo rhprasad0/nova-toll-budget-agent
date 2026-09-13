@@ -2295,10 +2295,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "aws_lambda_alias.tollchat_live": ("lambda-alias", ("function_version",)),
             "aws_bedrockagentcore_agent_runtime.tollchat": (
                 "agentcore-code",
-                (
-                    "agent_runtime_artifact.code_configuration.code.s3.version_id",
-                    "environment_variables",
-                ),
+                ("environment_variables",),
             ),
             "aws_bedrockagentcore_agent_runtime_endpoint.tollchat": (
                 "agentcore-endpoint",
