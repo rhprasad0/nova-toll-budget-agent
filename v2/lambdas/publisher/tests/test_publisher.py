@@ -1264,7 +1264,8 @@ def test_i66_schedule_matches_oracle_holidays_and_clipped_six_minute_hours():
 
 def test_i66_source_revision_and_whole_route_alignment_fail_closed():
     start = datetime(2026, 1, 5, 10, 30, tzinfo=UTC)
-    end = start + timedelta(minutes=6)
+    end = start + timedelta(minutes=5)
+    bin_end = start + timedelta(minutes=6)
     path = _i66_path()
     selected = publisher._selected_i66_prices(
         [
@@ -1276,7 +1277,7 @@ def test_i66_source_revision_and_whole_route_alignment_fail_closed():
         end,
         path.legs[0],
     )
-    assert selected[end].price == Decimal("2.00")
+    assert selected[bin_end].price == Decimal("2.00")
     assert (
         publisher._selected_i66_prices(
             [_i66_source(start, end, calculated=end + timedelta(seconds=1))],
@@ -1303,6 +1304,17 @@ def test_i66_source_revision_and_whole_route_alignment_fail_closed():
             end,
             path.legs[0],
         )
+    later = publisher._selected_i66_prices(
+        [
+            _i66_source(start - timedelta(minutes=5), start, price="1.00"),
+            _i66_source(start, end, price="2.00"),
+        ],
+        datetime(2026, 1, 5, tzinfo=EASTERN),
+        datetime(2026, 1, 12, tzinfo=EASTERN),
+        end,
+        path.legs[0],
+    )
+    assert later[bin_end].price == Decimal("2.00")
     rows = publisher._hourly_i66_rows(
         (path,),
         {path.path_id: [selected]},
@@ -1373,7 +1385,7 @@ def test_i66_malformed_duration_is_pre_mutation_and_all_facility_scoped(
         return [
             _i66_source(
                 invalid_start,
-                invalid_start + timedelta(minutes=5),
+                invalid_start + timedelta(minutes=6),
                 zones=(leg.start_zone_id, leg.end_zone_id),
             )
         ]
@@ -1407,7 +1419,7 @@ def test_i66_boundary_slot_is_omitted_by_publication_envelope(monkeypatch):
             return []
         return [
             _i66_source(
-                boundary_end - timedelta(minutes=6),
+                boundary_end - timedelta(minutes=5),
                 boundary_end,
                 zones=(leg.start_zone_id, leg.end_zone_id),
             )

@@ -453,7 +453,7 @@ def _selected_i66_prices(
 ) -> dict[datetime, _I66Observation]:
     if leg.start_zone_id is None or leg.end_zone_id is None:
         raise ValueError("I-66 pricing leg is malformed")
-    selected: dict[datetime, tuple[datetime, str, _I66Observation]] = {}
+    selected: dict[datetime, tuple[datetime, datetime, str, _I66Observation]] = {}
     for row in rows:
         try:
             interval_start = _require_aware(
@@ -475,13 +475,13 @@ def _selected_i66_prices(
             or price < 0
             or zones != (leg.start_zone_id, leg.end_zone_id)
             or interval_start >= interval_end
-            or interval_end - interval_start != timedelta(minutes=6)
+            or interval_end - interval_start != timedelta(minutes=5)
             or interval_start.second
             or interval_start.microsecond
             or interval_end.second
             or interval_end.microsecond
-            or interval_start.minute % 6
-            or interval_end.minute % 6
+            or interval_start.minute % 5
+            or interval_end.minute % 5
         ):
             raise ValueError("I-66 source observation is malformed")
         if (
@@ -490,14 +490,16 @@ def _selected_i66_prices(
             or calculated > run_at.astimezone(UTC)
         ):
             continue
+        bin_end = interval_end.replace(minute=interval_end.minute // 6 * 6)
+        bin_end += timedelta(minutes=6)
         observation = _I66Observation(interval_start, interval_end, price)
-        candidate = (calculated, key, observation)
-        existing = selected.get(interval_end)
-        if existing and candidate[:2] == existing[:2] and observation != existing[2]:
+        candidate = (interval_end, calculated, key, observation)
+        existing = selected.get(bin_end)
+        if existing and candidate[:3] == existing[:3] and observation != existing[3]:
             raise ValueError("I-66 source revisions conflict")
-        if existing is None or candidate[:2] > existing[:2]:
-            selected[interval_end] = candidate
-    return {interval: selected[interval][2] for interval in selected}
+        if existing is None or candidate[:3] > existing[:3]:
+            selected[bin_end] = candidate
+    return {interval: selected[interval][3] for interval in selected}
 
 
 def _hourly_rows(
@@ -647,8 +649,8 @@ def _hourly_i66_rows(
                         _positive_overlap(
                             item.start,
                             item.end,
-                            hour,
-                            hour + timedelta(hours=1),
+                            interval - timedelta(minutes=6),
+                            interval,
                         )
                         for item in observations
                     ):
