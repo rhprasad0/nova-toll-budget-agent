@@ -1,0 +1,34 @@
+{
+  "name": "TollChat development",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "workspaceMount": "source=nova-toll-budget-agent-workspace,target=/workspaces/nova-toll-budget-agent,type=volume",
+  "workspaceFolder": "/workspaces/nova-toll-budget-agent",
+  "mounts": [
+    "source=nova-toll-dev-home,target=/home/vscode,type=volume",
+    "source=nova-toll-tailscale,target=/var/lib/tailscale,type=volume"
+  ],
+  "remoteUser": "vscode",
+  "remoteEnv": {
+    "CONTEXT7_API_KEY": "${localEnv:CONTEXT7_API_KEY}"
+  },
+  "capAdd": [
+    "NET_ADMIN",
+    "NET_RAW"
+  ],
+  "runArgs": [
+    "--device=/dev/net/tun:/dev/net/tun"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "openai.chatgpt"
+      ]
+    }
+  },
+  "initializeCommand": "if [ -n \"${SSH_AUTH_SOCK:-}\" ]; then echo 'SSH_AUTH_SOCK is set in the VS Code host process; fully quit VS Code and relaunch with SSH_AUTH_SOCK unset.' >&2; exit 1; fi",
+  "postCreateCommand": "if [ -e .git ]; then :; elif [ -z \"$(find . -mindepth 1 -maxdepth 1 -print -quit)\" ]; then git clone https://github.com/rhprasad0/nova-toll-budget-agent.git .; else echo 'Workspace is non-empty and is not a Git checkout; preserving it unchanged.' >&2; exit 1; fi",
+  "postStartCommand": "bash .devcontainer/post-start.sh"
+}
