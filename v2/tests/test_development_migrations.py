@@ -61,9 +61,9 @@ def test_main_rejects_arguments_before_runner(monkeypatch: pytest.MonkeyPatch) -
 def test_migration_candidates_are_registered_and_exclude_bootstrap_files() -> None:
     schemas, _ = runner._registry()
     migrations: Any = runner._migration_candidates(schemas)
-    assert len(migrations) == 29
+    assert len(migrations) == 30
     assert migrations[0].number == 2
-    assert migrations[-1].number == 31
+    assert migrations[-1].number == 32
     assert all("rollback" not in migration.path for migration in migrations)
     assert all(
         re.fullmatch(r"[0-9a-f]{64}", migration.source_sha256)
@@ -99,7 +99,7 @@ def test_baseline_manifest_is_shared_and_matches_canonical_bytes() -> None:
         runner.bootstrap.baseline_for_canonical(
             "oracle", "v2/db/oracle/schema.sql"
         ).version
-        == "1.14.1"
+        == "1.15.0"
     )
 
 
@@ -257,6 +257,10 @@ def test_production_preflight_recognizes_each_immutable_oracle_baseline() -> Non
         (
             "1.14.1",
             "02b742cbac045f993167cef446cad05e6f8e03f0270d6a1d799f232b3cd9c61c",
+        ),
+        (
+            "1.15.0",
+            "75376bd53bee64f93ddc152eba702c6391b1c9e97bc01b127f75e9f7ea1cbc35",
         ),
     }
     assert all(baseline.source_sha256 in sql for baseline in baselines)

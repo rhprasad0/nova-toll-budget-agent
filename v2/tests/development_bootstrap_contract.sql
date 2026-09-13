@@ -148,7 +148,7 @@ DECLARE
   ];
 BEGIN
   IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.3.0'
-     OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.14.1'
+     OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.15.0'
      OR (SELECT count(*) FROM oracle.toll_route_point) <> 220
      OR (SELECT count(*) FROM oracle.toll_connection) <> 996 THEN
     RAISE EXCEPTION 'development bootstrap data/version contract is wrong';
@@ -377,7 +377,7 @@ BEGIN
        WHERE NOT is_baseline OR migration_id <> 'baseline'
          OR (schema_name, schema_version, source_path) NOT IN (
            ('pricing', '1.3.0', 'v2/db/schema.sql'),
-           ('oracle', '1.14.1', 'v2/db/oracle/schema.sql')
+           ('oracle', '1.15.0', 'v2/db/oracle/schema.sql')
          )
          OR source_sha256 !~ '^[0-9a-f]{64}$'
          OR btrim(evidence) = ''

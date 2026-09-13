@@ -364,6 +364,26 @@ I95_REPORT_POINT_PLACES = {
     "i95:236SO": "Dale City",
 }
 
+I66_REPORT_POINT_PLACES = {
+    "1": "Idylwood",
+    "2": "Idylwood",
+    "3": "Idylwood",
+    "4": "West Falls Church",
+    "5": "Idylwood",
+    "6": "West Falls Church",
+    "7": "Tysons",
+    "8": "East Falls Church",
+    "9": "Ballston",
+    "10": "East Falls Church",
+    "11": "East Falls Church",
+    "12": "East Falls Church",
+    "13": "North Arlington",
+    "14": "Rosslyn",
+    "15": "Pentagon area",
+    "16": "Washington, D.C.",
+    "17": "North Arlington",
+}
+
 I95_REPORT_POINT_REGIONS = {
     "i95:2249ND": "Virginia",
 }

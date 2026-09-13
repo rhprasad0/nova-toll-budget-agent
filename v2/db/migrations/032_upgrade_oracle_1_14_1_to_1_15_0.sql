@@ -36,8 +36,8 @@ BEGIN
     FROM oracle.schema_version
     WHERE singleton;
 
-    IF current_version NOT IN ('1.14.0', '1.15.0') THEN
-        RAISE EXCEPTION 'expected oracle schema version 1.14.0 or 1.15.0, got %',
+    IF current_version NOT IN ('1.14.1', '1.15.0') THEN
+        RAISE EXCEPTION 'expected oracle schema version 1.14.1 or 1.15.0, got %',
             current_version;
     END IF;
     IF to_regprocedure('oracle.get_i95_i495_report_inputs()') IS NULL
@@ -57,7 +57,7 @@ BEGIN
         RAISE EXCEPTION 'oracle 1.15.0 requires the legacy report contract';
     END IF;
 
-    IF current_version = '1.14.0' AND (
+    IF current_version = '1.14.1' AND (
         to_regprocedure('oracle.get_agent_report_routes()') IS NOT NULL
         OR EXISTS (
             SELECT 1
@@ -79,12 +79,12 @@ BEGIN
               AND num_nonnulls(place_name, region, country_code) <> 0
         )
     ) THEN
-        RAISE EXCEPTION 'oracle 1.14.0 source state is incompatible';
+        RAISE EXCEPTION 'oracle 1.14.1 source state is incompatible';
     END IF;
 END
 $migration$;
 
-SELECT version = '1.14.0' AS oracle_upgrade_needed
+SELECT version = '1.14.1' AS oracle_upgrade_needed
 FROM oracle.schema_version
 WHERE singleton
 \gset
@@ -261,7 +261,7 @@ TO report_publisher;
 
 UPDATE oracle.schema_version
 SET version = '1.15.0', installed_at = statement_timestamp()
-WHERE singleton AND version = '1.14.0';
+WHERE singleton AND version = '1.14.1';
 
 \endif
 

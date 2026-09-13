@@ -1249,7 +1249,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         )
         expected_mutations = {
             "aws_lambda_function.loader": ("lambda-code", ("filename", "source_code_hash")),
-            "aws_lambda_function.publisher": ("lambda-code", ("filename", "source_code_hash")),
+            "aws_lambda_function.publisher": ("lambda-code", ("source_code_hash",)),
             "aws_s3_object.agentcore": ("artifact-upload", ("source_hash",)),
             "aws_s3_object.tollchat_proxy": ("artifact-upload", ("source_hash",)),
             'aws_s3_object.site_assets["coverage-locations.json"]': ("site-asset-upload", ("source_hash",)),

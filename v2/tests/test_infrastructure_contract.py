@@ -13138,7 +13138,7 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
     )
     assert migration_step["env"] == {
         "EXPECTED_PRICING_VERSION": "1.3.0",
-        "EXPECTED_ORACLE_VERSION": "1.14.1",
+        "EXPECTED_ORACLE_VERSION": "1.15.0",
     }
     defaults = cast(dict[str, object], job["defaults"])
     run_defaults = cast(dict[str, object], defaults["run"])
