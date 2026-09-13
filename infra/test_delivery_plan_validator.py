@@ -2442,6 +2442,15 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             for field, value in spec.create_identity:
                 before[field] = after[field] = value
             if address == "aws_bedrockagentcore_agent_runtime.tollchat":
+                runtime_identity = {
+                    "agent_runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl",
+                    "agent_runtime_id": "nova_toll_v2_development-Y69XBf88Bl",
+                    "agent_runtime_name": "nova_toll_v2_development",
+                    "region": "us-east-1",
+                    "role_arn": "arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-runtime-dev",
+                }
+                before.update(runtime_identity)
+                after.update(runtime_identity)
                 before["environment_variables"] = {
                     "DB_HOST": "database",
                     "PRICING_DB_USER": "pricing",
@@ -2454,7 +2463,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
 
         plan = _plan([update(address) for address in committed_updates])
         accepted = validate_plan(plan, manifest)
-        self.assertEqual(accepted["status"], "accepted")
+        self.assertEqual(accepted["status"], "accepted", accepted)
         self.assertEqual(accepted["reason_code"], "ok")
         self.assertEqual(accepted["addresses"], list(committed_updates))
 
