@@ -748,8 +748,8 @@ def _validate_publisher_policy(before: Any, after: Any, address: str, action: st
         or rds.get("Effect") != "Allow"
         or rds.get("Action") != ["rds-db:connect"]
         or rds.get("Resource") != sorted([
-            f"arn:aws:rds-db:{REGION}:{ACCOUNT}:dbuser:db-DMHPVKTM5V5HN3QJG2UKFDEGTI/report_publisher_development",
-            f"arn:aws:rds-db:{REGION}:{ACCOUNT}:dbuser:db-DMHPVKTM5V5HN3QJG2UKFDEGTI/report_reader_development",
+            f"arn:aws:rds-db:{REGION}:{ACCOUNT}:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/report_publisher_development",
+            f"arn:aws:rds-db:{REGION}:{ACCOUNT}:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/pricing_reader_development",
         ])
         or not isinstance(site_key, dict)
         or set(site_key) != {"Sid", "Effect", "Action", "Resource"}
