@@ -9,6 +9,15 @@ from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol, cast
 
+# Instrument before importing the application; production never enables this flag.
+if os.environ.get("UNIFIED_TRACES_DESTINATION_ENABLED") == "true":
+    from opentelemetry.instrumentation.auto_instrumentation import initialize
+
+    os.environ.setdefault("AGENT_OBSERVABILITY_ENABLED", "true")
+    os.environ.setdefault("OTEL_PYTHON_DISTRO", "aws_distro")
+    os.environ.setdefault("OTEL_PYTHON_CONFIGURATOR", "aws_configurator")
+    initialize(swallow_exceptions=False)
+
 import boto3
 from bedrock_agentcore import BedrockAgentCoreApp
 from strands.types.agent import Limits
