@@ -97,41 +97,8 @@ def test_i95_i495_report_points_have_curated_geographic_context() -> None:
     assert "IAD" in points["airport_iad"].aliases
     assert all("Reagan Airport" not in point.aliases for point in report_points)
 
-    i66_places = {
-        "1": "Idylwood",
-        "2": "Idylwood",
-        "3": "Idylwood",
-        "4": "West Falls Church",
-        "5": "Idylwood",
-        "6": "West Falls Church",
-        "7": "Tysons",
-        "8": "East Falls Church",
-        "9": "Ballston",
-        "10": "East Falls Church",
-        "11": "East Falls Church",
-        "12": "East Falls Church",
-        "13": "North Arlington",
-        "14": "Rosslyn",
-        "15": "Pentagon area",
-        "16": "Washington, D.C.",
-        "17": "North Arlington",
-    }
-    i66_points = [point for point in points.values() if point.network_id == "i66"]
-    assert len(i66_points) == 30
-    assert all(
-        point.place_name == i66_places[point.source_node_id] for point in i66_points
-    )
-    assert all(point.country_code == "US" for point in i66_points)
-    assert all(
-        point.region
-        == ("District of Columbia" if point.source_node_id == "16" else "Virginia")
-        for point in i66_points
-    )
-
     non_report_points = [
-        point
-        for point in points.values()
-        if point.network_id not in {"i95", "i495", "i66"}
+        point for point in points.values() if point.network_id not in {"i95", "i495"}
     ]
     assert all(point.place_name is None for point in non_report_points)
     assert all(point.region is None for point in non_report_points)

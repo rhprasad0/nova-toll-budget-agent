@@ -404,14 +404,20 @@ data "aws_iam_policy_document" "publisher" {
   }
 
   statement {
-    sid       = "ListPublicReports"
+    sid       = "ReadPublicationManifest"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.site.arn}/tolls/i95-i495/manifest.json"]
+  }
+
+  statement {
+    sid       = "FindPublicationManifest"
     actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.site.arn]
 
     condition {
       test     = "StringEquals"
       variable = "s3:prefix"
-      values   = ["tolls/i95-i495/", "tolls/i66/"]
+      values   = ["tolls/i95-i495/manifest.json"]
     }
   }
 
@@ -420,17 +426,7 @@ data "aws_iam_policy_document" "publisher" {
     actions = ["s3:PutObject"]
     resources = [
       "${aws_s3_bucket.site.arn}/tolls/i95-i495/*",
-      "${aws_s3_bucket.site.arn}/tolls/i66/*",
       "${aws_s3_bucket.site.arn}/sitemap.xml",
-    ]
-  }
-
-  statement {
-    sid     = "DeleteStalePublicReports"
-    actions = ["s3:DeleteObject"]
-    resources = [
-      "${aws_s3_bucket.site.arn}/tolls/i95-i495/*",
-      "${aws_s3_bucket.site.arn}/tolls/i66/*",
     ]
   }
 
@@ -609,10 +605,10 @@ resource "aws_scheduler_schedule" "publisher" {
 
 resource "aws_cloudwatch_metric_alarm" "report_generation_freshness" {
   alarm_name          = "toll-v2-report-generation-freshness${local.suffix}"
-  alarm_description   = "No complete I-95/I-495 and I-66 report generation in the trailing seven-day sliding window."
+  alarm_description   = "No complete I-95/I-495 report generation in the trailing seven-day sliding window."
   namespace           = "NovaToll"
   metric_name         = "V2ReportGenerationSuccess"
-  dimensions          = local.is_production ? { facility_scope = "both" } : { facility_scope = "both", Environment = var.environment }
+  dimensions          = local.is_production ? { facility = "i95_i495" } : { facility = "i95_i495", Environment = var.environment }
   statistic           = "Sum"
   period              = 86400
   evaluation_periods  = 7

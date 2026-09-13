@@ -134,7 +134,6 @@ ORACLE_APPLICATION_FUNCTIONS = (
     "get_i95_i495_ballpark_samples",
     "get_annual_ballpark_summary",
     "get_i95_i495_report_inputs",
-    "get_agent_report_routes",
 )
 ORACLE_APPLICATION_SIGNATURES = (
     ("get_toll_route_prompt_points", ""),
@@ -171,7 +170,6 @@ ORACLE_APPLICATION_SIGNATURES = (
         "jsonb, time without time zone, time without time zone, date[], jsonb, integer, timestamp with time zone",
     ),
     ("get_i95_i495_report_inputs", ""),
-    ("get_agent_report_routes", ""),
 )
 APPLICATION_DEFINITION_FINGERPRINTS = MappingProxyType(
     {
@@ -211,10 +209,9 @@ APPLICATION_DEFINITION_FINGERPRINTS = MappingProxyType(
         "oracle.get_i95_i495_ballpark_samples(integer, time without time zone, date[], timestamp with time zone)": "f951ee4d02fff3ace2d6516a30bcdf4765069ee70c9f216292ab734a66241fd2",
         "oracle.get_annual_ballpark_summary(jsonb, time without time zone, time without time zone, date[], jsonb, integer, timestamp with time zone)": "0dcd4b49285a2b3f71b30803538c2116b3d3c4ea4093733ed0c6dd7c80f8dca7",
         "oracle.get_i95_i495_report_inputs()": "471943dcea829d284e85a432fef362e530912a2fd6335f98bfe39e4f316c4f4a",
-        "oracle.get_agent_report_routes()": "3d3388330c88ef6b5652ed4506c6d79c7ca3397f44b5bd5f2e44763ccba06044",
     }
 )
-# Explicit runtime EXECUTE grants on the 20 application functions.  The
+# Explicit runtime EXECUTE grants on the 19 application functions.  The
 # identity argument strings use PostgreSQL's type-only catalog representation;
 # owner ACL entries are implicit and are intentionally excluded.
 ORACLE_FUNCTION_ACL_ALLOWLIST = (
@@ -242,7 +239,6 @@ ORACLE_FUNCTION_ACL_ALLOWLIST = (
         "pricing_caller",
     ),
     ("get_i95_i495_report_inputs", "", "report_publisher"),
-    ("get_agent_report_routes", "", "report_publisher"),
 )
 
 # Non-owner grants from the reviewed canonical production contract.  Owner
@@ -1173,7 +1169,7 @@ BEGIN
             WHERE dependency.classid = 'pg_proc'::regclass
               AND dependency.objid = procedure.oid
               AND dependency.deptype = 'e'
-          )) <> 20
+          )) <> 19
      OR EXISTS (
        SELECT 1 FROM pg_proc procedure
        JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace

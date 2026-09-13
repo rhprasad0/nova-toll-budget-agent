@@ -3608,7 +3608,7 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
         assert training_agent not in robots
     assert "cloudfront wait distribution-deployed" in DEPLOYMENT
     assert "aws_lambda_function.publisher" in DEPLOYMENT
-    assert 'test "$(wc -l <"$REPORT_URLS")" -eq 262' in DEPLOYMENT
+    assert 'test "$(wc -l <"$REPORT_URLS")" -eq 685' in DEPLOYMENT
     assert (
         "Disabling publication does not withdraw existing report objects" in DEPLOYMENT
     )
@@ -3640,10 +3640,9 @@ def test_public_report_launch_is_selected_environment_and_correlated():
         '--start-time "$REPORT_STARTED_MS"',
         "V2_REPORT_SMOKE_OK $REPORT_SMOKE_ID",
         "(published|unchanged)",
-        'schema_version == "3.0.0"',
-        "facility == $facility",
-        "route_count == $routes",
-        "report_manifest_is_valid i66 16",
+        'schema_version == "2.0.0"',
+        'publication_format_version == "2.0.0"',
+        "route_count == 685",
         'test("^[a-f0-9]{64}$")',
         "trap 'rm -f --",
     ):
@@ -3780,7 +3779,7 @@ def test_public_report_launch_is_selected_environment_and_correlated():
                     [
                         "bash",
                         "-c",
-                        f'set -euo pipefail; {manifest_check}; report_manifest_is_valid i95_i495 246 "$REPORT_MANIFEST"',
+                        f'set -euo pipefail; {manifest_check}; report_manifest_is_valid "$REPORT_MANIFEST"',
                     ],
                     check=False,
                     env={**os.environ, "REPORT_MANIFEST": fixture.name},
@@ -3789,14 +3788,15 @@ def test_public_report_launch_is_selected_environment_and_correlated():
             )
 
     manifest: dict[str, object] = {
-        "schema_version": "3.0.0",
-        "facility": "i95_i495",
-        "route_count": 246,
-        "week_end": "2026-08-01T00:00:00Z",
+        "schema_version": "2.0.0",
+        "publication_format_version": "2.0.0",
+        "route_count": 685,
+        "generation_id": "old-generation",
+        "published_at": "2026-08-01T00:00:00Z",
         "result_sha256": "a" * 64,
     }
     assert manifest_passes(manifest)
-    assert not manifest_passes({**manifest, "week_end": ""})
+    assert not manifest_passes({**manifest, "generation_id": ""})
     assert not manifest_passes({**manifest, "result_sha256": "A" * 64})
 
 
@@ -4435,19 +4435,16 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
         "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.reader}",
     ]
     assert "*" not in rds_resources.group(1)
-    assert "s3:GetObject" not in policy
+    assert 'actions   = ["s3:GetObject"]' in policy
+    assert "tolls/i95-i495/manifest.json" in policy
     assert 'actions   = ["s3:ListBucket"]' in policy
     assert 'variable = "s3:prefix"' in policy
-    assert 'values   = ["tolls/i95-i495/", "tolls/i66/"]' in policy
+    assert 'values   = ["tolls/i95-i495/manifest.json"]' in policy
     assert re.search(r'actions\s+= \["s3:PutObject"\]', policy)
     assert "tolls/i95-i495/*" in policy
-    assert "tolls/i66/*" in policy
     assert "sitemap.xml" in policy
     assert 'actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]' in policy
-    assert re.search(r'actions\s+= \["s3:DeleteObject"\]', policy)
-    assert '"${aws_s3_bucket.site.arn}/tolls/i95-i495/*"' in policy
-    assert '"${aws_s3_bucket.site.arn}/tolls/i66/*"' in policy
-    assert "s3:DeleteObjectVersion" not in policy
+    assert "s3:DeleteObject" not in policy
     assert 'resource "aws_vpc_security_group_egress_rule" "publisher_to_s3"' in MAIN_TF
     publisher_lambda = MAIN_TF.split(
         'resource "aws_lambda_function" "publisher"', maxsplit=1
@@ -4474,7 +4471,7 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
     assert "put_metric_data" not in PUBLISHER_HANDLER
     assert "print(" in PUBLISHER_HANDLER
     assert '"Timestamp": int(marker.timestamp() * 1000)' in PUBLISHER_HANDLER
-    assert "_week_window(invoked_at)" in PUBLISHER_HANDLER
+    assert "_weekly_run_at(invoked_at)" in PUBLISHER_HANDLER
     assert 'local.is_production ? "[..., event=\\"V2_LOAD_OK\\", feed]"' in MAIN_TF
     assert "TOLLCHAT_ENVIRONMENT = var.environment" in MAIN_TF
     assert "}, local.is_production ? {} : {" in publisher_lambda
@@ -4497,7 +4494,7 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
     assert "threshold           = 1" in freshness_alarm
     assert 'comparison_operator = "LessThanThreshold"' in freshness_alarm
     assert 'treat_missing_data  = "breaching"' in freshness_alarm
-    assert 'facility_scope = "both"' in freshness_alarm
+    assert 'facility = "i95_i495"' in freshness_alarm
     assert "Environment = var.environment" in freshness_alarm
     assert "alarm_actions       = local.alarm_actions" in freshness_alarm
     assert (V2_ROOT / "scripts" / "build_publisher_zip.sh").exists()
@@ -13138,7 +13135,7 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
     )
     assert migration_step["env"] == {
         "EXPECTED_PRICING_VERSION": "1.3.0",
-        "EXPECTED_ORACLE_VERSION": "1.15.0",
+        "EXPECTED_ORACLE_VERSION": "1.14.1",
     }
     defaults = cast(dict[str, object], job["defaults"])
     run_defaults = cast(dict[str, object], defaults["run"])
