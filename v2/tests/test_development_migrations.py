@@ -718,7 +718,8 @@ def test_private_render_accepts_every_registered_migration(tmp_path: Path) -> No
     assert migrations
     for migration in migrations:
         destination = tmp_path / Path(migration.path).name
-        runner.bootstrap.render(runner.ROOT / migration.path, destination)
+        runner._render_development_migration(runner.ROOT / migration.path, destination)
+        assert re.search(r"\bpricing_owner\b", destination.read_text()) is None
         runner._remove_terminal_commit(destination)
 
 
