@@ -724,6 +724,9 @@ def test_private_render_accepts_every_registered_migration(tmp_path: Path) -> No
         if migration.number == 31:
             assert "oracle.ST_MakePoint" not in rendered
             assert "format(" not in rendered
+            assert "END::oracle.geography" not in rendered
+            assert "SET location = coordinate.location" in rendered
+            assert ") AS coordinate(point_id, location)" in rendered
             assert (
                 "'SRID=4326;POINT(-77.0659710000000 38.8663530000000)'"
                 "::oracle.geography(Point,4326)"
