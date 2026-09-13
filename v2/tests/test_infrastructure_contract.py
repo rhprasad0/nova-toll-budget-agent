@@ -7086,11 +7086,20 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         ],
         "PassAgentCoreTraceLogsRole": ["iam:PassRole"],
         "PassAgentCoreTraceFirehoseRole": ["iam:PassRole"],
+        "ManageAgentCoreTraceRuntimePolicy": ["iam:PutRolePolicy"],
     }
     assert by_sid["UpdateReportPublisherInlinePolicy"]["resources"] == [
         "arn:aws:iam::${local.development_delivery_account_id}:role/toll-v2-report-publisher-dev"
     ]
     assert by_sid["UpdateReportPublisherInlinePolicy"]["conditions"] == []
+    assert by_sid["ManageAgentCoreTraceRuntimePolicy"] == {
+        "sid": "ManageAgentCoreTraceRuntimePolicy",
+        "actions": ["iam:PutRolePolicy"],
+        "resources": [
+            "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-agentcore-runtime-dev"
+        ],
+        "conditions": [],
+    }
     assert by_sid["UpdateReportGenerationFreshnessAlarm"] == {
         "sid": "UpdateReportGenerationFreshnessAlarm",
         "actions": ["cloudwatch:PutMetricAlarm"],
@@ -9070,6 +9079,7 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
             "ReadAgentCoreTraceFirehose",
             "ManageAgentCoreTraceSubscriptions",
             "ManageAgentCoreTraceFirehose",
+            "ManageAgentCoreTraceRuntimePolicy",
             "PassAgentCoreTraceLogsRole",
             "PassAgentCoreTraceFirehoseRole",
             "ManageAgentCoreTraceRetention",
@@ -9102,6 +9112,7 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
         "ReadAgentCoreTraceFirehose",
         "ManageAgentCoreTraceSubscriptions",
         "ManageAgentCoreTraceFirehose",
+        "ManageAgentCoreTraceRuntimePolicy",
         "PassAgentCoreTraceLogsRole",
         "PassAgentCoreTraceFirehoseRole",
         "ManageAgentCoreTraceRetention",
@@ -9380,7 +9391,7 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
 
 def test_development_delivery_policy_set_is_deterministic_and_bounded():
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 66
+    assert len(statements) == 67
     expected_groups = {
         "state": (
             0,
@@ -9421,13 +9432,14 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         ),
         "trace": (
             19,
-            29,
+            30,
             [
                 "ReadAgentCoreTraceSubscription",
                 "ReadAgentCoreTraceRoles",
                 "ReadAgentCoreTraceFirehose",
                 "ManageAgentCoreTraceSubscriptions",
                 "ManageAgentCoreTraceFirehose",
+                "ManageAgentCoreTraceRuntimePolicy",
                 "PassAgentCoreTraceLogsRole",
                 "PassAgentCoreTraceFirehoseRole",
                 "ManageApplicationAlarms",
@@ -9436,8 +9448,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
         "storage": (
-            29,
-            35,
+            30,
+            36,
             [
                 "ManageApplicationSiteBuckets",
                 "ManageApplicationMeasurementBucket",
@@ -9448,8 +9460,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
         "data": (
-            35,
-            45,
+            36,
+            46,
             [
                 "UseApplicationKmsKeys",
                 "ReadRetainedMeasurementKey",
@@ -9464,8 +9476,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
         "runtime": (
-            45,
-            55,
+            46,
+            56,
             [
                 "ManageApplicationSchedules",
                 "PassTimedChecksSchedulerRole",
@@ -9480,8 +9492,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
         "edge": (
-            55,
-            66,
+            56,
+            67,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -9502,7 +9514,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
     )
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups)
-    assert len(rendered_aggregate) == len(statements) == 66
+    assert len(rendered_aggregate) == len(statements) == 67
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
         "StringEquals": {"aws:RequestedRegion": "us-east-1"}
