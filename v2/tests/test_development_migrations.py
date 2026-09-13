@@ -61,9 +61,9 @@ def test_main_rejects_arguments_before_runner(monkeypatch: pytest.MonkeyPatch) -
 def test_migration_candidates_are_registered_and_exclude_bootstrap_files() -> None:
     schemas, _ = runner._registry()
     migrations: Any = runner._migration_candidates(schemas)
-    assert len(migrations) == 29
+    assert len(migrations) == 30
     assert migrations[0].number == 2
-    assert migrations[-1].number == 31
+    assert migrations[-1].number == 32
     assert all("rollback" not in migration.path for migration in migrations)
     assert all(
         re.fullmatch(r"[0-9a-f]{64}", migration.source_sha256)
@@ -99,7 +99,7 @@ def test_baseline_manifest_is_shared_and_matches_canonical_bytes() -> None:
         runner.bootstrap.baseline_for_canonical(
             "oracle", "v2/db/oracle/schema.sql"
         ).version
-        == "1.14.1"
+        == "1.15.0"
     )
 
 
@@ -258,6 +258,10 @@ def test_production_preflight_recognizes_each_immutable_oracle_baseline() -> Non
             "1.14.1",
             "02b742cbac045f993167cef446cad05e6f8e03f0270d6a1d799f232b3cd9c61c",
         ),
+        (
+            "1.15.0",
+            "75376bd53bee64f93ddc152eba702c6391b1c9e97bc01b127f75e9f7ea1cbc35",
+        ),
     }
     assert all(baseline.source_sha256 in sql for baseline in baselines)
 
@@ -343,7 +347,7 @@ def test_generated_session_is_one_locked_psql_stream() -> None:
     rendered = Path("/private/002.sql")
     sql = runner._session_sql(
         (migration,),
-        {"pricing": "1.3.0", "oracle": "1.14.0"},
+        {"pricing": "1.3.0", "oracle": "1.15.0"},
         {migration.path: rendered},
         "b" * 40,
         "12345678-1234-4234-8234-123456789abc",
@@ -544,7 +548,7 @@ def test_run_renders_captured_committed_bytes(
     monkeypatch.setattr(
         runner,
         "_registry",
-        lambda: ((), {"pricing": "1.3.0", "oracle": "1.14.0"}),
+        lambda: ((), {"pricing": "1.3.0", "oracle": "1.15.0"}),
     )
 
     def fake_candidates(_schemas: Any) -> tuple[Any, ...]:
@@ -583,7 +587,7 @@ def test_run_renders_captured_committed_bytes(
         run_id: str,
     ) -> str:
         rendered_sources.append(rendered[migration.path])
-        return f"\\echo TOLLCHAT_RESULT_{run_id} 1.3.0 1.14.0 1.3.0 1.14.0"
+        return f"\\echo TOLLCHAT_RESULT_{run_id} 1.3.0 1.15.0 1.3.0 1.15.0"
 
     monkeypatch.setattr(runner, "_session_sql", fake_session)
 
@@ -617,7 +621,7 @@ def test_run_rejects_worktree_swap_after_capture(
     monkeypatch.setattr(runner, "ROOT", tmp_path)
     monkeypatch.setattr(runner, "MIGRATIONS_DIR", source.parent)
     monkeypatch.setattr(
-        runner, "_registry", lambda: ((), {"pricing": "1.3.0", "oracle": "1.14.0"})
+        runner, "_registry", lambda: ((), {"pricing": "1.3.0", "oracle": "1.15.0"})
     )
 
     def fake_candidates(_schemas: Any) -> tuple[Any, ...]:
@@ -746,8 +750,8 @@ def test_main_success_serializes_allowlisted_result(
         return {
             "database": runner.DATABASE,
             "user": runner.USER,
-            "before": {"pricing": "1.3.0", "oracle": "1.14.0"},
-            "after": {"pricing": "1.3.0", "oracle": "1.14.0"},
+            "before": {"pricing": "1.3.0", "oracle": "1.15.0"},
+            "after": {"pricing": "1.3.0", "oracle": "1.15.0"},
             "applied": [],
             "commit": "a" * 40,
             "run_id": "12345678-1234-4234-8234-123456789abc",
@@ -777,7 +781,7 @@ def test_main_uses_one_psql_boundary_for_noop(
     monkeypatch.setattr(
         runner,
         "_registry",
-        lambda: ((), {"pricing": "1.3.0", "oracle": "1.14.0"}),
+        lambda: ((), {"pricing": "1.3.0", "oracle": "1.15.0"}),
     )
     monkeypatch.setattr(runner, "_migration_candidates", _empty_candidates)
     monkeypatch.setattr(runner, "_run_capture", _fixed_commit)
@@ -791,7 +795,7 @@ def test_main_uses_one_psql_boundary_for_noop(
         run_id: str = match.group(1)
         return SimpleNamespace(
             returncode=0,
-            stdout=f"TOLLCHAT_RESULT_{run_id} 1.3.0 1.14.0 1.3.0 1.14.0\n",
+            stdout=f"TOLLCHAT_RESULT_{run_id} 1.3.0 1.15.0 1.3.0 1.15.0\n",
             stderr="",
         )
 
@@ -805,7 +809,7 @@ def test_main_uses_one_psql_boundary_for_noop(
         == result["after"]
         == {
             "pricing": "1.3.0",
-            "oracle": "1.14.0",
+            "oracle": "1.15.0",
         }
     )
 
@@ -821,7 +825,7 @@ def test_main_rejects_psql_failure_or_missing_marker(
     monkeypatch.setattr(
         runner,
         "_registry",
-        lambda: ((), {"pricing": "1.3.0", "oracle": "1.14.0"}),
+        lambda: ((), {"pricing": "1.3.0", "oracle": "1.15.0"}),
     )
     monkeypatch.setattr(runner, "_migration_candidates", _empty_candidates)
     monkeypatch.setattr(runner, "_run_capture", _fixed_commit)

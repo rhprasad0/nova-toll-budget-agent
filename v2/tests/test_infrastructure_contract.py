@@ -3608,7 +3608,7 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
         assert training_agent not in robots
     assert "cloudfront wait distribution-deployed" in DEPLOYMENT
     assert "aws_lambda_function.publisher" in DEPLOYMENT
-    assert 'test "$(wc -l <"$REPORT_URLS")" -eq 685' in DEPLOYMENT
+    assert 'test "$(wc -l <"$REPORT_URLS")" -eq 262' in DEPLOYMENT
     assert (
         "Disabling publication does not withdraw existing report objects" in DEPLOYMENT
     )
@@ -3640,9 +3640,10 @@ def test_public_report_launch_is_selected_environment_and_correlated():
         '--start-time "$REPORT_STARTED_MS"',
         "V2_REPORT_SMOKE_OK $REPORT_SMOKE_ID",
         "(published|unchanged)",
-        'schema_version == "2.0.0"',
-        'publication_format_version == "2.0.0"',
-        "route_count == 685",
+        'schema_version == "3.0.0"',
+        "facility == $facility",
+        "route_count == $routes",
+        "report_manifest_is_valid i66 16",
         'test("^[a-f0-9]{64}$")',
         "trap 'rm -f --",
     ):
@@ -3779,7 +3780,7 @@ def test_public_report_launch_is_selected_environment_and_correlated():
                     [
                         "bash",
                         "-c",
-                        f'set -euo pipefail; {manifest_check}; report_manifest_is_valid "$REPORT_MANIFEST"',
+                        f'set -euo pipefail; {manifest_check}; report_manifest_is_valid i95_i495 246 "$REPORT_MANIFEST"',
                     ],
                     check=False,
                     env={**os.environ, "REPORT_MANIFEST": fixture.name},
@@ -3788,15 +3789,14 @@ def test_public_report_launch_is_selected_environment_and_correlated():
             )
 
     manifest: dict[str, object] = {
-        "schema_version": "2.0.0",
-        "publication_format_version": "2.0.0",
-        "route_count": 685,
-        "generation_id": "old-generation",
-        "published_at": "2026-08-01T00:00:00Z",
+        "schema_version": "3.0.0",
+        "facility": "i95_i495",
+        "route_count": 246,
+        "week_end": "2026-08-01T00:00:00Z",
         "result_sha256": "a" * 64,
     }
     assert manifest_passes(manifest)
-    assert not manifest_passes({**manifest, "generation_id": ""})
+    assert not manifest_passes({**manifest, "week_end": ""})
     assert not manifest_passes({**manifest, "result_sha256": "A" * 64})
 
 
@@ -13135,7 +13135,7 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
     )
     assert migration_step["env"] == {
         "EXPECTED_PRICING_VERSION": "1.3.0",
-        "EXPECTED_ORACLE_VERSION": "1.14.1",
+        "EXPECTED_ORACLE_VERSION": "1.15.0",
     }
     defaults = cast(dict[str, object], job["defaults"])
     run_defaults = cast(dict[str, object], defaults["run"])

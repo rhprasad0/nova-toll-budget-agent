@@ -252,7 +252,7 @@ assert set(result) == {
 }
 assert result["database"] == "nova_toll_development"
 assert result["user"] == "schema_migrator_development"
-assert result["before"] == result["after"] == {"pricing": "1.3.0", "oracle": "1.14.1"}
+assert result["before"] == result["after"] == {"pricing": "1.3.0", "oracle": "1.15.0"}
 assert result["applied"] == []
 assert re.fullmatch(r"[0-9a-f]{40}", result["commit"])
 assert re.fullmatch(
@@ -290,7 +290,7 @@ migration = runner.Migration(
     source_sha256=hashlib.sha256(Path(migration_path).read_bytes()).hexdigest(),
 )
 
-runner._registry = lambda: ((), {"pricing": "1.0.1", "oracle": "1.14.1"})
+runner._registry = lambda: ((), {"pricing": "1.0.1", "oracle": "1.15.0"})
 runner._migration_candidates = lambda _schemas: (migration,)
 runner._history_preflight_sql = lambda *_args, **_kwargs: ""
 

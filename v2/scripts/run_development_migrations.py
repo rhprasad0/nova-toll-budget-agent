@@ -1146,7 +1146,7 @@ def run(profile: MigrationProfile = DEVELOPMENT_PROFILE) -> dict[str, object]:
 
 
 def _production_baselines() -> tuple[bootstrap.Baseline, ...]:
-    """Bind the recurring runner to the two immutable adopted rows."""
+    """Bind the recurring runner to the immutable adopted rows."""
     return tuple(
         bootstrap.Baseline(
             schema=baseline.schema,

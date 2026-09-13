@@ -364,6 +364,26 @@ I95_REPORT_POINT_PLACES = {
     "i95:236SO": "Dale City",
 }
 
+I66_REPORT_POINT_PLACES = {
+    "1": "Idylwood",
+    "2": "Idylwood",
+    "3": "Idylwood",
+    "4": "West Falls Church",
+    "5": "Idylwood",
+    "6": "West Falls Church",
+    "7": "Tysons",
+    "8": "East Falls Church",
+    "9": "Ballston",
+    "10": "East Falls Church",
+    "11": "East Falls Church",
+    "12": "East Falls Church",
+    "13": "North Arlington",
+    "14": "Rosslyn",
+    "15": "Pentagon area",
+    "16": "Washington, D.C.",
+    "17": "North Arlington",
+}
+
 I95_REPORT_POINT_REGIONS = {
     "i95:2249ND": "Virginia",
 }
@@ -656,6 +676,11 @@ def build_points() -> dict[str, Point]:
                     metadata.update(
                         _alternative_ranking(network_id, source_node_id, point_id)
                     )
+                    place_name = (
+                        I66_REPORT_POINT_PLACES[source_node_id]
+                        if network_id == "i66"
+                        else None
+                    )
                     points[point_id] = Point(
                         point_id=point_id,
                         network_id=network_id,
@@ -663,9 +688,15 @@ def build_points() -> dict[str, Point]:
                         point_type=point_type,
                         direction=direction,
                         label=point_label,
-                        place_name=None,
-                        region=None,
-                        country_code=None,
+                        place_name=place_name,
+                        region=(
+                            "District of Columbia"
+                            if network_id == "i66" and source_node_id == "16"
+                            else "Virginia"
+                            if network_id == "i66"
+                            else None
+                        ),
+                        country_code="US" if network_id == "i66" else None,
                         longitude=longitude,
                         latitude=latitude,
                         aliases=aliases,

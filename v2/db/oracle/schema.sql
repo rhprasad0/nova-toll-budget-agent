@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.14.1
+-- oracle schema version: 1.15.0
 
 \set ON_ERROR_STOP on
 
@@ -163,7 +163,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.14.1');
+INSERT INTO oracle.schema_version (version) VALUES ('1.15.0');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,
@@ -2629,6 +2629,141 @@ ORDER BY
     comparison.comparison_offset
 $function$;
 
+CREATE FUNCTION oracle.get_agent_report_routes() RETURNS TABLE (
+    facility text,
+    path_id text,
+    path_order integer,
+    pricing_legs jsonb,
+    origin_area text,
+    destination_area text,
+    direction text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+WITH report_points AS MATERIALIZED (
+    SELECT
+        logical.facility,
+        point.point_id,
+        point.point_type,
+        point.direction,
+        point.place_name
+    FROM (VALUES
+        ('i66'::text, ARRAY['i66']::text[]),
+        ('i95_i495'::text, ARRAY['i95', 'i495']::text[])
+    ) AS logical(facility, networks)
+    JOIN oracle.toll_route_point AS point
+      ON point.network_id = ANY(logical.networks)
+), candidates AS MATERIALIZED (
+    SELECT
+        origin.facility,
+        origin.point_id AS origin_point_id,
+        destination.point_id AS destination_point_id,
+        origin.place_name AS origin_area,
+        destination.place_name AS destination_area,
+        CASE origin.direction
+            WHEN 'NB' THEN 'northbound'
+            WHEN 'SB' THEN 'southbound'
+            WHEN 'EB' THEN 'eastbound'
+            WHEN 'WB' THEN 'westbound'
+        END AS direction,
+        resolved.point_ids,
+        resolved.connection_ids,
+        oracle.route_pricing_legs(
+            resolved.point_ids, resolved.connection_ids
+        ) AS full_pricing_legs
+    FROM report_points AS origin
+    JOIN report_points AS destination
+      ON destination.facility = origin.facility
+     AND destination.point_type = 'exit'
+    CROSS JOIN LATERAL oracle.resolve_toll_route_internal(
+        origin.point_id, destination.point_id, false
+    ) AS resolved
+    WHERE origin.point_type = 'entry'
+      AND resolved.status = 'valid'
+), pure_candidates AS MATERIALIZED (
+    SELECT
+        candidate.*,
+        legs.pricing_legs,
+        legs.signature
+    FROM candidates AS candidate
+    CROSS JOIN LATERAL (
+        SELECT
+            jsonb_agg(
+                jsonb_build_object(
+                    'route_step_id', leg.value->'route_step_id',
+                    'facility', leg.value->'facility',
+                    'pricing_key', leg.value->'pricing_key'
+                ) ORDER BY leg.ord
+            ) AS pricing_legs,
+            jsonb_agg(
+                CASE candidate.facility
+                    WHEN 'i66' THEN jsonb_build_object(
+                        'facility', candidate.facility,
+                        'direction', candidate.direction,
+                        'start_zone_id',
+                            leg.value->'pricing_key'->'start_zone_id',
+                        'end_zone_id',
+                            leg.value->'pricing_key'->'end_zone_id',
+                        'charge_index',
+                            leg.value->'pricing_key'->'charge_index'
+                    )
+                    WHEN 'i95_i495' THEN jsonb_build_object(
+                        'facility', candidate.facility,
+                        'direction', candidate.direction,
+                        'od_pair_id', leg.value->'pricing_key'->'od_pair_id',
+                        'charge_index',
+                            leg.value->'pricing_key'->'charge_index'
+                    )
+                END ORDER BY leg.ord
+            ) AS signature
+        FROM jsonb_array_elements(candidate.full_pricing_legs)
+             WITH ORDINALITY AS leg(value, ord)
+    ) AS legs
+    WHERE jsonb_array_length(candidate.full_pricing_legs) > 0
+      AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(candidate.full_pricing_legs) AS leg(value)
+          WHERE leg.value->>'facility' <> candidate.facility
+      )
+), representatives AS MATERIALIZED (
+    SELECT DISTINCT ON (pure.facility, pure.signature)
+        pure.facility,
+        pure.signature,
+        pure.pricing_legs,
+        pure.origin_area,
+        pure.destination_area,
+        pure.direction
+    FROM pure_candidates AS pure
+    ORDER BY
+        pure.facility,
+        pure.signature,
+        pure.origin_point_id,
+        pure.destination_point_id,
+        pure.point_ids::text,
+        pure.connection_ids::text
+), ordered AS (
+    SELECT
+        representative.*,
+        row_number() OVER (
+            ORDER BY representative.facility, representative.signature
+        )::integer AS path_order
+    FROM representatives AS representative
+)
+SELECT
+    ordered.facility,
+    ordered.facility || '-' || md5(ordered.signature::text),
+    ordered.path_order,
+    ordered.pricing_legs,
+    ordered.origin_area,
+    ordered.destination_area,
+    ordered.direction
+FROM ordered
+ORDER BY ordered.path_order
+$function$;
+
 REVOKE ALL ON ALL TABLES IN SCHEMA oracle FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA oracle FROM PUBLIC;
 REVOKE ALL ON TYPE oracle.geometry, oracle.geography FROM PUBLIC;
@@ -2712,6 +2847,10 @@ ALTER FUNCTION oracle.get_annual_ballpark_summary(
     jsonb, time, time, date[], jsonb, integer, timestamptz
 ) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.get_i95_i495_report_inputs() OWNER TO oracle_owner;
+ALTER FUNCTION oracle.get_agent_report_routes() OWNER TO oracle_owner;
 ALTER SCHEMA oracle OWNER TO oracle_owner;
+SET LOCAL ROLE oracle_owner;
+GRANT EXECUTE ON FUNCTION oracle.get_agent_report_routes()
+TO report_publisher;
 
 COMMIT;

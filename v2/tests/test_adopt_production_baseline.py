@@ -105,7 +105,7 @@ def test_adoption_selects_only_current_canonical_rows() -> None:
     assert {
         (baseline.schema, baseline.version)
         for baseline in adopt.load_baseline_manifest()
-    } == {("pricing", "1.3.0"), ("oracle", "1.14.1")}
+    } == {("pricing", "1.3.0"), ("oracle", "1.15.0")}
 
 
 @pytest.mark.parametrize(
@@ -1567,7 +1567,7 @@ ORDER BY type.typname, privilege.grantee;
         == no_op["after"]
         == {
             "pricing": "1.3.0",
-            "oracle": "1.14.1",
+            "oracle": "1.15.0",
         }
     )
     assert no_op["applied"] == []
@@ -1587,7 +1587,7 @@ ORDER BY type.typname, privilege.grantee;
         )
         session = runner._session_sql(  # pyright: ignore[reportPrivateUsage]
             (migration,),
-            {"pricing": "1.3.1", "oracle": "1.14.1"},
+            {"pricing": "1.3.1", "oracle": "1.15.0"},
             {migration.path: rendered},
             "a" * 40,
             "12345678-1234-4234-8234-123456789abc",
