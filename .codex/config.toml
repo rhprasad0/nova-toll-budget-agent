@@ -1,6 +1,18 @@
 [mcp_servers.context7]
+command = "bash"
+args = ["-c", 'set -a; context7_env="$HOME/.config/context7/env"; if [ -r "$context7_env" ]; then . "$context7_env"; fi; exec npx -y @upstash/context7-mcp@4.0.4']
+
+[mcp_servers.exa]
+url = "https://mcp.exa.ai/mcp"
+
+[mcp_servers.aws-mcp]
+command = "uvx"
+args = ["mcp-proxy-for-aws==1.6.4", "https://aws-mcp.us-east-1.api.aws/mcp", "--profile", "nova-toll-dev"]
+
+[mcp_servers.agentmemory]
 command = "npx"
-args = ["-y", "@upstash/context7-mcp@4.0.4"]
+args = ["-y", "@agentmemory/mcp@0.9.29"]
+env = { AGENTMEMORY_URL = "http://127.0.0.1:3111" }
 
 [agents]
 max_threads = 6
