@@ -27,7 +27,9 @@ model and reasoning effort explicitly from the profile table below.
 
 Authority is explicit: Root writes and owns `.graph/contract.md`,
 `.graph/acceptance.md`, and `.graph/STATE.md`. The Root contract records the
-risk class, fixed child profile, authoritative scope, and acceptance rules;
+risk class, fixed child profile, authoritative scope, acceptance rules, and the
+frozen threat model's trusted actors, attacker capabilities, protected assets,
+and excluded threats;
 the acceptance artifact records Root's rationale and disposition. The intent,
 Root contract, and `.graph/explore.md` define approved scope, and the numbered
 requirements in `.graph/checklist.md` define acceptance. `.graph/research.md`
@@ -90,7 +92,8 @@ review 2 critical FAIL → Root planning | Root block
 1. Create or reuse an isolated project-root `.worktrees/` path. Keep `.graph/`
    inside that worktree gitignored and free of secrets. Root first writes or
    refreshes `.graph/contract.md`, `.graph/acceptance.md`, and the five-line
-   `.graph/STATE.md`, recording the fixed child profile.
+   `.graph/STATE.md`, recording the fixed child profile and all four frozen
+   threat-model fields in the contract before exploration.
 2. Update `.graph/STATE.md`, then spawn `explorer` with the fixed profile's
    explicit `model`, `reasoning_effort`, and `fork_turns: "none"`, the intent,
    `.graph/contract.md`, and absolute worktree path. The synchronous `SubagentStart`
@@ -322,7 +325,8 @@ security, data safety, credential handling, or migration authorization.
 All paths are relative to the assigned worktree:
 
 - `.graph/contract.md`: Root-owned risk class, fixed child profile,
-  authoritative scope, and acceptance rules. Children may read but never write.
+  authoritative scope, acceptance rules, trusted actors, attacker capabilities,
+  protected assets, and excluded threats. Children may read but never write.
 - `.graph/acceptance.md`: Root-owned review-round and disposition record with
   rationale and repair, accept, or block status. Acceptance cannot override a
   failed review or incomplete required evidence.
