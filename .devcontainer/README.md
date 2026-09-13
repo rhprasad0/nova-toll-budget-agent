@@ -60,6 +60,10 @@ aws sso login --profile nova-toll-dev
 sudo tailscale up
 ```
 
+Start Codex from `/workspaces/nova-toll-budget-agent` and approve its trust
+prompt for that exact checkout. Codex intentionally disables the repository's
+`.codex/config.toml`, including its MCP servers, until the project is trusted.
+
 `nova-toll` is for the local agent console. `nova-toll-dev` is for development
 operations and the AWS MCP. `nova-toll-prod` is only for separately authorized
 production procedures. Having a profile or logging in does not authorize a
@@ -128,7 +132,9 @@ After reopening, verify the boundary and toolchain:
 
 ```sh
 id -u                                      # nonzero
-findmnt -no SOURCE,FSTYPE /workspaces/nova-toll-budget-agent /home/vscode /var/lib/tailscale
+for path in /workspaces/nova-toll-budget-agent /home/vscode /var/lib/tailscale; do
+  findmnt -no SOURCE,FSTYPE --target "$path"
+done
 test ! -S /var/run/docker.sock
 test ! -S "/run/user/$(id -u)/docker.sock"
 ! command -v docker

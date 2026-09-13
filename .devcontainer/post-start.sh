@@ -39,7 +39,7 @@ fi
 mkdir -p "$agentmemory_data" "$(dirname "$agentmemory_log")"
 if ! curl --max-time 2 -fsS http://127.0.0.1:3111/agentmemory/livez >/dev/null 2>&1; then
   : >"$agentmemory_log"
-  agentmemory --data-dir "$agentmemory_data" >"$agentmemory_log" 2>&1 &
+  (cd "$agentmemory_data" && agentmemory --data-dir "$agentmemory_data") >"$agentmemory_log" 2>&1 &
 fi
 
 for _ in $(seq 1 30); do
