@@ -658,7 +658,7 @@ data "aws_iam_policy_document" "development_delivery" {
 
   statement {
     sid       = "ReadAgentCoreTraceFirehose"
-    actions   = ["firehose:DescribeDeliveryStream"]
+    actions   = ["firehose:DescribeDeliveryStream", "firehose:ListTagsForDeliveryStream"]
     resources = [local.development_delivery_agentcore_trace_firehose_arn]
   }
 
@@ -672,6 +672,12 @@ data "aws_iam_policy_document" "development_delivery" {
     sid       = "ManageAgentCoreTraceFirehose"
     actions   = ["firehose:CreateDeliveryStream", "firehose:DeleteDeliveryStream", "firehose:TagDeliveryStream", "firehose:UpdateDestination"]
     resources = [local.development_delivery_agentcore_trace_firehose_arn]
+  }
+
+  statement {
+    sid       = "ManageAgentCoreTraceRuntimePolicy"
+    actions   = ["iam:PutRolePolicy"]
+    resources = ["arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-agentcore-runtime-dev"]
   }
 
   statement {
@@ -1055,23 +1061,23 @@ locals {
     })
     trace = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 19, 29)
+      Statement = slice(local.development_delivery_policy_statements, 19, 30)
     })
     storage = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 29, 35)
+      Statement = slice(local.development_delivery_policy_statements, 30, 36)
     })
     data = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 35, 45)
+      Statement = slice(local.development_delivery_policy_statements, 36, 46)
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 45, 55)
+      Statement = slice(local.development_delivery_policy_statements, 46, 56)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 55, 66)
+      Statement = slice(local.development_delivery_policy_statements, 56, 67)
     })
   }
 }
@@ -1266,7 +1272,7 @@ data "aws_iam_policy_document" "development_plan" {
 
   statement {
     sid       = "ReadAgentCoreTraceFirehose"
-    actions   = ["firehose:DescribeDeliveryStream"]
+    actions   = ["firehose:DescribeDeliveryStream", "firehose:ListTagsForDeliveryStream"]
     resources = [local.development_delivery_agentcore_trace_firehose_arn]
   }
 
@@ -1638,6 +1644,7 @@ locals {
     "ReadAgentCoreTraceFirehose",
     "ManageAgentCoreTraceSubscriptions",
     "ManageAgentCoreTraceFirehose",
+    "ManageAgentCoreTraceRuntimePolicy",
     "PassAgentCoreTraceLogsRole",
     "PassAgentCoreTraceFirehoseRole",
     "ManageAgentCoreTraceRetention",

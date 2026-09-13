@@ -162,6 +162,8 @@ TRACE_LOGS_ROLE = f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-agentcore-traces-lo
 TRACE_FIREHOSE_ROLE = (
     f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-agentcore-traces-firehose-dev"
 )
+TRACE_RUNTIME_ROLE_NAME = "nova-toll-v2-agentcore-runtime-dev"
+TRACE_RUNTIME_ROLE = f"arn:aws:iam::{ACCOUNT}:role/{TRACE_RUNTIME_ROLE_NAME}"
 TRACE_MEASUREMENT_BUCKET = (
     "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-903859731897-dev"
 )
@@ -197,11 +199,48 @@ TRACE_READ_ONLY_FIELDS = {
         "id",
         "version_id",
     ),
-    'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]': ("id",),
-    'aws_cloudwatch_log_subscription_filter.agentcore_traces["preview"]': ("id",),
+    'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]': (
+        "apply_on_transformed_logs",
+        "distribution",
+        "emit_system_fields",
+        "id",
+        "region",
+    ),
+    'aws_cloudwatch_log_subscription_filter.agentcore_traces["preview"]': (
+        "apply_on_transformed_logs",
+        "distribution",
+        "emit_system_fields",
+        "id",
+        "region",
+    ),
     "aws_s3_bucket_lifecycle_configuration.agent_measurement": ("id",),
-    "aws_glue_catalog_table.agentcore_traces[0]": ("arn", "id"),
-    "aws_athena_named_query.agentcore_trace_summary[0]": ("id",),
+    "aws_glue_catalog_table.agentcore_traces[0]": (
+        "arn",
+        "description",
+        "id",
+        "open_table_format_input",
+        "owner",
+        "partition_keys",
+        "region",
+        "retention",
+        "storage_descriptor[0].additional_locations",
+        "storage_descriptor[0].bucket_columns",
+        "storage_descriptor[0].columns[0].comment",
+        "storage_descriptor[0].columns[0].parameters",
+        "storage_descriptor[0].compressed",
+        "storage_descriptor[0].number_of_buckets",
+        "storage_descriptor[0].parameters",
+        "storage_descriptor[0].schema_reference",
+        "storage_descriptor[0].ser_de_info[0].name",
+        "storage_descriptor[0].skewed_info",
+        "storage_descriptor[0].sort_columns",
+        "storage_descriptor[0].stored_as_sub_directories",
+        "target_table",
+        "view_definition",
+        "view_expanded_text",
+        "view_original_text",
+    ),
+    "aws_athena_named_query.agentcore_trace_summary[0]": ("id", "region"),
     "aws_bedrockagentcore_agent_runtime.tollchat": ("arn", "id"),
 }
 
@@ -442,6 +481,18 @@ def _build_contract() -> dict[str, Mutation]:
         create_identity=(("name", PUBLISHER_ROLE_NAME), ("role", PUBLISHER_ROLE_NAME)),
         provider_change_identity=(("account_id", ACCOUNT), ("name", PUBLISHER_ROLE_NAME), ("role", PUBLISHER_ROLE_NAME)),
     )
+    result["aws_iam_role_policy.tollchat_runtime"] = _mutation(
+        ("policy",),
+        ("update",),
+        "agentcore-trace-runtime-policy",
+        _permission("iam:PutRolePolicy", TRACE_RUNTIME_ROLE),
+        create_identity=(("name", TRACE_RUNTIME_ROLE_NAME), ("role", TRACE_RUNTIME_ROLE_NAME)),
+        provider_change_identity=(
+            ("account_id", ACCOUNT),
+            ("name", TRACE_RUNTIME_ROLE_NAME),
+            ("role", TRACE_RUNTIME_ROLE_NAME),
+        ),
+    )
     result["aws_cloudwatch_metric_alarm.report_generation_freshness"] = _mutation(
         ("alarm_description", "dimensions"),
         ("update",),
@@ -564,7 +615,9 @@ def _build_contract() -> dict[str, Mutation]:
         "agentcore-trace-retention",
         _permission("s3:PutLifecycleConfiguration", TRACE_MEASUREMENT_BUCKET),
         provider_change_identity=(
+            ("account_id", ACCOUNT),
             ("bucket", TRACE_MEASUREMENT_BUCKET.removeprefix("arn:aws:s3:::")),
+            ("region", REGION),
         ),
     )
     result["aws_glue_catalog_table.agentcore_traces[0]"] = _mutation(
@@ -581,11 +634,6 @@ def _build_contract() -> dict[str, Mutation]:
             ("name", "agentcore_traces"),
             ("table_type", "EXTERNAL_TABLE"),
         ),
-        provider_change_identity=(
-            ("catalog_id", ACCOUNT),
-            ("database_name", "tollchat_agent_reports_development"),
-            ("name", "agentcore_traces"),
-        ),
     )
     result["aws_athena_named_query.agentcore_trace_summary[0]"] = _mutation(
         ("database", "description", "name", "query", "workgroup"),
@@ -595,10 +643,6 @@ def _build_contract() -> dict[str, Mutation]:
         _permission("athena:DeleteNamedQuery", TRACE_WORKGROUP),
         create_identity=(
             ("database", "tollchat_agent_reports_development"),
-            ("name", "agentcore-trace-summary-dev"),
-            ("workgroup", "tollchat-agent-reports-dev"),
-        ),
-        provider_change_identity=(
             ("name", "agentcore-trace-summary-dev"),
             ("workgroup", "tollchat-agent-reports-dev"),
         ),
@@ -746,6 +790,18 @@ _AUTHORIZATION_FIELDS = frozenset(
 )
 _DERIVED_UNKNOWN_EDGES = MappingProxyType(
     {
+    **{
+        (address, "destination_arn"): (
+            ("destination_arn",),
+            ("destination_arn",),
+            "aws_kinesis_firehose_delivery_stream.agentcore_traces[0].arn",
+            "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]",
+        )
+        for address in (
+            'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]',
+            'aws_cloudwatch_log_subscription_filter.agentcore_traces["preview"]',
+        )
+    },
     (
         "aws_bedrockagentcore_agent_runtime.tollchat",
         "agent_runtime_artifact.code_configuration.code.s3.version_id",
@@ -1020,13 +1076,18 @@ def _validate_s3_identity(
     spec: Mutation,
     address: str,
     action: str,
+    unknown_paths: tuple[str, ...] = (),
 ) -> None:
     if action not in {"create", "update", "no-op"} or not spec.create_identity:
         return
     values = (after,) if action == "create" else (before, after)
     if any(
         not isinstance(value, dict)
-        or any(field not in value or value[field] != expected for field, expected in spec.create_identity)
+        or any(
+            (field not in value and field not in unknown_paths)
+            or (field in value and value[field] != expected)
+            for field, expected in spec.create_identity
+        )
         for value in values
     ):
         _reject("invalid_resource_identity", address=address, action=action, operation_class=spec.operation_class)
@@ -1125,6 +1186,29 @@ def _validate_publisher_policy(before: Any, after: Any, address: str, action: st
         _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
 
 
+def _validate_trace_runtime_policy(
+    before: Any, after: Any, address: str, action: str, operation_class: str
+) -> None:
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        _trace_reject(address, action, operation_class)
+    old, new = (
+        _publisher_policy(value.get("policy"), address, action, operation_class)
+        for value in (before, after)
+    )
+    statement = _publisher_statement(
+        "EnableUnifiedRuntimeTraceDelivery",
+        "logs:PutResourcePolicy",
+        (
+            f"arn:aws:logs:{REGION}:{ACCOUNT}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-*",
+        ),
+        condition=("aws:RequestedRegion", (REGION,)),
+    )
+    added = new.pop(statement["Sid"], None)
+    removed = old.pop(statement["Sid"], None)
+    if old != new or (added, removed) not in ((statement, None), (None, statement)):
+        _trace_reject(address, action, operation_class)
+
+
 def _validate_report_freshness_alarm(before: Any, after: Any, address: str, action: str, operation_class: str) -> None:
     expected_before = {
         "alarm_description": "No complete I-95/I-495 report generation in the trailing seven-day sliding window.",
@@ -1150,7 +1234,12 @@ def _validate_report_freshness_alarm(before: Any, after: Any, address: str, acti
 
 
 def _validate_agentcore_trace_value(
-    before: Any, after: Any, address: str, action: str, operation_class: str
+    before: Any,
+    after: Any,
+    address: str,
+    action: str,
+    operation_class: str,
+    unknown_paths: tuple[str, ...] = (),
 ) -> None:
     value = before if action == "delete" else after
     if not isinstance(value, dict):
@@ -1159,10 +1248,18 @@ def _validate_agentcore_trace_value(
     def configured(candidate: Any) -> Any:
         if not isinstance(candidate, dict):
             _trace_reject(address, action, operation_class)
-        return _without_paths(candidate, TRACE_READ_ONLY_FIELDS.get(address, ()))
+        if (
+            operation_class == "agentcore-trace-catalog"
+            and candidate.get("partition_keys") != []
+        ):
+            _trace_reject(address, action, operation_class)
+        return _without_paths(
+            candidate,
+            TRACE_READ_ONLY_FIELDS.get(address, ()) + unknown_paths,
+        )
 
     if operation_class == "agentcore-trace-subscription":
-        expected = dict(CONTRACT[address].create_identity)
+        expected = _without_paths(dict(CONTRACT[address].create_identity), unknown_paths)
         values = (
             (before,)
             if action == "delete"
@@ -1194,7 +1291,12 @@ def _validate_agentcore_trace_value(
                     "location": f"s3://{TRACE_MEASUREMENT_BUCKET.removeprefix('arn:aws:s3:::')}/{TRACE_PREFIX}",
                     "input_format": "org.apache.hadoop.mapred.TextInputFormat",
                     "output_format": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
-                    "columns": [{"name": "raw_json", "type": "string"}],
+                    "columns": [
+                        {
+                            "name": "raw_json",
+                            "type": "string",
+                        }
+                    ],
                     "ser_de_info": [
                         {
                             "serialization_library": "org.apache.hadoop.hive.serde2.RegexSerDe",
@@ -1235,7 +1337,51 @@ def _validate_agentcore_trace_value(
         def canonical(value: Any) -> tuple[str, ...] | None:
             if not isinstance(value, dict) or not isinstance(value.get("rule"), list):
                 return None
-            return tuple(sorted(_canonical(rule) for rule in value["rule"]))
+            normalized = []
+            for source in value["rule"]:
+                if not isinstance(source, dict):
+                    return None
+                rule = copy.deepcopy(source)
+                for field, default in (
+                    ("noncurrent_version_expiration", []),
+                    ("noncurrent_version_transition", []),
+                    ("prefix", ""),
+                    ("transition", []),
+                ):
+                    if field in rule:
+                        if rule[field] != default:
+                            return None
+                        rule.pop(field)
+                if rule.get("abort_incomplete_multipart_upload") == []:
+                    rule.pop("abort_incomplete_multipart_upload")
+                for block_name, defaults in (
+                    (
+                        "filter",
+                        {
+                            "and": [],
+                            "object_size_greater_than": None,
+                            "object_size_less_than": None,
+                            "tag": [],
+                        },
+                    ),
+                    (
+                        "expiration",
+                        {"date": None, "expired_object_delete_marker": False},
+                    ),
+                ):
+                    blocks = rule.get(block_name)
+                    if not isinstance(blocks, list):
+                        return None
+                    for block in blocks:
+                        if not isinstance(block, dict):
+                            return None
+                        for field, default in defaults.items():
+                            if field in block:
+                                if block[field] != default:
+                                    return None
+                                block.pop(field)
+                normalized.append(rule)
+            return tuple(sorted(_canonical(rule) for rule in normalized))
 
         baseline = tuple(
             sorted(_canonical(rule) for rule in _trace_lifecycle(enabled=False))
@@ -1247,6 +1393,18 @@ def _validate_agentcore_trace_value(
             _trace_reject(address, action, operation_class)
     elif address == "aws_bedrockagentcore_agent_runtime.tollchat":
         if not isinstance(before, dict) or not isinstance(after, dict):
+            _trace_reject(address, action, operation_class)
+        runtime_identity = {
+            "agent_runtime_arn": f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl",
+            "agent_runtime_id": "nova_toll_v2_development-Y69XBf88Bl",
+            "agent_runtime_name": "nova_toll_v2_development",
+            "region": REGION,
+            "role_arn": f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-agentcore-runtime-dev",
+        }
+        if any(
+            any(candidate.get(key) != expected for key, expected in runtime_identity.items())
+            for candidate in (before, after)
+        ):
             _trace_reject(address, action, operation_class)
         before_env, after_env = (
             before.get("environment_variables"),
@@ -1327,7 +1485,13 @@ def _has_configuration_reference(
     resources = root_module.get("resources") if isinstance(root_module, dict) else None
     if not isinstance(resources, list):
         return False
-    matching = [resource for resource in resources if isinstance(resource, dict) and resource.get("address") == address]
+    configuration_address = address.split("[", 1)[0]
+    matching = [
+        resource
+        for resource in resources
+        if isinstance(resource, dict)
+        and resource.get("address") in {address, configuration_address}
+    ]
     if len(matching) != 1 or not isinstance(matching[0].get("expressions"), dict):
         return False
     expressions = matching[0]["expressions"]
@@ -1337,11 +1501,14 @@ def _has_configuration_reference(
     if len(nodes) != 1 or not isinstance(nodes[0], dict):
         return False
     references = nodes[0].get("references")
+    expected = {reference, producer}
+    if "[" in producer:
+        expected.add(producer.split("[", 1)[0])
     return (
         isinstance(references, list)
-        and len(references) == 2
+        and len(references) == len(expected)
         and all(_is_string(item) for item in references)
-        and set(references) == {reference, producer}
+        and set(references) == expected
     )
 
 
@@ -1448,50 +1615,54 @@ def _validate_resource_shape(resource: Any) -> tuple[str, str, dict[str, Any], d
         _reject("malformed_input")
     resource_type, resource_name, resource_index = _address_identity(address)
     if resource.get("type") != resource_type or resource.get("name") != resource_name:
-        _reject("malformed_input", address=address)
+        _reject("malformed_input", address=address, operation_class="resource-identity")
     if resource_index is None:
         if "index" in resource:
-            _reject("malformed_input", address=address)
+            _reject("malformed_input", address=address, operation_class="index-envelope")
     elif resource.get("index") != resource_index:
-        _reject("malformed_input", address=address)
+        _reject("malformed_input", address=address, operation_class="index-envelope")
     for key in ("type", "name", "provider_name", "action_reason"):
         if key in resource and not isinstance(resource[key], str):
-            _reject("malformed_input", address=address)
+            _reject("malformed_input", address=address, operation_class="resource-field-envelope")
     if "index" in resource and not isinstance(resource["index"], (str, int)):
-        _reject("malformed_input", address=address)
+        _reject("malformed_input", address=address, operation_class="index-envelope")
     if "schema_version" in resource and not isinstance(resource["schema_version"], int):
-        _reject("malformed_input", address=address)
+        _reject("malformed_input", address=address, operation_class="schema-envelope")
     if "depends_on" in resource and (
         not isinstance(resource["depends_on"], list)
         or any(not _is_string(item) for item in resource["depends_on"])
     ):
-        _reject("malformed_input", address=address)
+        _reject("malformed_input", address=address, operation_class="dependency-envelope")
     if not set(change).issubset(_CHANGE_KEYS) or not isinstance(change.get("actions"), list):
-        _reject("malformed_input", address=address)
+        _reject("malformed_input", address=address, operation_class="change-envelope")
     if "action_reason" in change and not isinstance(change["action_reason"], str):
-        _reject("malformed_input", address=address)
+        _reject("malformed_input", address=address, operation_class="action-reason-envelope")
     actions = change["actions"]
     if not actions or any(not _is_string(action) or action not in _ACTIONS for action in actions):
-        _reject("malformed_input", address=address)
+        _reject("malformed_input", address=address, operation_class="action-envelope")
     for key in ("before_identity", "after_identity"):
-        if key in change and not isinstance(change[key], (dict, type(None))):
-            _reject("malformed_input", address=address)
-    if len(actions) == 1 and actions[0] in {"no-op", "update"}:
+        if (
+            key in change
+            and not isinstance(change[key], (dict, type(None)))
+            and change[key] is not False
+        ):
+            _reject("malformed_input", address=address, operation_class="identity-envelope")
+    if len(actions) == 1 and actions[0] == "update":
         if change.get("before_identity") != change.get("after_identity"):
-            _reject("malformed_input", address=address)
+            _reject("malformed_input", address=address, action=actions[0], operation_class="identity-transition")
     if not isinstance(change.get("before"), (dict, type(None))) or not isinstance(change.get("after"), (dict, type(None))):
-        _reject("malformed_input", address=address)
+        _reject("malformed_input", address=address, operation_class="value-envelope")
     if "replace_paths" in change and not isinstance(change["replace_paths"], list):
-        _reject("malformed_input", address=address)
+        _reject("malformed_input", address=address, operation_class="replace-envelope")
     metadata_paths: dict[str, tuple[str, ...]] = {}
     for key in ("after_unknown", "before_sensitive", "after_sensitive"):
         if key in change:
-            if not isinstance(change[key], dict):
-                _reject("malformed_input", address=address)
+            if not isinstance(change[key], dict) and change[key] is not False:
+                _reject("malformed_input", address=address, operation_class=f"{key}-envelope")
             try:
                 metadata_paths[key] = _unknown_paths(change[key])
             except _Invalid:
-                _reject("malformed_input", address=address)
+                _reject("malformed_input", address=address, operation_class=f"{key}-tree")
     return address, mode, change, metadata_paths
 
 
@@ -1591,7 +1762,14 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         if spec is not None and spec.provider_change_identity:
             runtime_identity_omitted = (
                 address == "aws_bedrockagentcore_agent_runtime.tollchat"
-                and change["actions"] == ["update"]
+                and (
+                    change["actions"] == ["update"]
+                    or (
+                        change["actions"] == ["no-op"]
+                        and change["before"] == change["after"]
+                        and not any(metadata_paths.values())
+                    )
+                )
                 and "before_identity" not in change
                 and "after_identity" not in change
             )
@@ -1605,6 +1783,14 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             }
             if "index" in resource:
                 expected_resource_keys.add("index")
+            action_for_identity = change["actions"][0]
+            identity_sides = (
+                ("after_identity",)
+                if action_for_identity == "create"
+                else ("before_identity",)
+                if action_for_identity == "delete"
+                else ("before_identity", "after_identity")
+            )
             expected_change_keys = {
                 "actions",
                 "before",
@@ -1614,24 +1800,27 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 "after_sensitive",
             }
             if not runtime_identity_omitted:
-                expected_change_keys.update(("before_identity", "after_identity"))
+                expected_change_keys.update(identity_sides)
             if set(resource) != expected_resource_keys or set(change) != expected_change_keys:
                 _reject("malformed_input", address=address)
-            action_for_identity = change["actions"][0]
             expected_identity = (
                 {"arn": None if action_for_identity == "create" else TRACE_FIREHOSE}
                 if address == "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]"
+                else {
+                    "account_id": None,
+                    "log_group_name": None,
+                    "name": None,
+                    "region": None,
+                }
+                if action_for_identity == "create"
+                and address.startswith(
+                    'aws_cloudwatch_log_subscription_filter.agentcore_traces["'
+                )
                 else dict(spec.provider_change_identity)
             )
-            identity_sides = (
-                ("after_identity",)
-                if action_for_identity == "create"
-                else ("before_identity",)
-                if action_for_identity == "delete"
-                else ("before_identity", "after_identity")
-            )
             if runtime_identity_omitted and any(
-                change[side].get("agent_runtime_name")
+                not isinstance(change[side], dict)
+                or change[side].get("agent_runtime_name")
                 != expected_identity["agent_runtime_name"]
                 for side in ("before", "after")
             ):
@@ -1739,13 +1928,27 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 for path in metadata_paths.get(key, ())
             ):
                 _reject("sensitive_authorization_value", address=address, action=action, operation_class=spec.operation_class)
-        _validate_s3_identity(before, after, spec, address, action)
+        _validate_s3_identity(
+            before,
+            after,
+            spec,
+            address,
+            action,
+            metadata_paths.get("after_unknown", ()),
+        )
         if action == "create":
             unknown_paths = metadata_paths.get("after_unknown", ())
             ignored_unknown += tuple(
                 path for path in unknown_paths if not _path_allowed(path, spec.fields)
             )
-            changed = _create_fields(after, spec, address, action, ignored_unknown)
+            changed_set = set(
+                _create_fields(after, spec, address, action, ignored_unknown)
+            )
+            for path in unknown_paths:
+                parents = [field for field in spec.fields if _path_allowed(path, (field,))]
+                if parents:
+                    changed_set.add(max(parents, key=len))
+            changed = tuple(sorted(changed_set))
         else:
             unknown_paths = metadata_paths.get("after_unknown", ())
             ignored_unknown += tuple(
@@ -1779,6 +1982,10 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
         if spec.operation_class == "publisher-inline-policy":
             _validate_publisher_policy(before, after, address, action, spec.operation_class)
+        if spec.operation_class == "agentcore-trace-runtime-policy":
+            _validate_trace_runtime_policy(
+                before, after, address, action, spec.operation_class
+            )
         if spec.operation_class == "report-freshness-alarm":
             _validate_report_freshness_alarm(
                 before, after, address, action, spec.operation_class
@@ -1788,7 +1995,12 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             and "environment_variables" in changed
         ):
             _validate_agentcore_trace_value(
-                before, after, address, action, spec.operation_class
+                before,
+                after,
+                address,
+                action,
+                spec.operation_class,
+                metadata_paths.get("after_unknown", ()),
             )
         if any(
             _metadata_authorized(path, spec)

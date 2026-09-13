@@ -971,8 +971,8 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             {"domain_name": "dev.tollchat.ai"},
             {"domain_name": "dev.tollchat.ai"},
         )
-        no_op["change"]["before_identity"] = None
-        no_op["change"]["after_identity"] = None
+        no_op["change"]["before_identity"] = False
+        no_op["change"]["after_identity"] = False
         result = validate_plan(
             _plan([no_op], applyable=False),
             lambda_manifest(),
@@ -1004,7 +1004,12 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             before_identity={"id": "old"},
             after_identity={"id": "new"},
         )
-        self.assert_reason("malformed_input", plan=_plan([no_op], applyable=False))
+        self.assertEqual(
+            validate_plan(_plan([no_op], applyable=False), lambda_manifest())[
+                "status"
+            ],
+            "accepted",
+        )
 
         plan = lambda_plan()
         plan["resource_changes"][0]["change"].update(
@@ -1203,6 +1208,49 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         rejected = copy.deepcopy(plan)
         rejected["resource_changes"][0]["change"]["actions"] = ["no-op"]
         self.assert_reason("malformed_input", plan=rejected, manifest=manifest)
+
+    def test_runtime_noop_without_identity_requires_known_unchanged_values(self):
+        address = "aws_bedrockagentcore_agent_runtime.tollchat"
+        fields = ("agent_runtime_artifact.code_configuration.code.s3.version_id",)
+        plan = _plan([_mutation_change(address, fields, "no-op")])
+        change = plan["resource_changes"][0]["change"]
+        for side in ("before", "after"):
+            change[side]["agent_runtime_name"] = "nova_toll_v2_development"
+            change.pop(f"{side}_identity")
+        manifest = _mutation_manifest(((address, "update", fields),))
+        baseline = validate_plan(_plan([]), manifest)
+        self.assertEqual(baseline["status"], "accepted")
+        for applyable in (False, True):
+            with self.subTest(applyable=applyable):
+                plan["applyable"] = applyable
+                self.assertEqual(validate_plan(plan, manifest), baseline)
+
+        for key, value in (
+            ("before_identity", {"agent_runtime_name": "nova_toll_v2_development"}),
+            ("after_identity", {"agent_runtime_name": "nova_toll_v2_development"}),
+            ("after_unknown", {"agent_runtime_name": True}),
+            ("after_unknown", {fields[0]: True}),
+            ("before_sensitive", {"agent_runtime_name": True}),
+            ("after_sensitive", {"agent_runtime_name": True}),
+            ("after_sensitive", {"environment_variables": True}),
+            ("action_reason", "unreviewed-envelope"),
+        ):
+            with self.subTest(key=key, value=value):
+                rejected = copy.deepcopy(plan)
+                rejected["resource_changes"][0]["change"][key] = value
+                self.assert_reason("malformed_input", plan=rejected, manifest=manifest)
+
+        changed = copy.deepcopy(plan)
+        changed["resource_changes"][0]["change"]["after"]["description"] = "changed"
+        self.assert_reason("malformed_input", plan=changed, manifest=manifest)
+
+        for value in (None, {}, {"agent_runtime_name": "wrong-runtime-name"}):
+            with self.subTest(value=value):
+                rejected = copy.deepcopy(plan)
+                rejected["resource_changes"][0]["change"].update(
+                    before=copy.deepcopy(value), after=copy.deepcopy(value)
+                )
+                self.assert_reason("invalid_resource_identity", plan=rejected, manifest=manifest)
 
     def test_rejects_derived_unknown_without_exact_provenance_or_producer(self):
         for label, kwargs in (
@@ -1451,9 +1499,58 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                     "manifest_mutation_mismatch", plan=undeclared, manifest=manifest
                 )
 
+    def test_agentcore_trace_runtime_policy_only_adds_required_permission(self):
+        address = "aws_iam_role_policy.tollchat_runtime"
+        identity = {
+            "id": "nova-toll-v2-agentcore-runtime-dev:nova-toll-v2-agentcore-runtime-dev",
+            "name": "nova-toll-v2-agentcore-runtime-dev",
+            "role": "nova-toll-v2-agentcore-runtime-dev",
+        }
+        baseline = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "ReadArtifact",
+                    "Effect": "Allow",
+                    "Action": "s3:GetObjectVersion",
+                    "Resource": "arn:aws:s3:::nova-toll-agentcore-903859731897/runtime/v2/agentcore-dev.zip",
+                }
+            ],
+        }
+        trace_statement = {
+            "Sid": "EnableUnifiedRuntimeTraceDelivery",
+            "Effect": "Allow",
+            "Action": "logs:PutResourcePolicy",
+            "Resource": "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-*",
+            "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-1"}},
+        }
+        before = {**identity, "policy": json.dumps(baseline)}
+        after = {
+            **identity,
+            "policy": json.dumps(
+                {**baseline, "Statement": [*baseline["Statement"], trace_statement]}
+            ),
+        }
+        plan = _plan([_resource_change(address, "update", before, after)])
+        manifest = _mutation_manifest(
+            [(address, "update", ("policy",))]
+        )
+        self.assertEqual(validate_plan(plan, manifest)["status"], "accepted")
+        tampered = copy.deepcopy(plan)
+        tampered_statement = json.loads(tampered["resource_changes"][0]["change"]["after"]["policy"])
+        tampered_statement["Statement"][-1]["Action"] = "logs:*"
+        tampered["resource_changes"][0]["change"]["after"]["policy"] = json.dumps(tampered_statement)
+        self.assertEqual(
+            validate_plan(tampered, manifest)["reason_code"],
+            "unsupported_field_delta",
+        )
+
     def test_agentcore_trace_initial_and_recovery_fixtures_are_finite(self):
         subscriptions = {
             'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]': {
+                "distribution": "ByLogStream",
+                "emit_system_fields": None,
+                "region": "us-east-1",
                 "name": "nova-toll-v2-agentcore-traces-dev",
                 "log_group_name": "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
                 "destination_arn": TRACE_FIREHOSE,
@@ -1461,6 +1558,9 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "filter_pattern": TRACE_FILTER,
             },
             'aws_cloudwatch_log_subscription_filter.agentcore_traces["preview"]': {
+                "distribution": "ByLogStream",
+                "emit_system_fields": None,
+                "region": "us-east-1",
                 "name": "nova-toll-v2-agentcore-traces-dev",
                 "log_group_name": "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
                 "destination_arn": TRACE_FIREHOSE,
@@ -1494,6 +1594,13 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "DB_HOST": "database",
             "DB_PORT": "5432",
             "PRICING_DB_USER": "pricing",
+        }
+        runtime_identity = {
+            "agent_runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl",
+            "agent_runtime_id": "nova_toll_v2_development-Y69XBf88Bl",
+            "agent_runtime_name": "nova_toll_v2_development",
+            "region": "us-east-1",
+            "role_arn": "arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-runtime-dev",
         }
         initial = {
             "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]": {
@@ -1571,23 +1678,50 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             },
             "aws_glue_catalog_table.agentcore_traces[0]": {
                 "database_name": "tollchat_agent_reports_development",
+                "description": None,
                 "name": "agentcore_traces",
+                "open_table_format_input": [],
+                "owner": None,
                 "table_type": "EXTERNAL_TABLE",
                 "parameters": {"EXTERNAL": "TRUE"},
+                "partition_keys": [],
+                "region": "us-east-1",
+                "retention": None,
                 "storage_descriptor": [
                     {
+                        "additional_locations": None,
+                        "bucket_columns": None,
+                        "compressed": None,
                         "location": "s3://aws-waf-logs-tollchat-agent-reports-903859731897-dev/agentcore-traces/",
                         "input_format": "org.apache.hadoop.mapred.TextInputFormat",
+                        "number_of_buckets": None,
                         "output_format": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
-                        "columns": [{"name": "raw_json", "type": "string"}],
+                        "parameters": None,
+                        "columns": [
+                            {
+                                "comment": None,
+                                "name": "raw_json",
+                                "parameters": None,
+                                "type": "string",
+                            }
+                        ],
+                        "schema_reference": [],
                         "ser_de_info": [
                             {
+                                "name": None,
                                 "serialization_library": "org.apache.hadoop.hive.serde2.RegexSerDe",
                                 "parameters": {"input.regex": "^(.*)$"},
                             }
                         ],
+                        "skewed_info": [],
+                        "sort_columns": [],
+                        "stored_as_sub_directories": None,
                     }
                 ],
+                "target_table": [],
+                "view_definition": [],
+                "view_expanded_text": None,
+                "view_original_text": None,
             },
             "aws_athena_named_query.agentcore_trace_summary[0]": {
                 "database": "tollchat_agent_reports_development",
@@ -1595,11 +1729,13 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "workgroup": "tollchat-agent-reports-dev",
                 "description": "Bounded development trace outcome summary",
                 "query": TRACE_QUERY,
+                "region": "us-east-1",
             },
             "aws_s3_bucket_lifecycle_configuration.agent_measurement": {
                 "rule": [*baseline_rules, trace_rule],
             },
             "aws_bedrockagentcore_agent_runtime.tollchat": {
+                **runtime_identity,
                 "environment_variables": {
                     **runtime_before,
                     "UNIFIED_TRACES_DESTINATION_ENABLED": "true",
@@ -1652,7 +1788,10 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                     {"rule": baseline_rules}
                     if address
                     == "aws_s3_bucket_lifecycle_configuration.agent_measurement"
-                    else {"environment_variables": runtime_before}
+                    else {
+                        **runtime_identity,
+                        "environment_variables": runtime_before,
+                    }
                     if address == "aws_bedrockagentcore_agent_runtime.tollchat"
                     else {
                         **dict(CONTRACT[address].create_identity),
@@ -1667,6 +1806,11 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 for address, value in initial.items()
             ]
         )
+        for resource in initial_plan["resource_changes"]:
+            if resource["change"]["actions"] == ["create"]:
+                resource["change"]["before_sensitive"] = False
+                if CONTRACT[resource["address"]].provider_change_identity:
+                    resource["change"].pop("before_identity")
         firehose_create = next(
             item
             for item in initial_plan["resource_changes"]
@@ -1674,6 +1818,37 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             == "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]"
         )["change"]
         firehose_create["after_identity"] = {"arn": None}
+        for resource in initial_plan["resource_changes"]:
+            if resource["address"].startswith(
+                'aws_cloudwatch_log_subscription_filter.agentcore_traces["'
+            ):
+                resource["change"]["after"] = copy.deepcopy(resource["change"]["after"])
+                resource["change"]["after"].pop("destination_arn")
+                resource["change"]["after_unknown"] = {"destination_arn": True}
+                resource["change"]["after_identity"] = {
+                    "account_id": None,
+                    "log_group_name": None,
+                    "name": None,
+                    "region": None,
+                }
+        initial_plan["configuration"] = {
+            "root_module": {
+                "resources": [
+                    {
+                        "address": "aws_cloudwatch_log_subscription_filter.agentcore_traces",
+                        "expressions": {
+                            "destination_arn": {
+                                "references": [
+                                    "aws_kinesis_firehose_delivery_stream.agentcore_traces[0].arn",
+                                    "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]",
+                                    "aws_kinesis_firehose_delivery_stream.agentcore_traces",
+                                ]
+                            }
+                        },
+                    }
+                ]
+            }
+        }
         firehose_create["after_unknown"] = {
             "arn": True,
             "destination_id": True,
@@ -1683,6 +1858,21 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         }
         initial_result = validate_plan(initial_plan, manifest_for(initial, actions))
         self.assertEqual(initial_result["status"], "accepted", initial_result)
+
+        partitioned_catalog = copy.deepcopy(initial_plan)
+        next(
+            item
+            for item in partitioned_catalog["resource_changes"]
+            if item["address"] == "aws_glue_catalog_table.agentcore_traces[0]"
+        )["change"]["after"]["partition_keys"] = [
+            {"name": "unexpected", "type": "string"}
+        ]
+        self.assertEqual(
+            validate_plan(
+                partitioned_catalog, manifest_for(initial, actions)
+            )["reason_code"],
+            "unsupported_field_delta",
+        )
 
         recovery_values = {
             address: value
@@ -1696,6 +1886,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         }
         recovery_actions = {address: "delete" for address in recovery_values}
         recovery_values["aws_bedrockagentcore_agent_runtime.tollchat"] = {
+            **runtime_identity,
             "environment_variables": runtime_before
         }
         recovery_actions["aws_bedrockagentcore_agent_runtime.tollchat"] = "update"
@@ -1712,6 +1903,11 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 for address, value in recovery_values.items()
             ]
         )
+        for resource in recovery_plan["resource_changes"]:
+            if resource["change"]["actions"] == ["delete"]:
+                resource["change"]["after_sensitive"] = False
+                if CONTRACT[resource["address"]].provider_change_identity:
+                    resource["change"].pop("after_identity")
         firehose_delete = next(
             item
             for item in recovery_plan["resource_changes"]

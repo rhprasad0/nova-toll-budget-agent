@@ -781,11 +781,11 @@ def main() -> None:
         development_delivery,
     )
     require(
-        "Statement = slice(local.development_delivery_policy_statements, 45, 55)",
+        "Statement = slice(local.development_delivery_policy_statements, 46, 56)",
         development_shards,
     )
     require(
-        "Statement = slice(local.development_delivery_policy_statements, 55, 66)",
+        "Statement = slice(local.development_delivery_policy_statements, 56, 67)",
         development_shards,
     )
 
