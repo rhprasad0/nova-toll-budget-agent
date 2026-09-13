@@ -658,7 +658,7 @@ data "aws_iam_policy_document" "development_delivery" {
 
   statement {
     sid       = "ReadAgentCoreTraceFirehose"
-    actions   = ["firehose:DescribeDeliveryStream"]
+    actions   = ["firehose:DescribeDeliveryStream", "firehose:ListTagsForDeliveryStream"]
     resources = [local.development_delivery_agentcore_trace_firehose_arn]
   }
 
@@ -1272,7 +1272,7 @@ data "aws_iam_policy_document" "development_plan" {
 
   statement {
     sid       = "ReadAgentCoreTraceFirehose"
-    actions   = ["firehose:DescribeDeliveryStream"]
+    actions   = ["firehose:DescribeDeliveryStream", "firehose:ListTagsForDeliveryStream"]
     resources = [local.development_delivery_agentcore_trace_firehose_arn]
   }
 

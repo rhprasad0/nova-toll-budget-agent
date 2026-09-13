@@ -1248,6 +1248,11 @@ def _validate_agentcore_trace_value(
     def configured(candidate: Any) -> Any:
         if not isinstance(candidate, dict):
             _trace_reject(address, action, operation_class)
+        if (
+            operation_class == "agentcore-trace-catalog"
+            and candidate.get("partition_keys") != []
+        ):
+            _trace_reject(address, action, operation_class)
         return _without_paths(
             candidate,
             TRACE_READ_ONLY_FIELDS.get(address, ()) + unknown_paths,

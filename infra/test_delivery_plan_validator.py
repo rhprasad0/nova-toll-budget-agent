@@ -1816,6 +1816,21 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         initial_result = validate_plan(initial_plan, manifest_for(initial, actions))
         self.assertEqual(initial_result["status"], "accepted", initial_result)
 
+        partitioned_catalog = copy.deepcopy(initial_plan)
+        next(
+            item
+            for item in partitioned_catalog["resource_changes"]
+            if item["address"] == "aws_glue_catalog_table.agentcore_traces[0]"
+        )["change"]["after"]["partition_keys"] = [
+            {"name": "unexpected", "type": "string"}
+        ]
+        self.assertEqual(
+            validate_plan(
+                partitioned_catalog, manifest_for(initial, actions)
+            )["reason_code"],
+            "unsupported_field_delta",
+        )
+
         recovery_values = {
             address: value
             for address, value in initial.items()

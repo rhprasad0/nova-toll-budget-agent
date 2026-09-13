@@ -8047,7 +8047,10 @@ DEVELOPMENT_PLAN_REFRESH_TUPLES = {
         _NO_PLAN_CONDITIONS,
     ),
     "ReadAgentCoreTraceFirehose": (
-        ("firehose:DescribeDeliveryStream",),
+        (
+            "firehose:DescribeDeliveryStream",
+            "firehose:ListTagsForDeliveryStream",
+        ),
         ("local.development_delivery_agentcore_trace_firehose_arn",),
         _NO_PLAN_CONDITIONS,
     ),
@@ -8822,7 +8825,10 @@ def _assert_agentcore_trace_identity_reads(source: str) -> None:
             [],
         ),
         "ReadAgentCoreTraceFirehose": (
-            ["firehose:DescribeDeliveryStream"],
+            [
+                "firehose:DescribeDeliveryStream",
+                "firehose:ListTagsForDeliveryStream",
+            ],
             ["local.development_delivery_agentcore_trace_firehose_arn"],
             [],
         ),
@@ -9065,7 +9071,10 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
             [],
         ),
         "ReadAgentCoreTraceFirehose": (
-            ["firehose:DescribeDeliveryStream"],
+            [
+                "firehose:DescribeDeliveryStream",
+                "firehose:ListTagsForDeliveryStream",
+            ],
             ["local.development_delivery_agentcore_trace_firehose_arn"],
             [],
         ),
@@ -9245,7 +9254,10 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
             "Condition": None,
         },
         "ReadAgentCoreTraceFirehose": {
-            "Action": "firehose:DescribeDeliveryStream",
+            "Action": [
+                "firehose:ListTagsForDeliveryStream",
+                "firehose:DescribeDeliveryStream",
+            ],
             "Resource": "arn:aws:firehose:us-east-1:903859731897:deliverystream/nova-toll-v2-agentcore-traces-dev",
             "Condition": None,
         },
