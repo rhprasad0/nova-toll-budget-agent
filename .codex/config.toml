@@ -1,7 +1,6 @@
 [mcp_servers.context7]
-command = "npx"
-args = ["-y", "@upstash/context7-mcp@4.0.4"]
-env_vars = ["CONTEXT7_API_KEY"]
+command = "bash"
+args = ["-c", 'set -a; context7_env="$HOME/.config/context7/env"; if [ -r "$context7_env" ]; then . "$context7_env"; fi; exec npx -y @upstash/context7-mcp@4.0.4']
 
 [mcp_servers.exa]
 url = "https://mcp.exa.ai/mcp"

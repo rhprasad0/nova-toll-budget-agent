@@ -13,15 +13,11 @@ it is not mounted into the container.
    "dev.containers.gitCredentialHelperConfigLocation": "none"
    ```
 
-2. Fully quit every VS Code process. From a host Bash shell, privately enter the
-   Context7 key, then launch the trusted seed checkout without an SSH agent:
+2. Fully quit every VS Code process. From a host Bash shell, launch the trusted
+   seed checkout without an SSH agent:
 
    ```sh
-   read -rsp "Context7 API key: " CONTEXT7_API_KEY
-   export CONTEXT7_API_KEY
-   printf '\n'
    env -u SSH_AUTH_SOCK code /path/to/trusted/nova-toll-budget-agent
-   unset CONTEXT7_API_KEY
    ```
 
 3. Choose **Dev Containers: Reopen in Container**. Do **not** choose **Clone
@@ -38,14 +34,24 @@ forwarding the host SSH agent. The host-side initialization check fails visibly
 before container creation if the socket variable is still set; it only reads
 that variable and does not copy source or authenticate.
 
-The hidden prompt keeps the Context7 key out of shell history and command
-arguments. `remoteEnv` forwards only `CONTEXT7_API_KEY` so the remote Codex
-extension can inherit it, and the Context7 MCP declaration allows only that
-named variable through to its process. This is the narrow exception to the
-no-host-credential-forwarding rule: the value is not stored in the repository,
-image, Docker configuration, or named volumes, but processes running as the
-same `vscode` user can read their environment. Repeat the private launch after
-fully quitting VS Code; do not print the variable or persist it in a shell file.
+## Configure Context7
+
+Store the Context7 key inside the persistent container home rather than passing
+it through VS Code, where resolved configuration can appear in diagnostic logs:
+
+```sh
+install -d -m 700 ~/.config/context7
+umask 077
+touch ~/.config/context7/env
+chmod 600 ~/.config/context7/env
+${EDITOR:-vi} ~/.config/context7/env
+```
+
+In the editor, add `CONTEXT7_API_KEY=<enter privately in the editor>`. Do not
+print the file or put the key in repository content, command arguments, shell
+history, or logs. Start a fresh Codex session after changing it. The Context7
+MCP reads only this file; processes running as the same `vscode` user can read
+the key.
 
 Interactive work runs as the non-root `vscode` user. Authenticate only when
 needed, from inside the container:
@@ -119,14 +125,13 @@ or logs.
 ## Persistence and checks
 
 - `nova-toll-budget-agent-workspace` contains the writable checkout.
-- `nova-toll-dev-home` contains Codex, agentmemory, AWS, GitHub, and shell state.
+- `nova-toll-dev-home` contains Codex, Context7, agentmemory, AWS, GitHub, and shell state.
 - `nova-toll-tailscale` contains Tailscale state.
 
 Credentials are entered interactively and remain in the named home or
-Tailscale state volume. The transient Context7 variable is the exception
-described above and is not persisted. The volumes are not automatically backed
-up; commit work that must survive volume deletion. Do not copy or mount host
-credentials into the container.
+Tailscale state volume. The volumes are not automatically backed up; commit
+work that must survive volume deletion. Do not copy or mount host credentials
+into the container.
 
 After reopening, verify the boundary and toolchain:
 
@@ -144,7 +149,7 @@ if git config --show-origin --get-all credential.helper 2>/dev/null | grep -Eiq 
   echo "VS Code-backed Git credential helper is present" >&2
   exit 1
 fi
-test -n "${CONTEXT7_API_KEY:-}"
+test -r ~/.config/context7/env
 codex mcp get context7
 python3 --version
 uv --version
@@ -164,15 +169,13 @@ sudo tailscale status
 The SSH checks must produce no output. Run `gh auth login` inside the container;
 it is the only GitHub credential path for this environment. Do not enable host
 Git credential or SSH-agent forwarding. The Context7 checks confirm only that
-the variable and inherited-environment declaration exist; they do not print the
-key. Do not use `env`, `printenv`, `set`, or `echo` to inspect it.
+the private file and MCP declaration exist; they do not print the key. Do not
+use `env`, `printenv`, `set`, `echo`, or `cat` to inspect it.
 
-On the host, use a separate clean shell with `CONTEXT7_API_KEY` unset for
-`devcontainer read-configuration --workspace-folder .`, `devcontainer build
---workspace-folder .`, and Docker inspection; resolved configuration output
-must never be captured while the key is present. Inspection should show only
-the three named volumes, `/dev/net/tun`, `NET_ADMIN`, and `NET_RAW`—no bind,
-host checkout, Docker socket, host network, or privileged mode.
+On the host, `devcontainer read-configuration --workspace-folder .`,
+`devcontainer build --workspace-folder .`, and Docker inspection should show
+only the three named volumes, `/dev/net/tun`, `NET_ADMIN`, and `NET_RAW`—no
+bind, host checkout, Docker socket, host network, or privileged mode.
 
 From `v2/`, run `uv sync --locked`, Ruff, format, Pyright, the offline eval
 check, and the documented Node tests. Docker/PostGIS tests, including
