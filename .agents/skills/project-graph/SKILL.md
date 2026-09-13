@@ -195,12 +195,14 @@ failure-boundary violation is blocking in both review rounds.
 
 Apply this section only to deployment-relevant database work. Map the exact
 target migration principal and active/effective role memberships, including
-direct, inherited, and `PUBLIC` privileges; map the target RDS extension owner
-and relevant schema, function, and type ACLs; and identify hidden function,
-cast, type-I/O, and operator dependencies under that exact role. The disposable
-PostGIS evidence must mirror that extension owner and relevant function/type
-ACLs and use an exact-role analogue of the migration principal. Local success
-does not prove target authority. Missing sanitized target evidence is a blocking
+direct, inherited, and `PUBLIC` privileges. When the work depends on PostGIS or
+another extension-owned object, also map the target RDS extension owner,
+relevant schema/function/type ACLs, and hidden function, cast, type-I/O, and
+operator dependencies under that exact role. For PostGIS-dependent work, the
+disposable evidence must mirror that extension owner and relevant function/type
+ACLs and use an exact-role analogue of the migration principal. Do not require
+PostGIS evidence for unrelated database work. Local success does not prove
+target authority. Missing applicable sanitized target evidence is a blocking
 gap, not permission to infer authority.
 
 Root alone records target failures in the existing `.graph/acceptance.md`

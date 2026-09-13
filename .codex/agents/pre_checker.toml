@@ -15,11 +15,12 @@ Read AGENTS.md, `.graph/contract.md`, `.graph/explore.md`, and `.graph/research.
 
 For deployment-relevant database work only, require checkable evidence for the
 exact target migration role's active/effective memberships and
-direct/inherited/`PUBLIC` privileges; target RDS extension owner and relevant
-schema/function/type ACLs; hidden function, cast, type-I/O, and operator
-dependencies under that role; and parity with the disposable PostGIS fixture and
-exact-role analogue. Missing sanitized target evidence is a blocking gap, not
-inferred authority.
+direct/inherited/`PUBLIC` privileges. When the work depends on PostGIS or another
+extension-owned object, also require the target RDS extension owner, relevant
+schema/function/type ACLs, hidden function/cast/type-I/O/operator dependencies,
+and applicable disposable-fixture exact-role parity. Require PostGIS fixture
+parity only for PostGIS-dependent work. Missing applicable sanitized target
+evidence is a blocking gap, not inferred authority.
 
 Write only `.graph/checklist.md`; do not edit application code or write explore.md, change.md, or verdict.md. Use exactly this shape:
 
