@@ -187,25 +187,27 @@ def _render_development_migration(source: Path, destination: Path) -> None:
     if source.name == "031_upgrade_oracle_1_14_0_to_1_14_1.sql":
         restricted_cast = """oracle.ST_SetSRID(
                 oracle.ST_MakePoint(coordinate.longitude, coordinate.latitude), 4326
-            )"""
+            )::oracle.geography"""
         if rendered.count(restricted_cast) != 1:
             raise MigrationError("Oracle 1.14.1 spatial update changed unexpectedly")
+        rendered = rendered.replace(restricted_cast, "coordinate.location")
+        coordinate_row = re.compile(
+            r"\('(?P<point_id>i95:[^']+)', (?P<longitude>-?\d+(?:\.\d+)?)::numeric, "
+            r"(?P<latitude>-?\d+(?:\.\d+)?)::numeric\)"
+        )
+        rendered, coordinate_count = coordinate_row.subn(
+            lambda match: (
+                f"('{match.group('point_id')}', "
+                f"'SRID=4326;POINT({match.group('longitude')} "
+                f"{match.group('latitude')})'::oracle.geography(Point,4326))"
+            ),
+            rendered,
+        )
+        coordinate_alias = ") AS coordinate(point_id, longitude, latitude)"
+        if coordinate_count != 10 or rendered.count(coordinate_alias) != 1:
+            raise MigrationError("Oracle 1.14.1 coordinates changed unexpectedly")
         rendered = rendered.replace(
-            restricted_cast,
-            """CASE
-                WHEN point.point_id IN ('i95:22329ND', 'i95:2232ND', 'i95:223SO')
-                    THEN 'SRID=4326;POINT(-77.0659710000000 38.8663530000000)'::oracle.geography(Point,4326)
-                WHEN point.point_id = 'i95:2232SO'
-                    THEN 'SRID=4326;POINT(-77.03933 38.878511)'::oracle.geography(Point,4326)
-                WHEN point.point_id IN ('i95:2233SO', 'i95:2239ND', 'i95:223ND')
-                    THEN 'SRID=4326;POINT(-77.0574660000000 38.8663900000000)'::oracle.geography(Point,4326)
-                WHEN point.point_id = 'i95:2249ND'
-                    THEN 'SRID=4326;POINT(-77.0461277 38.8707667)'::oracle.geography(Point,4326)
-                WHEN point.point_id = 'i95:224ND'
-                    THEN 'SRID=4326;POINT(-77.0396420000000 38.8780160000000)'::oracle.geography(Point,4326)
-                WHEN point.point_id = 'i95:224NO'
-                    THEN 'SRID=4326;POINT(-77.052876 38.865725)'::oracle.geography(Point,4326)
-            END""",
+            coordinate_alias, ") AS coordinate(point_id, location)"
         )
     destination.write_text(rendered)
 
