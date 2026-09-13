@@ -113,8 +113,8 @@
     "v2/eval/run_evaluation.py": "eed661d1c463461ff12277594a05540f6b2234b7eb0a72fad6e4e7960e25208f",
     "v2/eval/test-cases.jsonl": "0290fd1c26f9814ac2fc880f70ad9566ec0a4966821ced7581fd4be4ddca62f5",
     "v2/infra/.terraform.lock.hcl": "fd42f83e883fe5b260118f566eeb4f4a918f6c68dd791bcf7a3e5677f3830fad",
-    "v2/infra/agent_measurement.tf": "d748c5b5dc8aeb30d9bdd96c322388526c1ea18d0174c55d5aa1705607c189a6",
-    "v2/infra/agentcore.tf": "2b46984936dfd56459b19d145e18be7370477196f23ac1fbf285d79b536bc313",
+    "v2/infra/agent_measurement.tf": "147bf20a30cafd3e69e2b6f68c7a9f8b189a1d16aa7ee3d65c9dc56e07db32d5",
+    "v2/infra/agentcore.tf": "644f92f9f90bb4d6d340c5192bc6dabc620e73347a1bfa330e1e4d85b7065d2c",
     "v2/infra/backend.development.hcl": "e9140a8f8120f479e04d22def7149d32e63fd34d5e82d04db9bda51e4ccbf313",
     "v2/infra/data.tf": "6288fa2b14e10e503499a59a8cca7a763d4f23ea9d27f167d922ae41cd24569b",
     "v2/infra/development.tfvars": "73f91fa50c80c95491b83d664d7a7b1f9661198026b94977e10c63b36f475fff",
@@ -122,7 +122,7 @@
     "v2/infra/lambda-stub/handler.py": "b012092f485d3ed57d93e39b65c57af4a34c4b03b8586c00dd1c39c088484327",
     "v2/infra/main.tf": "5b1fdf1dc7fcbf79c909b29b492f20dabda0c8c271f2f9c0e8f68e18ab7d1322",
     "v2/infra/providers.tf": "b5fc8bb0f92ed4990625aebbe95811d683f36d48a9f18ad3520238d79b95e4aa",
-    "v2/infra/site.tf": "dad79b68b07ba405562adce53da900c8b7241650bf20e056014f9ea1436c43b2",
+    "v2/infra/site.tf": "8190668422c8aff876d4ae3f919d51302da5f23b918d0c63f9a53957c171d74f",
     "v2/infra/timed_checks.tf": "7f047507cf0355a5eeaf4dea4cea91106ec38ea19f01f1c38bb2b81732616e36",
     "v2/infra/variables.tf": "42754ba6a341f2a09f0673ee1ffad18c47f035ef1dfe643dc936e60c2bd2efc1",
     "v2/infra/versions.tf": "e08079981fe5f42c0af5906a3710c635d03e346e2724811d02cb8528bb5ad32d",
@@ -242,7 +242,7 @@
       "action": "update",
       "operation_class": "agentcore-code",
       "changed_fields": [
-        "agent_runtime_artifact.code_configuration.code.s3.version_id"
+        "environment_variables"
       ]
     },
     {
@@ -277,6 +277,79 @@
       "changed_fields": [
         "source_hash"
       ]
+    },
+    {
+      "address": "aws_s3_object.index",
+      "action": "update",
+      "operation_class": "site-object-upload",
+      "changed_fields": ["content", "source", "source_hash"]
+    },
+    {
+      "address": "aws_s3_object.faq",
+      "action": "update",
+      "operation_class": "site-object-upload",
+      "changed_fields": ["content", "source", "source_hash"]
+    },
+    {
+      "address": "aws_s3_object.privacy",
+      "action": "update",
+      "operation_class": "site-object-upload",
+      "changed_fields": ["content", "source", "source_hash"]
+    },
+    {
+      "address": "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]",
+      "action": "create",
+      "operation_class": "agentcore-trace-firehose",
+      "changed_fields": [
+        "destination",
+        "elasticsearch_configuration",
+        "extended_s3_configuration",
+        "http_endpoint_configuration",
+        "iceberg_configuration",
+        "kinesis_source_configuration",
+        "msk_source_configuration",
+        "name",
+        "opensearch_configuration",
+        "opensearchserverless_configuration",
+        "redshift_configuration",
+        "region",
+        "server_side_encryption",
+        "snowflake_configuration",
+        "splunk_configuration",
+        "tags",
+        "tags_all",
+        "timeouts"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_log_subscription_filter.agentcore_traces[\"DEFAULT\"]",
+      "action": "create",
+      "operation_class": "agentcore-trace-subscription",
+      "changed_fields": ["destination_arn", "filter_pattern", "log_group_name", "name", "role_arn"]
+    },
+    {
+      "address": "aws_cloudwatch_log_subscription_filter.agentcore_traces[\"preview\"]",
+      "action": "create",
+      "operation_class": "agentcore-trace-subscription",
+      "changed_fields": ["destination_arn", "filter_pattern", "log_group_name", "name", "role_arn"]
+    },
+    {
+      "address": "aws_s3_bucket_lifecycle_configuration.agent_measurement",
+      "action": "update",
+      "operation_class": "agentcore-trace-retention",
+      "changed_fields": ["rule"]
+    },
+    {
+      "address": "aws_glue_catalog_table.agentcore_traces[0]",
+      "action": "create",
+      "operation_class": "agentcore-trace-catalog",
+      "changed_fields": ["database_name", "name", "parameters", "storage_descriptor", "table_type"]
+    },
+    {
+      "address": "aws_athena_named_query.agentcore_trace_summary[0]",
+      "action": "create",
+      "operation_class": "agentcore-trace-query",
+      "changed_fields": ["database", "description", "name", "query", "workgroup"]
     }
   ],
   "permissions": [
@@ -364,6 +437,162 @@
       "address": "aws_s3_object.site_assets[\"coverage-locations.json\"]",
       "action": "s3:PutObject",
       "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.index",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.faq",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.privacy",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]",
+      "action": "firehose:CreateDeliveryStream",
+      "resource": "arn:aws:firehose:us-east-1:903859731897:deliverystream/nova-toll-v2-agentcore-traces-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]",
+      "action": "firehose:DeleteDeliveryStream",
+      "resource": "arn:aws:firehose:us-east-1:903859731897:deliverystream/nova-toll-v2-agentcore-traces-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]",
+      "action": "firehose:TagDeliveryStream",
+      "resource": "arn:aws:firehose:us-east-1:903859731897:deliverystream/nova-toll-v2-agentcore-traces-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]",
+      "action": "firehose:UpdateDestination",
+      "resource": "arn:aws:firehose:us-east-1:903859731897:deliverystream/nova-toll-v2-agentcore-traces-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]",
+      "action": "iam:PassRole",
+      "resource": "arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-traces-firehose-dev",
+      "conditions": {"iam:PassedToService": "firehose.amazonaws.com"}
+    },
+    {
+      "address": "aws_cloudwatch_log_subscription_filter.agentcore_traces[\"DEFAULT\"]",
+      "action": "logs:PutSubscriptionFilter",
+      "resource": "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT:*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_log_subscription_filter.agentcore_traces[\"DEFAULT\"]",
+      "action": "logs:DeleteSubscriptionFilter",
+      "resource": "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT:*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_log_subscription_filter.agentcore_traces[\"DEFAULT\"]",
+      "action": "iam:PassRole",
+      "resource": "arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-traces-logs-dev",
+      "conditions": {"iam:PassedToService": "logs.amazonaws.com"}
+    },
+    {
+      "address": "aws_cloudwatch_log_subscription_filter.agentcore_traces[\"preview\"]",
+      "action": "logs:PutSubscriptionFilter",
+      "resource": "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview:*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_log_subscription_filter.agentcore_traces[\"preview\"]",
+      "action": "logs:DeleteSubscriptionFilter",
+      "resource": "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview:*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_log_subscription_filter.agentcore_traces[\"preview\"]",
+      "action": "iam:PassRole",
+      "resource": "arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-traces-logs-dev",
+      "conditions": {"iam:PassedToService": "logs.amazonaws.com"}
+    },
+    {
+      "address": "aws_s3_bucket_lifecycle_configuration.agent_measurement",
+      "action": "s3:PutLifecycleConfiguration",
+      "resource": "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-903859731897-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_glue_catalog_table.agentcore_traces[0]",
+      "action": "glue:CreateTable",
+      "resource": "arn:aws:glue:us-east-1:903859731897:catalog",
+      "conditions": {}
+    },
+    {
+      "address": "aws_glue_catalog_table.agentcore_traces[0]",
+      "action": "glue:CreateTable",
+      "resource": "arn:aws:glue:us-east-1:903859731897:database/tollchat_agent_reports_development",
+      "conditions": {}
+    },
+    {
+      "address": "aws_glue_catalog_table.agentcore_traces[0]",
+      "action": "glue:CreateTable",
+      "resource": "arn:aws:glue:us-east-1:903859731897:table/tollchat_agent_reports_development/agentcore_traces",
+      "conditions": {}
+    },
+    {
+      "address": "aws_glue_catalog_table.agentcore_traces[0]",
+      "action": "glue:DeleteTable",
+      "resource": "arn:aws:glue:us-east-1:903859731897:catalog",
+      "conditions": {}
+    },
+    {
+      "address": "aws_glue_catalog_table.agentcore_traces[0]",
+      "action": "glue:DeleteTable",
+      "resource": "arn:aws:glue:us-east-1:903859731897:database/tollchat_agent_reports_development",
+      "conditions": {}
+    },
+    {
+      "address": "aws_glue_catalog_table.agentcore_traces[0]",
+      "action": "glue:DeleteTable",
+      "resource": "arn:aws:glue:us-east-1:903859731897:table/tollchat_agent_reports_development/agentcore_traces",
+      "conditions": {}
+    },
+    {
+      "address": "aws_glue_catalog_table.agentcore_traces[0]",
+      "action": "glue:UpdateTable",
+      "resource": "arn:aws:glue:us-east-1:903859731897:catalog",
+      "conditions": {}
+    },
+    {
+      "address": "aws_glue_catalog_table.agentcore_traces[0]",
+      "action": "glue:UpdateTable",
+      "resource": "arn:aws:glue:us-east-1:903859731897:database/tollchat_agent_reports_development",
+      "conditions": {}
+    },
+    {
+      "address": "aws_glue_catalog_table.agentcore_traces[0]",
+      "action": "glue:UpdateTable",
+      "resource": "arn:aws:glue:us-east-1:903859731897:table/tollchat_agent_reports_development/agentcore_traces",
+      "conditions": {}
+    },
+    {
+      "address": "aws_athena_named_query.agentcore_trace_summary[0]",
+      "action": "athena:CreateNamedQuery",
+      "resource": "arn:aws:athena:us-east-1:903859731897:workgroup/tollchat-agent-reports-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_athena_named_query.agentcore_trace_summary[0]",
+      "action": "athena:DeleteNamedQuery",
+      "resource": "arn:aws:athena:us-east-1:903859731897:workgroup/tollchat-agent-reports-dev",
       "conditions": {}
     }
   ]

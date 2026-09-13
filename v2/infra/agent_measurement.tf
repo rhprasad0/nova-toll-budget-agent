@@ -70,6 +70,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "agent_measurement" {
     expiration { days = 7 }
     abort_incomplete_multipart_upload { days_after_initiation = 1 }
   }
+
+  dynamic "rule" {
+    for_each = local.is_production ? [] : ["agentcore-traces"]
+    content {
+      id     = "expire-agentcore-traces"
+      status = "Enabled"
+      filter { prefix = "agentcore-traces/" }
+      expiration { days = 7 }
+      abort_incomplete_multipart_upload { days_after_initiation = 1 }
+    }
+  }
+
 }
 
 data "aws_iam_policy_document" "agent_measurement_bucket" {
@@ -314,6 +326,39 @@ resource "aws_athena_workgroup" "agent_reports" {
       }
     }
   }
+}
+
+resource "aws_glue_catalog_table" "agentcore_traces" {
+  count         = local.is_production ? 0 : 1
+  name          = "agentcore_traces"
+  database_name = aws_glue_catalog_database.agent_reports.name
+  table_type    = "EXTERNAL_TABLE"
+  parameters    = { EXTERNAL = "TRUE" }
+
+  storage_descriptor {
+    location      = "s3://${aws_s3_bucket.agent_measurement.id}/agentcore-traces/"
+    input_format  = "org.apache.hadoop.mapred.TextInputFormat"
+    output_format = "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+    columns {
+      name = "raw_json"
+      type = "string"
+    }
+    ser_de_info {
+      serialization_library = "org.apache.hadoop.hive.serde2.RegexSerDe"
+      parameters = {
+        "input.regex" = "^(.*)$"
+      }
+    }
+  }
+}
+
+resource "aws_athena_named_query" "agentcore_trace_summary" {
+  count       = local.is_production ? 0 : 1
+  name        = "agentcore-trace-summary-dev"
+  database    = aws_glue_catalog_database.agent_reports.name
+  workgroup   = aws_athena_workgroup.agent_reports.name
+  description = "Bounded development trace outcome summary"
+  query       = "SELECT json_extract_scalar(raw_json, '$.traceId') AS traceId, json_extract_scalar(raw_json, '$.spanId') AS spanId, json_extract_scalar(raw_json, '$.name') AS name, cast(json_extract_scalar(raw_json, '$.durationNano') AS bigint) AS durationNano, json_extract_scalar(raw_json, '$.status.code') AS status_code, json_extract(raw_json, '$.attributes') AS attributes FROM agentcore_traces LIMIT 100"
 }
 
 # Historical rollup execution logs remain managed for read-only retention; the

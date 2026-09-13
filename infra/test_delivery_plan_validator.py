@@ -2278,11 +2278,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         self.assert_reason("malformed_input", plan=plan, manifest=lambda_manifest())
 
     def test_committed_development_manifest_covers_full_package_graph(self):
-        application_infra = (
-            Path(__file__).resolve().parents[1] / "v2" / "infra" / "agentcore.tf"
-        ).read_text(encoding="utf-8")
-        if 'resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces"' not in application_infra:
-            return
         manifest = json.loads(
             (Path(__file__).resolve().parent / "development-release-manifest.json").read_text(
                 encoding="utf-8"
