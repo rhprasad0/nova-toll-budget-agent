@@ -179,6 +179,15 @@ def _source_bytes(relative: str, path: Path) -> bytes:
     return committed
 
 
+def _render_development_migration(source: Path, destination: Path) -> None:
+    bootstrap.render(source, destination)
+    destination.write_text(
+        re.sub(
+            r"\bpricing_owner\b", "pricing_owner_development", destination.read_text()
+        )
+    )
+
+
 def _tracked_modes() -> dict[str, str]:
     output = _run_capture("git", "ls-files", "--stage", "--", "v2/db/migrations")
     tracked: dict[str, str] = {}
@@ -1078,7 +1087,7 @@ def run(profile: MigrationProfile = DEVELOPMENT_PROFILE) -> dict[str, object]:
             captured_source.write_bytes(committed)
             captured_source.chmod(0o600)
             if profile is DEVELOPMENT_PROFILE:
-                bootstrap.render(captured_source, destination)
+                _render_development_migration(captured_source, destination)
             else:
                 destination.write_bytes(committed)
             _remove_terminal_commit(destination)
