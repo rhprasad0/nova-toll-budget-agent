@@ -1209,6 +1209,49 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         rejected["resource_changes"][0]["change"]["actions"] = ["no-op"]
         self.assert_reason("malformed_input", plan=rejected, manifest=manifest)
 
+    def test_runtime_noop_without_identity_requires_known_unchanged_values(self):
+        address = "aws_bedrockagentcore_agent_runtime.tollchat"
+        fields = ("agent_runtime_artifact.code_configuration.code.s3.version_id",)
+        plan = _plan([_mutation_change(address, fields, "no-op")])
+        change = plan["resource_changes"][0]["change"]
+        for side in ("before", "after"):
+            change[side]["agent_runtime_name"] = "nova_toll_v2_development"
+            change.pop(f"{side}_identity")
+        manifest = _mutation_manifest(((address, "update", fields),))
+        baseline = validate_plan(_plan([]), manifest)
+        self.assertEqual(baseline["status"], "accepted")
+        for applyable in (False, True):
+            with self.subTest(applyable=applyable):
+                plan["applyable"] = applyable
+                self.assertEqual(validate_plan(plan, manifest), baseline)
+
+        for key, value in (
+            ("before_identity", {"agent_runtime_name": "nova_toll_v2_development"}),
+            ("after_identity", {"agent_runtime_name": "nova_toll_v2_development"}),
+            ("after_unknown", {"agent_runtime_name": True}),
+            ("after_unknown", {fields[0]: True}),
+            ("before_sensitive", {"agent_runtime_name": True}),
+            ("after_sensitive", {"agent_runtime_name": True}),
+            ("after_sensitive", {"environment_variables": True}),
+            ("action_reason", "unreviewed-envelope"),
+        ):
+            with self.subTest(key=key, value=value):
+                rejected = copy.deepcopy(plan)
+                rejected["resource_changes"][0]["change"][key] = value
+                self.assert_reason("malformed_input", plan=rejected, manifest=manifest)
+
+        changed = copy.deepcopy(plan)
+        changed["resource_changes"][0]["change"]["after"]["description"] = "changed"
+        self.assert_reason("malformed_input", plan=changed, manifest=manifest)
+
+        for value in (None, {}, {"agent_runtime_name": "wrong-runtime-name"}):
+            with self.subTest(value=value):
+                rejected = copy.deepcopy(plan)
+                rejected["resource_changes"][0]["change"].update(
+                    before=copy.deepcopy(value), after=copy.deepcopy(value)
+                )
+                self.assert_reason("invalid_resource_identity", plan=rejected, manifest=manifest)
+
     def test_rejects_derived_unknown_without_exact_provenance_or_producer(self):
         for label, kwargs in (
             ("missing_configuration", {"configuration": False}),

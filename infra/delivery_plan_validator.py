@@ -1762,7 +1762,14 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         if spec is not None and spec.provider_change_identity:
             runtime_identity_omitted = (
                 address == "aws_bedrockagentcore_agent_runtime.tollchat"
-                and change["actions"] == ["update"]
+                and (
+                    change["actions"] == ["update"]
+                    or (
+                        change["actions"] == ["no-op"]
+                        and change["before"] == change["after"]
+                        and not any(metadata_paths.values())
+                    )
+                )
                 and "before_identity" not in change
                 and "after_identity" not in change
             )
@@ -1812,7 +1819,8 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 else dict(spec.provider_change_identity)
             )
             if runtime_identity_omitted and any(
-                change[side].get("agent_runtime_name")
+                not isinstance(change[side], dict)
+                or change[side].get("agent_runtime_name")
                 != expected_identity["agent_runtime_name"]
                 for side in ("before", "after")
             ):
