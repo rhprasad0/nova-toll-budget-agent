@@ -720,7 +720,42 @@ def test_private_render_accepts_every_registered_migration(tmp_path: Path) -> No
         destination = tmp_path / Path(migration.path).name
         runner._render_development_migration(runner.ROOT / migration.path, destination)
         assert re.search(r"\bpricing_owner\b", destination.read_text()) is None
-        runner._remove_terminal_commit(destination)
+        runner._remove_terminal_commit(destination, migration)
+        assert (
+            "GRANT SELECT ON pricing.schema_version TO oracle_owner_development;"
+            in destination.read_text()
+        ) == (migration.schema == "oracle")
+
+
+def test_development_oracle_migration_borrows_pricing_version_read_in_transaction(
+    tmp_path: Path,
+) -> None:
+    migration = _migration(
+        path="v2/db/migrations/031_upgrade_oracle_1_14_0_to_1_14_1.sql",
+        schema="oracle",
+        previous="1.14.0",
+        target="1.14.1",
+        number=31,
+    )
+    destination = tmp_path / "031.sql"
+    runner._render_development_migration(runner.ROOT / migration.path, destination)
+    runner._remove_terminal_commit(destination, migration)
+
+    rendered = destination.read_text(encoding="utf-8")
+    grant = "GRANT SELECT ON pricing.schema_version TO oracle_owner_development;"
+    assert rendered.index("BEGIN;") < rendered.index(grant)
+    assert rendered.index(grant) < rendered.index("SET LOCAL search_path")
+
+    session = runner._migration_sql(
+        migration,
+        destination,
+        "c" * 40,
+        "12345678-1234-4234-8234-123456789abc",
+    )
+    revoke = "REVOKE SELECT ON pricing.schema_version FROM oracle_owner_development;"
+    assert session.index("\\ir") < session.index(revoke)
+    assert session.index(revoke) < session.index("INSERT INTO")
+    assert session.index("INSERT INTO") < session.index("COMMIT;")
 
 
 def test_result_parser_returns_only_marked_values() -> None:
