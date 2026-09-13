@@ -243,6 +243,7 @@
       "action": "update",
       "operation_class": "agentcore-code",
       "changed_fields": [
+        "agent_runtime_artifact.code_configuration.code.s3.version_id",
         "environment_variables"
       ]
     },
