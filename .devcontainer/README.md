@@ -13,11 +13,19 @@ it is not mounted into the container.
    "dev.containers.gitCredentialHelperConfigLocation": "none"
    ```
 
-2. Fully quit every VS Code process. From a host Bash shell, launch the trusted
-   seed checkout without an SSH agent:
+2. Fully quit every VS Code process, then launch the trusted seed checkout
+   without an SSH agent:
 
    ```sh
    env -u SSH_AUTH_SOCK code /path/to/trusted/nova-toll-budget-agent
+   ```
+
+   If another VS Code session must stay open, use an isolated instance instead
+   and repeat step 1 in that instance before reopening:
+
+   ```sh
+   env -u SSH_AUTH_SOCK code --user-data-dir ~/.config/Code-devcontainer \
+     --new-window /path/to/trusted/nova-toll-budget-agent
    ```
 
 3. Choose **Dev Containers: Reopen in Container**. Do **not** choose **Clone
