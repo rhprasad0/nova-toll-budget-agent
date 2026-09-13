@@ -719,7 +719,11 @@ def test_private_render_accepts_every_registered_migration(tmp_path: Path) -> No
     for migration in migrations:
         destination = tmp_path / Path(migration.path).name
         runner._render_development_migration(runner.ROOT / migration.path, destination)
-        assert re.search(r"\bpricing_owner\b", destination.read_text()) is None
+        rendered = destination.read_text()
+        assert re.search(r"\bpricing_owner\b", rendered) is None
+        if migration.number == 31:
+            assert "oracle.ST_MakePoint" not in rendered
+            assert "SRID=4326;POINT(%s %s)" in rendered
         runner._remove_terminal_commit(destination, migration)
         assert (
             "GRANT SELECT ON pricing.schema_version TO oracle_owner_development;"

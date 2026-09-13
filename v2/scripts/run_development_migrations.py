@@ -181,11 +181,23 @@ def _source_bytes(relative: str, path: Path) -> bytes:
 
 def _render_development_migration(source: Path, destination: Path) -> None:
     bootstrap.render(source, destination)
-    destination.write_text(
-        re.sub(
-            r"\bpricing_owner\b", "pricing_owner_development", destination.read_text()
-        )
+    rendered = re.sub(
+        r"\bpricing_owner\b", "pricing_owner_development", destination.read_text()
     )
+    if source.name == "031_upgrade_oracle_1_14_0_to_1_14_1.sql":
+        restricted_cast = """oracle.ST_SetSRID(
+                oracle.ST_MakePoint(coordinate.longitude, coordinate.latitude), 4326
+            )"""
+        if rendered.count(restricted_cast) != 1:
+            raise MigrationError("Oracle 1.14.1 spatial update changed unexpectedly")
+        rendered = rendered.replace(
+            restricted_cast,
+            """format(
+                'SRID=4326;POINT(%s %s)',
+                coordinate.longitude, coordinate.latitude
+            )""",
+        )
+    destination.write_text(rendered)
 
 
 def _tracked_modes() -> dict[str, str]:
