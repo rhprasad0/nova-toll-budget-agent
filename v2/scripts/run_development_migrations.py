@@ -185,30 +185,15 @@ def _render_development_migration(source: Path, destination: Path) -> None:
         r"\bpricing_owner\b", "pricing_owner_development", destination.read_text()
     )
     if source.name == "031_upgrade_oracle_1_14_0_to_1_14_1.sql":
-        restricted_cast = """oracle.ST_SetSRID(
+        # ponytail: RDS revokes constructors; preserve old locations until a
+        # privileged migration exists.
+        restricted_location_update = """location = oracle.ST_SetSRID(
                 oracle.ST_MakePoint(coordinate.longitude, coordinate.latitude), 4326
-            )::oracle.geography"""
-        if rendered.count(restricted_cast) != 1:
+            )::oracle.geography,
+            """
+        if rendered.count(restricted_location_update) != 1:
             raise MigrationError("Oracle 1.14.1 spatial update changed unexpectedly")
-        rendered = rendered.replace(restricted_cast, "coordinate.location")
-        coordinate_row = re.compile(
-            r"\('(?P<point_id>i95:[^']+)', (?P<longitude>-?\d+(?:\.\d+)?)::numeric, "
-            r"(?P<latitude>-?\d+(?:\.\d+)?)::numeric\)"
-        )
-        rendered, coordinate_count = coordinate_row.subn(
-            lambda match: (
-                f"('{match.group('point_id')}', "
-                f"'SRID=4326;POINT({match.group('longitude')} "
-                f"{match.group('latitude')})'::oracle.geography(Point,4326))"
-            ),
-            rendered,
-        )
-        coordinate_alias = ") AS coordinate(point_id, longitude, latitude)"
-        if coordinate_count != 10 or rendered.count(coordinate_alias) != 1:
-            raise MigrationError("Oracle 1.14.1 coordinates changed unexpectedly")
-        rendered = rendered.replace(
-            coordinate_alias, ") AS coordinate(point_id, location)"
-        )
+        rendered = rendered.replace(restricted_location_update, "")
     destination.write_text(rendered)
 
 
