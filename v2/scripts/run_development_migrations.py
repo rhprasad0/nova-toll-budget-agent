@@ -192,10 +192,20 @@ def _render_development_migration(source: Path, destination: Path) -> None:
             raise MigrationError("Oracle 1.14.1 spatial update changed unexpectedly")
         rendered = rendered.replace(
             restricted_cast,
-            """format(
-                'SRID=4326;POINT(%s %s)',
-                coordinate.longitude, coordinate.latitude
-            )""",
+            """CASE
+                WHEN point.point_id IN ('i95:22329ND', 'i95:2232ND', 'i95:223SO')
+                    THEN 'SRID=4326;POINT(-77.0659710000000 38.8663530000000)'::oracle.geography(Point,4326)
+                WHEN point.point_id = 'i95:2232SO'
+                    THEN 'SRID=4326;POINT(-77.03933 38.878511)'::oracle.geography(Point,4326)
+                WHEN point.point_id IN ('i95:2233SO', 'i95:2239ND', 'i95:223ND')
+                    THEN 'SRID=4326;POINT(-77.0574660000000 38.8663900000000)'::oracle.geography(Point,4326)
+                WHEN point.point_id = 'i95:2249ND'
+                    THEN 'SRID=4326;POINT(-77.0461277 38.8707667)'::oracle.geography(Point,4326)
+                WHEN point.point_id = 'i95:224ND'
+                    THEN 'SRID=4326;POINT(-77.0396420000000 38.8780160000000)'::oracle.geography(Point,4326)
+                WHEN point.point_id = 'i95:224NO'
+                    THEN 'SRID=4326;POINT(-77.052876 38.865725)'::oracle.geography(Point,4326)
+            END""",
         )
     destination.write_text(rendered)
 

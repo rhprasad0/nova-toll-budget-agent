@@ -151,7 +151,7 @@
     "v2/scripts/loader-requirements.txt": "7e35ab33589fae931d8bac07a7e32f868c02c4f37b629eb4208075a98fd918b4",
     "v2/scripts/publisher-requirements.in": "443323b60ce646abe57f80efe6a842af9467d089d73459b84830450825fabdcc",
     "v2/scripts/publisher-requirements.txt": "cb3079cc8c5512aa65994c7dd3c2e31a5f98386e53a7d059622badf96be11019",
-    "v2/scripts/run_development_migrations.py": "d8345d90d0e9267fa1dc7069e4490b6e18376c88e97a758baf5323981878a904",
+    "v2/scripts/run_development_migrations.py": "3b0c5c3ada88efdff6f90c6e6f0c774385c02568098886ce181a1dbd804a7f16",
     "v2/scripts/run_development_migrations_workflow.sh": "06279a34ca06825152139ddf18d1f593d0d8d94e5dee1388e9eedf7af67c1185",
     "v2/scripts/run_private_stage.sh": "e6335bce0b7971d425e457e35df7d4fc1c5fcce212cc338322a65f9c535fdf76",
     "v2/scripts/run_production_migrations.py": "2077cbd16ba4832de6c75f1f113c2f23bb16f1d57a0dcb1615701b2631bb2e5c",
