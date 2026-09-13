@@ -320,6 +320,185 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         self.assertEqual(len(result["fingerprint"]), 64)
         self.assertEqual(set(result), {"status", "reason_code", "addresses", "actions", "operation_classes", "fingerprint"})
 
+    def test_accepts_hash_only_local_lambda_updates(self):
+        for address in ("aws_lambda_function.loader", "aws_lambda_function.publisher"):
+            with self.subTest(address=address):
+                plan = _plan([_mutation_change(address, ("source_code_hash",))])
+                manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                result = validate_plan(plan, manifest)
+                self.assertEqual(result["status"], "accepted")
+                self.assertEqual(result["reason_code"], "ok")
+                self.assertEqual(result["addresses"], [address])
+
+    def test_hash_only_local_lambda_boundaries_are_independent(self):
+        for address in ("aws_lambda_function.loader", "aws_lambda_function.publisher"):
+            with self.subTest(address=address, boundary="runtime"):
+                plan = _plan([_mutation_change(address, ("source_code_hash",))])
+                manifest = _mutation_manifest(((address, "update", ("filename", "source_code_hash")),))
+                self.assertEqual(validate_plan(plan, manifest)["reason_code"], "manifest_mutation_mismatch")
+            with self.subTest(address=address, boundary="manifest"):
+                plan = _plan([_mutation_change(address, ("filename", "source_code_hash"))])
+                manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                self.assertEqual(validate_plan(plan, manifest)["reason_code"], "manifest_mutation_mismatch")
+
+    def test_rejects_hash_only_s3_lambda_updates_at_both_boundaries_and_cli(self):
+        for address in ("aws_lambda_function.tollchat_proxy", "aws_lambda_function.timed_checks"):
+            with self.subTest(address=address, boundary="runtime"):
+                plan = _plan([_mutation_change(address, ("source_code_hash",))])
+                manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                if address.endswith("timed_checks"):
+                    manifest["deployment_inputs"]["v2/scripts/build_timed_checks_zip.sh"] = HASH
+                    manifest["packages"]["timed-checks.zip"] = HASH
+                result = validate_plan(plan, manifest)
+                self.assertEqual(
+                    result,
+                    {
+                        "status": "rejected",
+                        "reason_code": "unsupported_field_delta",
+                        "address": address,
+                        "action": "update",
+                        "operation_class": "lambda-code",
+                    },
+                )
+
+            with self.subTest(address=address, boundary="manifest"):
+                plan = _plan([_mutation_change(address, ("s3_object_version", "source_code_hash"))])
+                manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                if address.endswith("timed_checks"):
+                    manifest["deployment_inputs"]["v2/scripts/build_timed_checks_zip.sh"] = HASH
+                    manifest["packages"]["timed-checks.zip"] = HASH
+                result = validate_plan(plan, manifest)
+                self.assertEqual(
+                    result,
+                    {
+                        "status": "rejected",
+                        "reason_code": "unsupported_field_delta",
+                        "address": address,
+                        "action": "update",
+                        "operation_class": "lambda-code",
+                    },
+                )
+
+        address = "aws_lambda_function.tollchat_proxy"
+        plan = _plan([_mutation_change(address, ("source_code_hash",))])
+        change = plan["resource_changes"][0]["change"]
+        change["before"]["source_code_hash"] = "hash-sentinel-before"
+        change["after"]["source_code_hash"] = "hash-sentinel-after"
+        manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plan_path, manifest_path, identity_path = (root / name for name in ("plan.json", "manifest.json", "identity.json"))
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            identity_path.write_text(json.dumps(dict(EXPECTED_IDENTITY),), encoding="utf-8")
+            cli = subprocess.run(
+                ["python3", "infra/delivery_plan_validator.py", str(plan_path), str(manifest_path), "--identity", str(identity_path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        self.assertNotEqual(cli.returncode, 0)
+        self.assertEqual(cli.stdout.count("\n"), 1)
+        self.assertEqual(
+            json.loads(cli.stdout),
+            {
+                "status": "rejected",
+                "reason_code": "unsupported_field_delta",
+                "address": address,
+                "action": "update",
+                "operation_class": "lambda-code",
+            },
+        )
+        self.assertEqual(cli.stderr, "")
+        self.assertNotIn("sentinel", cli.stdout + cli.stderr)
+
+    def test_hash_only_local_lambda_updates_retain_existing_gates(self):
+        for address in ("aws_lambda_function.loader", "aws_lambda_function.publisher"):
+            with self.subTest(address=address, gate="action"):
+                plan = _plan([_mutation_change(address, ("source_code_hash",), action="delete")])
+                manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                self.assertEqual(validate_plan(plan, manifest)["reason_code"], "delete_not_permitted")
+            with self.subTest(address=address, gate="provider"):
+                plan = _plan([_mutation_change(address, ("source_code_hash",))])
+                plan["resource_changes"][0]["provider_name"] = "registry.terraform.io/hashicorp/random"
+                manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                self.assertEqual(validate_plan(plan, manifest)["reason_code"], "provider_identity_mismatch")
+            with self.subTest(address=address, gate="terraform"):
+                plan = _plan([_mutation_change(address, ("source_code_hash",))])
+                plan["terraform_version"] = "1.14.0"
+                manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                self.assertEqual(validate_plan(plan, manifest)["reason_code"], "provider_identity_mismatch")
+            with self.subTest(address=address, gate="missing_identity"):
+                plan = _plan([_mutation_change(address, ("source_code_hash",))])
+                manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                self.assertEqual(_validate_plan(plan, manifest)["reason_code"], "provider_identity_missing")
+            with self.subTest(address=address, gate="identity"):
+                plan = _plan([_mutation_change(address, ("source_code_hash",))])
+                plan["resource_changes"][0]["change"]["before"]["function_name"] = "wrong-development-function"
+                manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                self.assertEqual(validate_plan(plan, manifest)["reason_code"], "invalid_resource_identity")
+            with self.subTest(address=address, gate="missing_function_identity"):
+                plan = _plan([_mutation_change(address, ("source_code_hash",))])
+                plan["resource_changes"][0]["change"]["before"].pop("function_name")
+                manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                self.assertEqual(validate_plan(plan, manifest)["reason_code"], "invalid_resource_identity")
+            for field in ("s3_bucket", "s3_key", "s3_object_version"):
+                with self.subTest(address=address, gate=field):
+                    plan = _plan([_mutation_change(address, ("source_code_hash",))])
+                    change = plan["resource_changes"][0]["change"]
+                    change["before"][field] = change["after"][field] = "non-null"
+                    manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                    self.assertEqual(validate_plan(plan, manifest)["reason_code"], "invalid_resource_identity")
+            for label, mutate, reason in (
+                ("missing_permission", lambda manifest: manifest.update(permissions=[]), "missing_permission"),
+                ("permission_action", lambda manifest: manifest["permissions"][0].update(action="lambda:UpdateFunctionConfiguration"), "invalid_permission"),
+                ("permission_resource", lambda manifest: manifest["permissions"][0].update(resource="*"), "invalid_permission"),
+                ("permission_conditions", lambda manifest: manifest["permissions"][0].update(conditions={"extra": "value"}), "invalid_permission"),
+                ("manifest_mismatch", lambda manifest: manifest["mutations"][0].update(changed_fields=["filename", "source_code_hash"]), "manifest_mutation_mismatch"),
+            ):
+                with self.subTest(address=address, gate=label):
+                    plan = _plan([_mutation_change(address, ("source_code_hash",))])
+                    manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                    mutate(manifest)
+                    self.assertEqual(validate_plan(plan, manifest)["reason_code"], reason)
+            for label, mutate, reason in (
+                ("runtime", lambda plan: plan["resource_changes"][0]["change"]["after"].update(runtime="python3.14"), "unsupported_field_delta"),
+                ("unknown", lambda plan: plan["resource_changes"][0]["change"].update(after_unknown={"source_code_hash": True}), "unknown_authorization_value"),
+                ("sensitive", lambda plan: plan["resource_changes"][0]["change"].update(after_sensitive={"source_code_hash": True}), "sensitive_authorization_value"),
+                ("production", lambda plan: plan["resource_changes"][0]["change"]["after"].update(source_code_hash="production"), "production_target"),
+            ):
+                with self.subTest(address=address, gate=label):
+                    plan = _plan([_mutation_change(address, ("source_code_hash",))])
+                    manifest = _mutation_manifest(((address, "update", ("source_code_hash",)),))
+                    mutate(plan)
+                    self.assertEqual(validate_plan(plan, manifest)["reason_code"], reason)
+
+    def test_later_publisher_release_can_use_hash_only_manifest_declaration(self):
+        manifest = json.loads(
+            (Path(__file__).resolve().parent / "development-release-manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        later_manifest = copy.deepcopy(manifest)
+        publisher = next(
+            record
+            for record in later_manifest["mutations"]
+            if record["address"] == "aws_lambda_function.publisher"
+        )
+        publisher["changed_fields"] = ["source_code_hash"]
+        loader = next(
+            record
+            for record in later_manifest["mutations"]
+            if record["address"] == "aws_lambda_function.loader"
+        )
+        self.assertEqual(loader["changed_fields"], ["filename", "source_code_hash"])
+        result = validate_plan(
+            _plan([_mutation_change("aws_lambda_function.publisher", ("source_code_hash",))]),
+            later_manifest,
+        )
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(result["addresses"], ["aws_lambda_function.publisher"])
+
     def test_accepts_only_reviewed_publisher_and_report_freshness_updates(self):
         self.assertEqual(
             hashlib.sha256(PUBLISHER_AND_ALARM_FIXTURE).hexdigest(),
@@ -1073,6 +1252,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "aws_lambda_function.publisher": ("lambda-code", ("filename", "source_code_hash")),
             "aws_s3_object.agentcore": ("artifact-upload", ("source_hash",)),
             "aws_s3_object.tollchat_proxy": ("artifact-upload", ("source_hash",)),
+            'aws_s3_object.site_assets["coverage-locations.json"]': ("site-asset-upload", ("source_hash",)),
             "aws_lambda_function.tollchat_proxy": ("lambda-code", ("s3_object_version", "source_code_hash")),
             "aws_s3_object.timed_checks": ("artifact-upload", ("source_hash",)),
             "aws_lambda_function.timed_checks": ("lambda-code", ("s3_object_version", "source_code_hash")),
@@ -1120,6 +1300,12 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "aws_s3_object.tollchat_proxy",
                 "s3:PutObject",
                 "arn:aws:s3:::nova-toll-agentcore-903859731897/lambda/v2/*",
+                (),
+            ),
+            (
+                'aws_s3_object.site_assets["coverage-locations.json"]',
+                "s3:PutObject",
+                "arn:aws:s3:::tollchat-site-903859731897-dev/*",
                 (),
             ),
             (
@@ -1230,6 +1416,67 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         rejected = validate_plan(plan, widened_permission)
         self.assertEqual(rejected["status"], "rejected")
         self.assertEqual(rejected["reason_code"], "invalid_permission")
+
+    def test_committed_manifest_covers_coverage_asset_update_subset(self):
+        address = 'aws_s3_object.site_assets["coverage-locations.json"]'
+        manifest = json.loads(
+            (Path(__file__).resolve().parent / "development-release-manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        before = {
+            "source": "v2/agent/assets/coverage-locations.json",
+            "source_hash": "old",
+            **dict(CONTRACT[address].create_identity),
+        }
+        plan = _plan([_resource_change(address, "update", before, dict(before, source_hash="new"))])
+        accepted = validate_plan(plan, manifest)
+        self.assertEqual(accepted["status"], "accepted")
+        self.assertEqual(accepted["reason_code"], "ok")
+        self.assertEqual(accepted["addresses"], [address])
+        self.assertEqual(accepted["actions"], ["update"])
+        self.assertEqual(accepted["operation_classes"], ["site-asset-upload"])
+
+        missing_mutation = copy.deepcopy(manifest)
+        missing_mutation["mutations"] = [record for record in missing_mutation["mutations"] if record["address"] != address]
+        self.assertEqual(validate_plan(plan, missing_mutation), {"status": "rejected", "reason_code": "manifest_coverage_mismatch"})
+
+        missing_permission = copy.deepcopy(manifest)
+        missing_permission["permissions"] = [record for record in missing_permission["permissions"] if record["address"] != address]
+        expected = {
+            "status": "rejected",
+            "reason_code": "missing_permission",
+            "address": address,
+            "action": "update",
+            "operation_class": "site-asset-upload",
+        }
+        self.assertEqual(validate_plan(plan, missing_permission), expected)
+
+        for field in ("bucket", "key"):
+            with self.subTest(gate=field):
+                rejected = copy.deepcopy(plan)
+                change = rejected["resource_changes"][0]["change"]
+                change["before"][field] = change["after"][field] = "wrong"
+                result = validate_plan(rejected, manifest)
+                self.assertEqual(result["reason_code"], "invalid_resource_identity")
+                self.assertFalse({"before", "after", "source", "source_hash"} & set(result))
+
+        for label, mutate, reason in (
+            ("action", lambda permission: permission.update(action="s3:GetObject"), "invalid_permission"),
+            ("broad_resource", lambda permission: permission.update(resource="*"), "invalid_permission"),
+            ("different_resource", lambda permission: permission.update(resource="arn:aws:s3:::unrelated-bucket/*"), "invalid_permission"),
+            ("conditions", lambda permission: permission.update(conditions={"extra": "value"}), "invalid_permission"),
+            ("duplicate", lambda permission: None, "missing_permission"),
+        ):
+            with self.subTest(gate=label):
+                rejected_manifest = copy.deepcopy(manifest)
+                permission = next(record for record in rejected_manifest["permissions"] if record["address"] == address)
+                mutate(permission)
+                if label == "duplicate":
+                    rejected_manifest["permissions"].append(copy.deepcopy(permission))
+                result = validate_plan(plan, rejected_manifest)
+                self.assertEqual(result["reason_code"], reason)
+                self.assertFalse({"before", "after", "source", "source_hash"} & set(result))
 
     def test_timed_schedule_updates_require_fixed_enabled_target(self):
         address = 'aws_scheduler_schedule.timed_checks["greenway-eb-mon-0723"]'

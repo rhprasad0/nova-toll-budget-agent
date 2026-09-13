@@ -1181,7 +1181,12 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
         if spec.operation_class == "lambda-code":
             changed_set = set(changed)
-            if changed_set != {"filename", "source_code_hash"} and not (
+            if changed_set == {"source_code_hash"} and address in {
+                "aws_lambda_function.loader",
+                "aws_lambda_function.publisher",
+            }:
+                pass
+            elif changed_set != {"filename", "source_code_hash"} and not (
                 "source_code_hash" in changed_set
                 and bool(changed_set & {"s3_bucket", "s3_key", "s3_object_version"})
             ):
@@ -1282,13 +1287,20 @@ def _validate_manifest_entry(address: str, declaration: Mapping[str, Any], permi
     fields = declaration["changed_fields"]
     if not fields or len(set(fields)) != len(fields) or any(field not in spec.fields for field in fields):
         _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
-    if spec.operation_class == "lambda-code" and set(fields) not in (
-        {"filename", "source_code_hash"},
-        {"s3_bucket", "s3_key", "s3_object_version", "source_code_hash"},
-    ):
-        s3_fields = {"s3_bucket", "s3_key", "s3_object_version"}
-        if "source_code_hash" not in fields or not (set(fields) & s3_fields):
-            _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
+    if spec.operation_class == "lambda-code":
+        field_set = set(fields)
+        if field_set == {"source_code_hash"} and address in {
+            "aws_lambda_function.loader",
+            "aws_lambda_function.publisher",
+        }:
+            pass
+        elif field_set not in (
+            {"filename", "source_code_hash"},
+            {"s3_bucket", "s3_key", "s3_object_version", "source_code_hash"},
+        ):
+            s3_fields = {"s3_bucket", "s3_key", "s3_object_version"}
+            if "source_code_hash" not in fields or not (field_set & s3_fields):
+                _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
     expected = spec.permissions
     if len(permissions) != len(expected):
         _reject("missing_permission", address=address, action=action, operation_class=spec.operation_class)
