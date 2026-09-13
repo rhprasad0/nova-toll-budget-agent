@@ -55,7 +55,3 @@ enabled_tools = ["aws___search_documentation", "aws___read_documentation", "aws_
 
 [mcp_servers.exa]
 url = "https://mcp.exa.ai/mcp"
-
-[mcp_servers.context7]
-command = "npx"
-args = ["-y", "@upstash/context7-mcp@4.0.4"]
