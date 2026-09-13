@@ -1589,6 +1589,12 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         address, mode, change, metadata_paths = _validate_resource_shape(resource)
         spec = CONTRACT.get(address)
         if spec is not None and spec.provider_change_identity:
+            runtime_identity_omitted = (
+                address == "aws_bedrockagentcore_agent_runtime.tollchat"
+                and change["actions"] == ["update"]
+                and "before_identity" not in change
+                and "after_identity" not in change
+            )
             expected_resource_keys = {
                 "address",
                 "mode",
@@ -1599,16 +1605,17 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             }
             if "index" in resource:
                 expected_resource_keys.add("index")
-            if set(resource) != expected_resource_keys or set(change) != {
+            expected_change_keys = {
                 "actions",
                 "before",
                 "after",
                 "after_unknown",
                 "before_sensitive",
                 "after_sensitive",
-                "before_identity",
-                "after_identity",
-            }:
+            }
+            if not runtime_identity_omitted:
+                expected_change_keys.update(("before_identity", "after_identity"))
+            if set(resource) != expected_resource_keys or set(change) != expected_change_keys:
                 _reject("malformed_input", address=address)
             action_for_identity = change["actions"][0]
             expected_identity = (
@@ -1623,7 +1630,13 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 if action_for_identity == "delete"
                 else ("before_identity", "after_identity")
             )
-            if any(
+            if runtime_identity_omitted and any(
+                change[side].get("agent_runtime_name")
+                != expected_identity["agent_runtime_name"]
+                for side in ("before", "after")
+            ):
+                _reject("invalid_resource_identity", address=address)
+            if not runtime_identity_omitted and any(
                 not isinstance(change.get(side), dict)
                 or change[side] != expected_identity
                 for side in identity_sides

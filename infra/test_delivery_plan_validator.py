@@ -1117,6 +1117,93 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         }
         self.assertEqual(validate_plan(plan, manifest)["status"], "accepted")
 
+    def test_runtime_identity_metadata_omission_requires_fixed_direct_name(self):
+        address = "aws_bedrockagentcore_agent_runtime.tollchat"
+        fields = ("agent_runtime_artifact.code_configuration.code.s3.version_id",)
+        plan = _plan([_mutation_change(address, fields)])
+        change = plan["resource_changes"][0]["change"]
+        for side in ("before", "after"):
+            change[side]["agent_runtime_name"] = dict(
+                CONTRACT[address].provider_change_identity
+            )["agent_runtime_name"]
+            change.pop(f"{side}_identity")
+        manifest = _mutation_manifest(((address, "update", fields),))
+        self.assertEqual(validate_plan(plan, manifest)["status"], "accepted")
+
+        for side in ("before_identity", "after_identity"):
+            with self.subTest(identity=side):
+                rejected = copy.deepcopy(plan)
+                rejected["resource_changes"][0]["change"][side] = dict(
+                    CONTRACT[address].provider_change_identity
+                )
+                self.assert_reason("malformed_input", plan=rejected, manifest=manifest)
+
+        for value in (
+            None,
+            "wrong-runtime-name",
+            ["wrong-runtime-name"],
+            {},
+            {"agent_runtime_name": "wrong-runtime-name"},
+            {"agent_runtime_name": "nova_toll_v2_development", "extra": "value"},
+        ):
+            with self.subTest(identity=value):
+                rejected = copy.deepcopy(plan)
+                rejected["resource_changes"][0]["change"].update(
+                    before_identity=copy.deepcopy(value), after_identity=copy.deepcopy(value)
+                )
+                result = validate_plan(rejected, manifest)
+                self.assertEqual(result["status"], "rejected")
+                self.assertNotIn("wrong-runtime-name", json.dumps(result))
+
+        unequal = copy.deepcopy(plan)
+        unequal["resource_changes"][0]["change"].update(
+            before_identity=dict(CONTRACT[address].provider_change_identity),
+            after_identity={"agent_runtime_name": "wrong-runtime-name"},
+        )
+        self.assert_reason("malformed_input", plan=unequal, manifest=manifest)
+
+        for side, value in (
+            ("before", "missing"),
+            ("before", None),
+            ("before", "wrong-runtime-name"),
+            ("after", "missing"),
+            ("after", None),
+            ("after", "wrong-runtime-name"),
+        ):
+            with self.subTest(side=side, value=value):
+                rejected = copy.deepcopy(plan)
+                if value == "missing":
+                    rejected["resource_changes"][0]["change"][side].pop(
+                        "agent_runtime_name"
+                    )
+                else:
+                    rejected["resource_changes"][0]["change"][side][
+                        "agent_runtime_name"
+                    ] = value
+                result = validate_plan(rejected, manifest)
+                self.assertEqual(result["reason_code"], "invalid_resource_identity")
+                self.assertNotIn("wrong-runtime-name", json.dumps(result))
+
+        for before, after in (
+            ("wrong-runtime-name", "wrong-runtime-name"),
+            ("wrong-runtime-name", "another-runtime-name"),
+        ):
+            with self.subTest(before=before, after=after):
+                rejected = copy.deepcopy(plan)
+                rejected["resource_changes"][0]["change"]["before"][
+                    "agent_runtime_name"
+                ] = before
+                rejected["resource_changes"][0]["change"]["after"][
+                    "agent_runtime_name"
+                ] = after
+                result = validate_plan(rejected, manifest)
+                self.assertEqual(result["reason_code"], "invalid_resource_identity")
+                self.assertNotIn("runtime-name", json.dumps(result))
+
+        rejected = copy.deepcopy(plan)
+        rejected["resource_changes"][0]["change"]["actions"] = ["no-op"]
+        self.assert_reason("malformed_input", plan=rejected, manifest=manifest)
+
     def test_rejects_derived_unknown_without_exact_provenance_or_producer(self):
         for label, kwargs in (
             ("missing_configuration", {"configuration": False}),
