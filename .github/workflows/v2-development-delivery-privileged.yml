@@ -512,13 +512,12 @@ jobs:
           test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST" || MANIFEST_VALID=false
           test -f "$IDENTITY" && test ! -L "$IDENTITY" && test -r "$IDENTITY" || IDENTITY_VALID=false
           PRIVATE_STAGE_FALLBACK_STAGE=validator
-          if run_private_stage "validator" "$VALIDATION" "$VALIDATOR_LOG" \
-            python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY"; then
-            VALIDATOR_STATUS=0
-          else
-            VALIDATOR_STATUS=$?
-          fi
-          if run_private_stage "validator" "$VALIDATION_SUMMARY" "$VALIDATOR_PARSE_LOG" jq -e '
+          _run_private_stage_emit 'stage=validator status=start elapsed=0 exit=0 reason=unclassified'
+          set +e
+          python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" \
+            >"$VALIDATION" 2>"$VALIDATOR_LOG"
+          VALIDATOR_STATUS=$?
+          jq -e '
             def valid_reason:
               .reason_code as $reason |
               ["data_mode_misuse", "delete_not_permitted", "deposed_resource", "duplicate_address", "duplicate_manifest_mutation", "duplicate_permission", "import_or_refresh", "invalid_permission", "invalid_resource_identity", "invalid_schedule_value", "malformed_input", "manifest_coverage_mismatch", "manifest_mutation_mismatch", "missing_permission", "moved_resource", "production_target", "provider_identity_mismatch", "provider_identity_missing", "replacement", "sensitive_authorization_value", "timed_contract_requires_marker", "unknown_authorization_value", "unknown_manifest_declaration", "unsupported_action", "unsupported_address", "unsupported_field_delta"]
@@ -537,12 +536,12 @@ jobs:
               (.action? == null or (.action | type == "string" and length <= 32)) and
               (.operation_class? == null or (.operation_class | type == "string" and length <= 64))));
             select(valid_result) | {status, reason_code}
-          ' "$VALIDATION"; then
-            VALIDATOR_PARSE_STATUS=0
-          else
-            VALIDATOR_PARSE_STATUS=$?
-          fi
+          ' "$VALIDATION" >"$VALIDATION_SUMMARY" 2>"$VALIDATOR_PARSE_LOG"
+          VALIDATOR_PARSE_STATUS=$?
+          set -e
           if test "$VALIDATOR_PARSE_STATUS" -ne 0; then
+            _run_private_stage_emit "stage=validator status=fail elapsed=0 exit=$VALIDATOR_PARSE_STATUS reason=malformed_input"
+            PRIVATE_STAGE_REPORTED=1
             exit "$VALIDATOR_PARSE_STATUS"
           fi
           if ! cat "$VALIDATION_SUMMARY" >&2; then
@@ -563,11 +562,15 @@ jobs:
           set +e
           VALIDATOR_RESULT_STATUS="$(jq -er '.status' "$VALIDATION_SUMMARY" 2>"$VALIDATOR_PARSE_LOG")"
           VALIDATOR_RESULT_STATUS_CODE=$?
+          VALIDATOR_RESULT_REASON="$(jq -er '.reason_code' "$VALIDATION_SUMMARY" 2>"$VALIDATOR_PARSE_LOG")"
+          VALIDATOR_RESULT_REASON_CODE=$?
           set -e
-          if test "$VALIDATOR_RESULT_STATUS_CODE" -ne 0; then
-            _run_private_stage_emit "stage=validator status=fail elapsed=0 exit=$VALIDATOR_RESULT_STATUS_CODE reason=malformed_input"
+          if test "$VALIDATOR_RESULT_STATUS_CODE" -ne 0 || test "$VALIDATOR_RESULT_REASON_CODE" -ne 0; then
+            VALIDATOR_RESULT_PARSE_STATUS="$VALIDATOR_RESULT_STATUS_CODE"
+            test "$VALIDATOR_RESULT_PARSE_STATUS" -ne 0 || VALIDATOR_RESULT_PARSE_STATUS="$VALIDATOR_RESULT_REASON_CODE"
+            _run_private_stage_emit "stage=validator status=fail elapsed=0 exit=$VALIDATOR_RESULT_PARSE_STATUS reason=malformed_input"
             PRIVATE_STAGE_REPORTED=1
-            exit "$VALIDATOR_RESULT_STATUS_CODE"
+            exit "$VALIDATOR_RESULT_PARSE_STATUS"
           fi
           if test "$MANIFEST_VALID" != true || test "$IDENTITY_VALID" != true; then
             _run_private_stage_emit 'stage=validator status=fail elapsed=0 exit=1 reason=malformed_input'
@@ -580,13 +583,16 @@ jobs:
               PRIVATE_STAGE_REPORTED=1
               exit 1
             fi
+            _run_private_stage_emit "stage=validator status=fail elapsed=0 exit=$VALIDATOR_STATUS reason=$VALIDATOR_RESULT_REASON"
             PRIVATE_STAGE_REPORTED=1
             exit "$VALIDATOR_STATUS"
           fi
           if test "$VALIDATOR_STATUS" -ne 0; then
+            _run_private_stage_emit "stage=validator status=fail elapsed=0 exit=$VALIDATOR_STATUS reason=unclassified"
             PRIVATE_STAGE_REPORTED=1
             exit "$VALIDATOR_STATUS"
           fi
+          _run_private_stage_emit 'stage=validator status=pass elapsed=0 exit=0 reason=ok'
           chmod 600 -- "$PLAN" "$PLAN_JSON" "$FOUNDATION_VARS"
 
       - name: Fetch pinned RDS CA bundle for automatic migrations

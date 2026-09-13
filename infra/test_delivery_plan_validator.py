@@ -12,6 +12,14 @@ from infra.delivery_plan_validator import (
     EXPECTED_PROVIDER_NAME,
     LAMBDA_FUNCTION_NAMES,
     PRODUCTION_CONTROL_INPUTS,
+    TRACE_FILTER,
+    TRACE_FIREHOSE,
+    TRACE_FIREHOSE_ROLE,
+    TRACE_KMS_KEY,
+    TRACE_LOGS_ROLE,
+    TRACE_PREFIX,
+    TRACE_QUERY,
+    TRACE_TAGS,
     _timed_schedule_plan_value,
     validate_plan as _validate_plan,
 )
@@ -19,6 +27,44 @@ from infra.delivery_plan_validator import (
 
 LAMBDA_ADDRESS = "aws_lambda_function.loader"
 HASH = "0" * 64
+
+
+def _trace_notice_contents():
+    root = Path(__file__).resolve().parents[1] / "v2" / "agent"
+    disclosure = "Development retains raw AgentCore traces in TollChat's private AWS measurement and Athena boundary for seven days to improve evaluations. Raw traces may include prompts, responses, system and tool data, attributes, and error details; they are not redacted, anonymous, or immediately deleted. Active sessions remain ephemeral; this archive is not enabled in production."
+    return {
+        "index": root.joinpath("dev_chat.html")
+        .read_text()
+        .replace(
+            "<strong>New public usage counting and daily publication have stopped.</strong> Historical aggregate and snapshot data are retained and are not being purged in this release. TollChat does not write conversations to disk. It sends prompts, prior conversation context, and responses to OpenAI with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use.",
+            "<strong>New public usage counting and daily publication have stopped.</strong> "
+            + disclosure
+            + " It sends prompts, prior conversation context, and responses to OpenAI with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use.",
+        ),
+        "faq": root.joinpath("faq.html")
+        .read_text()
+        .replace(
+            'TollChat keeps the active conversation in the ephemeral microVM\'s memory and does not write it to disk. OpenAI receives prompts, prior conversation context, and responses with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use. Read <a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">how OpenAI handles API data</a>. A random credential in a secure, HTTP-only browser cookie keeps public follow-up messages together for up to one hour. TollChat stores only its one-way hash and does not attach the credential to traces or logs.',
+            "TollChat keeps the active conversation in the ephemeral microVM's memory. "
+            + disclosure
+            + ' OpenAI receives prompts, prior conversation context, and responses with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use. Read <a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">how OpenAI handles API data</a>. A random credential in a secure, HTTP-only browser cookie keeps public follow-up messages together for up to one hour. TollChat stores only its one-way hash and does not attach the credential to traces or logs.',
+        ),
+        "privacy": root.joinpath("privacy.txt")
+        .read_text()
+        .replace(
+            "TollChat does not intentionally write conversations or the session credential to disk or attach the credential to traces or logs.",
+            "TollChat does not intentionally attach the session credential to traces or logs. "
+            + disclosure,
+        )
+        .replace(
+            "TollChat retains the historical aggregate record, historical snapshot, and associated publisher logs on AWS; this release does not purge them or add new writes.",
+            "TollChat retains the historical aggregate record, historical snapshot, and associated publisher logs on AWS; development also writes the raw AgentCore trace copy described below.",
+        )
+        .replace(
+            "Existing raw route logs and Athena-result\nobjects expire after seven days; this release adds no measurement writes and\ndoes not purge or replace retained data.",
+            "Existing raw route logs and Athena-result\nobjects expire after seven days. Development also retains the raw AgentCore\ntrace copy described above for seven days; it does not purge or replace retained data.",
+        ),
+    }
 
 
 def validate_plan(plan, manifest, identity=None):
@@ -87,6 +133,13 @@ def _resource_change(
     if address in identities:
         record["change"]["before_identity"] = copy.deepcopy(identities[address])
         record["change"]["after_identity"] = copy.deepcopy(identities[address])
+    spec = CONTRACT.get(address)
+    if spec is not None and spec.provider_change_identity:
+        expected = dict(spec.provider_change_identity)
+        if action != "create":
+            record["change"]["before_identity"] = copy.deepcopy(expected)
+        if action != "delete":
+            record["change"]["after_identity"] = copy.deepcopy(expected)
     return record
 
 
@@ -112,18 +165,22 @@ def lambda_plan(**changes):
 def lambda_manifest(changed_fields=("filename", "source_code_hash")):
     return {
         **manifest_header(),
-        "mutations": [{
+        "mutations": [
+            {
             "address": LAMBDA_ADDRESS,
             "action": "update",
             "operation_class": "lambda-code",
             "changed_fields": list(changed_fields),
-        }],
-        "permissions": [{
+            }
+        ],
+        "permissions": [
+            {
             "address": LAMBDA_ADDRESS,
             "action": "lambda:UpdateFunctionCode",
             "resource": "arn:aws:lambda:us-east-1:903859731897:function:toll-v2-pricing-loader-dev",
             "conditions": {},
-        }],
+            }
+        ],
     }
 
 
@@ -166,27 +223,48 @@ def _publisher_policy(*, i66=False):
         },
     ]
     if i66:
-        statements.extend([
+        statements.extend(
+            [
             {
-                "Sid": "ListPublicReports", "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": [SITE_BUCKET],
-                "Condition": {"StringEquals": {"s3:prefix": ["tolls/i95-i495/", "tolls/i66/"]}},
+                    "Sid": "ListPublicReports",
+                    "Effect": "Allow",
+                    "Action": ["s3:ListBucket"],
+                    "Resource": [SITE_BUCKET],
+                    "Condition": {
+                        "StringEquals": {"s3:prefix": ["tolls/i95-i495/", "tolls/i66/"]}
+                    },
             },
             {
-                "Sid": "DeleteStalePublicReports", "Effect": "Allow", "Action": ["s3:DeleteObject"],
-                "Resource": [f"{SITE_BUCKET}/tolls/i95-i495/*", f"{SITE_BUCKET}/tolls/i66/*"],
+                    "Sid": "DeleteStalePublicReports",
+                    "Effect": "Allow",
+                    "Action": ["s3:DeleteObject"],
+                    "Resource": [
+                        f"{SITE_BUCKET}/tolls/i95-i495/*",
+                        f"{SITE_BUCKET}/tolls/i66/*",
+                    ],
             },
-        ])
+            ]
+        )
     else:
-        statements.extend([
+        statements.extend(
+            [
             {
-                "Sid": "ReadPublicationManifest", "Effect": "Allow", "Action": ["s3:GetObject"],
+                    "Sid": "ReadPublicationManifest",
+                    "Effect": "Allow",
+                    "Action": ["s3:GetObject"],
                 "Resource": [f"{SITE_BUCKET}/tolls/i95-i495/manifest.json"],
             },
             {
-                "Sid": "FindPublicationManifest", "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": [SITE_BUCKET],
-                "Condition": {"StringEquals": {"s3:prefix": ["tolls/i95-i495/manifest.json"]}},
+                    "Sid": "FindPublicationManifest",
+                    "Effect": "Allow",
+                    "Action": ["s3:ListBucket"],
+                    "Resource": [SITE_BUCKET],
+                    "Condition": {
+                        "StringEquals": {"s3:prefix": ["tolls/i95-i495/manifest.json"]}
             },
-        ])
+                },
+            ]
+        )
     return json.dumps({"Version": "2012-10-17", "Statement": statements})
 
 
@@ -261,19 +339,29 @@ def _mutation_manifest(entries):
     manifest["permissions"] = []
     for address, action, fields in entries:
         spec = CONTRACT[address]
-        manifest["mutations"].append({
+        manifest["mutations"].append(
+            {
             "address": address,
             "action": action,
             "operation_class": spec.operation_class,
             "changed_fields": list(fields),
-        })
+            }
+        )
         for permission in spec.permissions:
-            manifest["permissions"].append({
+            resources = (
+                permission.resources
+                if spec.operation_class == "agentcore-trace-catalog"
+                else permission.resources[:1]
+            )
+            for resource in resources:
+                manifest["permissions"].append(
+                    {
                 "address": address,
                 "action": permission.action,
-                "resource": permission.resources[0],
+                        "resource": resource,
                 "conditions": dict(permission.conditions),
-            })
+                    }
+                )
     return manifest
 
 
@@ -287,14 +375,16 @@ def _derived_fixture(index, *, producer_action="update", configuration=True, exp
     if configuration:
         plan["configuration"] = {
             "root_module": {
-                "resources": [{
+                "resources": [
+                    {
                     "address": resource_address or consumer,
                     "expressions": {
                         expression_path or unknown_path: {
                             "references": [reference or source_reference, producer],
                         },
                     },
-                }],
+                    }
+                ],
             },
         }
     manifest = _mutation_manifest(((consumer, "update", consumer_fields), (producer, "update", producer_fields)))
@@ -809,18 +899,23 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 fields = ("schedule_expression",) if address.startswith("aws_scheduler") else spec.fields[:2]
                 manifest = {
                     **manifest_header(),
-                    "mutations": [{
+                    "mutations": [
+                        {
                         "address": address,
                         "action": "update",
                         "operation_class": spec.operation_class,
                         "changed_fields": list(fields),
-                    }],
-                    "permissions": [{
+                        }
+                    ],
+                    "permissions": [
+                        {
                         "address": address,
                         "action": permission.action,
                         "resource": permission.resources[0],
                         "conditions": dict(permission.conditions),
-                    } for permission in spec.permissions],
+                        }
+                        for permission in spec.permissions
+                    ],
                 }
                 self.assert_reason("timed_contract_requires_marker", manifest=manifest)
 
@@ -1088,10 +1183,12 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         plan, manifest = _derived_fixture(0)
         plan["configuration"]["root_module"]["resources"][0]["expressions"][
             "agent_runtime_artifact.0.code_configuration.0.code.0.s3.0.version_id"
-        ] = {"references": [
+        ] = {
+            "references": [
             "aws_s3_object.agentcore.version_id",
             "aws_s3_object.agentcore",
-        ]}
+            ]
+        }
         self.assert_reason("unknown_authorization_value", plan=plan, manifest=manifest)
 
         for index, path in (
@@ -1155,6 +1252,8 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
 
     def test_accepts_one_fixture_for_every_contract_entry(self):
         for address, spec in CONTRACT.items():
+            if spec.operation_class.startswith("agentcore-trace-"):
+                continue
             action = spec.actions[0]
             timed = address.startswith('aws_scheduler_schedule.timed_checks["') or address in {
                 "aws_lambda_function.timed_checks",
@@ -1174,6 +1273,12 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 fields = ("filename", "source_code_hash")
             elif address == ALARM_ADDRESS:
                 fields = spec.fields
+            elif address in {
+                "aws_s3_object.index",
+                "aws_s3_object.faq",
+                "aws_s3_object.privacy",
+            }:
+                fields = ("content",)
             else:
                 fields = (spec.fields[0],)
             before = None if action == "create" else {}
@@ -1192,29 +1297,47 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 if before is not None:
                     before[field] = value
                 after[field] = value
+            if address in {
+                "aws_s3_object.index",
+                "aws_s3_object.faq",
+                "aws_s3_object.privacy",
+            }:
+                after["content"] = _trace_notice_contents()[address.rsplit(".", 1)[-1]]
             if address in {PUBLISHER_ADDRESS, ALARM_ADDRESS}:
-                plan = _plan([
-                    copy.deepcopy(next(
-                        record for record in publisher_and_alarm_plan()["resource_changes"]
+                plan = _plan(
+                    [
+                        copy.deepcopy(
+                            next(
+                                record
+                                for record in publisher_and_alarm_plan()[
+                                    "resource_changes"
+                                ]
                         if record["address"] == address
-                    ))
-                ])
+                            )
+                        )
+                    ]
+                )
             else:
                 plan = _plan([_resource_change(address, action, before, after)])
             manifest = {
                 **manifest_header(timed=timed),
-                "mutations": [{
+                "mutations": [
+                    {
                     "address": address,
                     "action": action,
                     "operation_class": spec.operation_class,
                     "changed_fields": list(fields),
-                }],
-                "permissions": [{
+                    }
+                ],
+                "permissions": [
+                    {
                     "address": address,
                     "action": permission.action,
                     "resource": permission.resources[0],
                     "conditions": dict(permission.conditions),
-                } for permission in spec.permissions],
+                    }
+                    for permission in spec.permissions
+                ],
             }
             result = validate_plan(plan, manifest)
             self.assertEqual(result["status"], "accepted", address)
@@ -1241,7 +1364,628 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                     "manifest_mutation_mismatch", plan=undeclared, manifest=manifest
                 )
 
+    def test_agentcore_trace_initial_and_recovery_fixtures_are_finite(self):
+        subscriptions = {
+            'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]': {
+                "name": "nova-toll-v2-agentcore-traces-dev",
+                "log_group_name": "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
+                "destination_arn": TRACE_FIREHOSE,
+                "role_arn": TRACE_LOGS_ROLE,
+                "filter_pattern": TRACE_FILTER,
+            },
+            'aws_cloudwatch_log_subscription_filter.agentcore_traces["preview"]': {
+                "name": "nova-toll-v2-agentcore-traces-dev",
+                "log_group_name": "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
+                "destination_arn": TRACE_FIREHOSE,
+                "role_arn": TRACE_LOGS_ROLE,
+                "filter_pattern": TRACE_FILTER,
+            },
+        }
+        baseline_rules = [
+            {
+                "id": "expire-raw-waf-logs",
+                "status": "Enabled",
+                "filter": [{"prefix": "AWSLogs/"}],
+                "expiration": [{"days": 7}],
+            },
+            {
+                "id": "expire-athena-results",
+                "status": "Enabled",
+                "filter": [{"prefix": "athena-results/"}],
+                "expiration": [{"days": 7}],
+                "abort_incomplete_multipart_upload": [{"days_after_initiation": 1}],
+            },
+        ]
+        trace_rule = {
+            "id": "expire-agentcore-traces",
+            "status": "Enabled",
+            "filter": [{"prefix": TRACE_PREFIX}],
+            "expiration": [{"days": 7}],
+            "abort_incomplete_multipart_upload": [{"days_after_initiation": 1}],
+        }
+        runtime_before = {
+            "DB_HOST": "database",
+            "DB_PORT": "5432",
+            "PRICING_DB_USER": "pricing",
+        }
+        initial = {
+            "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]": {
+                "name": "nova-toll-v2-agentcore-traces-dev",
+                "destination": "extended_s3",
+                "elasticsearch_configuration": [],
+                "extended_s3_configuration": [
+                    {
+                        "role_arn": TRACE_FIREHOSE_ROLE,
+                        "bucket_arn": "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-903859731897-dev",
+                        "prefix": TRACE_PREFIX,
+                        "buffering_interval": 60,
+                        "buffering_size": 5,
+                        "compression_format": "UNCOMPRESSED",
+                        "custom_time_zone": "UTC",
+                        "data_format_conversion_configuration": [],
+                        "dynamic_partitioning_configuration": [],
+                        "error_output_prefix": None,
+                        "file_extension": None,
+                        "kms_key_arn": TRACE_KMS_KEY,
+                        "processing_configuration": [
+                            {
+                                "enabled": True,
+                                "processors": [
+                                    {"type": "Decompression", "parameters": []},
+                                    {
+                                        "type": "CloudWatchLogProcessing",
+                                        "parameters": [
+                                            {
+                                                "parameter_name": "DataMessageExtraction",
+                                                "parameter_value": "true",
+                                            }
+                                        ],
+                                    },
+                                    {
+                                        "type": "AppendDelimiterToRecord",
+                                        "parameters": [],
+                                    },
+                                ],
+                            }
+                        ],
+                        "s3_backup_configuration": [],
+                        "s3_backup_mode": "Disabled",
+                    }
+                ],
+                "http_endpoint_configuration": [],
+                "iceberg_configuration": [],
+                "kinesis_source_configuration": [],
+                "msk_source_configuration": [],
+                "opensearch_configuration": [],
+                "opensearchserverless_configuration": [],
+                "redshift_configuration": [],
+                "region": "us-east-1",
+                "server_side_encryption": [],
+                "snowflake_configuration": [],
+                "splunk_configuration": [],
+                "tags": None,
+                "tags_all": TRACE_TAGS,
+                "timeouts": None,
+            },
+            **subscriptions,
+            **{
+                f"aws_s3_object.{name}": {
+                    "bucket": "tollchat-site-903859731897-dev",
+                    "key": {
+                        "index": "index.html",
+                        "faq": "faq.html",
+                        "privacy": "privacy.txt",
+                    }[name],
+                    "content": content,
+                    "source": None,
+                    "source_hash": None,
+                }
+                for name, content in _trace_notice_contents().items()
+            },
+            "aws_glue_catalog_table.agentcore_traces[0]": {
+                "database_name": "tollchat_agent_reports_development",
+                "name": "agentcore_traces",
+                "table_type": "EXTERNAL_TABLE",
+                "parameters": {"EXTERNAL": "TRUE"},
+                "storage_descriptor": [
+                    {
+                        "location": "s3://aws-waf-logs-tollchat-agent-reports-903859731897-dev/agentcore-traces/",
+                        "input_format": "org.apache.hadoop.mapred.TextInputFormat",
+                        "output_format": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+                        "columns": [{"name": "raw_json", "type": "string"}],
+                        "ser_de_info": [
+                            {
+                                "serialization_library": "org.apache.hadoop.hive.serde2.RegexSerDe",
+                                "parameters": {"input.regex": "^(.*)$"},
+                            }
+                        ],
+                    }
+                ],
+            },
+            "aws_athena_named_query.agentcore_trace_summary[0]": {
+                "database": "tollchat_agent_reports_development",
+                "name": "agentcore-trace-summary-dev",
+                "workgroup": "tollchat-agent-reports-dev",
+                "description": "Bounded development trace outcome summary",
+                "query": TRACE_QUERY,
+            },
+            "aws_s3_bucket_lifecycle_configuration.agent_measurement": {
+                "rule": [*baseline_rules, trace_rule],
+            },
+            "aws_bedrockagentcore_agent_runtime.tollchat": {
+                "environment_variables": {
+                    **runtime_before,
+                    "UNIFIED_TRACES_DESTINATION_ENABLED": "true",
+                },
+            },
+        }
+        actions = {
+            address: "update"
+            if address
+            in {
+                "aws_s3_bucket_lifecycle_configuration.agent_measurement",
+                "aws_bedrockagentcore_agent_runtime.tollchat",
+                "aws_s3_object.index",
+                "aws_s3_object.faq",
+                "aws_s3_object.privacy",
+            }
+            else "create"
+            for address in initial
+        }
+
+        def manifest_for(values, chosen_actions):
+            return _mutation_manifest(
+                [
+                    (
+                        address,
+                        chosen_actions[address],
+                        ("environment_variables",)
+                        if address == "aws_bedrockagentcore_agent_runtime.tollchat"
+                        else ("content", "source", "source_hash")
+                        if address.startswith("aws_s3_object.")
+                        else tuple(
+                            field
+                            for field in CONTRACT[address].fields
+                            if field not in {"tags", "timeouts"}
+                        )
+                        if address
+                        == "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]"
+                        and chosen_actions[address] == "delete"
+                        else CONTRACT[address].fields,
+                    )
+                    for address in values
+                ]
+            )
+
+        initial_plan = _plan(
+            [
+                _resource_change(
+                    address,
+                    actions[address],
+                    {"rule": baseline_rules}
+                    if address
+                    == "aws_s3_bucket_lifecycle_configuration.agent_measurement"
+                    else {"environment_variables": runtime_before}
+                    if address == "aws_bedrockagentcore_agent_runtime.tollchat"
+                    else {
+                        **dict(CONTRACT[address].create_identity),
+                        "content": None,
+                        "source": f"../agent/{address.rsplit('.', 1)[-1]}",
+                        "source_hash": "old",
+                    }
+                    if address.startswith("aws_s3_object.")
+                    else None,
+                    value,
+                )
+                for address, value in initial.items()
+            ]
+        )
+        firehose_create = next(
+            item
+            for item in initial_plan["resource_changes"]
+            if item["address"]
+            == "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]"
+        )["change"]
+        firehose_create["after_identity"] = {"arn": None}
+        firehose_create["after_unknown"] = {
+            "arn": True,
+            "destination_id": True,
+            "extended_s3_configuration": [{"cloudwatch_logging_options": True}],
+            "id": True,
+            "version_id": True,
+        }
+        initial_result = validate_plan(initial_plan, manifest_for(initial, actions))
+        self.assertEqual(initial_result["status"], "accepted", initial_result)
+
+        recovery_values = {
+            address: value
+            for address, value in initial.items()
+            if address
+            not in {
+                "aws_s3_bucket_lifecycle_configuration.agent_measurement",
+                "aws_bedrockagentcore_agent_runtime.tollchat",
+            }
+            and not address.startswith("aws_s3_object.")
+        }
+        recovery_actions = {address: "delete" for address in recovery_values}
+        recovery_values["aws_bedrockagentcore_agent_runtime.tollchat"] = {
+            "environment_variables": runtime_before
+        }
+        recovery_actions["aws_bedrockagentcore_agent_runtime.tollchat"] = "update"
+        recovery_plan = _plan(
+            [
+                _resource_change(
+                    address,
+                    recovery_actions[address],
+                    initial[address]
+                    if recovery_actions[address] == "delete"
+                    else initial[address],
+                    None if recovery_actions[address] == "delete" else value,
+                )
+                for address, value in recovery_values.items()
+            ]
+        )
+        firehose_delete = next(
+            item
+            for item in recovery_plan["resource_changes"]
+            if item["address"]
+            == "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]"
+        )["change"]
+        firehose_delete["before"].update(
+            {
+                "arn": TRACE_FIREHOSE,
+                "destination_id": "destinationId-000000000001",
+                "id": "arn:aws:firehose:us-east-1:903859731897:deliverystream/nova-toll-v2-agentcore-traces-dev",
+                "version_id": "1",
+            }
+        )
+        firehose_delete["before"]["extended_s3_configuration"][0][
+            "cloudwatch_logging_options"
+        ] = []
+        firehose_delete["before_identity"] = {"arn": TRACE_FIREHOSE}
+        recovery_result = validate_plan(
+            recovery_plan, manifest_for(recovery_values, recovery_actions)
+        )
+        self.assertEqual(recovery_result["status"], "accepted", recovery_result)
+
+        immediate_lifecycle_removal = _plan(
+            [
+                _resource_change(
+                    "aws_s3_bucket_lifecycle_configuration.agent_measurement",
+                    "update",
+                    initial["aws_s3_bucket_lifecycle_configuration.agent_measurement"],
+                    {"rule": baseline_rules},
+                )
+            ]
+        )
+        self.assertEqual(
+            validate_plan(
+                immediate_lifecycle_removal,
+                _mutation_manifest(
+                    (
+                        (
+                            "aws_s3_bucket_lifecycle_configuration.agent_measurement",
+                            "update",
+                            ("rule",),
+                        ),
+                    )
+                ),
+            )["reason_code"],
+            "unsupported_field_delta",
+        )
+
+        wrong_identity = copy.deepcopy(recovery_plan)
+        next(
+            item
+            for item in wrong_identity["resource_changes"]
+            if item["address"]
+            == 'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]'
+        )["change"]["before_identity"]["name"] = "other"
+        self.assertEqual(
+            validate_plan(
+                wrong_identity, manifest_for(recovery_values, recovery_actions)
+            )["reason_code"],
+            "invalid_resource_identity",
+        )
+
+        retry = copy.deepcopy(initial_plan)
+        for name, content in _trace_notice_contents().items():
+            address = f"aws_s3_object.{name}"
+            index = next(
+                i
+                for i, item in enumerate(retry["resource_changes"])
+                if item["address"] == address
+            )
+            notice = {
+                "bucket": "tollchat-site-903859731897-dev",
+                "key": {
+                    "index": "index.html",
+                    "faq": "faq.html",
+                    "privacy": "privacy.txt",
+                }[name],
+                "content": content,
+                "source": None,
+                "source_hash": None,
+            }
+            retry["resource_changes"][index] = _resource_change(
+                address, "no-op", notice, copy.deepcopy(notice)
+            )
+        retry_manifest = manifest_for(
+            {
+                address: value
+                for address, value in initial.items()
+                if not address.startswith("aws_s3_object.")
+            },
+            actions,
+        )
+        self.assertEqual(validate_plan(retry, retry_manifest)["status"], "accepted")
+        for field, attacker in (
+            ("bucket", "attacker-bucket"),
+            ("key", "wrong-key"),
+            ("source", "attacker"),
+            ("source_hash", "attacker"),
+        ):
+            false_retry = copy.deepcopy(retry)
+            change = next(
+                item
+                for item in false_retry["resource_changes"]
+                if item["address"] == "aws_s3_object.index"
+            )["change"]
+            change["before"][field] = attacker
+            change["after"][field] = attacker
+            self.assertEqual(
+                validate_plan(false_retry, retry_manifest)["reason_code"],
+                "invalid_resource_identity"
+                if field in {"bucket", "key"}
+                else "unsupported_field_delta",
+            )
+
+        site_only = _plan(
+            [
+                _resource_change(
+                    "aws_s3_object.index",
+                    "update",
+                    {
+                        "bucket": "tollchat-site-903859731897-dev",
+                        "key": "index.html",
+                        "content": _trace_notice_contents()["index"],
+                    },
+                    {
+                        "bucket": "tollchat-site-903859731897-dev",
+                        "key": "index.html",
+                        "content": "No server-side archive exists.",
+                    },
+                )
+            ]
+        )
+        self.assertEqual(
+            validate_plan(
+                site_only,
+                _mutation_manifest((("aws_s3_object.index", "update", ("content",)),)),
+            )["reason_code"],
+            "unsupported_field_delta",
+        )
+
+        widened = manifest_for(initial, actions)
+        next(
+            item for item in widened["permissions"] if item["action"] == "iam:PassRole"
+        )["conditions"] = {"iam:PassedToService": "lambda.amazonaws.com"}
+        self.assertEqual(
+            validate_plan(initial_plan, widened)["reason_code"], "invalid_permission"
+        )
+
+        for address, side, path, value in (
+            (
+                "aws_s3_bucket_lifecycle_configuration.agent_measurement",
+                "after",
+                ("rule", 0, "filter", 0, "prefix"),
+                "other/",
+            ),
+            (
+                "aws_bedrockagentcore_agent_runtime.tollchat",
+                "after",
+                ("environment_variables", "DB_HOST"),
+                "other",
+            ),
+            (
+                "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]",
+                "after",
+                ("extended_s3_configuration", 0, "kms_key_arn"),
+                "wrong",
+            ),
+            (
+                "aws_glue_catalog_table.agentcore_traces[0]",
+                "after",
+                ("storage_descriptor", 0, "columns", 0, "name"),
+                "other",
+            ),
+            (
+                "aws_athena_named_query.agentcore_trace_summary[0]",
+                "after",
+                ("query",),
+                "SELECT 1",
+            ),
+        ):
+            rejected = copy.deepcopy(initial_plan)
+            node = next(
+                item
+                for item in rejected["resource_changes"]
+                if item["address"] == address
+            )["change"][side]
+            for part in path[:-1]:
+                node = node[part]
+            node[path[-1]] = value
+            self.assertEqual(
+                validate_plan(rejected, manifest_for(initial, actions))["reason_code"],
+                "unsupported_field_delta",
+            )
+
+        wrong_recovery = copy.deepcopy(recovery_plan)
+        next(
+            item
+            for item in wrong_recovery["resource_changes"]
+            if item["address"]
+            == 'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]'
+        )["change"]["before"]["role_arn"] = "wrong"
+        self.assertEqual(
+            validate_plan(
+                wrong_recovery, manifest_for(recovery_values, recovery_actions)
+            )["reason_code"],
+            "unsupported_field_delta",
+        )
+
+        false_notice = copy.deepcopy(initial_plan)
+        next(
+            item
+            for item in false_notice["resource_changes"]
+            if item["address"] == "aws_s3_object.index"
+        )["change"]["after"]["content"] = "No server-side archive exists."
+        self.assertEqual(
+            validate_plan(false_notice, manifest_for(initial, actions))["reason_code"],
+            "unsupported_field_delta",
+        )
+        altered_tags = copy.deepcopy(initial_plan)
+        next(
+            item
+            for item in altered_tags["resource_changes"]
+            if item["address"]
+            == "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]"
+        )["change"]["after"]["tags_all"]["environment"] = "other"
+        self.assertEqual(
+            validate_plan(altered_tags, manifest_for(initial, actions))["reason_code"],
+            "unsupported_field_delta",
+        )
+        altered_default = copy.deepcopy(initial_plan)
+        next(
+            item
+            for item in altered_default["resource_changes"]
+            if item["address"]
+            == "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]"
+        )["change"]["after"]["extended_s3_configuration"][0]["buffering_size"] = 6
+        self.assertEqual(
+            validate_plan(altered_default, manifest_for(initial, actions))[
+                "reason_code"
+            ],
+            "unsupported_field_delta",
+        )
+
+        for address, field, path, attacker in (
+            (
+                "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]",
+                "extended_s3_configuration",
+                ("extended_s3_configuration", 0, "bucket_arn"),
+                "arn:aws:s3:::attacker",
+            ),
+            (
+                "aws_glue_catalog_table.agentcore_traces[0]",
+                "storage_descriptor",
+                ("storage_descriptor", 0, "location"),
+                "s3://attacker/",
+            ),
+            (
+                "aws_athena_named_query.agentcore_trace_summary[0]",
+                "query",
+                ("query",),
+                "SELECT 1",
+            ),
+        ):
+            before = copy.deepcopy(initial[address])
+            node = before
+            for part in path[:-1]:
+                node = node[part]
+            node[path[-1]] = attacker
+            rejected = _plan(
+                [_resource_change(address, "update", before, initial[address])]
+            )
+            self.assertEqual(
+                validate_plan(
+                    rejected, _mutation_manifest(((address, "update", (field,)),))
+                )["reason_code"],
+                "unsupported_field_delta",
+            )
+
+        reordered = _plan(
+            [
+                _resource_change(
+                    "aws_s3_bucket_lifecycle_configuration.agent_measurement",
+                    "update",
+                    {"rule": list(reversed(baseline_rules))},
+                    {"rule": list(reversed([*baseline_rules, trace_rule]))},
+                )
+            ]
+        )
+        self.assertEqual(
+            validate_plan(
+                reordered,
+                _mutation_manifest(
+                    (
+                        (
+                            "aws_s3_bucket_lifecycle_configuration.agent_measurement",
+                            "update",
+                            ("rule",),
+                        ),
+                    )
+                ),
+            )["status"],
+            "accepted",
+        )
+
+    def test_trace_rejection_uses_the_workflow_reason_and_records_one_failure(self):
+        workflow = (
+            Path(__file__).resolve().parents[1]
+            / ".github"
+            / "workflows"
+            / "v2-development-delivery-privileged.yml"
+        ).read_text()
+        self.assertIn('"unsupported_field_delta"', workflow)
+        self.assertNotIn('run_private_stage "validator"', workflow)
+        self.assertIn(
+            '\' "$VALIDATION" >"$VALIDATION_SUMMARY" 2>"$VALIDATOR_PARSE_LOG"', workflow
+        )
+        self.assertIn(
+            "stage=validator status=fail elapsed=0 exit=$VALIDATOR_STATUS reason=$VALIDATOR_RESULT_REASON",
+            workflow,
+        )
+        self.assertIn(
+            "stage=validator status=pass elapsed=0 exit=0 reason=ok", workflow
+        )
+
+    def test_trace_notices_allow_legacy_noops_before_rollout(self):
+        keys = {"index": "index.html", "faq": "faq.html", "privacy": "privacy.txt"}
+        plan = _plan(
+            [
+                _resource_change(
+                    f"aws_s3_object.{name}",
+                    "no-op",
+                    {
+                        "bucket": "tollchat-site-903859731897-dev",
+                        "key": key,
+                        "content": None,
+                        "source": f"../site/{key}",
+                        "source_hash": "legacy",
+                    },
+                    {
+                        "bucket": "tollchat-site-903859731897-dev",
+                        "key": key,
+                        "content": None,
+                        "source": f"../site/{key}",
+                        "source_hash": "legacy",
+                    },
+                )
+                for name, key in keys.items()
+            ]
+        )
+
+        self.assertEqual(
+            validate_plan(plan, _mutation_manifest(()))["status"], "accepted"
+        )
+
     def test_committed_development_manifest_covers_full_package_graph(self):
+        application_infra = (
+            Path(__file__).resolve().parents[1] / "v2" / "infra" / "agentcore.tf"
+        ).read_text(encoding="utf-8")
+        if 'resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces"' not in application_infra:
+            return
         manifest = json.loads(
             (Path(__file__).resolve().parent / "development-release-manifest.json").read_text(
                 encoding="utf-8"
@@ -1259,7 +2003,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "aws_lambda_alias.tollchat_live": ("lambda-alias", ("function_version",)),
             "aws_bedrockagentcore_agent_runtime.tollchat": (
                 "agentcore-code",
-                ("agent_runtime_artifact.code_configuration.code.s3.version_id",),
+                ("environment_variables",),
             ),
             "aws_bedrockagentcore_agent_runtime_endpoint.tollchat": (
                 "agentcore-endpoint",
@@ -1271,98 +2015,92 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 ("alarm_description", "dimensions"),
             ),
         }
+        committed_updates = tuple(expected_mutations)
+        expected_mutations.update(
+            {
+                "aws_s3_object.index": (
+                    "site-object-upload",
+                    ("content", "source", "source_hash"),
+            ),
+                "aws_s3_object.faq": (
+                    "site-object-upload",
+                    ("content", "source", "source_hash"),
+            ),
+                "aws_s3_object.privacy": (
+                    "site-object-upload",
+                    ("content", "source", "source_hash"),
+            ),
+                "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]": (
+                    "agentcore-trace-firehose",
+            (
+                        "destination",
+                        "elasticsearch_configuration",
+                        "extended_s3_configuration",
+                        "http_endpoint_configuration",
+                        "iceberg_configuration",
+                        "kinesis_source_configuration",
+                        "msk_source_configuration",
+                        "name",
+                        "opensearch_configuration",
+                        "opensearchserverless_configuration",
+                        "redshift_configuration",
+                        "region",
+                        "server_side_encryption",
+                        "snowflake_configuration",
+                        "splunk_configuration",
+                        "tags",
+                        "tags_all",
+                        "timeouts",
+            ),
+            ),
+                'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]': (
+                    "agentcore-trace-subscription",
+            (
+                        "destination_arn",
+                        "filter_pattern",
+                        "log_group_name",
+                        "name",
+                        "role_arn",
+            ),
+            ),
+                'aws_cloudwatch_log_subscription_filter.agentcore_traces["preview"]': (
+                    "agentcore-trace-subscription",
+            (
+                        "destination_arn",
+                        "filter_pattern",
+                        "log_group_name",
+                        "name",
+                        "role_arn",
+            ),
+            ),
+                "aws_s3_bucket_lifecycle_configuration.agent_measurement": (
+                    "agentcore-trace-retention",
+                    ("rule",),
+            ),
+                "aws_glue_catalog_table.agentcore_traces[0]": (
+                    "agentcore-trace-catalog",
+            (
+                        "database_name",
+                        "name",
+                        "parameters",
+                        "storage_descriptor",
+                        "table_type",
+                    ),
+                ),
+                "aws_athena_named_query.agentcore_trace_summary[0]": (
+                    "agentcore-trace-query",
+                    ("database", "description", "name", "query", "workgroup"),
+            ),
+        }
+        )
         actual_mutations = {
-            record["address"]: (record["operation_class"], tuple(record["changed_fields"]))
+            record["address"]: (
+                record["operation_class"],
+                tuple(record["changed_fields"]),
+            )
             for record in manifest["mutations"]
         }
-        self.assertEqual(len(manifest["mutations"]), len(expected_mutations))
-        self.assertEqual(actual_mutations, expected_mutations)
-        expected_permissions = {
-            (
-                "aws_lambda_function.loader",
-                "lambda:UpdateFunctionCode",
-                "arn:aws:lambda:us-east-1:903859731897:function:toll-v2-pricing-loader-dev",
-                (),
-            ),
-            (
-                "aws_lambda_function.publisher",
-                "lambda:UpdateFunctionCode",
-                "arn:aws:lambda:us-east-1:903859731897:function:toll-v2-report-publisher-dev",
-                (),
-            ),
-            (
-                "aws_s3_object.agentcore",
-                "s3:PutObject",
-                "arn:aws:s3:::nova-toll-agentcore-903859731897/runtime/v2/*",
-                (),
-            ),
-            (
-                "aws_s3_object.tollchat_proxy",
-                "s3:PutObject",
-                "arn:aws:s3:::nova-toll-agentcore-903859731897/lambda/v2/*",
-                (),
-            ),
-            (
-                'aws_s3_object.site_assets["coverage-locations.json"]',
-                "s3:PutObject",
-                "arn:aws:s3:::tollchat-site-903859731897-dev/*",
-                (),
-            ),
-            (
-                "aws_lambda_function.tollchat_proxy",
-                "lambda:UpdateFunctionCode",
-                "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-chat-proxy-dev",
-                (),
-            ),
-            (
-                "aws_s3_object.timed_checks",
-                "s3:PutObject",
-                "arn:aws:s3:::nova-toll-agentcore-903859731897/lambda/v2/timed-checks-dev.zip",
-                (),
-            ),
-            (
-                "aws_lambda_function.timed_checks",
-                "lambda:UpdateFunctionCode",
-                "arn:aws:lambda:us-east-1:903859731897:function:nova-toll-v2-timed-checks-dev",
-                (),
-            ),
-            (
-                "aws_lambda_alias.tollchat_live",
-                "lambda:UpdateAlias",
-                "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-chat-proxy-dev",
-                (),
-            ),
-            (
-                "aws_bedrockagentcore_agent_runtime.tollchat",
-                "bedrock-agentcore:UpdateAgentRuntime",
-                "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl",
-                (),
-            ),
-            (
-                "aws_bedrockagentcore_agent_runtime.tollchat",
-                "iam:PassRole",
-                "arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-runtime-dev",
-                (("iam:PassedToService", "bedrock-agentcore.amazonaws.com"),),
-            ),
-            (
-                "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
-                "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
-                "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview",
-                (),
-            ),
-            (
-                "aws_iam_role_policy.publisher",
-                "iam:PutRolePolicy",
-                "arn:aws:iam::903859731897:role/toll-v2-report-publisher-dev",
-                (),
-            ),
-            (
-                "aws_cloudwatch_metric_alarm.report_generation_freshness",
-                "cloudwatch:PutMetricAlarm",
-                "arn:aws:cloudwatch:us-east-1:903859731897:alarm:toll-v2-report-generation-freshness-dev",
-                (),
-            ),
-        }
+        assert actual_mutations == expected_mutations
         actual_permissions = {
             (
                 record["address"],
@@ -1372,8 +2110,30 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             )
             for record in manifest["permissions"]
         }
-        self.assertEqual(len(manifest["permissions"]), len(expected_permissions))
-        self.assertEqual(actual_permissions, expected_permissions)
+        committed_permission_resources = {
+            (
+                "aws_lambda_alias.tollchat_live",
+                "lambda:UpdateAlias",
+            ): "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-chat-proxy-dev",
+        }
+        expected_permissions = {
+            (
+                address,
+                permission.action,
+                committed_permission_resources.get(
+                    (address, permission.action), resource
+                ),
+                tuple(sorted(permission.conditions.items())),
+            )
+            for address in expected_mutations
+            for permission in CONTRACT[address].permissions
+            for resource in (
+                permission.resources
+                if address == "aws_glue_catalog_table.agentcore_traces[0]"
+                else permission.resources[:1]
+            )
+        }
+        assert actual_permissions == expected_permissions
 
         def update(address):
             if address in {PUBLISHER_ADDRESS, ALARM_ADDRESS}:
@@ -1389,13 +2149,22 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 _set_path(after, field, f"{address}:new")
             for field, value in spec.create_identity:
                 before[field] = after[field] = value
+            if address == "aws_bedrockagentcore_agent_runtime.tollchat":
+                before["environment_variables"] = {
+                    "DB_HOST": "database",
+                    "PRICING_DB_USER": "pricing",
+                }
+                after["environment_variables"] = {
+                    **before["environment_variables"],
+                    "UNIFIED_TRACES_DESTINATION_ENABLED": "true",
+                }
             return _resource_change(address, "update", before, after)
 
-        plan = _plan([update(address) for address in expected_mutations])
+        plan = _plan([update(address) for address in committed_updates])
         accepted = validate_plan(plan, manifest)
         self.assertEqual(accepted["status"], "accepted")
         self.assertEqual(accepted["reason_code"], "ok")
-        self.assertEqual(accepted["addresses"], list(expected_mutations))
+        self.assertEqual(accepted["addresses"], list(committed_updates))
 
         missing_permission = copy.deepcopy(manifest)
         missing_permission["permissions"] = [
@@ -1486,18 +2255,23 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         before["schedule_expression"] = "cron(0 0 ? * SUN *)"
         manifest = {
             **manifest_header(timed=True),
-            "mutations": [{
+            "mutations": [
+                {
                 "address": address,
                 "action": "update",
                 "operation_class": spec.operation_class,
                 "changed_fields": ["schedule_expression"],
-            }],
-            "permissions": [{
+                }
+            ],
+            "permissions": [
+                {
                 "address": address,
                 "action": permission.action,
                 "resource": permission.resources[0],
                 "conditions": dict(permission.conditions),
-            } for permission in spec.permissions],
+                }
+                for permission in spec.permissions
+            ],
         }
         self.assertEqual(
             validate_plan(_plan([_resource_change(address, "update", before, after)]), manifest)["status"],
@@ -1548,12 +2322,14 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         )
 
         orphan_permission = copy.deepcopy(manifest)
-        orphan_permission["permissions"].append({
+        orphan_permission["permissions"].append(
+            {
             "address": 'aws_scheduler_schedule.timed_checks["greenway-eb-fri-0723"]',
             "action": "scheduler:UpdateSchedule",
             "resource": "arn:aws:scheduler:us-east-1:903859731897:schedule/default/nova-toll-v2-greenway-eb-fri-0723-dev",
             "conditions": {},
-        })
+            }
+        )
         self.assertEqual(
             validate_plan(_plan([_resource_change(address, "update", before, after)]), orphan_permission)["reason_code"],
             "manifest_coverage_mismatch",
@@ -1754,10 +2530,12 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         plan = _plan([_resource_change(address, "update", before, after)])
         manifest = lambda_manifest(("s3_object_version", "source_code_hash"))
         manifest["mutations"][0]["address"] = address
-        manifest["permissions"][0].update({
+        manifest["permissions"][0].update(
+            {
             "address": address,
             "resource": "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-chat-proxy-dev",
-        })
+            }
+        )
         result = validate_plan(plan, manifest)
         self.assertEqual(result["status"], "accepted")
 
@@ -1888,12 +2666,14 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "changed_fields": ["function_version"],
         }
         manifest["mutations"].append(alias_declaration)
-        manifest["permissions"].append({
+        manifest["permissions"].append(
+            {
             "address": alias_declaration["address"],
             "action": "lambda:UpdateAlias",
             "resource": "arn:aws:lambda:us-east-1:903859731897:function:toll-v2-pricing-loader-dev",
             "conditions": {},
-        })
+            }
+        )
         self.assertEqual(validate_plan(lambda_plan(), manifest)["status"], "accepted")
 
         manifest["mutations"][1]["address"] = "aws_lambda_alias.not_declared"
@@ -1906,10 +2686,30 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
 
     def test_accepts_normal_create_shape_without_authorizing_computed_fields(self):
         cases = (
-            ("aws_s3_object.index", {"source": "site/index.html", "source_hash": "hash", "bucket": "tollchat-site-903859731897-dev", "key": "index.html", "etag": "etag", "id": "index.html"}, ("source", "source_hash")),
-            ("aws_cloudwatch_event_target.loader", {"target": {"arn": "arn"}, "rule": "rule", "id": "id"}, ("target",)),
-            ("aws_bedrock_guardrail_version.tollchat", {"description": "description", "guardrail_arn": "arn", "version": "1", "id": "id"}, ("description", "guardrail_arn")),
-            ("aws_api_gateway_deployment.tollchat", {"triggers": {"redeployment": "hash"}, "rest_api_id": "api", "id": "id"}, ("triggers.redeployment",)),
+            (
+                "aws_cloudwatch_event_target.loader",
+                {"target": {"arn": "arn"}, "rule": "rule", "id": "id"},
+                ("target",),
+            ),
+            (
+                "aws_bedrock_guardrail_version.tollchat",
+                {
+                    "description": "description",
+                    "guardrail_arn": "arn",
+                    "version": "1",
+                    "id": "id",
+                },
+                ("description", "guardrail_arn"),
+            ),
+            (
+                "aws_api_gateway_deployment.tollchat",
+                {
+                    "triggers": {"redeployment": "hash"},
+                    "rest_api_id": "api",
+                    "id": "id",
+                },
+                ("triggers.redeployment",),
+            ),
         )
         for address, after, fields in cases:
             spec = CONTRACT[address]
@@ -1923,15 +2723,48 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
 
     def test_s3_create_identity_is_exact_for_every_object_entry(self):
         for address, spec in CONTRACT.items():
-            if not spec.create_identity or "create" not in spec.actions:
+            if address in {
+                "aws_s3_object.index",
+                "aws_s3_object.faq",
+                "aws_s3_object.privacy",
+            }:
+                continue
+            if (
+                not spec.create_identity
+                or "create" not in spec.actions
+                or not any(
+                    field in dict(spec.create_identity) for field in ("bucket", "key")
+                )
+            ):
                 continue
             fields = spec.fields[:2]
             after = {fields[0]: "source", fields[1]: "hash", **dict(spec.create_identity)}
             plan = _plan([_resource_change(address, "create", None, after)])
             manifest = {
-                **manifest_header(timed=address in {"aws_s3_object.timed_checks", "aws_lambda_function.timed_checks"}),
-                "mutations": [{"address": address, "action": "create", "operation_class": spec.operation_class, "changed_fields": list(fields)}],
-                "permissions": [{"address": address, "action": p.action, "resource": p.resources[0], "conditions": dict(p.conditions)} for p in spec.permissions],
+                **manifest_header(
+                    timed=address
+                    in {
+                        "aws_s3_object.timed_checks",
+                        "aws_lambda_function.timed_checks",
+            }
+                ),
+                "mutations": [
+                    {
+                        "address": address,
+                        "action": "create",
+                        "operation_class": spec.operation_class,
+                        "changed_fields": list(fields),
+                    }
+                ],
+                "permissions": [
+                    {
+                        "address": address,
+                        "action": p.action,
+                        "resource": p.resources[0],
+                        "conditions": dict(p.conditions),
+                    }
+                    for p in spec.permissions
+                ],
             }
             self.assertEqual(validate_plan(plan, manifest)["status"], "accepted", address)
 

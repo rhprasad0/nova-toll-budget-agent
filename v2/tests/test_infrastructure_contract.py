@@ -5667,17 +5667,24 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
         'if test "$MANIFEST_VALID" != true || test "$IDENTITY_VALID" != true; then'
         in source
     )
-    assert 'run_private_stage "validator" "$VALIDATION" "$VALIDATOR_LOG"' in source
-    assert (
-        'run_private_stage "validator" "$VALIDATION_SUMMARY" "$VALIDATOR_PARSE_LOG"'
-        in source
-    )
+    assert 'run_private_stage "validator"' not in source
+    assert '\' "$VALIDATION" >"$VALIDATION_SUMMARY" 2>"$VALIDATOR_PARSE_LOG"' in source
     assert 'cat "$VALIDATION_SUMMARY" >>"$VALIDATOR_PARSE_LOG"' in source
     assert '"invalid_schedule_value"' in source
     assert '"timed_contract_requires_marker"' in source
     assert (
         'VALIDATOR_RESULT_STATUS="$(jq -er \'.status\' "$VALIDATION_SUMMARY"' in source
     )
+    assert (
+        'VALIDATOR_RESULT_REASON="$(jq -er \'.reason_code\' "$VALIDATION_SUMMARY"'
+        in source
+    )
+    assert 'exit "$VALIDATOR_RESULT_PARSE_STATUS"' in source
+    assert (
+        "stage=validator status=fail elapsed=0 exit=$VALIDATOR_STATUS reason=$VALIDATOR_RESULT_REASON"
+        in source
+    )
+    assert "stage=validator status=pass elapsed=0 exit=0 reason=ok" in source
     assert 'if test "$VALIDATOR_RESULT_STATUS" != accepted; then' in source
     assert 'if test "$VALIDATOR_STATUS" -ne 0;' in source
     assert 'PROOF="$RUNNER_TEMP/protected-main-oidc.json"' in source
@@ -6603,8 +6610,8 @@ def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_pla
         DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW
     )
     validator_invocation = (
-        'run_private_stage "validator" "$VALIDATION" "$VALIDATOR_LOG" '
-        '\\\n            python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY"'
+        'python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" '
+        '\\\n            >"$VALIDATION" 2>"$VALIDATOR_LOG"'
     )
     show_invocation = (
         'run_private_stage "show" "$PLAN_JSON" "$SHOW_LOG" '
@@ -7070,6 +7077,15 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "PassExistingAgentCoreRuntimeRole": ["iam:PassRole"],
         "PassTimedChecksSchedulerRole": ["iam:PassRole"],
         "UpdateReportPublisherInlinePolicy": ["iam:PutRolePolicy"],
+        "ReadAgentCoreTraceRoles": [
+            "iam:GetRole",
+            "iam:GetRolePolicy",
+            "iam:ListAttachedRolePolicies",
+            "iam:ListRolePolicies",
+            "iam:ListRoleTags",
+        ],
+        "PassAgentCoreTraceLogsRole": ["iam:PassRole"],
+        "PassAgentCoreTraceFirehoseRole": ["iam:PassRole"],
     }
     assert by_sid["UpdateReportPublisherInlinePolicy"]["resources"] == [
         "arn:aws:iam::${local.development_delivery_account_id}:role/toll-v2-report-publisher-dev"
@@ -7227,7 +7243,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "ListApplicationAthenaWorkGroups",
         "ReadManagedCloudFrontPolicies",
         "ReadApplicationKmsAliases",
-        "ReadAgentCoreTraceXRaySettings",
     }
     for sid in wildcard_statements:
         conditions = cast(list[dict[str, object]], by_sid[sid]["conditions"])
@@ -7460,9 +7475,11 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "wafv2:ListTagsForResource",
     ]
     assert "ManageApplicationNetworking" not in by_sid
-    assert "CreateNamedQuery" not in all_actions
-    assert "athena:DeleteNamedQuery" not in all_actions
-    assert "UpdateNamedQuery" not in all_actions
+    assert by_sid["ManageAgentCoreTraceNamedQuery"]["actions"] == [
+        "athena:CreateNamedQuery",
+        "athena:DeleteNamedQuery",
+    ]
+    assert "athena:UpdateNamedQuery" not in all_actions
     assert re.search(r'development_delivery_api_id\s*=\s*"ocw8sg0wlb"', source)
     assert re.search(r"guardrail/vdyqrh31xgca", source)
     assert re.search(r"runtime/nova_toll_v2_development-Y69XBf88Bl", source)
@@ -7878,8 +7895,8 @@ DEVELOPMENT_PLAN_SIDS = [
     "DescribeApplicationLogPolicies",
     "DescribeApplicationLogGroups",
     "ReadAgentCoreTraceSubscription",
+    "ReadAgentCoreTraceRoles",
     "ReadAgentCoreTraceFirehose",
-    "ReadAgentCoreTraceXRaySettings",
     "ReadApplicationAlarms",
     "ReadRetainedRollupAlarms",
     "DescribeApplicationNetworking",
@@ -8003,18 +8020,27 @@ DEVELOPMENT_PLAN_REFRESH_TUPLES = {
     ),
     "ReadAgentCoreTraceSubscription": (
         ("logs:DescribeSubscriptionFilters",),
-        ("${local.development_delivery_agentcore_trace_log_group_arn}:*",),
+        (
+            "for",
+            "arn",
+            "in",
+            "local.development_delivery_agentcore_trace_log_group_arns",
+            "${arn}:*",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadAgentCoreTraceRoles": (
+        _IAM_READ_ACTIONS,
+        (
+            "local.development_delivery_agentcore_trace_logs_role_arn",
+            "local.development_delivery_agentcore_trace_firehose_role_arn",
+        ),
         _NO_PLAN_CONDITIONS,
     ),
     "ReadAgentCoreTraceFirehose": (
         ("firehose:DescribeDeliveryStream",),
         ("local.development_delivery_agentcore_trace_firehose_arn",),
         _NO_PLAN_CONDITIONS,
-    ),
-    "ReadAgentCoreTraceXRaySettings": (
-        ("xray:GetIndexingRules", "xray:GetTraceSegmentDestination"),
-        ("*",),
-        _REGIONAL_PLAN_CONDITIONS,
     ),
     "ReadApplicationAlarms": (
         _ALARM_READ_ACTIONS,
@@ -8448,7 +8474,6 @@ def _assert_development_plan_policy(source: str) -> None:
         "ReadApplicationKmsAliases",
         "ListApplicationAthenaWorkGroups",
         "ReadManagedCloudFrontPolicies",
-        "ReadAgentCoreTraceXRaySettings",
     }
     for sid in wildcard_sids:
         assert by_sid[sid]["conditions"] == [
@@ -8618,10 +8643,13 @@ def _assert_agentcore_trace_foundation_source(source: str) -> None:
                 {
                     "test": "StringLike",
                     "variable": "aws:SourceArn",
-                    "values": [
-                        "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:*"
-                    ],
-                }
+                    "values": ["${arn}:*"],
+                },
+                {
+                    "test": "StringEquals",
+                    "variable": "aws:SourceAccount",
+                    "values": [],
+                },
             ],
         }
     ]
@@ -8681,7 +8709,10 @@ def _assert_agentcore_trace_foundation_source(source: str) -> None:
         },
     ]
     for name, service in (
-        ("development_agentcore_trace_logs_assume", "logs.amazonaws.com"),
+        (
+            "development_agentcore_trace_logs_assume",
+            "logs.${local.development_delivery_region}.amazonaws.com",
+        ),
         ("development_agentcore_trace_firehose_assume", "firehose.amazonaws.com"),
     ):
         principals = _hcl_named_blocks(
@@ -8762,7 +8793,23 @@ def _assert_agentcore_trace_identity_reads(source: str) -> None:
     ] = {
         "ReadAgentCoreTraceSubscription": (
             ["logs:DescribeSubscriptionFilters"],
-            ["${local.development_delivery_agentcore_trace_log_group_arn}:*"],
+            [
+                'for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"'
+            ],
+            [],
+        ),
+        "ReadAgentCoreTraceRoles": (
+            [
+                "iam:GetRole",
+                "iam:GetRolePolicy",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListRolePolicies",
+                "iam:ListRoleTags",
+            ],
+            [
+                "local.development_delivery_agentcore_trace_logs_role_arn",
+                "local.development_delivery_agentcore_trace_firehose_role_arn",
+            ],
             [],
         ),
         "ReadAgentCoreTraceFirehose": (
@@ -8770,22 +8817,34 @@ def _assert_agentcore_trace_identity_reads(source: str) -> None:
             ["local.development_delivery_agentcore_trace_firehose_arn"],
             [],
         ),
-        "ReadAgentCoreTraceXRaySettings": (
-            ["xray:GetIndexingRules", "xray:GetTraceSegmentDestination"],
-            ["*"],
-            [{"test": "StringEquals", "variable": "aws:RequestedRegion", "values": []}],
-        ),
     }
     for document in ("development_delivery", "development_plan"):
         statements = _policy_by_sid(_parsed_policy_document(source, document))
+        document_expected = deepcopy(expected)
+        if document == "development_plan":
+            document_expected["ReadAgentCoreTraceRoles"] = (
+                [
+                    "iam:GetRole",
+                    "iam:GetRolePolicy",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:ListInstanceProfilesForRole",
+                    "iam:ListRolePolicies",
+                    "iam:ListRoleTags",
+                ],
+                [
+                    "local.development_delivery_agentcore_trace_logs_role_arn",
+                    "local.development_delivery_agentcore_trace_firehose_role_arn",
+                ],
+                [],
+            )
         assert {
             sid: (
                 statements[sid]["actions"],
                 statements[sid]["resources"],
                 statements[sid]["conditions"],
             )
-            for sid in expected
-        } == expected
+            for sid in document_expected
+        } == document_expected
 
 
 def test_development_delivery_direct_api_denials_are_resource_scoped():
@@ -8823,14 +8882,24 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
         "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-agentcore-runtime-dev"
     ]
     assert "lambda:UpdateFunctionConfiguration" not in all_actions
-    assert "athena:DeleteNamedQuery" not in all_actions
-    assert (
-        not {
-            "athena:CreateNamedQuery",
-            "athena:UpdateNamedQuery",
+    assert by_sid["ManageAgentCoreTraceNamedQuery"]["resources"] == [
+        "local.development_delivery_athena_workgroup_arn"
+    ]
+    assert by_sid["PassAgentCoreTraceLogsRole"]["conditions"] == [
+        {
+            "test": "StringEquals",
+            "variable": "iam:PassedToService",
+            "values": ["logs.amazonaws.com"],
         }
-        & all_actions
-    )
+    ]
+    assert by_sid["PassAgentCoreTraceFirehoseRole"]["conditions"] == [
+        {
+            "test": "StringEquals",
+            "variable": "iam:PassedToService",
+            "values": ["firehose.amazonaws.com"],
+        }
+    ]
+    assert "athena:UpdateNamedQuery" not in all_actions
     temporary_sids = {
         "RetireUsagePublisherIam",
         "RetireUsagePublisherLambda",
@@ -8961,13 +9030,29 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
         )
         for sid in (
             "ReadAgentCoreTraceSubscription",
+            "ReadAgentCoreTraceRoles",
             "ReadAgentCoreTraceFirehose",
-            "ReadAgentCoreTraceXRaySettings",
         )
     } == {
         "ReadAgentCoreTraceSubscription": (
             ["logs:DescribeSubscriptionFilters"],
-            ["${local.development_delivery_agentcore_trace_log_group_arn}:*"],
+            [
+                'for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"'
+            ],
+            [],
+        ),
+        "ReadAgentCoreTraceRoles": (
+            [
+                "iam:GetRole",
+                "iam:GetRolePolicy",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListRolePolicies",
+                "iam:ListRoleTags",
+            ],
+            [
+                "local.development_delivery_agentcore_trace_logs_role_arn",
+                "local.development_delivery_agentcore_trace_firehose_role_arn",
+            ],
             [],
         ),
         "ReadAgentCoreTraceFirehose": (
@@ -8975,54 +9060,60 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
             ["local.development_delivery_agentcore_trace_firehose_arn"],
             [],
         ),
-        "ReadAgentCoreTraceXRaySettings": (
-            ["xray:GetIndexingRules", "xray:GetTraceSegmentDestination"],
-            ["*"],
-            [{"test": "StringEquals", "variable": "aws:RequestedRegion", "values": []}],
-        ),
     }
     _assert_agentcore_trace_identity_reads(FOUNDATION_IAM)
     trace_actions = {
         action
         for sid in {
             "ReadAgentCoreTraceSubscription",
+            "ReadAgentCoreTraceRoles",
             "ReadAgentCoreTraceFirehose",
-            "ReadAgentCoreTraceXRaySettings",
+            "ManageAgentCoreTraceSubscriptions",
+            "ManageAgentCoreTraceFirehose",
+            "PassAgentCoreTraceLogsRole",
+            "PassAgentCoreTraceFirehoseRole",
+            "ManageAgentCoreTraceRetention",
+            "ManageAgentCoreTraceCatalog",
+            "ManageAgentCoreTraceNamedQuery",
         }
         for action in cast(list[str], delivery[sid]["actions"])
     }
-    assert (
-        not {
-            "logs:PutSubscriptionFilter",
-            "logs:DeleteSubscriptionFilter",
-            "logs:PutResourcePolicy",
-            "logs:DeleteResourcePolicy",
-            "firehose:CreateDeliveryStream",
-            "firehose:DeleteDeliveryStream",
-            "firehose:UpdateDestination",
-            "xray:UpdateIndexingRule",
-            "xray:UpdateTraceSegmentDestination",
-            "s3:PutLifecycleConfiguration",
-            "glue:CreateTable",
-            "glue:DeleteTable",
-            "glue:UpdateTable",
-            "athena:CreateNamedQuery",
-            "athena:DeleteNamedQuery",
-            "athena:UpdateNamedQuery",
-            "iam:PassRole",
-        }
-        & trace_actions
-    )
+    assert {
+        "logs:PutSubscriptionFilter",
+        "logs:DeleteSubscriptionFilter",
+        "firehose:CreateDeliveryStream",
+        "firehose:DeleteDeliveryStream",
+        "firehose:TagDeliveryStream",
+        "firehose:UpdateDestination",
+        "s3:PutLifecycleConfiguration",
+        "glue:CreateTable",
+        "glue:DeleteTable",
+        "glue:UpdateTable",
+        "athena:CreateNamedQuery",
+        "athena:DeleteNamedQuery",
+        "iam:PassRole",
+    } <= trace_actions
+    assert "logs:PutResourcePolicy" not in trace_actions
     production = _top_level_terraform_block(FOUNDATION_IAM, "locals", 3)
     assert "development_delivery_trace_statement_sids = toset" in production
     for sid in {
         "ReadAgentCoreTraceSubscription",
+        "ReadAgentCoreTraceRoles",
         "ReadAgentCoreTraceFirehose",
-        "ReadAgentCoreTraceXRaySettings",
+        "ManageAgentCoreTraceSubscriptions",
+        "ManageAgentCoreTraceFirehose",
+        "PassAgentCoreTraceLogsRole",
+        "PassAgentCoreTraceFirehoseRole",
+        "ManageAgentCoreTraceRetention",
+        "ManageAgentCoreTraceCatalog",
+        "ManageAgentCoreTraceNamedQuery",
     }:
         assert f'"{sid}"' in production
     assert "production_delivery_trace_role_arns" not in production
-    role_discovery = _top_level_terraform_block(FOUNDATION_IAM, "locals", 0)
+    role_discovery = _hcl_attribute(
+        _top_level_terraform_block(FOUNDATION_IAM, "locals", 0),
+        "development_delivery_role_names",
+    )
     assert "nova-toll-v2-agentcore-traces-logs-dev" not in role_discovery
     assert "nova-toll-v2-agentcore-traces-firehose-dev" not in role_discovery
     _, rendered_delivery, foundation = (
@@ -9037,11 +9128,15 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
                 "Action": "sts:AssumeRole",
                 "Condition": {
                     "StringLike": {
-                        "aws:SourceArn": "arn:aws:logs:us-east-1:903859731897:*"
-                    }
+                        "aws:SourceArn": [
+                            "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT:*",
+                            "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview:*",
+                        ]
+                    },
+                    "StringEquals": {"aws:SourceAccount": "903859731897"},
                 },
                 "Effect": "Allow",
-                "Principal": {"Service": "logs.amazonaws.com"},
+                "Principal": {"Service": "logs.us-east-1.amazonaws.com"},
             }
         ],
         "Version": "2012-10-17",
@@ -9128,12 +9223,14 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
         for sid in (
             "ReadAgentCoreTraceSubscription",
             "ReadAgentCoreTraceFirehose",
-            "ReadAgentCoreTraceXRaySettings",
         )
     } == {
         "ReadAgentCoreTraceSubscription": {
             "Action": "logs:DescribeSubscriptionFilters",
-            "Resource": "arn:aws:logs:us-east-1:903859731897:log-group:aws/spans:*",
+            "Resource": [
+                "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview:*",
+                "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT:*",
+            ],
             "Condition": None,
         },
         "ReadAgentCoreTraceFirehose": {
@@ -9141,22 +9238,17 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
             "Resource": "arn:aws:firehose:us-east-1:903859731897:deliverystream/nova-toll-v2-agentcore-traces-dev",
             "Condition": None,
         },
-        "ReadAgentCoreTraceXRaySettings": {
-            "Action": ["xray:GetTraceSegmentDestination", "xray:GetIndexingRules"],
-            "Resource": "*",
-            "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-1"}},
-        },
     }
     for marker, original, replacement in (
         (
             'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',
-            "logs.amazonaws.com",
+            "logs.${local.development_delivery_region}.amazonaws.com",
             "lambda.amazonaws.com",
         ),
         (
             'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',
-            "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:*",
-            "arn:aws:logs:us-west-2:903859731897:*",
+            'values   = [for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"]',
+            'values   = ["*"]',
         ),
         (
             'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',
@@ -9240,8 +9332,8 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
         _assert_agentcore_trace_foundation_source,
         FOUNDATION_IAM,
         'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',
-        '["logs.amazonaws.com"]',
-        '["logs.amazonaws.com", "lambda.amazonaws.com"]',
+        '["logs.${local.development_delivery_region}.amazonaws.com"]',
+        '["logs.${local.development_delivery_region}.amazonaws.com", "lambda.amazonaws.com"]',
     )
     _must_reject_after_marker(
         _assert_agentcore_trace_resource_headers,
@@ -9268,7 +9360,6 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
         "aws_cloudwatch_log_subscription_filter",
         "aws_cloudwatch_log_resource_policy",
         "aws_kinesis_firehose_delivery_stream",
-        "aws_xray_trace_segment_destination",
         "aws_athena_named_query",
         "aws_s3_bucket_lifecycle_configuration",
     ):
@@ -9289,7 +9380,7 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
 
 def test_development_delivery_policy_set_is_deterministic_and_bounded():
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 59
+    assert len(statements) == 66
     expected_groups = {
         "state": (
             0,
@@ -9318,7 +9409,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         ),
         "observability": (
             13,
-            25,
+            19,
             [
                 "ManageApplicationEventRules",
                 "ReadRetainedRollupEventRule",
@@ -9326,42 +9417,55 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
                 "ReadRetainedRollupLogGroup",
                 "DescribeApplicationLogPolicies",
                 "DescribeApplicationLogGroups",
+            ],
+        ),
+        "trace": (
+            19,
+            29,
+            [
                 "ReadAgentCoreTraceSubscription",
-                "ReadAgentCoreTraceXRaySettings",
+                "ReadAgentCoreTraceRoles",
                 "ReadAgentCoreTraceFirehose",
+                "ManageAgentCoreTraceSubscriptions",
+                "ManageAgentCoreTraceFirehose",
+                "PassAgentCoreTraceLogsRole",
+                "PassAgentCoreTraceFirehoseRole",
                 "ManageApplicationAlarms",
                 "ReadRetainedRollupAlarms",
                 "DescribeApplicationNetworking",
             ],
         ),
         "storage": (
-            25,
-            30,
+            29,
+            35,
             [
                 "ManageApplicationSiteBuckets",
                 "ManageApplicationMeasurementBucket",
+                "ManageAgentCoreTraceRetention",
                 "ReadRetainedApplicationMeasurementRegistry",
                 "PublishApplicationArtifacts",
                 "ReadApplicationArtifactBucket",
             ],
         ),
         "data": (
-            30,
-            38,
+            35,
+            45,
             [
                 "UseApplicationKmsKeys",
                 "ReadRetainedMeasurementKey",
                 "ReadApplicationKmsAliases",
                 "ManageApplicationSessions",
                 "ReadRetainedApplicationCatalog",
+                "ManageAgentCoreTraceCatalog",
+                "ManageAgentCoreTraceNamedQuery",
                 "ReadRetainedApplicationAthenaNamedQueries",
                 "ReadRetainedApplicationAthenaWorkGroup",
                 "ListApplicationAthenaWorkGroups",
             ],
         ),
         "runtime": (
-            38,
-            48,
+            45,
+            55,
             [
                 "ManageApplicationSchedules",
                 "PassTimedChecksSchedulerRole",
@@ -9376,8 +9480,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
         "edge": (
-            48,
-            59,
+            55,
+            66,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -9398,7 +9502,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
     )
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups)
-    assert len(rendered_aggregate) == len(statements) == 59
+    assert len(rendered_aggregate) == len(statements) == 66
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
         "StringEquals": {"aws:RequestedRegion": "us-east-1"}
