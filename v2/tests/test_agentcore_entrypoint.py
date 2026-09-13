@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
+import sys
 from collections.abc import AsyncIterator
 from typing import cast
 
+import pytest
 from pytest import LogCaptureFixture
 from strands.types.agent import Limits
 
@@ -16,6 +20,48 @@ from agent.agentcore_entrypoint import (
     TollChatRuntime,
     _canary_event,  # pyright: ignore[reportPrivateUsage]
 )
+
+
+@pytest.mark.parametrize("enabled", ["", "false", "true"])
+def test_development_tracing_exports_spans_only_when_enabled(enabled: str) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import agent.agentcore_entrypoint
+import os
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+provider = trace.get_tracer_provider()
+if os.environ['UNIFIED_TRACES_DESTINATION_ENABLED'] == 'true':
+    assert isinstance(provider, TracerProvider)
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    with trace.get_tracer('archive-check').start_as_current_span('synthetic-check'):
+        pass
+    assert [span.name for span in exporter.get_finished_spans()] == ['synthetic-check']
+else:
+    assert not isinstance(provider, TracerProvider)
+""",
+        ],
+        env=os.environ
+        | {
+            "UNIFIED_TRACES_DESTINATION_ENABLED": enabled,
+            "AWS_EC2_METADATA_DISABLED": "true",
+            "OTEL_TRACES_EXPORTER": "none",
+            "OTEL_METRICS_EXPORTER": "none",
+            "OTEL_LOGS_EXPORTER": "none",
+            "OTEL_AWS_APPLICATION_SIGNALS_ENABLED": "false",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 class FakeGuardrail:
