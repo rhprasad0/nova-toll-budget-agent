@@ -1,5 +1,6 @@
 # Account-level prerequisites for the development AgentCore trace archive.
 resource "aws_cloudwatch_log_group" "development_transaction_search" {
+  # AWS creates the reserved aws/spans group; import it after enabling the destination.
   for_each          = var.environment == "development" ? toset(["aws/spans", "/aws/application-signals/data"]) : toset([])
   name              = each.value
   retention_in_days = 7
@@ -15,7 +16,10 @@ resource "aws_cloudwatch_log_resource_policy" "development_transaction_search" {
       Effect    = "Allow"
       Principal = { Service = "xray.amazonaws.com" }
       Action    = "logs:PutLogEvents"
-      Resource  = [for group in aws_cloudwatch_log_group.development_transaction_search : "${group.arn}:*"]
+      Resource = [
+        "arn:aws:logs:us-east-1:903859731897:log-group:aws/spans:*",
+        "arn:aws:logs:us-east-1:903859731897:log-group:/aws/application-signals/data:*",
+      ]
       Condition = {
         StringEquals = { "aws:SourceAccount" = "903859731897" }
         ArnLike      = { "aws:SourceArn" = "arn:aws:xray:us-east-1:903859731897:*" }

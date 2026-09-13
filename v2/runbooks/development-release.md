@@ -1165,6 +1165,10 @@ in `infra/development-tracing.tf` before application delivery: the regional
 CloudWatch Logs trace destination, X-Ray resource policy, seven-day shared log
 groups, and the fixed runtime role's `xray:PutTraceSegments` permission. Review
 and apply one saved foundation plan containing only those prerequisite changes.
+AWS reserves the `aws/spans` name: first bootstrap the policy, destination,
+export permission, and `/aws/application-signals/data` group; then import the
+service-created `aws/spans` group and apply its seven-day retention in a second
+reviewed saved plan. Do not attempt to create `aws/spans` directly.
 This changes the development account's regional trace destination; production
 is excluded. Keep the existing indexing percentage unchanged. The runtime
 package includes ADOT >=0.18.0 and initializes it before application imports
