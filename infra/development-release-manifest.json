@@ -256,6 +256,14 @@
       ]
     },
     {
+      "address": "aws_iam_role_policy.tollchat_runtime",
+      "action": "update",
+      "operation_class": "agentcore-trace-runtime-policy",
+      "changed_fields": [
+        "policy"
+      ]
+    },
+    {
       "address": "aws_iam_role_policy.publisher",
       "action": "update",
       "operation_class": "publisher-inline-policy",
@@ -421,6 +429,12 @@
       "address": "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
       "action": "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
       "resource": "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview",
+      "conditions": {}
+    },
+    {
+      "address": "aws_iam_role_policy.tollchat_runtime",
+      "action": "iam:PutRolePolicy",
+      "resource": "arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-runtime-dev",
       "conditions": {}
     },
     {

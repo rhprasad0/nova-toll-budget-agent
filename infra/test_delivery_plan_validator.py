@@ -2313,6 +2313,10 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         committed_updates = tuple(expected_mutations)
         expected_mutations.update(
             {
+                "aws_iam_role_policy.tollchat_runtime": (
+                    "agentcore-trace-runtime-policy",
+                    ("policy",),
+                ),
                 "aws_s3_object.index": (
                     "site-object-upload",
                     ("content", "source", "source_hash"),
