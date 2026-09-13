@@ -781,11 +781,11 @@ def main() -> None:
         development_delivery,
     )
     require(
-        "Statement = slice(local.development_delivery_policy_statements, 38, 48)",
+        "Statement = slice(local.development_delivery_policy_statements, 45, 55)",
         development_shards,
     )
     require(
-        "Statement = slice(local.development_delivery_policy_statements, 48, 59)",
+        "Statement = slice(local.development_delivery_policy_statements, 55, 66)",
         development_shards,
     )
 
@@ -821,8 +821,15 @@ def main() -> None:
     production_locals = terraform_block(IAM, "locals", 3)
     for sid in (
         "ReadAgentCoreTraceSubscription",
+        "ReadAgentCoreTraceRoles",
         "ReadAgentCoreTraceFirehose",
-        "ReadAgentCoreTraceXRaySettings",
+        "ManageAgentCoreTraceSubscriptions",
+        "ManageAgentCoreTraceFirehose",
+        "PassAgentCoreTraceLogsRole",
+        "PassAgentCoreTraceFirehoseRole",
+        "ManageAgentCoreTraceRetention",
+        "ManageAgentCoreTraceCatalog",
+        "ManageAgentCoreTraceNamedQuery",
     ):
         leaked_trace_sid = IAM.replace(
             production_locals,

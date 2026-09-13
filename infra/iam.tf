@@ -216,14 +216,24 @@ locals {
     "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-usage-publisher-errors-dev",
     "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-usage-publisher-failed-invocations-dev",
   ]
-  development_delivery_athena_workgroup_arn          = "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
-  development_delivery_agentcore_trace_log_group_arn = "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:aws/spans"
-  development_delivery_agentcore_trace_firehose_arn  = "arn:aws:firehose:${local.development_delivery_region}:${local.development_delivery_account_id}:deliverystream/nova-toll-v2-agentcore-traces-dev"
-  development_delivery_api_id                        = "ocw8sg0wlb"
-  development_delivery_distribution_arn              = "arn:aws:cloudfront::${local.development_delivery_account_id}:distribution/E33DVF3KT7BTAC"
-  development_delivery_guardrail_arn                 = "arn:aws:bedrock:${local.development_delivery_region}:${local.development_delivery_account_id}:guardrail/vdyqrh31xgca"
-  development_delivery_agentcore_runtime_arn         = "arn:aws:bedrock-agentcore:${local.development_delivery_region}:${local.development_delivery_account_id}:runtime/nova_toll_v2_development-Y69XBf88Bl"
-  development_delivery_agentcore_endpoint_arn        = "${local.development_delivery_agentcore_runtime_arn}/runtime-endpoint/preview"
+  development_delivery_athena_workgroup_arn = "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
+  development_delivery_agentcore_trace_log_group_arns = [
+    "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
+    "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
+  ]
+  development_delivery_agentcore_trace_firehose_arn      = "arn:aws:firehose:${local.development_delivery_region}:${local.development_delivery_account_id}:deliverystream/nova-toll-v2-agentcore-traces-dev"
+  development_delivery_agentcore_trace_logs_role_arn     = "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-agentcore-traces-logs-dev"
+  development_delivery_agentcore_trace_firehose_role_arn = "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-agentcore-traces-firehose-dev"
+  development_delivery_agentcore_trace_glue_resources = [
+    "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:catalog",
+    "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:database/tollchat_agent_reports_development",
+    "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:table/tollchat_agent_reports_development/agentcore_traces",
+  ]
+  development_delivery_api_id                 = "ocw8sg0wlb"
+  development_delivery_distribution_arn       = "arn:aws:cloudfront::${local.development_delivery_account_id}:distribution/E33DVF3KT7BTAC"
+  development_delivery_guardrail_arn          = "arn:aws:bedrock:${local.development_delivery_region}:${local.development_delivery_account_id}:guardrail/vdyqrh31xgca"
+  development_delivery_agentcore_runtime_arn  = "arn:aws:bedrock-agentcore:${local.development_delivery_region}:${local.development_delivery_account_id}:runtime/nova_toll_v2_development-Y69XBf88Bl"
+  development_delivery_agentcore_endpoint_arn = "${local.development_delivery_agentcore_runtime_arn}/runtime-endpoint/preview"
   development_delivery_api_deployment_arns = [
     "arn:aws:apigateway:${local.development_delivery_region}::/restapis/${local.development_delivery_api_id}/deployments",
     "arn:aws:apigateway:${local.development_delivery_region}::/restapis/${local.development_delivery_api_id}/deployments/*",
@@ -371,12 +381,17 @@ data "aws_iam_policy_document" "development_agentcore_trace_logs_assume" {
     actions = ["sts:AssumeRole"]
     principals {
       type        = "Service"
-      identifiers = ["logs.amazonaws.com"]
+      identifiers = ["logs.${local.development_delivery_region}.amazonaws.com"]
     }
     condition {
       test     = "StringLike"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:*"]
+      values   = [for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [local.development_delivery_account_id]
     }
   }
 }
@@ -632,24 +647,53 @@ data "aws_iam_policy_document" "development_delivery" {
   statement {
     sid       = "ReadAgentCoreTraceSubscription"
     actions   = ["logs:DescribeSubscriptionFilters"]
-    resources = ["${local.development_delivery_agentcore_trace_log_group_arn}:*"]
+    resources = [for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"]
   }
 
   statement {
-    sid       = "ReadAgentCoreTraceXRaySettings"
-    actions   = ["xray:GetIndexingRules", "xray:GetTraceSegmentDestination"]
-    resources = ["*"]
-    condition {
-      test     = "StringEquals"
-      variable = "aws:RequestedRegion"
-      values   = [local.development_delivery_region]
-    }
+    sid       = "ReadAgentCoreTraceRoles"
+    actions   = ["iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:ListRoleTags"]
+    resources = [local.development_delivery_agentcore_trace_logs_role_arn, local.development_delivery_agentcore_trace_firehose_role_arn]
   }
 
   statement {
     sid       = "ReadAgentCoreTraceFirehose"
     actions   = ["firehose:DescribeDeliveryStream"]
     resources = [local.development_delivery_agentcore_trace_firehose_arn]
+  }
+
+  statement {
+    sid       = "ManageAgentCoreTraceSubscriptions"
+    actions   = ["logs:DeleteSubscriptionFilter", "logs:PutSubscriptionFilter"]
+    resources = [for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"]
+  }
+
+  statement {
+    sid       = "ManageAgentCoreTraceFirehose"
+    actions   = ["firehose:CreateDeliveryStream", "firehose:DeleteDeliveryStream", "firehose:TagDeliveryStream", "firehose:UpdateDestination"]
+    resources = [local.development_delivery_agentcore_trace_firehose_arn]
+  }
+
+  statement {
+    sid       = "PassAgentCoreTraceLogsRole"
+    actions   = ["iam:PassRole"]
+    resources = [local.development_delivery_agentcore_trace_logs_role_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["logs.amazonaws.com"]
+    }
+  }
+
+  statement {
+    sid       = "PassAgentCoreTraceFirehoseRole"
+    actions   = ["iam:PassRole"]
+    resources = [local.development_delivery_agentcore_trace_firehose_role_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["firehose.amazonaws.com"]
+    }
   }
 
   statement {
@@ -684,6 +728,12 @@ data "aws_iam_policy_document" "development_delivery" {
   statement {
     sid       = "ManageApplicationMeasurementBucket"
     actions   = ["s3:GetAccelerateConfiguration", "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketLocation", "s3:GetBucketLogging", "s3:GetBucketObjectLockConfiguration", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketRequestPayment", "s3:GetBucketTagging", "s3:GetBucketVersioning", "s3:GetBucketWebsite", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetReplicationConfiguration", "s3:ListBucket", "s3:ListBucketMultipartUploads", "s3:ListBucketVersions"]
+    resources = [local.development_delivery_measurement_bucket_arn]
+  }
+
+  statement {
+    sid       = "ManageAgentCoreTraceRetention"
+    actions   = ["s3:PutLifecycleConfiguration"]
     resources = [local.development_delivery_measurement_bucket_arn]
   }
 
@@ -766,6 +816,18 @@ data "aws_iam_policy_document" "development_delivery" {
       "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:database/tollchat_agent_reports_development",
       "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:table/tollchat_agent_reports_development/*",
     ]
+  }
+
+  statement {
+    sid       = "ManageAgentCoreTraceCatalog"
+    actions   = ["glue:CreateTable", "glue:DeleteTable", "glue:UpdateTable"]
+    resources = local.development_delivery_agentcore_trace_glue_resources
+  }
+
+  statement {
+    sid       = "ManageAgentCoreTraceNamedQuery"
+    actions   = ["athena:CreateNamedQuery", "athena:DeleteNamedQuery"]
+    resources = [local.development_delivery_athena_workgroup_arn]
   }
 
   statement {
@@ -989,23 +1051,27 @@ locals {
     })
     observability = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 13, 25)
+      Statement = slice(local.development_delivery_policy_statements, 13, 19)
+    })
+    trace = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_delivery_policy_statements, 19, 29)
     })
     storage = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 25, 30)
+      Statement = slice(local.development_delivery_policy_statements, 29, 35)
     })
     data = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 30, 38)
+      Statement = slice(local.development_delivery_policy_statements, 35, 45)
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 38, 48)
+      Statement = slice(local.development_delivery_policy_statements, 45, 55)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 48, 59)
+      Statement = slice(local.development_delivery_policy_statements, 55, 66)
     })
   }
 }
@@ -1189,7 +1255,13 @@ data "aws_iam_policy_document" "development_plan" {
   statement {
     sid       = "ReadAgentCoreTraceSubscription"
     actions   = ["logs:DescribeSubscriptionFilters"]
-    resources = ["${local.development_delivery_agentcore_trace_log_group_arn}:*"]
+    resources = [for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"]
+  }
+
+  statement {
+    sid       = "ReadAgentCoreTraceRoles"
+    actions   = ["iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole", "iam:ListRolePolicies", "iam:ListRoleTags"]
+    resources = [local.development_delivery_agentcore_trace_logs_role_arn, local.development_delivery_agentcore_trace_firehose_role_arn]
   }
 
   statement {
@@ -1198,16 +1270,6 @@ data "aws_iam_policy_document" "development_plan" {
     resources = [local.development_delivery_agentcore_trace_firehose_arn]
   }
 
-  statement {
-    sid       = "ReadAgentCoreTraceXRaySettings"
-    actions   = ["xray:GetIndexingRules", "xray:GetTraceSegmentDestination"]
-    resources = ["*"]
-    condition {
-      test     = "StringEquals"
-      variable = "aws:RequestedRegion"
-      values   = [local.development_delivery_region]
-    }
-  }
 
   statement {
     sid       = "ReadApplicationAlarms"
@@ -1572,8 +1634,15 @@ locals {
   production_delivery_cloudflare_key_arn    = "arn:aws:kms:us-east-1:920534282028:key/49d9dfb4-f9a7-465a-a3a1-e7bb394dd0de"
   development_delivery_trace_statement_sids = toset([
     "ReadAgentCoreTraceSubscription",
-    "ReadAgentCoreTraceXRaySettings",
+    "ReadAgentCoreTraceRoles",
     "ReadAgentCoreTraceFirehose",
+    "ManageAgentCoreTraceSubscriptions",
+    "ManageAgentCoreTraceFirehose",
+    "PassAgentCoreTraceLogsRole",
+    "PassAgentCoreTraceFirehoseRole",
+    "ManageAgentCoreTraceRetention",
+    "ManageAgentCoreTraceCatalog",
+    "ManageAgentCoreTraceNamedQuery",
   ])
 
   # This is the existing reviewed development policy with only account-local

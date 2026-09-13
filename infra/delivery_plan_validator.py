@@ -34,13 +34,15 @@ TIMED_PACKAGES = (*LEGACY_PACKAGES, "timed-checks.zip")
 PACKAGES = LEGACY_PACKAGES
 TIMED_CHECKS_MARKER = "v2/scripts/build_timed_checks_zip.sh"
 PRODUCTION_CONTROL_MARKER = "v2/scripts/run_production_migrations.py"
-PRODUCTION_CONTROL_INPUTS = frozenset({
+PRODUCTION_CONTROL_INPUTS = frozenset(
+    {
     ".github/workflows/v2-production-migrations.yml",
     "v2/scripts/adopt_production_baseline.py",
     "v2/scripts/check_production_release.py",
     PRODUCTION_CONTROL_MARKER,
     "v2/scripts/run_production_migrations_workflow.sh",
-})
+    }
+)
 
 
 def _packages_for_inputs(inputs: Mapping[str, Any]) -> tuple[str, ...]:
@@ -92,12 +94,14 @@ LAMBDA = tuple(
         "nova-toll-v2-timed-checks-dev",
     )
 )
-LAMBDA_FUNCTION_NAMES = MappingProxyType({
+LAMBDA_FUNCTION_NAMES = MappingProxyType(
+    {
     "loader": "toll-v2-pricing-loader-dev",
     "publisher": "toll-v2-report-publisher-dev",
     "tollchat_proxy": "tollchat-v2-chat-proxy-dev",
     "timed_checks": "nova-toll-v2-timed-checks-dev",
-})
+    }
+)
 TIMED_SCHEDULE_KEYS = (
     "greenway-eb-fri-0723", "greenway-eb-mon-0723", "greenway-eb-thu-0723",
     "greenway-eb-tue-0723", "greenway-eb-wed-0723", "greenway-wb-fri-1723",
@@ -146,8 +150,158 @@ SITE_BUCKET = f"arn:aws:s3:::{SITE_BUCKET_NAME}"
 PUBLISHER_ROLE_NAME = "toll-v2-report-publisher-dev"
 PUBLISHER_ROLE_ARN = f"arn:aws:iam::{ACCOUNT}:role/{PUBLISHER_ROLE_NAME}"
 REPORT_FRESHNESS_ALARM_NAME = "toll-v2-report-generation-freshness-dev"
-REPORT_FRESHNESS_ALARM_ARN = f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{REPORT_FRESHNESS_ALARM_NAME}"
-PUBLISHER_SITE_KEY_ARN = "arn:aws:kms:us-east-1:903859731897:key/3bc78b60-9cbe-4abd-9744-8772c78d8379"
+REPORT_FRESHNESS_ALARM_ARN = (
+    f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{REPORT_FRESHNESS_ALARM_NAME}"
+)
+PUBLISHER_SITE_KEY_ARN = (
+    "arn:aws:kms:us-east-1:903859731897:key/3bc78b60-9cbe-4abd-9744-8772c78d8379"
+)
+TRACE_LOG_GROUPS = LOG_GROUPS[4:]
+TRACE_FIREHOSE = f"arn:aws:firehose:{REGION}:{ACCOUNT}:deliverystream/nova-toll-v2-agentcore-traces-dev"
+TRACE_LOGS_ROLE = f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-agentcore-traces-logs-dev"
+TRACE_FIREHOSE_ROLE = (
+    f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-agentcore-traces-firehose-dev"
+)
+TRACE_MEASUREMENT_BUCKET = (
+    "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-903859731897-dev"
+)
+TRACE_GLUE = (
+    f"arn:aws:glue:{REGION}:{ACCOUNT}:catalog",
+    f"arn:aws:glue:{REGION}:{ACCOUNT}:database/tollchat_agent_reports_development",
+    f"arn:aws:glue:{REGION}:{ACCOUNT}:table/tollchat_agent_reports_development/agentcore_traces",
+)
+TRACE_WORKGROUP = (
+    f"arn:aws:athena:{REGION}:{ACCOUNT}:workgroup/tollchat-agent-reports-dev"
+)
+TRACE_PREFIX = "agentcore-traces/"
+TRACE_KMS_KEY = (
+    f"arn:aws:kms:{REGION}:{ACCOUNT}:key/076e8341-894b-405c-96e9-2b037f96e2a6"
+)
+TRACE_FILTER = '{ $.traceId = "*" && $.spanId = "*" && $.durationNano >= 0 }'
+TRACE_QUERY = "SELECT json_extract_scalar(raw_json, '$.traceId') AS traceId, json_extract_scalar(raw_json, '$.spanId') AS spanId, json_extract_scalar(raw_json, '$.name') AS name, cast(json_extract_scalar(raw_json, '$.durationNano') AS bigint) AS durationNano, json_extract_scalar(raw_json, '$.status.code') AS status_code, json_extract(raw_json, '$.attributes') AS attributes FROM agentcore_traces LIMIT 100"
+TRACE_TAGS = {
+    "environment": "development",
+    "project": "nova-toll-budget-agent",
+    "version": "v2",
+}
+TRACE_NOTICE_DIGESTS = {
+    "aws_s3_object.index": "126f555a71d0afef5978bf415a3f6c90d8b2fb280618fdc2bc9ab44a0fefae4d",
+    "aws_s3_object.faq": "3c2e1281969095cbf1282bf8abbb268713dfdd96110db28bc5bbf3ea1823c105",
+    "aws_s3_object.privacy": "3363dc45ae0e3bc97b8ec4d90c4fb3290050e45b5f4bf1989edd95bd52b7318d",
+}
+TRACE_READ_ONLY_FIELDS = {
+    "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]": (
+        "arn",
+        "destination_id",
+        "extended_s3_configuration[0].cloudwatch_logging_options",
+        "id",
+        "version_id",
+    ),
+    'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]': ("id",),
+    'aws_cloudwatch_log_subscription_filter.agentcore_traces["preview"]': ("id",),
+    "aws_s3_bucket_lifecycle_configuration.agent_measurement": ("id",),
+    "aws_glue_catalog_table.agentcore_traces[0]": ("arn", "id"),
+    "aws_athena_named_query.agentcore_trace_summary[0]": ("id",),
+    "aws_bedrockagentcore_agent_runtime.tollchat": ("arn", "id"),
+}
+
+
+def _trace_reject(address: str, action: str, operation_class: str) -> None:
+    # This is intentionally an existing workflow allowlisted reason.  The
+    # delivery workflow records the validator once and propagates this summary.
+    _reject(
+        "unsupported_field_delta",
+        address=address,
+        action=action,
+        operation_class=operation_class,
+    )
+
+
+def _trace_lifecycle(*, enabled: bool) -> list[dict[str, Any]]:
+    rules = [
+        {
+            "id": "expire-raw-waf-logs",
+            "status": "Enabled",
+            "filter": [{"prefix": "AWSLogs/"}],
+            "expiration": [{"days": 7}],
+        },
+        {
+            "id": "expire-athena-results",
+            "status": "Enabled",
+            "filter": [{"prefix": "athena-results/"}],
+            "expiration": [{"days": 7}],
+            "abort_incomplete_multipart_upload": [{"days_after_initiation": 1}],
+        },
+    ]
+    if enabled:
+        rules.append(
+            {
+                "id": "expire-agentcore-traces",
+                "status": "Enabled",
+                "filter": [{"prefix": TRACE_PREFIX}],
+                "expiration": [{"days": 7}],
+                "abort_incomplete_multipart_upload": [{"days_after_initiation": 1}],
+            }
+        )
+    return rules
+
+
+def _trace_firehose_value() -> dict[str, Any]:
+    return {
+        "destination": "extended_s3",
+        "elasticsearch_configuration": [],
+        "extended_s3_configuration": [
+            {
+                "bucket_arn": TRACE_MEASUREMENT_BUCKET,
+                "buffering_interval": 60,
+                "buffering_size": 5,
+                "compression_format": "UNCOMPRESSED",
+                "custom_time_zone": "UTC",
+                "data_format_conversion_configuration": [],
+                "dynamic_partitioning_configuration": [],
+                "error_output_prefix": None,
+                "file_extension": None,
+                "kms_key_arn": TRACE_KMS_KEY,
+                "prefix": TRACE_PREFIX,
+                "processing_configuration": [
+                    {
+                        "enabled": True,
+                        "processors": [
+                            {"parameters": [], "type": "Decompression"},
+                            {
+                                "parameters": [
+                                    {
+                                        "parameter_name": "DataMessageExtraction",
+                                        "parameter_value": "true",
+                                    }
+                                ],
+                                "type": "CloudWatchLogProcessing",
+                            },
+                            {"parameters": [], "type": "AppendDelimiterToRecord"},
+                        ],
+                    }
+                ],
+                "role_arn": TRACE_FIREHOSE_ROLE,
+                "s3_backup_configuration": [],
+                "s3_backup_mode": "Disabled",
+            }
+        ],
+        "http_endpoint_configuration": [],
+        "iceberg_configuration": [],
+        "kinesis_source_configuration": [],
+        "msk_source_configuration": [],
+        "name": "nova-toll-v2-agentcore-traces-dev",
+        "opensearch_configuration": [],
+        "opensearchserverless_configuration": [],
+        "redshift_configuration": [],
+        "region": REGION,
+        "server_side_encryption": [],
+        "snowflake_configuration": [],
+        "splunk_configuration": [],
+        "tags": None,
+        "tags_all": TRACE_TAGS,
+        "timeouts": None,
+    }
 
 
 def _build_contract() -> dict[str, Mutation]:
@@ -330,7 +484,10 @@ def _build_contract() -> dict[str, Mutation]:
         _permission("bedrock:CreateGuardrailVersion", f"arn:aws:bedrock:{REGION}:{ACCOUNT}:guardrail/vdyqrh31xgca"),
     )
     result["aws_bedrockagentcore_agent_runtime.tollchat"] = _mutation(
-        ("agent_runtime_artifact.code_configuration.code.s3.version_id",),
+        (
+            "agent_runtime_artifact.code_configuration.code.s3.version_id",
+            "environment_variables",
+        ),
         ("update",),
         "agentcore-code",
         _permission("bedrock-agentcore:UpdateAgentRuntime", f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl"),
@@ -339,12 +496,112 @@ def _build_contract() -> dict[str, Mutation]:
             f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-agentcore-runtime-dev",
             conditions={"iam:PassedToService": "bedrock-agentcore.amazonaws.com"},
         ),
+        provider_change_identity=(("agent_runtime_name", "nova_toll_v2_development"),),
     )
     result["aws_bedrockagentcore_agent_runtime_endpoint.tollchat"] = _mutation(
         ("agent_runtime_version",),
         ("update",),
         "agentcore-endpoint",
         _permission("bedrock-agentcore:UpdateAgentRuntimeEndpoint", f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview"),
+    )
+    result["aws_kinesis_firehose_delivery_stream.agentcore_traces[0]"] = _mutation(
+        tuple(_trace_firehose_value()),
+        ("create", "delete", "update"),
+        "agentcore-trace-firehose",
+        _permission("firehose:CreateDeliveryStream", TRACE_FIREHOSE),
+        _permission("firehose:DeleteDeliveryStream", TRACE_FIREHOSE),
+        _permission("firehose:TagDeliveryStream", TRACE_FIREHOSE),
+        _permission("firehose:UpdateDestination", TRACE_FIREHOSE),
+        _permission(
+            "iam:PassRole",
+            TRACE_FIREHOSE_ROLE,
+            conditions={"iam:PassedToService": "firehose.amazonaws.com"},
+        ),
+        create_identity=(
+            ("name", "nova-toll-v2-agentcore-traces-dev"),
+            ("destination", "extended_s3"),
+        ),
+        provider_change_identity=(("arn", TRACE_FIREHOSE),),
+    )
+    for key, group in zip(("DEFAULT", "preview"), TRACE_LOG_GROUPS):
+        result[f'aws_cloudwatch_log_subscription_filter.agentcore_traces["{key}"]'] = (
+            _mutation(
+                (
+                    "destination_arn",
+                    "filter_pattern",
+                    "log_group_name",
+                    "name",
+                    "role_arn",
+                ),
+                ("create", "delete", "update"),
+                "agentcore-trace-subscription",
+                _permission("logs:PutSubscriptionFilter", f"{group}:*"),
+                _permission("logs:DeleteSubscriptionFilter", f"{group}:*"),
+                _permission(
+                    "iam:PassRole",
+                    TRACE_LOGS_ROLE,
+                    conditions={"iam:PassedToService": "logs.amazonaws.com"},
+                ),
+                create_identity=(
+                    ("name", "nova-toll-v2-agentcore-traces-dev"),
+                    ("log_group_name", group.rsplit(":", 1)[-1]),
+                    ("destination_arn", TRACE_FIREHOSE),
+                    ("role_arn", TRACE_LOGS_ROLE),
+                    (
+                        "filter_pattern",
+                        '{ $.traceId = "*" && $.spanId = "*" && $.durationNano >= 0 }',
+                    ),
+                ),
+                provider_change_identity=(
+                    ("log_group_name", group.rsplit(":", 1)[-1]),
+                    ("name", "nova-toll-v2-agentcore-traces-dev"),
+                ),
+            )
+        )
+    result["aws_s3_bucket_lifecycle_configuration.agent_measurement"] = _mutation(
+        ("rule",),
+        ("update",),
+        "agentcore-trace-retention",
+        _permission("s3:PutLifecycleConfiguration", TRACE_MEASUREMENT_BUCKET),
+        provider_change_identity=(
+            ("bucket", TRACE_MEASUREMENT_BUCKET.removeprefix("arn:aws:s3:::")),
+        ),
+    )
+    result["aws_glue_catalog_table.agentcore_traces[0]"] = _mutation(
+        ("database_name", "name", "parameters", "storage_descriptor", "table_type"),
+        ("create", "delete", "update"),
+        "agentcore-trace-catalog",
+        *(
+            _permission(action, resource)
+            for action in ("glue:CreateTable", "glue:DeleteTable", "glue:UpdateTable")
+            for resource in TRACE_GLUE
+        ),
+        create_identity=(
+            ("database_name", "tollchat_agent_reports_development"),
+            ("name", "agentcore_traces"),
+            ("table_type", "EXTERNAL_TABLE"),
+        ),
+        provider_change_identity=(
+            ("catalog_id", ACCOUNT),
+            ("database_name", "tollchat_agent_reports_development"),
+            ("name", "agentcore_traces"),
+        ),
+    )
+    result["aws_athena_named_query.agentcore_trace_summary[0]"] = _mutation(
+        ("database", "description", "name", "query", "workgroup"),
+        ("create", "delete", "update"),
+        "agentcore-trace-query",
+        _permission("athena:CreateNamedQuery", TRACE_WORKGROUP),
+        _permission("athena:DeleteNamedQuery", TRACE_WORKGROUP),
+        create_identity=(
+            ("database", "tollchat_agent_reports_development"),
+            ("name", "agentcore-trace-summary-dev"),
+            ("workgroup", "tollchat-agent-reports-dev"),
+        ),
+        provider_change_identity=(
+            ("name", "agentcore-trace-summary-dev"),
+            ("workgroup", "tollchat-agent-reports-dev"),
+        ),
     )
     result["aws_api_gateway_deployment.tollchat"] = _mutation(
         ("triggers.redeployment",),
@@ -365,28 +622,76 @@ def _build_contract() -> dict[str, Mutation]:
 
 CONTRACT = MappingProxyType(_build_contract())
 SUPPORTED_ADDRESSES = frozenset(CONTRACT)
-TIMED_ADDRESSES = frozenset({
+TIMED_ADDRESSES = frozenset(
+    {
     "aws_s3_object.timed_checks",
     "aws_lambda_function.timed_checks",
-    *(f'aws_scheduler_schedule.timed_checks["{key}"]' for key in TIMED_SCHEDULE_KEYS),
-})
+        *(
+            f'aws_scheduler_schedule.timed_checks["{key}"]'
+            for key in TIMED_SCHEDULE_KEYS
+        ),
+    }
+)
 
-_PLAN_KEYS = frozenset({
-    "format_version", "terraform_version", "resource_changes", "planned_values", "prior_state",
-    "configuration", "output_changes", "variables", "timestamp", "checks", "errored",
-    "applyable", "complete", "resource_drift", "relevant_attributes",
-})
-_RESOURCE_KEYS = frozenset({
-    "address", "mode", "type", "name", "index", "provider_name", "schema_version", "change",
-    "deposed", "previous_address", "action_reason", "depends_on",
-})
-_CHANGE_KEYS = frozenset({
-    "actions", "before", "after", "after_unknown", "before_sensitive", "after_sensitive",
-    "replace_paths", "action_reason", "before_identity", "after_identity",
-})
-_MANIFEST_KEYS = frozenset({
-    "schema_version", "provider_identity", "deployment_inputs", "packages", "mutations", "permissions",
-})
+_PLAN_KEYS = frozenset(
+    {
+        "format_version",
+        "terraform_version",
+        "resource_changes",
+        "planned_values",
+        "prior_state",
+        "configuration",
+        "output_changes",
+        "variables",
+        "timestamp",
+        "checks",
+        "errored",
+        "applyable",
+        "complete",
+        "resource_drift",
+        "relevant_attributes",
+    }
+)
+_RESOURCE_KEYS = frozenset(
+    {
+        "address",
+        "mode",
+        "type",
+        "name",
+        "index",
+        "provider_name",
+        "schema_version",
+        "change",
+        "deposed",
+        "previous_address",
+        "action_reason",
+        "depends_on",
+    }
+)
+_CHANGE_KEYS = frozenset(
+    {
+        "actions",
+        "before",
+        "after",
+        "after_unknown",
+        "before_sensitive",
+        "after_sensitive",
+        "replace_paths",
+        "action_reason",
+        "before_identity",
+        "after_identity",
+    }
+)
+_MANIFEST_KEYS = frozenset(
+    {
+        "schema_version",
+        "provider_identity",
+        "deployment_inputs",
+        "packages",
+        "mutations",
+        "permissions",
+    }
+)
 _MUTATION_KEYS = frozenset({"address", "action", "operation_class", "changed_fields"})
 _PERMISSION_KEYS = frozenset({"address", "action", "resource", "conditions"})
 _ACTIONS = frozenset({"create", "update", "delete", "read", "no-op", "import", "refresh"})
@@ -396,15 +701,51 @@ _PRODUCTION_MARKERS = re.compile(
     r"|(?<![A-Za-z0-9.-])(?:www\.)?tollchat\.ai(?::\d+)?(?=$|[/?#])",
     re.I,
 )
-_AUTHORIZATION_FIELDS = frozenset({
-    "runtime", "handler", "role", "environment", "memory_size", "timeout", "reserved_concurrent_executions",
-    "vpc_config", "layers", "architectures", "tracing_config", "ephemeral_storage", "file_system_config",
-    "function_url_config", "event_invoke_config", "invoke_config", "permissions", "publish", "kms_key_arn",
-    "code_signing_config_arn", "package_type", "image_uri", "acl", "tags", "content_type", "cache_control",
-    "force_destroy", "policy", "public_access_block", "lifecycle_rule", "versioning", "logging", "encryption",
-    "role_arn", "target_arn", "schedule_expression", "guardrail_arn", "resource_policy", "domain_name",
-})
-_DERIVED_UNKNOWN_EDGES = MappingProxyType({
+_AUTHORIZATION_FIELDS = frozenset(
+    {
+        "runtime",
+        "handler",
+        "role",
+        "environment",
+        "memory_size",
+        "timeout",
+        "reserved_concurrent_executions",
+        "vpc_config",
+        "layers",
+        "architectures",
+        "tracing_config",
+        "ephemeral_storage",
+        "file_system_config",
+        "function_url_config",
+        "event_invoke_config",
+        "invoke_config",
+        "permissions",
+        "publish",
+        "kms_key_arn",
+        "code_signing_config_arn",
+        "package_type",
+        "image_uri",
+        "acl",
+        "tags",
+        "content_type",
+        "cache_control",
+        "force_destroy",
+        "policy",
+        "public_access_block",
+        "lifecycle_rule",
+        "versioning",
+        "logging",
+        "encryption",
+        "role_arn",
+        "target_arn",
+        "schedule_expression",
+        "guardrail_arn",
+        "resource_policy",
+        "domain_name",
+    }
+)
+_DERIVED_UNKNOWN_EDGES = MappingProxyType(
+    {
     (
         "aws_bedrockagentcore_agent_runtime.tollchat",
         "agent_runtime_artifact.code_configuration.code.s3.version_id",
@@ -413,11 +754,17 @@ _DERIVED_UNKNOWN_EDGES = MappingProxyType({
             "agent_runtime_artifact.code_configuration.code.s3.version_id",
             "agent_runtime_artifact[0].code_configuration[0].code[0].s3[0].version_id",
         ),
-        ("agent_runtime_artifact.code_configuration.code.s3.version_id", "agent_runtime_artifact.0.code_configuration.0.code.0.s3.0.version_id"),
+            (
+                "agent_runtime_artifact.code_configuration.code.s3.version_id",
+                "agent_runtime_artifact.0.code_configuration.0.code.0.s3.0.version_id",
+            ),
         "aws_s3_object.agentcore.version_id",
         "aws_s3_object.agentcore",
     ),
-    ("aws_bedrockagentcore_agent_runtime_endpoint.tollchat", "agent_runtime_version"): (
+        (
+            "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+            "agent_runtime_version",
+        ): (
         ("agent_runtime_version",),
         ("agent_runtime_version",),
         "aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_version",
@@ -441,7 +788,8 @@ _DERIVED_UNKNOWN_EDGES = MappingProxyType({
         "aws_s3_object.timed_checks.version_id",
         "aws_s3_object.timed_checks",
     ),
-})
+    }
+)
 
 
 class _Invalid(Exception):
@@ -501,17 +849,28 @@ def _timed_schedule_plan_value(address: str) -> dict[str, Any]:
         "schedule_expression": expected["schedule_expression"],
         "schedule_expression_timezone": expected["schedule_expression_timezone"],
         "flexible_time_window": [{"mode": "OFF"}],
-        "target": [{
+        "target": [
+            {
             "arn": f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:nova-toll-v2-timed-checks-dev",
             "role_arn": f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-timed-checks-scheduler-dev",
             "input": json.dumps(
-                {"window_id": expected["window_id"], "schedule": expected["schedule"]},
+                    {
+                        "window_id": expected["window_id"],
+                        "schedule": expected["schedule"],
+                    },
                 sort_keys=True,
                 separators=(",", ":"),
             ),
-            "retry_policy": [{"maximum_event_age_in_seconds": 600, "maximum_retry_attempts": 0}],
-            "dead_letter_config": [{"arn": f"arn:aws:sqs:{REGION}:{ACCOUNT}:nova-toll-v2-timed-checks-delivery-failure-dev"}],
-        }],
+                "retry_policy": [
+                    {"maximum_event_age_in_seconds": 600, "maximum_retry_attempts": 0}
+                ],
+                "dead_letter_config": [
+                    {
+                        "arn": f"arn:aws:sqs:{REGION}:{ACCOUNT}:nova-toll-v2-timed-checks-delivery-failure-dev"
+                    }
+                ],
+            }
+        ],
     }
 
 
@@ -655,8 +1014,14 @@ def _metadata_authorized(path: str, spec: Mutation) -> bool:
     )
 
 
-def _validate_s3_identity(before: dict[str, Any] | None, after: dict[str, Any], spec: Mutation, address: str, action: str) -> None:
-    if action not in {"create", "update"} or not spec.create_identity:
+def _validate_s3_identity(
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    spec: Mutation,
+    address: str,
+    action: str,
+) -> None:
+    if action not in {"create", "update", "no-op"} or not spec.create_identity:
         return
     values = (after,) if action == "create" else (before, after)
     if any(
@@ -769,11 +1134,141 @@ def _validate_report_freshness_alarm(before: Any, after: Any, address: str, acti
         "alarm_description": "No complete I-95/I-495 and I-66 report generation in the trailing seven-day sliding window.",
         "dimensions": {"facility_scope": "both", "Environment": "development"},
     }
-    if not isinstance(before, dict) or not isinstance(after, dict) or any(
-        value.get(field) != expected for value, expected_values in ((before, expected_before), (after, expected_after))
+    if (
+        not isinstance(before, dict)
+        or not isinstance(after, dict)
+        or any(
+            value.get(field) != expected
+            for value, expected_values in (
+                (before, expected_before),
+                (after, expected_after),
+            )
         for field, expected in expected_values.items()
+        )
     ):
         _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+
+
+def _validate_agentcore_trace_value(
+    before: Any, after: Any, address: str, action: str, operation_class: str
+) -> None:
+    value = before if action == "delete" else after
+    if not isinstance(value, dict):
+        _trace_reject(address, action, operation_class)
+
+    def configured(candidate: Any) -> Any:
+        if not isinstance(candidate, dict):
+            _trace_reject(address, action, operation_class)
+        return _without_paths(candidate, TRACE_READ_ONLY_FIELDS.get(address, ()))
+
+    if operation_class == "agentcore-trace-subscription":
+        expected = dict(CONTRACT[address].create_identity)
+        values = (
+            (before,)
+            if action == "delete"
+            else (after,)
+            if action == "create"
+            else (before, after)
+        )
+        if any(configured(candidate) != expected for candidate in values):
+            _trace_reject(address, action, operation_class)
+    elif operation_class == "agentcore-trace-firehose":
+        expected = _trace_firehose_value()
+        values = (
+            (before,)
+            if action == "delete"
+            else (after,)
+            if action == "create"
+            else (before, after)
+        )
+        if any(configured(candidate) != expected for candidate in values):
+            _trace_reject(address, action, operation_class)
+    elif operation_class == "agentcore-trace-catalog":
+        expected = {
+            "database_name": "tollchat_agent_reports_development",
+            "name": "agentcore_traces",
+            "table_type": "EXTERNAL_TABLE",
+            "parameters": {"EXTERNAL": "TRUE"},
+            "storage_descriptor": [
+                {
+                    "location": f"s3://{TRACE_MEASUREMENT_BUCKET.removeprefix('arn:aws:s3:::')}/{TRACE_PREFIX}",
+                    "input_format": "org.apache.hadoop.mapred.TextInputFormat",
+                    "output_format": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+                    "columns": [{"name": "raw_json", "type": "string"}],
+                    "ser_de_info": [
+                        {
+                            "serialization_library": "org.apache.hadoop.hive.serde2.RegexSerDe",
+                            "parameters": {"input.regex": "^(.*)$"},
+                        }
+                    ],
+                }
+            ],
+        }
+        values = (
+            (before,)
+            if action == "delete"
+            else (after,)
+            if action == "create"
+            else (before, after)
+        )
+        if any(configured(candidate) != expected for candidate in values):
+            _trace_reject(address, action, operation_class)
+    elif operation_class == "agentcore-trace-query":
+        expected = {
+            "database": "tollchat_agent_reports_development",
+            "name": "agentcore-trace-summary-dev",
+            "workgroup": "tollchat-agent-reports-dev",
+            "description": "Bounded development trace outcome summary",
+            "query": TRACE_QUERY,
+        }
+        values = (
+            (before,)
+            if action == "delete"
+            else (after,)
+            if action == "create"
+            else (before, after)
+        )
+        if any(configured(candidate) != expected for candidate in values):
+            _trace_reject(address, action, operation_class)
+    elif operation_class == "agentcore-trace-retention":
+
+        def canonical(value: Any) -> tuple[str, ...] | None:
+            if not isinstance(value, dict) or not isinstance(value.get("rule"), list):
+                return None
+            return tuple(sorted(_canonical(rule) for rule in value["rule"]))
+
+        baseline = tuple(
+            sorted(_canonical(rule) for rule in _trace_lifecycle(enabled=False))
+        )
+        traced = tuple(
+            sorted(_canonical(rule) for rule in _trace_lifecycle(enabled=True))
+        )
+        if (canonical(before), canonical(after)) != (baseline, traced):
+            _trace_reject(address, action, operation_class)
+    elif address == "aws_bedrockagentcore_agent_runtime.tollchat":
+        if not isinstance(before, dict) or not isinstance(after, dict):
+            _trace_reject(address, action, operation_class)
+        before_env, after_env = (
+            before.get("environment_variables"),
+            after.get("environment_variables"),
+        )
+        if not isinstance(before_env, dict) or not isinstance(after_env, dict):
+            _trace_reject(address, action, operation_class)
+        old = {
+            key: value
+            for key, value in before_env.items()
+            if key != "UNIFIED_TRACES_DESTINATION_ENABLED"
+        }
+        new = {
+            key: value
+            for key, value in after_env.items()
+            if key != "UNIFIED_TRACES_DESTINATION_ENABLED"
+        }
+        if old != new or {
+            before_env.get("UNIFIED_TRACES_DESTINATION_ENABLED"),
+            after_env.get("UNIFIED_TRACES_DESTINATION_ENABLED"),
+        } != {None, "true"}:
+            _trace_reject(address, action, operation_class)
 
 
 def _unknown_paths(value: Any, prefix: str = "") -> tuple[str, ...]:
@@ -863,6 +1358,8 @@ def _validate_derived_unknowns(
     for address, action, operation_class, paths in pending:
         spec = CONTRACT.get(address)
         for path in paths:
+            if path in TRACE_READ_ONLY_FIELDS.get(address, ()):
+                continue
             if spec is None or not _metadata_authorized(path, spec):
                 continue
             edge = next(
@@ -1092,17 +1589,54 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         address, mode, change, metadata_paths = _validate_resource_shape(resource)
         spec = CONTRACT.get(address)
         if spec is not None and spec.provider_change_identity:
-            if set(resource) != {"address", "mode", "type", "name", "provider_name", "change"} or set(change) != {"actions", "before", "after", "after_unknown", "before_sensitive", "after_sensitive", "before_identity", "after_identity"}:
+            expected_resource_keys = {
+                "address",
+                "mode",
+                "type",
+                "name",
+                "provider_name",
+                "change",
+            }
+            if "index" in resource:
+                expected_resource_keys.add("index")
+            if set(resource) != expected_resource_keys or set(change) != {
+                "actions",
+                "before",
+                "after",
+                "after_unknown",
+                "before_sensitive",
+                "after_sensitive",
+                "before_identity",
+                "after_identity",
+            }:
                 _reject("malformed_input", address=address)
-            expected_identity = dict(spec.provider_change_identity)
-            if any(not isinstance(change.get(side), dict) or change[side] != expected_identity for side in ("before_identity", "after_identity")):
+            action_for_identity = change["actions"][0]
+            expected_identity = (
+                {"arn": None if action_for_identity == "create" else TRACE_FIREHOSE}
+                if address == "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]"
+                else dict(spec.provider_change_identity)
+            )
+            identity_sides = (
+                ("after_identity",)
+                if action_for_identity == "create"
+                else ("before_identity",)
+                if action_for_identity == "delete"
+                else ("before_identity", "after_identity")
+            )
+            if any(
+                not isinstance(change.get(side), dict)
+                or change[side] != expected_identity
+                for side in identity_sides
+            ):
                 _reject("invalid_resource_identity", address=address)
-        pending_unknowns.append((
+        pending_unknowns.append(
+            (
             address,
             change["actions"][0],
             spec.operation_class if spec is not None else None,
             metadata_paths.get("after_unknown", ()),
-        ))
+            )
+        )
         if resource.get("provider_name") != EXPECTED_PROVIDER_NAME:
             _reject("provider_identity_mismatch", address=address)
         if address in seen:
@@ -1126,9 +1660,16 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         for key in ("after_unknown", "before_sensitive", "after_sensitive"):
             if action in {"create", "update"} and key not in change:
                 _reject("malformed_input", address=address, action=action)
-        if action == "delete":
+        if action == "delete" and (
+            spec is None or not spec.operation_class.startswith("agentcore-trace-")
+        ):
             _reject("delete_not_permitted", address=address, action=action)
-        if _has_production_value(resource):
+        production_candidate = copy.deepcopy(resource)
+        if spec is not None and address in TRACE_NOTICE_DIGESTS:
+            for side in ("before", "after"):
+                if isinstance(production_candidate["change"].get(side), dict):
+                    production_candidate["change"][side].pop("content", None)
+        if _has_production_value(production_candidate):
             _reject("production_target", address=address, action=action)
         if mode == "data":
             if not address.startswith("data.") or action not in {"read", "no-op"}:
@@ -1141,16 +1682,42 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         if action == "no-op":
             if _changed_fields(change.get("before"), change.get("after"), ignored=metadata_paths.get("after_unknown", ())):
                 _reject("unsupported_field_delta", address=address, action=action)
+            if address in TRACE_NOTICE_DIGESTS:
+                if spec is None:
+                    _reject("unsupported_address", address=address, action=action)
+                _validate_s3_identity(
+                    change.get("before"), change.get("after"), spec, address, action
+                )
+                records.append(
+                    {
+                        "address": address,
+                        "action": action,
+                        "operation_class": spec.operation_class
+                        if spec
+                        else "site-object-upload",
+                        "changed_fields": (),
+                        "before": change.get("before"),
+                        "after": change.get("after"),
+                        "spec": spec,
+                        "ignored_unknown": (),
+                        "no_op_evidence": True,
+                    }
+                )
             continue
         if spec is None:
             _reject("unsupported_address", address=address, action=action)
         before, after = change.get("before"), change.get("after")
-        ignored_unknown: tuple[str, ...] = ()
+        ignored_unknown: tuple[str, ...] = TRACE_READ_ONLY_FIELDS.get(address, ())
         if action == "update" and (before is None or after is None):
             _reject("malformed_input", address=address, action=action)
         if action == "create" and (before is not None or after is None):
             _reject("malformed_input", address=address, action=action)
-        if spec.operation_class in {"publisher-inline-policy", "report-freshness-alarm"}:
+        if action == "delete" and (before is None or after is not None):
+            _reject("malformed_input", address=address, action=action)
+        if spec.operation_class in {
+            "publisher-inline-policy",
+            "report-freshness-alarm",
+        }:
             if metadata_paths.get("after_unknown", ()):
                 _reject("unknown_authorization_value", address=address, action=action, operation_class=spec.operation_class)
             if any(
@@ -1162,12 +1729,18 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         _validate_s3_identity(before, after, spec, address, action)
         if action == "create":
             unknown_paths = metadata_paths.get("after_unknown", ())
-            ignored_unknown = tuple(path for path in unknown_paths if not _path_allowed(path, spec.fields))
+            ignored_unknown += tuple(
+                path for path in unknown_paths if not _path_allowed(path, spec.fields)
+            )
             changed = _create_fields(after, spec, address, action, ignored_unknown)
         else:
             unknown_paths = metadata_paths.get("after_unknown", ())
-            ignored_unknown = tuple(path for path in unknown_paths if not _path_allowed(path, spec.fields))
-            changed_set = set(_changed_fields(before, after, spec.fields, ignored_unknown))
+            ignored_unknown += tuple(
+                path for path in unknown_paths if not _path_allowed(path, spec.fields)
+            )
+            changed_set = set(
+                _changed_fields(before, after, spec.fields, ignored_unknown)
+            )
             for path in unknown_paths:
                 parents = [field for field in spec.fields if _path_allowed(path, (field,))]
                 if parents:
@@ -1194,14 +1767,29 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         if spec.operation_class == "publisher-inline-policy":
             _validate_publisher_policy(before, after, address, action, spec.operation_class)
         if spec.operation_class == "report-freshness-alarm":
-            _validate_report_freshness_alarm(before, after, address, action, spec.operation_class)
+            _validate_report_freshness_alarm(
+                before, after, address, action, spec.operation_class
+            )
+        if spec.operation_class.startswith("agentcore-trace-") or (
+            address == "aws_bedrockagentcore_agent_runtime.tollchat"
+            and "environment_variables" in changed
+        ):
+            _validate_agentcore_trace_value(
+                before, after, address, action, spec.operation_class
+            )
         if any(
             _metadata_authorized(path, spec)
             for key in ("before_sensitive", "after_sensitive")
             for path in metadata_paths.get(key, ())
         ):
-            _reject("sensitive_authorization_value", address=address, action=action, operation_class=spec.operation_class)
-        records.append({
+            _reject(
+                "sensitive_authorization_value",
+                address=address,
+                action=action,
+                operation_class=spec.operation_class,
+            )
+        records.append(
+            {
             "address": address,
             "action": action,
             "operation_class": spec.operation_class,
@@ -1210,7 +1798,8 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             "after": after,
             "spec": spec,
             "ignored_unknown": ignored_unknown,
-        })
+            }
+        )
     _validate_derived_unknowns(plan, pending_unknowns, records)
     if any((address, path) in _DERIVED_UNKNOWN_EDGES for address, _, _, paths in pending_unknowns for path in paths):
         records.sort(key=lambda record: record["address"])
@@ -1277,7 +1866,58 @@ def _parse_manifest(manifest: Any) -> tuple[dict[str, Any], dict[str, list[dict[
     return mutations, permissions
 
 
-def _validate_manifest_entry(address: str, declaration: Mapping[str, Any], permissions: list[dict[str, Any]]) -> None:
+def _validate_trace_notices(records: list[dict[str, Any]]) -> None:
+    subscription_create = any(
+        record["operation_class"] == "agentcore-trace-subscription"
+        and record["action"] == "create"
+        for record in records
+    )
+    by_address = {record["address"]: record for record in records}
+    for address, digest in TRACE_NOTICE_DIGESTS.items():
+        record = by_address.get(address)
+        if record is None:
+            if subscription_create:
+                _reject(
+                    "unsupported_field_delta",
+                    address=address,
+                    operation_class="site-object-upload",
+                )
+            continue
+        if record["action"] == "no-op" and not subscription_create:
+            continue
+        content = (
+            record.get("after", {}).get("content")
+            if isinstance(record.get("after"), dict)
+            else None
+        )
+        before = record.get("before")
+        after = record.get("after")
+        if (
+            not isinstance(content, str)
+            or hashlib.sha256(content.encode()).hexdigest() != digest
+            or not isinstance(after, dict)
+            or after.get("source") is not None
+            or after.get("source_hash") is not None
+            or (
+                record["action"] == "no-op"
+                and (
+                    not isinstance(before, dict)
+                    or before.get("source") is not None
+                    or before.get("source_hash") is not None
+                )
+            )
+        ):
+            _reject(
+                "unsupported_field_delta",
+                address=address,
+                action=record["action"],
+                operation_class="site-object-upload",
+            )
+
+
+def _validate_manifest_entry(
+    address: str, declaration: Mapping[str, Any], permissions: list[dict[str, Any]]
+) -> None:
     spec = CONTRACT.get(address)
     if spec is None:
         _reject("unsupported_address", address=address)
@@ -1336,10 +1976,14 @@ def validate_plan(plan: Any, manifest: Any, identity: Any | None = None) -> dict
             _reject("production_target")
         _validate_identity(identity)
         records = _parse_plan(plan)
+        _validate_trace_notices(records)
         declared, declared_permissions = _parse_manifest(manifest)
         if manifest.get("provider_identity") != identity:
             _reject("provider_identity_mismatch")
-        actual_addresses = {record["address"] for record in records}
+        actual_records = [
+            record for record in records if not record.get("no_op_evidence")
+        ]
+        actual_addresses = {record["address"] for record in actual_records}
         if not set(declared_permissions).issubset(set(declared)):
             _reject("manifest_coverage_mismatch")
         if not actual_addresses.issubset(set(declared)):
@@ -1347,7 +1991,7 @@ def validate_plan(plan: Any, manifest: Any, identity: Any | None = None) -> dict
         for address, declaration in declared.items():
             _validate_manifest_entry(address, declaration, declared_permissions.get(address, []))
         sanitized_records: list[dict[str, Any]] = []
-        for record in records:
+        for record in actual_records:
             address = record["address"]
             declaration = declared[address]
             if (
@@ -1362,10 +2006,12 @@ def validate_plan(plan: Any, manifest: Any, identity: Any | None = None) -> dict
                 action, resource, conditions = _validate_permission(permission, record["spec"], address)
                 normalized.append({"address": address, "action": action, "resource": resource, "conditions": conditions})
             sanitized_records.append(_mutation_result(record, declaration, normalized))
-        fingerprint = _fingerprint({
+        fingerprint = _fingerprint(
+            {
             "identity": dict(EXPECTED_IDENTITY),
             "mutations": sanitized_records,
-        })
+            }
+        )
         return {
             "status": "accepted",
             "reason_code": "ok",
