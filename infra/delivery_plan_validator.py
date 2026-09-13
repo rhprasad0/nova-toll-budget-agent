@@ -2036,7 +2036,7 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             _reject("malformed_input")
         if plan["complete"] is not True or plan["errored"] is not False:
             _reject("malformed_input")
-        if records and plan["applyable"] is not True:
+        if any(not record.get("no_op_evidence") for record in records) and plan["applyable"] is not True:
             _reject("malformed_input")
     return records
 

@@ -2259,9 +2259,23 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(
-            validate_plan(plan, _mutation_manifest(()))["status"], "accepted"
-        )
+        for applyable in (False, True):
+            with self.subTest(applyable=applyable):
+                plan["applyable"] = applyable
+                self.assertEqual(
+                    validate_plan(plan, _mutation_manifest(()))["status"], "accepted"
+                )
+
+        for field, value in (("complete", False), ("errored", True)):
+            with self.subTest(field=field):
+                rejected = copy.deepcopy(plan)
+                rejected[field] = value
+                self.assert_reason("malformed_input", plan=rejected, manifest=_mutation_manifest(()))
+
+        plan["resource_changes"].extend(lambda_plan()["resource_changes"])
+        self.assertEqual(validate_plan(plan, lambda_manifest())["status"], "accepted")
+        plan["applyable"] = False
+        self.assert_reason("malformed_input", plan=plan, manifest=lambda_manifest())
 
     def test_committed_development_manifest_covers_full_package_graph(self):
         application_infra = (
