@@ -410,7 +410,11 @@ def _mask_sql_literals(sql: str) -> str:
     return "".join(masked)
 
 
-def _remove_terminal_commit(path: Path) -> None:
+def _remove_terminal_commit(
+    path: Path,
+    migration: Migration | None = None,
+    profile: MigrationProfile = DEVELOPMENT_PROFILE,
+) -> None:
     """Prepare one private rendered migration for the session transaction."""
     try:
         sql = path.read_text(encoding="utf-8")
@@ -452,8 +456,17 @@ def _remove_terminal_commit(path: Path) -> None:
         or sql[commits[0].end("boundary") :].strip()
     ):
         raise MigrationError(f"migration transaction shape is unsupported: {path.name}")
+    temporary_grant = ""
+    if profile is DEVELOPMENT_PROFILE and migration and migration.schema == "oracle":
+        temporary_grant = """
+SET LOCAL ROLE pricing_owner_development;
+GRANT SELECT ON pricing.schema_version TO oracle_owner_development;
+SET LOCAL ROLE oracle_owner_development;"""
     path.write_text(
-        sql[: commits[0].start("boundary")] + sql[commits[0].end("boundary") :],
+        sql[: begins[0].end("boundary")]
+        + temporary_grant
+        + sql[begins[0].end("boundary") : commits[0].start("boundary")]
+        + sql[commits[0].end("boundary") :],
         encoding="utf-8",
     )
 
@@ -858,6 +871,11 @@ def _migration_sql(
     post_migration_guard = (
         _production_postgis_type_guard() if profile is PRODUCTION_PROFILE else ""
     )
+    temporary_revoke = (
+        "REVOKE SELECT ON pricing.schema_version FROM oracle_owner_development;"
+        if profile is DEVELOPMENT_PROFILE and migration.schema == "oracle"
+        else ""
+    )
     return rf"""
 SET ROLE {profile.owners["pricing"]};
 SELECT NOT EXISTS (
@@ -874,6 +892,7 @@ SELECT (SELECT version FROM {migration.schema}.schema_version WHERE singleton)
 {post_migration_guard}
 RESET ROLE;
 SET ROLE {profile.owners["pricing"]};
+{temporary_revoke}
 INSERT INTO {HISTORY_TABLE} (
   schema_name, schema_version, migration_id, source_path, source_sha256, evidence, is_baseline
 ) VALUES (
@@ -1090,7 +1109,7 @@ def run(profile: MigrationProfile = DEVELOPMENT_PROFILE) -> dict[str, object]:
                 _render_development_migration(captured_source, destination)
             else:
                 destination.write_bytes(committed)
-            _remove_terminal_commit(destination)
+            _remove_terminal_commit(destination, migration, profile)
             destination.chmod(0o600)
             rendered[migration.path] = destination
             captured_sources[migration.path] = committed
