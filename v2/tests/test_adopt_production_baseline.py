@@ -1839,3 +1839,67 @@ SELECT has_database_privilege('schema_migrator_production', current_database(), 
     )
     assert unchanged.returncode == 0
     assert unchanged.stdout.strip() == "2"
+
+    # Exercise the pending production path after the separately privileged 031.
+    previous = next(
+        baseline
+        for baseline in runner._production_baselines()  # pyright: ignore[reportPrivateUsage]
+        if baseline.schema == "oracle" and baseline.version == "1.14.0"
+    )
+    reset = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        input_sql=f"""
+DROP FUNCTION oracle.get_agent_report_routes();
+UPDATE oracle.toll_route_point SET place_name = NULL, region = NULL, country_code = NULL
+WHERE network_id = 'i66';
+UPDATE oracle.schema_version SET version = '1.14.0' WHERE singleton;
+UPDATE tollchat_migration.schema_history
+SET schema_version = '1.14.0', source_sha256 = '{previous.source_sha256}'
+WHERE schema_name = 'oracle' AND is_baseline;
+ALTER ROLE nova_toll_admin SUPERUSER;
+""",
+    )
+    assert reset.returncode == 0, reset.stderr
+    migration_path = "v2/db/migrations/031_upgrade_oracle_1_14_0_to_1_14_1.sql"
+    migration_source = (adopt.ROOT / migration_path).read_bytes()
+    migration_sql = migration_source.decode()
+    assert migration_sql.endswith("COMMIT;\n")
+    # The administrator completes the original 031 and its history row in one
+    # transaction. No PostGIS privileges are added to the recurring runner.
+    privileged_sql = (
+        migration_sql.removesuffix("COMMIT;\n")
+        + f"""
+INSERT INTO tollchat_migration.schema_history
+  (schema_name,schema_version,migration_id,source_path,source_sha256,evidence,is_baseline)
+VALUES ('oracle','1.14.1','{Path(migration_path).name}','{migration_path}',
+  '{hashlib.sha256(migration_source).hexdigest()}',
+  'commit={"b" * 40};run=12345678-1234-4234-8234-123456789abc',false);
+COMMIT;
+"""
+    )
+    privileged = run_psql(
+        "--username",
+        "nova_toll_admin",
+        "--dbname",
+        "nova_toll",
+        input_sql=privileged_sql,
+    )
+    assert privileged.returncode == 0, privileged.stderr
+    drop_privilege = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        input_sql="ALTER ROLE nova_toll_admin NOSUPERUSER;",
+    )
+    assert drop_privilege.returncode == 0, drop_privilege.stderr
+    upgraded = runner.run_production()
+    assert upgraded["before"] == {"pricing": "1.3.0", "oracle": "1.14.1"}
+    assert upgraded["after"] == {"pricing": "1.3.0", "oracle": "1.15.0"}
+    assert upgraded["applied"] == [
+        "v2/db/migrations/032_upgrade_oracle_1_14_1_to_1_15_0.sql",
+    ]
+    assert runner.run_production()["applied"] == []
