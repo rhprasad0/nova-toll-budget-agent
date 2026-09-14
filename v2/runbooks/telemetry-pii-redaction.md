@@ -57,11 +57,18 @@ static diagnostics may be used while investigating; do not log failed content.
    foundation output may change. Stop on replacements, deletes, or unrelated
    changes. Recheck account and saved-plan digest; apply that exact plan. Require
    a zero-change follow-up foundation plan. No database migration is needed.
-4. Merge the activation PR with the exporter, CloudWatch policies, both archive
-   destinations, and notices. Use the existing protected development delivery,
-   then the protected production release/plan/apply sequence in `RUNBOOK.md`.
-   Do not bypass environment review or exact artifact/plan checks.
-5. Use a fresh synthetic session per environment with a fabricated name, email,
+4. Merge and deliver the infrastructure staging PR first. PR planning uses
+   trusted `main` Terraform, so runtime Guardrail settings, permissions,
+   CloudWatch policies, and archive declarations must precede the exporter
+   candidate. This step retains the existing packages and privacy notices.
+   Require the protected development delivery to finish before proceeding.
+5. Merge the activation PR with the exporter and notices. First publication
+   requires a runtime code update, configured Guardrail settings (which may
+   already be staged), and both masking policies. Use the existing protected
+   development delivery, then the protected production release/plan/apply
+   sequence in `RUNBOOK.md`. Do not bypass environment review or exact
+   artifact/plan checks. Production receives the complete change together.
+6. Use a fresh synthetic session per environment with a fabricated name, email,
    phone, address, and dummy credential. Verify the user response still works.
    Inspect only that session/time window: CloudWatch spans and log events, the
    resulting Firehose S3 records, and the corresponding Athena rows. Require

@@ -17,7 +17,7 @@ rm -rf "$AGENT_STAGE" "$PROXY_STAGE" \
 mkdir -p "$AGENT_STAGE/agent" "$AGENT_STAGE/agent_tools" \
   "$AGENT_STAGE/agent-sops" "$PROXY_STAGE"
 
-cp "$V2_ROOT"/agent/{__init__.py,agentcore_entrypoint.py,toll_agent.py} \
+cp "$V2_ROOT"/agent/{__init__.py,agentcore_entrypoint.py,toll_agent.py,telemetry.py} \
   "$AGENT_STAGE/agent/"
 cp "$V2_ROOT"/agent_tools/*.py "$AGENT_STAGE/agent_tools/"
 cp "$V2_ROOT/agent-sops/nova-toll-pricing-assistant.sop.md" \

@@ -3349,7 +3349,17 @@ def test_agentcore_trace_archive_has_shared_privacy_notice_and_retention():
     assert lifecycle.count("agentcore-traces/") == 1
     assert 'for_each = ["agentcore-traces"]' in lifecycle
     assert "expiration { days = 7 }" in lifecycle
-    assert "development_trace_disclosure" in SITE_TF
+    for name, filename in (
+        ("index", "dev_chat.html"),
+        ("faq", "faq.html"),
+        ("privacy", "privacy.txt"),
+    ):
+        block = terraform_block(SITE_TF, f'resource "aws_s3_object" "{name}"')
+        assert f'file("${{path.module}}/../agent/{filename}")' in block
+        assert "local.is_production" not in block
+        notice = (V2_ROOT / "agent" / filename).read_text()
+        assert "make an effort to protect" in notice
+        assert "can miss" in notice
 
     proxy = agentcore.split(
         'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
@@ -3615,12 +3625,11 @@ def test_agentcore_trace_protection_applies_to_both_environments():
         "local.is_production ? {} : {"
     )
     for name in (
+        "UNIFIED_TRACES_DESTINATION_ENABLED",
         "TOLLCHAT_TELEMETRY_GUARDRAIL_ID",
         "TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION",
     ):
         assert name in common and name not in development
-    assert "UNIFIED_TRACES_DESTINATION_ENABLED" not in common
-    assert 'UNIFIED_TRACES_DESTINATION_ENABLED = "true"' in development
     subscriptions = terraform_block(
         agentcore,
         'resource "aws_cloudwatch_log_subscription_filter" "agentcore_traces"',

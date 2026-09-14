@@ -1,5 +1,5 @@
 TollChat privacy notice
-Effective September 7, 2026
+Effective September 14, 2026
 
 Who operates TollChat
 
@@ -9,13 +9,23 @@ What TollChat receives
 
 TollChat receives the text you submit, which may include trip locations, travel times, commute schedules, and salary figures. It also receives the responses and tool results needed to answer you.
 
-TollChat does not create user accounts. A random credential in a secure, HTTP-only browser cookie keeps public follow-up messages together for up to one hour. TollChat stores only a one-way hash of that credential with the temporary server session. It keeps the active conversation in the ephemeral microVM's memory. Starting a new chat removes the active conversation from TollChat's server memory. Server state disappears when the microVM stops or the server starts a new daily session. TollChat does not intentionally write conversations or the session credential to disk or attach the credential to traces or logs. Starting a new chat does not change OpenAI's retention described below.
+TollChat does not create user accounts. A random credential in a secure, HTTP-only browser cookie keeps public follow-up messages together for up to one hour. TollChat stores only a one-way hash of that credential with the temporary server session. It keeps the active conversation in the ephemeral microVM's memory. Starting a new chat removes the active conversation from TollChat's server memory. Server state disappears when the microVM stops or the server starts a new daily session. TollChat does not intentionally attach the session credential to traces or logs. Separate diagnostic traces are retained as described below. Starting a new chat does not change OpenAI's retention described below.
 
 Do not submit names, exact home or work addresses, account numbers, payment information, credentials, or other personal or confidential information.
 
+Diagnostic traces and personal information
+
+We make an effort to protect your personal information by automatically redacting detected PII from diagnostic traces before storage. Automated redaction can miss information. Please avoid sharing sensitive personal details.
+
+TollChat uses Amazon Bedrock Guardrails to detect and mask personal information in telemetry copies before export. This processing does not change the active conversation or the answer you receive. Diagnostic traces can contain redacted prompts, responses, tool inputs and results, attributes, and error details. Detection is probabilistic, so some personal information may remain. If redaction fails, affected content is omitted rather than exported raw.
+
+CloudWatch Logs data protection provides additional masking of detected information. This additional masking restricts viewing; unmasked originals remain recoverable by authorized AWS administrators. CloudWatch retention is one day in production and seven days in development. Both environments archive traces privately in encrypted S3 for Athena analysis, with seven-day expiration. Expiration and deletion are asynchronous. Starting a new chat does not delete these diagnostic records.
+
+Development traces collected before this rollout were stored without PII redaction. They remain subject to their existing seven-day retention and are not retroactively redacted or immediately purged.
+
 Historical usage data
 
-New public usage counting and daily publication have stopped. TollChat retains the historical aggregate record, historical snapshot, and associated publisher logs on AWS; this release does not purge them or add new writes. The retained historical data contains cumulative, non-identifying usage totals and does not contain chat text, trip details, salary figures, IP addresses, or advertising identifiers. TollChat does not sell this data or use it for targeted advertising.
+New public usage counting and daily publication have stopped. TollChat retains the historical aggregate record, historical snapshot, and associated publisher logs on AWS; these historical records are not being purged. The retained historical data contains cumulative, non-identifying usage totals and does not contain chat text, trip details, salary figures, IP addresses, or advertising identifiers. TollChat does not sell this data or use it for targeted advertising.
 
 New session records contain only the one-way hash of a random browser credential, a random runtime ID, creation and activity timestamps, a one-hour expiration timestamp, and a temporary request lease. TollChat stops accepting the record after one hour, and DynamoDB then deletes it asynchronously. The record does not contain chat text, trip details, salary figures, IP addresses, or advertising identifiers.
 
@@ -36,8 +46,8 @@ New route-analytics collection and aggregate publication have stopped. TollChat
 retains the historical measurement bucket, registry bytes, report-generation
 objects, rollup objects, and related catalog state on AWS while the separate
 retirement decision remains pending. Existing raw route logs and Athena-result
-objects expire after seven days; this release adds no measurement writes and
-does not purge or replace retained data.
+objects expire after seven days. Diagnostic trace archives also expire after
+seven days; this release does not purge retained data.
 
 This retained historical state is not a current usage service and is not used to
 identify visitors or for targeted advertising. Public report access and
