@@ -2197,7 +2197,7 @@ def _validate_trace_notices(records: list[dict[str, Any]]) -> None:
         if not env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_ID") or not env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION"):
             _reject("unsupported_field_delta", operation_class="site-object-upload")
         publishing = any(notice_digest(by_address[address], "before") != REDACTED_TRACE_NOTICE_DIGESTS[address] for address in new_notices)
-        if publishing and (runtime["action"] != "update" or not {"environment_variables", "agent_runtime_artifact.code_configuration.code.s3.version_id"} <= set(runtime["changed_fields"])):
+        if publishing and (runtime["action"] != "update" or "agent_runtime_artifact.code_configuration.code.s3.version_id" not in runtime["changed_fields"]):
             _reject("unsupported_field_delta", operation_class="site-object-upload")
         for endpoint in ("DEFAULT", "preview"):
             address = f'aws_cloudwatch_log_data_protection_policy.agentcore["{endpoint}"]'

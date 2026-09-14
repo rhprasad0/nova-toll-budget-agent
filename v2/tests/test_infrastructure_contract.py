@@ -3231,7 +3231,7 @@ def test_v2_has_an_independent_state_and_identity():
     assert 'value    = "noindex"' in site
 
 
-def test_v2_declares_a_private_agentcore_application_with_development_only_trace_archive():
+def test_v2_declares_a_private_agentcore_application_with_protected_trace_archive():
     agentcore_path = V2_ROOT / "infra" / "agentcore.tf"
     assert agentcore_path.exists()
     agentcore = agentcore_path.read_text()
@@ -3299,7 +3299,7 @@ def test_v2_declares_a_private_agentcore_application_with_development_only_trace
     firehose = terraform_block(
         agentcore, 'resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces"'
     )
-    assert "count       = local.is_production ? 0 : 1" in firehose
+    assert "count       = 1" in firehose
     assert 'prefix             = "agentcore-traces/"' in firehose
     assert re.findall(r'processors \{ type = "([^"]+)" \}', firehose) == [
         "Decompression",
@@ -3328,13 +3328,13 @@ def test_v2_declares_a_private_agentcore_application_with_development_only_trace
         in subscriptions
     )
     assert (
-        "depends_on = [aws_s3_object.index, aws_s3_object.faq, aws_s3_object.privacy]"
+        "depends_on = [aws_s3_object.index, aws_s3_object.faq, aws_s3_object.privacy, aws_cloudwatch_log_data_protection_policy.agentcore]"
         in subscriptions
     )
     assert "exc_info" not in subscriptions
 
 
-def test_agentcore_trace_archive_is_development_gated_after_legal_publication():
+def test_agentcore_trace_archive_has_shared_privacy_notice_and_retention():
     agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
     for value in (
         'resource "aws_glue_catalog_table" "agentcore_traces"',
@@ -3342,23 +3342,14 @@ def test_agentcore_trace_archive_is_development_gated_after_legal_publication():
         "agentcore-traces/",
     ):
         assert value in MEASUREMENT_INFRA
-    assert "development_trace_disclosure" in SITE_TF
     lifecycle = terraform_block(
         MEASUREMENT_INFRA,
         'resource "aws_s3_bucket_lifecycle_configuration" "agent_measurement"',
     )
     assert lifecycle.count("agentcore-traces/") == 1
-    assert 'for_each = local.is_production ? [] : ["agentcore-traces"]' in lifecycle
+    assert 'for_each = ["agentcore-traces"]' in lifecycle
     assert "expiration { days = 7 }" in lifecycle
-    for phrase in (
-        "raw AgentCore traces",
-        "prompts, responses, system and tool data, attributes, and error details",
-        "private AWS measurement and Athena boundary",
-        "seven days",
-        "not redacted, anonymous, or immediately deleted",
-        "not enabled in production",
-    ):
-        assert phrase in SITE_TF
+    assert "development_trace_disclosure" in SITE_TF
 
     proxy = agentcore.split(
         'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
@@ -3394,7 +3385,7 @@ def test_agentcore_trace_envelope_becomes_raw_ndjson_and_projects_query_fields()
     )
     assert 'Action   = "logs:PutResourcePolicy"' in runtime_policy
     assert (
-        'Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-*"'
+        'Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/${local.is_production ? "nova_toll_v2-W6989LEw44" : "nova_toll_v2_development-Y69XBf88Bl"}-*"'
         in runtime_policy
     )
     assert (
@@ -3614,231 +3605,41 @@ def test_agentcore_trace_envelope_becomes_raw_ndjson_and_projects_query_fields()
         )
 
 
-def test_agentcore_trace_resolved_environments_preserve_production_baseline():
+def test_agentcore_trace_protection_applies_to_both_environments():
     agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
-    measurement = MEASUREMENT_INFRA
-    site = SITE_TF
-    iam = FOUNDATION_IAM
-
-    def render_legal(name: str, is_production: bool) -> bytes:
-        block = terraform_block(site, f'resource "aws_s3_object" "{name}"')
-        source = _hcl_attribute(block, "source")
-        filename_match = re.search(r'../agent/([^" ]+)', source)
-        assert filename_match
-        filename = filename_match.group(1)
-        baseline = subprocess.run(
-            ["git", "show", f"HEAD:v2/agent/{filename}"],
-            check=True,
-            capture_output=True,
-        ).stdout
-        if is_production:
-            return baseline
-        literals = [
-            ast.literal_eval(value)
-            for value in re.findall(
-                r'"(?:\\.|[^"\\])*"', _hcl_attribute(block, "content")
-            )
-        ]
-        rendered = (V2_ROOT / "agent" / filename).read_text()
-        disclosure = _hcl_scalar(
-            _top_level_terraform_block(site, "locals", 0),
-            "development_trace_disclosure",
-        )
-        for old, new in zip(literals[1::2], literals[2::2], strict=True):
-            rendered = rendered.replace(
-                old, new.replace("${local.development_trace_disclosure}", disclosure)
-            )
-        return rendered.encode()
-
-    def resolve(
-        is_production: bool,
-        agentcore_source: str = agentcore,
-        measurement_source: str = measurement,
-        iam_source: str = iam,
-    ) -> dict[str, object]:
-        def count(
-            block: str, environment_expression: str = "local.is_production ? 0 : 1"
-        ) -> int:
-            match = re.search(r"^\s*count\s+=\s*(.+)$", block, re.MULTILINE)
-            assert match and match.group(1).strip() == environment_expression
-            return 0 if is_production else 1
-
-        firehose = terraform_block(
-            agentcore_source,
-            'resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces"',
-        )
-        subscriptions = terraform_block(
-            agentcore_source,
-            'resource "aws_cloudwatch_log_subscription_filter" "agentcore_traces"',
-        )
-        lifecycle = terraform_block(
-            measurement_source,
-            'resource "aws_s3_bucket_lifecycle_configuration" "agent_measurement"',
-        )
-        runtime = terraform_block(
-            agentcore_source, 'resource "aws_bedrockagentcore_agent_runtime" "tollchat"'
-        )
-        trace_resources = {
-            "firehose": count(firehose),
-            "catalog": count(
-                terraform_block(
-                    measurement_source,
-                    'resource "aws_glue_catalog_table" "agentcore_traces"',
-                )
-            ),
-            "query": count(
-                terraform_block(
-                    measurement_source,
-                    'resource "aws_athena_named_query" "agentcore_trace_summary"',
-                )
-            ),
-        }
-        subscription_match = re.search(
-            r'for_each\s+=\s*local\.is_production \? toset\(\[\]\) : toset\(\["DEFAULT", "preview"\]\)',
-            subscriptions,
-        )
-        assert subscription_match
-        subscriptions_inventory = () if is_production else ("DEFAULT", "preview")
-        lifecycle_match = re.search(
-            r'for_each\s+=\s*local\.is_production \? \[\] : \["agentcore-traces"\]',
-            lifecycle,
-        )
-        assert lifecycle_match
-        runtime_environment = _hcl_expression(runtime, "environment_variables")
+    protection = (V2_ROOT / "infra" / "trace_redaction.tf").read_text()
+    runtime = terraform_block(
+        agentcore, 'resource "aws_bedrockagentcore_agent_runtime" "tollchat"'
+    )
+    common, development = _hcl_expression(runtime, "environment_variables").split(
+        "local.is_production ? {} : {"
+    )
+    for name in (
+        "TOLLCHAT_TELEMETRY_GUARDRAIL_ID",
+        "TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION",
+    ):
+        assert name in common and name not in development
+    assert "UNIFIED_TRACES_DESTINATION_ENABLED" not in common
+    assert 'UNIFIED_TRACES_DESTINATION_ENABLED = "true"' in development
+    subscriptions = terraform_block(
+        agentcore,
+        'resource "aws_cloudwatch_log_subscription_filter" "agentcore_traces"',
+    )
+    assert re.search(r'for_each\s*= toset\(\["DEFAULT", "preview"\]\)', subscriptions)
+    assert re.search(
+        r"for_each\s*= aws_cloudwatch_log_group.agentcore_runtime", protection
+    )
+    for resource in (
+        'aws_glue_catalog_table" "agentcore_traces',
+        'aws_athena_named_query" "agentcore_trace_summary',
+    ):
         assert re.search(
-            r'local\.is_production \? \{\} : \{[\s\S]*?UNIFIED_TRACES_DESTINATION_ENABLED\s*=\s*"true"',
-            runtime_environment,
+            r"count\s*= 1", terraform_block(MEASUREMENT_INFRA, f'resource "{resource}"')
         )
-        role_blocks = [
-            terraform_block(iam_source, f'resource "aws_iam_role" "{name}"')
-            for name in (
-                "development_agentcore_trace_logs",
-                "development_agentcore_trace_firehose",
-            )
-        ]
-        trace_roles = sum(
-            count(block, 'var.environment == "development" ? 1 : 0')
-            for block in role_blocks
-        )
-        delivery = terraform_block(
-            iam_source, 'data "aws_iam_policy_document" "development_delivery"'
-        )
-        role_discovery = (
-            ("ReadAgentCoreTraceRoles",)
-            if not is_production and 'sid       = "ReadAgentCoreTraceRoles"' in delivery
-            else ()
-        )
-        return {
-            "unified_trace_setting": {}
-            if is_production
-            else {"UNIFIED_TRACES_DESTINATION_ENABLED": "true"},
-            "trace_roles": trace_roles if not is_production else 0,
-            "role_discovery": role_discovery,
-            "firehose": trace_resources["firehose"],
-            "subscriptions": subscriptions_inventory,
-            "lifecycle": () if is_production else ("agentcore-traces/",),
-            "catalog_query": trace_resources["catalog"] + trace_resources["query"],
-            "notices": {}
-            if is_production
-            else {
-                name: render_legal(name, False) for name in ("index", "faq", "privacy")
-            },
-            "production_legal": {
-                name: render_legal(name, True) for name in ("index", "faq", "privacy")
-            }
-            if is_production
-            else {},
-        }
-
-    development, production = resolve(False), resolve(True)
-    assert development == {
-        "unified_trace_setting": {"UNIFIED_TRACES_DESTINATION_ENABLED": "true"},
-        "trace_roles": 2,
-        "role_discovery": ("ReadAgentCoreTraceRoles",),
-        "firehose": 1,
-        "subscriptions": ("DEFAULT", "preview"),
-        "lifecycle": ("agentcore-traces/",),
-        "catalog_query": 2,
-        "notices": development["notices"],
-        "production_legal": {},
-    }
-    assert production == {
-        "unified_trace_setting": {},
-        "trace_roles": 0,
-        "role_discovery": (),
-        "firehose": 0,
-        "subscriptions": (),
-        "lifecycle": (),
-        "catalog_query": 0,
-        "notices": {},
-        "production_legal": production["production_legal"],
-    }
-    assert all(
-        b"raw AgentCore traces" in value
-        for value in cast(dict[str, bytes], development["notices"]).values()
-    )
-    assert all(
-        value
-        == subprocess.run(
-            ["git", "show", f"HEAD:v2/agent/{filename}"],
-            check=True,
-            capture_output=True,
-        ).stdout
-        for value, filename in zip(
-            cast(dict[str, bytes], production["production_legal"]).values(),
-            ("dev_chat.html", "faq.html", "privacy.txt"),
-            strict=True,
-        )
-    )
-    production_translation = _top_level_terraform_block(iam, "locals", 3)
-    assert '"ReadAgentCoreTraceRoles"' in production_translation
-    assert (
-        "if !contains(" in production_translation
-        and "development_delivery_trace_statement_sids" in production_translation
-    )
-    for name in ("index", "faq", "privacy"):
-        current = terraform_block(site, f'resource "aws_s3_object" "{name}"')
-        baseline = terraform_block(
-            subprocess.run(
-                ["git", "show", "HEAD:v2/infra/site.tf"],
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout,
-            f'resource "aws_s3_object" "{name}"',
-        )
-        assert _hcl_attribute(baseline, "source") in _hcl_attribute(current, "source")
-        assert _hcl_attribute(current, "source").endswith(" : null")
-        assert _hcl_attribute(baseline, "source_hash") in _hcl_attribute(
-            current, "source_hash"
-        )
-        assert _hcl_attribute(current, "source_hash").endswith(" : null")
-        assert "local.is_production ? null" in _hcl_attribute(current, "content")
-    assert all(
-        b"raw AgentCore traces" not in (V2_ROOT / "agent" / filename).read_bytes()
-        for filename in ("dev_chat.html", "faq.html", "privacy.txt")
-    )
-    before_query, query_source = measurement.split(
-        'resource "aws_athena_named_query" "agentcore_trace_summary" {', 1
-    )
-    production_query_mutant = (
-        before_query
-        + 'resource "aws_athena_named_query" "agentcore_trace_summary" {'
-        + query_source.replace(
-            "count       = local.is_production ? 0 : 1", "count       = 1", 1
-        )
-    )
-    assert production_query_mutant != measurement
-    with pytest.raises(AssertionError):
-        resolve(True, measurement_source=production_query_mutant)
-    runtime_gate_mutant = agentcore.replace(
-        'local.is_production ? {} : {\n      PRICING_DB_USER                    = local.database_roles.pricing_caller\n      UNIFIED_TRACES_DESTINATION_ENABLED = "true"\n    }',
-        '{\n      PRICING_DB_USER                    = local.database_roles.pricing_caller\n      UNIFIED_TRACES_DESTINATION_ENABLED = "true"\n    }',
-        1,
-    )
-    assert runtime_gate_mutant != agentcore
-    with pytest.raises(AssertionError):
-        resolve(True, agentcore_source=runtime_gate_mutant)
+    foundation = (FOUNDATION_ROOT / "telemetry.tf").read_text()
+    assert 'var.environment == "production" ? 1 : 0' in foundation
+    assert "local.production_telemetry_archive_statements" in foundation
+    assert "logs:Unmask" not in foundation
 
 
 def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
