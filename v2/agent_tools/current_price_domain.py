@@ -884,18 +884,6 @@ def _build_i66_component(
     )
 
 
-def _price_i66_leg(  # pyright: ignore[reportUnusedFunction]
-    leg: route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
-) -> _I66Component | _UnavailableComponent:
-    """Price one validated I-66 leg from observations or its published schedule."""
-    rows = _fetch_i66_comparisons(
-        leg.pricing_key.start_zone_id,
-        leg.pricing_key.end_zone_id,
-        leg.pricing_key.source_route_key.split(":", 1)[0],
-    )
-    return _build_i66_component(leg, rows)
-
-
 def _build_i95_i495_component(
     leg: route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
     rows: list[_I95ComparisonRow],
@@ -976,15 +964,6 @@ def _build_i95_i495_component(
         source_status=cast(str, current.source_status),
         recent_movement=recent_movement,
         prior_week_comparison=prior_week_comparison,
-    )
-
-
-def _price_i95_i495_leg(  # pyright: ignore[reportUnusedFunction]
-    leg: route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
-) -> _I95Component | _UnavailableComponent:
-    """Price one validated I-95/I-495 facility leg from current observations."""
-    return _build_i95_i495_component(
-        leg, _fetch_i95_i495_comparisons(leg.pricing_key.od_pair_id)
     )
 
 

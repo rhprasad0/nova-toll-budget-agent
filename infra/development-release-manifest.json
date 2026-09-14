@@ -69,7 +69,7 @@
     "v2/agent/terms.txt": "8fe686b47200732c6d823a43ae214d9113849f53f2dd9f84e65a82c62f4f46af",
     "v2/agent/toll_agent.py": "08884359e691fb4ffab87831731dff10071c33d58eefa99696d2b05994a37847",
     "v2/agent_tools/contract-manifest.json": "9e926ccdc216dbcf314fc35330bfe723f374d4566e74708242a602d2511db132",
-    "v2/agent_tools/current_price_domain.py": "28518a483c442266a8db9a780af09bc625151b79bb673c1c9a3f9f382be45cd7",
+    "v2/agent_tools/current_price_domain.py": "2b7fce1649980c4d8b0442cfc8493eb30776f21fa9d5e03320740e36d57d453c",
     "v2/agent_tools/get_annual_toll_ballpark.py": "5ee06fa1af46e03c4305a5412e33306008fca0a129a7d33063b23a868966b61f",
     "v2/agent_tools/get_current_toll_price.py": "df00c0655a872182c288436c7085079ac56334fe74f7e5840d10dbc47a37dec6",
     "v2/agent_tools/validate_toll_route.py": "fe4806d58d92995deed44a665619b9d6ae00a64174dcf9dbe9f75c34b76680e9",
@@ -169,11 +169,11 @@
     "v2/uv.lock": "949ab5c944868e37fa31b97c4bbca5befb41a175b240c8daec02eb0ce8c0082e"
   },
   "packages": {
-    "agentcore.zip": "33939daaec5b70dc9f89711617acd3f31c17ef8976bc0a8707a0ac69cc5bfbe7",
+    "agentcore.zip": "a719e078c31381d89719be9547343f7898a15c0c452e5886b8d8c9e992a7a5b3",
     "chat-proxy.zip": "44d27f8bd6015085c75aca087ef2d4a9941f5403364654c7cf83f6959087a319",
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
-    "publisher.zip": "1fcbe2781279bb5fe29439b12620e05ce80106e76380a70f4b5050fdeaa69c88",
-    "timed-checks.zip": "e3931ce254e77d9351a88dc486b375fa1e4fae73478bdc09ace138da27e3bee6"
+    "publisher.zip": "fcbd89680b1c66566e53df83081e56beb4e12937a699674b2adc143576fb03d3",
+    "timed-checks.zip": "dcd3944953e94005c4eab975e17b536fa1df72109702db4936be2f7008a99b19"
   },
   "mutations": [
     {

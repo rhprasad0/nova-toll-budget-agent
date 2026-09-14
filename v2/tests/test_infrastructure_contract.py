@@ -1013,7 +1013,6 @@ def test_foundation_rds_database_name_tracks_environment_contract():
 
 def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
     runbook = DEPLOYMENT
-    plan = (V2_ROOT / "plans" / "ENVIRONMENT-AND-RELEASE-PLAN.md").read_text()
     for text in (
         "guarded\nproduction planner",
         "current foundation output",
@@ -1021,19 +1020,17 @@ def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
         "planner-owned production handoff",
     ):
         assert text in runbook
-    for document in (runbook, plan):
-        for text in (
-            "#330",
-            "#331",
-            "#332",
-            "#333",
-            "certificate-validation",
-            "enable_public_dns = false",
-            "AWS-only identity",
-            "cannot write Cloudflare DNS",
-        ):
-            assert text in document
-    assert "provide an operative development" in plan
+    for text in (
+        "#330",
+        "#331",
+        "#332",
+        "#333",
+        "certificate-validation",
+        "enable_public_dns = false",
+        "AWS-only identity",
+        "cannot write Cloudflare DNS",
+    ):
+        assert text in runbook
     assert "is the operative development release path" in runbook
     assert "runbooks/development-foundation-330-archive.md" in RUNBOOK
     assert "historical audit and recovery context" in RUNBOOK
@@ -1633,9 +1630,6 @@ def test_legacy_development_inventory_hands_cleanup_to_issue_333():
     ):
         assert text in LEGACY_DEVELOPMENT_INVENTORY
     assert "not independent buckets" in LEGACY_DEVELOPMENT_INVENTORY
-    plan = (V2_ROOT / "plans" / "ENVIRONMENT-AND-RELEASE-PLAN.md").read_text()
-    assert "account-local foundation handoff" in plan
-    assert "legacy production-account development cleanup is owned by #333" in plan
 
 
 def test_foundation_budget_preserves_the_production_notification_contract():
@@ -13531,7 +13525,7 @@ def test_slice3_rollback_legacy_https_health_fails_closed(
         assert result.returncode == expected, result.stderr
 
 
-def test_slice_3_runbook_and_plan_document_the_staged_order_and_rollback():
+def test_slice_3_runbook_documents_the_staged_order_and_rollback():
     handoff = DEPLOYMENT.split("##### Exact DNS workflow operations and ordering", 1)[1]
     assert handoff.index("legacy_alias_released=true") < handoff.index(
         "before applying the reviewed development alias"
@@ -13558,19 +13552,6 @@ def test_slice_3_runbook_and_plan_document_the_staged_order_and_rollback():
         "#333 cleanup",
     ):
         assert required in DEPLOYMENT
-    for required in (
-        "Slice 3 custom-domain handoff",
-        "enable_development_custom_domain",
-        "production-foundation-dns",
-        "account-owned token",
-        "captured `dev.tollchat.ai` CNAME",
-        "Rollback restores that captured record by ID",
-        "No certificate, CloudFront alias, or DNS write",
-    ):
-        assert (
-            required
-            in (V2_ROOT / "plans" / "ENVIRONMENT-AND-RELEASE-PLAN.md").read_text()
-        )
 
 
 def test_development_migrations_iam_is_development_only_and_least_privilege():

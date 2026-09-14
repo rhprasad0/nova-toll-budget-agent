@@ -1386,12 +1386,8 @@ def test_iad_terminal_connectors_return_zero_toll(
     assert payload["total_usd"] == "0.00"
 
 
-def test_i66_pricer_returns_current_price_and_comparisons(monkeypatch):
-    monkeypatch.setattr(
-        pricing_tool, "_fetch_i66_comparisons", lambda *_args: _i66_rows()
-    )
-
-    component = pricing_tool._price_i66_leg(_i66_leg())
+def test_i66_pricer_returns_current_price_and_comparisons():
+    component = pricing_tool._build_i66_component(_i66_leg(), _i66_rows())  # pyright: ignore[reportPrivateUsage]
 
     assert isinstance(component, pricing_tool._I66ObservedComponent)  # pyright: ignore[reportPrivateUsage]
     assert component.price_usd == Decimal("7.20")
@@ -1406,19 +1402,12 @@ def test_i66_pricer_returns_current_price_and_comparisons(monkeypatch):
     assert component.prior_week_comparison.higher_than_count == 3
 
 
-def test_i66_pricer_returns_schedule_derived_zero(monkeypatch):
-    requested: list[tuple[int, int, str]] = []
-
-    def fetch(start_zone_id: int, end_zone_id: int, direction: str):
-        requested.append((start_zone_id, end_zone_id, direction))
-        return _i66_schedule_rows()
-
-    monkeypatch.setattr(pricing_tool, "_fetch_i66_comparisons", fetch)
-
-    component = pricing_tool._price_i66_leg(_i66_leg())
+def test_i66_pricer_returns_schedule_derived_zero():
+    component = pricing_tool._build_i66_component(  # pyright: ignore[reportPrivateUsage]
+        _i66_leg(), _i66_schedule_rows()
+    )
 
     assert isinstance(component, pricing_tool._I66ScheduleComponent)  # pyright: ignore[reportPrivateUsage]
-    assert requested == [(3110, 3110, "EB")]
     assert component.price_usd == Decimal("0.00")
     assert component.source_kind == "schedule_derived"
     assert component.pricing_method == "published_schedule"
@@ -1437,14 +1426,8 @@ def test_i66_pricer_returns_schedule_derived_zero(monkeypatch):
     ],
 )
 def test_i95_pricer_returns_current_price_comparisons_and_provenance(
-    monkeypatch, source_kind, pricing_method, od_pair_id, proxy_od_pair_id
+    source_kind, pricing_method, od_pair_id, proxy_od_pair_id
 ):
-    monkeypatch.setattr(
-        pricing_tool,
-        "_fetch_i95_i495_comparisons",
-        lambda *_args: _i95_rows(source_kind=source_kind),
-    )
-
     leg = (
         _i95_leg()
         if source_kind == "observed"
@@ -1455,7 +1438,9 @@ def test_i95_pricer_returns_current_price_comparisons_and_provenance(
             point_ids=["i495:192NO", "i95:201ND"],
         )
     )
-    component = pricing_tool._price_i95_i495_leg(leg)
+    component = pricing_tool._build_i95_i495_component(  # pyright: ignore[reportPrivateUsage]
+        leg, _i95_rows(source_kind=source_kind)
+    )
 
     assert isinstance(component, pricing_tool._I95Component)  # pyright: ignore[reportPrivateUsage]
     assert component.price_usd == Decimal("8.20")
@@ -1527,14 +1512,10 @@ def test_i95_fetch_rejects_misaligned_row_sets(monkeypatch, mutation):
         "exceptional_i95_schedule",
     ],
 )
-def test_i95_pricer_preserves_unavailable_diagnostic(monkeypatch, reason):
-    monkeypatch.setattr(
-        pricing_tool,
-        "_fetch_i95_i495_comparisons",
-        lambda *_args: _i95_rows(unavailable_reason=reason),
+def test_i95_pricer_preserves_unavailable_diagnostic(reason):
+    result = pricing_tool._build_i95_i495_component(  # pyright: ignore[reportPrivateUsage]
+        _i95_leg(), _i95_rows(unavailable_reason=reason)
     )
-
-    result = pricing_tool._price_i95_i495_leg(_i95_leg())
 
     assert isinstance(result, pricing_tool._UnavailableComponent)  # pyright: ignore[reportPrivateUsage]
     assert result.reason == reason
@@ -1555,16 +1536,12 @@ def test_i95_pricer_preserves_unavailable_diagnostic(monkeypatch, reason):
         lambda data: data["pricing_key"].update({"source_route_key": "bad-key"}),
     ],
 )
-def test_i95_pricer_rejects_misaligned_leg(monkeypatch, mutation):
+def test_i95_pricer_rejects_misaligned_leg(mutation):
     data = _i95_leg().model_dump(mode="python")
     mutation(data)
     leg = pricing_tool.route_validation._I95FacilityLeg.model_validate(data)  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr(
-        pricing_tool, "_fetch_i95_i495_comparisons", lambda *_args: _i95_rows()
-    )
-
     with pytest.raises(ValueError, match="I-95/I-495"):
-        pricing_tool._price_i95_i495_leg(leg)
+        pricing_tool._build_i95_i495_component(leg, _i95_rows())  # pyright: ignore[reportPrivateUsage]
 
 
 def test_i95_to_reagan_prices_only_the_i95_leg(monkeypatch):
@@ -2034,14 +2011,10 @@ def test_i95_failure_streams_failed_and_sanitizes_error(monkeypatch, caplog):
     assert secret not in caplog.text
 
 
-def test_i66_pricer_omits_incomplete_history(monkeypatch):
-    monkeypatch.setattr(
-        pricing_tool,
-        "_fetch_i66_comparisons",
-        lambda *_args: _i66_rows()[:1],
+def test_i66_pricer_omits_incomplete_history():
+    component = pricing_tool._build_i66_component(  # pyright: ignore[reportPrivateUsage]
+        _i66_leg(), _i66_rows()[:1]
     )
-
-    component = pricing_tool._price_i66_leg(_i66_leg())
 
     assert isinstance(component, pricing_tool._I66ObservedComponent)  # pyright: ignore[reportPrivateUsage]
     assert component.recent_movement is None
@@ -2084,14 +2057,10 @@ def test_i66_comparison_row_rejects_invalid_database_data(mutation):
 
 
 @pytest.mark.parametrize("reason", ["missing_observation", "stale_observation"])
-def test_i66_pricer_preserves_unavailable_diagnostic(monkeypatch, reason):
-    monkeypatch.setattr(
-        pricing_tool,
-        "_fetch_i66_comparisons",
-        lambda *_args: _i66_rows(unavailable_reason=reason),
+def test_i66_pricer_preserves_unavailable_diagnostic(reason):
+    result = pricing_tool._build_i66_component(  # pyright: ignore[reportPrivateUsage]
+        _i66_leg(), _i66_rows(unavailable_reason=reason)
     )
-
-    result = pricing_tool._price_i66_leg(_i66_leg())
 
     assert isinstance(result, pricing_tool._UnavailableComponent)  # pyright: ignore[reportPrivateUsage]
     assert result.reason == reason
@@ -2106,16 +2075,12 @@ def test_i66_pricer_preserves_unavailable_diagnostic(monkeypatch, reason):
         lambda data: data["pricing_key"].update({"source_route_key": "bad-key"}),
     ],
 )
-def test_i66_pricer_rejects_misaligned_leg(monkeypatch, mutation):
+def test_i66_pricer_rejects_misaligned_leg(mutation):
     data = _i66_leg().model_dump(mode="python")
     mutation(data)
     leg = pricing_tool.route_validation._I66FacilityLeg.model_validate(data)  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr(
-        pricing_tool, "_fetch_i66_comparisons", lambda *_args: _i66_rows()
-    )
-
     with pytest.raises(ValueError, match="I-66"):
-        pricing_tool._price_i66_leg(leg)
+        pricing_tool._build_i66_component(leg, _i66_rows())  # pyright: ignore[reportPrivateUsage]
 
 
 @pytest.mark.parametrize(
