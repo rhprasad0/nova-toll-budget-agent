@@ -72,7 +72,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "agent_measurement" {
   }
 
   dynamic "rule" {
-    for_each = local.is_production ? [] : ["agentcore-traces"]
+    for_each = ["agentcore-traces"]
     content {
       id     = "expire-agentcore-traces"
       status = "Enabled"
@@ -329,7 +329,7 @@ resource "aws_athena_workgroup" "agent_reports" {
 }
 
 resource "aws_glue_catalog_table" "agentcore_traces" {
-  count         = local.is_production ? 0 : 1
+  count         = 1
   name          = "agentcore_traces"
   database_name = aws_glue_catalog_database.agent_reports.name
   table_type    = "EXTERNAL_TABLE"
@@ -353,8 +353,8 @@ resource "aws_glue_catalog_table" "agentcore_traces" {
 }
 
 resource "aws_athena_named_query" "agentcore_trace_summary" {
-  count       = local.is_production ? 0 : 1
-  name        = "agentcore-trace-summary-dev"
+  count       = 1
+  name        = "agentcore-trace-summary${local.suffix}"
   database    = aws_glue_catalog_database.agent_reports.name
   workgroup   = aws_athena_workgroup.agent_reports.name
   description = "Bounded development trace outcome summary"

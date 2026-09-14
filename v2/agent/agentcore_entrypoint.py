@@ -9,16 +9,11 @@ from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol, cast
 
-# Instrument before importing the application; production never enables this flag.
+# Establish the telemetry boundary before importing or serving the application.
 if os.environ.get("UNIFIED_TRACES_DESTINATION_ENABLED") == "true":
-    from opentelemetry.instrumentation.auto_instrumentation import initialize
+    from agent.telemetry import initialize
 
-    os.environ.setdefault("AGENT_OBSERVABILITY_ENABLED", "true")
-    os.environ.setdefault("OTEL_PYTHON_DISTRO", "aws_distro")
-    os.environ.setdefault("OTEL_PYTHON_CONFIGURATOR", "aws_configurator")
-    # Archive development spans even when the PassThrough proxy sends an unsampled parent.
-    os.environ["OTEL_TRACES_SAMPLER"] = "always_on"
-    initialize(swallow_exceptions=False)
+    initialize()
 
 import boto3
 from bedrock_agentcore import BedrockAgentCoreApp

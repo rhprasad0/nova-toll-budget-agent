@@ -3023,6 +3023,7 @@ dependencies = [
     { name = "bedrock-agentcore" },
     { name = "boto3", extra = ["crt"] },
     { name = "defusedxml" },
+    { name = "opentelemetry-sdk" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "strands-agents", extra = ["openai"] },
@@ -3041,10 +3042,11 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aws-opentelemetry-distro", specifier = ">=0.18.0,<1" },
+    { name = "aws-opentelemetry-distro", specifier = "==0.19.0" },
     { name = "bedrock-agentcore", specifier = ">=1.21.0,<2" },
     { name = "boto3", extras = ["crt"], specifier = ">=1.43.70" },
     { name = "defusedxml", specifier = ">=0.7.1" },
+    { name = "opentelemetry-sdk", specifier = "==1.44.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "strands-agents", extras = ["openai"], specifier = ">=1.52.0" },

@@ -215,7 +215,7 @@ resource "aws_iam_role_policy" "tollchat_runtime" {
         Sid      = "ApplyGuardrail"
         Effect   = "Allow"
         Action   = "bedrock:ApplyGuardrail"
-        Resource = aws_bedrock_guardrail.tollchat.guardrail_arn
+        Resource = [aws_bedrock_guardrail.tollchat.guardrail_arn, var.foundation.telemetry_guardrail.arn]
       },
       {
         Sid    = "WriteRuntimeLogs"
@@ -226,11 +226,11 @@ resource "aws_iam_role_policy" "tollchat_runtime" {
           "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*",
         ]
       },
-      ], local.is_production ? [] : [{
+      ], [{
         Sid      = "EnableUnifiedRuntimeTraceDelivery"
         Effect   = "Allow"
         Action   = "logs:PutResourcePolicy"
-        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-*"
+        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/${local.is_production ? "nova_toll_v2-W6989LEw44" : "nova_toll_v2_development-Y69XBf88Bl"}-*"
         Condition = {
           StringEquals = { "aws:RequestedRegion" = data.aws_region.current.region }
         }
@@ -377,17 +377,19 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
 
   environment_variables = merge(
     {
-      DB_HOST                    = var.foundation.db_instance.address
-      DB_PORT                    = tostring(var.foundation.db_instance.port)
-      DB_NAME                    = local.database_name
-      DB_USER                    = local.database_roles.agent
-      DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"
-      TOLLCHAT_GUARDRAIL_ID      = aws_bedrock_guardrail.tollchat.guardrail_id
-      TOLLCHAT_GUARDRAIL_VERSION = aws_bedrock_guardrail_version.tollchat.version
+      DB_HOST                              = var.foundation.db_instance.address
+      DB_PORT                              = tostring(var.foundation.db_instance.port)
+      DB_NAME                              = local.database_name
+      DB_USER                              = local.database_roles.agent
+      DB_CA_BUNDLE_PATH                    = "/var/task/rds-ca-bundle.pem"
+      TOLLCHAT_GUARDRAIL_ID                = aws_bedrock_guardrail.tollchat.guardrail_id
+      TOLLCHAT_GUARDRAIL_VERSION           = aws_bedrock_guardrail_version.tollchat.version
+      TOLLCHAT_TELEMETRY_GUARDRAIL_ID      = var.foundation.telemetry_guardrail.id
+      TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION = var.foundation.telemetry_guardrail.version
+      UNIFIED_TRACES_DESTINATION_ENABLED   = "true"
     },
     local.is_production ? {} : {
-      PRICING_DB_USER                    = local.database_roles.pricing_caller
-      UNIFIED_TRACES_DESTINATION_ENABLED = "true"
+      PRICING_DB_USER = local.database_roles.pricing_caller
     },
   )
 
@@ -408,12 +410,12 @@ resource "aws_cloudwatch_log_group" "agentcore_runtime" {
 }
 
 resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces" {
-  count       = local.is_production ? 0 : 1
-  name        = "nova-toll-v2-agentcore-traces-dev"
+  count       = 1
+  name        = "nova-toll-v2-agentcore-traces${local.suffix}"
   destination = "extended_s3"
 
   extended_s3_configuration {
-    role_arn           = "arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-traces-firehose-dev"
+    role_arn           = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/nova-toll-v2-agentcore-traces-firehose${local.suffix}"
     bucket_arn         = aws_s3_bucket.agent_measurement.arn
     prefix             = "agentcore-traces/"
     buffering_interval = 60
@@ -435,14 +437,14 @@ resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces" {
 }
 
 resource "aws_cloudwatch_log_subscription_filter" "agentcore_traces" {
-  for_each        = local.is_production ? toset([]) : toset(["DEFAULT", "preview"])
-  name            = "nova-toll-v2-agentcore-traces-dev"
+  for_each        = toset(["DEFAULT", "preview"])
+  name            = "nova-toll-v2-agentcore-traces${local.suffix}"
   log_group_name  = aws_cloudwatch_log_group.agentcore_runtime[each.value].name
   destination_arn = aws_kinesis_firehose_delivery_stream.agentcore_traces[0].arn
-  role_arn        = "arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-traces-logs-dev"
+  role_arn        = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/nova-toll-v2-agentcore-traces-logs${local.suffix}"
   filter_pattern  = "{ $.traceId = \"*\" && $.spanId = \"*\" && $.durationNano >= 0 }"
 
-  depends_on = [aws_s3_object.index, aws_s3_object.faq, aws_s3_object.privacy]
+  depends_on = [aws_s3_object.index, aws_s3_object.faq, aws_s3_object.privacy, aws_cloudwatch_log_data_protection_policy.agentcore]
 }
 
 resource "aws_bedrockagentcore_agent_runtime_endpoint" "tollchat" {
