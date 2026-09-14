@@ -398,11 +398,18 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         for index in range(len(records)):
             with self.subTest(missing=index), self.assertRaises(_Invalid):
                 _validate_trace_notices(records[:index] + records[index+1:])
-        for missing_field in ("environment_variables", "agent_runtime_artifact.code_configuration.code.s3.version_id"):
-            mutant = copy.deepcopy(records)
-            mutant[3]["changed_fields"].remove(missing_field)
+        staged = copy.deepcopy(records)
+        staged[3]["before"] = copy.deepcopy(staged[3]["after"])
+        staged[3]["changed_fields"] = ["agent_runtime_artifact.code_configuration.code.s3.version_id"]
+        _validate_trace_notices(staged)
+        for mutant in (copy.deepcopy(records), copy.deepcopy(staged)):
+            mutant[3]["changed_fields"].remove("agent_runtime_artifact.code_configuration.code.s3.version_id")
             with self.assertRaises(_Invalid):
                 _validate_trace_notices(mutant)
+        missing_env = copy.deepcopy(staged)
+        missing_env[3]["after"]["environment_variables"].pop("TOLLCHAT_TELEMETRY_GUARDRAIL_ID")
+        with self.assertRaises(_Invalid):
+            _validate_trace_notices(missing_env)
         mixed = copy.deepcopy(records)
         mixed[0]["after"] = mixed[0]["before"]
         with self.assertRaises(_Invalid):
@@ -2462,7 +2469,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             ),
         }
         )
-        expected_mutations["aws_bedrockagentcore_agent_runtime.tollchat"] = ("agentcore-code", ("agent_runtime_artifact.code_configuration.code.s3.version_id", "environment_variables"))
+        expected_mutations["aws_bedrockagentcore_agent_runtime.tollchat"] = ("agentcore-code", ("agent_runtime_artifact.code_configuration.code.s3.version_id",))
         for name in ("index", "faq", "privacy"):
             expected_mutations[f"aws_s3_object.{name}"] = ("site-object-upload", ("content",))
         for address, spec in CONTRACT.items():
@@ -2541,7 +2548,8 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                     "UNIFIED_TRACES_DESTINATION_ENABLED": "true",
                 }
                 after["environment_variables"] = dict(before["environment_variables"])
-                after["environment_variables"].update(TOLLCHAT_TELEMETRY_GUARDRAIL_ID="testid", TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION="1")
+                before["environment_variables"].update(TOLLCHAT_TELEMETRY_GUARDRAIL_ID="testid", TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION="1")
+                after["environment_variables"] = dict(before["environment_variables"])
             return _resource_change(address, "update", before, after)
 
         plan = _plan([update(address) for address in committed_updates])
