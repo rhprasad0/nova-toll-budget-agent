@@ -1489,6 +1489,12 @@ def _validate_telemetry_value(value: Any, address: str, action: str, operation_c
             or transformations[0].get("default_value") is not None):
             _trace_reject(address, action, operation_class)
     elif operation_class == "telemetry-alarm":
+        value = dict(value)
+        # AWS normalizes omitted collections to either null or empty on create.
+        if value.get("alarm_actions") is None:
+            value["alarm_actions"] = []
+        if value.get("dimensions") is None:
+            value["dimensions"] = {}
         pii = 'telemetry_pii[' in address
         endpoint = "DEFAULT" if '"DEFAULT"' in address else "preview"
         expected = {

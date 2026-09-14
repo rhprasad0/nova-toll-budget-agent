@@ -1494,6 +1494,12 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             }
             result = validate_plan(plan, manifest)
             self.assertEqual(result["status"], "accepted", address)
+            if spec.operation_class == "telemetry-alarm":
+                normalized = copy.deepcopy(plan)
+                normalized["resource_changes"][0]["change"]["after"]["alarm_actions"] = None
+                if not after["dimensions"]:
+                    normalized["resource_changes"][0]["change"]["after"]["dimensions"] = None
+                self.assertEqual(validate_plan(normalized, manifest)["status"], "accepted", address)
             if spec.operation_class.startswith("telemetry-"):
                 for field in after:
                     mutant = copy.deepcopy(plan)
