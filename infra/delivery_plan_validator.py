@@ -604,8 +604,10 @@ def _build_contract() -> dict[str, Mutation]:
                     ),
                 ),
                 provider_change_identity=(
+                    ("account_id", ACCOUNT),
                     ("log_group_name", group.rsplit(":", 1)[-1]),
                     ("name", "nova-toll-v2-agentcore-traces-dev"),
+                    ("region", REGION),
                 ),
             )
         )

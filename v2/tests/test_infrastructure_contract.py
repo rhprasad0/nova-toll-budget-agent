@@ -9210,7 +9210,8 @@ def _assert_agentcore_trace_foundation_source(source: str) -> None:
         }
     ]
     logs_source = terraform_block(
-        source, 'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"'
+        source,
+        'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',
     )
     assert (
         "values=concat(local.development_delivery_agentcore_trace_log_group_arns,"
