@@ -2329,7 +2329,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "aws_lambda_alias.tollchat_live": ("lambda-alias", ("function_version",)),
             "aws_bedrockagentcore_agent_runtime.tollchat": (
                 "agentcore-code",
-                ("environment_variables",),
+                ("agent_runtime_artifact.code_configuration.code.s3.version_id",),
             ),
             "aws_bedrockagentcore_agent_runtime_endpoint.tollchat": (
                 "agentcore-endpoint",
@@ -2492,11 +2492,9 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 before["environment_variables"] = {
                     "DB_HOST": "database",
                     "PRICING_DB_USER": "pricing",
-                }
-                after["environment_variables"] = {
-                    **before["environment_variables"],
                     "UNIFIED_TRACES_DESTINATION_ENABLED": "true",
                 }
+                after["environment_variables"] = dict(before["environment_variables"])
             return _resource_change(address, "update", before, after)
 
         plan = _plan([update(address) for address in committed_updates])
