@@ -144,7 +144,7 @@
     "v2/scripts/build_release_bundle.sh": "40bf8759eddb5b75a5b0e44b3fbd568f2252f1e5fa034163da8111c444a5c6e8",
     "v2/scripts/build_timed_checks_zip.sh": "c51b3e752ace8ecc34ff5e6964739d167f0edc61ebeffbcd4ca595fe9359dab1",
     "v2/scripts/check_development_admission.py": "60222d03555f2dad9373947b7fa1dbb0db817e78300c9fe373db37afd21f972b",
-    "v2/scripts/check_development_release.py": "e521609f1cee61fe2d5cfc5747ea57583dbfcd4a33233f491021f2d707397d6c",
+    "v2/scripts/check_development_release.py": "3c1f63defd61a769eadca84d58f23f4d8de413f11a4713ee102aca20ca1bc706",
     "v2/scripts/check_production_release.py": "fcf2c5ecedc50e1fe15d8205528b3f0509089377d52b99f8bd97ba52fa7a4888",
     "v2/scripts/classify_deployment_error.py": "8c736cbd2a8957f347408b92553efd0971bb50d42e6c8f658f5ff7602079b405",
     "v2/scripts/development_deployment_status.py": "dd694f4417a61ba4e51dad9f414b2e096aeb7bd5660cd9a53016c6b445b8ce8f",

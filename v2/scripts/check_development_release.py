@@ -230,6 +230,25 @@ def expected(state: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
         if resource == "tollchat_proxy":
             require(function["version"] == alias["function_version"])
     require(state["values"]["outputs"]["public_site"]["value"]["url"] == profile_site)
+    if not profile_production:
+        # The gated plan publishes rendered development disclosures, not source bytes.
+        for name, filename in (
+            ("index", "dev_chat.html"),
+            ("faq", "faq.html"),
+            ("privacy", "privacy.txt"),
+        ):
+            notice = resources[f"aws_s3_object.{name}"]
+            content = notice.get("content")
+            require(
+                isinstance(content, str)
+                and bool(content)
+                and notice.get("source") in (None, "")
+                and notice.get("source_hash") in (None, ""),
+                "notice_content",
+            )
+            hashes[f"v2/agent/{filename}"] = hashlib.sha256(
+                content.encode()
+            ).hexdigest()
     values = {
         "hashes": hashes,
         "robots_hash": hashes.get("v2/agent/robots.txt"),
