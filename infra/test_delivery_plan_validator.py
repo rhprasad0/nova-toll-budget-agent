@@ -17,6 +17,7 @@ from infra.delivery_plan_validator import (
     TRACE_FIREHOSE_ROLE,
     TRACE_KMS_KEY,
     TRACE_LOGS_ROLE,
+    TRACE_NOTICE_DIGESTS,
     TRACE_PREFIX,
     TRACE_QUERY,
     TRACE_TAGS,
@@ -2002,6 +2003,15 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             actions,
         )
         self.assertEqual(validate_plan(retry, retry_manifest)["status"], "accepted")
+        # The AWS provider normalizes absent S3 source fields to empty strings.
+        normalized_retry = copy.deepcopy(retry)
+        for item in normalized_retry["resource_changes"]:
+            if item["address"] in TRACE_NOTICE_DIGESTS:
+                for side in ("before", "after"):
+                    item["change"][side].update(source="", source_hash="")
+        self.assertEqual(
+            validate_plan(normalized_retry, retry_manifest)["status"], "accepted"
+        )
         for field, attacker in (
             ("bucket", "attacker-bucket"),
             ("key", "wrong-key"),
