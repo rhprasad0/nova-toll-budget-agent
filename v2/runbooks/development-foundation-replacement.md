@@ -99,7 +99,7 @@ test "$(terraform version -json | jq -r '.terraform_version')" = "1.15.8"
 test "$(sha256sum "$ROOT/infra/.terraform.lock.hcl" | awk '{print $1}')" = "798415e2b72a761023f0ee096521a29223173428c99de7e4c50103e726eef4d8"
 : "${REVIEWED_SOURCE_REVISION:?set the reviewed state-seed merge revision}"
 test "$(git -C "$ROOT" rev-parse --verify HEAD)" = "$REVIEWED_SOURCE_REVISION"
-test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all -- . ':(exclude).graph')"
+test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all)"
 RDS_INSTANCE_ARN="arn:aws:rds:us-east-1:903859731897:db:nova-toll-db"
 RDS_RESOURCE_ID="db-DMHPVKTM5V5HN3QJG2UKFDEGTI"
 RDS_METADATA="$(aws --region us-east-1 rds describe-db-instances \
@@ -211,7 +211,7 @@ test "$(sha256sum "$ARCHIVE_PROVIDER" | awk '{print $1}')" = "276b0d0b0fd0dbc3aa
 test "$(stat -c '%a' -- "$STATE_SEED_ROOT/development-state-seed.tfplan")" = "600"
 test "$(sha256sum "$STATE_SEED_ROOT/development-state-seed.tfplan" | awk '{print $1}')" = "$STATE_SEED_PLAN_SHA256"
 test "$(git -C "$ROOT" rev-parse --verify HEAD)" = "$REVIEWED_SOURCE_REVISION"
-test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all -- . ':(exclude).graph')"
+test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all)"
 RDS_INSTANCE_ARN="arn:aws:rds:us-east-1:903859731897:db:nova-toll-db"
 RDS_RESOURCE_ID="db-DMHPVKTM5V5HN3QJG2UKFDEGTI"
 STATE_SEED_APPLY_STARTED=0
@@ -319,7 +319,7 @@ holds that same identifier.
    : "${REVIEWED_SOURCE_REVISION:?set the reviewed source revision}"
    printf '%s\n' "$REVIEWED_SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$'
    test "$(git -C "$ROOT" rev-parse --verify HEAD)" = "$REVIEWED_SOURCE_REVISION"
-   test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all -- . ':(exclude).graph')"
+   test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all)"
    RDS_METADATA="$(aws --region us-east-1 rds describe-db-instances \
      --db-instance-identifier nova-toll-db \
      --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible}' \
@@ -421,7 +421,7 @@ holds that same identifier.
    : "${REVIEWED_SOURCE_REVISION:?set the reviewed source revision}"
    printf '%s\n' "$REVIEWED_SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$'
    test "$(git -C "$ROOT" rev-parse --verify HEAD)" = "$REVIEWED_SOURCE_REVISION"
-   test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all -- . ':(exclude).graph')"
+   test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all)"
    grep -Fx 'bucket       = "nova-toll-tfstate-903859731897"' "$ROOT/infra/backend.development.hcl"
    grep -Fx 'key          = "nova-toll/development/terraform.tfstate"' "$ROOT/infra/backend.development.hcl"
    grep -Fx 'region       = "us-east-1"' "$ROOT/infra/backend.development.hcl"

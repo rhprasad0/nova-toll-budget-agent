@@ -135,9 +135,6 @@ money, and response grounding.
 | [`v2/infra/`](v2/infra/) | Application runtime, edge, observability, and least-privilege infrastructure |
 | [`infra/`](infra/) | Shared polling, raw storage, RDS, networking, security, and Terraform state |
 | [`.github/workflows/`](.github/workflows/) | Credential-free PR checks and protected deployment/migration workflows |
-| [`.agents/skills/project-graph/SKILL.md`](.agents/skills/project-graph/SKILL.md) | Project-graph role instructions and artifact contract |
-| [`.codex/agents/`](.codex/agents/) | Project-graph role configurations |
-| `.worktrees/<name>/.graph/` | Ignored per-run project-graph artifacts, not a tracked repository directory |
 
 Start with the [v2 technical guide](v2/README.md) for implementation and
 operations details.
