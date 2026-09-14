@@ -381,7 +381,7 @@ data "aws_iam_policy_document" "development_agentcore_trace_logs_assume" {
     actions = ["sts:AssumeRole"]
     principals {
       type        = "Service"
-      identifiers = ["logs.${local.development_delivery_region}.amazonaws.com"]
+      identifiers = ["logs.amazonaws.com"]
     }
     condition {
       test     = "StringLike"

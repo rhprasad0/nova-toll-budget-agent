@@ -9267,7 +9267,7 @@ def _assert_agentcore_trace_foundation_source(source: str) -> None:
     for name, service in (
         (
             "development_agentcore_trace_logs_assume",
-            "logs.${local.development_delivery_region}.amazonaws.com",
+            "logs.amazonaws.com",
         ),
         ("development_agentcore_trace_firehose_assume", "firehose.amazonaws.com"),
     ):
@@ -9700,7 +9700,7 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
                     "StringEquals": {"aws:SourceAccount": "903859731897"},
                 },
                 "Effect": "Allow",
-                "Principal": {"Service": "logs.us-east-1.amazonaws.com"},
+                "Principal": {"Service": "logs.amazonaws.com"},
             }
         ],
         "Version": "2012-10-17",
@@ -9809,7 +9809,7 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
     for marker, original, replacement in (
         (
             'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',
-            "logs.${local.development_delivery_region}.amazonaws.com",
+            "logs.amazonaws.com",
             "lambda.amazonaws.com",
         ),
         (
@@ -9899,8 +9899,8 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
         _assert_agentcore_trace_foundation_source,
         FOUNDATION_IAM,
         'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',
-        '["logs.${local.development_delivery_region}.amazonaws.com"]',
-        '["logs.${local.development_delivery_region}.amazonaws.com", "lambda.amazonaws.com"]',
+        '["logs.amazonaws.com"]',
+        '["logs.amazonaws.com", "lambda.amazonaws.com"]',
     )
     _must_reject_after_marker(
         _assert_agentcore_trace_resource_headers,
