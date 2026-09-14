@@ -16,6 +16,8 @@ if os.environ.get("UNIFIED_TRACES_DESTINATION_ENABLED") == "true":
     os.environ.setdefault("AGENT_OBSERVABILITY_ENABLED", "true")
     os.environ.setdefault("OTEL_PYTHON_DISTRO", "aws_distro")
     os.environ.setdefault("OTEL_PYTHON_CONFIGURATOR", "aws_configurator")
+    # Archive development spans even when the PassThrough proxy sends an unsampled parent.
+    os.environ["OTEL_TRACES_SAMPLER"] = "always_on"
     initialize(swallow_exceptions=False)
 
 import boto3

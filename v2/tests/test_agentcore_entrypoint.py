@@ -43,9 +43,19 @@ if os.environ['UNIFIED_TRACES_DESTINATION_ENABLED'] == 'true':
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     with trace.get_tracer('archive-check').start_as_current_span('synthetic-check'):
         pass
-    assert [span.name for span in exporter.get_finished_spans()] == ['synthetic-check']
+    parent = trace.NonRecordingSpan(trace.SpanContext(
+        trace_id=1, span_id=2, is_remote=True, trace_flags=trace.TraceFlags(0)
+    ))
+    with trace.get_tracer('archive-check').start_as_current_span(
+        'unsampled-parent-check', context=trace.set_span_in_context(parent)
+    ):
+        pass
+    assert [span.name for span in exporter.get_finished_spans()] == [
+        'synthetic-check', 'unsampled-parent-check'
+    ]
 else:
     assert not isinstance(provider, TracerProvider)
+    assert os.environ['OTEL_TRACES_SAMPLER'] == 'parentbased_always_on'
 """,
         ],
         env=os.environ
@@ -53,6 +63,7 @@ else:
             "UNIFIED_TRACES_DESTINATION_ENABLED": enabled,
             "AWS_EC2_METADATA_DISABLED": "true",
             "OTEL_TRACES_EXPORTER": "none",
+            "OTEL_TRACES_SAMPLER": "parentbased_always_on",
             "OTEL_METRICS_EXPORTER": "none",
             "OTEL_LOGS_EXPORTER": "none",
             "OTEL_AWS_APPLICATION_SIGNALS_ENABLED": "false",
