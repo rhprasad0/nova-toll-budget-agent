@@ -68,6 +68,20 @@ def _trace_notice_contents():
     }
 
 
+def _telemetry_value(address):
+    spec = CONTRACT[address]
+    value = dict(spec.create_identity)
+    if spec.operation_class == "telemetry-log-protection":
+        value["policy_document"] = (Path(__file__).resolve().parents[1] / "v2/infra/telemetry-log-policy.json").read_text()
+    elif spec.operation_class == "telemetry-failure-metric":
+        value.update(pattern="?telemetry_redaction_failed ?telemetry_redaction_omitted ?telemetry_export_failed", metric_transformation=[{"name": "RedactionFailures", "namespace": "TollChat/Telemetry", "value": "1"}])
+    else:
+        pii = 'telemetry_pii[' in address
+        endpoint = "DEFAULT" if '"DEFAULT"' in address else "preview"
+        value.update(namespace="AWS/Logs" if pii else "TollChat/Telemetry", metric_name="LogEventsWithFindings" if pii else "RedactionFailures", dimensions={"LogGroupName": f"/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-{endpoint}"} if pii else {}, statistic="Sum", period=300, evaluation_periods=1, comparison_operator="GreaterThanThreshold", threshold=0, treat_missing_data="notBreaching", alarm_actions=[])
+    return value
+
+
 def validate_plan(plan, manifest, identity=None):
     return _validate_plan(plan, manifest, dict(EXPECTED_IDENTITY) if identity is None else identity)
 
@@ -1439,6 +1453,9 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "aws_s3_object.privacy",
             }:
                 after["content"] = _trace_notice_contents()[address.rsplit(".", 1)[-1]]
+            if spec.operation_class.startswith("telemetry-"):
+                after = _telemetry_value(address)
+                fields = tuple(sorted(after))
             if address in {PUBLISHER_ADDRESS, ALARM_ADDRESS}:
                 plan = _plan(
                     [
@@ -1477,6 +1494,11 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             }
             result = validate_plan(plan, manifest)
             self.assertEqual(result["status"], "accepted", address)
+            if spec.operation_class.startswith("telemetry-"):
+                for field in after:
+                    mutant = copy.deepcopy(plan)
+                    mutant["resource_changes"][0]["change"]["after"][field] = "unreviewed"
+                    self.assertEqual(validate_plan(mutant, manifest)["status"], "rejected", (address, field))
             if address == "aws_s3_object.agentcore":
                 undeclared = _plan(
                     [

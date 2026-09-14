@@ -191,6 +191,7 @@ TRACE_NOTICE_DIGESTS = {
     "aws_s3_object.faq": "3c2e1281969095cbf1282bf8abbb268713dfdd96110db28bc5bbf3ea1823c105",
     "aws_s3_object.privacy": "3363dc45ae0e3bc97b8ec4d90c4fb3290050e45b5f4bf1989edd95bd52b7318d",
 }
+REDACTED_TRACE_NOTICE_DIGESTS = {'aws_s3_object.index': 'c4d4867169f6040c265f349697a6c9fa7c70506d66e41d93fea2ef5ae8d8b2e1', 'aws_s3_object.faq': 'ad2bfde99a68f8ed16fb1f8d67a9a7a4fbff031396639a1e84700230a590547a', 'aws_s3_object.privacy': '00b192c03648aaec4913aafc8e3ad30bff05d73497de7466a78fbcef1969e0f5'}
 TRACE_READ_ONLY_FIELDS = {
     "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]": (
         "arn",
@@ -662,6 +663,33 @@ def _build_contract() -> dict[str, Mutation]:
             "cloudfront-code",
             _permission("cloudfront:UpdateFunction", f"arn:aws:cloudfront::{ACCOUNT}:function/tollchat-v2-{name.replace('_', '-')}-dev"),
             _permission("cloudfront:PublishFunction", f"arn:aws:cloudfront::{ACCOUNT}:function/tollchat-v2-{name.replace('_', '-')}-dev"),
+        )
+    for endpoint, group in zip(("DEFAULT", "preview"), TRACE_LOG_GROUPS):
+        group_name = group.split(":log-group:", 1)[1].removesuffix(":*")
+        result[f'aws_cloudwatch_log_data_protection_policy.agentcore["{endpoint}"]'] = _mutation(
+            ("log_group_name", "policy_document"), ("create", "update"), "telemetry-log-protection",
+            _permission("logs:PutDataProtectionPolicy", group),
+            create_identity=(("log_group_name", group_name),),
+        )
+        result[f'aws_cloudwatch_log_metric_filter.telemetry_redaction["{endpoint}"]'] = _mutation(
+            ("name", "log_group_name", "pattern", "metric_transformation"), ("create", "update"), "telemetry-failure-metric",
+            _permission("logs:PutMetricFilter", group),
+            create_identity=(("name", "tollchat-redaction-failures"), ("log_group_name", group_name)),
+        )
+    for key, name in (
+        ("telemetry_redaction", "redaction-failures"),
+        ('telemetry_pii["DEFAULT"]', "pii-findings-DEFAULT"),
+        ('telemetry_pii["preview"]', "pii-findings-preview"),
+    ):
+        alarm_name = f"tollchat-v2-{name}-dev"
+        alarm_arn = f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{alarm_name}"
+        result[f"aws_cloudwatch_metric_alarm.{key}"] = _mutation(
+            ("alarm_name", "alarm_description", "namespace", "metric_name", "dimensions", "statistic", "period", "evaluation_periods", "comparison_operator", "threshold", "treat_missing_data", "alarm_actions", "tags"),
+            ("create", "update"), "telemetry-alarm",
+            _permission("cloudwatch:PutMetricAlarm", alarm_arn),
+            _permission("cloudwatch:TagResource", alarm_arn),
+            _permission("cloudwatch:UntagResource", alarm_arn),
+            create_identity=(("alarm_name", alarm_name),),
         )
     return result
 
@@ -1207,7 +1235,19 @@ def _validate_trace_runtime_policy(
     )
     added = new.pop(statement["Sid"], None)
     removed = old.pop(statement["Sid"], None)
-    if old != new or (added, removed) not in ((statement, None), (None, statement)):
+    old_apply, new_apply = old.get("ApplyGuardrail"), new.get("ApplyGuardrail")
+    telemetry_added = False
+    if isinstance(old_apply, dict) and isinstance(new_apply, dict):
+        old_resources = old_apply.get("Resource", [])
+        new_resources = new_apply.get("Resource", [])
+        extra = set(new_resources) - set(old_resources)
+        if len(extra) == 1 and re.fullmatch(r"arn:aws:bedrock:us-east-1:903859731897:guardrail/[a-z0-9]+", next(iter(extra))):
+            new_apply["Resource"] = [item for item in new_resources if item not in extra]
+            telemetry_added = True
+    if old != new or not (
+        (added, removed) in ((statement, None), (None, statement))
+        or (telemetry_added and added == removed == statement)
+    ):
         _trace_reject(address, action, operation_class)
 
 
@@ -1414,20 +1454,52 @@ def _validate_agentcore_trace_value(
         )
         if not isinstance(before_env, dict) or not isinstance(after_env, dict):
             _trace_reject(address, action, operation_class)
-        old = {
-            key: value
-            for key, value in before_env.items()
-            if key != "UNIFIED_TRACES_DESTINATION_ENABLED"
+        telemetry_keys = {"TOLLCHAT_TELEMETRY_GUARDRAIL_ID", "TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION"}
+        ignored_keys = telemetry_keys | {"UNIFIED_TRACES_DESTINATION_ENABLED"}
+        old = {key: value for key, value in before_env.items() if key not in ignored_keys}
+        new = {key: value for key, value in after_env.items() if key not in ignored_keys}
+        if old != new:
+            _trace_reject(address, action, operation_class)
+        if telemetry_keys & set(after_env):
+            if (after_env.get("UNIFIED_TRACES_DESTINATION_ENABLED") != "true"
+                or not re.fullmatch(r"[a-z0-9]+", str(after_env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_ID", "")))
+                or not re.fullmatch(r"[1-9][0-9]*", str(after_env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION", "")))):
+                _trace_reject(address, action, operation_class)
+        elif {before_env.get("UNIFIED_TRACES_DESTINATION_ENABLED"), after_env.get("UNIFIED_TRACES_DESTINATION_ENABLED")} != {None, "true"}:
+            _trace_reject(address, action, operation_class)
+
+
+def _validate_telemetry_value(value: Any, address: str, action: str, operation_class: str) -> None:
+    if not isinstance(value, dict):
+        _trace_reject(address, action, operation_class)
+    if operation_class == "telemetry-log-protection":
+        try:
+            policy = json.loads(value["policy_document"])
+            digest = hashlib.sha256(json.dumps(policy, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        except (KeyError, TypeError, ValueError):
+            _trace_reject(address, action, operation_class)
+        if digest != "37b6be001869b097a89a67ef6fb3828039be35f7464155eb713f4f72ca567aa5":
+            _trace_reject(address, action, operation_class)
+    elif operation_class == "telemetry-failure-metric":
+        transformations = value.get("metric_transformation")
+        if (value.get("pattern") != "?telemetry_redaction_failed ?telemetry_redaction_omitted ?telemetry_export_failed"
+            or not isinstance(transformations, list) or len(transformations) != 1
+            or any(transformations[0].get(k) != v for k, v in {"name": "RedactionFailures", "namespace": "TollChat/Telemetry", "value": "1"}.items())
+            or transformations[0].get("dimensions") not in (None, {})
+            or transformations[0].get("default_value") is not None):
+            _trace_reject(address, action, operation_class)
+    elif operation_class == "telemetry-alarm":
+        pii = 'telemetry_pii[' in address
+        endpoint = "DEFAULT" if '"DEFAULT"' in address else "preview"
+        expected = {
+            "namespace": "AWS/Logs" if pii else "TollChat/Telemetry",
+            "metric_name": "LogEventsWithFindings" if pii else "RedactionFailures",
+            "dimensions": {"LogGroupName": f"/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-{endpoint}"} if pii else {},
+            "statistic": "Sum", "period": 300, "evaluation_periods": 1,
+            "comparison_operator": "GreaterThanThreshold", "threshold": 0,
+            "treat_missing_data": "notBreaching", "alarm_actions": [],
         }
-        new = {
-            key: value
-            for key, value in after_env.items()
-            if key != "UNIFIED_TRACES_DESTINATION_ENABLED"
-        }
-        if old != new or {
-            before_env.get("UNIFIED_TRACES_DESTINATION_ENABLED"),
-            after_env.get("UNIFIED_TRACES_DESTINATION_ENABLED"),
-        } != {None, "true"}:
+        if any(value.get(k) != v for k, v in expected.items()) or value.get("ok_actions") not in (None, []) or value.get("insufficient_data_actions") not in (None, []) or value.get("metric_query") not in (None, []):
             _trace_reject(address, action, operation_class)
 
 
@@ -1982,6 +2054,8 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 and bool(changed_set & {"s3_bucket", "s3_key", "s3_object_version"})
             ):
                 _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
+        if spec.operation_class.startswith("telemetry-"):
+            _validate_telemetry_value(after, address, action, spec.operation_class)
         if spec.operation_class == "publisher-inline-policy":
             _validate_publisher_policy(before, after, address, action, spec.operation_class)
         if spec.operation_class == "agentcore-trace-runtime-policy":
@@ -2121,7 +2195,7 @@ def _validate_trace_notices(records: list[dict[str, Any]]) -> None:
         after = record.get("after")
         if (
             not isinstance(content, str)
-            or hashlib.sha256(content.encode()).hexdigest() != digest
+            or hashlib.sha256(content.encode()).hexdigest() not in {digest, REDACTED_TRACE_NOTICE_DIGESTS[address]}
             or not isinstance(after, dict)
             or after.get("source") not in (None, "")
             or after.get("source_hash") not in (None, "")

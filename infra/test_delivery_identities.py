@@ -116,6 +116,7 @@ def rendered_production_policies(iam: str = IAM) -> tuple[
     """Render the production policy locals in an isolated, backend-free root."""
     first_locals = terraform_block(iam, "locals", 0)
     production_locals = terraform_block(iam, "locals", 3)
+    telemetry_locals = terraform_block((ROOT / "infra/telemetry.tf").read_text(), "locals", 0)
     policy_data = terraform_block(iam, 'data "aws_iam_policy_document" "development_delivery"')
     test_bucket_arn = "arn:aws:s3:::nova-toll-tfstate-920534282028"
     test_kms_arn = "arn:aws:kms:us-east-1:920534282028:key/00000000-0000-0000-0000-000000000000"
@@ -153,6 +154,8 @@ def rendered_production_policies(iam: str = IAM) -> tuple[
         }}
 
         {first_locals}
+        variable "environment" {{ default = "production" }}
+        {telemetry_locals}
         {policy_data}
         {production_locals}
 
@@ -239,6 +242,8 @@ def rendered_production_policies(iam: str = IAM) -> tuple[
 
 
 def production_policies_digest(policies: tuple[object, ...]) -> str:
+    # Keep the frozen baseline for existing partitions; telemetry is checked below.
+    policies = tuple({key: value for key, value in item.items() if key != "telemetry"} if isinstance(item, dict) else item for item in policies)
     return hashlib.sha256(
         json.dumps(policies, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
@@ -839,7 +844,7 @@ def main() -> None:
         assert production_policies_digest(rendered_production_policies(leaked_trace_sid)) != (
             "d4d45fabe9af7a4176276b77da67f9041d3da2e9e95515cfadd3925e840b4263"
         )
-    assert len(planner_documents) == 9
+    assert len(planner_documents) == 10
     assert len(planner_documents) <= 10
     assert set(planner_documents) == {
         "state",
@@ -851,6 +856,7 @@ def main() -> None:
         "runtime",
         "edge",
         "endpoint",
+        "telemetry",
     }
     planner_keys = (
         "state",
@@ -925,7 +931,18 @@ def main() -> None:
     for statement in split_statements:
         if "s3:GetObjectVersion" in statement.get("Action", []):
             assert all("/plans/" not in resource for resource in statement["Resource"])
-    assert set(deploy_documents) == {"state", "release", "compute", "observability", "storage", "data", "runtime", "schedules", "edge"}
+    assert set(deploy_documents) == {"state", "release", "compute", "observability", "storage", "data", "runtime", "schedules", "edge", "telemetry"}
+    assert len(deploy_documents) <= 10
+    telemetry_reads = planner_documents["telemetry"]["Statement"]
+    assert all(statement["Sid"].startswith("Read") for statement in telemetry_reads)
+    telemetry_deploy = deploy_documents["telemetry"]["Statement"]
+    assert {s["Sid"] for s in telemetry_deploy} == {
+        "ReadTelemetryLogProtection", "ReadTelemetryAlarms", "ManageTelemetryLogProtection", "ManageTelemetryAlarms",
+        "ReadAgentCoreTraceSubscription", "ReadAgentCoreTraceRoles", "ReadAgentCoreTraceFirehose",
+        "ManageAgentCoreTraceSubscriptions", "ManageAgentCoreTraceFirehose", "ManageAgentCoreTraceRuntimePolicy", "PassAgentCoreTraceLogsRole",
+        "PassAgentCoreTraceFirehoseRole", "ManageAgentCoreTraceRetention", "ManageAgentCoreTraceCatalog", "ManageAgentCoreTraceNamedQuery",
+    }
+    assert "logs:Unmask" not in json.dumps(telemetry_deploy)
     schedule_statements = deploy_documents["schedules"]["Statement"]
     assert [statement["Sid"] for statement in schedule_statements] == [
         "ManageApplicationSchedules",

@@ -60,7 +60,8 @@ variable "foundation" {
       address     = string
       port        = number
     })
-    alerts_topic_arn = string
+    alerts_topic_arn    = string
+    telemetry_guardrail = optional(object({ id = string, arn = string, version = string }))
   })
 }
 

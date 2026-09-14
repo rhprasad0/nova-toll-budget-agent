@@ -237,6 +237,7 @@ def _selected(
         return timed_enabled
     selected = (
         path in EXACT_INPUTS
+        or path in {"v2/agent/telemetry.py", "v2/infra/telemetry-log-policy.json"}
         or any(path.startswith(prefix) for prefix in INPUT_PREFIXES)
         or (path.startswith("infra/") and path.endswith(".tf"))
         or (path.startswith("v2/infra/") and path.endswith(".tf"))

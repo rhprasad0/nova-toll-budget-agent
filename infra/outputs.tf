@@ -21,5 +21,10 @@ output "foundation" {
       port        = aws_db_instance.main.port
     }
     alerts_topic_arn = aws_sns_topic.alerts.arn
+    telemetry_guardrail = {
+      id      = aws_bedrock_guardrail.telemetry.guardrail_id
+      arn     = aws_bedrock_guardrail.telemetry.guardrail_arn
+      version = aws_bedrock_guardrail_version.telemetry.version
+    }
   }
 }
