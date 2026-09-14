@@ -1964,7 +1964,7 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         if action == "no-op":
             if _changed_fields(change.get("before"), change.get("after"), ignored=metadata_paths.get("after_unknown", ())):
                 _reject("unsupported_field_delta", address=address, action=action)
-            if address in TRACE_NOTICE_DIGESTS:
+            if address in TRACE_NOTICE_DIGESTS or address == "aws_bedrockagentcore_agent_runtime.tollchat" or (spec is not None and spec.operation_class == "telemetry-log-protection"):
                 if spec is None:
                     _reject("unsupported_address", address=address, action=action)
                 _validate_s3_identity(
@@ -2180,6 +2180,31 @@ def _validate_trace_notices(records: list[dict[str, Any]]) -> None:
         for record in records
     )
     by_address = {record["address"]: record for record in records}
+    def notice_digest(record: dict[str, Any], side: str = "after") -> str:
+        value = record.get(side)
+        content = value.get("content") if isinstance(value, dict) else None
+        return hashlib.sha256(content.encode()).hexdigest() if isinstance(content, str) else ""
+
+    new_notices = [address for address, digest in REDACTED_TRACE_NOTICE_DIGESTS.items() if address in by_address and notice_digest(by_address[address]) == digest]
+    if new_notices:
+        if len(new_notices) != len(REDACTED_TRACE_NOTICE_DIGESTS):
+            _reject("unsupported_field_delta", operation_class="site-object-upload")
+        runtime = by_address.get("aws_bedrockagentcore_agent_runtime.tollchat")
+        if runtime is None:
+            _reject("unsupported_field_delta", operation_class="site-object-upload")
+        _validate_agentcore_trace_value(runtime["before"], runtime["after"], runtime["address"], runtime["action"], "agentcore-code")
+        env = runtime["after"].get("environment_variables", {})
+        if not env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_ID") or not env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION"):
+            _reject("unsupported_field_delta", operation_class="site-object-upload")
+        publishing = any(notice_digest(by_address[address], "before") != REDACTED_TRACE_NOTICE_DIGESTS[address] for address in new_notices)
+        if publishing and (runtime["action"] != "update" or not {"environment_variables", "agent_runtime_artifact.code_configuration.code.s3.version_id"} <= set(runtime["changed_fields"])):
+            _reject("unsupported_field_delta", operation_class="site-object-upload")
+        for endpoint in ("DEFAULT", "preview"):
+            address = f'aws_cloudwatch_log_data_protection_policy.agentcore["{endpoint}"]'
+            policy = by_address.get(address)
+            if policy is None:
+                _reject("unsupported_field_delta", address=address)
+            _validate_telemetry_value(policy["after"], address, policy["action"], "telemetry-log-protection")
     for address, digest in TRACE_NOTICE_DIGESTS.items():
         record = by_address.get(address)
         if record is None:
@@ -2284,6 +2309,8 @@ def validate_plan(plan: Any, manifest: Any, identity: Any | None = None) -> dict
         _validate_identity(identity)
         records = _parse_plan(plan)
         _validate_trace_notices(records)
+        # Runtime/policy no-ops prove notice consistency, not deployment mutations.
+        records = [record for record in records if not record.get("no_op_evidence") or record["address"] in TRACE_NOTICE_DIGESTS]
         declared, declared_permissions = _parse_manifest(manifest)
         if manifest.get("provider_identity") != identity:
             _reject("provider_identity_mismatch")

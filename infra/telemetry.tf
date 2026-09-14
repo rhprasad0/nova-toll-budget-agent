@@ -199,7 +199,7 @@ resource "aws_bedrock_guardrail" "telemetry" {
     regexes_config {
       name           = "authorization_header"
       description    = "Authorization bearer or basic credentials"
-      pattern        = "(?i)\\b(?:authorization|x-api-key)\\s*[:=]\\s*(?:bearer|basic)\\s+[A-Za-z0-9._~+/=-]{8,}"
+      pattern        = "(?i)\\b(?:authorization[\"']?\\s*[:=]\\s*[\"']?(?:bearer|basic)\\s+|x-api-key[\"']?\\s*[:=]\\s*[\"']?)[A-Za-z0-9._~+/=-]{8,}"
       action         = "ANONYMIZE"
       input_action   = "ANONYMIZE"
       output_action  = "ANONYMIZE"
