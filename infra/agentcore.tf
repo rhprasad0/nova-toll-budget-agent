@@ -21,21 +21,13 @@ resource "aws_subnet" "tollchat_private_c" {
   tags              = { Name = "nova-toll-private-c" }
 }
 
-resource "aws_eip" "tollchat_nat" {
-  domain = "vpc"
-}
-
-resource "aws_nat_gateway" "tollchat" {
-  allocation_id = aws_eip.tollchat_nat.id
-  subnet_id     = data.aws_subnet.tailscale_router.id
-  tags          = { Name = "nova-toll-preview" }
-}
-
+# ponytail: one existing router per environment; revisit managed NAT if traffic
+# or availability requirements outgrow this low-traffic reference deployment.
 resource "aws_route_table" "tollchat_private" {
   vpc_id = data.aws_vpc.default.id
   route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.tollchat.id
+    cidr_block           = "0.0.0.0/0"
+    network_interface_id = aws_instance.tailscale_router.primary_network_interface_id
   }
 }
 
@@ -66,11 +58,13 @@ resource "aws_security_group" "agentcore_endpoint" {
   vpc_id      = data.aws_vpc.default.id
 }
 
+# Interface endpoints bill per AZ. Keep one ENI per service alongside the router;
+# application subnets and the RDS subnet group keep their existing placement.
 resource "aws_vpc_endpoint" "agentcore" {
   vpc_id              = data.aws_vpc.default.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.bedrock-agentcore"
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.private_subnets
+  subnet_ids          = [aws_subnet.tollchat_private_c.id]
   security_group_ids  = [aws_security_group.agentcore_endpoint.id]
   private_dns_enabled = true
 }
@@ -79,7 +73,7 @@ resource "aws_vpc_endpoint" "tollchat_api" {
   vpc_id              = data.aws_vpc.default.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.execute-api"
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.private_subnets
+  subnet_ids          = [aws_subnet.tollchat_private_c.id]
   security_group_ids  = [aws_security_group.tollchat_api_endpoint.id]
   private_dns_enabled = false
 }
@@ -108,7 +102,7 @@ resource "aws_vpc_endpoint" "eventbridge" {
   vpc_id              = data.aws_vpc.default.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.events"
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.private_subnets
+  subnet_ids          = [aws_subnet.tollchat_private_c.id]
   security_group_ids  = [aws_security_group.eventbridge_endpoint.id]
   private_dns_enabled = true
 }

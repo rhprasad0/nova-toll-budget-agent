@@ -87,13 +87,20 @@ data "aws_subnet" "tailscale_router" {
 }
 
 resource "aws_instance" "tailscale_router" {
-  ami                    = local.tailscale_router_ami
-  instance_type          = "t4g.nano"
-  subnet_id              = data.aws_subnet.tailscale_router.id
-  vpc_security_group_ids = [aws_security_group.tailscale_router.id]
-  iam_instance_profile   = aws_iam_instance_profile.tailscale_router.name
+  ami                         = local.tailscale_router_ami
+  instance_type               = "t4g.nano"
+  subnet_id                   = data.aws_subnet.tailscale_router.id
+  vpc_security_group_ids      = [aws_security_group.tailscale_router.id]
+  iam_instance_profile        = aws_iam_instance_profile.tailscale_router.name
+  source_dest_check           = false
+  associate_public_ip_address = true
+  user_data_replace_on_change = false
 
   lifecycle {
+    # Existing enrolled nodes receive NAT setup through SSM. Updating user data
+    # would stop/start the router without rerunning cloud-init. New nodes use it.
+    ignore_changes = [user_data]
+
     precondition {
       condition     = !var.tailscale_advertise_routes || (var.environment == "production" && data.aws_caller_identity.current.account_id == local.production_account_id) || (var.environment == "development" && data.aws_caller_identity.current.account_id == local.development_account_id)
       error_message = "Tailscale route advertisement is allowed only for the account-local production route or the reviewed development site-1 route."
@@ -110,6 +117,8 @@ resource "aws_instance" "tailscale_router" {
   user_data = <<-EOF
     #!/bin/bash
     set -euxo pipefail
+    ${local.router_nat_setup}
+
     curl -fsSL https://tailscale.com/install.sh | sh
 
     echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/99-tailscale.conf
