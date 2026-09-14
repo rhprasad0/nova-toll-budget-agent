@@ -2462,6 +2462,13 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             ),
         }
         )
+        expected_mutations["aws_bedrockagentcore_agent_runtime.tollchat"] = ("agentcore-code", ("agent_runtime_artifact.code_configuration.code.s3.version_id", "environment_variables"))
+        for name in ("index", "faq", "privacy"):
+            expected_mutations[f"aws_s3_object.{name}"] = ("site-object-upload", ("content",))
+        for address, spec in CONTRACT.items():
+            if spec.operation_class.startswith("telemetry-"):
+                fields = {"telemetry-log-protection": ("log_group_name", "policy_document"), "telemetry-failure-metric": ("log_group_name", "metric_transformation", "name", "pattern"), "telemetry-alarm": ("alarm_actions", "alarm_description", "alarm_name", "comparison_operator", "dimensions", "evaluation_periods", "metric_name", "namespace", "period", "statistic", "tags", "threshold", "treat_missing_data")}[spec.operation_class]
+                expected_mutations[address] = (spec.operation_class, fields)
         actual_mutations = {
             record["address"]: (
                 record["operation_class"],
@@ -2534,6 +2541,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                     "UNIFIED_TRACES_DESTINATION_ENABLED": "true",
                 }
                 after["environment_variables"] = dict(before["environment_variables"])
+                after["environment_variables"].update(TOLLCHAT_TELEMETRY_GUARDRAIL_ID="testid", TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION="1")
             return _resource_change(address, "update", before, after)
 
         plan = _plan([update(address) for address in committed_updates])

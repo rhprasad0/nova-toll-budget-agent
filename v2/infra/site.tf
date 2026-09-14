@@ -71,7 +71,7 @@ resource "aws_s3_object" "index" {
   content_type  = "text/html; charset=utf-8"
   cache_control = "no-cache"
 
-  depends_on = [aws_s3_object.site_assets, aws_s3_bucket_server_side_encryption_configuration.site]
+  depends_on = [aws_s3_object.site_assets, aws_s3_bucket_server_side_encryption_configuration.site, aws_bedrockagentcore_agent_runtime_endpoint.tollchat, aws_cloudwatch_log_data_protection_policy.agentcore]
 }
 
 resource "aws_s3_object" "chat" {
@@ -106,7 +106,7 @@ resource "aws_s3_object" "faq" {
   content_type  = "text/html; charset=utf-8"
   cache_control = "no-cache"
 
-  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
+  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site, aws_bedrockagentcore_agent_runtime_endpoint.tollchat, aws_cloudwatch_log_data_protection_policy.agentcore]
 }
 
 resource "aws_s3_object" "privacy" {
@@ -116,7 +116,7 @@ resource "aws_s3_object" "privacy" {
   content_type  = "text/plain; charset=utf-8"
   cache_control = "no-cache"
 
-  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
+  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site, aws_bedrockagentcore_agent_runtime_endpoint.tollchat, aws_cloudwatch_log_data_protection_policy.agentcore]
 }
 
 resource "aws_s3_object" "terms" {

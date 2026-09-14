@@ -126,7 +126,7 @@
     "v2/infra/lambda-stub/handler.py": "b012092f485d3ed57d93e39b65c57af4a34c4b03b8586c00dd1c39c088484327",
     "v2/infra/main.tf": "5b1fdf1dc7fcbf79c909b29b492f20dabda0c8c271f2f9c0e8f68e18ab7d1322",
     "v2/infra/providers.tf": "b5fc8bb0f92ed4990625aebbe95811d683f36d48a9f18ad3520238d79b95e4aa",
-    "v2/infra/site.tf": "fe5a1cdfbd613835de4d883ce084d51afaa03643d442514645c923586bfe2f19",
+    "v2/infra/site.tf": "0d22916bd4f9ea17283a55abb990eba3ad0047fc8f7fbc16f76d14a845ac7a28",
     "v2/infra/telemetry-log-policy.tf": "641ab81e8c947e3c04196e856addee12bdd06a06c1e9a9f14cdb8b5f8830c03a",
     "v2/infra/timed_checks.tf": "7f047507cf0355a5eeaf4dea4cea91106ec38ea19f01f1c38bb2b81732616e36",
     "v2/infra/trace_redaction.tf": "70bd43bf038c175f47ff2ff9a125c911d0452b12ced42081fdd93808dbf60569",
