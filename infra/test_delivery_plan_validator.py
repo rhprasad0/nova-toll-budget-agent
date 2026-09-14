@@ -72,7 +72,7 @@ def _telemetry_value(address):
     spec = CONTRACT[address]
     value = dict(spec.create_identity)
     if spec.operation_class == "telemetry-log-protection":
-        value["policy_document"] = (Path(__file__).resolve().parents[1] / "v2/infra/telemetry-log-policy.json").read_text()
+        value["policy_document"] = (Path(__file__).resolve().parents[1] / "v2/infra/telemetry-log-policy.tf").read_text().split("<<-POLICY\n", 1)[1].split("\nPOLICY", 1)[0]
     elif spec.operation_class == "telemetry-failure-metric":
         value.update(pattern="?telemetry_redaction_failed ?telemetry_redaction_omitted ?telemetry_export_failed", metric_transformation=[{"name": "RedactionFailures", "namespace": "TollChat/Telemetry", "value": "1"}])
     else:

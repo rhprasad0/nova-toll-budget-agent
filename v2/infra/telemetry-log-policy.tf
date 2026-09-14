@@ -1,3 +1,5 @@
+locals {
+  telemetry_log_policy = <<-POLICY
 {
   "Name": "tollchat-telemetry-pii",
   "Description": "Additional masking of detected PII; originals remain recoverable in CloudWatch",
@@ -100,4 +102,6 @@
       }
     }
   ]
+}
+POLICY
 }
