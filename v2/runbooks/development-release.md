@@ -1046,7 +1046,7 @@ source_tree_digest() {
 }
 SOURCE_REVISION="$(git -C "$ROOT" rev-parse HEAD)"
 SOURCE_TREE_SHA256="$(source_tree_digest)"
-SOURCE_DIFF_SHA256="$(git -C "$ROOT" diff HEAD --no-ext-diff --binary -- . ':(exclude).graph' | sha256sum | cut -d' ' -f1)"
+SOURCE_DIFF_SHA256="$(git -C "$ROOT" diff HEAD --no-ext-diff --binary | sha256sum | cut -d' ' -f1)"
 tf_dev -chdir="$ROOT/v2/infra" plan -input=false $PLAN_ARGS -var public_preview_hostname= -out="$PHASE_ONE_PLAN" >/dev/null
 PHASE_ONE_PLAN_SHA256="$(plan_policy "$PHASE_ONE_PLAN")"
 scan_release_file "$PHASE_ONE_PLAN"
@@ -1147,7 +1147,7 @@ test -n "$RESOURCE_TYPES"
 scan_release_directory
 test "$(git -C "$ROOT" rev-parse HEAD)" = "$SOURCE_REVISION"
 test "$SOURCE_TREE_SHA256" = "$(source_tree_digest)"
-test "$SOURCE_DIFF_SHA256" = "$(git -C "$ROOT" diff HEAD --no-ext-diff --binary -- . ':(exclude).graph' | sha256sum | cut -d' ' -f1)"
+test "$SOURCE_DIFF_SHA256" = "$(git -C "$ROOT" diff HEAD --no-ext-diff --binary | sha256sum | cut -d' ' -f1)"
 printf '%s\n' "account=$EXPECTED_ACCOUNT" "region=$REGION" "source_revision=$(git -C "$ROOT" rev-parse HEAD)" "source_tree_sha256=$SOURCE_TREE_SHA256" "source_diff_sha256=$SOURCE_DIFF_SHA256" "foundation_sha256=$FOUNDATION_DIGEST" "phase_one_plan_sha256=$PHASE_ONE_PLAN_SHA256" "phase_two_plan_sha256=$PHASE_TWO_PLAN_SHA256" "loader_sha256=$LOADER_SHA256" "publisher_sha256=$PUBLISHER_SHA256" "agentcore_sha256=$AGENTCORE_SHA256" "chat_proxy_sha256=$PROXY_SHA256" "plan_policy=pass" "lambda_quota=$LAMBDA_QUOTA" "lambda_reservations=5,1,5" "apply=pass" "database_bootstrap=not-run" "database_contract=$DB_CONTRACT" "resource_count=$RESOURCE_COUNT" "resource_inventory=$RESOURCE_TYPES" "preview_url=$PREVIEW_URL" "smoke=pass" "dns_before=$DNS_BEFORE" "dns_after=$DNS_AFTER" >"$RELEASE_EVIDENCE"
 if rg --text --ignore-case --quiet 'password|secret_arn|secretstring|920534282028|dev.tollchat.ai|cloudflare|terraform\.tfstate|\.tfplan' "$RELEASE_EVIDENCE"; then
   exit 1
