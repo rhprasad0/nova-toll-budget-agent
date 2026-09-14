@@ -75,6 +75,12 @@ def release(
             "source_code_hash": base64.b64encode(bytes.fromhex(digest)).decode(),
             "version": "12",
         }
+    for name in ("index", "faq", "privacy"):
+        resources[f"aws_s3_object.{name}"] = {
+            "content": "static",
+            "source": "",
+            "source_hash": "",
+        }
     state = {
         "values": {
             "root_module": {
@@ -92,6 +98,21 @@ def release(
 def test_expected_release_identity(release: tuple[dict[str, Any], ...]) -> None:
     state, manifest, _ = release
     assert check.expected(state, manifest)["version"] == "8"
+
+
+def test_development_smoke_hashes_rendered_notice(
+    release: tuple[dict[str, Any], ...],
+) -> None:
+    state, manifest, resources = release
+    resources["aws_s3_object.index"]["content"] = "rendered development notice"
+    values = check.expected(state, manifest)
+    assert (
+        values["hashes"]["v2/agent/dev_chat.html"]
+        == hashlib.sha256(b"rendered development notice").hexdigest()
+    )
+    resources["aws_s3_object.index"]["source"] = "unexpected.html"
+    with pytest.raises(check.CheckFailure, match="notice_content"):
+        check.expected(state, manifest)
 
 
 def test_fixed_profiles_switch_without_leaking_identifiers() -> None:
