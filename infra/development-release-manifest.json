@@ -29,6 +29,7 @@
     "infra/network.tf": "9563ed49f827cea47a2b13855a640cfcb9b9d7db2c31ca3c90010b4af516a081",
     "infra/observability.tf": "e44cca1e76ae2d1bd4f58da7455388713369ffa8f1f49c5db4fb65c8291798ea",
     "infra/outputs.tf": "252052ed70c9b1e03232a2b4d3ccbf12d65712209a5f262401fec2b13aa965f6",
+    "infra/production-tracing.tf": "9c5c4883b7af75193a7fb6efc024f35868839496751bff0bd01075995d345dfe",
     "infra/providers.tf": "698c60284f5f3621a8fdd47ae29684254d54bb1b57db4fbe5aa42f453a8b57e5",
     "infra/rds.tf": "52085157d4398808227e100f56481ceae1669a8394f98b326fa219c1413a4d40",
     "infra/release_manifest.py": "5b51a40919e2901393988a4e0e9a3649ea7d48222e439e20fcd89ae1c0b1a62f",

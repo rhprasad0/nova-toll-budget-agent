@@ -68,7 +68,18 @@ static diagnostics may be used while investigating; do not log failed content.
    development delivery, then the protected production release/plan/apply
    sequence in `RUNBOOK.md`. Do not bypass environment review or exact
    artifact/plan checks. Production receives the complete change together.
-6. Use a fresh synthetic session per environment with a fabricated name, email,
+6. Verify the account-level Transaction Search prerequisites in both accounts:
+   X-Ray's trace segment destination must be `CloudWatchLogs` with status
+   `ACTIVE`, and the runtime role must allow `xray:PutTraceSegments` in
+   `us-east-1`. Production uses `infra/production-tracing.tf`; development uses
+   `infra/development-tracing.tf`. Enabling the destination creates AWS's
+   reserved log groups. For a new account, install the reviewed CloudWatch
+   resource policy and enable the destination, then import that policy, the
+   regional destination, and both reserved log groups into foundation state
+   before applying the full saved foundation plan. Production groups retain
+   logs for one day. Missing export permission can leave a healthy application
+   with no detailed traces; an initialized exporter alone is not proof.
+7. Use a fresh synthetic session per environment with a fabricated name, email,
    phone, address, and dummy credential. Verify the user response still works.
    Inspect only that session/time window: CloudWatch spans and log events, the
    resulting Firehose S3 records, and the corresponding Athena rows. Require
