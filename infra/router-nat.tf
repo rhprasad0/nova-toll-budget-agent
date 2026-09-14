@@ -17,7 +17,10 @@ table ip tollchat_nat {
   chain forward {
     type filter hook forward priority 10; policy accept;
     # EC2 uses the same interface for private ingress and internet egress.
-    # Tailscale traffic traverses tailscale0 and keeps its existing policy.
+    # Only replies to tailnet-initiated connections may return to tailscale0.
+    # Private workloads must not gain access to tailnet peers or advertised routes.
+    iifname "$UPLINK" oifname "tailscale0" ip saddr { 172.31.224.0/24, 172.31.225.0/24 } ct state { established, related } ct direction reply counter accept
+    iifname "$UPLINK" oifname "tailscale0" ip saddr { 172.31.224.0/24, 172.31.225.0/24 } counter drop
     iifname "$UPLINK" oifname "$UPLINK" jump private_egress
   }
   chain private_egress {

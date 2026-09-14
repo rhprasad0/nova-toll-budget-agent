@@ -61,6 +61,9 @@ enter router iptables -A ts-forward -o tailscale0 -j ACCEPT
 enter router iptables -t nat -A POSTROUTING -m mark --mark 0x40000/0xff0000 -j MASQUERADE
 enter server python3 -m http.server 443 --bind 198.18.0.2 >/tmp/server443.log 2>&1 &
 enter server python3 -m http.server 80 --bind 198.18.0.2 >/tmp/server80.log 2>&1 &
+# TCPServer avoids reverse-DNS waits in these intentionally isolated namespaces.
+enter tailnet python3 -c 'import http.server,socketserver; socketserver.TCPServer(("0.0.0.0",443),http.server.SimpleHTTPRequestHandler).serve_forever()' >/tmp/tailnet443.log 2>&1 &
+enter c python3 -c 'import http.server,socketserver; socketserver.TCPServer(("0.0.0.0",443),http.server.SimpleHTTPRequestHandler).serve_forever()' >/tmp/private443.log 2>&1 &
 sleep 1
 probe() { enter "$1" curl --noproxy '*' -fsS --connect-timeout 1 --max-time 2 "http://198.18.0.2:$2" >/dev/null; }
 for pass in 1 2 3; do
@@ -77,6 +80,10 @@ for pass in 1 2 3; do
   probe c 443
   if probe a 80 || probe denied 443; then echo 'unexpected forwarding allowed' >&2; exit 1; fi
   probe tailnet 80
+  if enter a curl --noproxy '*' -fsS --connect-timeout 1 --max-time 2 http://100.64.0.2:443 >/dev/null; then
+    echo 'private workload reached tailnet' >&2; exit 1
+  fi
+  enter tailnet curl --noproxy '*' -fsS --connect-timeout 1 --max-time 2 http://172.31.225.2:443 >/dev/null
   enter router iptables -C FORWARD -j ts-forward
   test -L /etc/systemd/system/multi-user.target.wants/tollchat-nat.service
 done

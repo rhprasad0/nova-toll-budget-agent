@@ -32,7 +32,7 @@
     "infra/providers.tf": "698c60284f5f3621a8fdd47ae29684254d54bb1b57db4fbe5aa42f453a8b57e5",
     "infra/rds.tf": "52085157d4398808227e100f56481ceae1669a8394f98b326fa219c1413a4d40",
     "infra/release_manifest.py": "066e5487c177e178d60d3ac436e344ff53940e375d461ca752e267aa1a3c9d85",
-    "infra/router-nat.tf": "430cb4d5eebda9fde10053725db6cd2e74fb9c684cf7dbd3251b6d82cd1f7cfc",
+    "infra/router-nat.tf": "42b11c0581cb52a13bd40662fe736e9caee6177f894aaca1d29c52dfdde416bb",
     "infra/s3.tf": "e74b230347830bd268099bdacad255656f4c60d68d53159e1240a8b56dbc2d6d",
     "infra/ssm.tf": "84d24c7793f7ac21208a7a67b4796cd4a107dd22ff4d01d6ae05c3390e88c68e",
     "infra/tailscale.tf": "5eeec806383e6e7524aa839d65cc10e30ac7323971a654ca19ee0f3da9e5e287",
