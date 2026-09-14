@@ -9199,7 +9199,7 @@ def _assert_agentcore_trace_foundation_source(source: str) -> None:
                 {
                     "test": "StringLike",
                     "variable": "aws:SourceArn",
-                    "values": ["${arn}:*"],
+                    "values": [],
                 },
                 {
                     "test": "StringEquals",
@@ -9209,6 +9209,13 @@ def _assert_agentcore_trace_foundation_source(source: str) -> None:
             ],
         }
     ]
+    logs_source = terraform_block(
+        source, 'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"'
+    )
+    assert (
+        "values=concat(local.development_delivery_agentcore_trace_log_group_arns,"
+        '[forarninlocal.development_delivery_agentcore_trace_log_group_arns:"${arn}:*"],)'
+    ) in "".join(logs_source.split())
     assert logs_policy == [
         {
             "sid": "",
@@ -9693,6 +9700,8 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
                 "Condition": {
                     "StringLike": {
                         "aws:SourceArn": [
+                            "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
+                            "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
                             "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT:*",
                             "arn:aws:logs:us-east-1:903859731897:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview:*",
                         ]
@@ -9814,8 +9823,8 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
         ),
         (
             'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',
-            'values   = [for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"]',
-            'values   = ["*"]',
+            '[for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"]',
+            '["*"]',
         ),
         (
             'data "aws_iam_policy_document" "development_agentcore_trace_logs_assume"',

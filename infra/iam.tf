@@ -386,7 +386,10 @@ data "aws_iam_policy_document" "development_agentcore_trace_logs_assume" {
     condition {
       test     = "StringLike"
       variable = "aws:SourceArn"
-      values   = [for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"]
+      values = concat(
+        local.development_delivery_agentcore_trace_log_group_arns,
+        [for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"],
+      )
     }
     condition {
       test     = "StringEquals"

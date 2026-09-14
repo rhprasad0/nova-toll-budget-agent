@@ -22,7 +22,7 @@
     "infra/data.tf": "e8e443e33a9d908f405eec54fa6bee2075fa8c228e293d734d1b0a5fc0428bc1",
     "infra/delivery_plan_validator.py": "b620d32ed098cfd362909cb5c6033b550f6e7cb4a0693853d24c26278fba5034",
     "infra/development-tracing.tf": "489b1cb626e528a6fb0dc68d8d2dbf8e3beb24d40a7b3d7fa92631f00e920c97",
-    "infra/iam.tf": "6955210a13ee859a086dde602c59d30092eaf2854319f363a5b121578f110824",
+    "infra/iam.tf": "ca27db5691d0896038d3a9705adbe4c2d5ba1413abda4c4be9b00c4722180a09",
     "infra/kms.tf": "be9512e49926805d56b6c521793c08880929948b820f943f0a2c5a0f9e589168",
     "infra/lambda-stub/handler.py": "d86cf7746868e087960da8c551496bcf21aa71d79baf4d910e60fb3f43a05868",
     "infra/lambda.tf": "c95fafdc5f815820273eb9f314787532e8b6e5c1f601f50c2481f51b5c48ce0c",
