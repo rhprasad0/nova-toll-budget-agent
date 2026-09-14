@@ -1,12 +1,13 @@
 from copy import deepcopy
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from scripts.validate_router_nat_plan import ACCOUNTS, CIDRS, ENDPOINTS, validate
 
 
-def fixture(environment="development"):
+def fixture(environment: str = "development") -> dict[str, Any]:
     router = {
         "id": "i-router",
         "source_dest_check": False,
@@ -15,7 +16,7 @@ def fixture(environment="development"):
         "vpc_security_group_ids": ["sg-router"],
         "primary_network_interface_id": "eni-router",
     }
-    values = {
+    values: dict[str, Any] = {
         "aws_instance.tailscale_router": router,
         "aws_security_group.tailscale_router": {"id": "sg-router"},
         "aws_subnet.tollchat_private_c": {
@@ -41,9 +42,10 @@ def fixture(environment="development"):
             "to_port": 443,
             "security_group_id": "sg-router",
         }
-    changes = []
+    changes: list[dict[str, Any]] = []
     for address, after in values.items():
-        before = deepcopy(after)
+        before: dict[str, Any] | None = deepcopy(after)
+        assert before is not None
         actions = ["update"]
         if address == "aws_instance.tailscale_router":
             before["source_dest_check"] = True
@@ -113,7 +115,7 @@ def fixture(environment="development"):
 
 
 @pytest.mark.parametrize("environment", ACCOUNTS)
-def test_router_plan_and_converged_plan(environment):
+def test_router_plan_and_converged_plan(environment: str):
     plan = fixture(environment)
     assert validate(plan, environment) == {"create": 2, "update": 5, "delete": 2}
     plan["resource_changes"] = []
@@ -135,7 +137,7 @@ def test_router_plan_and_converged_plan(environment):
         "gateway_route",
     ],
 )
-def test_router_plan_rejects_unsafe_changes(failure):
+def test_router_plan_rejects_unsafe_changes(failure: str):
     plan = fixture()
     router = plan["resource_changes"][0]
     resources = {
@@ -194,7 +196,7 @@ def test_router_terraform_preserves_application_subnets_and_enrollment():
         in network
     )
     assert "ignore_changes = [user_data]" in router
-    assert '${file("${path.module}/router-nat.sh")}' in router
+    assert "${local.router_nat_setup}" in router
     assert (
         "private_subnet_ids                     = { a = aws_subnet.tollchat_private_a.id, c = aws_subnet.tollchat_private_c.id }"
         in (root / "infra/outputs.tf").read_text()

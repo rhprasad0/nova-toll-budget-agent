@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any
+from typing import Any, cast
 
 ACCOUNTS = {"development": "903859731897", "production": "920534282028"}
 CIDRS = ("172.31.224.0/24", "172.31.225.0/24")
@@ -26,14 +26,13 @@ def require(ok: object, reason: str) -> None:
 
 def unknown(value: object) -> bool:
     if isinstance(value, dict):
-        return any(unknown(item) for item in value.values())
+        return any(unknown(item) for item in cast(dict[str, object], value).values())
     if isinstance(value, list):
-        return any(unknown(item) for item in value)
+        return any(unknown(item) for item in cast(list[object], value))
     return value is True
 
 
 def validate(plan: dict[str, Any], environment: str) -> dict[str, int]:
-    require(isinstance(plan, dict), "plan object")
     require(environment in ACCOUNTS, "environment")
     require(
         plan.get("complete") is True and plan.get("errored") is False, "incomplete plan"
@@ -176,7 +175,9 @@ def main() -> int:
     parser.add_argument("--environment", choices=ACCOUNTS, required=True)
     args = parser.parse_args()
     try:
-        result = validate(json.load(sys.stdin), args.environment)
+        plan = json.load(sys.stdin)
+        require(isinstance(plan, dict), "plan object")
+        result = validate(plan, args.environment)
     except (KeyError, TypeError, ValueError, StopIteration):
         print(
             "router-nat: plan rejected; review private plan for identity, drift or out-of-scope changes",

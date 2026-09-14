@@ -117,7 +117,7 @@ resource "aws_instance" "tailscale_router" {
   user_data = <<-EOF
     #!/bin/bash
     set -euxo pipefail
-    ${file("${path.module}/router-nat.sh")}
+    ${local.router_nat_setup}
 
     curl -fsSL https://tailscale.com/install.sh | sh
 

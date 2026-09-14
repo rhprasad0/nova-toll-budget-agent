@@ -1,3 +1,5 @@
+locals {
+  router_nat_setup = <<-NAT_SETUP
 #!/bin/bash
 # Shared by first boot and the reviewed SSM in-place setup. No Tailscale keys.
 set -euo pipefail
@@ -56,3 +58,5 @@ systemctl daemon-reload
 systemctl enable tollchat-nat.service
 systemctl restart tollchat-nat.service
 echo 'router-nat: HTTPS forwarding configured'
+NAT_SETUP
+}

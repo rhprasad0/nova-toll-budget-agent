@@ -48,12 +48,14 @@ reviewed, enrolled nodes). Do not print state, plan JSON, budget values or secre
 1. Prepare a private mode-0700 temporary directory on tmpfs for plan artifacts
    and logs, with `umask 077` and shell tracing disabled. Keep Terraform plugins
    on executable disk. Copy the reviewed foundation root, including
-   `router-nat.sh`, the lockfile and fetcher artifact. Initialize the matching
+   `router-nat.tf`, the lockfile and fetcher artifact. Initialize the matching
    fixed backend with `-lockfile=readonly`; never use `-upgrade`.
-2. Configure the verified existing router via SSM `AWS-RunShellScript`. Generate
-   its parameters using `jq -n --rawfile script infra/router-nat.sh
-   '{commands:[$script],executionTimeout:["180"]}'` into the private temporary
-   directory and pass that file to `aws ssm send-command`. Specify the verified
+2. Configure the verified existing router via SSM `AWS-RunShellScript`. Export
+   the shared local from the initialized reviewed root using
+   `terraform console <<< 'jsonencode(local.router_nat_setup)' | jq -r fromjson`
+   into a private temporary script. Generate parameters with
+   `jq -n --rawfile script <private-script> '{commands:[$script],executionTimeout:["180"]}'`
+   and pass the private parameters file to `aws ssm send-command`. Specify the verified
    single instance ID and profile. Wait for completion and require `Success`.
    The shared script installs nftables if needed, validates its own table,
    enables persistent forwarding and the `tollchat-nat` service, and loads it.

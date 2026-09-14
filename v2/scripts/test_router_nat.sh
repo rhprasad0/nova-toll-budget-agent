@@ -5,7 +5,7 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 CONTAINER=$(docker run -d --privileged ubuntu:24.04 sleep infinity)
 trap 'docker rm -f "$CONTAINER" >/dev/null' EXIT
 docker exec "$CONTAINER" sh -c 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nftables iproute2 iptables python3 curl systemd >/dev/null'
-docker cp "$ROOT/infra/router-nat.sh" "$CONTAINER:/router-nat.sh"
+sed -n '/^#!\/bin\/bash/,/^NAT_SETUP/{ /^NAT_SETUP/d; p; }' "$ROOT/infra/router-nat.tf" | docker exec -i "$CONTAINER" sh -c 'cat > /router-nat.sh'
 docker exec -i "$CONTAINER" bash <<'TEST'
 set -euo pipefail
 enter() { local ns=$1; shift; nsenter --net="/run/netns/$ns" -- "$@"; }
