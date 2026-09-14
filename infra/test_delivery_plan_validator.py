@@ -2278,11 +2278,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         self.assert_reason("malformed_input", plan=plan, manifest=lambda_manifest())
 
     def test_committed_development_manifest_covers_full_package_graph(self):
-        application_infra = (
-            Path(__file__).resolve().parents[1] / "v2" / "infra" / "agentcore.tf"
-        ).read_text(encoding="utf-8")
-        if 'resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces"' not in application_infra:
-            return
         manifest = json.loads(
             (Path(__file__).resolve().parent / "development-release-manifest.json").read_text(
                 encoding="utf-8"
@@ -2315,6 +2310,10 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         committed_updates = tuple(expected_mutations)
         expected_mutations.update(
             {
+                "aws_iam_role_policy.tollchat_runtime": (
+                    "agentcore-trace-runtime-policy",
+                    ("policy",),
+                ),
                 "aws_s3_object.index": (
                     "site-object-upload",
                     ("content", "source", "source_hash"),
@@ -2447,6 +2446,15 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             for field, value in spec.create_identity:
                 before[field] = after[field] = value
             if address == "aws_bedrockagentcore_agent_runtime.tollchat":
+                runtime_identity = {
+                    "agent_runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl",
+                    "agent_runtime_id": "nova_toll_v2_development-Y69XBf88Bl",
+                    "agent_runtime_name": "nova_toll_v2_development",
+                    "region": "us-east-1",
+                    "role_arn": "arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-runtime-dev",
+                }
+                before.update(runtime_identity)
+                after.update(runtime_identity)
                 before["environment_variables"] = {
                     "DB_HOST": "database",
                     "PRICING_DB_USER": "pricing",
@@ -2459,7 +2467,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
 
         plan = _plan([update(address) for address in committed_updates])
         accepted = validate_plan(plan, manifest)
-        self.assertEqual(accepted["status"], "accepted")
+        self.assertEqual(accepted["status"], "accepted", accepted)
         self.assertEqual(accepted["reason_code"], "ok")
         self.assertEqual(accepted["addresses"], list(committed_updates))
 

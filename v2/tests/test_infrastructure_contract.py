@@ -1,6 +1,7 @@
 import ast
 import base64
 import difflib
+import gzip
 import hashlib
 import importlib.util
 import json
@@ -3215,7 +3216,7 @@ def test_v2_has_an_independent_state_and_identity():
     assert 'value    = "noindex"' in site
 
 
-def test_v2_declares_a_private_agentcore_application_without_telemetry():
+def test_v2_declares_a_private_agentcore_application_with_development_only_trace_archive():
     agentcore_path = V2_ROOT / "infra" / "agentcore.tf"
     assert agentcore_path.exists()
     agentcore = agentcore_path.read_text()
@@ -3248,7 +3249,6 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
     assert "cloudflare" not in agentcore
     assert "aws_acm" not in agentcore
     assert "opentelemetry" not in agentcore.lower()
-    assert "xray" not in agentcore.lower()
     assert "TOLLCHAT_TRACE_LOG_GROUP" not in agentcore
     assert "github_pat_[A-Za-z0-9_-]{20,}" in agentcore
     guardrail_version = agentcore.split(
@@ -3271,6 +3271,79 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
     )[1].split('resource "aws_bedrockagentcore_agent_runtime_endpoint"', maxsplit=1)[0]
     assert 'toset(["DEFAULT", "preview"])' in runtime_logs
     assert "retention_in_days = local.is_production ? 1 : 7" in runtime_logs
+    for resource in (
+        'resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces"',
+        'resource "aws_cloudwatch_log_subscription_filter" "agentcore_traces"',
+        "UNIFIED_TRACES_DESTINATION_ENABLED",
+    ):
+        assert resource in agentcore
+    trace_archive_flag = "enable_development_" + "trace_archive"
+    assert trace_archive_flag not in agentcore
+    assert "TOLLCHAT_" + "DEVELOPMENT_TRACES" not in agentcore
+    assert trace_archive_flag not in APPLICATION_VARIABLES
+    firehose = terraform_block(
+        agentcore, 'resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces"'
+    )
+    assert "count       = local.is_production ? 0 : 1" in firehose
+    assert 'prefix             = "agentcore-traces/"' in firehose
+    assert re.findall(r'processors \{ type = "([^"]+)" \}', firehose) == [
+        "Decompression",
+        "AppendDelimiterToRecord",
+    ]
+    assert (
+        firehose.index('processors { type = "Decompression" }')
+        < firehose.index('type = "CloudWatchLogProcessing"')
+        < firehose.index('processors { type = "AppendDelimiterToRecord" }')
+    )
+    processing = _hcl_named_blocks(firehose, "processing_configuration")[0]
+    assert "enabled = true" in processing
+    cloudwatch_processor = _hcl_named_blocks(firehose, "processors")[1]
+    assert _hcl_scalar(cloudwatch_processor, "type") == "CloudWatchLogProcessing"
+    parameters = _hcl_named_blocks(cloudwatch_processor, "parameters")
+    assert len(parameters) == 1
+    assert _hcl_scalar(parameters[0], "parameter_name") == "DataMessageExtraction"
+    assert _hcl_scalar(parameters[0], "parameter_value") == "true"
+    subscriptions = terraform_block(
+        agentcore,
+        'resource "aws_cloudwatch_log_subscription_filter" "agentcore_traces"',
+    )
+    assert 'toset(["DEFAULT", "preview"])' in subscriptions
+    assert (
+        'filter_pattern  = "{ $.traceId = \\"*\\" && $.spanId = \\"*\\" && $.durationNano >= 0 }"'
+        in subscriptions
+    )
+    assert (
+        "depends_on = [aws_s3_object.index, aws_s3_object.faq, aws_s3_object.privacy]"
+        in subscriptions
+    )
+    assert "exc_info" not in subscriptions
+
+
+def test_agentcore_trace_archive_is_development_gated_after_legal_publication():
+    agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
+    for value in (
+        'resource "aws_glue_catalog_table" "agentcore_traces"',
+        'resource "aws_athena_named_query" "agentcore_trace_summary"',
+        "agentcore-traces/",
+    ):
+        assert value in MEASUREMENT_INFRA
+    assert "development_trace_disclosure" in SITE_TF
+    lifecycle = terraform_block(
+        MEASUREMENT_INFRA,
+        'resource "aws_s3_bucket_lifecycle_configuration" "agent_measurement"',
+    )
+    assert lifecycle.count("agentcore-traces/") == 1
+    assert 'for_each = local.is_production ? [] : ["agentcore-traces"]' in lifecycle
+    assert "expiration { days = 7 }" in lifecycle
+    for phrase in (
+        "raw AgentCore traces",
+        "prompts, responses, system and tool data, attributes, and error details",
+        "private AWS measurement and Athena boundary",
+        "seven days",
+        "not redacted, anonymous, or immediately deleted",
+        "not enabled in production",
+    ):
+        assert phrase in SITE_TF
 
     proxy = agentcore.split(
         'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
@@ -3279,6 +3352,478 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
     assert "aws_iam_role_policy.tollchat_proxy" in proxy
 
     assert "put-function-concurrency" not in DEPLOYMENT
+
+
+def test_agentcore_trace_envelope_becomes_raw_ndjson_and_projects_query_fields():
+    agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
+    firehose = terraform_block(
+        agentcore, 'resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces"'
+    )
+    processor_blocks = _hcl_named_blocks(firehose, "processors")
+    processors = [_hcl_scalar(block, "type") for block in processor_blocks]
+    assert processors == [
+        "Decompression",
+        "CloudWatchLogProcessing",
+        "AppendDelimiterToRecord",
+    ]
+    extraction_parameters = {
+        _hcl_scalar(block, "parameter_name"): _hcl_scalar(block, "parameter_value")
+        for block in _hcl_named_blocks(processor_blocks[1], "parameters")
+    }
+    assert extraction_parameters == {"DataMessageExtraction": "true"}
+    assert (
+        "enabled = true" in _hcl_named_blocks(firehose, "processing_configuration")[0]
+    )
+    runtime_policy = terraform_block(
+        agentcore, 'resource "aws_iam_role_policy" "tollchat_runtime"'
+    )
+    assert 'Action   = "logs:PutResourcePolicy"' in runtime_policy
+    assert (
+        'Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-*"'
+        in runtime_policy
+    )
+    assert (
+        'Action   = "logs:PutResourcePolicy"\n        Resource = "*"'
+        not in runtime_policy
+    )
+    subscription = terraform_block(
+        agentcore,
+        'resource "aws_cloudwatch_log_subscription_filter" "agentcore_traces"',
+    )
+    filter_pattern = _hcl_scalar(subscription, "filter_pattern")
+    assert (
+        filter_pattern == '{ $.traceId = "*" && $.spanId = "*" && $.durationNano >= 0 }'
+    )
+    table = terraform_block(
+        MEASUREMENT_INFRA, 'resource "aws_glue_catalog_table" "agentcore_traces"'
+    )
+    descriptor = _hcl_named_blocks(table, "storage_descriptor")[0]
+    assert [
+        _hcl_scalar(column, "name")
+        for column in _hcl_named_blocks(descriptor, "columns")
+    ] == ["raw_json"]
+    assert [
+        _hcl_scalar(column, "type")
+        for column in _hcl_named_blocks(descriptor, "columns")
+    ] == ["string"]
+    serde = _hcl_named_blocks(descriptor, "ser_de_info")[0]
+    assert (
+        _hcl_scalar(serde, "serialization_library")
+        == "org.apache.hadoop.hive.serde2.RegexSerDe"
+    )
+    serde_pattern = re.search(r'"input\.regex"\s*=\s*"([^"]+)"', serde)
+    assert serde_pattern and serde_pattern.group(1) == "^(.*)$"
+    query = terraform_block(
+        MEASUREMENT_INFRA, 'resource "aws_athena_named_query" "agentcore_trace_summary"'
+    )
+    sql = _hcl_scalar(query, "query")
+    assert (
+        sql
+        == "SELECT json_extract_scalar(raw_json, '$.traceId') AS traceId, json_extract_scalar(raw_json, '$.spanId') AS spanId, json_extract_scalar(raw_json, '$.name') AS name, cast(json_extract_scalar(raw_json, '$.durationNano') AS bigint) AS durationNano, json_extract_scalar(raw_json, '$.status.code') AS status_code, json_extract(raw_json, '$.attributes') AS attributes FROM agentcore_traces LIMIT 100"
+    )
+
+    filter_contract = re.fullmatch(
+        r'\{ \$\.([A-Za-z][A-Za-z0-9]*) = "\*" && \$\.([A-Za-z][A-Za-z0-9]*) = "\*" && \$\.([A-Za-z][A-Za-z0-9]*) >= ([0-9]+) \}',
+        filter_pattern,
+    )
+    assert filter_contract
+    string_fields = filter_contract.group(1, 2)
+    number_field, minimum = filter_contract.group(3), int(filter_contract.group(4))
+    scalar_paths = re.findall(r"json_extract_scalar\(raw_json, '\$\.([^']+)'\)", sql)
+    structured_paths = re.findall(r"json_extract\(raw_json, '\$\.([^']+)'\)", sql)
+    assert scalar_paths == ["traceId", "spanId", "name", "durationNano", "status.code"]
+    assert structured_paths == ["attributes"]
+
+    def matches_filter(record: object) -> bool:
+        if not isinstance(record, dict):
+            return False
+        typed_record = cast(dict[str, object], record)
+        number = typed_record.get(number_field)
+        return (
+            all(isinstance(typed_record.get(field), str) for field in string_fields)
+            and isinstance(number, int)
+            and number >= minimum
+        )
+
+    serde_regex = serde_pattern.group(1)
+
+    def native_rows(encoded: str) -> list[bytes]:
+        envelope = json.loads(gzip.decompress(base64.b64decode(encoded)))
+        assert envelope["messageType"] == "DATA_MESSAGE"
+        assert processors == [
+            "Decompression",
+            "CloudWatchLogProcessing",
+            "AppendDelimiterToRecord",
+        ]
+        assert extraction_parameters == {"DataMessageExtraction": "true"}
+        delivered = bytearray()
+        for event in envelope["logEvents"]:
+            raw = event["message"].encode()
+            assert b"\n" not in raw
+            record = json.loads(raw)  # CloudWatchLogProcessing's data extraction.
+            if matches_filter(record):
+                delivered.extend(raw)
+                delivered.extend(
+                    b"\n"
+                )  # AppendDelimiterToRecord: exactly one boundary.
+        assert delivered.count(b"\n") == sum(
+            matches_filter(json.loads(event["message"]))
+            for event in envelope["logEvents"]
+        )
+        rows = [bytes(row) for row in delivered.splitlines()]
+        regex = re.compile(serde_regex.encode())
+        assert all(
+            (match := regex.fullmatch(row)) is not None and match.group(1) == row
+            for row in rows
+        )
+        return rows
+
+    success = {
+        "traceId": "0123456789abcdef0123456789abcdef",
+        "spanId": "0123456789abcdef",
+        "name": "execute_tool",
+        "durationNano": 1,
+        "status": {"code": "OK"},
+        "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "nested": {"steps": [1, 2]},
+        },
+        "events": [{"attributes": {"gen_ai.prompt": "raw prompt"}}],
+    }
+    error = success | {"status": {"code": "ERROR"}}
+    ordinary_log = {"message": "runtime started"}
+    control_span = {"traceId": success["traceId"], "spanId": success["spanId"]}
+    assert matches_filter(success)
+    assert matches_filter(error)
+    assert not matches_filter(ordinary_log)
+    assert not matches_filter(control_span)
+    assert not matches_filter(
+        {"traceId": success["traceId"], "spanId": success["spanId"], "durationNano": -1}
+    )
+    assert not matches_filter("not-json")
+    success_line, error_line = (
+        json.dumps(record, separators=(",", ":")).encode()
+        for record in (success, error)
+    )
+    envelope = {
+        "messageType": "DATA_MESSAGE",
+        "owner": "903859731897",
+        "logGroup": "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
+        "logEvents": [
+            {"id": "success", "timestamp": 1, "message": success_line.decode()},
+            {"id": "error", "timestamp": 2, "message": error_line.decode()},
+            {"id": "ordinary", "timestamp": 3, "message": json.dumps(ordinary_log)},
+            {"id": "control", "timestamp": 4, "message": json.dumps(control_span)},
+            {
+                "id": "negative",
+                "timestamp": 5,
+                "message": json.dumps(
+                    {
+                        "traceId": success["traceId"],
+                        "spanId": success["spanId"],
+                        "durationNano": -1,
+                    }
+                ),
+            },
+        ],
+    }
+    encoded = base64.b64encode(gzip.compress(json.dumps(envelope).encode())).decode()
+    rows = native_rows(encoded)
+    assert rows == [success_line, error_line]
+    parsed_rows = [json.loads(row) for row in rows]
+    assert parsed_rows == [success, error]
+
+    def extract(row: dict[str, Any], path: str) -> object:
+        value: Any = row
+        for part in path.split("."):
+            value = value[part]
+        return cast(object, value)
+
+    projected = [
+        tuple(extract(row, path) for path in (*scalar_paths, *structured_paths))
+        for row in parsed_rows
+    ]
+    assert projected == [
+        (
+            "0123456789abcdef0123456789abcdef",
+            "0123456789abcdef",
+            "execute_tool",
+            1,
+            "OK",
+            {"gen_ai.operation.name": "execute_tool", "nested": {"steps": [1, 2]}},
+        ),
+        (
+            "0123456789abcdef0123456789abcdef",
+            "0123456789abcdef",
+            "execute_tool",
+            1,
+            "ERROR",
+            {"gen_ai.operation.name": "execute_tool", "nested": {"steps": [1, 2]}},
+        ),
+    ]
+    assert all(
+        json.dumps(row["attributes"], separators=(",", ":"))
+        == '{"gen_ai.operation.name":"execute_tool","nested":{"steps":[1,2]}}'
+        for row in parsed_rows
+    )
+    with pytest.raises((AssertionError, KeyError, json.JSONDecodeError)):
+        native_rows(
+            base64.b64encode(
+                gzip.compress(
+                    json.dumps({**envelope, "messageType": "CONTROL_MESSAGE"}).encode()
+                )
+            ).decode()
+        )
+    with pytest.raises((AssertionError, KeyError, json.JSONDecodeError)):
+        native_rows(
+            base64.b64encode(
+                gzip.compress(
+                    json.dumps(
+                        {**envelope, "logEvents": [{"message": "not-json"}]}
+                    ).encode()
+                )
+            ).decode()
+        )
+    with pytest.raises(AssertionError):
+        native_rows(
+            base64.b64encode(
+                gzip.compress(
+                    json.dumps(
+                        {
+                            **envelope,
+                            "logEvents": [{"message": '{\n  "traceId":"pretty"\n}'}],
+                        }
+                    ).encode()
+                )
+            ).decode()
+        )
+
+
+def test_agentcore_trace_resolved_environments_preserve_production_baseline():
+    agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
+    measurement = MEASUREMENT_INFRA
+    site = SITE_TF
+    iam = FOUNDATION_IAM
+
+    def render_legal(name: str, is_production: bool) -> bytes:
+        block = terraform_block(site, f'resource "aws_s3_object" "{name}"')
+        source = _hcl_attribute(block, "source")
+        filename_match = re.search(r'../agent/([^" ]+)', source)
+        assert filename_match
+        filename = filename_match.group(1)
+        baseline = subprocess.run(
+            ["git", "show", f"HEAD:v2/agent/{filename}"],
+            check=True,
+            capture_output=True,
+        ).stdout
+        if is_production:
+            return baseline
+        literals = [
+            ast.literal_eval(value)
+            for value in re.findall(
+                r'"(?:\\.|[^"\\])*"', _hcl_attribute(block, "content")
+            )
+        ]
+        rendered = (V2_ROOT / "agent" / filename).read_text()
+        disclosure = _hcl_scalar(
+            _top_level_terraform_block(site, "locals", 0),
+            "development_trace_disclosure",
+        )
+        for old, new in zip(literals[1::2], literals[2::2], strict=True):
+            rendered = rendered.replace(
+                old, new.replace("${local.development_trace_disclosure}", disclosure)
+            )
+        return rendered.encode()
+
+    def resolve(
+        is_production: bool,
+        agentcore_source: str = agentcore,
+        measurement_source: str = measurement,
+        iam_source: str = iam,
+    ) -> dict[str, object]:
+        def count(
+            block: str, environment_expression: str = "local.is_production ? 0 : 1"
+        ) -> int:
+            match = re.search(r"^\s*count\s+=\s*(.+)$", block, re.MULTILINE)
+            assert match and match.group(1).strip() == environment_expression
+            return 0 if is_production else 1
+
+        firehose = terraform_block(
+            agentcore_source,
+            'resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces"',
+        )
+        subscriptions = terraform_block(
+            agentcore_source,
+            'resource "aws_cloudwatch_log_subscription_filter" "agentcore_traces"',
+        )
+        lifecycle = terraform_block(
+            measurement_source,
+            'resource "aws_s3_bucket_lifecycle_configuration" "agent_measurement"',
+        )
+        runtime = terraform_block(
+            agentcore_source, 'resource "aws_bedrockagentcore_agent_runtime" "tollchat"'
+        )
+        trace_resources = {
+            "firehose": count(firehose),
+            "catalog": count(
+                terraform_block(
+                    measurement_source,
+                    'resource "aws_glue_catalog_table" "agentcore_traces"',
+                )
+            ),
+            "query": count(
+                terraform_block(
+                    measurement_source,
+                    'resource "aws_athena_named_query" "agentcore_trace_summary"',
+                )
+            ),
+        }
+        subscription_match = re.search(
+            r'for_each\s+=\s*local\.is_production \? toset\(\[\]\) : toset\(\["DEFAULT", "preview"\]\)',
+            subscriptions,
+        )
+        assert subscription_match
+        subscriptions_inventory = () if is_production else ("DEFAULT", "preview")
+        lifecycle_match = re.search(
+            r'for_each\s+=\s*local\.is_production \? \[\] : \["agentcore-traces"\]',
+            lifecycle,
+        )
+        assert lifecycle_match
+        runtime_environment = _hcl_expression(runtime, "environment_variables")
+        assert re.search(
+            r'local\.is_production \? \{\} : \{[\s\S]*?UNIFIED_TRACES_DESTINATION_ENABLED\s*=\s*"true"',
+            runtime_environment,
+        )
+        role_blocks = [
+            terraform_block(iam_source, f'resource "aws_iam_role" "{name}"')
+            for name in (
+                "development_agentcore_trace_logs",
+                "development_agentcore_trace_firehose",
+            )
+        ]
+        trace_roles = sum(
+            count(block, 'var.environment == "development" ? 1 : 0')
+            for block in role_blocks
+        )
+        delivery = terraform_block(
+            iam_source, 'data "aws_iam_policy_document" "development_delivery"'
+        )
+        role_discovery = (
+            ("ReadAgentCoreTraceRoles",)
+            if not is_production and 'sid       = "ReadAgentCoreTraceRoles"' in delivery
+            else ()
+        )
+        return {
+            "unified_trace_setting": {}
+            if is_production
+            else {"UNIFIED_TRACES_DESTINATION_ENABLED": "true"},
+            "trace_roles": trace_roles if not is_production else 0,
+            "role_discovery": role_discovery,
+            "firehose": trace_resources["firehose"],
+            "subscriptions": subscriptions_inventory,
+            "lifecycle": () if is_production else ("agentcore-traces/",),
+            "catalog_query": trace_resources["catalog"] + trace_resources["query"],
+            "notices": {}
+            if is_production
+            else {
+                name: render_legal(name, False) for name in ("index", "faq", "privacy")
+            },
+            "production_legal": {
+                name: render_legal(name, True) for name in ("index", "faq", "privacy")
+            }
+            if is_production
+            else {},
+        }
+
+    development, production = resolve(False), resolve(True)
+    assert development == {
+        "unified_trace_setting": {"UNIFIED_TRACES_DESTINATION_ENABLED": "true"},
+        "trace_roles": 2,
+        "role_discovery": ("ReadAgentCoreTraceRoles",),
+        "firehose": 1,
+        "subscriptions": ("DEFAULT", "preview"),
+        "lifecycle": ("agentcore-traces/",),
+        "catalog_query": 2,
+        "notices": development["notices"],
+        "production_legal": {},
+    }
+    assert production == {
+        "unified_trace_setting": {},
+        "trace_roles": 0,
+        "role_discovery": (),
+        "firehose": 0,
+        "subscriptions": (),
+        "lifecycle": (),
+        "catalog_query": 0,
+        "notices": {},
+        "production_legal": production["production_legal"],
+    }
+    assert all(
+        b"raw AgentCore traces" in value
+        for value in cast(dict[str, bytes], development["notices"]).values()
+    )
+    assert all(
+        value
+        == subprocess.run(
+            ["git", "show", f"HEAD:v2/agent/{filename}"],
+            check=True,
+            capture_output=True,
+        ).stdout
+        for value, filename in zip(
+            cast(dict[str, bytes], production["production_legal"]).values(),
+            ("dev_chat.html", "faq.html", "privacy.txt"),
+            strict=True,
+        )
+    )
+    production_translation = _top_level_terraform_block(iam, "locals", 3)
+    assert '"ReadAgentCoreTraceRoles"' in production_translation
+    assert (
+        "if !contains(" in production_translation
+        and "development_delivery_trace_statement_sids" in production_translation
+    )
+    for name in ("index", "faq", "privacy"):
+        current = terraform_block(site, f'resource "aws_s3_object" "{name}"')
+        baseline = terraform_block(
+            subprocess.run(
+                ["git", "show", "HEAD:v2/infra/site.tf"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout,
+            f'resource "aws_s3_object" "{name}"',
+        )
+        assert _hcl_attribute(baseline, "source") in _hcl_attribute(current, "source")
+        assert _hcl_attribute(current, "source").endswith(" : null")
+        assert _hcl_attribute(baseline, "source_hash") in _hcl_attribute(
+            current, "source_hash"
+        )
+        assert _hcl_attribute(current, "source_hash").endswith(" : null")
+        assert "local.is_production ? null" in _hcl_attribute(current, "content")
+    assert all(
+        b"raw AgentCore traces" not in (V2_ROOT / "agent" / filename).read_bytes()
+        for filename in ("dev_chat.html", "faq.html", "privacy.txt")
+    )
+    before_query, query_source = measurement.split(
+        'resource "aws_athena_named_query" "agentcore_trace_summary" {', 1
+    )
+    production_query_mutant = (
+        before_query
+        + 'resource "aws_athena_named_query" "agentcore_trace_summary" {'
+        + query_source.replace(
+            "count       = local.is_production ? 0 : 1", "count       = 1", 1
+        )
+    )
+    assert production_query_mutant != measurement
+    with pytest.raises(AssertionError):
+        resolve(True, measurement_source=production_query_mutant)
+    runtime_gate_mutant = agentcore.replace(
+        'local.is_production ? {} : {\n      PRICING_DB_USER                    = local.database_roles.pricing_caller\n      UNIFIED_TRACES_DESTINATION_ENABLED = "true"\n    }',
+        '{\n      PRICING_DB_USER                    = local.database_roles.pricing_caller\n      UNIFIED_TRACES_DESTINATION_ENABLED = "true"\n    }',
+        1,
+    )
+    assert runtime_gate_mutant != agentcore
+    with pytest.raises(AssertionError):
+        resolve(True, agentcore_source=runtime_gate_mutant)
 
 
 def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
@@ -3984,9 +4529,8 @@ def test_public_site_publishes_the_v2_ui_and_legal_assets():
     server = (V2_ROOT / "agent" / "dev_chat.py").read_text()
 
     assert re.search(r'key\s+= "index[.]html"', site)
-    assert re.search(
-        r'source\s+= "\$\{path[.]module\}/[.][.]/agent/dev_chat[.]html"', site
-    )
+    assert "agent/dev_chat.html" in site
+    assert "local.is_production ?" in site
     assert re.search(r'key\s+= "chat[.]mjs"', site)
     assert re.search(
         r'source\s+= "\$\{path[.]module\}/[.][.]/agent/public_chat[.]mjs"', site
@@ -7074,9 +7618,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "iam:ListRolePolicies",
             "iam:ListRoleTags",
         ],
-        "PassExistingAgentCoreRuntimeRole": ["iam:PassRole"],
-        "PassTimedChecksSchedulerRole": ["iam:PassRole"],
-        "UpdateReportPublisherInlinePolicy": ["iam:PutRolePolicy"],
         "ReadAgentCoreTraceRoles": [
             "iam:GetRole",
             "iam:GetRolePolicy",
@@ -7084,6 +7625,9 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "iam:ListRolePolicies",
             "iam:ListRoleTags",
         ],
+        "PassExistingAgentCoreRuntimeRole": ["iam:PassRole"],
+        "PassTimedChecksSchedulerRole": ["iam:PassRole"],
+        "UpdateReportPublisherInlinePolicy": ["iam:PutRolePolicy"],
         "PassAgentCoreTraceLogsRole": ["iam:PassRole"],
         "PassAgentCoreTraceFirehoseRole": ["iam:PassRole"],
         "ManageAgentCoreTraceRuntimePolicy": ["iam:PutRolePolicy"],

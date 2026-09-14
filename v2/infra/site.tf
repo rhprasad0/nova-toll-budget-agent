@@ -1,5 +1,6 @@
 locals {
-  site_assets = fileset("${path.module}/../agent/assets", "**")
+  site_assets                  = fileset("${path.module}/../agent/assets", "**")
+  development_trace_disclosure = "Development retains raw AgentCore traces in TollChat's private AWS measurement and Athena boundary for seven days to improve evaluations. Raw traces may include prompts, responses, system and tool data, attributes, and error details; they are not redacted, anonymous, or immediately deleted. Active sessions remain ephemeral; this archive is not enabled in production."
 }
 
 resource "aws_s3_bucket" "site" {
@@ -67,8 +68,9 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "site" {
 resource "aws_s3_object" "index" {
   bucket        = aws_s3_bucket.site.id
   key           = "index.html"
-  source        = "${path.module}/../agent/dev_chat.html"
-  source_hash   = filebase64sha256("${path.module}/../agent/dev_chat.html")
+  source        = local.is_production ? "${path.module}/../agent/dev_chat.html" : null
+  source_hash   = local.is_production ? filebase64sha256("${path.module}/../agent/dev_chat.html") : null
+  content       = local.is_production ? null : replace(file("${path.module}/../agent/dev_chat.html"), "<strong>New public usage counting and daily publication have stopped.</strong> Historical aggregate and snapshot data are retained and are not being purged in this release. TollChat does not write conversations to disk. It sends prompts, prior conversation context, and responses to OpenAI with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use.", "<strong>New public usage counting and daily publication have stopped.</strong> ${local.development_trace_disclosure} It sends prompts, prior conversation context, and responses to OpenAI with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use.")
   content_type  = "text/html; charset=utf-8"
   cache_control = "no-cache"
 
@@ -103,8 +105,9 @@ resource "aws_s3_object" "usage" {
 resource "aws_s3_object" "faq" {
   bucket        = aws_s3_bucket.site.id
   key           = "faq.html"
-  source        = "${path.module}/../agent/faq.html"
-  source_hash   = filebase64sha256("${path.module}/../agent/faq.html")
+  source        = local.is_production ? "${path.module}/../agent/faq.html" : null
+  source_hash   = local.is_production ? filebase64sha256("${path.module}/../agent/faq.html") : null
+  content       = local.is_production ? null : replace(file("${path.module}/../agent/faq.html"), "TollChat keeps the active conversation in the ephemeral microVM's memory and does not write it to disk. OpenAI receives prompts, prior conversation context, and responses with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use. Read <a href=\"https://developers.openai.com/api/docs/guides/your-data\" target=\"_blank\" rel=\"noopener noreferrer\" referrerpolicy=\"no-referrer\">how OpenAI handles API data</a>. A random credential in a secure, HTTP-only browser cookie keeps public follow-up messages together for up to one hour. TollChat stores only its one-way hash and does not attach the credential to traces or logs.", "TollChat keeps the active conversation in the ephemeral microVM's memory. ${local.development_trace_disclosure} OpenAI receives prompts, prior conversation context, and responses with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use. Read <a href=\"https://developers.openai.com/api/docs/guides/your-data\" target=\"_blank\" rel=\"noopener noreferrer\" referrerpolicy=\"no-referrer\">how OpenAI handles API data</a>. A random credential in a secure, HTTP-only browser cookie keeps public follow-up messages together for up to one hour. TollChat stores only its one-way hash and does not attach the credential to traces or logs.")
   content_type  = "text/html; charset=utf-8"
   cache_control = "no-cache"
 
@@ -114,8 +117,9 @@ resource "aws_s3_object" "faq" {
 resource "aws_s3_object" "privacy" {
   bucket        = aws_s3_bucket.site.id
   key           = "privacy.txt"
-  source        = "${path.module}/../agent/privacy.txt"
-  source_hash   = filebase64sha256("${path.module}/../agent/privacy.txt")
+  source        = local.is_production ? "${path.module}/../agent/privacy.txt" : null
+  source_hash   = local.is_production ? filebase64sha256("${path.module}/../agent/privacy.txt") : null
+  content       = local.is_production ? null : replace(replace(replace(file("${path.module}/../agent/privacy.txt"), "TollChat does not intentionally write conversations or the session credential to disk or attach the credential to traces or logs.", "TollChat does not intentionally attach the session credential to traces or logs. ${local.development_trace_disclosure}"), "TollChat retains the historical aggregate record, historical snapshot, and associated publisher logs on AWS; this release does not purge them or add new writes.", "TollChat retains the historical aggregate record, historical snapshot, and associated publisher logs on AWS; development also writes the raw AgentCore trace copy described below."), "Existing raw route logs and Athena-result\nobjects expire after seven days; this release adds no measurement writes and\ndoes not purge or replace retained data.", "Existing raw route logs and Athena-result\nobjects expire after seven days. Development also retains the raw AgentCore\ntrace copy described above for seven days; it does not purge or replace retained data.")
   content_type  = "text/plain; charset=utf-8"
   cache_control = "no-cache"
 

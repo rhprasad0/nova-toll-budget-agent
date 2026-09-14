@@ -1156,3 +1156,45 @@ elif [ "$?" -ne 1 ]; then
 fi
 )
 ~~~
+
+## Issue #307 development trace archive
+
+In account `903859731897`, region `us-east-1`, a human administrator reviews
+the existing saved development plans. Bootstrap the development-only resources
+in `infra/development-tracing.tf` before application delivery: the regional
+CloudWatch Logs trace destination, X-Ray resource policy, seven-day shared log
+groups, and the fixed runtime role's `xray:PutTraceSegments` permission. Review
+and apply one saved foundation plan containing only those prerequisite changes.
+AWS reserves the `aws/spans` name: first bootstrap the policy, destination,
+export permission, and `/aws/application-signals/data` group; then import the
+service-created `aws/spans` group and apply its seven-day retention in a second
+reviewed saved plan. Do not attempt to create `aws/spans` directly.
+This changes the development account's regional trace destination; production
+is excluded. Keep the existing indexing percentage unchanged. The runtime
+package includes ADOT >=0.18.0 and initializes it before application imports
+only when `UNIFIED_TRACES_DESTINATION_ENABLED=true`. Startup fails if tracing
+initialization fails. The only archive sources are
+`/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT`
+and `-preview`; the existing measurement bucket, KMS key, Glue database, and
+Athena workgroup are reused.
+
+The foundation plan may change only the two fixed CloudWatch Logs/Firehose
+roles and inline policies. The runtime role receives `logs:PutResourcePolicy`
+at AWS's supported scope. One reviewed post-bootstrap application saved plan
+may change only the runtime setting, two subscriptions, one Firehose, the
+`agentcore-traces/` lifecycle, table/query, and development notice;
+`iam:PassRole` is limited to those roles and services. Subscription dependencies
+publish the notice first. Recovery uses a reviewed saved plan to disable or
+remove subscriptions and unified tracing first, then remove Firehose and query
+metadata while retaining the `agentcore-traces/` lifecycle rule. Existing
+objects expire asynchronously after seven days; remove that rule only in a
+later reviewed retirement after the prefix is empty. A short development
+interruption is acceptable; never touch production or retrieve payloads.
+
+Before enablement, review current regional costs for CloudWatch delivery and
+ingestion, Firehose ingestion/decompression, S3 storage/requests, KMS requests,
+and Athena scans. This reuses the existing services, seven-day retention, and
+the 1 GiB Athena cutoff; trace volume, regional price, and a health threshold
+are not evidenced here. Use only sanitized configuration or Firehose-health
+evidence after enablement—no live trace reads, alarms, dashboards, receipts, or
+custom validation protocol.
