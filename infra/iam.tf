@@ -381,12 +381,15 @@ data "aws_iam_policy_document" "development_agentcore_trace_logs_assume" {
     actions = ["sts:AssumeRole"]
     principals {
       type        = "Service"
-      identifiers = ["logs.${local.development_delivery_region}.amazonaws.com"]
+      identifiers = ["logs.amazonaws.com"]
     }
     condition {
       test     = "StringLike"
       variable = "aws:SourceArn"
-      values   = [for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"]
+      values = concat(
+        local.development_delivery_agentcore_trace_log_group_arns,
+        [for arn in local.development_delivery_agentcore_trace_log_group_arns : "${arn}:*"],
+      )
     }
     condition {
       test     = "StringEquals"

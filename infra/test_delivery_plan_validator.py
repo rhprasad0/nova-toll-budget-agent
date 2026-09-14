@@ -17,6 +17,7 @@ from infra.delivery_plan_validator import (
     TRACE_FIREHOSE_ROLE,
     TRACE_KMS_KEY,
     TRACE_LOGS_ROLE,
+    TRACE_NOTICE_DIGESTS,
     TRACE_PREFIX,
     TRACE_QUERY,
     TRACE_TAGS,
@@ -2002,6 +2003,15 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             actions,
         )
         self.assertEqual(validate_plan(retry, retry_manifest)["status"], "accepted")
+        # The AWS provider normalizes absent S3 source fields to empty strings.
+        normalized_retry = copy.deepcopy(retry)
+        for item in normalized_retry["resource_changes"]:
+            if item["address"] in TRACE_NOTICE_DIGESTS:
+                for side in ("before", "after"):
+                    item["change"][side].update(source="", source_hash="")
+        self.assertEqual(
+            validate_plan(normalized_retry, retry_manifest)["status"], "accepted"
+        )
         for field, attacker in (
             ("bucket", "attacker-bucket"),
             ("key", "wrong-key"),
@@ -2232,6 +2242,30 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         self.assertIn(
             "stage=validator status=pass elapsed=0 exit=0 reason=ok", workflow
         )
+
+    def test_existing_trace_subscription_identity_pins_account_and_region(self):
+        address = 'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]'
+        values = dict(CONTRACT[address].create_identity)
+        record = _resource_change(address, "no-op", values, copy.deepcopy(values))
+        identity = {
+            "account_id": "903859731897",
+            "region": "us-east-1",
+            "log_group_name": "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
+            "name": "nova-toll-v2-agentcore-traces-dev",
+        }
+        for side in ("before_identity", "after_identity"):
+            record["change"][side] = copy.deepcopy(identity)
+        plan = _plan([record])
+        manifest = _mutation_manifest(())
+        self.assertEqual(validate_plan(plan, manifest)["status"], "accepted")
+        for side in ("before_identity", "after_identity"):
+            for field in ("account_id", "region"):
+                invalid = copy.deepcopy(plan)
+                invalid["resource_changes"][0]["change"][side][field] = "wrong"
+                self.assertEqual(
+                    validate_plan(invalid, manifest)["reason_code"],
+                    "invalid_resource_identity",
+                )
 
     def test_trace_notices_allow_legacy_noops_before_rollout(self):
         keys = {"index": "index.html", "faq": "faq.html", "privacy": "privacy.txt"}

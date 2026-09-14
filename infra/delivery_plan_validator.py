@@ -604,8 +604,10 @@ def _build_contract() -> dict[str, Mutation]:
                     ),
                 ),
                 provider_change_identity=(
+                    ("account_id", ACCOUNT),
                     ("log_group_name", group.rsplit(":", 1)[-1]),
                     ("name", "nova-toll-v2-agentcore-traces-dev"),
+                    ("region", REGION),
                 ),
             )
         )
@@ -2121,14 +2123,14 @@ def _validate_trace_notices(records: list[dict[str, Any]]) -> None:
             not isinstance(content, str)
             or hashlib.sha256(content.encode()).hexdigest() != digest
             or not isinstance(after, dict)
-            or after.get("source") is not None
-            or after.get("source_hash") is not None
+            or after.get("source") not in (None, "")
+            or after.get("source_hash") not in (None, "")
             or (
                 record["action"] == "no-op"
                 and (
                     not isinstance(before, dict)
-                    or before.get("source") is not None
-                    or before.get("source_hash") is not None
+                    or before.get("source") not in (None, "")
+                    or before.get("source_hash") not in (None, "")
                 )
             )
         ):
