@@ -71,7 +71,7 @@ static diagnostics may be used while investigating; do not log failed content.
 6. Verify the account-level Transaction Search prerequisites in both accounts:
    X-Ray's trace segment destination must be `CloudWatchLogs` with status
    `ACTIVE`, and the runtime role must allow `xray:PutTraceSegments` in
-   `us-east-1`. Production uses `infra/production-tracing.tf`; development uses
+   `us-east-1`. Production uses `infra/telemetry.tf`; development uses
    `infra/development-tracing.tf`. Enabling the destination creates AWS's
    reserved log groups. For a new account, install the reviewed CloudWatch
    resource policy and enable the destination, then import that policy, the
