@@ -31,41 +31,26 @@ HASH = "0" * 64
 
 
 def _trace_notice_contents():
-    root = Path(__file__).resolve().parents[1] / "v2" / "agent"
-    disclosure = "Development retains raw AgentCore traces in TollChat's private AWS measurement and Athena boundary for seven days to improve evaluations. Raw traces may include prompts, responses, system and tool data, attributes, and error details; they are not redacted, anonymous, or immediately deleted. Active sessions remain ephemeral; this archive is not enabled in production."
-    return {
-        "index": root.joinpath("dev_chat.html")
-        .read_text()
-        .replace(
-            "<strong>New public usage counting and daily publication have stopped.</strong> Historical aggregate and snapshot data are retained and are not being purged in this release. TollChat does not write conversations to disk. It sends prompts, prior conversation context, and responses to OpenAI with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use.",
-            "<strong>New public usage counting and daily publication have stopped.</strong> "
-            + disclosure
-            + " It sends prompts, prior conversation context, and responses to OpenAI with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use.",
-        ),
-        "faq": root.joinpath("faq.html")
-        .read_text()
-        .replace(
-            'TollChat keeps the active conversation in the ephemeral microVM\'s memory and does not write it to disk. OpenAI receives prompts, prior conversation context, and responses with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use. Read <a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">how OpenAI handles API data</a>. A random credential in a secure, HTTP-only browser cookie keeps public follow-up messages together for up to one hour. TollChat stores only its one-way hash and does not attach the credential to traces or logs.',
-            "TollChat keeps the active conversation in the ephemeral microVM's memory. "
-            + disclosure
-            + ' OpenAI receives prompts, prior conversation context, and responses with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use. Read <a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">how OpenAI handles API data</a>. A random credential in a secure, HTTP-only browser cookie keeps public follow-up messages together for up to one hour. TollChat stores only its one-way hash and does not attach the credential to traces or logs.',
-        ),
-        "privacy": root.joinpath("privacy.txt")
-        .read_text()
-        .replace(
-            "TollChat does not intentionally write conversations or the session credential to disk or attach the credential to traces or logs.",
-            "TollChat does not intentionally attach the session credential to traces or logs. "
-            + disclosure,
-        )
-        .replace(
-            "TollChat retains the historical aggregate record, historical snapshot, and associated publisher logs on AWS; this release does not purge them or add new writes.",
-            "TollChat retains the historical aggregate record, historical snapshot, and associated publisher logs on AWS; development also writes the raw AgentCore trace copy described below.",
-        )
-        .replace(
-            "Existing raw route logs and Athena-result\nobjects expire after seven days; this release adds no measurement writes and\ndoes not purge or replace retained data.",
-            "Existing raw route logs and Athena-result\nobjects expire after seven days. Development also retains the raw AgentCore\ntrace copy described above for seven days; it does not purge or replace retained data.",
-        ),
-    }
+    # Freeze published notices so page edits cannot rewrite legacy test inputs.
+    import gzip
+    values = json.loads(gzip.decompress((Path(__file__).parent / "fixtures/telemetry-notices.json.gz").read_bytes()))
+    for name, content in values["legacy"].items():
+        assert hashlib.sha256(content.encode()).hexdigest() == TRACE_NOTICE_DIGESTS[f"aws_s3_object.{name}"]
+    return values["legacy"]
+
+
+def _telemetry_value(address):
+    spec = CONTRACT[address]
+    value = dict(spec.create_identity)
+    if spec.operation_class == "telemetry-log-protection":
+        value["policy_document"] = (Path(__file__).resolve().parents[1] / "v2/infra/telemetry-log-policy.tf").read_text().split("<<-POLICY\n", 1)[1].split("\nPOLICY", 1)[0]
+    elif spec.operation_class == "telemetry-failure-metric":
+        value.update(pattern="?telemetry_redaction_failed ?telemetry_redaction_omitted ?telemetry_export_failed", metric_transformation=[{"name": "RedactionFailures", "namespace": "TollChat/Telemetry", "value": "1"}])
+    else:
+        pii = 'telemetry_pii[' in address
+        endpoint = "DEFAULT" if '"DEFAULT"' in address else "preview"
+        value.update(namespace="AWS/Logs" if pii else "TollChat/Telemetry", metric_name="LogEventsWithFindings" if pii else "RedactionFailures", dimensions={"LogGroupName": f"/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-{endpoint}"} if pii else {}, statistic="Sum", period=300, evaluation_periods=1, comparison_operator="GreaterThanThreshold", threshold=0, treat_missing_data="notBreaching", alarm_actions=[])
+    return value
 
 
 def validate_plan(plan, manifest, identity=None):
@@ -393,6 +378,46 @@ def _derived_fixture(index, *, producer_action="update", configuration=True, exp
 
 
 class DeliveryPlanValidatorTests(unittest.TestCase):
+    def test_redacted_notices_require_complete_activation_and_support_later_noops(self):
+        import gzip
+        from infra.delivery_plan_validator import _validate_trace_notices, _Invalid, REDACTED_TRACE_NOTICE_DIGESTS
+        fixture = json.loads(gzip.decompress((Path(__file__).parent / "fixtures/telemetry-notices.json.gz").read_bytes()))
+        records = []
+        for name, content in fixture["redacted"].items():
+            address = f"aws_s3_object.{name}"
+            self.assertEqual(hashlib.sha256(content.encode()).hexdigest(), REDACTED_TRACE_NOTICE_DIGESTS[address])
+            records.append(dict(address=address, action="update", operation_class="site-object-upload", before={"content": fixture["legacy"][name]}, after={"content": content}))
+        identity = dict(agent_runtime_arn="arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl", agent_runtime_id="nova_toll_v2_development-Y69XBf88Bl", agent_runtime_name="nova_toll_v2_development", region="us-east-1", role_arn="arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-runtime-dev")
+        before = dict(identity, environment_variables={"UNIFIED_TRACES_DESTINATION_ENABLED": "true"})
+        after = dict(identity, environment_variables={"UNIFIED_TRACES_DESTINATION_ENABLED": "true", "TOLLCHAT_TELEMETRY_GUARDRAIL_ID": "testid", "TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION": "1"})
+        records.append(dict(address="aws_bedrockagentcore_agent_runtime.tollchat", action="update", operation_class="agentcore-code", before=before, after=after, changed_fields=["environment_variables", "agent_runtime_artifact.code_configuration.code.s3.version_id"]))
+        for endpoint in ("DEFAULT", "preview"):
+            address = f'aws_cloudwatch_log_data_protection_policy.agentcore["{endpoint}"]'
+            records.append(dict(address=address, action="create", operation_class="telemetry-log-protection", after=_telemetry_value(address)))
+        _validate_trace_notices(records)
+        for index in range(len(records)):
+            with self.subTest(missing=index), self.assertRaises(_Invalid):
+                _validate_trace_notices(records[:index] + records[index+1:])
+        for missing_field in ("environment_variables", "agent_runtime_artifact.code_configuration.code.s3.version_id"):
+            mutant = copy.deepcopy(records)
+            mutant[3]["changed_fields"].remove(missing_field)
+            with self.assertRaises(_Invalid):
+                _validate_trace_notices(mutant)
+        mixed = copy.deepcopy(records)
+        mixed[0]["after"] = mixed[0]["before"]
+        with self.assertRaises(_Invalid):
+            _validate_trace_notices(mixed)
+        for record in records:
+            record.update(action="no-op", before=copy.deepcopy(record["after"]), changed_fields=[])
+        _validate_trace_notices(records)
+
+    def test_credential_regex_covers_plain_and_serialized_headers(self):
+        import re
+        source = (Path(__file__).parent / "telemetry.tf").read_text().split('name           = "authorization_header"', 1)[1]
+        pattern = json.loads(re.search(r"(?m)^\s*pattern\s*= (.+)$", source).group(1))
+        for text in ("Authorization: Bearer abcdefgh12345", "Authorization: Basic abcdefgh12345", "x-api-key: abcdefgh12345", '{"x-api-key":"abcdefgh12345"}', '{"Authorization":"Bearer abcdefgh12345"}'):
+            self.assertIsNotNone(re.search(pattern, text), text)
+
     def assert_reason(self, reason, plan=None, manifest=None, identity=None):
         result = validate_plan(plan if plan is not None else lambda_plan(), manifest if manifest is not None else lambda_manifest(), identity)
         self.assertEqual(result["status"], "rejected")
@@ -1439,6 +1464,9 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "aws_s3_object.privacy",
             }:
                 after["content"] = _trace_notice_contents()[address.rsplit(".", 1)[-1]]
+            if spec.operation_class.startswith("telemetry-"):
+                after = _telemetry_value(address)
+                fields = tuple(sorted(after))
             if address in {PUBLISHER_ADDRESS, ALARM_ADDRESS}:
                 plan = _plan(
                     [
@@ -1477,6 +1505,17 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             }
             result = validate_plan(plan, manifest)
             self.assertEqual(result["status"], "accepted", address)
+            if spec.operation_class == "telemetry-alarm":
+                normalized = copy.deepcopy(plan)
+                normalized["resource_changes"][0]["change"]["after"]["alarm_actions"] = None
+                if not after["dimensions"]:
+                    normalized["resource_changes"][0]["change"]["after"]["dimensions"] = None
+                self.assertEqual(validate_plan(normalized, manifest)["status"], "accepted", address)
+            if spec.operation_class.startswith("telemetry-"):
+                for field in after:
+                    mutant = copy.deepcopy(plan)
+                    mutant["resource_changes"][0]["change"]["after"][field] = "unreviewed"
+                    self.assertEqual(validate_plan(mutant, manifest)["status"], "rejected", (address, field))
             if address == "aws_s3_object.agentcore":
                 undeclared = _plan(
                     [

@@ -1,0 +1,107 @@
+locals {
+  telemetry_log_policy = <<-POLICY
+{
+  "Name": "tollchat-telemetry-pii",
+  "Description": "Additional masking of detected PII; originals remain recoverable in CloudWatch",
+  "Version": "2021-06-01",
+  "Configuration": {
+    "CustomDataIdentifier": [
+      {
+        "Name": "ApiCredential",
+        "Regex": "(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_-]{20,}|(?:AKIA|ASIA)[A-Z0-9]{16})"
+      },
+      {
+        "Name": "ConnectionString",
+        "Regex": "(?:postgres(?:ql)?|mysql|mongodb(?:\\+srv)?|redis)://[^\\s\"']+"
+      }
+    ]
+  },
+  "Statement": [
+    {
+      "Sid": "Audit",
+      "DataIdentifier": [
+        "arn:aws:dataprotection::aws:data-identifier/Address",
+        "arn:aws:dataprotection::aws:data-identifier/Name",
+        "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
+        "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-US",
+        "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-GB",
+        "arn:aws:dataprotection::aws:data-identifier/IpAddress",
+        "arn:aws:dataprotection::aws:data-identifier/LatLong",
+        "arn:aws:dataprotection::aws:data-identifier/AwsSecretKey",
+        "arn:aws:dataprotection::aws:data-identifier/OpenSshPrivateKey",
+        "arn:aws:dataprotection::aws:data-identifier/PgpPrivateKey",
+        "arn:aws:dataprotection::aws:data-identifier/PkcsPrivateKey",
+        "arn:aws:dataprotection::aws:data-identifier/PuttyPrivateKey",
+        "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+        "arn:aws:dataprotection::aws:data-identifier/CreditCardExpiration",
+        "arn:aws:dataprotection::aws:data-identifier/CreditCardSecurityCode",
+        "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-US",
+        "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-GB",
+        "arn:aws:dataprotection::aws:data-identifier/Ssn-US",
+        "arn:aws:dataprotection::aws:data-identifier/DriversLicense-US",
+        "arn:aws:dataprotection::aws:data-identifier/PassportNumber-US",
+        "arn:aws:dataprotection::aws:data-identifier/PassportNumber-CA",
+        "arn:aws:dataprotection::aws:data-identifier/PassportNumber-GB",
+        "arn:aws:dataprotection::aws:data-identifier/IndividualTaxIdentificationNumber-US",
+        "arn:aws:dataprotection::aws:data-identifier/NhsNumber-GB",
+        "arn:aws:dataprotection::aws:data-identifier/NationalInsuranceNumber-GB",
+        "arn:aws:dataprotection::aws:data-identifier/TaxId-GB",
+        "arn:aws:dataprotection::aws:data-identifier/PersonalHealthNumber-CA",
+        "arn:aws:dataprotection::aws:data-identifier/SocialInsuranceNumber-CA",
+        "arn:aws:dataprotection::aws:data-identifier/VehicleIdentificationNumber",
+        "arn:aws:dataprotection::aws:data-identifier/ZipCode-US",
+        "ApiCredential",
+        "ConnectionString"
+      ],
+      "Operation": {
+        "Audit": {
+          "FindingsDestination": {}
+        }
+      }
+    },
+    {
+      "Sid": "Mask",
+      "DataIdentifier": [
+        "arn:aws:dataprotection::aws:data-identifier/Address",
+        "arn:aws:dataprotection::aws:data-identifier/Name",
+        "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
+        "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-US",
+        "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-GB",
+        "arn:aws:dataprotection::aws:data-identifier/IpAddress",
+        "arn:aws:dataprotection::aws:data-identifier/LatLong",
+        "arn:aws:dataprotection::aws:data-identifier/AwsSecretKey",
+        "arn:aws:dataprotection::aws:data-identifier/OpenSshPrivateKey",
+        "arn:aws:dataprotection::aws:data-identifier/PgpPrivateKey",
+        "arn:aws:dataprotection::aws:data-identifier/PkcsPrivateKey",
+        "arn:aws:dataprotection::aws:data-identifier/PuttyPrivateKey",
+        "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+        "arn:aws:dataprotection::aws:data-identifier/CreditCardExpiration",
+        "arn:aws:dataprotection::aws:data-identifier/CreditCardSecurityCode",
+        "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-US",
+        "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-GB",
+        "arn:aws:dataprotection::aws:data-identifier/Ssn-US",
+        "arn:aws:dataprotection::aws:data-identifier/DriversLicense-US",
+        "arn:aws:dataprotection::aws:data-identifier/PassportNumber-US",
+        "arn:aws:dataprotection::aws:data-identifier/PassportNumber-CA",
+        "arn:aws:dataprotection::aws:data-identifier/PassportNumber-GB",
+        "arn:aws:dataprotection::aws:data-identifier/IndividualTaxIdentificationNumber-US",
+        "arn:aws:dataprotection::aws:data-identifier/NhsNumber-GB",
+        "arn:aws:dataprotection::aws:data-identifier/NationalInsuranceNumber-GB",
+        "arn:aws:dataprotection::aws:data-identifier/TaxId-GB",
+        "arn:aws:dataprotection::aws:data-identifier/PersonalHealthNumber-CA",
+        "arn:aws:dataprotection::aws:data-identifier/SocialInsuranceNumber-CA",
+        "arn:aws:dataprotection::aws:data-identifier/VehicleIdentificationNumber",
+        "arn:aws:dataprotection::aws:data-identifier/ZipCode-US",
+        "ApiCredential",
+        "ConnectionString"
+      ],
+      "Operation": {
+        "Deidentify": {
+          "MaskConfig": {}
+        }
+      }
+    }
+  ]
+}
+POLICY
+}

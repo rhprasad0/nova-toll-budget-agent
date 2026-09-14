@@ -44,3 +44,10 @@ regexes = [
   '''^\s*"v2/agent/public-api-gate\.js"\s*:\s*"[0-9a-f]{64}"\s*,?\s*$''',
 ]
 targetRules = ["generic-api-key"]
+
+[[allowlists]]
+description = "Synthetic header value used to test telemetry credential redaction"
+condition = "AND"
+paths = ['''^infra/test_delivery_plan_validator\.py$''']
+regexes = ['''^abcdefgh12345$''']
+targetRules = ["generic-api-key"]

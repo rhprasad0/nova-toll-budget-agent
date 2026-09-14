@@ -1050,6 +1050,7 @@ resource "aws_iam_role" "development_delivery" {
 locals {
   development_delivery_policy_statements = jsondecode(data.aws_iam_policy_document.development_delivery.json).Statement
   development_delivery_policy_documents = {
+    telemetry = local.telemetry_delivery_policy
     state = jsonencode({
       Version   = "2012-10-17"
       Statement = slice(local.development_delivery_policy_statements, 0, 7)
@@ -1978,8 +1979,9 @@ locals {
   ]
 
   production_delivery_deploy_policy_documents = {
-    state   = jsonencode({ Version = "2012-10-17", Statement = local.production_delivery_deploy_state_statements })
-    release = jsonencode({ Version = "2012-10-17", Statement = local.production_delivery_deploy_release_statements })
+    telemetry = local.telemetry_delivery_policy
+    state     = jsonencode({ Version = "2012-10-17", Statement = local.production_delivery_deploy_state_statements })
+    release   = jsonencode({ Version = "2012-10-17", Statement = local.production_delivery_deploy_release_statements })
     compute = jsonencode({
       Version   = "2012-10-17"
       Statement = slice(local.production_delivery_application_policy_statements, 0, 6)
@@ -2013,6 +2015,7 @@ locals {
   # Keep the planner's read-only discovery allowlist intact while staying
   # below IAM's 6,144-character customer-managed policy limit.
   production_delivery_planner_policy_documents = {
+    telemetry = local.telemetry_plan_policy
     state = jsonencode({
       Version   = "2012-10-17"
       Statement = slice(local.production_delivery_planner_state_statements, 0, 5)
@@ -2055,6 +2058,7 @@ locals {
 locals {
   development_plan_policy_statements = jsondecode(data.aws_iam_policy_document.development_plan.json).Statement
   development_plan_policy_documents = var.environment == "development" ? {
+    telemetry = local.telemetry_plan_policy
     state = jsonencode({
       Version   = "2012-10-17"
       Statement = slice(local.development_plan_policy_statements, 0, 4)

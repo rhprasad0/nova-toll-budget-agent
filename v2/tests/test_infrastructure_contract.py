@@ -60,6 +60,7 @@ FOUNDATION_FIELDS = (
     "agentcore_artifacts_bucket_name",
     "db_instance",
     "alerts_topic_arn",
+    "telemetry_guardrail",
 )
 DEVELOPMENT_DELIVERY_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-development-delivery.yml"
@@ -393,6 +394,12 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
         .replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
         .replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
     )
+    telemetry_locals = (
+        _top_level_terraform_block(
+            (FOUNDATION_ROOT / "telemetry.tf").read_text(), "locals", 0
+        )
+        + '\nlocals {\n production_delivery_account_id = "920534282028"\n production_delivery_application_policy_json = jsonencode({Statement = []})\n development_delivery_trace_statement_sids = []\n}\n'
+    )
     configuration = dedent(
         f"""
         terraform {{
@@ -425,6 +432,7 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
         }}
 
         {first_locals}
+        {telemetry_locals}
         {policy_data}
         {foundation_data}
         {policy_locals}
@@ -553,6 +561,12 @@ def _terraform_rendered_development_plan_policies() -> tuple[
         .replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
         .replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
     )
+    telemetry_locals = (
+        _top_level_terraform_block(
+            (FOUNDATION_ROOT / "telemetry.tf").read_text(), "locals", 0
+        )
+        + '\nlocals {\n production_delivery_account_id = "920534282028"\n production_delivery_application_policy_json = jsonencode({Statement = []})\n development_delivery_trace_statement_sids = []\n}\n'
+    )
     configuration = dedent(
         f"""
         terraform {{
@@ -585,6 +599,7 @@ def _terraform_rendered_development_plan_policies() -> tuple[
         }}
 
         {first_locals}
+        {telemetry_locals}
         {policy_data}
         {plan_locals}
 
@@ -5502,7 +5517,9 @@ def test_development_foundation_output_validators_fail_closed_and_match():
     runbook_predicate = _development_cutover_foundation_validator(DEPLOYMENT)
 
     for predicate in (workflow_predicate, runbook_predicate):
-        assert _foundation_validator_keys(predicate) == list(FOUNDATION_FIELDS)
+        assert _foundation_validator_keys(predicate) == [
+            field for field in FOUNDATION_FIELDS if field != "telemetry_guardrail"
+        ]
     output_index = deploy_source.index("terraform -chdir=infra output -json foundation")
     validator_index = deploy_source.index("jq -e '\n", output_index)
     wrapper_index = deploy_source.index(
@@ -9139,6 +9156,7 @@ def test_development_plan_policy_set_is_deterministic_and_bounded():
         "data",
         "runtime",
         "edge",
+        "telemetry",
     }
     assert len(aggregate) == 47
     assert [
@@ -10079,7 +10097,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         _terraform_rendered_development_delivery_policies()
     )
     assert len(rendered_documents) <= 10
-    assert set(rendered_documents) == set(expected_groups)
+    assert set(rendered_documents) == set(expected_groups) | {"telemetry"}
     assert len(rendered_aggregate) == len(statements) == 67
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
