@@ -240,6 +240,13 @@ with patch.object(telemetry.boto3, "client", return_value=client), patch.object(
     batches += [p._batch_processor for p in providers[1]._multi_log_record_processor._log_record_processors]
     assert batches and all(isinstance(p._exporter, telemetry.RedactingExporter) for p in batches)
     assert telemetry.os.environ["OTEL_METRICS_EXPORTER"] == "none"
+    parent = trace.NonRecordingSpan(trace.SpanContext(
+        trace_id=1, span_id=2, is_remote=True, trace_flags=trace.TraceFlags(0)
+    ))
+    with trace.get_tracer('archive-check').start_as_current_span(
+        'unsampled-parent-check', context=trace.set_span_in_context(parent)
+    ) as span:
+        assert span.is_recording() and span.get_span_context().trace_flags.sampled
     for provider in providers:
         provider.shutdown()
 print("protected startup passed")

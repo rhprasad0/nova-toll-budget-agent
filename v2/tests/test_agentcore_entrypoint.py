@@ -22,8 +22,8 @@ from agent.agentcore_entrypoint import (
 )
 
 
-@pytest.mark.parametrize("enabled", ["", "false", "true"])
-def test_development_tracing_exports_spans_only_when_enabled(enabled: str) -> None:
+@pytest.mark.parametrize("enabled", ["", "false"])
+def test_disabled_tracing_does_not_initialize_exporters(enabled: str) -> None:
     result = subprocess.run(
         [
             sys.executable,
@@ -33,29 +33,9 @@ import agent.agentcore_entrypoint
 import os
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-
 provider = trace.get_tracer_provider()
-if os.environ['UNIFIED_TRACES_DESTINATION_ENABLED'] == 'true':
-    assert isinstance(provider, TracerProvider)
-    exporter = InMemorySpanExporter()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    with trace.get_tracer('archive-check').start_as_current_span('synthetic-check'):
-        pass
-    parent = trace.NonRecordingSpan(trace.SpanContext(
-        trace_id=1, span_id=2, is_remote=True, trace_flags=trace.TraceFlags(0)
-    ))
-    with trace.get_tracer('archive-check').start_as_current_span(
-        'unsampled-parent-check', context=trace.set_span_in_context(parent)
-    ):
-        pass
-    assert [span.name for span in exporter.get_finished_spans()] == [
-        'synthetic-check', 'unsampled-parent-check'
-    ]
-else:
-    assert not isinstance(provider, TracerProvider)
-    assert os.environ['OTEL_TRACES_SAMPLER'] == 'parentbased_always_on'
+assert not isinstance(provider, TracerProvider)
+assert os.environ['OTEL_TRACES_SAMPLER'] == 'parentbased_always_on'
 """,
         ],
         env=os.environ
