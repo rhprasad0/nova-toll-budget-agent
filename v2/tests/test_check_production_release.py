@@ -312,7 +312,13 @@ def test_admission_accepts_a_current_full_development_rerun(
 
 @pytest.mark.parametrize(
     "canary_change",
-    [None, ("schema_version", True), ("call_count", True), ("runtime_version", "v8")],
+    [
+        None,
+        ("schema_version", True),
+        ("call_count", True),
+        ("runtime_version", "v8"),
+        ("prompt_version", "2.0.2"),
+    ],
 )
 def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
     monkeypatch: pytest.MonkeyPatch,
@@ -342,10 +348,7 @@ def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
             "call_count": 1,
             "total_usd": "4.25",
             "elapsed_ms": 10,
-            "model": "gpt-5.6-luna",
-            "tool_contract": "1.5.0",
-            "prompt_version": "2.0.2",
-            "renderer_version": "1.0.0",
+            **_module("check_development_release.py")._canary_contract(),
             "success": True,
             "commit": candidate,
             "run_id": 12,
