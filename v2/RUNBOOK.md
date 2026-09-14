@@ -381,6 +381,10 @@ review passes; never retain state, tokens, or raw plan JSON.
 
 ## Account-local foundation handoff
 
+For endpoint consolidation and replacement of managed NAT with the existing
+routers, use the [router NAT procedure](runbooks/router-nat.md). This is a
+reviewed foundation operation, separate from application and database delivery.
+
 The foundation and application roots have independent state. The guarded
 production planner reads the current foundation output into a temporary tfvars
 file, validates its approved non-secret shape, passes it only to the matching

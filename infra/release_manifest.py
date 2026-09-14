@@ -75,6 +75,7 @@ EXACT_INPUTS = {
     "infra/delivery_plan_validator.py",
     "infra/lambda-stub/handler.py",
     "infra/release_manifest.py",
+    "infra/router-nat.sh",
     "v2/agent-sops/nova-toll-pricing-assistant.sop.md",
     "v2/agent/__init__.py",
     "v2/agent/agentcore_entrypoint.py",
