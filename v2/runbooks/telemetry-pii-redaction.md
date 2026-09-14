@@ -75,8 +75,9 @@ static diagnostics may be used while investigating; do not log failed content.
    `infra/development-tracing.tf`. Enabling the destination creates AWS's
    reserved log groups. For a new account, install the reviewed CloudWatch
    resource policy and enable the destination, then import that policy, the
-   regional destination, and both reserved log groups into foundation state
-   before applying the full saved foundation plan. Production groups retain
+   regional destination, and both reserved log groups into foundation state.
+   Imports change the state serial: generate and review a new full saved
+   foundation plan after all imports, then apply that exact plan. Production groups retain
    logs for one day. Missing export permission can leave a healthy application
    with no detailed traces; an initialized exporter alone is not proof.
 7. Use a fresh synthetic session per environment with a fabricated name, email,
