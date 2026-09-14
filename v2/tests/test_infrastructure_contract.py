@@ -3615,11 +3615,12 @@ def test_agentcore_trace_protection_applies_to_both_environments():
         "local.is_production ? {} : {"
     )
     for name in (
-        "UNIFIED_TRACES_DESTINATION_ENABLED",
         "TOLLCHAT_TELEMETRY_GUARDRAIL_ID",
         "TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION",
     ):
         assert name in common and name not in development
+    assert "UNIFIED_TRACES_DESTINATION_ENABLED" not in common
+    assert 'UNIFIED_TRACES_DESTINATION_ENABLED = "true"' in development
     subscriptions = terraform_block(
         agentcore,
         'resource "aws_cloudwatch_log_subscription_filter" "agentcore_traces"',

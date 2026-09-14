@@ -386,10 +386,10 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
       TOLLCHAT_GUARDRAIL_VERSION           = aws_bedrock_guardrail_version.tollchat.version
       TOLLCHAT_TELEMETRY_GUARDRAIL_ID      = var.foundation.telemetry_guardrail.id
       TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION = var.foundation.telemetry_guardrail.version
-      UNIFIED_TRACES_DESTINATION_ENABLED   = "true"
     },
     local.is_production ? {} : {
-      PRICING_DB_USER = local.database_roles.pricing_caller
+      PRICING_DB_USER                    = local.database_roles.pricing_caller
+      UNIFIED_TRACES_DESTINATION_ENABLED = "true"
     },
   )
 
