@@ -71,15 +71,45 @@ def test_migration_candidates_are_registered_and_exclude_bootstrap_files() -> No
     )
 
 
-def test_production_registry_stops_at_authorized_migration_030() -> None:
-    schemas, _ = runner._registry()
+def test_production_registry_reaches_current_schemas_and_stops_at_032() -> None:
+    schemas, versions = runner._registry()
     migrations: Any = runner._production_migrations(
-        runner._migration_candidates(schemas)
+        (*runner._migration_candidates(schemas), _migration(number=33))
     )
     assert migrations[-1].path == (
-        "v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql"
+        "v2/db/migrations/032_upgrade_oracle_1_14_1_to_1_15_0.sql"
     )
-    assert all(migration.number <= 30 for migration in migrations)
+    assert all(migration.number <= 32 for migration in migrations)
+    assert {migration.schema: migration.target for migration in migrations} == versions
+
+    wrapper = (SCRIPTS / "run_production_migrations_workflow.sh").read_text()
+    gate = wrapper.split('jq -e --arg candidate "$CANDIDATE" \'\n', 1)[1].split(
+        '\n\' <<<"$ADMISSION"', 1
+    )[0]
+    admission: dict[str, Any] = {
+        "bundle_digest": "sha256:" + "a" * 64,
+        "bundle_id": 1,
+        "candidate": "b" * 40,
+        "claim_id": 1,
+        "consumer_attempt": 1,
+        "consumer_run": 1,
+        "development_attempt": 1,
+        "development_deployment": 1,
+        "development_run": 1,
+        "evidence_artifact": {},
+        "listener_attempt": 1,
+        "listener_run": 1,
+        "release_id": 1,
+        "schema_versions": versions,
+        "tag": "v1.0.8",
+    }
+    result = subprocess.run(
+        ["jq", "-e", "--arg", "candidate", admission["candidate"], gate],
+        input=json.dumps(admission),
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_baseline_manifest_is_shared_and_matches_canonical_bytes() -> None:
