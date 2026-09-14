@@ -398,11 +398,18 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         for index in range(len(records)):
             with self.subTest(missing=index), self.assertRaises(_Invalid):
                 _validate_trace_notices(records[:index] + records[index+1:])
-        for missing_field in ("environment_variables", "agent_runtime_artifact.code_configuration.code.s3.version_id"):
-            mutant = copy.deepcopy(records)
-            mutant[3]["changed_fields"].remove(missing_field)
+        staged = copy.deepcopy(records)
+        staged[3]["before"] = copy.deepcopy(staged[3]["after"])
+        staged[3]["changed_fields"] = ["agent_runtime_artifact.code_configuration.code.s3.version_id"]
+        _validate_trace_notices(staged)
+        for mutant in (copy.deepcopy(records), copy.deepcopy(staged)):
+            mutant[3]["changed_fields"].remove("agent_runtime_artifact.code_configuration.code.s3.version_id")
             with self.assertRaises(_Invalid):
                 _validate_trace_notices(mutant)
+        missing_env = copy.deepcopy(staged)
+        missing_env[3]["after"]["environment_variables"].pop("TOLLCHAT_TELEMETRY_GUARDRAIL_ID")
+        with self.assertRaises(_Invalid):
+            _validate_trace_notices(missing_env)
         mixed = copy.deepcopy(records)
         mixed[0]["after"] = mixed[0]["before"]
         with self.assertRaises(_Invalid):
@@ -2462,6 +2469,11 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             ),
         }
         )
+        expected_mutations["aws_bedrockagentcore_agent_runtime.tollchat"] = ("agentcore-code", ("environment_variables",))
+        for address, spec in CONTRACT.items():
+            if spec.operation_class.startswith("telemetry-"):
+                fields = {"telemetry-log-protection": ("log_group_name", "policy_document"), "telemetry-failure-metric": ("log_group_name", "metric_transformation", "name", "pattern"), "telemetry-alarm": ("alarm_actions", "alarm_description", "alarm_name", "comparison_operator", "dimensions", "evaluation_periods", "metric_name", "namespace", "period", "statistic", "tags", "threshold", "treat_missing_data")}[spec.operation_class]
+                expected_mutations[address] = (spec.operation_class, fields)
         actual_mutations = {
             record["address"]: (
                 record["operation_class"],
@@ -2534,6 +2546,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                     "UNIFIED_TRACES_DESTINATION_ENABLED": "true",
                 }
                 after["environment_variables"] = dict(before["environment_variables"])
+                after["environment_variables"].update(TOLLCHAT_TELEMETRY_GUARDRAIL_ID="testid", TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION="1")
             return _resource_change(address, "update", before, after)
 
         plan = _plan([update(address) for address in committed_updates])
