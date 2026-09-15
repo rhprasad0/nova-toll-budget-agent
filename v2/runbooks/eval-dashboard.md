@@ -36,9 +36,14 @@ user chat sessions. Postgres retains history; the public window is seven days.
    Only the three dashboard IAM statements and two additional environment
    variables may change. Reject package changes, dependency-expanded mutations,
    deletes, replacements, production resources, or removed environment values.
-   Apply that exact reviewed plan. The old handler ignores these new variables.
-4. Merge the application PR after CI and human review. The protected development
-   delivery sequence validates its saved plan, applies registered migration 033
+   Keep this bootstrap plan unapplied during PR checks: those checks use
+   Terraform from main, so applying it early makes them propose reverting the
+   new IAM/configuration and fail the finite plan guard.
+4. Merge the application PR after CI and human review, then apply that exact
+   reviewed bootstrap plan before protected delivery. If the main CI plan ran
+   before bootstrap completed, rerun its failed checks afterward. The old
+   handler ignores the new variables. The protected development delivery
+   sequence validates its saved application plan, applies registered migration 033
    under the fixed migrator identity, re-assumes delivery, and applies that plan.
    Ordinary delivery permissions and finite plan guards are unchanged.
 5. Verify pricing schema 1.4.0, the writer's table-only permissions, and
