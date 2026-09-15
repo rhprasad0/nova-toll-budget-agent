@@ -130,6 +130,55 @@ def test_export_copies_redact_nested_content_without_mutating_agent_data():
     assert all(call["outputScope"] == "INTERVENTIONS" for call in client.calls)
 
 
+def test_large_static_agent_metadata_is_compacted_before_redaction():
+    original = span()
+    system_prompt = "source-controlled system prompt " * 1_000
+    original._attributes = {
+        **(original.attributes or {}),
+        "gen_ai.agent.tools": json.dumps(
+            ["get_current_toll_price", "get_annual_toll_ballpark"]
+        ),
+        "system_prompt": system_prompt,
+    }
+    original._events = [
+        Event("gen_ai.system.message", {"content": system_prompt}),
+        Event("gen_ai.user.message", {"content": PII}),
+    ]
+    capture, client = Capture(), Guardrail()
+
+    result = RedactingExporter(capture, client, "guardrail", "1").export([original])
+
+    assert result is SpanExportResult.SUCCESS
+    wire = b"".join(capture.wire)
+    assert b"tollchat.agent.tool_names" in wire
+    assert b"get_current_toll_price" in wire
+    assert b"get_annual_toll_ballpark" in wire
+    assert b"gen_ai.agent.tools" not in wire
+    assert system_prompt.encode() not in wire
+    assert OMITTED.encode() not in wire
+    assert PII.encode() not in wire and b"{EMAIL}" in wire
+    assert all(
+        len(call["content"][0]["text"]["text"]) <= 10_000 for call in client.calls
+    )
+    assert original.attributes is not None
+    assert original.attributes["system_prompt"] == system_prompt
+    assert original.attributes["gen_ai.agent.tools"] == json.dumps(
+        ["get_current_toll_price", "get_annual_toll_ballpark"]
+    )
+    assert original.events[0].attributes is not None
+    assert original.events[0].attributes["content"] == system_prompt
+
+
+def test_malformed_tool_metadata_fails_closed():
+    item = span()
+    item._attributes = {"gen_ai.agent.tools": f"not json {PII}"}
+
+    safe = Redactor(Guardrail(), "id", "1").span(item)
+
+    assert safe.attributes == {"tollchat.agent.tool_names": OMITTED}
+    assert item.attributes == {"gen_ai.agent.tools": f"not json {PII}"}
+
+
 @pytest.mark.parametrize(
     "response",
     cast(
