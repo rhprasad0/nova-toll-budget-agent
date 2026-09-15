@@ -34,6 +34,12 @@ locals {
       Resource = local.telemetry_alarms
     },
   ]
+  telemetry_verification_statements = [{
+    Sid      = "ReadAgentCoreTraceArchive"
+    Effect   = "Allow"
+    Action   = ["s3:GetObject"]
+    Resource = ["arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${local.telemetry_account}${local.telemetry_suffix}/agentcore-traces/*"]
+  }]
   # The production trace statements were previously excluded. Restore just that
   # finite set in a separate policy, preserving existing policy partitioning.
   production_telemetry_archive_statements = [
@@ -42,7 +48,7 @@ locals {
   ]
   telemetry_delivery_policy = jsonencode({
     Version   = "2012-10-17"
-    Statement = concat(local.telemetry_read_statements, local.telemetry_write_statements, [for statement in local.production_telemetry_archive_statements : statement if var.environment == "production"])
+    Statement = concat(local.telemetry_read_statements, local.telemetry_write_statements, local.telemetry_verification_statements, [for statement in local.production_telemetry_archive_statements : statement if var.environment == "production"])
   })
   telemetry_plan_policy = jsonencode({
     Version = "2012-10-17"

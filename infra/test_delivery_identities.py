@@ -935,13 +935,27 @@ def main() -> None:
     assert len(deploy_documents) <= 10
     telemetry_reads = planner_documents["telemetry"]["Statement"]
     assert all(statement["Sid"].startswith("Read") for statement in telemetry_reads)
+    assert not any(
+        statement["Sid"] == "ReadAgentCoreTraceArchive"
+        for statement in telemetry_reads
+    )
     telemetry_deploy = deploy_documents["telemetry"]["Statement"]
     assert {s["Sid"] for s in telemetry_deploy} == {
         "ReadTelemetryLogProtection", "ReadTelemetryAlarms", "ManageTelemetryLogProtection", "ManageTelemetryAlarms",
         "ReadAgentCoreTraceSubscription", "ReadAgentCoreTraceRoles", "ReadAgentCoreTraceFirehose",
         "ManageAgentCoreTraceSubscriptions", "ManageAgentCoreTraceFirehose", "ManageAgentCoreTraceRuntimePolicy", "PassAgentCoreTraceLogsRole",
         "PassAgentCoreTraceFirehoseRole", "ManageAgentCoreTraceRetention", "ManageAgentCoreTraceCatalog", "ManageAgentCoreTraceNamedQuery",
+        "ReadAgentCoreTraceArchive",
     }
+    archive_read = next(
+        statement
+        for statement in telemetry_deploy
+        if statement["Sid"] == "ReadAgentCoreTraceArchive"
+    )
+    assert archive_read["Action"] == ["s3:GetObject"]
+    assert archive_read["Resource"] == [
+        "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-920534282028/agentcore-traces/*"
+    ]
     assert "logs:Unmask" not in json.dumps(telemetry_deploy)
     schedule_statements = deploy_documents["schedules"]["Statement"]
     assert [statement["Sid"] for statement in schedule_statements] == [

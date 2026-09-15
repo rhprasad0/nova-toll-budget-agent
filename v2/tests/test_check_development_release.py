@@ -27,6 +27,14 @@ def no_sleep(_seconds: float) -> None:
     pass
 
 
+def fixed_token_hex(_size: int) -> str:
+    return "fixed"
+
+
+def one_trace(_started: object) -> list[tuple[str, int]]:
+    return [("trace", 50)]
+
+
 @pytest.fixture
 def release(
     monkeypatch: pytest.MonkeyPatch,
@@ -527,6 +535,101 @@ def test_canary_contract_versions_match_trusted_runtime_sources() -> None:
     }
 
 
+def test_security_checks_block_guardrail_and_find_redacted_address_trace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompts: list[str] = []
+
+    def request(
+        _jar: http.cookiejar.CookieJar,
+        _path: str,
+        body: dict[str, Any] | None = None,
+        **_kwargs: Any,
+    ) -> tuple[int, str, bytes]:
+        assert body is not None
+        prompt = str(body["message"])
+        prompts.append(prompt)
+        if prompt == check.GUARDRAIL_PROMPT:
+            event = {
+                "type": "answer",
+                "text": check.BLOCKED_MESSAGE,
+                "blocked": True,
+            }
+        else:
+            event = {"type": "answer", "text": "Need a route.", "blocked": False}
+        return 200, "application/x-ndjson", json.dumps(event).encode()
+
+    def download(_key: str, destination: Path) -> None:
+        records = [
+            {"kind": "output", "body": "tollchat-address-redaction-v1-fixed"},
+            {
+                "kind": "input",
+                "body": "tollchat-address-redaction-v1-fixed {ADDRESS}",
+            },
+        ]
+        destination.write_text(
+            "\n".join(json.dumps(record) for record in records), encoding="utf-8"
+        )
+
+    monkeypatch.setattr(check, "request", request)
+    monkeypatch.setattr(check.secrets, "token_hex", fixed_token_hex)
+    monkeypatch.setattr(check, "_trace_objects", one_trace)
+    monkeypatch.setattr(check, "_download_trace", download)
+
+    assert check.security_checks() == {
+        "guardrail_blocked": True,
+        "address_redacted": True,
+    }
+    assert prompts[0] == check.GUARDRAIL_PROMPT
+    assert check.SYNTHETIC_ADDRESS in prompts[1]
+
+
+def test_security_checks_fail_closed_when_archived_trace_exposes_address(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def request(
+        _jar: http.cookiejar.CookieJar,
+        _path: str,
+        body: dict[str, Any] | None = None,
+        **_kwargs: Any,
+    ) -> tuple[int, str, bytes]:
+        assert body is not None
+        blocked = body["message"] == check.GUARDRAIL_PROMPT
+        event = {
+            "type": "answer",
+            "text": check.BLOCKED_MESSAGE if blocked else "Need a route.",
+            "blocked": blocked,
+        }
+        return 200, "application/x-ndjson", json.dumps(event).encode()
+
+    def download(_key: str, destination: Path) -> None:
+        records = [
+            {
+                "kind": "input",
+                "body": "tollchat-address-redaction-v1-fixed {ADDRESS}",
+            },
+            {
+                "kind": "input",
+                "body": "tollchat-address-redaction-v1-fixed "
+                + check.SYNTHETIC_ADDRESS,
+            },
+        ]
+        destination.write_text(
+            "\n".join(json.dumps(record) for record in records),
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(check, "request", request)
+    monkeypatch.setattr(check.secrets, "token_hex", fixed_token_hex)
+    monkeypatch.setattr(check, "_trace_objects", one_trace)
+    monkeypatch.setattr(check, "_download_trace", download)
+
+    with pytest.raises(check.CheckFailure, match="address_exposed"):
+        check.security_checks()
+    output = capsys.readouterr().err
+    assert check.SYNTHETIC_ADDRESS not in output
+
+
 def cookie(value: str, *, http_only: bool = True) -> http.cookiejar.Cookie:
     return http.cookiejar.Cookie(
         0,
@@ -700,6 +803,11 @@ def test_public_smoke_and_two_session_lifecycle(
         return 200, "text/plain", b"wrong" if wrong == "static" else b"static"
 
     monkeypatch.setattr(check, "request", request)
+    monkeypatch.setattr(
+        check,
+        "security_checks",
+        lambda: {"guardrail_blocked": True, "address_redacted": True},
+    )
     monkeypatch.setattr(check.time, "sleep", no_sleep)
     if wrong:
         with pytest.raises(ValueError):
@@ -821,6 +929,11 @@ def test_main_preserves_original_smoke_diagnostic_after_cleanup(
     monkeypatch.setattr(check, "expected", expected_stub)
     monkeypatch.setattr(check, "readiness", readiness_stub)
     monkeypatch.setattr(check, "request", request)
+    monkeypatch.setattr(
+        check,
+        "security_checks",
+        lambda: {"guardrail_blocked": True, "address_redacted": True},
+    )
     monkeypatch.setattr(
         check.sys, "argv", ["check", str(state_path), str(manifest_path)]
     )

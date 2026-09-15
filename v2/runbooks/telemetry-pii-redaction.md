@@ -41,6 +41,16 @@ CloudWatch metric filters count redaction omissions/errors and export failures.
 Alarms also watch CloudWatch's PII findings after application redaction. Only
 static diagnostics may be used while investigating; do not log failed content.
 
+The development and production release checks also exercise the deployed
+boundary with a fixed prompt attack and a fictional street address. Release
+success requires the prompt attack to return the application's blocked response
+and a marker-bearing Firehose archive record to contain `{ADDRESS}` without the
+seeded address. This proves consumer-visible archive masking; it does not inspect
+CloudWatch's privileged underlying originals. Production performs this check
+after apply, so failure blocks release success but does not automatically change
+routing. Follow the production incident procedure without removing CloudWatch
+masking if the check fails.
+
 ## Delivery sequence
 
 1. Merge the prerequisite PR: additive foundation guardrail and account-local
