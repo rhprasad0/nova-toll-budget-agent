@@ -417,6 +417,19 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         for record in records:
             record.update(action="no-op", before=copy.deepcopy(record["after"]), changed_fields=[])
         _validate_trace_notices(records)
+        for record in records:
+            name = record["address"].split(".")[-1]
+            if name in fixture["dashboard"]:
+                record.update(action="update", after={"content": fixture["dashboard"][name]})
+        _validate_trace_notices(records)
+        changed_notice = copy.deepcopy(records)
+        changed_notice[0]["after"]["content"] += "unreviewed content"
+        with self.assertRaises(_Invalid):
+            _validate_trace_notices(changed_notice)
+        missing_guard = copy.deepcopy(records)
+        missing_guard[3]["after"]["environment_variables"].pop("TOLLCHAT_TELEMETRY_GUARDRAIL_ID")
+        with self.assertRaises(_Invalid):
+            _validate_trace_notices(missing_guard)
 
     def test_credential_regex_covers_plain_and_serialized_headers(self):
         import re
@@ -2476,6 +2489,11 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             if spec.operation_class.startswith("telemetry-"):
                 fields = {"telemetry-log-protection": ("log_group_name", "policy_document"), "telemetry-failure-metric": ("log_group_name", "metric_transformation", "name", "pattern"), "telemetry-alarm": ("alarm_actions", "alarm_description", "alarm_name", "comparison_operator", "dimensions", "evaluation_periods", "metric_name", "namespace", "period", "statistic", "tags", "threshold", "treat_missing_data")}[spec.operation_class]
                 expected_mutations[address] = (spec.operation_class, fields)
+        expected_mutations.update({
+            "aws_cloudfront_function.public_report_routes": ("cloudfront-code", ("code",)),
+            "aws_s3_object.evals": ("site-object-upload", ("cache_control", "content", "content_type", "source", "source_hash")),
+            **{f'aws_s3_object.site_assets["{name}"]': ("site-asset-upload", ("cache_control", "content_type", "source", "source_hash")) for name in ("evals.css", "evals.mjs")},
+        })
         actual_mutations = {
             record["address"]: (
                 record["operation_class"],
@@ -2577,6 +2595,23 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         rejected = validate_plan(plan, widened_permission)
         self.assertEqual(rejected["status"], "rejected")
         self.assertEqual(rejected["reason_code"], "invalid_permission")
+
+    def test_dashboard_create_computed_acl_requires_omitted_configuration(self):
+        manifest = json.loads((Path(__file__).parent / "development-release-manifest.json").read_text())
+        for address in ("aws_s3_object.evals", 'aws_s3_object.site_assets["evals.css"]', 'aws_s3_object.site_assets["evals.mjs"]'):
+            spec = CONTRACT[address]
+            after = {**dict(spec.create_identity), **{field: None for field in spec.fields}}
+            resource = _resource_change(address, "create", None, after)
+            resource["change"]["after_unknown"] = {"acl": True}
+            config = {"address": address.split("[", 1)[0], "expressions": {"bucket": {"constant_value": after["bucket"]}}}
+            plan = _plan([resource], configuration={"root_module": {"resources": [config]}})
+            self.assertEqual(validate_plan(plan, manifest)["status"], "accepted")
+            for acl in ({"references": ["var.acl"]}, {"constant_value": "public-read"}):
+                config["expressions"]["acl"] = acl
+                self.assertEqual(validate_plan(plan, manifest)["reason_code"], "unknown_authorization_value")
+            config["expressions"].pop("acl")
+            plan.pop("configuration")
+            self.assertEqual(validate_plan(plan, manifest)["reason_code"], "unknown_authorization_value")
 
     def test_committed_manifest_covers_coverage_asset_update_subset(self):
         address = 'aws_s3_object.site_assets["coverage-locations.json"]'
