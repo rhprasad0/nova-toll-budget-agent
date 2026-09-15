@@ -10,13 +10,13 @@ production_db="nova_toll"
 development_db="nova_toll_development"
 development_roles=(
   pricing_loader_writer_development pricing_reader_development oracle_owner_development
-  tollchat_agent_development pricing_caller_development report_publisher_development
+  tollchat_agent_development pricing_caller_development report_publisher_development eval_writer_development
   pricing_owner_development schema_migrator_development
 )
 login_roles=(
-  pricing_loader_writer pricing_reader tollchat_agent pricing_caller report_publisher
+  pricing_loader_writer pricing_reader tollchat_agent pricing_caller report_publisher eval_writer
   pricing_loader_writer_development pricing_reader_development tollchat_agent_development
-  pricing_caller_development report_publisher_development schema_migrator_development
+  pricing_caller_development report_publisher_development eval_writer_development schema_migrator_development
 )
 
 sentinel='VERIFIER_SENTINEL_SECRET'
@@ -313,7 +313,7 @@ FROM pg_database WHERE datname = '$production_db'
 DO \$\$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_database WHERE datname = '$development_db')
-     OR EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ANY (ARRAY['${development_roles[0]}', '${development_roles[1]}', '${development_roles[2]}', '${development_roles[3]}', '${development_roles[4]}', '${development_roles[5]}', '${development_roles[6]}', '${development_roles[7]}'])) THEN
+     OR EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ANY (ARRAY['${development_roles[0]}', '${development_roles[1]}', '${development_roles[2]}', '${development_roles[3]}', '${development_roles[4]}', '${development_roles[5]}', '${development_roles[6]}', '${development_roles[7]}', '${development_roles[8]}'])) THEN
     RAISE EXCEPTION 'failed bootstrap left development artifacts';
   END IF;
 END \$\$;"
@@ -389,6 +389,7 @@ SQL
 psql --dbname "$development_db" --set ON_ERROR_STOP=1 <<'SQL'
 ALTER SCHEMA pricing OWNER TO bootstrap_non_superuser;
 ALTER TABLE pricing.schema_version OWNER TO bootstrap_non_superuser;
+ALTER TABLE pricing.evaluation_runs OWNER TO bootstrap_non_superuser;
 ALTER TABLE pricing.trip_pricing_i95 OWNER TO bootstrap_non_superuser;
 ALTER TABLE pricing.trip_pricing_i66 OWNER TO bootstrap_non_superuser;
 ALTER VIEW pricing.current_trip_pricing_i95 OWNER TO bootstrap_non_superuser;

@@ -128,6 +128,7 @@ def test_timed_checks_zip_is_flat_deterministic_and_importable(tmp_path: Path) -
         "timed_checks.py",
         "eval/run_evaluation.py",
         "eval/simulated.py",
+        "eval/dashboard.py",
         "eval/test-cases.jsonl",
         "agent/__init__.py",
         "agent/toll_agent.py",

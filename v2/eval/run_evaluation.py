@@ -9,6 +9,7 @@ import re
 import sys
 from argparse import ArgumentParser
 from calendar import monthcalendar
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
@@ -1832,7 +1833,12 @@ def _configure_database() -> None:
         os.environ["DB_PORT"] = str(instance["Endpoint"]["Port"])
 
 
-def main(window: str, suite: str = "all", output_dir: Path | str | None = None) -> None:
+def main(
+    window: str,
+    suite: str = "all",
+    output_dir: Path | str | None = None,
+    on_report: Callable[[object], None] | None = None,
+) -> None:
     cases = load_cases(
         suite=suite, window=window, weekday=datetime.now(_EASTERN).isoweekday()
     )
@@ -1854,6 +1860,8 @@ def main(window: str, suite: str = "all", output_dir: Path | str | None = None) 
     results_dir.mkdir(parents=True, exist_ok=True)
     report.to_file(str(results_dir / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
     report.display(include_input=False)
+    if on_report is not None:
+        on_report(report)
     if suite == "scheduled" and len(report.test_passes) != 3:
         raise EvaluationExecutionError("TollChat evaluation execution failed")
     if not all(report.test_passes):

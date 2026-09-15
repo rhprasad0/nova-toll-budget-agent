@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL pricing bootstrap.
--- pricing schema version: 1.3.0
+-- pricing schema version: 1.4.0
 
 \set ON_ERROR_STOP on
 
@@ -17,7 +17,20 @@ CREATE TABLE pricing.schema_version (
     installed_at timestamptz NOT NULL DEFAULT now()
 );
 
-INSERT INTO pricing.schema_version (version) VALUES ('1.3.0');
+INSERT INTO pricing.schema_version (version) VALUES ('1.4.0');
+
+CREATE TABLE pricing.evaluation_runs (
+    environment text NOT NULL CHECK (environment IN ('development', 'production')),
+    window_id text NOT NULL CHECK (window_id IN ('i95_northbound', 'i95_southbound', 'i95_reversal', 'greenway_eb_peak', 'greenway_wb_peak')),
+    scheduled_at timestamptz NOT NULL,
+    scenario_id text NOT NULL,
+    started_at timestamptz NOT NULL,
+    finished_at timestamptz,
+    status text NOT NULL CHECK (status IN ('running', 'passed', 'failed', 'error', 'stale')),
+    evidence jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(evidence) = 'object'),
+    PRIMARY KEY (environment, window_id, scheduled_at)
+);
+CREATE INDEX evaluation_runs_latest ON pricing.evaluation_runs (environment, scenario_id, scheduled_at DESC);
 
 CREATE TABLE pricing.trip_pricing_i95 (
     interval_end_at    timestamptz NOT NULL,
