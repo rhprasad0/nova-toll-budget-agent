@@ -227,12 +227,15 @@ class TollChatRuntime:
         self._turns = 0
 
     def _is_blocked(self, text: str, source: str) -> bool:
+        text_content: dict[str, object] = {"text": text}
+        if source == "INPUT":
+            text_content["qualifiers"] = ["guard_content"]
         response = self._guardrail_client.apply_guardrail(
             guardrailIdentifier=self._guardrail_identifier,
             guardrailVersion=self._guardrail_version,
             source=source,
             outputScope="FULL",
-            content=[{"text": {"text": text}}],
+            content=[{"text": text_content}],
         )
         return response.get("action") == "GUARDRAIL_INTERVENED"
 

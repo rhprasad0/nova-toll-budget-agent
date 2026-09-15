@@ -318,6 +318,8 @@ def test_admission_accepts_a_current_full_development_rerun(
         ("call_count", True),
         ("runtime_version", "v8"),
         ("prompt_version", "2.0.2"),
+        ("guardrail_blocked", False),
+        ("address_redacted", False),
     ],
 )
 def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
@@ -349,6 +351,8 @@ def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
             "total_usd": "4.25",
             "elapsed_ms": 10,
             **_module("check_development_release.py")._canary_contract(),
+            "guardrail_blocked": True,
+            "address_redacted": True,
             "success": True,
             "commit": candidate,
             "run_id": 12,
