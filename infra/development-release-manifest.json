@@ -65,7 +65,7 @@
     "v2/agent/public-report-routes.js": "11bba4535c13628459b7d37113c7ceb0de428b76a8fec1bb8af69e74034e8eb7",
     "v2/agent/public_chat.mjs": "8302f3dae650dcfdaa45c49438a6b061bf301e71ee7fc684cca3bb4b6f9bea39",
     "v2/agent/robots.txt": "006953aa1ea1e823fdbde642b82832eca750db1ef7d22edffee8d8a7deabf879",
-    "v2/agent/telemetry.py": "a9f0a1dc62c7905564f14c9cad1e151868d2fed55ed0a78adfc47ba2f5c45c07",
+    "v2/agent/telemetry.py": "d21ee4588683dcbed28c6e457345e40fc6060756859758b20b44fb5424d72c3c",
     "v2/agent/terms.txt": "8fe686b47200732c6d823a43ae214d9113849f53f2dd9f84e65a82c62f4f46af",
     "v2/agent/toll_agent.py": "08884359e691fb4ffab87831731dff10071c33d58eefa99696d2b05994a37847",
     "v2/agent_tools/contract-manifest.json": "9e926ccdc216dbcf314fc35330bfe723f374d4566e74708242a602d2511db132",
@@ -169,7 +169,7 @@
     "v2/uv.lock": "949ab5c944868e37fa31b97c4bbca5befb41a175b240c8daec02eb0ce8c0082e"
   },
   "packages": {
-    "agentcore.zip": "a719e078c31381d89719be9547343f7898a15c0c452e5886b8d8c9e992a7a5b3",
+    "agentcore.zip": "95e3002509038e0a7cb588a51e6977cfa5de3ec851096e0c08fed3d743649475",
     "chat-proxy.zip": "44d27f8bd6015085c75aca087ef2d4a9941f5403364654c7cf83f6959087a319",
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
     "publisher.zip": "fcbd89680b1c66566e53df83081e56beb4e12937a699674b2adc143576fb03d3",

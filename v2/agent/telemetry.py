@@ -201,6 +201,20 @@ class Redactor:
             }:
                 # Contract hashes/versions are fixed application metadata.
                 result[key] = value
+            elif key == "system_prompt":
+                # The prompt hash above identifies this source-controlled content.
+                continue
+            elif key == "gen_ai.agent.tools" and isinstance(value, str):
+                try:
+                    tools = json.loads(value)
+                    if not isinstance(tools, list) or not all(
+                        isinstance(name, str) and name for name in tools
+                    ):
+                        raise ValueError
+                    content["tollchat.agent.tool_names"] = tools
+                except (TypeError, ValueError):
+                    _logger.warning("telemetry_redaction_failed")
+                    result["tollchat.agent.tool_names"] = OMITTED
             else:
                 content[key] = value
         if content:
@@ -232,7 +246,13 @@ class Redactor:
         result._attributes = self.attributes(span.attributes)
         result._resource = self.resource(span.resource)
         result._events = [
-            Event(self.text(e.name), self.attributes(e.attributes), e.timestamp)
+            Event(
+                self.text(e.name),
+                {}
+                if e.name == "gen_ai.system.message"
+                else self.attributes(e.attributes),
+                e.timestamp,
+            )
             for e in span.events
         ]
         result._links = [
