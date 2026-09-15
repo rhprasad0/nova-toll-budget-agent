@@ -49,6 +49,10 @@
     .skip-link:focus { transform:none; }
     .app-shell { display:grid; grid-template:"header map" auto "transcript map" minmax(12rem,1fr) "composer map" auto "footer map" auto / minmax(0,58fr) minmax(25rem,42fr); min-height:100svh; }
     .hero { grid-area:header; padding:28px clamp(24px,4vw,56px) 26px; border-bottom:1px solid var(--line); background:var(--paper); }
+    .project-evidence { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 18px; margin:0 0 22px; padding:14px 16px; border-radius:10px; background:var(--navy); color:#fff; }
+    .project-evidence strong { display:block; font-size:.95rem; }
+    .project-evidence p { margin:3px 0 0; color:#d5e2f4; font-size:.79rem; }
+    .project-evidence a { display:inline-flex; align-items:center; min-height:44px; color:#fff; font-size:.85rem; font-weight:800; }
     .brand-row { display:flex; align-items:center; gap:16px; }
     .brand-logo { width:68px; height:68px; flex:0 0 auto; border-radius:16px; object-fit:cover; box-shadow:0 8px 24px rgba(0,123,255,.16); }
     .brand-copy { min-width:0; margin-right:auto; }
@@ -163,6 +167,10 @@
   <a class="skip-link" href="#message">Skip the map and ask TollChat</a>
   <main class="app-shell">
     <header class="hero">
+      <aside class="project-evidence" aria-label="Engineering evidence">
+        <div><strong>How reliable is this agent?</strong><p>Inspect scheduled tests, real conversations, and failures.</p></div>
+        <a href="/eval-dashboard">View eval dashboard <span aria-hidden="true">&nbsp;→</span></a>
+      </aside>
       <div class="brand-row">
         <img class="brand-logo" src="/assets/tollchat-logo.png" alt="TollChat roadway logo" width="68" height="68">
         <div class="brand-copy">
