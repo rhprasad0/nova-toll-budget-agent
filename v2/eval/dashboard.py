@@ -6,17 +6,18 @@ import json
 import os
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import boto3
-from psycopg import Connection
-from psycopg.types.json import Jsonb
 
 from agent_tools.validate_toll_route import (
     _connect_to_database,  # pyright: ignore[reportPrivateUsage]
 )
 from eval.run_evaluation import load_cases
 from timed_checks import NEW_YORK, SCHEDULE_WINDOW_PAIRS
+
+if TYPE_CHECKING:
+    from psycopg import Connection
 
 TITLES = {
     "springfield-franconia-to-westpark": (
@@ -203,7 +204,7 @@ class Store:
         self.user = os.environ["EVAL_DB_USER"]
 
     def connect(self) -> Connection[dict[str, Any]]:
-        return cast(Connection[dict[str, Any]], _connect_to_database(self.user))
+        return cast("Connection[dict[str, Any]]", _connect_to_database(self.user))
 
     def start(
         self, window: str, scheduled: datetime, started: datetime, stale: bool
@@ -227,6 +228,8 @@ class Store:
     def finish(
         self, window: str, scheduled: datetime, status: str, evidence: dict[str, Any]
     ) -> None:
+        from psycopg.types.json import Jsonb
+
         with self.connect() as connection, connection.cursor() as cursor:
             cursor.execute(
                 """UPDATE pricing.evaluation_runs SET status=%s, finished_at=%s, evidence=%s
