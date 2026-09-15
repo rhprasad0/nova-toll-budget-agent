@@ -1582,7 +1582,7 @@ ORDER BY type.typname, privilege.grantee;
     monkeypatch.setenv("PGHOSTADDR", host)
     # Exercise the unchanged production runner at its authorized 032 ceiling.
     # A dashboard production release must separately update that contract.
-    current_registry = runner._registry
+    current_registry = runner._registry  # pyright: ignore[reportPrivateUsage]
 
     def production_registry(
         profile: runner.MigrationProfile = runner.PRODUCTION_PROFILE,
