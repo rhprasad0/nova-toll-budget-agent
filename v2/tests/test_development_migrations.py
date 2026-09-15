@@ -105,7 +105,7 @@ def test_production_registry_stays_at_032_until_dashboard_release_is_authorized(
         "listener_attempt": 1,
         "listener_run": 1,
         "release_id": 1,
-        "schema_versions": versions,
+        "schema_versions": {"pricing": "1.3.0", "oracle": versions["oracle"]},
         "tag": "v1.0.8",
     }
     result = subprocess.run(
@@ -188,7 +188,7 @@ def test_bootstrap_uses_manifest_values_for_history_insert(
     assert variables is not None
     baselines = runner.bootstrap.load_baseline_manifest()
     assert variables["pricing_version"] == next(
-        baseline.version for baseline in baselines if baseline.schema == "pricing"
+        baseline.version for baseline in baselines if baseline.schema == "pricing" and baseline.version == "1.4.0"
     )
     assert (
         variables["oracle_sha256"]

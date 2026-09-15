@@ -4,7 +4,8 @@ BEGIN;
 SET LOCAL search_path = pg_catalog, pg_temp;
 SET LOCAL lock_timeout = '5s';
 SELECT pg_advisory_xact_lock(hashtext('tollchat-v2-pricing-schema-version'));
-SELECT version = '1.3.0' AS needs_upgrade FROM pricing.schema_version WHERE singleton\gset
+SELECT version = '1.3.0' AS needs_upgrade FROM pricing.schema_version WHERE singleton
+\gset
 DO $$ BEGIN
     IF (SELECT version FROM pricing.schema_version WHERE singleton) NOT IN ('1.3.0', '1.4.0') THEN
         RAISE EXCEPTION 'expected pricing version 1.3.0 or 1.4.0';
