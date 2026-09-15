@@ -388,6 +388,7 @@ def _build_contract() -> dict[str, Mutation]:
         "index": "index.html",
         "chat": "chat.mjs",
         "usage": "usage.json",
+        "evals": "evals.html",
         "faq": "faq.html",
         "privacy": "privacy.txt",
         "terms": "terms.txt",
@@ -403,6 +404,8 @@ def _build_contract() -> dict[str, Mutation]:
         )
     for key in (
         "LICENSE.txt",
+        "evals.css",
+        "evals.mjs",
         "chat-markdown.mjs",
         "commute-estimates.json",
         "commute-map.mjs",
