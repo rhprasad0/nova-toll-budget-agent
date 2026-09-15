@@ -177,7 +177,8 @@
     "agentcore.zip": "b0f988bd61892a1a0becdeebf4c44b7fad5d05ce2ba6cfa7fd2df6873c44f48f",
     "chat-proxy.zip": "44d27f8bd6015085c75aca087ef2d4a9941f5403364654c7cf83f6959087a319",
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
-    "publisher.zip": "d5643ad399bf9d8e3bdeb6c4a84694c3254136f8fc709754973a4631553c4516"
+    "publisher.zip": "d5643ad399bf9d8e3bdeb6c4a84694c3254136f8fc709754973a4631553c4516",
+    "timed-checks.zip": "4bb45763a478df14b4a3dbce222bff1b410c3099fd9911235729377d5650e67c"
   },
   "mutations": [
     {
