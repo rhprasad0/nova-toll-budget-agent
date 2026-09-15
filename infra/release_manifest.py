@@ -233,6 +233,10 @@ def _selected(
     timed_enabled: bool = False,
     production_controls_enabled: bool = False,
 ) -> bool:
+    if path in {"v2/eval/dashboard.py"}:
+        return timed_enabled
+    if path == "v2/agent/evals.html":
+        return True
     if path in TIMED_INPUTS:
         return timed_enabled
     selected = (

@@ -495,5 +495,14 @@ class ReleaseManifestTests(unittest.TestCase):
                 self.verify()
 
 
+class DashboardInventoryTests(unittest.TestCase):
+    def test_dashboard_is_bounded_and_optional(self):
+        self.assertTrue(release_manifest._selected("v2/eval/dashboard.py", timed_enabled=True))
+        self.assertFalse(release_manifest._selected("v2/eval/dashboard.py"))
+        self.assertTrue(release_manifest._selected("v2/agent/evals.html"))
+        self.assertFalse(release_manifest._selected("v2/agent/arbitrary.html"))
+        self.assertNotIn("v2/eval/dashboard.py", release_manifest.TIMED_INPUTS)
+
+
 if __name__ == "__main__":
     unittest.main()
