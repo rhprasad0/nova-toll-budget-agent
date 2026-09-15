@@ -89,6 +89,13 @@ dump_schema() {
   fi
 }
 
+normalize_schema_dump() {
+  # Grant order records installation history, not a schema difference.
+  python3 -c 'import re, sys
+text = re.sub(r"^\\(?:un)?restrict .*\n", "", sys.stdin.read(), flags=re.M)
+print(re.sub(r"(?:^GRANT [^\n]+;\n)+", lambda m: "".join(sorted(m[0].splitlines(keepends=True))), text, flags=re.M), end="")'
+}
+
 cleanup_allowed=true
 trap cleanup EXIT
 cleanup_databases
@@ -720,9 +727,9 @@ SQL
     )"
     if [[ "$target_version" == "$bootstrap_version" ]]; then
       dump_schema --schema-only --schema "$schema_name" --no-owner "$bootstrap_db" | \
-        sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/bootstrap.sql"
+        normalize_schema_dump >"$migration_source_dir/bootstrap.sql"
       dump_schema --schema-only --schema "$schema_name" --no-owner "$migration_db" | \
-        sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/migrated.sql"
+        normalize_schema_dump >"$migration_source_dir/migrated.sql"
       diff -u "$migration_source_dir/bootstrap.sql" "$migration_source_dir/migrated.sql"
     fi
 
