@@ -66,8 +66,12 @@ def test_projection_publishes_evidence_once_and_omits_internal_fields() -> None:
         (RuntimeError("notification failed"), True),
     ],
 )
+@pytest.mark.parametrize("start_snapshot_failure", [False, True])
 def test_handler_records_execution_and_publishes_after_completion(
-    monkeypatch: pytest.MonkeyPatch, failure: Exception | None, scored: bool
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Exception | None,
+    scored: bool,
+    start_snapshot_failure: bool,
 ) -> None:
     events: list[object] = []
 
@@ -88,6 +92,8 @@ def test_handler_records_execution_and_publishes_after_completion(
 
         def publish(self) -> None:
             events.append("publish")
+            if start_snapshot_failure and events.count("publish") == 1:
+                raise RuntimeError("snapshot unavailable")
 
     def run(*args: object) -> dict[str, str]:
         events.append("evaluate")

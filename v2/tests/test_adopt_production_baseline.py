@@ -1580,17 +1580,7 @@ ORDER BY type.typname, privilege.grantee;
     monkeypatch.setenv("PGHOST", host)
     monkeypatch.setenv("PGPORT", port)
     monkeypatch.setenv("PGHOSTADDR", host)
-    # Exercise the unchanged production runner at its authorized 032 ceiling.
-    # A dashboard production release must separately update that contract.
-    current_registry = runner._registry  # pyright: ignore[reportPrivateUsage]
-
-    def production_registry(
-        profile: runner.MigrationProfile = runner.PRODUCTION_PROFILE,
-    ) -> tuple[object, dict[str, str]]:
-        schemas, versions = current_registry(profile)
-        return schemas, {**versions, "pricing": "1.3.0"}
-
-    monkeypatch.setattr(runner, "_registry", production_registry)
+    # Exercise the actual production target at its authorized 032 ceiling.
     no_op = runner.run_production()
     assert (
         no_op["before"]

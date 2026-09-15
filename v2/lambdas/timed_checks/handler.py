@@ -265,7 +265,11 @@ def handler(event: object, context: object) -> dict[str, str]:
     stale = not scheduled_run_is_fresh(schedule, started)
     store = dashboard.Store()
     claimed = store.start(window, scheduled, started, stale)
-    store.publish()
+    try:
+        store.publish()
+    except Exception:
+        # Completion retries publication; the dashboard must not gate evaluation.
+        logger.warning("Evaluation start snapshot could not be published")
     if not claimed:
         return {"status": "duplicate", "window_id": window}
     if stale:
