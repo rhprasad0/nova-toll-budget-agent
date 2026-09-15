@@ -30,6 +30,13 @@ from agent.toll_agent import build_agent  # noqa: E402
 
 _CASES_PATH = Path(__file__).with_name("test-cases.jsonl")
 _RESULTS_DIR = Path(__file__).with_name("results")
+_SCHEDULED_CASES = {
+    "i95_northbound": "springfield-franconia-to-westpark",
+    "i95_southbound": "reagan-airport-pentagon-eads-westpark-parity",
+    "i95_reversal": "old-keene-mill-to-reagan-i95-unavailable",
+    "greenway_eb_peak": "i66-west-to-route-7-current-price",
+    "greenway_wb_peak": "route-7-to-i495-south-current-price",
+}
 _EASTERN = ZoneInfo("America/New_York")
 _PROFILE = {
     "vehicle_class": "two_axle_passenger",
@@ -200,14 +207,34 @@ def load_cases(
     window: str = "all",
     weekday: int | None = None,
 ) -> list[Case[str, str]]:
+    scheduled_case = None
+    if suite == "scheduled":
+        if window not in _SCHEDULED_CASES:
+            raise ValueError("scheduled suite requires a specific timed window")
+        scheduled_case = _SCHEDULED_CASES[window]
+        if window == "i95_northbound" and weekday == 6:
+            # Springfield-Westpark is a weekday-only regression.
+            scheduled_case = "dulles-to-reagan-current-price"
     return [
         Case[str, str](
             name=row["id"],
             input=row["prompt"],
+            expected_assertion=(
+                row["expected_assertion"]
+                + " Use pricing_profile vehicle_class=two_axle_passenger, "
+                "payment_method=e_zpass, transponder_mode=toll unless the user "
+                "explicitly changes that profile."
+            )
+            if suite == "scheduled"
+            else None,
             metadata={**row, "active_window": window},
         )
         for row in load_rows(path)
-        if suite == "all" or row.get("suite") == suite
+        if (
+            row["id"] == scheduled_case
+            if suite == "scheduled"
+            else suite == "all" or row.get("suite") == suite
+        )
         if window == "all" or window in row.get("windows", [])
         if weekday is None or weekday in row.get("weekdays", range(1, 8))
     ]
@@ -1806,19 +1833,29 @@ def _configure_database() -> None:
 
 
 def main(window: str, suite: str = "all", output_dir: Path | str | None = None) -> None:
+    cases = load_cases(
+        suite=suite, window=window, weekday=datetime.now(_EASTERN).isoweekday()
+    )
+    if suite == "scheduled" and len(cases) != 1:
+        raise EvaluationExecutionError("Scheduled evaluation requires exactly one case")
     _configure_database()
+    evaluators: list[Evaluator[str, str]] = [TollChatEvaluator()]
+    task = task_function
+    if suite == "scheduled":
+        from eval import simulated
+
+        evaluators = list(simulated.evaluators())
+        task = simulated.task_function
     report = Experiment[str, str](
-        cases=load_cases(
-            suite=suite,
-            window=window,
-            weekday=datetime.now(_EASTERN).isoweekday(),
-        ),
-        evaluators=[TollChatEvaluator()],
-    ).run_evaluations(task_function)
+        cases=cases,
+        evaluators=evaluators,
+    ).run_evaluations(task)
     results_dir = _RESULTS_DIR if output_dir is None else Path(output_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
     report.to_file(str(results_dir / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
     report.display(include_input=False)
+    if suite == "scheduled" and len(report.test_passes) != 3:
+        raise EvaluationExecutionError("TollChat evaluation execution failed")
     if not all(report.test_passes):
         if any(
             not passed and not detailed_results
@@ -1830,6 +1867,21 @@ def main(window: str, suite: str = "all", output_dir: Path | str | None = None) 
         failed_indexes = [
             index for index, passed in enumerate(report.test_passes) if not passed
         ]
+        if suite == "scheduled":
+            # Strands emits one report row per judge; this is still one case.
+            summaries = [_failure_summary(report, index) for index in failed_indexes]
+            reason = " | ".join(
+                f"{report.cases[index]['evaluator']}: {summary['reason']}"
+                for index, summary in zip(failed_indexes, summaries, strict=True)
+            )
+            raise EvaluationFailure(
+                failure_count=1,
+                failure_summaries=summaries,
+                summaries_truncated=False,
+                passed_count=0,
+                case_count=1,
+                failures=((summaries[0]["case_id"], reason),),
+            )
         reasons = _report_field(report, "reasons")
         legacy_failures = (
             tuple(
@@ -3439,6 +3491,7 @@ if __name__ == "__main__":
             "--suite",
             choices=(
                 "all",
+                "scheduled",
                 "direct",
                 "fallback",
                 "unavailable",

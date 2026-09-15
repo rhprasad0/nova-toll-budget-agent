@@ -17,8 +17,6 @@ from timed_checks import (
     NEW_YORK,
     SCHEDULE_WINDOW_PAIRS,
     WINDOW_IDS,
-    run_annual_checks,
-    run_route_checks,
     scheduled_run_is_fresh,
 )
 
@@ -94,8 +92,6 @@ def handler(event: object, context: object) -> dict[str, str]:
         "scheduled_time": None,
         "actual_start_time": actual_start.isoformat(),
         "freshness": "not_checked",
-        "route": "not_run",
-        "annual": "not_run",
         "evaluation": "not_run",
     }
     phase: str | None = None
@@ -119,14 +115,10 @@ def handler(event: object, context: object) -> dict[str, str]:
             )
             raise TimedChecksStaleError("timed-check window is stale")
 
-        phase = "route"
-        run_route_checks(window_id)
-        terminal["route"] = "succeeded"
-        phase = "annual"
-        run_annual_checks()
-        terminal["annual"] = "succeeded"
         phase = "evaluation"
-        run_evaluation.main(window=window_id, output_dir=_EVAL_OUTPUT_DIR)
+        run_evaluation.main(
+            window=window_id, suite="scheduled", output_dir=_EVAL_OUTPUT_DIR
+        )
         terminal["evaluation"] = "succeeded"
         terminal["status"] = "succeeded"
         return {"status": "succeeded", "window_id": window_id}

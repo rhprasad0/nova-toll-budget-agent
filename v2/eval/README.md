@@ -1,12 +1,75 @@
 # TollChat v2 evaluation
 
-This code-graded Strands suite runs eight current-toll routing cases and twelve
-annual job-offer affordability cases through a fresh production agent. It
+The scheduled Strands suite uses simulated users and model-based judges for six
+current-toll scenarios. The broader code-graded regression catalog retains eight
+current-toll routing cases and twelve annual affordability cases. It
 verifies exact tool calls, route/fallback behavior, required-input and income
 clarification, adjustable 52-week commute-day estimates, safe annual route
 unavailability, independent AM/PM legs, retained alternative selection,
 divergent-area confirmation, scenario-bound money, and annual response
 grounding.
+
+## Minimal scheduled suite
+
+The timed-check Lambda uses `suite="scheduled"`, selecting one agent case per
+invocation. The full catalog remains available for targeted regression runs.
+
+| Window | Scheduled case |
+| --- | --- |
+| I-95 northbound, weekdays | Springfield-Franconia to Westpark |
+| I-95 northbound, Saturday | Dulles Airport to Reagan Airport |
+| I-95 southbound | Reagan Airport / Pentagon-Eads to Westpark origin correction |
+| I-95 reversal | Old Keene Mill to Reagan unavailable route |
+| Greenway morning | I-66 eastbound, I-66 West to Route 7 |
+| Greenway evening | I-66 westbound, Route 7 to I-495 South |
+
+The Saturday substitution preserves Springfield–Westpark's weekday restriction.
+The origin-correction case has two conversation turns. There are still 28 timed
+invocations per week per environment. Each runs only its selected simulated case;
+the old direct route and annual preflight checks no longer run on the timer.
+Annual and fallback agent cases remain available through explicit regression runs.
+
+### Simulated users and judges
+
+Each selected case uses Strands `ActorSimulator` with its fixture's `actor_goal`
+and a maximum of three assistant turns. The initial question is fixed; subsequent
+user replies are simulated. The Pentagon/Eads actor must correct its origin
+before finishing. The simulator has no tools: its structured stop response
+replaces the SDK's default completion tool, which otherwise uses a default
+Bedrock model.
+
+Both simulator and judges use `gpt-5.6-luna` with the existing SSM credential.
+The application agent's model and prompt are unchanged. All three checks must pass:
+
+- **ToolCallCount:** a deterministic evaluator requires exactly one
+  `get_current_toll_price` call per user turn. Zero calls, duplicate calls, or a
+  different tool fail. The two-turn origin-correction case requires two calls
+  total, one per turn. Simulator and judge calls are not counted.
+
+- **Completeness:** Strands `GoalSuccessRateEvaluator`, using the fixture's
+  `expected_assertion`. SDK 1.1.0 has no class named `CompletenessEvaluator`.
+- **Correctness:** Strands `CorrectnessEvaluator`, with a small prompt adapter
+  that includes the full conversation and actual tool results. Its default
+  reference prompt omits that evidence.
+
+The SDK `Session` is constructed from actual responses and extracted tool calls,
+preserving JSON tool payloads. Simulator messages and judge reasoning are not
+agent tool evidence. No fixed toll values, required emoji, Markdown layouts, or
+exact response phrases determine the scheduled score. Unknown/unavailable
+results are judged against their actual evidence, not presumed calendar state.
+The origin-correction case grounds each price in its own observation instead of
+requiring prices from separate calls to be identical.
+
+These judges replace `TollChatEvaluator` for the scheduled suite only. Existing
+deterministic domain checks remain available for manual diagnostics and regression runs.
+One case produces three evaluator rows in the detailed report; failure notifications
+count it as one case. Actor/judge execution errors use the operational-error path.
+The actor stopping is not itself a passing score. Empty case selections, missing
+verdicts, and pricing-tool execution errors fail through the operational-error path.
+
+The offline checks verify simulation bounds, evidence transfer, judge selection,
+and failure handling. They do not establish judge accuracy; a live run and review
+of its verdicts are still needed before relying on the new scores.
 
 ## Offline check
 
@@ -20,7 +83,7 @@ This command is network-free and runs in normal pull-request CI.
 
 ```bash
 env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
-  uv run python eval/run_evaluation.py --window i95_southbound
+  uv run python eval/run_evaluation.py --window i95_southbound --suite scheduled
 ```
 
 The Springfield-Franconia to Westpark direct-price regression runs only during
@@ -32,7 +95,7 @@ env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
   uv run python eval/run_evaluation.py --window i95_northbound --suite direct
 ```
 
-The southbound direct schedule retains one agent for a scripted Reagan Airport
+The optional southbound direct regression retains one agent for a scripted Reagan Airport
 to Westpark request followed by an I-395 Pentagon/Eads origin correction. It
 makes one current-price call per turn (two TollChat invocations total), requiring
 the exact distinct origins and equal public priced-toll projection; this is an
@@ -99,9 +162,8 @@ the checks read existing services only and do not deploy or mutate deployed data
 
 The live run needs the RDS CA bundle at `infra/build/ca/rds-ca-bundle.pem`, AWS
 access to RDS and `/nova-toll/openai_api_key`, and network access to the private
-database. The window must match the live state. Protected timed CI also runs
-the I-66 eastbound/westbound cases at 7:23 AM, 2:17 PM, and 5:23 PM Eastern so
-the active/free and both-free states are covered by the existing daily jobs.
+database. The window must match the live state. The timed Lambda selects the I-66 eastbound case at 7:23 AM and the westbound
+case at 5:23 PM Eastern. Other I-66 states require explicit regression runs.
 
 ## Asynchronous ballpark hallucination run
 
