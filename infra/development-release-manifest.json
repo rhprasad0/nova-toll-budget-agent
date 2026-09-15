@@ -10,7 +10,7 @@
   "deployment_inputs": {
     ".github/workflows/v2-development-delivery-privileged.yml": "585d739966c85176eadcadb62b6f0a1252849fc43d3dca692d5ebb5b4a867a7b",
     ".github/workflows/v2-development-delivery.yml": "e817305c2a2b02be080df82249b0bb0f4f53f0644c2b5fc72a583a2838ab0b23",
-    ".github/workflows/v2-development-migrations.yml": "aaf562cbc85a46946fb627a8fecfb2ed574c0710ad2a9be9c9bd256b872a93ed",
+    ".github/workflows/v2-development-migrations.yml": "9f077e65b48623e6b3022bb9d0316926a51bd1fd8e44433b5098a9bbbc53531e",
     ".github/workflows/v2-development-plan.yml": "d705b4abb93f5647d1e670437c0eab3daa3eed624dc885b8a4f9e0abe3ecbbe9",
     ".github/workflows/v2-production-migrations.yml": "04fa2602f3fdb87737d4d6b8e8eeb13f19b6bbb85f89e6eabde9d490a77be47c",
     "infra/.terraform.lock.hcl": "798415e2b72a761023f0ee096521a29223173428c99de7e4c50103e726eef4d8",
@@ -20,7 +20,7 @@
     "infra/backend.development.hcl": "a3ae667db1382bdffc851cffcc29f3d127df34d3ce31179e75758b2eda5526cf",
     "infra/budget.tf": "01980ebb992a5256e5cdb3ae4b3da19a197e5011b83551d94b638d0dfc1d3ec7",
     "infra/data.tf": "e8e443e33a9d908f405eec54fa6bee2075fa8c228e293d734d1b0a5fc0428bc1",
-    "infra/delivery_plan_validator.py": "afa99b0b1c5c23d2be9358fe0fc2169530c9c6cbc0f1326760ba729808eeb7a4",
+    "infra/delivery_plan_validator.py": "b2d3e5cd4bade0526f6c451e2a0e27e2f8501e544158e58e58051714b2b3c2e7",
     "infra/development-tracing.tf": "489b1cb626e528a6fb0dc68d8d2dbf8e3beb24d40a7b3d7fa92631f00e920c97",
     "infra/iam.tf": "4a94b75287b6d1ecd66dcff9ca7896cb9e5d24af9103fbd9de3446d891b74590",
     "infra/kms.tf": "be9512e49926805d56b6c521793c08880929948b820f943f0a2c5a0f9e589168",
@@ -49,6 +49,8 @@
     "v2/agent/assets/commute-map.mjs": "bd615b5ff18b6042d365277a305f102d0a7bfa361c4eeb8d0d197323a7b72057",
     "v2/agent/assets/commute-routes.mjs": "abfb43356804b4d3e150edc98deabe8ddffc4d65e7ac812e1cb5fc5f81366e6b",
     "v2/agent/assets/coverage-locations.json": "9aab142b12e6d185c450d000787c50b1f5fabbf6c48eab1c139e1150ffe66070",
+    "v2/agent/assets/evals.css": "5109a2fbbdcc7a73673c249cb8e14be4f309ea0222d74501166d37aa74044017",
+    "v2/agent/assets/evals.mjs": "2977e6c18e7cb9828f5bf9c670520c05f97fcb95b4826a4c8ff4bf293d9d5ba3",
     "v2/agent/assets/favicon.png": "dc47e12a0652a019c819ac6ff92fab231974af7fa0d5efff6652415645a149ad",
     "v2/agent/assets/maplibre-gl-6.0.0/LICENSE.txt": "ee5fc05a0677eaf69601d2c7db0d9ecd6cc27c3abc1d0733bc9ed34707cf8ef2",
     "v2/agent/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs": "ba5bae6a93301ad92b8466fce6b80f8299c5825c41ae76496293bde34db96713",
@@ -58,11 +60,12 @@
     "v2/agent/assets/markdown-it.esm.min.mjs": "eb0a6cb2beb08326ea4d3e0e3b25ac72c1e6f119a619d9bbe061e72000ffa118",
     "v2/agent/assets/tollchat-annual-commute-example.png": "c648fb2b4be4a8f4741d807a0b6e946aff6bcfbc20529bc288900e39beb6bb6a",
     "v2/agent/assets/tollchat-logo.png": "da0167c64714b0e37c234d18695aecf6f81226627ca21e105e1fcc43c397e1a6",
-    "v2/agent/dev_chat.html": "c4d4867169f6040c265f349697a6c9fa7c70506d66e41d93fea2ef5ae8d8b2e1",
-    "v2/agent/faq.html": "ad2bfde99a68f8ed16fb1f8d67a9a7a4fbff031396639a1e84700230a590547a",
+    "v2/agent/dev_chat.html": "ba691bafe85efe376cdcf65780805e939c9492587839deca0f60ced5580f1ea9",
+    "v2/agent/evals.html": "5f8baf80f46e2284d6533203a61e2fc98fed7ed720d409f1d0490d10591e58cd",
+    "v2/agent/faq.html": "09d9433615f842f51714135b3f2d5bd52cf764a4a6bb3bc45d4275871c5e37c7",
     "v2/agent/privacy.txt": "00b192c03648aaec4913aafc8e3ad30bff05d73497de7466a78fbcef1969e0f5",
     "v2/agent/public-api-gate.js": "695db31f3ab2a4f5a3ff38959b02b0bba34fd577737e1a4eae1222cd649a2bf8",
-    "v2/agent/public-report-routes.js": "11bba4535c13628459b7d37113c7ceb0de428b76a8fec1bb8af69e74034e8eb7",
+    "v2/agent/public-report-routes.js": "7198632a414b271e6119659c5f1c24b443af0018786f456410f7f899095790ed",
     "v2/agent/public_chat.mjs": "8302f3dae650dcfdaa45c49438a6b061bf301e71ee7fc684cca3bb4b6f9bea39",
     "v2/agent/robots.txt": "006953aa1ea1e823fdbde642b82832eca750db1ef7d22edffee8d8a7deabf879",
     "v2/agent/telemetry.py": "d21ee4588683dcbed28c6e457345e40fc6060756859758b20b44fb5424d72c3c",
@@ -76,7 +79,7 @@
     "v2/analytics/agent_registry.ndjson": "1e3f6acf2afa3e887a6baa0631837dec28e6384d6026cb1f3d111413426c48ec",
     "v2/db/analysis.sql": "bc348c18e81ac9015f919efa731c6edb85b7cc15e85d335aac3bcb56ba0849ca",
     "v2/db/application-schemas.json": "7db6fcb374162aaa157116b4107dab3160854ffeb5603557771043faf0dce85d",
-    "v2/db/migration-baselines.json": "872768e18348d1e23b5a63bfed36a050da8fdf7e2651b2a6f926a70802d5c2eb",
+    "v2/db/migration-baselines.json": "4d58207cee5b79cf27f42185ecf3e45210f164f49b91d3b3e5dcbd12c2c2326b",
     "v2/db/migrations/001_create_pricing_schema.sql": "4642bf10230c094ec050080ddc499d78b309af6cae4aa7c933e589fea69fb0f7",
     "v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql": "35770ff6324463c527fbda292c6b7d3d10bdf950c02d41445861e896b98158b4",
     "v2/db/migrations/003_create_oracle_schema.rollback.sql": "92a2258941372a12777d09a629ff41f411698d70a20af71a1dc3a6dc14c7479c",
@@ -110,11 +113,13 @@
     "v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql": "101ee53eb4e37f00e4bf711d9c97bf97b4c53981f5b0a6bd7a932cfea9ecee40",
     "v2/db/migrations/031_upgrade_oracle_1_14_0_to_1_14_1.sql": "aaa97f33ea603f4643b14da5bae5ae6dc58149745e2e8a29a93296be2f467608",
     "v2/db/migrations/032_upgrade_oracle_1_14_1_to_1_15_0.sql": "3e0d684ebf46f418639b109669cc257eee6d984eb5af7812daa731d62bf0e12e",
+    "v2/db/migrations/033_upgrade_pricing_1_3_0_to_1_4_0.sql": "4eeb78257eddd69e89bb89f54f80e5c64bb656804e4a973f9633e6ad82adc079",
     "v2/db/oracle/data.sql": "ec144c66a6c7e2ea8a3b0d89c298e9bcf2a29b50b7731ee6c8ab0ba4186bf560",
     "v2/db/oracle/schema.sql": "75376bd53bee64f93ddc152eba702c6391b1c9e97bc01b127f75e9f7ea1cbc35",
-    "v2/db/roles.sql": "7657a7e48f1c4f580a9c8c467c7972d58154f1560b21ed18015a968e23c20de6",
-    "v2/db/schema.sql": "fbfe52f47d1cc1f88d97e9e2f9b641f73f2798ecf9bc88e4abc9897c9190bddf",
-    "v2/eval/run_evaluation.py": "6e36187dad992288ad5f9513724323d5b20cf70ac3f5df82fd0e066a5373781e",
+    "v2/db/roles.sql": "ac2bd729a38763870e904747622b9d76a6e9bf7ba2762870607a75004e5469f1",
+    "v2/db/schema.sql": "9bed36a8a09b3f49dabf0f640702b2c72ad6955f6fb24db66825898016f6ed72",
+    "v2/eval/dashboard.py": "732804586977bff06471667b88663623459918d2e90c965195b5ca32b5ae936b",
+    "v2/eval/run_evaluation.py": "9a7fff1c2c2e88dc836491b800b4ef17018ffaf1e1d4125edc07fc68beb1e896",
     "v2/eval/test-cases.jsonl": "88339a635880daea8c29171f0003386e0d7f6efb8c787ec806eeb92fed6bdf5c",
     "v2/infra/.terraform.lock.hcl": "fd42f83e883fe5b260118f566eeb4f4a918f6c68dd791bcf7a3e5677f3830fad",
     "v2/infra/agent_measurement.tf": "4044474e5f57758fbd70b25cb53dc9a17ad00189761811d5ca2968e0e1576502",
@@ -126,9 +131,9 @@
     "v2/infra/lambda-stub/handler.py": "b012092f485d3ed57d93e39b65c57af4a34c4b03b8586c00dd1c39c088484327",
     "v2/infra/main.tf": "5b1fdf1dc7fcbf79c909b29b492f20dabda0c8c271f2f9c0e8f68e18ab7d1322",
     "v2/infra/providers.tf": "b5fc8bb0f92ed4990625aebbe95811d683f36d48a9f18ad3520238d79b95e4aa",
-    "v2/infra/site.tf": "0d22916bd4f9ea17283a55abb990eba3ad0047fc8f7fbc16f76d14a845ac7a28",
+    "v2/infra/site.tf": "8de3822ad65fe85216496660ca02e858be188e7e8f6693ddcb3ca151a4c46cb4",
     "v2/infra/telemetry-log-policy.tf": "641ab81e8c947e3c04196e856addee12bdd06a06c1e9a9f14cdb8b5f8830c03a",
-    "v2/infra/timed_checks.tf": "7f047507cf0355a5eeaf4dea4cea91106ec38ea19f01f1c38bb2b81732616e36",
+    "v2/infra/timed_checks.tf": "1e07ba046ae1d690a7a3e68383712c10771f0edba9a6313a2c1b026d3acdadff",
     "v2/infra/trace_redaction.tf": "70bd43bf038c175f47ff2ff9a125c911d0452b12ced42081fdd93808dbf60569",
     "v2/infra/variables.tf": "7fce0c65dfaf1baead6ed1358b771c4422364455e443763622b3331837f12b4d",
     "v2/infra/versions.tf": "e08079981fe5f42c0af5906a3710c635d03e346e2724811d02cb8528bb5ad32d",
@@ -140,14 +145,14 @@
     "v2/lambdas/loader/parse_csv.py": "313d5d0843f9e884e7649dc66da3ebc5cdb015e2484899f4152d5ab9fb7b19ac",
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
     "v2/lambdas/publisher/handler.py": "8f28ad63fff9dfbb89562c3ca755f264b28d36093f2051ea6699aeca9e4a510a",
-    "v2/lambdas/timed_checks/handler.py": "b35211f134fd4909d93669f9674ebf2236eb068223a25e13f30c24a97683c3c7",
+    "v2/lambdas/timed_checks/handler.py": "b7f952df617bddccc03d4e34245a40b49fdb66f4af74e4f1ed884540221ae3ea",
     "v2/pyproject.toml": "ea77ede3b884a31b975cff723d02fd797342aff3d168068a9ae38689b5b141a8",
     "v2/scripts/adopt_production_baseline.py": "eb4e85b5a6d92f11906c3a53a4adfe304bf136f386cb8791a5b9fd814e36db4f",
     "v2/scripts/build_agentcore_zips.sh": "574086ee097150d0557ff6b8d04a831c9c78c2efc1311d4768dea07cb56ae7e7",
     "v2/scripts/build_loader_zip.sh": "018e0f5ff41f8619d8903481928bfb40e765c9356af132cf6104a4ad40fa5646",
     "v2/scripts/build_publisher_zip.sh": "174e88fd65a997a16c08cf7f838105b7d19a2e3d1fc0a63d460ad43bcaf4834b",
     "v2/scripts/build_release_bundle.sh": "40bf8759eddb5b75a5b0e44b3fbd568f2252f1e5fa034163da8111c444a5c6e8",
-    "v2/scripts/build_timed_checks_zip.sh": "1ce0ef99fc6eeb7d5c91cf3edf6bb7bd3d77492770efa7c2c2a8cf2e7ea4f675",
+    "v2/scripts/build_timed_checks_zip.sh": "836065aec814e27a8c97744874e8ed298e4a16b1240e01c743f8143bc50e65d2",
     "v2/scripts/check_development_admission.py": "60222d03555f2dad9373947b7fa1dbb0db817e78300c9fe373db37afd21f972b",
     "v2/scripts/check_development_release.py": "293e9cac4c15bbc8b7d7e68a34fec17f39385aee9254b1dd53baf56f0333c543",
     "v2/scripts/check_production_release.py": "8e2d51d50fc5b7034a23129a13ae8ef9a1d9a277c76ee7ccdcfb78392c6aafe7",
@@ -157,7 +162,7 @@
     "v2/scripts/loader-requirements.txt": "7e35ab33589fae931d8bac07a7e32f868c02c4f37b629eb4208075a98fd918b4",
     "v2/scripts/publisher-requirements.in": "443323b60ce646abe57f80efe6a842af9467d089d73459b84830450825fabdcc",
     "v2/scripts/publisher-requirements.txt": "cb3079cc8c5512aa65994c7dd3c2e31a5f98386e53a7d059622badf96be11019",
-    "v2/scripts/run_development_migrations.py": "ca3a5ddf48fea1bdfb673a4f96045d1892f05e98a8134207fbe24a7c22fa2a7a",
+    "v2/scripts/run_development_migrations.py": "98d1f1c1e2ff916b834127cedb138f6b2b9f3f105415500dfffc1e8a0bff9467",
     "v2/scripts/run_development_migrations_workflow.sh": "06279a34ca06825152139ddf18d1f593d0d8d94e5dee1388e9eedf7af67c1185",
     "v2/scripts/run_private_stage.sh": "e6335bce0b7971d425e457e35df7d4fc1c5fcce212cc338322a65f9c535fdf76",
     "v2/scripts/run_production_migrations.py": "2077cbd16ba4832de6c75f1f113c2f23bb16f1d57a0dcb1615701b2631bb2e5c",
@@ -173,7 +178,7 @@
     "chat-proxy.zip": "44d27f8bd6015085c75aca087ef2d4a9941f5403364654c7cf83f6959087a319",
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
     "publisher.zip": "d5643ad399bf9d8e3bdeb6c4a84694c3254136f8fc709754973a4631553c4516",
-    "timed-checks.zip": "8ed931737d7204dc760fdb0ea465084aa21a4d7a59f8c6b0d2029bae4bd979a0"
+    "timed-checks.zip": "4225b216dea0490f3d7acf3e142ddb23ce5ba515d5e873e47363277ab2657293"
   },
   "mutations": [
     {
@@ -495,6 +500,48 @@
         "tags",
         "threshold",
         "treat_missing_data"
+      ]
+    },
+    {
+      "address": "aws_cloudfront_function.public_report_routes",
+      "action": "update",
+      "operation_class": "cloudfront-code",
+      "changed_fields": [
+        "code"
+      ]
+    },
+    {
+      "address": "aws_s3_object.evals",
+      "action": "create",
+      "operation_class": "site-object-upload",
+      "changed_fields": [
+        "cache_control",
+        "content",
+        "content_type",
+        "source",
+        "source_hash"
+      ]
+    },
+    {
+      "address": "aws_s3_object.site_assets[\"evals.css\"]",
+      "action": "create",
+      "operation_class": "site-asset-upload",
+      "changed_fields": [
+        "cache_control",
+        "content_type",
+        "source",
+        "source_hash"
+      ]
+    },
+    {
+      "address": "aws_s3_object.site_assets[\"evals.mjs\"]",
+      "action": "create",
+      "operation_class": "site-asset-upload",
+      "changed_fields": [
+        "cache_control",
+        "content_type",
+        "source",
+        "source_hash"
       ]
     }
   ],
@@ -829,6 +876,36 @@
       "address": "aws_cloudwatch_metric_alarm.telemetry_pii[\"preview\"]",
       "action": "cloudwatch:UntagResource",
       "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-pii-findings-preview-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudfront_function.public_report_routes",
+      "action": "cloudfront:UpdateFunction",
+      "resource": "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-report-routes-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudfront_function.public_report_routes",
+      "action": "cloudfront:PublishFunction",
+      "resource": "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-report-routes-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.evals",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.site_assets[\"evals.css\"]",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.site_assets[\"evals.mjs\"]",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/*",
       "conditions": {}
     }
   ]

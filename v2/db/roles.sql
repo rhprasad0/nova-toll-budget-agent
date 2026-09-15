@@ -20,6 +20,18 @@ EXCEPTION
     WHEN duplicate_object THEN NULL;
 END $$;
 
+DO $$
+BEGIN
+    CREATE ROLE eval_writer LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+GRANT rds_iam TO eval_writer;
+DO $$ BEGIN
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO eval_writer', current_database());
+END $$;
+GRANT USAGE ON SCHEMA pricing TO eval_writer;
+GRANT SELECT, INSERT, UPDATE ON pricing.evaluation_runs TO eval_writer;
+
 GRANT rds_iam TO pricing_loader_writer, pricing_reader;
 GRANT USAGE ON SCHEMA pricing TO pricing_loader_writer, pricing_reader;
 

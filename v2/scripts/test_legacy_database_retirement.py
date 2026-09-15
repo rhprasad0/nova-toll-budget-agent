@@ -202,7 +202,7 @@ def _require_fixture_target() -> None:
             "SELECT count(*) FROM pg_roles WHERE rolname LIKE '%\\_development' ESCAPE '\\' "
             "AND shobj_description(oid, 'pg_authid') = 'environment=development'"
         )
-        != "8"
+        != "9"
     ):
         raise AssertionError("initialized development role comments are wrong")
 
@@ -230,6 +230,10 @@ def _setup() -> None:
         _psql_file(rendered / "v2/db/schema.sql", DEVELOPMENT, role=FIXTURE_OWNER)
         _psql_file(rendered / "v2/db/roles.sql", DEVELOPMENT)
         _psql_file(rendered / "v2/db/oracle/schema.sql", DEVELOPMENT)
+    # Recreate the legacy six-role fixture before testing its fixed retirement contract.
+    _sql("DROP OWNED BY eval_writer_development", DEVELOPMENT)
+    _sql("DROP ROLE eval_writer_development")
+    _sql("REVOKE CONNECT ON DATABASE nova_toll FROM eval_writer")
     _sql(
         f"COMMENT ON DATABASE {DEVELOPMENT} IS 'environment=development';"
         f"REVOKE CONNECT ON DATABASE {DEVELOPMENT} FROM PUBLIC;"

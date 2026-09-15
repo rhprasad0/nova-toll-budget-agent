@@ -6,14 +6,14 @@ DECLARE
   development_roles text[] := ARRAY[
     'pricing_loader_writer_development', 'pricing_reader_development',
     'oracle_owner_development', 'tollchat_agent_development',
-    'pricing_caller_development', 'report_publisher_development',
+    'pricing_caller_development', 'report_publisher_development', 'eval_writer_development',
     'pricing_owner_development', 'schema_migrator_development'
   ];
 BEGIN
   IF current_database() <> 'nova_toll_development'
-     OR (SELECT count(*) FROM pg_roles WHERE rolname = ANY (development_roles)) <> 8
+     OR (SELECT count(*) FROM pg_roles WHERE rolname = ANY (development_roles)) <> 9
      OR (SELECT count(*) FROM pg_roles
-         WHERE rolname LIKE E'%\\_development' ESCAPE E'\\') <> 8 THEN
+         WHERE rolname LIKE E'%\\_development' ESCAPE E'\\') <> 9 THEN
     RAISE EXCEPTION 'fresh development identity is wrong';
   END IF;
   IF (SELECT description FROM pg_shdescription
@@ -47,12 +47,12 @@ DECLARE
   role_name text;
   production_roles text[] := ARRAY[
     'pricing_loader_writer', 'pricing_reader', 'oracle_owner', 'tollchat_agent',
-    'pricing_caller', 'report_publisher'
+    'pricing_caller', 'report_publisher', 'eval_writer'
   ];
   development_roles text[] := ARRAY[
     'pricing_loader_writer_development', 'pricing_reader_development',
     'oracle_owner_development', 'tollchat_agent_development',
-    'pricing_caller_development', 'report_publisher_development',
+    'pricing_caller_development', 'report_publisher_development', 'eval_writer_development',
     'pricing_owner_development', 'schema_migrator_development'
   ];
 BEGIN
@@ -117,7 +117,7 @@ BEGIN
   ) OR EXISTS (
     SELECT 1 FROM pg_roles
     WHERE rolname IN ('pricing_loader_writer', 'pricing_reader', 'tollchat_agent',
-                      'pricing_caller', 'report_publisher')
+                      'pricing_caller', 'report_publisher', 'eval_writer')
       AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
            OR rolreplication OR rolbypassrls)
   ) THEN
@@ -144,10 +144,10 @@ DECLARE
   runtime_roles text[] := ARRAY[
     'pricing_loader_writer_development', 'pricing_reader_development',
     'oracle_owner_development', 'tollchat_agent_development',
-    'pricing_caller_development', 'report_publisher_development'
+    'pricing_caller_development', 'report_publisher_development', 'eval_writer_development'
   ];
 BEGIN
-  IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.3.0'
+  IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.4.0'
      OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.15.0'
      OR (SELECT count(*) FROM oracle.toll_route_point) <> 220
      OR (SELECT count(*) FROM oracle.toll_connection) <> 996 THEN
@@ -172,7 +172,7 @@ BEGIN
     SELECT 1 FROM pg_roles
     WHERE rolname IN ('pricing_loader_writer_development', 'pricing_reader_development',
                       'tollchat_agent_development', 'pricing_caller_development',
-                      'report_publisher_development')
+                      'report_publisher_development', 'eval_writer_development')
       AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
            OR rolreplication OR rolbypassrls)
   ) THEN
@@ -376,7 +376,7 @@ BEGIN
        SELECT 1 FROM tollchat_migration.schema_history
        WHERE NOT is_baseline OR migration_id <> 'baseline'
          OR (schema_name, schema_version, source_path) NOT IN (
-           ('pricing', '1.3.0', 'v2/db/schema.sql'),
+           ('pricing', '1.4.0', 'v2/db/schema.sql'),
            ('oracle', '1.15.0', 'v2/db/oracle/schema.sql')
          )
          OR source_sha256 !~ '^[0-9a-f]{64}$'

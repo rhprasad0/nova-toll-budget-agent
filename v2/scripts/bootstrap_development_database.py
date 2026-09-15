@@ -34,6 +34,7 @@ ROLES = {
         "tollchat_agent",
         "pricing_caller",
         "report_publisher",
+        "eval_writer",
     ),
     "development": (
         "pricing_loader_writer_development",
@@ -42,6 +43,7 @@ ROLES = {
         "tollchat_agent_development",
         "pricing_caller_development",
         "report_publisher_development",
+        "eval_writer_development",
         "pricing_owner_development",
         "schema_migrator_development",
     ),
@@ -52,6 +54,7 @@ LOCAL_PORT = re.compile(r"[1-9][0-9]{0,4}\Z")
 DEVELOPMENT_RUNTIME_ROLE_COUNT = len(ROLES["production"])
 PRICING_OWNER_TABLES = (
     "pricing.schema_version",
+    "pricing.evaluation_runs",
     "pricing.trip_pricing_i95",
     "pricing.trip_pricing_i66",
 )
@@ -794,7 +797,7 @@ def main() -> int:
         not IDENTIFIER.fullmatch(name) for names in ROLES.values() for name in names
     ):
         raise RuntimeError("bootstrap role map contains an unsafe identifier")
-    if len(set(ROLES["production"] + ROLES["development"])) != 14:
+    if len(set(ROLES["production"] + ROLES["development"])) != 16:
         raise RuntimeError("bootstrap role map contains duplicate identifiers")
     if len(sys.argv) == 2 and sys.argv[1] == "--fresh-development":
         return fresh_development()
@@ -822,7 +825,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname IN ({dev_roles})) THEN
     RAISE EXCEPTION 'development role already exists';
   END IF;
-  IF (SELECT count(*) FROM pg_roles WHERE rolname IN ({", ".join(repr(role) for role in ROLES["production"])})) <> 6 THEN
+  IF (SELECT count(*) FROM pg_roles WHERE rolname IN ({", ".join(repr(role) for role in ROLES["production"])})) <> 7 THEN
     RAISE EXCEPTION 'required production role is missing';
   END IF;
   IF EXISTS (
@@ -859,7 +862,7 @@ BEGIN
       AND privilege.grantee NOT IN (0, database.datdba)
       AND privilege.grantee NOT IN (to_regrole('pricing_loader_writer'), to_regrole('pricing_reader'),
         to_regrole('oracle_owner'), to_regrole('tollchat_agent'), to_regrole('pricing_caller'),
-        to_regrole('report_publisher'))
+        to_regrole('report_publisher'), to_regrole('eval_writer'))
   ) THEN
     RAISE EXCEPTION 'production database has unexpected CONNECT grantee';
   END IF;
@@ -938,7 +941,7 @@ BEGIN
       AND privilege.grantee <> database.datdba
       AND privilege.grantee NOT IN (to_regrole('pricing_loader_writer'), to_regrole('pricing_reader'),
         to_regrole('oracle_owner'), to_regrole('tollchat_agent'), to_regrole('pricing_caller'),
-        to_regrole('report_publisher'))
+        to_regrole('report_publisher'), to_regrole('eval_writer'))
   ) OR EXISTS (
     SELECT 1 FROM pg_database database, LATERAL aclexplode(database.datacl) privilege
     WHERE database.datname = 'nova_toll_development' AND privilege.privilege_type = 'CONNECT'
@@ -946,7 +949,7 @@ BEGIN
       AND privilege.grantee NOT IN (to_regrole('pricing_loader_writer_development'),
         to_regrole('pricing_reader_development'), to_regrole('oracle_owner_development'),
         to_regrole('tollchat_agent_development'), to_regrole('pricing_caller_development'),
-        to_regrole('report_publisher_development'), to_regrole('pricing_owner_development'),
+        to_regrole('report_publisher_development'), to_regrole('eval_writer_development'), to_regrole('pricing_owner_development'),
         to_regrole('schema_migrator_development'))
   ) THEN RAISE EXCEPTION 'database has unexpected CONNECT grantee'; END IF;
   FOREACH role_name IN ARRAY production_roles LOOP

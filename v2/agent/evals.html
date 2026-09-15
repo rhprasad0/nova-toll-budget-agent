@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Live scheduled tests of TollChat’s evidence-backed AI answers."
+    />
+    <meta name="eval-environment" content="${environment}" />
+    <title>TollChat · Evaluation explorer</title>
+    <link rel="stylesheet" href="/assets/evals.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to results</a>
+    <div class="demo">
+      <strong id="environment">Evaluation explorer</strong> ·
+      <span id="freshness" role="status">Loading real scheduled results…</span>
+    </div>
+    <div class="wrap">
+      <header class="nav">
+        <a class="brand" href="#main" aria-label="TollChat evaluation explorer"
+          ><span class="mark" aria-hidden="true">T</span
+          ><span class="brand-name"
+            >tollchat<span style="color: var(--blue)">.</span></span
+          ><span class="nav-caption">Engineering notebook</span></a
+        >
+        <nav class="nav-links" aria-label="Project links">
+          <a href="https://github.com/rhprasad0/nova-toll-budget-agent"
+            >Source code ↗</a
+          ><a href="https://tollchat.ai">Try TollChat ↗</a>
+        </nav>
+      </header>
+      <main id="main">
+        <section class="hero" aria-labelledby="title">
+          <div>
+            <p class="eyebrow">Evaluation explorer</p>
+            <h1 id="title">
+              A useful answer.<br /><span>An inspectable result.</span>
+            </h1>
+            <p class="lede">
+              TollChat is an AI assistant for Northern Virginia toll prices. It
+              looks up road and pricing evidence, then explains the result.
+              These automated conversations test whether it answers the request
+              without inventing facts.
+            </p>
+            <p class="hero-note">
+              <strong>The engineering challenge:</strong> prices change, express
+              lanes reverse direction, and people change their minds.
+            </p>
+          </div>
+          <aside class="process" aria-label="How one test works">
+            <p class="process-title">
+              FROM A USER QUESTION TO CHECKABLE EVIDENCE
+            </p>
+            <div class="step">
+              <span class="step-no">01</span>
+              <div>
+                <h3>A simulated user asks a real-world question</h3>
+                <p>
+                  Including follow-ups like “I meant a different starting
+                  point.”
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="step-no">02</span>
+              <div>
+                <h3>The assistant consults a pricing tool</h3>
+                <p>
+                  The tool provides the route, price, and available evidence.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="step-no">03</span>
+              <div>
+                <h3>Three checks inspect what happened</h3>
+                <p>
+                  Did it answer the request? Are its claims supported? Did it
+                  use one pricing lookup per turn?
+                </p>
+              </div>
+            </div>
+          </aside>
+        </section>
+        <section aria-labelledby="snapshot-title">
+          <div class="section-head">
+            <div>
+              <h2 id="snapshot-title">A small test suite. Visible outcomes.</h2>
+              <p>
+                Six selected scenarios, scheduled for the road conditions they
+                exercise.
+              </p>
+            </div>
+            <div class="scope">
+              <strong>Live scheduled evaluations</strong><br /><span
+                id="updated"
+                >No snapshot loaded</span
+              >
+            </div>
+          </div>
+          <div class="metrics" id="metrics"></div>
+          <div class="activity">
+            <div class="activity-left">
+              <span>Last seven days · oldest first</span>
+              <div
+                class="ticks"
+                id="ticks"
+                aria-label="Recent attempt outcomes"
+              ></div>
+            </div>
+            <div class="legend">
+              <span><i class="dot green" aria-hidden="true"></i>Passed</span
+              ><span><i class="dot red" aria-hidden="true"></i>Failed</span
+              ><span
+                ><i class="dot amber" aria-hidden="true"></i>Execution
+                error</span
+              >
+            </div>
+          </div>
+        </section>
+        <section aria-labelledby="scenario-title">
+          <div class="section-head">
+            <div>
+              <h2 id="scenario-title">What we put to the test</h2>
+              <p>
+                Open a result to see the conversation, evidence, and verdicts.
+              </p>
+            </div>
+            <div class="scope">6 scenarios<br />28 scheduled runs / week</div>
+          </div>
+          <div id="scenarios" class="scenario-grid"></div>
+        </section>
+        <section class="history" aria-labelledby="history-title">
+          <div class="section-head">
+            <div>
+              <h2 id="history-title">Recent runs</h2>
+              <p>A run passes only when all three checks pass.</p>
+            </div>
+            <label class="filter"
+              >Show outcome<select id="outcome">
+                <option value="all">All outcomes</option>
+                <option value="passed">Passed</option>
+                <option value="failed">Failed</option>
+                <option value="error">Execution error</option>
+              </select></label
+            >
+          </div>
+          <div id="history" class="history-list"></div>
+          <div class="history-foot">
+            <span id="shown" role="status" aria-live="polite"></span
+            ><span>Rolling seven-day history · All times Eastern</span>
+          </div>
+        </section>
+        <section class="method" aria-labelledby="method-title">
+          <div>
+            <p class="eyebrow">Behind the results</p>
+            <h2 id="method-title">What these checks<br />can tell you</h2>
+          </div>
+          <div class="method-cols">
+            <div>
+              <h3>Evidence, not a general accuracy claim</h3>
+              <p>
+                These six scenarios cover selected current-toll conversations.
+                They do not measure every route, annual commute estimates, or
+                every possible user request. An honest “current pricing is
+                unavailable” can be a correct answer.
+              </p>
+            </div>
+            <div>
+              <h3>Model judgment + an exact rule</h3>
+              <p>
+                AI judges assess completeness and factual correctness against
+                the tool evidence. Code counts the pricing lookups. Judges can
+                make mistakes, so individual examples remain inspectable.
+              </p>
+            </div>
+            <details>
+              <summary>How scheduling and grading work</summary>
+              <p>
+                One scenario runs per scheduled window, with 28 runs each week.
+                Weekday and Saturday northbound windows use different scenarios.
+                Their latest results will naturally have different timestamps; a
+                scenario awaiting its first scheduled run has no score.
+              </p>
+              <p>
+                Strands ActorSimulator supplies follow-up messages, with at most
+                three assistant turns. The application, simulator, and judges
+                use GPT-5.6 Luna. Completeness uses Strands
+                GoalSuccessRateEvaluator; correctness uses CorrectnessEvaluator
+                with the conversation and tool evidence. A deterministic check
+                requires exactly one pricing call per user turn. The
+                origin-correction example has two turns and two calls total.
+              </p>
+              <p>
+                The pass rate counts passed runs divided by completed, graded
+                runs. Execution errors are shown separately and are not counted
+                as passes or graded failures. Missing or unscored results never
+                become a passing score. This page shows the environment named at
+                the top. Results refresh every minute while the page is visible.
+              </p>
+            </details>
+          </div>
+        </section>
+      </main>
+      <footer>
+        <span>TollChat · A practical AI agent reference implementation</span
+        ><span
+          >Live scheduled evaluations &nbsp; · &nbsp;
+          <a href="https://github.com/rhprasad0/nova-toll-budget-agent"
+            >Explore the implementation ↗</a
+          ></span
+        >
+      </footer>
+      <noscript
+        ><p>
+          Enable JavaScript to load the latest published evaluation results.
+        </p></noscript
+      >
+    </div>
+    <script type="module" src="/assets/evals.mjs"></script>
+  </body>
+</html>

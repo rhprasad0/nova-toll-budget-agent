@@ -203,3 +203,14 @@ writes `results.json` plus every failure and a deterministic 20-pass sample in
 `review.json`. Expired or failed work is never resubmitted automatically.
 The completed run and adjudicated findings are summarized in
 [`ballpark-hallucination-report.md`](ballpark-hallucination-report.md).
+
+## Public evaluation dashboard
+
+`/eval-dashboard` presents real scheduled results in plain language. The timed
+Lambda stores occurrence history in Postgres and publishes a sanitized S3
+snapshot; the browser refreshes it every minute. It shows seven days of history
+and the latest actual conversation, pricing evidence, and judge explanations for
+each scenario. Errors and missing runs are separate from graded failures.
+Development publication is enabled first; production remains on hold.
+See the [dashboard runbook](../runbooks/eval-dashboard.md) for delivery order,
+permissions, and verification.
