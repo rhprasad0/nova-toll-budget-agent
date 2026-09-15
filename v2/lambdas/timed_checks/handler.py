@@ -273,7 +273,14 @@ def handler(event: object, context: object) -> dict[str, str]:
     evidence: dict[str, Any] = {}
 
     def captured(report: object) -> None:
+        nonlocal outcome
         evidence.update(dashboard.project_report(report))
+        # A subsequent notification failure does not erase a completed grade.
+        outcome = (
+            "passed"
+            if all(check["passed"] for check in evidence["checks"])
+            else "failed"
+        )
 
     outcome = "error"
     try:

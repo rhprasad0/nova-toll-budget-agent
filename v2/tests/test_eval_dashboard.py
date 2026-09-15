@@ -1,6 +1,7 @@
+from collections.abc import Callable
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -57,9 +58,16 @@ def test_projection_publishes_evidence_once_and_omits_internal_fields() -> None:
         dashboard.project_report(report)
 
 
-@pytest.mark.parametrize("failure", [None, RuntimeError("private exception")])
+@pytest.mark.parametrize(
+    "failure,scored",
+    [
+        (None, False),
+        (RuntimeError("private exception"), False),
+        (RuntimeError("notification failed"), True),
+    ],
+)
 def test_handler_records_execution_and_publishes_after_completion(
-    monkeypatch: pytest.MonkeyPatch, failure: Exception | None
+    monkeypatch: pytest.MonkeyPatch, failure: Exception | None, scored: bool
 ) -> None:
     events: list[object] = []
 
@@ -75,20 +83,27 @@ def test_handler_records_execution_and_publishes_after_completion(
             status: str,
             evidence: dict[str, Any],
         ) -> None:
-            assert not evidence
+            assert bool(evidence) == scored
             events.append(status)
 
         def publish(self) -> None:
             events.append("publish")
 
-    def run(*_: object) -> dict[str, str]:
+    def run(*args: object) -> dict[str, str]:
         events.append("evaluate")
+        if scored:
+            cast(Callable[[object], None], args[2])(object())
         if failure:
             raise failure
         return {"status": "succeeded", "window_id": "i95_southbound"}
 
     monkeypatch.setenv("EVAL_DASHBOARD_BUCKET", "test")
     monkeypatch.setattr(dashboard, "Store", Store)
+
+    def projected(_: object) -> dict[str, object]:
+        return {"checks": [{"passed": False}]}
+
+    monkeypatch.setattr(dashboard, "project_report", projected)
 
     def fresh(*_: object) -> bool:
         return True
@@ -105,7 +120,7 @@ def test_handler_records_execution_and_publishes_after_completion(
         "start",
         "publish",
         "evaluate",
-        "error" if failure else "passed",
+        "failed" if scored else "error" if failure else "passed",
         "publish",
     ]
 
