@@ -27,6 +27,14 @@ def no_sleep(_seconds: float) -> None:
     pass
 
 
+def fixed_token_hex(_size: int) -> str:
+    return "fixed"
+
+
+def one_trace(_started: object) -> list[tuple[str, int]]:
+    return [("trace", 50)]
+
+
 @pytest.fixture
 def release(
     monkeypatch: pytest.MonkeyPatch,
@@ -564,8 +572,8 @@ def test_security_checks_block_guardrail_and_find_redacted_address_trace(
         )
 
     monkeypatch.setattr(check, "request", request)
-    monkeypatch.setattr(check.secrets, "token_hex", lambda _size: "fixed")
-    monkeypatch.setattr(check, "_trace_objects", lambda _started: [("trace", 50)])
+    monkeypatch.setattr(check.secrets, "token_hex", fixed_token_hex)
+    monkeypatch.setattr(check, "_trace_objects", one_trace)
     monkeypatch.setattr(check, "_download_trace", download)
 
     assert check.security_checks() == {
@@ -595,20 +603,25 @@ def test_security_checks_fail_closed_when_archived_trace_exposes_address(
         return 200, "application/x-ndjson", json.dumps(event).encode()
 
     def download(_key: str, destination: Path) -> None:
+        records = [
+            {
+                "kind": "input",
+                "body": "tollchat-address-redaction-v1-fixed {ADDRESS}",
+            },
+            {
+                "kind": "input",
+                "body": "tollchat-address-redaction-v1-fixed "
+                + check.SYNTHETIC_ADDRESS,
+            },
+        ]
         destination.write_text(
-            json.dumps(
-                {
-                    "kind": "input",
-                    "body": "tollchat-address-redaction-v1-fixed "
-                    + check.SYNTHETIC_ADDRESS,
-                }
-            ),
+            "\n".join(json.dumps(record) for record in records),
             encoding="utf-8",
         )
 
     monkeypatch.setattr(check, "request", request)
-    monkeypatch.setattr(check.secrets, "token_hex", lambda _size: "fixed")
-    monkeypatch.setattr(check, "_trace_objects", lambda _started: [("trace", 50)])
+    monkeypatch.setattr(check.secrets, "token_hex", fixed_token_hex)
+    monkeypatch.setattr(check, "_trace_objects", one_trace)
     monkeypatch.setattr(check, "_download_trace", download)
 
     with pytest.raises(check.CheckFailure, match="address_exposed"):

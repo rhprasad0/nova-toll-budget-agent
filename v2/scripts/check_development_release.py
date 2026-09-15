@@ -628,6 +628,7 @@ def security_checks() -> dict[str, bool]:
         marker_bytes = marker.encode()
         address_bytes = SYNTHETIC_ADDRESS.encode()
         while time.monotonic() < deadline:
+            redacted = False
             with tempfile.TemporaryDirectory(prefix="tollchat-trace-") as temporary:
                 for index, (key, _size) in enumerate(_trace_objects(started)):
                     path = Path(temporary) / str(index)
@@ -637,11 +638,13 @@ def security_checks() -> dict[str, bool]:
                         if marker_bytes in line:
                             require(address_bytes not in line, "address_exposed")
                             if b"{ADDRESS}" in line:
-                                _diagnostic("pass", "validated")
-                                return {
-                                    "guardrail_blocked": True,
-                                    "address_redacted": True,
-                                }
+                                redacted = True
+            if redacted:
+                _diagnostic("pass", "validated")
+                return {
+                    "guardrail_blocked": True,
+                    "address_redacted": True,
+                }
             time.sleep(10)
         _fail("trace_timeout")
     finally:
