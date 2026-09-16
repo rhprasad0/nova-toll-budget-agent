@@ -30,5 +30,13 @@
     "source_path": "v2/db/oracle/schema.sql",
     "source_sha256": "75376bd53bee64f93ddc152eba702c6391b1c9e97bc01b127f75e9f7ea1cbc35",
     "evidence": "canonical bootstrap baseline; no application migration executed"
+  },
+  {
+    "schema": "pricing",
+    "version": "1.4.0",
+    "migration_id": "baseline",
+    "source_path": "v2/db/schema.sql",
+    "source_sha256": "9bed36a8a09b3f49dabf0f640702b2c72ad6955f6fb24db66825898016f6ed72",
+    "evidence": "canonical bootstrap baseline; no application migration executed"
   }
 ]

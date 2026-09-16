@@ -77,6 +77,30 @@ resource "aws_iam_role_policy_attachment" "timed_checks_lambda_vpc" {
 }
 
 data "aws_iam_policy_document" "timed_checks_lambda" {
+  dynamic "statement" {
+    for_each = local.is_development ? [1] : []
+    content {
+      sid       = "ConnectEvaluationHistory"
+      actions   = ["rds-db:connect"]
+      resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/eval_writer_development"]
+    }
+  }
+  dynamic "statement" {
+    for_each = local.is_development ? [1] : []
+    content {
+      sid       = "PublishEvaluationSnapshot"
+      actions   = ["s3:PutObject"]
+      resources = ["${aws_s3_bucket.site.arn}/evals.json"]
+    }
+  }
+  dynamic "statement" {
+    for_each = local.is_development ? [1] : []
+    content {
+      sid       = "EncryptEvaluationSnapshot"
+      actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
+      resources = [aws_kms_key.site.arn]
+    }
+  }
   statement {
     sid       = "DescribeRdsEndpoint"
     actions   = ["rds:DescribeDBInstances"]
@@ -237,7 +261,10 @@ resource "aws_lambda_function" "timed_checks" {
       DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"
       TIMED_CHECK_ALERTS_ENABLED = tostring(local.timed_check_alerts_enabled)
       ENVIRONMENT                = var.environment
-      }, local.timed_check_alerts_enabled ? {
+      }, local.is_development ? {
+      EVAL_DASHBOARD_BUCKET = aws_s3_bucket.site.id
+      EVAL_DB_USER          = "eval_writer_development"
+      } : {}, local.timed_check_alerts_enabled ? {
       ALERTS_TOPIC_ARN = var.foundation.alerts_topic_arn
     } : {})
   }

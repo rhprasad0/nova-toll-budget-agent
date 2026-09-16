@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -17,8 +18,6 @@ from timed_checks import (
     NEW_YORK,
     SCHEDULE_WINDOW_PAIRS,
     WINDOW_IDS,
-    run_annual_checks,
-    run_route_checks,
     scheduled_run_is_fresh,
 )
 
@@ -82,7 +81,9 @@ def _log_stream_url(region: str, log_group: str, log_stream: str) -> str:
     )
 
 
-def handler(event: object, context: object) -> dict[str, str]:
+def _run_handler(
+    event: object, context: object, on_report: Callable[[object], None] | None = None
+) -> dict[str, str]:
     """Validate and run one timed-check window."""
     window_id: str | None = None
     schedule: str | None = None
@@ -94,8 +95,6 @@ def handler(event: object, context: object) -> dict[str, str]:
         "scheduled_time": None,
         "actual_start_time": actual_start.isoformat(),
         "freshness": "not_checked",
-        "route": "not_run",
-        "annual": "not_run",
         "evaluation": "not_run",
     }
     phase: str | None = None
@@ -119,14 +118,18 @@ def handler(event: object, context: object) -> dict[str, str]:
             )
             raise TimedChecksStaleError("timed-check window is stale")
 
-        phase = "route"
-        run_route_checks(window_id)
-        terminal["route"] = "succeeded"
-        phase = "annual"
-        run_annual_checks()
-        terminal["annual"] = "succeeded"
         phase = "evaluation"
-        run_evaluation.main(window=window_id, output_dir=_EVAL_OUTPUT_DIR)
+        if on_report is None:
+            run_evaluation.main(
+                window=window_id, suite="scheduled", output_dir=_EVAL_OUTPUT_DIR
+            )
+        else:
+            run_evaluation.main(
+                window=window_id,
+                suite="scheduled",
+                output_dir=_EVAL_OUTPUT_DIR,
+                on_report=on_report,
+            )
         terminal["evaluation"] = "succeeded"
         terminal["status"] = "succeeded"
         return {"status": "succeeded", "window_id": window_id}
@@ -244,3 +247,53 @@ def handler(event: object, context: object) -> dict[str, str]:
         raise
     finally:
         _emit_result(terminal)
+
+
+def handler(event: object, context: object) -> dict[str, str]:
+    """Publish only scheduled invocations in an explicitly configured environment."""
+    if not os.environ.get("EVAL_DASHBOARD_BUCKET"):
+        return _run_handler(event, context)
+    from eval import dashboard
+
+    # Keep malformed invocations on the original validation/logging boundary.
+    try:
+        window, schedule = _validate_event(event)
+    except TimedChecksValidationError:
+        return _run_handler(event, context)
+    started = datetime.now(NEW_YORK)
+    scheduled = _scheduled_time(schedule, started)
+    stale = not scheduled_run_is_fresh(schedule, started)
+    store = dashboard.Store()
+    claimed = store.start(window, scheduled, started, stale)
+    try:
+        store.publish()
+    except Exception:
+        # Completion retries publication; the dashboard must not gate evaluation.
+        logger.warning("Evaluation start snapshot could not be published")
+    if not claimed:
+        return {"status": "duplicate", "window_id": window}
+    if stale:
+        return _run_handler(event, context)
+    evidence: dict[str, Any] = {}
+
+    def captured(report: object) -> None:
+        nonlocal outcome
+        evidence.update(dashboard.project_report(report))
+        # A subsequent notification failure does not erase a completed grade.
+        outcome = (
+            "passed"
+            if all(check["passed"] for check in evidence["checks"])
+            else "failed"
+        )
+
+    outcome = "error"
+    try:
+        result = _run_handler(event, context, captured)
+        outcome = "passed" if result["status"] == "succeeded" else "failed"
+        return result
+    except run_evaluation.EvaluationFailed:
+        outcome = "failed" if evidence else "error"
+        raise
+    finally:
+        store.finish(window, scheduled, outcome, evidence)
+        store.publish()

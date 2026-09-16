@@ -105,7 +105,7 @@ def test_adoption_selects_only_current_canonical_rows() -> None:
     assert {
         (baseline.schema, baseline.version)
         for baseline in adopt.load_baseline_manifest()
-    } == {("pricing", "1.3.0"), ("oracle", "1.15.0")}
+    } == {("pricing", "1.4.0"), ("oracle", "1.15.0")}
 
 
 @pytest.mark.parametrize(
@@ -119,7 +119,11 @@ def test_canonical_drift_is_rejected_once_before_sql(
     manifest_path = adopt.ROOT / "v2/db/migration-baselines.json"
     source_path = adopt.ROOT / "v2/db/schema.sql"
     manifest = cast(list[dict[str, str]], json.loads(manifest_path.read_text()))
-    pricing = next(item for item in manifest if item["schema"] == "pricing")
+    pricing = next(
+        item
+        for item in manifest
+        if item["schema"] == "pricing" and item["version"] == "1.4.0"
+    )
     if drift == "manifest-path":
         pricing["source_path"] = "arbitrary.sql"
     elif drift == "manifest-version":
@@ -753,6 +757,13 @@ def test_disposable_postgis_adoption_and_rerun_guard(
     assert database_result.returncode == 0, database_result.stderr
     for filename in ("v2/db/schema.sql", "v2/db/oracle/schema.sql", "v2/db/roles.sql"):
         input_sql = None
+        if filename in {"v2/db/schema.sql", "v2/db/roles.sql"}:
+            # Production adoption remains fixed to the pre-dashboard contract.
+            input_sql = subprocess.check_output(
+                ["git", "show", f"59709fb8c88a2fe03424af890695280a4b8e1527:{filename}"],
+                cwd=adopt.ROOT,
+                text=True,
+            ).replace("\\ir analysis.sql", f"\\i {adopt.ROOT / 'v2/db/analysis.sql'}")
         if filename == "v2/db/oracle/schema.sql":
             # This test-only superuser fixture creates PostGIS as the observed
             # platform owner. It does not prove RDS authority.
@@ -789,7 +800,15 @@ def test_disposable_postgis_adoption_and_rerun_guard(
     assert fixture_postgis_version
     # The disposable image can differ from production. This substitution is
     # fixture-only and must never relax adoption_sql()'s literal 3.5.6 guard.
-    fixture_sql = adopt.adoption_sql().replace("'3.5.6'", repr(fixture_postgis_version))
+    production_baselines = tuple(
+        baseline
+        for baseline in runner.bootstrap.load_baseline_manifest()
+        if (baseline.schema, baseline.version)
+        in {("pricing", "1.3.0"), ("oracle", "1.15.0")}
+    )
+    fixture_sql = adopt.adoption_sql(baselines=production_baselines).replace(
+        "'3.5.6'", repr(fixture_postgis_version)
+    )
     assert "extension.extversion = '3.5.6'" in adopt.adoption_sql()
     assert f"extension.extversion = {fixture_postgis_version!r}" in fixture_sql
     rds_fixture = (
@@ -1561,6 +1580,7 @@ ORDER BY type.typname, privilege.grantee;
     monkeypatch.setenv("PGHOST", host)
     monkeypatch.setenv("PGPORT", port)
     monkeypatch.setenv("PGHOSTADDR", host)
+    # Exercise the actual production target at its authorized 032 ceiling.
     no_op = runner.run_production()
     assert (
         no_op["before"]
@@ -1770,7 +1790,7 @@ FROM tollchat_migration.schema_history ORDER BY schema_name;
             )
         )
         for baseline in sorted(
-            _canonical_baselines(), key=lambda baseline: baseline.schema
+            production_baselines, key=lambda baseline: baseline.schema
         )
     ]
     memberships = run_psql(

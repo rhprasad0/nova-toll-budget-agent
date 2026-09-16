@@ -127,6 +127,8 @@ def test_timed_checks_zip_is_flat_deterministic_and_importable(tmp_path: Path) -
         "handler.py",
         "timed_checks.py",
         "eval/run_evaluation.py",
+        "eval/simulated.py",
+        "eval/dashboard.py",
         "eval/test-cases.jsonl",
         "agent/__init__.py",
         "agent/toll_agent.py",
@@ -199,6 +201,7 @@ calls = []
 boto3.client = lambda *args, **kwargs: calls.append((args, kwargs))
 import agent.toll_agent
 import eval.run_evaluation
+import eval.simulated
 import handler
 import timed_checks
 

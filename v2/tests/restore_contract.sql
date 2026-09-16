@@ -126,9 +126,9 @@ END $$;
 
 DO $$
 BEGIN
-    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.3.0'
+    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.4.0'
        OR (SELECT count(*) FROM pricing.schema_version) <> 1 THEN
-        RAISE EXCEPTION 'pricing schema must expose exactly version 1.3.0';
+        RAISE EXCEPTION 'pricing schema must expose exactly version 1.4.0';
     END IF;
 
     IF NOT pg_has_role('pricing_loader_writer', 'rds_iam', 'MEMBER')

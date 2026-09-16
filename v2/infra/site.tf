@@ -634,3 +634,12 @@ output "public_site" {
     url             = local.public_site_url
   }
 }
+
+resource "aws_s3_object" "evals" {
+  bucket        = aws_s3_bucket.site.id
+  key           = "evals.html"
+  content       = templatefile("${path.module}/../agent/evals.html", { environment = var.environment })
+  content_type  = "text/html; charset=utf-8"
+  cache_control = "no-cache"
+  depends_on    = [aws_s3_bucket_server_side_encryption_configuration.site]
+}

@@ -61,9 +61,9 @@ def test_main_rejects_arguments_before_runner(monkeypatch: pytest.MonkeyPatch) -
 def test_migration_candidates_are_registered_and_exclude_bootstrap_files() -> None:
     schemas, _ = runner._registry()
     migrations: Any = runner._migration_candidates(schemas)
-    assert len(migrations) == 30
+    assert len(migrations) == 31
     assert migrations[0].number == 2
-    assert migrations[-1].number == 32
+    assert migrations[-1].number == 33
     assert all("rollback" not in migration.path for migration in migrations)
     assert all(
         re.fullmatch(r"[0-9a-f]{64}", migration.source_sha256)
@@ -71,7 +71,9 @@ def test_migration_candidates_are_registered_and_exclude_bootstrap_files() -> No
     )
 
 
-def test_production_registry_reaches_current_schemas_and_stops_at_032() -> None:
+def test_production_registry_stays_at_032_until_dashboard_release_is_authorized() -> (
+    None
+):
     schemas, versions = runner._registry()
     migrations: Any = runner._production_migrations(
         (*runner._migration_candidates(schemas), _migration(number=33))
@@ -80,7 +82,10 @@ def test_production_registry_reaches_current_schemas_and_stops_at_032() -> None:
         "v2/db/migrations/032_upgrade_oracle_1_14_1_to_1_15_0.sql"
     )
     assert all(migration.number <= 32 for migration in migrations)
-    assert {migration.schema: migration.target for migration in migrations} == versions
+    assert {migration.schema: migration.target for migration in migrations} == {
+        "pricing": "1.3.0",
+        "oracle": versions["oracle"],
+    }
 
     wrapper = (SCRIPTS / "run_production_migrations_workflow.sh").read_text()
     gate = wrapper.split('jq -e --arg candidate "$CANDIDATE" \'\n', 1)[1].split(
@@ -100,7 +105,7 @@ def test_production_registry_reaches_current_schemas_and_stops_at_032() -> None:
         "listener_attempt": 1,
         "listener_run": 1,
         "release_id": 1,
-        "schema_versions": versions,
+        "schema_versions": {"pricing": "1.3.0", "oracle": versions["oracle"]},
         "tag": "v1.0.8",
     }
     result = subprocess.run(
@@ -183,7 +188,9 @@ def test_bootstrap_uses_manifest_values_for_history_insert(
     assert variables is not None
     baselines = runner.bootstrap.load_baseline_manifest()
     assert variables["pricing_version"] == next(
-        baseline.version for baseline in baselines if baseline.schema == "pricing"
+        baseline.version
+        for baseline in baselines
+        if baseline.schema == "pricing" and baseline.version == "1.4.0"
     )
     assert (
         variables["oracle_sha256"]

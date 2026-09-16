@@ -72,7 +72,7 @@ cleanup_databases() {
     dropdb --if-exists "$database"
   done
   psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-    "DROP ROLE IF EXISTS pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, pricing_owner_development, schema_migrator_development, loader_writer"
+    "DROP ROLE IF EXISTS pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, eval_writer_development, pricing_owner_development, schema_migrator_development, loader_writer"
 }
 
 cleanup() {
@@ -87,6 +87,13 @@ dump_schema() {
   else
     pg_dump "$@"
   fi
+}
+
+normalize_schema_dump() {
+  # Grant order records installation history, not a schema difference.
+  python3 -c 'import re, sys
+text = re.sub(r"^\\(?:un)?restrict .*\n", "", sys.stdin.read(), flags=re.M)
+print(re.sub(r"(?:^GRANT [^\n]+;\n)+", lambda m: "".join(sorted(m[0].splitlines(keepends=True))), text, flags=re.M), end="")'
 }
 
 cleanup_allowed=true
@@ -198,12 +205,13 @@ else
 fi
 dropdb "$development_db"
 psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-  'DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, pricing_owner_development, schema_migrator_development'
+  'DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, eval_writer_development, pricing_owner_development, schema_migrator_development'
 
 createdb --template template0 "$production_db"
 psql --dbname "$production_db" --file v2/db/schema.sql
 psql --dbname "$production_db" --file v2/db/roles.sql
 psql --dbname "$production_db" --file v2/db/oracle/schema.sql
+psql --dbname "$production_db" --file v2/tests/evaluation_history_contract.sql
 url_target="$(python3 - <<'PY'
 import os
 from urllib.parse import quote
@@ -233,7 +241,7 @@ END $$;
 SQL
 dropdb "$development_db"
 psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-  "DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, pricing_owner_development, schema_migrator_development"
+  "DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, eval_writer_development, pricing_owner_development, schema_migrator_development"
 if NOVA_TOLL_ADMIN_URL='postgresql://must-not-be-used@127.0.0.1:1/postgres' \
   v2/scripts/test_development_database_bootstrap.sh; then
   echo "disposable bootstrap test accepted NOVA_TOLL_ADMIN_URL" >&2
@@ -252,7 +260,7 @@ assert set(result) == {
 }
 assert result["database"] == "nova_toll_development"
 assert result["user"] == "schema_migrator_development"
-assert result["before"] == result["after"] == {"pricing": "1.3.0", "oracle": "1.15.0"}
+assert result["before"] == result["after"] == {"pricing": "1.4.0", "oracle": "1.15.0"}
 assert result["applied"] == []
 assert re.fullmatch(r"[0-9a-f]{40}", result["commit"])
 assert re.fullmatch(
@@ -719,9 +727,9 @@ SQL
     )"
     if [[ "$target_version" == "$bootstrap_version" ]]; then
       dump_schema --schema-only --schema "$schema_name" --no-owner "$bootstrap_db" | \
-        sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/bootstrap.sql"
+        normalize_schema_dump >"$migration_source_dir/bootstrap.sql"
       dump_schema --schema-only --schema "$schema_name" --no-owner "$migration_db" | \
-        sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/migrated.sql"
+        normalize_schema_dump >"$migration_source_dir/migrated.sql"
       diff -u "$migration_source_dir/bootstrap.sql" "$migration_source_dir/migrated.sql"
     fi
 

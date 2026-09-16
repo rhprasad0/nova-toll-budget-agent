@@ -169,6 +169,8 @@ def _canary(
         "tool_contract",
         "prompt_version",
         "renderer_version",
+        "guardrail_blocked",
+        "address_redacted",
         "success",
         "commit",
         "run_id",
@@ -195,6 +197,8 @@ def _canary(
         or record.get("tool_contract") != "1.5.0"
         or record.get("prompt_version") != "2.3.0"
         or record.get("renderer_version") != "1.0.0"
+        or record.get("guardrail_blocked") is not True
+        or record.get("address_redacted") is not True
         or record.get("success") is not True
         or record.get("commit") != sha
         or _positive(record.get("run_id")) != run

@@ -1085,6 +1085,14 @@ def run(profile: MigrationProfile = DEVELOPMENT_PROFILE) -> dict[str, object]:
     migrations = _migration_candidates(schemas)
     if profile is PRODUCTION_PROFILE:
         migrations = _production_migrations(migrations)
+        # Production advances only with its separately reviewed migration cap.
+        canonical_versions = {
+            migration.schema: migration.target for migration in migrations
+        }
+        if set(canonical_versions) != set(profile.owners):
+            raise MigrationError(
+                "production migration cap does not cover fixed schemas"
+            )
     commit = _run_capture("git", "rev-parse", "HEAD")
     if not COMMIT_PATTERN.fullmatch(commit):
         raise MigrationError("current checkout commit is not a canonical SHA-1")

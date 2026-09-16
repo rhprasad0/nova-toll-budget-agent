@@ -58,7 +58,7 @@ assert os.environ['OTEL_TRACES_SAMPLER'] == 'parentbased_always_on'
 class FakeGuardrail:
     def __init__(self, blocked: str = "") -> None:
         self.blocked = blocked
-        self.calls: list[tuple[str, str]] = []
+        self.calls: list[tuple[str, str, object]] = []
 
     def apply_guardrail(self, **request: object) -> dict[str, object]:
         source = str(request["source"])
@@ -67,7 +67,7 @@ class FakeGuardrail:
         first = cast(dict[str, object], content[0])
         text_block = cast(dict[str, object], first["text"])
         text = str(text_block["text"])
-        self.calls.append((source, text))
+        self.calls.append((source, text, text_block.get("qualifiers")))
         return {"action": "GUARDRAIL_INTERVENED" if text == self.blocked else "NONE"}
 
 
@@ -155,8 +155,8 @@ def test_runtime_validates_streams_and_applies_both_guardrails():
         {"turns": 6, "output_tokens": 8_192, "total_tokens": 50_000}
     ]
     assert guardrail.calls == [
-        ("INPUT", "Price my trip"),
-        ("OUTPUT", "The toll is $4.25."),
+        ("INPUT", "Price my trip", ["guard_content"]),
+        ("OUTPUT", "The toll is $4.25.", None),
     ]
 
 
@@ -290,7 +290,7 @@ def test_runtime_treats_blank_final_results_as_safe_failures():
         }
         assert all(event["type"] != "answer" for event in events)
         assert DISCLAIMER not in str(events)
-        assert guardrail.calls == [("INPUT", "price it")]
+        assert guardrail.calls == [("INPUT", "price it", ["guard_content"])]
 
 
 def test_runtime_blocks_guardrail_content_and_returns_safe_failures(

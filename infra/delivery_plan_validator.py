@@ -192,6 +192,10 @@ TRACE_NOTICE_DIGESTS = {
     "aws_s3_object.privacy": "3363dc45ae0e3bc97b8ec4d90c4fb3290050e45b5f4bf1989edd95bd52b7318d",
 }
 REDACTED_TRACE_NOTICE_DIGESTS = {'aws_s3_object.index': 'c4d4867169f6040c265f349697a6c9fa7c70506d66e41d93fea2ef5ae8d8b2e1', 'aws_s3_object.faq': 'ad2bfde99a68f8ed16fb1f8d67a9a7a4fbff031396639a1e84700230a590547a', 'aws_s3_object.privacy': '00b192c03648aaec4913aafc8e3ad30bff05d73497de7466a78fbcef1969e0f5'}
+# Reviewed dashboard links preserve the existing redacted telemetry notices.
+DASHBOARD_NOTICE_DIGESTS = {'aws_s3_object.faq': '09d9433615f842f51714135b3f2d5bd52cf764a4a6bb3bc45d4275871c5e37c7', 'aws_s3_object.index': 'ba691bafe85efe376cdcf65780805e939c9492587839deca0f60ced5580f1ea9'}
+REDACTED_NOTICE_VERSIONS = {address: {digest, DASHBOARD_NOTICE_DIGESTS.get(address, digest)} for address, digest in REDACTED_TRACE_NOTICE_DIGESTS.items()}
+
 TRACE_READ_ONLY_FIELDS = {
     "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]": (
         "arn",
@@ -388,6 +392,7 @@ def _build_contract() -> dict[str, Mutation]:
         "index": "index.html",
         "chat": "chat.mjs",
         "usage": "usage.json",
+        "evals": "evals.html",
         "faq": "faq.html",
         "privacy": "privacy.txt",
         "terms": "terms.txt",
@@ -403,6 +408,8 @@ def _build_contract() -> dict[str, Mutation]:
         )
     for key in (
         "LICENSE.txt",
+        "evals.css",
+        "evals.mjs",
         "chat-markdown.mjs",
         "commute-estimates.json",
         "commute-map.mjs",
@@ -1592,6 +1599,25 @@ def _has_configuration_reference(
     )
 
 
+def _omitted_dashboard_acl(plan: Mapping[str, Any], address: str, action: str, path: str) -> bool:
+    # AWS 6.60 computes ACL metadata on creation even when no ACL is configured.
+    if action != "create" or path != "acl" or address not in {
+        "aws_s3_object.evals",
+        'aws_s3_object.site_assets["evals.css"]',
+        'aws_s3_object.site_assets["evals.mjs"]',
+    }:
+        return False
+    configuration = plan.get("configuration")
+    root = configuration.get("root_module") if isinstance(configuration, dict) else None
+    resources = root.get("resources") if isinstance(root, dict) else None
+    if not isinstance(resources, list):
+        return False
+    matching = [resource for resource in resources if isinstance(resource, dict)
+                and resource.get("address") in {address, address.split("[", 1)[0]}]
+    return (len(matching) == 1 and isinstance(matching[0].get("expressions"), dict)
+            and "acl" not in matching[0]["expressions"])
+
+
 def _validate_derived_unknowns(
     plan: Mapping[str, Any],
     pending: list[tuple[str, str, str | None, tuple[str, ...]]],
@@ -1608,6 +1634,8 @@ def _validate_derived_unknowns(
             if path in TRACE_READ_ONLY_FIELDS.get(address, ()):
                 continue
             if spec is None or not _metadata_authorized(path, spec):
+                continue
+            if _omitted_dashboard_acl(plan, address, action, path):
                 continue
             edge = next(
                 (
@@ -2185,7 +2213,7 @@ def _validate_trace_notices(records: list[dict[str, Any]]) -> None:
         content = value.get("content") if isinstance(value, dict) else None
         return hashlib.sha256(content.encode()).hexdigest() if isinstance(content, str) else ""
 
-    new_notices = [address for address, digest in REDACTED_TRACE_NOTICE_DIGESTS.items() if address in by_address and notice_digest(by_address[address]) == digest]
+    new_notices = [address for address, digest in REDACTED_TRACE_NOTICE_DIGESTS.items() if address in by_address and notice_digest(by_address[address]) in REDACTED_NOTICE_VERSIONS[address]]
     if new_notices:
         if len(new_notices) != len(REDACTED_TRACE_NOTICE_DIGESTS):
             _reject("unsupported_field_delta", operation_class="site-object-upload")
@@ -2196,7 +2224,7 @@ def _validate_trace_notices(records: list[dict[str, Any]]) -> None:
         env = runtime["after"].get("environment_variables", {})
         if not env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_ID") or not env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION"):
             _reject("unsupported_field_delta", operation_class="site-object-upload")
-        publishing = any(notice_digest(by_address[address], "before") != REDACTED_TRACE_NOTICE_DIGESTS[address] for address in new_notices)
+        publishing = any(notice_digest(by_address[address], "before") not in REDACTED_NOTICE_VERSIONS[address] for address in new_notices)
         if publishing and (runtime["action"] != "update" or "agent_runtime_artifact.code_configuration.code.s3.version_id" not in runtime["changed_fields"]):
             _reject("unsupported_field_delta", operation_class="site-object-upload")
         for endpoint in ("DEFAULT", "preview"):
@@ -2226,7 +2254,7 @@ def _validate_trace_notices(records: list[dict[str, Any]]) -> None:
         after = record.get("after")
         if (
             not isinstance(content, str)
-            or hashlib.sha256(content.encode()).hexdigest() not in {digest, REDACTED_TRACE_NOTICE_DIGESTS[address]}
+            or hashlib.sha256(content.encode()).hexdigest() not in {digest} | REDACTED_NOTICE_VERSIONS[address]
             or not isinstance(after, dict)
             or after.get("source") not in (None, "")
             or after.get("source_hash") not in (None, "")

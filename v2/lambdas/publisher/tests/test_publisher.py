@@ -1262,9 +1262,10 @@ def test_i66_schedule_matches_oracle_holidays_and_clipped_six_minute_hours():
     assert publisher._i66_schedule("eastbound", date(2022, 1, 3)) is not None
 
 
-def test_i66_source_revision_and_whole_route_alignment_fail_closed():
+@pytest.mark.parametrize("minutes", [5, 6])
+def test_i66_source_revision_and_whole_route_alignment_fail_closed(minutes):
     start = datetime(2026, 1, 5, 10, 30, tzinfo=UTC)
-    end = start + timedelta(minutes=5)
+    end = start + timedelta(minutes=minutes)
     bin_end = start + timedelta(minutes=6)
     path = _i66_path()
     selected = publisher._selected_i66_prices(
@@ -1306,7 +1307,7 @@ def test_i66_source_revision_and_whole_route_alignment_fail_closed():
         )
     later = publisher._selected_i66_prices(
         [
-            _i66_source(start - timedelta(minutes=5), start, price="1.00"),
+            _i66_source(start - timedelta(minutes=minutes), start, price="1.00"),
             _i66_source(start, end, price="2.00"),
         ],
         datetime(2026, 1, 5, tzinfo=EASTERN),
@@ -1314,6 +1315,7 @@ def test_i66_source_revision_and_whole_route_alignment_fail_closed():
         end,
         path.legs[0],
     )
+    assert later[start].price == Decimal("1.00")
     assert later[bin_end].price == Decimal("2.00")
     rows = publisher._hourly_i66_rows(
         (path,),
@@ -1356,8 +1358,22 @@ def test_i66_descriptor_direction_collision_and_two_facility_output_are_rejected
             super().put_object(**kwargs)
             self.bodies[kwargs["Key"]] = kwargs["Body"].decode()
 
+    def source(_reader, leg, *_args):
+        if leg.start_zone_id is None:
+            return []
+        hour = datetime(2026, 1, 5, 11, tzinfo=UTC)
+        return [
+            _i66_source(
+                hour + timedelta(minutes=6 * slot),
+                hour + timedelta(minutes=6 * (slot + 1)),
+                zones=(leg.start_zone_id, leg.end_zone_id),
+                price=str(slot + 1),
+            )
+            for slot in range(10)
+        ]
+
     s3 = CapturingS3()
-    monkeypatch.setattr(publisher, "_source_rows", lambda *_args: [])
+    monkeypatch.setattr(publisher, "_source_rows", source)
     publisher._publish(
         publisher._validate_paths(_valid_rows()),
         object(),
@@ -1370,13 +1386,34 @@ def test_i66_descriptor_direction_collision_and_two_facility_output_are_rejected
     assert sitemap.count("<url><loc>") == 262
     assert "/tolls/i66/" in sitemap and "/tolls/i95-i495/" in sitemap
     assert "EB:" not in "".join(s3.bodies.values())
+    for facility, count in (("i95-i495", 246), ("i66", 16)):
+        manifest = json.loads(s3.bodies[f"tolls/{facility}/manifest.json"])
+        assert manifest["schema_version"] == "3.0.0"
+        assert manifest["route_count"] == count
+    reports = [
+        json.loads(body)
+        for key, body in s3.bodies.items()
+        if key.startswith("tolls/i66/") and key.endswith("report.json")
+    ]
+    assert len(reports) == 16
+    for report in reports:
+        hour = report["hours"][1]
+        assert hour["status"] == "priced"
+        assert hour["observed_count"] == hour["expected_count"]
+        assert hour["observed_count"] > 0
+        assert (hour["minimum"], hour["median"], hour["maximum"]) == (
+            "1.00",
+            "5.50",
+            "10.00",
+        )
 
 
-def test_i66_malformed_duration_is_pre_mutation_and_all_facility_scoped(
-    monkeypatch, caplog
+@pytest.mark.parametrize("minutes, offset", [(4, 0), (7, 0), (5, 1), (6, 1)])
+def test_i66_malformed_interval_is_pre_mutation_and_all_facility_scoped(
+    monkeypatch, caplog, minutes, offset
 ):
     paths = publisher._validate_paths(_valid_rows())
-    invalid_start = datetime(2026, 1, 5, 10, 30, tzinfo=UTC)
+    invalid_start = datetime(2026, 1, 5, 10, 30, tzinfo=UTC) + timedelta(minutes=offset)
     s3 = _S3()
 
     def source(_reader, leg, *_args):
@@ -1385,7 +1422,7 @@ def test_i66_malformed_duration_is_pre_mutation_and_all_facility_scoped(
         return [
             _i66_source(
                 invalid_start,
-                invalid_start + timedelta(minutes=6),
+                invalid_start + timedelta(minutes=minutes),
                 zones=(leg.start_zone_id, leg.end_zone_id),
             )
         ]
@@ -1401,9 +1438,15 @@ def test_i66_malformed_duration_is_pre_mutation_and_all_facility_scoped(
     assert "V2ReportGenerationSuccess" not in caplog.text
 
 
-def test_i66_boundary_slot_is_omitted_by_publication_envelope(monkeypatch):
+@pytest.mark.parametrize(
+    "hour, minute, observed_hour",
+    [(10, 30, None), (10, 36, 0), (11, 0, 0), (14, 30, 4), (14, 36, None)],
+)
+def test_i66_publication_counts_only_overlapping_boundary_slots(
+    monkeypatch, hour, minute, observed_hour
+):
     paths = publisher._validate_paths(_valid_rows())
-    boundary_end = datetime(2026, 1, 5, 10, 30, tzinfo=UTC)
+    boundary_end = datetime(2026, 1, 5, hour, minute, tzinfo=UTC)
 
     class CapturingS3(_S3):
         def __init__(self):
@@ -1419,7 +1462,7 @@ def test_i66_boundary_slot_is_omitted_by_publication_envelope(monkeypatch):
             return []
         return [
             _i66_source(
-                boundary_end - timedelta(minutes=5),
+                boundary_end - timedelta(minutes=6),
                 boundary_end,
                 zones=(leg.start_zone_id, leg.end_zone_id),
             )
@@ -1435,7 +1478,8 @@ def test_i66_boundary_slot_is_omitted_by_publication_envelope(monkeypatch):
         for key, body in s3.bodies.items()
         if key.startswith("tolls/i66/") and key.endswith("report.json")
     )
-    assert i66_report["hours"][0]["observed_count"] == 0
+    for index, row in enumerate(i66_report["hours"]):
+        assert (row["observed_count"] > 0) == (index == observed_hour)
 
 
 def test_i66_put_failure_after_i95_puts_skips_cleanup_and_success(monkeypatch, caplog):

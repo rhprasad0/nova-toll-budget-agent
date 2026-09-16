@@ -13628,7 +13628,7 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
         if step.get("name") == "Run fixed-target migrations and emit sanitized evidence"
     )
     assert migration_step["env"] == {
-        "EXPECTED_PRICING_VERSION": "1.3.0",
+        "EXPECTED_PRICING_VERSION": "1.4.0",
         "EXPECTED_ORACLE_VERSION": "1.15.0",
     }
     defaults = cast(dict[str, object], job["defaults"])

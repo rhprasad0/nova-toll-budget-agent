@@ -12,7 +12,7 @@ from strands_evals import Case
 from strands_evals.evaluators import Evaluator
 from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
 
-from eval import run_evaluation
+from eval import run_evaluation, simulated
 from lambdas.timed_checks import handler as runner
 from timed_checks import SCHEDULE_WINDOW_PAIRS
 
@@ -494,25 +494,42 @@ def test_schedule_window_contract_has_28_unique_pairs() -> None:
     assert {window for _, window in SCHEDULE_WINDOW_PAIRS} == set(runner.WINDOW_IDS)
 
 
-def test_fresh_invocation_runs_in_order_and_uses_tmp(
+def test_scheduled_suite_selects_one_priority_case_for_every_schedule() -> None:
+    expected = {
+        "i95_northbound": "springfield-franconia-to-westpark",
+        "i95_southbound": "reagan-airport-pentagon-eads-westpark-parity",
+        "i95_reversal": "old-keene-mill-to-reagan-i95-unavailable",
+        "greenway_eb_peak": "i66-west-to-route-7-current-price",
+        "greenway_wb_peak": "route-7-to-i495-south-current-price",
+    }
+    for schedule, window in SCHEDULE_WINDOW_PAIRS:
+        weekday = int(schedule.split()[-1])
+        case_id = expected[window]
+        if window == "i95_northbound" and weekday == 6:
+            case_id = "dulles-to-reagan-current-price"
+        cases = run_evaluation.load_cases(
+            suite="scheduled", window=window, weekday=weekday
+        )
+        assert [case.name for case in cases] == [case_id], schedule
+        assert cases[0].expected_assertion
+        for field, value in run_evaluation._PROFILE.items():  # pyright: ignore[reportPrivateUsage]
+            assert f"{field}={value}" in cases[0].expected_assertion
+        assert cases[0].metadata and cases[0].metadata["actor_goal"]
+    assert len(run_evaluation.load_cases()) == 20
+    with pytest.raises(ValueError, match="specific timed window"):
+        run_evaluation.load_cases(suite="scheduled")
+
+
+def test_fresh_invocation_runs_only_scheduled_eval_and_uses_tmp(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     calls: list[Any] = []
 
-    def route_check(window: str) -> dict[str, object]:
-        calls.append(("route", window))
-        return {}
-
-    def annual_check() -> dict[str, object]:
-        calls.append("annual")
-        return {}
-
-    def evaluate(*, window: str, output_dir: Path) -> None:
+    def evaluate(*, window: str, suite: str, output_dir: Path) -> None:
+        assert suite == "scheduled"
         calls.append(("eval", window, output_dir))
 
     monkeypatch.setattr(runner, "scheduled_run_is_fresh", _always_fresh)
-    monkeypatch.setattr(runner, "run_route_checks", route_check)
-    monkeypatch.setattr(runner, "run_annual_checks", annual_check)
     monkeypatch.setattr(runner.run_evaluation, "main", evaluate)
     with caplog.at_level(logging.INFO):
         result = runner.handler(
@@ -524,16 +541,14 @@ def test_fresh_invocation_runs_in_order_and_uses_tmp(
         )
 
     assert result == {"status": "succeeded", "window_id": "i95_northbound"}
-    assert calls[:2] == [("route", "i95_northbound"), "annual"]
-    assert calls[2][0:2] == ("eval", "i95_northbound")
-    assert isinstance(calls[2][2], Path)
-    assert str(calls[2][2]).startswith("/tmp/")
+    assert len(calls) == 1
+    assert calls[0][0:2] == ("eval", "i95_northbound")
+    assert isinstance(calls[0][2], Path)
+    assert str(calls[0][2]).startswith("/tmp/")
     records = _records(caplog)
     assert len(records) == 1
     assert _record_field(records[0], "status") == "succeeded"
     assert _record_field(records[0], "freshness") == "fresh"
-    assert _record_field(records[0], "route") == "succeeded"
-    assert _record_field(records[0], "annual") == "succeeded"
     assert _record_field(records[0], "evaluation") == "succeeded"
     assert _record_field(records[0], "schedule") == _schedule("i95_northbound")
     assert _record_field(records[0], "scheduled_time").endswith(("-05:00", "-04:00"))
@@ -553,8 +568,6 @@ def test_stale_invocation_short_circuits_and_records_once(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     monkeypatch.setattr(runner, "scheduled_run_is_fresh", _always_stale)
-    monkeypatch.setattr(runner, "run_route_checks", _unexpected_call)
-    monkeypatch.setattr(runner, "run_annual_checks", _unexpected_call)
     monkeypatch.setattr(runner.run_evaluation, "main", _unexpected_call)
     with caplog.at_level(logging.INFO), pytest.raises(runner.TimedChecksStaleError):
         runner.handler(
@@ -588,7 +601,7 @@ def test_stale_invocation_short_circuits_and_records_once(
 def test_invalid_event_is_rejected_before_live_work(
     event: object, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    monkeypatch.setattr(runner, "run_route_checks", _unexpected_call)
+    monkeypatch.setattr(runner.run_evaluation, "main", _unexpected_call)
     with caplog.at_level(logging.INFO), pytest.raises(ValueError):
         runner.handler(event, object())
     records = _records(caplog)
@@ -597,30 +610,21 @@ def test_invalid_event_is_rejected_before_live_work(
     assert not hasattr(records[0], "event_payload")
 
 
-@pytest.mark.parametrize("stage", ["route", "annual", "evaluation"])
 @pytest.mark.parametrize(
     "failure", [RuntimeError("secret details"), SystemExit("secret details")]
 )
 def test_failure_is_reraised_and_logged_once_without_exception_text(
     failure: BaseException,
-    stage: str,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setattr(runner, "scheduled_run_is_fresh", _always_fresh)
-    monkeypatch.setattr(runner, "run_route_checks", _noop)
-    monkeypatch.setattr(runner, "run_annual_checks", _noop)
     monkeypatch.setattr(runner.run_evaluation, "main", _noop)
 
     def explode(*_args: object, **_kwargs: object) -> None:
         raise failure
 
-    if stage == "route":
-        monkeypatch.setattr(runner, "run_route_checks", explode)
-    elif stage == "annual":
-        monkeypatch.setattr(runner, "run_annual_checks", explode)
-    else:
-        monkeypatch.setattr(runner.run_evaluation, "main", explode)
+    monkeypatch.setattr(runner.run_evaluation, "main", explode)
     with caplog.at_level(logging.INFO), pytest.raises(type(failure)):
         runner.handler(
             {"window_id": "i95_reversal", "schedule": _schedule("i95_reversal")},
@@ -630,7 +634,7 @@ def test_failure_is_reraised_and_logged_once_without_exception_text(
     assert len(records) == 1
     assert _record_field(records[0], "status") == "failed"
     assert _record_field(records[0], "failure_type") == type(failure).__name__
-    assert _record_field(records[0], stage) == "failed"
+    assert _record_field(records[0], "evaluation") == "failed"
     assert "secret details" not in caplog.text
 
 
@@ -788,8 +792,6 @@ def test_evaluation_failure_is_reraised_by_timed_handler(
 ) -> None:
     failure = run_evaluation.EvaluationFailed(0, 1, (("case", "secret details"),))
     monkeypatch.setattr(runner, "scheduled_run_is_fresh", _always_fresh)
-    monkeypatch.setattr(runner, "run_route_checks", _noop)
-    monkeypatch.setattr(runner, "run_annual_checks", _noop)
 
     def raise_failure(**_: object) -> None:
         raise failure
@@ -806,8 +808,6 @@ def test_evaluation_failure_is_reraised_by_timed_handler(
     assert len(records) == 1
     assert _record_field(records[0], "status") == "failed"
     assert _record_field(records[0], "evaluation") == "failed"
-    assert _record_field(records[0], "route") == "succeeded"
-    assert _record_field(records[0], "annual") == "succeeded"
     assert _record_field(records[0], "failure_type") == "EvaluationFailed"
     assert "secret details" not in caplog.text
 
@@ -827,8 +827,6 @@ def test_unscored_experiment_errors_use_generic_handler_path_without_sns(
 
     monkeypatch.setattr(run_evaluation, "load_cases", load_cases)
     monkeypatch.setattr(runner, "scheduled_run_is_fresh", _always_fresh)
-    monkeypatch.setattr(runner, "run_route_checks", _noop)
-    monkeypatch.setattr(runner, "run_annual_checks", _noop)
     monkeypatch.setattr(runner, "_EVAL_OUTPUT_DIR", tmp_path)
     monkeypatch.setenv("TIMED_CHECK_ALERTS_ENABLED", "true")
     monkeypatch.setenv("ALERTS_TOPIC_ARN", "arn:aws:sns:us-east-1:123:alerts")
@@ -874,6 +872,10 @@ def test_unscored_experiment_errors_use_generic_handler_path_without_sns(
         monkeypatch.setattr(run_evaluation, "task_function", task)
         secret = "evaluator secret details"
 
+    monkeypatch.setattr(simulated, "task_function", task)
+    monkeypatch.setattr(
+        simulated, "evaluators", lambda: [run_evaluation.TollChatEvaluator()]
+    )
     with (
         caplog.at_level(logging.INFO),
         pytest.raises(
@@ -906,8 +908,6 @@ def _raise_evaluation_failure(**_: object) -> None:
 
 def _prepare_evaluation_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runner, "scheduled_run_is_fresh", _always_fresh)
-    monkeypatch.setattr(runner, "run_route_checks", _noop)
-    monkeypatch.setattr(runner, "run_annual_checks", _noop)
     monkeypatch.setattr(runner.run_evaluation, "main", _raise_evaluation_failure)
 
 
@@ -996,7 +996,12 @@ def test_tool_price_is_excluded_from_evaluation_failure_and_alert(
 
     class FakeReport:
         def __init__(self) -> None:
-            self.cases = [{"name": "springfield-franconia-to-westpark"}]
+            self.cases = [
+                {
+                    "name": "springfield-franconia-to-westpark",
+                    "evaluator": "Correctness",
+                }
+            ]
             self.test_passes = [False]
             self.reasons = [output[0].reason]
             self.detailed_results = [output]
@@ -1012,10 +1017,19 @@ def test_tool_price_is_excluded_from_evaluation_failure_and_alert(
         def __class_getitem__(cls, _item: object) -> type["FakeExperiment"]:
             return cls
 
-        def __init__(self, **_: object) -> None: ...
+        def __init__(self, *, evaluators: list[Any], **_: object) -> None:
+            self.count = len(evaluators)
 
         def run_evaluations(self, _task: object) -> FakeReport:
-            return FakeReport()
+            report = FakeReport()
+            for name in ("ToolCallCount", "Completeness")[: self.count - 1]:
+                report.cases.append(
+                    {"name": "springfield-franconia-to-westpark", "evaluator": name}
+                )
+                report.test_passes.append(True)
+                report.reasons.append("passed")
+                report.detailed_results.append([])
+            return report
 
     monkeypatch.setattr(run_evaluation, "_configure_database", lambda: None)
     monkeypatch.setattr(run_evaluation, "Experiment", FakeExperiment)
@@ -1029,6 +1043,11 @@ def test_tool_price_is_excluded_from_evaluation_failure_and_alert(
     main = run_evaluation.main
     _prepare_evaluation_failure(monkeypatch)
     monkeypatch.setattr(runner.run_evaluation, "main", main)
+    monkeypatch.setattr(
+        simulated,
+        "evaluators",
+        lambda: [run_evaluation.TollChatEvaluator() for _ in range(3)],
+    )
     monkeypatch.setenv("TIMED_CHECK_ALERTS_ENABLED", "true")
     monkeypatch.setenv("ALERTS_TOPIC_ARN", "arn:aws:sns:us-east-1:123:alerts")
     monkeypatch.setenv("ENVIRONMENT", "development")
@@ -1413,8 +1432,6 @@ def test_handler_propagates_structured_evaluation_failure_once(
     )
 
     monkeypatch.setattr(runner, "scheduled_run_is_fresh", _always_fresh)
-    monkeypatch.setattr(runner, "run_route_checks", _noop)
-    monkeypatch.setattr(runner, "run_annual_checks", _noop)
 
     def fail_evaluation(*_args: object, **_kwargs: object) -> None:
         raise failure
@@ -1453,8 +1470,6 @@ def _prepare_structured_evaluation_failure(
         summaries_truncated=False,
     )
     monkeypatch.setattr(runner, "scheduled_run_is_fresh", _always_fresh)
-    monkeypatch.setattr(runner, "run_route_checks", _noop)
-    monkeypatch.setattr(runner, "run_annual_checks", _noop)
 
     def fail_evaluation(**_kwargs: object) -> None:
         raise failure

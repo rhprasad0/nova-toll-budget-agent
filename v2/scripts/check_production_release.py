@@ -358,6 +358,8 @@ def _development(
             "tool_contract",
             "prompt_version",
             "renderer_version",
+            "guardrail_blocked",
+            "address_redacted",
             "success",
             "commit",
             "run_id",
@@ -382,6 +384,8 @@ def _development(
         or canary.get("tool_contract") != "1.5.0"
         or canary.get("prompt_version") != "2.3.0"
         or canary.get("renderer_version") != "1.0.0"
+        or canary.get("guardrail_blocked") is not True
+        or canary.get("address_redacted") is not True
         or canary.get("success") is not True
         or canary.get("commit") != candidate
         or _positive(canary.get("run_id")) != run_id

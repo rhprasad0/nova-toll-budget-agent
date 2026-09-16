@@ -469,19 +469,20 @@ def _selected_i66_prices(
             zones = (row["start_zone_id"], row["end_zone_id"])
         except (InvalidOperation, KeyError, ValueError) as error:
             raise ValueError("I-66 source observation is malformed") from error
+        interval_minutes = (interval_end - interval_start) / timedelta(minutes=1)
         if (
             not isinstance(key, str)
             or not key
             or price < 0
             or zones != (leg.start_zone_id, leg.end_zone_id)
             or interval_start >= interval_end
-            or interval_end - interval_start != timedelta(minutes=5)
+            or interval_minutes not in (5, 6)
             or interval_start.second
             or interval_start.microsecond
             or interval_end.second
             or interval_end.microsecond
-            or interval_start.minute % 5
-            or interval_end.minute % 5
+            or interval_start.minute % interval_minutes
+            or interval_end.minute % interval_minutes
         ):
             raise ValueError("I-66 source observation is malformed")
         if (
@@ -491,7 +492,8 @@ def _selected_i66_prices(
         ):
             continue
         bin_end = interval_end.replace(minute=interval_end.minute // 6 * 6)
-        bin_end += timedelta(minutes=6)
+        if bin_end < interval_end:
+            bin_end += timedelta(minutes=6)
         observation = _I66Observation(interval_start, interval_end, price)
         candidate = (interval_end, calculated, key, observation)
         existing = selected.get(bin_end)
