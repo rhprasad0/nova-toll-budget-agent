@@ -148,6 +148,7 @@ def rendered_production_policies(iam: str = IAM) -> tuple[
         }}
 
         locals {{
+          green_trace_log_arns = []
           test_tfstate_bucket_arn = "{test_bucket_arn}"
           test_tfstate_kms_key_arn = "{test_kms_arn}"
           test_alerts_kms_key_arn = "{test_alerts_kms_arn}"

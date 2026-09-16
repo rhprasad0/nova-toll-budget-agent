@@ -5957,6 +5957,7 @@ def _assert_required_event_callers(source: str) -> None:
     assert caller["permissions"] == {"contents": "read", "id-token": "write"}
     assert "pull_request" in str(caller["if"])
     assert "merge_group" in str(caller["if"])
+    assert "vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true'" in str(caller["if"])
 
     gate = ci_jobs["development-plan"]
     assert gate["if"] == "always()"
@@ -5972,6 +5973,31 @@ def _assert_required_event_callers(source: str) -> None:
     assert "continue-on-error" not in source
 
     _assert_terraform_trigger(TERRAFORM_WORKFLOW)
+
+
+def test_deployed_plan_gate_requires_success_after_bootstrap():
+    workflow = yaml.safe_load(CI_WORKFLOW)
+    source = workflow["jobs"]["development-plan"]["steps"][0]["run"]
+    for bootstrapped, called, planned, accepted in (
+        ("", "skipped", "", True),
+        ("true", "skipped", "", False),
+        ("true", "success", "failure", False),
+        ("true", "success", "success", True),
+        ("", "failure", "", False),
+    ):
+        result = subprocess.run(
+            ["bash", "-c", source],
+            env={
+                **os.environ,
+                "GITHUB_EVENT_NAME": "pull_request",
+                "BOOTSTRAPPED": bootstrapped,
+                "CALL_RESULT": called,
+                "PLAN_RESULT": planned,
+            },
+            capture_output=True,
+            check=False,
+        )
+        assert (result.returncode == 0) == accepted
 
 
 def _assert_terraform_trigger(source: str) -> None:

@@ -99,7 +99,7 @@ jobs:
           POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
 
   trusted-development-plan:
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true'
     uses: rhprasad0/nova-toll-budget-agent/.github/workflows/v2-development-plan.yml@main
     with:
       candidate_sha: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
@@ -116,9 +116,15 @@ jobs:
         env:
           CALL_RESULT: ${{ needs.trusted-development-plan.result }}
           PLAN_RESULT: ${{ needs.trusted-development-plan.outputs.plan_result }}
+          BOOTSTRAPPED: ${{ vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED }}
         run: |
           set -euo pipefail
           if [[ "$GITHUB_EVENT_NAME" != "pull_request" && "$GITHUB_EVENT_NAME" != "merge_group" ]]; then
+            exit 0
+          fi
+          if [[ "$BOOTSTRAPPED" != true ]]; then
+            test "$CALL_RESULT" = skipped
+            echo 'Deployed planning awaits the separately reviewed blue-green bootstrap; credential-free tests and package builds remain required.'
             exit 0
           fi
           test "$CALL_RESULT" = success
