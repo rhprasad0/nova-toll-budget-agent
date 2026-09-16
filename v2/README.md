@@ -3,6 +3,25 @@
 This directory contains TollChat's deployed application, tests, evals, and
 application infrastructure. Shared production foundations live in `../infra`.
 
+## Shared foundation changes
+
+Run these commands from the repository root. Build and review the real fetcher
+package for every root `infra/` plan. The current development foundation handoff
+is the authorized #327/#333 replacement in the
+[development foundation replacement runbook](runbooks/development-foundation-replacement.md).
+Do not use a generic plan display or unbounded apply command; application
+release remains a separately approved follow-on operation.
+
+```sh
+v2/scripts/build_fetcher_zip.sh
+AWS_PROFILE=nova-toll-dev terraform -chdir=infra init -backend=false -input=false
+AWS_PROFILE=nova-toll-dev terraform -chdir=infra validate
+```
+
+Pull-request checks remain credential-free. Load any runtime-only credentials
+from SSM into the process environment; never place them in Terraform variables,
+plans, state evidence, or documentation.
+
 ## Runtime boundaries
 
 - [Current-price tool](agent_tools/get_current_toll_price.py) and its
