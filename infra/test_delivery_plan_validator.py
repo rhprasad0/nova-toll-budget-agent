@@ -2282,25 +2282,18 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "accepted",
         )
 
-    def test_trace_rejection_uses_the_workflow_reason_and_records_one_failure(self):
+    def test_slot_preparation_uses_private_failure_reporting(self):
         workflow = (
             Path(__file__).resolve().parents[1]
             / ".github"
             / "workflows"
             / "v2-development-delivery-privileged.yml"
         ).read_text()
-        self.assertIn('"unsupported_field_delta"', workflow)
-        self.assertNotIn('run_private_stage "validator"', workflow)
-        self.assertIn(
-            '\' "$VALIDATION" >"$VALIDATION_SUMMARY" 2>"$VALIDATOR_PARSE_LOG"', workflow
-        )
-        self.assertIn(
-            "stage=validator status=fail elapsed=0 exit=$VALIDATOR_STATUS reason=$VALIDATOR_RESULT_REASON",
-            workflow,
-        )
-        self.assertIn(
-            "stage=validator status=pass elapsed=0 exit=0 reason=ok", workflow
-        )
+        self.assertIn('run_private_stage "plan" "$PLAN_LOG" "$PLAN_LOG"', workflow)
+        self.assertIn("release_blue_green.py prepare-plan", workflow)
+        self.assertIn("release_blue_green.py finish", workflow)
+        self.assertIn("jq '{deployment,recovery,active,probes,releases,recovery_record}'", workflow)
+        self.assertNotIn('cat "$PLAN_LOG"', workflow)
 
     def test_existing_trace_subscription_identity_pins_account_and_region(self):
         address = 'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]'
