@@ -1,8 +1,18 @@
-# Blue-green development delivery
+# Blue-green delivery
 
 **Bootstrap must be reviewed before enabling `DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED`.**
-Production still uses its existing gate; adopting this application layout there
-requires a separate bootstrap and workflow review after the development rehearsal.
+Production uses the same release phases behind `PRODUCTION_BLUE_GREEN_BOOTSTRAPPED`.
+Keep that flag disabled until a separate production bootstrap review after the
+development rehearsal. Its planner stages immutable objects and saves the exact
+preparation plan; the protected migration workflow revalidates that plan, applies
+compatible migrations, and finishes candidate validation, promotion, and observation.
+Production claims remain the existing numeric deployment IDs.
+
+For production bootstrap, populate `production_blue_green` in the foundation with
+the exact generated identities, and pass `--environment production` to the
+bootstrap binary-plan gate. The default gate only admits development plans.
+Review the production planner’s release-prefix-only object writes and the delivery
+role’s exact two-slot permissions; neither enables bootstrap resource creation.
 
 ## Architecture
 

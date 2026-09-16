@@ -23,9 +23,9 @@ permissions:
 
 jobs:
   migrate:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.PRODUCTION_BLUE_GREEN_BOOTSTRAPPED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 75
     environment: production
     permissions:
       actions: read
@@ -327,7 +327,7 @@ jobs:
           run_private_stage artifact-metadata "$RUNNER_TEMP/production-cloudflare-check.out" "$RUNNER_TEMP/production-cloudflare.err" test -n "$CLOUDFLARE_API_TOKEN"
           export CLOUDFLARE_API_TOKEN
           run_private_stage release-init "$RUNNER_TEMP/production-apply-init.out" "$RUNNER_TEMP/production-apply.err" terraform -chdir=v2/infra init -input=false -backend-config=backend.production.hcl
-          run_private_stage apply "$RUNNER_TEMP/production-apply.out" "$RUNNER_TEMP/production-apply.err" terraform -chdir=v2/infra apply -input=false "$RUNNER_TEMP/production-plan.tfplan"
+          CANARY_EVIDENCE_FILE="$RUNNER_TEMP/production-canary-evidence.json" CANARY_COMMIT="$CANDIDATE" CANARY_RUN_ID="$GITHUB_RUN_ID" CANARY_ATTEMPT="$GITHUB_RUN_ATTEMPT" CANARY_DEPLOYMENT_ID="$(jq -er .claim_id <<<"$ADMISSION")" CANARY_ARTIFACT_ID="$(jq -er .bundle_id <<<"$ADMISSION")" CANARY_ARTIFACT_DIGEST="$(jq -er .bundle_digest <<<"$ADMISSION")" GITHUB_SHA="$CANDIDATE" run_private_stage apply "$RUNNER_TEMP/production-apply.out" "$RUNNER_TEMP/production-apply.err" python3 "$GITHUB_WORKSPACE/trusted/v2/scripts/release_blue_green.py" finish --environment production --terraform-root v2/infra --bundle-root release-overlay --foundation-vars "$RUNNER_TEMP/blue-green-foundation.tfvars.json" --work-dir "$RUNNER_TEMP/blue-green" --claim "$(jq -er .claim_id <<<"$ADMISSION")" --saved-plan "$RUNNER_TEMP/production-plan.tfplan" --output "$RUNNER_TEMP/blue-green-result.json"
           unset CLOUDFLARE_API_TOKEN
           run_private_stage readiness-state "$RUNNER_TEMP/production-state-after.json" "$RUNNER_TEMP/production-readiness.err" terraform -chdir=v2/infra state pull
           run_private_stage readiness-state "$RUNNER_TEMP/production-readiness-state.json" "$RUNNER_TEMP/production-readiness.err" terraform -chdir=v2/infra show -json
@@ -335,11 +335,18 @@ jobs:
           run_private_stage readiness-state "$RUNNER_TEMP/production-state-after-match.out" "$RUNNER_TEMP/production-readiness.err" jq -ne --argjson expected "$STATE" --slurpfile state "$RUNNER_TEMP/production-state-after.json" --slurpfile head "$RUNNER_TEMP/production-state-after-head.json" '$state[0].lineage == $expected.lineage and ($state[0].serial >= $expected.serial) and ($head[0].VersionId != $expected.version_id or $state[0].serial > $expected.serial)'
           lock_released() { if aws s3api head-object --bucket nova-toll-tfstate-920534282028 --key nova-toll/v2/terraform.tfstate.tflock --expected-bucket-owner 920534282028 >"$RUNNER_TEMP/production-lock-private.out" 2>"$RUNNER_TEMP/production-lock-private.err"; then return 1; fi; grep -Eq '(404|Not Found)' "$RUNNER_TEMP/production-lock-private.err"; }
           run_private_stage readiness-state "$RUNNER_TEMP/production-lock.out" "$RUNNER_TEMP/production-readiness.err" lock_released
-          CANARY_EVIDENCE_FILE="$RUNNER_TEMP/production-canary-evidence.json" CANARY_COMMIT="$CANDIDATE" CANARY_RUN_ID="$GITHUB_RUN_ID" CANARY_ATTEMPT="$GITHUB_RUN_ATTEMPT" CANARY_DEPLOYMENT_ID="$(jq -er .claim_id <<<"$ADMISSION")" CANARY_ARTIFACT_ID="$(jq -er .bundle_id <<<"$ADMISSION")" CANARY_ARTIFACT_DIGEST="$(jq -er .bundle_digest <<<"$ADMISSION")" GITHUB_SHA="$CANDIDATE" run_private_stage readiness-check "$RUNNER_TEMP/production-readiness.out" "$RUNNER_TEMP/production-readiness.err" python3 v2/scripts/check_development_release.py --profile production "$RUNNER_TEMP/production-readiness-state.json" release-overlay/release-manifest.json
+      - name: Record deployment and recovery outcomes separately
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/blue-green-result.json"; then
+            jq '{deployment,recovery,active,probes,releases,recovery_record}' "$RUNNER_TEMP/blue-green-result.json" >>"$GITHUB_STEP_SUMMARY"
+          fi
       - name: Clear deploy credentials before evidence upload
         if: always()
         run: |
           set -euo pipefail
+          rm -rf -- "$RUNNER_TEMP/blue-green"
+          rm -f -- "$RUNNER_TEMP/blue-green-foundation.tfvars.json" "$RUNNER_TEMP/blue-green-result.json"
           rm -f -- "$RUNNER_TEMP/production-plan.tfplan" "$RUNNER_TEMP/production-state-after.json" "$RUNNER_TEMP/production-readiness-state.json" "$RUNNER_TEMP/production-state-after-head.json" "$RUNNER_TEMP/production-cloudflare-token" "$RUNNER_TEMP/production-lock-private.err"
           for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN; do
             unset "$name" || true

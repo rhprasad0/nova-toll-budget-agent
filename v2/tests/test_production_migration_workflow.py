@@ -615,7 +615,8 @@ def test_workflow_expressions_are_executable_and_private_stages_are_fixed() -> N
     assert 'NotAction:"s3:GetObjectVersion"' in source
     assert 'NotResource:("arn:aws:s3:::" + .saved_plan.bucket + "/plans/*")' in source
     assert 'StringEquals:{"s3:VersionId":.saved_plan.version_id}' in source
-    assert "release-overlay/release-manifest.json" in source
+    assert "--bundle-root release-overlay" in source
+    assert '--saved-plan "$RUNNER_TEMP/production-plan.tfplan"' in source
 
 
 def test_third_party_actions_follow_explicit_deploy_credential_clears() -> None:
@@ -816,7 +817,13 @@ elif name == "terraform":
   elif "state" in args: print('{"lineage":"wrong","serial":1}' if failure == "state" else '{"lineage":"11111111-1111-1111-1111-111111111111","serial":2}')
   elif "show" in args: print("{}")
 elif name == "python3":
-  if any("check_development_release.py" in value for value in args):
+  if any("release_blue_green.py" in value for value in args):
+    assert "finish" in args and value("--environment") == "production"
+    assert pathlib.Path(value("--saved-plan")).read_bytes() == b"PLAN"
+    if failure == "apply": raise SystemExit(17)
+    pathlib.Path(os.environ["APPLY_MARKER"]).write_text("apply")
+    if failure == "readiness": raise SystemExit(17)
+  elif any("check_development_release.py" in value for value in args):
     if failure == "readiness": raise SystemExit(17)
   elif any("check_production_release.py" in value for value in args):
     if "validate-saved-plan" in args: os.execv(sys.executable, [sys.executable, *args])
@@ -836,6 +843,7 @@ elif name == "python3":
         "KMS": "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7",
         "PLAN_BUCKET": "nova-toll-tfstate-920534282028",
         "PLAN_KEY": "plans/release-7-v1.2.3/14/release.tfplan",
+        "ADMISSION": json.dumps(_saved_contract()[0]),
         "PLAN_VERSION": "plan-version",
         "PLAN_CHECKSUM": encoded,
         "PLAN_KMS": "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7",

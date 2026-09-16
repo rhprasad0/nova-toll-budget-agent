@@ -77,6 +77,8 @@ data "aws_iam_policy_document" "production_agentcore_trace_logs_assume" {
       values = concat(
         [for arn in local.telemetry_groups : trimsuffix(arn, ":*")],
         [for arn in [for arn in local.telemetry_groups : trimsuffix(arn, ":*")] : "${arn}:*"],
+        local.production_green_trace_log_arns,
+        [for arn in local.production_green_trace_log_arns : "${arn}:*"],
       )
     }
     condition {

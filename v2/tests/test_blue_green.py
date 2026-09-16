@@ -474,16 +474,25 @@ def test_recovery_accepts_pre_promotion_output_after_partial_apply() -> None:
         ("restore_failure", ("failed", "failed", "green")),
     ],
 )
+@pytest.mark.parametrize("target", ["development", "production"])
 def test_complete_release_state_machine(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     scenario: str,
     expected: tuple[str, str, str],
+    target: str,
 ) -> None:
     import hashlib
     import sys
 
     initial = previous()
+    claim = "12:1" if target == "development" else "12"
+    account = "903859731897" if target == "development" else "920534282028"
+    role = (
+        "nova-toll-v2-development-delivery"
+        if target == "development"
+        else "nova-toll-production-deploy"
+    )
     prepared = deepcopy(initial)
     prepared["slots"]["green"] = slot("green", "release2")
     live = deepcopy(initial)
@@ -497,7 +506,7 @@ def test_complete_release_state_machine(
     delivery.write(
         work / "context.json",
         {
-            "claim": "12:1",
+            "claim": claim,
             "previous": initial,
             "identity": {"lineage": "test-lineage", "serial": serial},
             "inputs": gate.desired(initial, prepared["slots"]["green"]),
@@ -512,6 +521,13 @@ def test_complete_release_state_machine(
 
     def terraform(_root: Path, *args: Any) -> str:
         nonlocal serial
+        if args[0] == "show":
+            document = plan(gate.desired(initial, prepared["slots"]["green"]))
+            document["prior_state"] = {
+                "values": {"outputs": {"release_state": {"value": initial}}}
+            }
+            document["variables"]["foundation"] = {"value": {"vpc_id": "fixed"}}
+            return json.dumps(document)
         assert args[0] == "apply"
         phase = Path(args[-1]).stem
         applied.append(phase)
@@ -552,8 +568,8 @@ def test_complete_release_state_machine(
         "aws",
         Mock(
             return_value={
-                "Account": "903859731897",
-                "Arn": "arn:aws:sts::903859731897:assumed-role/nova-toll-v2-development-delivery/test",
+                "Account": account,
+                "Arn": f"arn:aws:sts::{account}:assumed-role/{role}/test",
             }
         ),
     )
@@ -619,6 +635,8 @@ def test_complete_release_state_machine(
         [
             "release_blue_green.py",
             "finish",
+            "--environment",
+            target,
             "--terraform-root",
             str(tmp_path),
             "--bundle-root",
@@ -630,8 +648,9 @@ def test_complete_release_state_machine(
             "--output",
             str(output),
             "--claim",
-            "12:1",
-        ],
+            claim,
+        ]
+        + (["--saved-plan", str(saved)] if target == "production" else []),
     )
     status = delivery.main()
     result = json.loads(output.read_text())

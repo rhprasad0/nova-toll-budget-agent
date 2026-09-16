@@ -4666,10 +4666,7 @@ def test_timed_package_is_threaded_through_all_plan_paths():
         '("timed_checks", "timed-checks")'
         in (V2_ROOT / "scripts/release_blue_green.py").read_text()
     )
-    assert (
-        '-var timed_checks_package_path="$overlay/v2/infra/build/timed-checks.zip"'
-        in PRODUCTION_PLAN_WORKFLOW
-    )
+    assert '--bundle-root "$overlay"' in PRODUCTION_PLAN_WORKFLOW
     assert "-target" not in PRODUCTION_PLAN_WORKFLOW
 
 

@@ -248,9 +248,9 @@ def wait_routing(root: Path, expected: dict[str, Any]) -> None:
             "root_module"
         ]["resources"]
     }
+    deadline = time.monotonic() + 900
     for name in ("site", "staging"):
         distribution = resources[f"aws_cloudfront_distribution.{name}"]
-        deadline = time.monotonic() + 900
         while True:
             actual = aws("cloudfront", "get-distribution", "--id", distribution["id"])[
                 "Distribution"
@@ -601,7 +601,9 @@ def recovery_key(release: str, claim: str) -> str:
     gate.require(
         re.fullmatch(r"[a-zA-Z0-9_-]{1,128}", release) is not None, "release_id"
     )
-    gate.require(re.fullmatch(r"[0-9]+:[0-9]+", claim) is not None, "recovery_claim")
+    gate.require(
+        re.fullmatch(r"[0-9]+(?::[0-9]+)?", claim) is not None, "recovery_claim"
+    )
     return f"releases/{release}/recovery/{claim}.json"
 
 
@@ -682,10 +684,11 @@ def main() -> int:
             caller["Arn"].startswith(f"arn:aws:sts::{account}:assumed-role/{role}/")
             or (
                 args.phase == "recover"
-                and environment == "development"
-                and caller["Arn"].startswith(
-                    "arn:aws:sts::903859731897:assumed-role/AWSReservedSSO_AdministratorAccess_00c1146592545487/"
+                and re.fullmatch(
+                    rf"arn:aws:sts::{account}:assumed-role/AWSReservedSSO_AdministratorAccess_[0-9a-f]{{16}}/[^/]+",
+                    caller["Arn"],
                 )
+                is not None
             ),
             "delivery_role",
         )
