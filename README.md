@@ -11,7 +11,7 @@ TollChat answers a practical question: **"What would this Northern Virginia comm
 
 I built the data pipeline, directed PostgreSQL/PostGIS route model, two deterministic pricing tools, and the Strands agent that uses them. I deployed the application on Amazon Bedrock AgentCore with separate AWS development and production environments, reviewed release workflows, and safety checks around the conversation. Diagnostic traces redact detected personal information before export.
 
-This project demonstrates how I build and operate an AI application, including the boundaries around the model. Evaluation is ongoing: a representative golden dataset and repeatable measurements of agent improvements are still in progress.
+This reference implementation demonstrates how I build and operate an AI application, including the boundaries around the model. Six scheduled scenarios now exercise simulated conversations with deterministic tool-call checks and model-based judges. A representative golden dataset and repeatable measurements of agent improvements are still in progress.
 
 ![TollChat showing an annual commute estimate beside a map of supported Northern Virginia toll routes](v2/agent/assets/tollchat-annual-commute-example.png)
 
@@ -24,10 +24,10 @@ Each row links a claim to its implementation and a way to inspect or verify it. 
 | Separate development and production environments | [Development backend](infra/backend.development.hcl), [production backend](infra/backend.production.hcl), and [account contract](infra/account-contract.json) | [Infrastructure contract tests](v2/tests/test_infrastructure_contract.py) and [delivery documentation](v2/README.md#verify-the-build) | Separate account/state configuration; release evidence is specific to an artifact and run. |
 | Reviewed, reproducible delivery | [Development delivery](.github/workflows/v2-development-delivery.yml), [production release](.github/workflows/v2-production-release.yml), and [production plan/apply](.github/workflows/v2-production-plan.yml) | [Release checks](v2/tests/test_check_production_release.py), [plan workflow tests](v2/tests/test_production_plan_workflow.py), and [operator runbook](v2/RUNBOOK.md) | Production delivery checks the candidate and saved plan and requires protected review. PR checks use disposable database validation. |
 | The model delegates route validation and money arithmetic to deterministic tools | [Current toll tool](v2/agent_tools/get_current_toll_price.py), [annual commute tool](v2/agent_tools/get_annual_toll_ballpark.py), and [routing contract](v2/db/oracle/CONTRACT.md) | [Tool contract tests](v2/tests/test_tool_contract.py) and [curated live results](v2/eval/results/README.md) | Tools own pricing; generated explanations still need grounding evaluation. |
-| Guardrails check inputs and completed answers | [Runtime checks](v2/agent/agentcore_entrypoint.py) and [versioned guardrail policy](v2/infra/agentcore.tf) | [Input/output blocking and safe-failure tests](v2/tests/test_agentcore_entrypoint.py) | Configured content, prompt-attack, and credential protections reduce abuse risk; they do not guarantee prevention. |
+| Guardrails check inputs and completed answers | [Runtime checks](v2/agent/agentcore_entrypoint.py) and [versioned guardrail policy](v2/infra/agentcore.tf) | [Input/output blocking and safe-failure tests](v2/tests/test_agentcore_entrypoint.py) and [live release gates](v2/scripts/check_development_release.py) | Configured content, prompt-attack, and credential protections reduce abuse risk; they do not guarantee prevention. |
 | Detected PII is redacted from telemetry before export | [Telemetry exporter](v2/agent/telemetry.py) and [additional masking and alarms](v2/infra/trace_redaction.tf) | [Redaction and failure-path tests](v2/tests/test_telemetry_redaction.py), [observed trace example](#observed-trace-redaction), and [verification runbook](v2/runbooks/telemetry-pii-redaction.md) | Detection can miss information. Redaction failures omit affected content; the screenshot demonstrates one address-redaction example. |
 | Runtime access and credentials have explicit boundaries | [Runtime IAM permissions](v2/infra/agentcore.tf), [database roles](v2/db/roles.sql), and [security policy](SECURITY.md) | [Infrastructure contract tests](v2/tests/test_infrastructure_contract.py) and [database validation instructions](v2/README.md#verify-the-build) | IAM-authenticated database access; deployed credentials live in SSM Parameter Store. |
-| Agent behavior has executable evaluation checks | [Evaluation runner](v2/eval/run_evaluation.py) and [evaluation guide](v2/eval/README.md) | [Recorded experiments and limitations](#evaluation-status) | Existing scoped experiments; representative golden set and measured agent improvements remain in progress. |
+| Agent behavior has executable evaluation checks | [Scheduled simulation and judges](v2/eval/simulated.py), [evaluation runner](v2/eval/run_evaluation.py), and [evaluation guide](v2/eval/README.md) | [Simulation contract tests](v2/tests/test_simulated_evaluation.py), [dashboard runbook](v2/runbooks/eval-dashboard.md), and [recorded experiments](#evaluation-status) | Six scheduled current-toll scenarios; development dashboard publication first, production activation pending. Representative golden set and measured improvements remain in progress. |
 
 ## Architecture and safety
 
@@ -54,7 +54,7 @@ Telemetry uses a separate guardrail. It scans copies of diagnostic content witho
 
 ### Observed trace redaction
 
-![A gen_ai.user.message trace event whose content reads: How do I get from {ADDRESS} to {ADDRESS}?](v2/agent/assets/tollchat-trace-address-redaction.png)
+![A gen_ai.user.message trace event whose content reads: How do I get from {ADDRESS} to {ADDRESS}?](v2/docs/assets/tollchat-trace-address-redaction.png)
 
 *Supplied trace capture: both addresses appear as `{ADDRESS}` in a `gen_ai.user.message` event.*
 
@@ -70,13 +70,15 @@ That work exposed 330 pricing IDs in the I-95/I-495 route map but only 314 in re
 
 ## Evaluation status
 
-**A representative golden evaluation set and repeatable before/after measurements of agent improvements are in progress.** The existing suite checks tool selection, parameters, clarification, route availability, money, and grounding. The reports below are scoped experiments, not a current whole-agent accuracy score or evidence of improvement between agent versions.
+**A representative golden evaluation set and repeatable before/after measurements of agent improvements are in progress.** The scheduled suite covers six current-toll scenarios with simulated users, a deterministic tool-call count check, and model-based completeness and correctness judges. The broader regression catalog checks parameters, clarification, route availability, money, and grounding. The reports below are scoped experiments, not a current whole-agent accuracy score or evidence of improvement between agent versions.
 
 | Experiment | Recorded result | Scope and limits |
 | --- | --- | --- |
 | [Live agent behavior, August 22, 2026](v2/eval/results/README.md) | 9/9 curated current-price and annual-affordability cases passed their code-graded contracts | Small curated set across three recorded runs; not a representative golden benchmark. |
 | [Frozen-fixture quantitative grounding](v2/eval/ballpark-hallucination-report.md) | 996/1,000 strict grounding passes; 999/1,000 without an incorrect quantitative fact; 93.1% conservative end-to-end result | One frozen route fixture, five prompt variants, correlated repetitions, and adjudication of flagged claims. Not an agent-wide hallucination rate. |
 | [Missing-price proxy holdout](v2/eval/results/i95-missing-od-pricing.md) | 1,200 comparisons; $0.106 mean absolute error; 96.1% within $0.50 | Five days of matched data; $8.05 maximum error. Measures a pricing proxy, not improvement to the agent. |
+
+The new [`/eval-dashboard`](v2/runbooks/eval-dashboard.md) shows seven days of scheduled results, the latest synthetic conversations, tool evidence, and judge explanations. It distinguishes graded failures from execution errors and missing runs. Publication is enabled for development first; production activation remains pending. Judge accuracy still needs live verdict review.
 
 The next evaluation milestone is to establish the representative golden set, record a baseline, and compare agent changes against that same set with documented failures and regressions. No improvement percentage is claimed here.
 
