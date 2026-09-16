@@ -371,6 +371,7 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
 ]:
     """Render the policy locals in a backend-free, credential-free Terraform root."""
     first_locals = _top_level_terraform_block(FOUNDATION_IAM, "locals", 0)
+    first_locals += "\nlocals { green_trace_log_arns = [] }\n"
     policy_locals = _top_level_terraform_block(FOUNDATION_IAM, "locals", 1)
     policy_data = _top_level_terraform_block(
         FOUNDATION_IAM,
@@ -544,6 +545,7 @@ def _terraform_rendered_development_plan_policies() -> tuple[
 ]:
     """Render the development plan policies in a backend-free Terraform root."""
     first_locals = _top_level_terraform_block(FOUNDATION_IAM, "locals", 0)
+    first_locals += "\nlocals { green_trace_log_arns = [] }\n"
     policy_data = _top_level_terraform_block(
         FOUNDATION_IAM,
         'data "aws_iam_policy_document" "development_plan"',
@@ -3236,7 +3238,7 @@ def test_v2_declares_a_private_agentcore_application_with_protected_trace_archiv
     assert agentcore_path.exists()
     agentcore = agentcore_path.read_text()
     assert (
-        'agent_runtime_name = "nova_toll_v2${local.is_production ? "" : "_development"}"'
+        'agent_runtime_name = "nova_toll_v2${local.is_production ? "" : "_development"}${each.key == "blue" ? "" : "_green"}"'
         in agentcore
     )
     assert 'network_mode = "VPC"' in agentcore
@@ -3249,7 +3251,7 @@ def test_v2_declares_a_private_agentcore_application_with_protected_trace_archiv
         in agentcore
     )
     assert (
-        'function_name                  = "tollchat-v2-chat-proxy${local.suffix}"'
+        'function_name                  = "tollchat-v2-chat-proxy${local.slot_suffix[each.key]}"'
         in agentcore
     )
     assert 'name         = "tollchat-v2-anonymous-sessions${local.suffix}"' in agentcore
@@ -3284,7 +3286,7 @@ def test_v2_declares_a_private_agentcore_application_with_protected_trace_archiv
     runtime_logs = agentcore.split(
         'resource "aws_cloudwatch_log_group" "agentcore_runtime"', maxsplit=1
     )[1].split('resource "aws_bedrockagentcore_agent_runtime_endpoint"', maxsplit=1)[0]
-    assert 'toset(["DEFAULT", "preview"])' in runtime_logs
+    assert "for_each = local.runtime_logs" in runtime_logs
     assert "retention_in_days = local.is_production ? 1 : 7" in runtime_logs
     for resource in (
         'resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces"',
@@ -3322,19 +3324,21 @@ def test_v2_declares_a_private_agentcore_application_with_protected_trace_archiv
         agentcore,
         'resource "aws_cloudwatch_log_subscription_filter" "agentcore_traces"',
     )
-    assert 'toset(["DEFAULT", "preview"])' in subscriptions
+    assert "local.runtime_logs" in subscriptions
     assert (
         'filter_pattern  = "{ $.traceId = \\"*\\" && $.spanId = \\"*\\" && $.durationNano >= 0 }"'
         in subscriptions
     )
     assert (
-        "depends_on = [aws_s3_object.index, aws_s3_object.faq, aws_s3_object.privacy, aws_cloudwatch_log_data_protection_policy.agentcore]"
+        "depends_on = [aws_cloudwatch_log_data_protection_policy.agentcore]"
         in subscriptions
     )
     assert "exc_info" not in subscriptions
 
 
 def test_agentcore_trace_archive_has_shared_privacy_notice_and_retention():
+    from scripts.verify_release_bundle import FIXED_PATHS
+
     agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
     for value in (
         'resource "aws_glue_catalog_table" "agentcore_traces"',
@@ -3349,14 +3353,8 @@ def test_agentcore_trace_archive_has_shared_privacy_notice_and_retention():
     assert lifecycle.count("agentcore-traces/") == 1
     assert 'for_each = ["agentcore-traces"]' in lifecycle
     assert "expiration { days = 7 }" in lifecycle
-    for name, filename in (
-        ("index", "dev_chat.html"),
-        ("faq", "faq.html"),
-        ("privacy", "privacy.txt"),
-    ):
-        block = terraform_block(SITE_TF, f'resource "aws_s3_object" "{name}"')
-        assert f'file("${{path.module}}/../agent/{filename}")' in block
-        assert "local.is_production" not in block
+    for filename in ("dev_chat.html", "faq.html", "privacy.txt"):
+        assert "v2/agent/" + filename in FIXED_PATHS
         notice = (V2_ROOT / "agent" / filename).read_text()
         assert "make an effort to protect" in notice
         assert "can miss" in notice
@@ -3395,7 +3393,7 @@ def test_agentcore_trace_envelope_becomes_raw_ndjson_and_projects_query_fields()
     )
     assert 'Action   = "logs:PutResourcePolicy"' in runtime_policy
     assert (
-        'Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/${local.is_production ? "nova_toll_v2-W6989LEw44" : "nova_toll_v2_development-Y69XBf88Bl"}-*"'
+        'Resource = [for log in values(local.runtime_logs) : "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/${var.release_slots[log.slot].runtime_id}-${log.endpoint}"]'
         in runtime_policy
     )
     assert (
@@ -3621,20 +3619,21 @@ def test_agentcore_trace_protection_applies_to_both_environments():
     runtime = terraform_block(
         agentcore, 'resource "aws_bedrockagentcore_agent_runtime" "tollchat"'
     )
-    common, development = _hcl_expression(runtime, "environment_variables").split(
-        "local.is_production ? {} : {"
+    assert "merge(each.value.runtime_environment" in _hcl_expression(
+        runtime, "environment_variables"
     )
+    assert "local.required_runtime_environment" in runtime
     for name in (
         "UNIFIED_TRACES_DESTINATION_ENABLED",
         "TOLLCHAT_TELEMETRY_GUARDRAIL_ID",
         "TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION",
     ):
-        assert name in common and name not in development
+        assert name in agentcore
     subscriptions = terraform_block(
         agentcore,
         'resource "aws_cloudwatch_log_subscription_filter" "agentcore_traces"',
     )
-    assert re.search(r'for_each\s*= toset\(\["DEFAULT", "preview"\]\)', subscriptions)
+    assert re.search(r"for_each\s*= local.runtime_logs", subscriptions)
     assert re.search(
         r"for_each\s*= aws_cloudwatch_log_group.agentcore_runtime", protection
     )
@@ -3662,7 +3661,8 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert "publish                        = true" in proxy
     assert "reserved_concurrent_executions = 5" in proxy
     assert "ignore_changes = [reserved_concurrent_executions]" not in proxy
-    assert "PUBLIC_ORIGINS = local.public_site_url" in proxy
+    assert "PUBLIC_ORIGINS = local.public_site_url" in agentcore
+    assert "merge(each.value.proxy_environment" in proxy
     assert 'PUBLIC_ORIGINS = "https://${local.domains[0]}"' not in proxy
     loader = main.split('resource "aws_lambda_function" "loader"', maxsplit=1)[1].split(
         'resource "aws_lambda_function" "publisher"', maxsplit=1
@@ -3696,20 +3696,21 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
         "count                             = local.is_production ? 1 : 0" in agentcore
     )
     assert (
-        "qualifier                         = aws_lambda_alias.tollchat_live.name"
+        'qualifier                         = aws_lambda_alias.tollchat_live["blue"].name'
         in agentcore
     )
 
     assert 'resource "aws_lambda_function_url" "public_chat"' in site
     assert 'authorization_type = "AWS_IAM"' in site
     assert 'invoke_mode        = "RESPONSE_STREAM"' in site
-    assert "qualifier          = aws_lambda_alias.tollchat_live.name" in site
+    assert "qualifier          = aws_lambda_alias.tollchat_live[each.key].name" in site
     assert 'origin_access_control_origin_type = "lambda"' in site
     assert 'origin_access_control_origin_type = "s3"' in site
     assert 'path_pattern             = "/api/*"' in site
     assert 'code    = file("${path.module}/../agent/public-api-gate.js")' in site
     assert (
-        "aliases             = local.custom_domain_enabled ? local.domains : []" in site
+        "aliases                         = local.custom_domain_enabled ? local.domains : []"
+        in site
     )
     assert "cloudfront_default_certificate = !local.custom_domain_enabled" in site
     assert (
@@ -3941,7 +3942,7 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
     )[0]
     assert "aws_cloudfront_function.public_report_routes.arn" in default_behavior
     api_behavior = site.split("  ordered_cache_behavior {", maxsplit=1)[1].split(
-        "  web_acl_id", maxsplit=1
+        "  ordered_cache_behavior {", maxsplit=1
     )[0]
     assert "aws_cloudfront_function.public_chat_routes.arn" in api_behavior
     assert "aws_cloudfront_function.public_report_routes.arn" not in api_behavior
@@ -4186,7 +4187,7 @@ def test_agent_measurement_retains_historical_metadata_without_active_sink():
         )[0]
     )
 
-    assert 'toset(["cookie", "authorization", "referer"])' in site
+    assert 'toset(["cookie", "authorization", "referer", "aws-cf-cd-tollchat"])' in site
     assert 'field_type = "QUERY_STRING"' in site
     assert site.count('action                     = "SUBSTITUTION"') >= 2
 
@@ -4349,21 +4350,25 @@ def test_agent_registry_and_rollup_outputs_are_retained_inert_metadata():
 
 
 def test_public_site_publishes_the_v2_ui_and_legal_assets():
+    from scripts.verify_release_bundle import FIXED_PATHS
+
     site = (V2_ROOT / "infra" / "site.tf").read_text()
     page = (V2_ROOT / "agent" / "dev_chat.html").read_text()
     server = (V2_ROOT / "agent" / "dev_chat.py").read_text()
 
-    assert re.search(r'key\s+= "index[.]html"', site)
-    assert "agent/dev_chat.html" in site
-    assert "local.is_production ?" in site
-    assert re.search(r'key\s+= "chat[.]mjs"', site)
-    assert re.search(
-        r'source\s+= "\$\{path[.]module\}/[.][.]/agent/public_chat[.]mjs"', site
+    for path in (
+        "dev_chat.html",
+        "public_chat.mjs",
+        "faq.html",
+        "privacy.txt",
+        "terms.txt",
+    ):
+        assert "v2/agent/" + path in FIXED_PATHS
+    assert (
+        "origin_path              = var.release_slots[var.active_slot].asset_prefix"
+        in site
     )
-    for path in ("faq.html", "privacy.txt", "terms.txt"):
-        assert path in site
-    assert 'fileset("${path.module}/../agent/assets", "**")' in site
-    assert re.search(r'key\s+= "assets/\$\{each[.]value\}"', site)
+    assert 'path_pattern           = "/releases/*"' in site
     assert (V2_ROOT / "agent" / "assets" / "tollchat-logo.png").exists()
     assert (V2_ROOT / "agent" / "assets" / "favicon.png").exists()
     assert 'href="/assets/favicon.png"' in page
@@ -4446,8 +4451,8 @@ def test_v2_agent_packages_are_required_for_real_deployments():
     build = V2_ROOT / "scripts" / "build_agentcore_zips.sh"
     assert 'variable "agentcore_package_path"' in variables
     assert 'variable "chat_proxy_package_path"' in variables
-    assert "AgentCore deployment requires the reviewed v2 runtime package" in agentcore
-    assert "Chat proxy deployment requires the reviewed v2 proxy package" in agentcore
+    assert "AgentCore must use the immutable release artifact" in agentcore
+    assert "Chat proxy must use the immutable release artifact" in agentcore
     assert build.exists()
 
 
@@ -5573,7 +5578,7 @@ def _assert_development_delivery_privileged(source: str) -> None:
     assert deploy["needs"] == "oidc-proof"
     assert (
         deploy["if"]
-        == "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor"
+        == "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true' && github.triggering_actor == github.actor"
     )
     assert deploy["environment"] == "development"
     assert deploy["concurrency"] == {"group": "v2-development-apply", "queue": "max"}
@@ -7950,13 +7955,13 @@ def test_development_agentcore_execution_trust_is_exact_and_confused_deputy_boun
         for condition in conditions
     )
     assert re.search(
-        r'agentcore_runtime_source_arns\s*=\s*local\.is_production\s*\?\s*\[.*runtime/\*"\]\s*:\s*\[local\.development_agentcore_runtime_arn\]',
+        r"agentcore_runtime_source_arns\s*=\s*values\(local.slot_runtime_arns\)",
         source,
         re.DOTALL,
     )
     assert (
-        'development_agentcore_runtime_arn = "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl"'
-        in source
+        'name => "arn:aws:bedrock-agentcore:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:runtime/${slot.runtime_id}"'
+        in (V2_ROOT / "infra/releases.tf").read_text()
     )
 
 
@@ -8041,11 +8046,11 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc():
             "if: github.ref == 'refs/heads/release'",
         ),
         (
-            "if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor",
+            "if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true' && github.triggering_actor == github.actor",
             "if: github.triggering_actor == github.actor",
         ),
         (
-            "if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor",
+            "if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true' && github.triggering_actor == github.actor",
             "if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'",
         ),
         (
@@ -8101,7 +8106,7 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc():
         _must_reject(
             assertion,
             source,
-            "if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor",
+            "if: " + str(yaml.safe_load(source)["jobs"]["deploy"]["if"]),
             "if: true",
         )
     _must_reject(
@@ -12927,7 +12932,7 @@ def test_slice_3_development_custom_domain_is_explicit_and_production_preserving
         SITE_TF, 'resource "aws_cloudfront_distribution" "site"'
     )
     assert (
-        "aliases             = local.custom_domain_enabled ? local.domains : []"
+        "aliases                         = local.custom_domain_enabled ? local.domains : []"
         in distribution
     )
     assert (

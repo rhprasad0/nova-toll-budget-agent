@@ -1,12 +1,23 @@
 locals {
-  agentcore_zip_path = var.agentcore_package_path != "" ? var.agentcore_package_path : data.archive_file.placeholder.output_path
-  proxy_zip_path     = var.chat_proxy_package_path != "" ? var.chat_proxy_package_path : data.archive_file.placeholder.output_path
-  proxy_zip_hash     = var.chat_proxy_package_path != "" ? filebase64sha256(var.chat_proxy_package_path) : data.archive_file.placeholder.output_base64sha256
-  private_subnets    = [var.foundation.private_subnet_ids.a, var.foundation.private_subnet_ids.c]
-  # The development runtime is pre-provisioned. Keep its trust exact; the
-  # production branch retains its existing account-local runtime pattern.
-  development_agentcore_runtime_arn = "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl"
-  agentcore_runtime_source_arns     = local.is_production ? ["arn:aws:bedrock-agentcore:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:runtime/*"] : [local.development_agentcore_runtime_arn]
+  private_subnets = [var.foundation.private_subnet_ids.a, var.foundation.private_subnet_ids.c]
+  # Frozen release configuration must retain the shared security boundary.
+  required_runtime_environment = merge({
+    DB_HOST                              = var.foundation.db_instance.address
+    DB_PORT                              = tostring(var.foundation.db_instance.port)
+    DB_NAME                              = local.database_name
+    DB_USER                              = local.database_roles.agent
+    DB_CA_BUNDLE_PATH                    = "/var/task/rds-ca-bundle.pem"
+    TOLLCHAT_GUARDRAIL_ID                = aws_bedrock_guardrail.tollchat.guardrail_id
+    TOLLCHAT_GUARDRAIL_VERSION           = aws_bedrock_guardrail_version.tollchat.version
+    TOLLCHAT_TELEMETRY_GUARDRAIL_ID      = var.foundation.telemetry_guardrail.id
+    TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION = var.foundation.telemetry_guardrail.version
+    UNIFIED_TRACES_DESTINATION_ENABLED   = "true"
+  }, local.is_production ? {} : { PRICING_DB_USER = local.database_roles.pricing_caller })
+  required_proxy_environment = merge({
+    AGENTCORE_VPCE_URL = "https://${var.foundation.agentcore_vpc_endpoint_dns_name}"
+    SESSION_TABLE_NAME = aws_dynamodb_table.tollchat_sessions.name
+  }, local.is_production ? {} : { PUBLIC_ORIGINS = local.public_site_url })
+  agentcore_runtime_source_arns = values(local.slot_runtime_arns)
   private_api_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -26,10 +37,12 @@ locals {
       },
     ]
   })
-  agentcore_policy_resources = {
-    runtime  = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn
-    endpoint = aws_bedrockagentcore_agent_runtime_endpoint.tollchat.agent_runtime_endpoint_arn
-  }
+  agentcore_policy_resources = merge([
+    for name in ["blue", "green"] : {
+      "${name}-runtime"  = aws_bedrockagentcore_agent_runtime.tollchat[name].agent_runtime_arn
+      "${name}-endpoint" = aws_bedrockagentcore_agent_runtime_endpoint.tollchat[name].agent_runtime_endpoint_arn
+    }
+  ]...)
   agentcore_resource_policies = {
     for name, arn in local.agentcore_policy_resources : name => jsonencode({
       Version = "2012-10-17"
@@ -144,19 +157,9 @@ resource "aws_dynamodb_table" "tollchat_sessions" {
   }
 }
 
-resource "aws_s3_object" "agentcore" {
-  bucket      = var.foundation.agentcore_artifacts_bucket_name
-  key         = "runtime/v2/agentcore${local.is_production ? "" : "-dev"}.zip"
-  source      = local.agentcore_zip_path
-  source_hash = filebase64sha256(local.agentcore_zip_path)
-}
 
-resource "aws_s3_object" "tollchat_proxy" {
-  bucket      = var.foundation.agentcore_artifacts_bucket_name
-  key         = "lambda/v2/chat-proxy${local.is_production ? "" : "-dev"}.zip"
-  source      = local.proxy_zip_path
-  source_hash = local.proxy_zip_hash
-}
+
+
 
 data "aws_iam_policy_document" "agentcore_assume" {
   statement {
@@ -194,7 +197,7 @@ resource "aws_iam_role_policy" "tollchat_runtime" {
         Sid      = "ReadArtifact"
         Effect   = "Allow"
         Action   = "s3:GetObjectVersion"
-        Resource = aws_s3_object.agentcore.arn
+        Resource = "arn:aws:s3:::${var.foundation.agentcore_artifacts_bucket_name}/releases/*/agentcore.zip"
       },
       {
         Sid      = "ReadOpenAiApiKey"
@@ -221,16 +224,16 @@ resource "aws_iam_role_policy" "tollchat_runtime" {
         Sid    = "WriteRuntimeLogs"
         Effect = "Allow"
         Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:DescribeLogStreams", "logs:PutLogEvents"]
-        Resource = [
-          "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*",
-          "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*",
-        ]
+        Resource = flatten([for log in values(local.runtime_logs) : [
+          "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/${var.release_slots[log.slot].runtime_id}-${log.endpoint}",
+          "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/${var.release_slots[log.slot].runtime_id}-${log.endpoint}:log-stream:*",
+        ]])
       },
       ], [{
         Sid      = "EnableUnifiedRuntimeTraceDelivery"
         Effect   = "Allow"
         Action   = "logs:PutResourcePolicy"
-        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/${local.is_production ? "nova_toll_v2-W6989LEw44" : "nova_toll_v2_development-Y69XBf88Bl"}-*"
+        Resource = [for log in values(local.runtime_logs) : "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/${var.release_slots[log.slot].runtime_id}-${log.endpoint}"]
         Condition = {
           StringEquals = { "aws:RequestedRegion" = data.aws_region.current.region }
         }
@@ -343,7 +346,8 @@ resource "aws_bedrock_guardrail_version" "tollchat" {
 
 
 resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
-  agent_runtime_name = "nova_toll_v2${local.is_production ? "" : "_development"}"
+  for_each           = var.release_slots
+  agent_runtime_name = "nova_toll_v2${local.is_production ? "" : "_development"}${each.key == "blue" ? "" : "_green"}"
   description        = "TollChat v2 pricing agent"
   role_arn           = aws_iam_role.tollchat_runtime.arn
   depends_on         = [aws_iam_role_policy.tollchat_runtime]
@@ -355,8 +359,8 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
       code {
         s3 {
           bucket     = var.foundation.agentcore_artifacts_bucket_name
-          prefix     = aws_s3_object.agentcore.key
-          version_id = aws_s3_object.agentcore.version_id
+          prefix     = each.value.runtime_key
+          version_id = each.value.runtime_object_version
         }
       }
     }
@@ -375,37 +379,31 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
     max_lifetime                 = 3600
   }
 
-  environment_variables = merge(
-    {
-      DB_HOST                              = var.foundation.db_instance.address
-      DB_PORT                              = tostring(var.foundation.db_instance.port)
-      DB_NAME                              = local.database_name
-      DB_USER                              = local.database_roles.agent
-      DB_CA_BUNDLE_PATH                    = "/var/task/rds-ca-bundle.pem"
-      TOLLCHAT_GUARDRAIL_ID                = aws_bedrock_guardrail.tollchat.guardrail_id
-      TOLLCHAT_GUARDRAIL_VERSION           = aws_bedrock_guardrail_version.tollchat.version
-      TOLLCHAT_TELEMETRY_GUARDRAIL_ID      = var.foundation.telemetry_guardrail.id
-      TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION = var.foundation.telemetry_guardrail.version
-      UNIFIED_TRACES_DESTINATION_ENABLED   = "true"
-    },
-    local.is_production ? {} : {
-      PRICING_DB_USER = local.database_roles.pricing_caller
-    },
-  )
+  environment_variables = merge(each.value.runtime_environment, {
+    TOLLCHAT_RELEASE_ID = each.value.release_id
+  })
 
   lifecycle {
     precondition {
-      condition     = var.agentcore_package_path != ""
-      error_message = "AgentCore deployment requires the reviewed v2 runtime package."
+      condition     = alltrue([for key, value in local.required_runtime_environment : lookup(each.value.runtime_environment, key, null) == value])
+      error_message = "Each retained runtime must preserve database, guardrail, and protected tracing configuration."
+    }
+    postcondition {
+      condition     = self.agent_runtime_id == each.value.runtime_id
+      error_message = "Runtime identity differs from the reviewed bootstrap inventory."
+    }
+    precondition {
+      condition     = each.value.runtime_key == "releases/${each.value.release_id}/agentcore.zip"
+      error_message = "AgentCore must use the immutable release artifact."
     }
   }
 
 }
 
 resource "aws_cloudwatch_log_group" "agentcore_runtime" {
-  for_each = toset(["DEFAULT", "preview"])
+  for_each = local.runtime_logs
 
-  name              = "/aws/bedrock-agentcore/runtimes/${aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_id}-${each.value}"
+  name              = "/aws/bedrock-agentcore/runtimes/${aws_bedrockagentcore_agent_runtime.tollchat[each.value.slot].agent_runtime_id}-${each.value.endpoint}"
   retention_in_days = local.is_production ? 1 : 7
 }
 
@@ -437,19 +435,20 @@ resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces" {
 }
 
 resource "aws_cloudwatch_log_subscription_filter" "agentcore_traces" {
-  for_each        = toset(["DEFAULT", "preview"])
+  for_each        = local.runtime_logs
   name            = "nova-toll-v2-agentcore-traces${local.suffix}"
-  log_group_name  = aws_cloudwatch_log_group.agentcore_runtime[each.value].name
+  log_group_name  = aws_cloudwatch_log_group.agentcore_runtime[each.key].name
   destination_arn = aws_kinesis_firehose_delivery_stream.agentcore_traces[0].arn
   role_arn        = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/nova-toll-v2-agentcore-traces-logs${local.suffix}"
   filter_pattern  = "{ $.traceId = \"*\" && $.spanId = \"*\" && $.durationNano >= 0 }"
 
-  depends_on = [aws_s3_object.index, aws_s3_object.faq, aws_s3_object.privacy, aws_cloudwatch_log_data_protection_policy.agentcore]
+  depends_on = [aws_cloudwatch_log_data_protection_policy.agentcore]
 }
 
 resource "aws_bedrockagentcore_agent_runtime_endpoint" "tollchat" {
-  agent_runtime_id      = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_id
-  agent_runtime_version = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_version
+  for_each              = var.release_slots
+  agent_runtime_id      = aws_bedrockagentcore_agent_runtime.tollchat[each.key].agent_runtime_id
+  agent_runtime_version = aws_bedrockagentcore_agent_runtime.tollchat[each.key].agent_runtime_version
   name                  = "preview"
   description           = "Private TollChat v2 preview"
 }
@@ -478,20 +477,14 @@ resource "aws_iam_role_policy" "tollchat_proxy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = "bedrock-agentcore:InvokeAgentRuntime"
-        Resource = [
-          aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn,
-          aws_bedrockagentcore_agent_runtime_endpoint.tollchat.agent_runtime_endpoint_arn,
-        ]
+        Effect   = "Allow"
+        Action   = "bedrock-agentcore:InvokeAgentRuntime"
+        Resource = values(local.agentcore_policy_resources)
       },
       {
-        Effect = "Allow"
-        Action = "bedrock-agentcore:StopRuntimeSession"
-        Resource = [
-          aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn,
-          aws_bedrockagentcore_agent_runtime_endpoint.tollchat.agent_runtime_endpoint_arn,
-        ]
+        Effect   = "Allow"
+        Action   = "bedrock-agentcore:StopRuntimeSession"
+        Resource = values(local.agentcore_policy_resources)
       },
       {
         Effect   = "Allow"
@@ -503,13 +496,15 @@ resource "aws_iam_role_policy" "tollchat_proxy" {
 }
 
 resource "aws_cloudwatch_log_group" "tollchat_proxy" {
-  name              = "/aws/lambda/tollchat-v2-chat-proxy${local.suffix}"
+  for_each          = var.release_slots
+  name              = "/aws/lambda/tollchat-v2-chat-proxy${local.slot_suffix[each.key]}"
   retention_in_days = local.log_retention_days
   tags              = local.is_production ? { delivery_proof = "issue-301" } : {}
 }
 
 resource "aws_lambda_function" "tollchat_proxy" {
-  function_name                  = "tollchat-v2-chat-proxy${local.suffix}"
+  for_each                       = var.release_slots
+  function_name                  = "tollchat-v2-chat-proxy${local.slot_suffix[each.key]}"
   role                           = aws_iam_role.tollchat_proxy.arn
   runtime                        = "nodejs24.x"
   handler                        = "handler.handler"
@@ -519,9 +514,9 @@ resource "aws_lambda_function" "tollchat_proxy" {
   reserved_concurrent_executions = 5
 
   s3_bucket         = var.foundation.agentcore_artifacts_bucket_name
-  s3_key            = aws_s3_object.tollchat_proxy.key
-  s3_object_version = aws_s3_object.tollchat_proxy.version_id
-  source_code_hash  = local.proxy_zip_hash
+  s3_key            = each.value.proxy_key
+  s3_object_version = each.value.proxy_object_version
+  source_code_hash  = each.value.proxy_sha256
 
   vpc_config {
     subnet_ids         = local.private_subnets
@@ -529,19 +524,22 @@ resource "aws_lambda_function" "tollchat_proxy" {
   }
 
   environment {
-    variables = merge({
-      AGENTCORE_RUNTIME_ARN = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn
-      AGENTCORE_VPCE_URL    = "https://${var.foundation.agentcore_vpc_endpoint_dns_name}"
-      SESSION_TABLE_NAME    = aws_dynamodb_table.tollchat_sessions.name
-      }, local.is_production ? {} : {
-      PUBLIC_ORIGINS = local.public_site_url
+    variables = merge(each.value.proxy_environment, {
+      AGENTCORE_RUNTIME_ARN      = aws_bedrockagentcore_agent_runtime.tollchat[each.key].agent_runtime_arn
+      AGENTCORE_RUNTIME_ENDPOINT = aws_bedrockagentcore_agent_runtime_endpoint.tollchat[each.key].name
+      AGENTCORE_RUNTIME_VERSION  = aws_bedrockagentcore_agent_runtime_endpoint.tollchat[each.key].agent_runtime_version
+      RELEASE_ID                 = each.value.release_id
     })
   }
 
   lifecycle {
     precondition {
-      condition     = var.chat_proxy_package_path != ""
-      error_message = "Chat proxy deployment requires the reviewed v2 proxy package."
+      condition     = alltrue([for key, value in local.required_proxy_environment : lookup(each.value.proxy_environment, key, null) == value])
+      error_message = "Each retained proxy must preserve private ingress, session storage, and allowed origins."
+    }
+    precondition {
+      condition     = each.value.proxy_key == "releases/${each.value.release_id}/chat-proxy.zip"
+      error_message = "Chat proxy must use the immutable release artifact."
     }
   }
 
@@ -554,16 +552,17 @@ resource "aws_lambda_function" "tollchat_proxy" {
 }
 
 resource "aws_lambda_alias" "tollchat_live" {
+  for_each         = var.release_slots
   name             = "live"
   description      = "Reviewed public TollChat release"
-  function_name    = aws_lambda_function.tollchat_proxy.function_name
-  function_version = aws_lambda_function.tollchat_proxy.version
+  function_name    = aws_lambda_function.tollchat_proxy[each.key].function_name
+  function_version = aws_lambda_function.tollchat_proxy[each.key].version
 }
 
 resource "aws_lambda_provisioned_concurrency_config" "tollchat" {
   count                             = local.is_production ? 1 : 0
-  function_name                     = aws_lambda_alias.tollchat_live.function_name
-  qualifier                         = aws_lambda_alias.tollchat_live.name
+  function_name                     = aws_lambda_alias.tollchat_live["blue"].function_name
+  qualifier                         = aws_lambda_alias.tollchat_live["blue"].name
   provisioned_concurrent_executions = 1
 }
 
@@ -608,7 +607,7 @@ resource "aws_api_gateway_integration" "tollchat_root" {
   http_method             = aws_api_gateway_method.tollchat_root.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.tollchat_proxy.response_streaming_invoke_arn
+  uri                     = local.private_proxy_invoke_arn
   response_transfer_mode  = "STREAM"
   timeout_milliseconds    = 55000
 }
@@ -619,7 +618,7 @@ resource "aws_api_gateway_integration" "tollchat_proxy" {
   http_method             = aws_api_gateway_method.tollchat_proxy.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.tollchat_proxy.response_streaming_invoke_arn
+  uri                     = local.private_proxy_invoke_arn
   response_transfer_mode  = "STREAM"
   timeout_milliseconds    = 55000
 }
@@ -659,16 +658,18 @@ resource "aws_api_gateway_method_settings" "tollchat" {
 }
 
 resource "aws_lambda_permission" "tollchat_api" {
+  for_each      = var.release_slots
+  qualifier     = aws_lambda_alias.tollchat_live[each.key].name
   statement_id  = "AllowPrivateApiGatewayV2"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.tollchat_proxy.function_name
+  function_name = aws_lambda_function.tollchat_proxy[each.key].function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.tollchat.execution_arn}/*/*"
 }
 
 resource "aws_cloudwatch_log_metric_filter" "proxy_failure" {
   name           = "V2ProxyFailure${local.suffix}"
-  log_group_name = aws_cloudwatch_log_group.tollchat_proxy.name
+  log_group_name = aws_cloudwatch_log_group.tollchat_proxy["blue"].name
   pattern        = "PROXY_FAILURE"
 
   metric_transformation {
@@ -682,7 +683,7 @@ resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_errors" {
   alarm_name          = "tollchat-v2-chat-proxy-errors${local.suffix}"
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
-  dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy.function_name }
+  dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy["blue"].function_name }
   period              = 300
   evaluation_periods  = 1
   statistic           = "Sum"
@@ -709,7 +710,7 @@ resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_latency" {
   alarm_name          = "tollchat-v2-chat-proxy-latency${local.suffix}"
   namespace           = "AWS/Lambda"
   metric_name         = "Duration"
-  dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy.function_name }
+  dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy["blue"].function_name }
   period              = 300
   evaluation_periods  = 2
   datapoints_to_alarm = 1
