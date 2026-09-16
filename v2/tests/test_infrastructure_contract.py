@@ -4607,6 +4607,49 @@ def test_timed_lambda_scheduler_and_failure_contract():
     assert 'ip_protocol = "-1"' not in TIMED_CHECKS_TF
 
 
+def test_eval_dashboard_is_configured_in_both_environments():
+    assert_assignment(
+        TIMED_CHECKS_TF,
+        "eval_db_user",
+        'local.is_production ? "eval_writer" : "eval_writer_development"',
+    )
+    policy = terraform_block(
+        TIMED_CHECKS_TF, 'data "aws_iam_policy_document" "timed_checks_lambda"'
+    )
+    for sid, actions, resources in (
+        (
+            "ConnectEvaluationHistory",
+            '["rds-db:connect"]',
+            '["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.eval_db_user}"]',
+        ),
+        (
+            "PublishEvaluationSnapshot",
+            '["s3:PutObject"]',
+            '["${aws_s3_bucket.site.arn}/evals.json"]',
+        ),
+        (
+            "EncryptEvaluationSnapshot",
+            '["kms:GenerateDataKey", "kms:Decrypt"]',
+            "[aws_kms_key.site.arn]",
+        ),
+    ):
+        statement = next(
+            block for block in policy.split("statement {")[1:] if f'"{sid}"' in block
+        )
+        assert_assignment(statement, "actions", actions)
+        assert_assignment(statement, "resources", resources)
+    assert 'dynamic "statement"' not in policy
+    function = terraform_block(
+        TIMED_CHECKS_TF, 'resource "aws_lambda_function" "timed_checks"'
+    )
+    # Both variables must be in the unconditional map, before the alerts merge.
+    base_environment = function.split("variables = merge({", 1)[1].split("},", 1)[0]
+    assert_assignment(
+        base_environment, "EVAL_DASHBOARD_BUCKET", "aws_s3_bucket.site.id"
+    )
+    assert_assignment(base_environment, "EVAL_DB_USER", "local.eval_db_user")
+
+
 def test_timed_package_is_threaded_through_all_plan_paths():
     assert (
         '-var timed_checks_package_path="$STAGING/timed-checks.zip"'
