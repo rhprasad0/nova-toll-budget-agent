@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -54,6 +55,10 @@ profile_functions = {
     "tollchat_proxy": ("tollchat-v2-chat-proxy-dev", "chat-proxy.zip"),
 }
 profile_production = False
+candidate_header: str | None = None
+serving_expected: dict[str, Any] | None = None
+serving_observed: dict[str, Any] = {}
+profile_path_prefix = ""
 profile_trace_bucket = "aws-waf-logs-tollchat-agent-reports-903859731897-dev"
 
 
@@ -454,6 +459,8 @@ def request(
         "Sec-Fetch-Site": "same-origin",
         "Accept-Encoding": "identity",
     }
+    if candidate_header is not None:
+        headers["aws-cf-cd-tollchat"] = candidate_header
     if cookie is not None:
         headers["Cookie"] = f"{COOKIE}={cookie}"
     if canary:
@@ -465,7 +472,9 @@ def request(
     opener = urllib.request.build_opener(
         NoRedirect(), urllib.request.HTTPCookieProcessor(jar)
     )
-    req = urllib.request.Request(profile_site + path, data=data, headers=headers)
+    req = urllib.request.Request(
+        profile_site + profile_path_prefix + path, data=data, headers=headers
+    )
     try:
         response = opener.open(req, timeout=90 if path == "/api/chat" else 20)
     except urllib.error.HTTPError as error:
@@ -484,6 +493,24 @@ def request(
             or not isinstance(content, bytes)
         ):
             raise ValueError("invalid HTTP response")
+        if path == "/api/chat" and code == 200 and serving_expected is not None:
+            fields = {
+                "release_id": "Release",
+                "proxy_arn": "Proxy",
+                "proxy_version": "Proxy-Version",
+                "runtime_arn": "Runtime",
+                "runtime_version": "Runtime-Version",
+                "endpoint": "Endpoint",
+            }
+            observed = {
+                key: response.headers.get("X-TollChat-" + suffix)
+                for key, suffix in fields.items()
+            }
+            require(
+                all(observed[key] == serving_expected[key] for key in fields),
+                "serving_identity",
+            )
+            serving_observed.update(observed)
         return code, kind, content
 
 
@@ -728,7 +755,8 @@ def canary(values: dict[str, Any]) -> dict[str, Any]:
                     "success",
                 }
                 require(
-                    set(item) == expected
+                    set(item)
+                    == expected | ({"release_id"} if "release_id" in item else set())
                     and type(item.get("schema_version")) is int
                     and item.get("schema_version") == 1,
                     "canary_evidence",
@@ -755,6 +783,12 @@ def canary(values: dict[str, Any]) -> dict[str, Any]:
                     and re.fullmatch(r"\d{1,4}\.\d{2}", item["total_usd"]) is not None,
                     "canary_evidence",
                 )
+                if serving_expected is not None:
+                    require(
+                        item.get("release_id") == serving_expected["release_id"],
+                        "invoked_release",
+                    )
+                    serving_observed["runtime_release_id"] = item["release_id"]
                 evidence = item
             elif item.get("type") == "answer":
                 require(
@@ -830,7 +864,7 @@ def token(jar: http.cookiejar.CookieJar) -> str:
     require(
         item.secure
         and item.path == "/"
-        and item.domain == "dev.tollchat.ai"
+        and item.domain == urllib.parse.urlsplit(profile_site).hostname
         and not item.domain_specified,
         "session_cookie_attributes",
     )
