@@ -843,7 +843,7 @@ def main() -> int:
         OSError,
         subprocess.SubprocessError,
     ):
-        pass
+        result["deployment"] = "failed"
     if recovery_record is not None:
         result["recovery_record"] = recovery_record
     if authorized and args.phase != "prepare-plan":
@@ -873,6 +873,7 @@ def main() -> int:
             subprocess.SubprocessError,
         ):
             result["active"] = "unverified"
+            result["deployment"] = "failed"
     write(args.output, result)
     print(json.dumps(result, sort_keys=True))
     return 0 if result["deployment"] in {"succeeded", "prepared_plan"} else 1

@@ -472,6 +472,7 @@ def test_recovery_accepts_pre_promotion_output_after_partial_apply() -> None:
         ("post_promotion_failure", ("failed", "recovered", "blue")),
         ("partial_switch", ("failed", "recovered", "blue")),
         ("restore_failure", ("failed", "failed", "green")),
+        ("final_state_failure", ("failed", "not_attempted", "unverified")),
     ],
 )
 @pytest.mark.parametrize("target", ["development", "production"])
@@ -515,6 +516,8 @@ def test_complete_release_state_machine(
     )
 
     def current(_root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+        if scenario == "final_state_failure" and len(probe_calls) == 5:
+            raise gate.Rejected("state_unavailable")
         return deepcopy(live), {"lineage": "test-lineage", "serial": serial}
 
     monkeypatch.setattr(delivery, "current", current)
@@ -661,7 +664,7 @@ def test_complete_release_state_machine(
         ["prepare"]
         if scenario == "invalid_candidate"
         else ["prepare", "promote"]
-        if scenario == "healthy"
+        if scenario in {"healthy", "final_state_failure"}
         else ["prepare", "promote", "recover"]
     )
     assert live["slots"]["blue"] == initial["slots"]["blue"]
