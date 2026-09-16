@@ -71,21 +71,16 @@ def test_migration_candidates_are_registered_and_exclude_bootstrap_files() -> No
     )
 
 
-def test_production_registry_stays_at_032_until_dashboard_release_is_authorized() -> (
-    None
-):
+def test_production_release_schema_preflight() -> None:
     schemas, versions = runner._registry()
     migrations: Any = runner._production_migrations(
-        (*runner._migration_candidates(schemas), _migration(number=33))
+        (*runner._migration_candidates(schemas), _migration(number=34))
     )
     assert migrations[-1].path == (
-        "v2/db/migrations/032_upgrade_oracle_1_14_1_to_1_15_0.sql"
+        "v2/db/migrations/033_upgrade_pricing_1_3_0_to_1_4_0.sql"
     )
-    assert all(migration.number <= 32 for migration in migrations)
-    assert {migration.schema: migration.target for migration in migrations} == {
-        "pricing": "1.3.0",
-        "oracle": versions["oracle"],
-    }
+    assert all(migration.number <= 33 for migration in migrations)
+    assert {migration.schema: migration.target for migration in migrations} == versions
 
     wrapper = (SCRIPTS / "run_production_migrations_workflow.sh").read_text()
     gate = wrapper.split('jq -e --arg candidate "$CANDIDATE" \'\n', 1)[1].split(
@@ -105,7 +100,7 @@ def test_production_registry_stays_at_032_until_dashboard_release_is_authorized(
         "listener_attempt": 1,
         "listener_run": 1,
         "release_id": 1,
-        "schema_versions": {"pricing": "1.3.0", "oracle": versions["oracle"]},
+        "schema_versions": versions,
         "tag": "v1.0.8",
     }
     result = subprocess.run(
@@ -115,6 +110,15 @@ def test_production_registry_stays_at_032_until_dashboard_release_is_authorized(
         capture_output=True,
     )
     assert result.returncode == 0, result.stderr
+    for schema in versions:
+        admission["schema_versions"] = {**versions, schema: "0.0.0"}
+        rejected = subprocess.run(
+            ["jq", "-e", "--arg", "candidate", admission["candidate"], gate],
+            input=json.dumps(admission),
+            text=True,
+            capture_output=True,
+        )
+        assert rejected.returncode != 0
 
 
 def test_baseline_manifest_is_shared_and_matches_canonical_bytes() -> None:

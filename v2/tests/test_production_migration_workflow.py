@@ -78,13 +78,13 @@ elif name == "python3":
         assert os.environ["PGUSER"] == "schema_migrator_production"
         assert os.environ["PGSSLMODE"] == "verify-full"
         if mode == "runner": fail()
-        versions = {"pricing":"1.3.0", "oracle":"1.15.0"}
+        versions = {"pricing":"1.4.0", "oracle":"1.15.0"}
         data = {"commit":os.environ["PRODUCTION_MIGRATION_CANDIDATE"], "database":"nova_toll",
                 "user":"schema_migrator_production","status":"ok","before":versions,
                 "after":versions,"applied":[],"run_id":"12345678-1234-4234-8234-123456789abc"}
         if mode == "apply":
-            data["before"] = {"pricing":"1.2.0", "oracle":"1.13.0"}
-            data["applied"] = ["v2/db/migrations/031_upgrade_pricing_1_2_0_to_1_3_0.sql"]
+            data["before"] = {"pricing":"1.3.0", "oracle":"1.15.0"}
+            data["applied"] = ["v2/db/migrations/033_upgrade_pricing_1_3_0_to_1_4_0.sql"]
         if mode == "runner-commit": data["commit"] = "c" * 40
         if mode == "runner-after": data["after"] = {"pricing":"1.2.0", "oracle":"1.13.0"}
         if mode == "runner-shape": del data["after"]
@@ -123,7 +123,7 @@ def _admission() -> dict[str, object]:
         "evidence_artifact": {"id": 13, "digest": "sha256:" + "c" * 64},
         "bundle_id": 10,
         "bundle_digest": "sha256:" + "d" * 64,
-        "schema_versions": {"pricing": "1.3.0", "oracle": "1.15.0"},
+        "schema_versions": {"pricing": "1.4.0", "oracle": "1.15.0"},
         "consumer_run": 14,
         "consumer_attempt": 1,
         "claim_id": 15,
@@ -269,7 +269,7 @@ def test_actual_workflow_precredential_blocks_sanitize_failure(
         "BUNDLE_ID": "10",
         "BUNDLE_DIGEST": "sha256:" + "d" * 64,
         "CANDIDATE": "b" * 40,
-        "PRICING": "1.3.0",
+        "PRICING": "1.4.0",
         "ORACLE": "1.15.0",
     }
     result = subprocess.run(
@@ -577,7 +577,7 @@ fi
                 "BUNDLE_ID": "10",
                 "BUNDLE_DIGEST": "sha256:" + "d" * 64,
                 "CANDIDATE": "b" * 40,
-                "PRICING": "1.3.0",
+                "PRICING": "1.4.0",
                 "ORACLE": "1.15.0",
                 "REAL_GIT": real_git,
                 "STATUS_FAILURE": "1" if candidate_change == "status-failure" else "",
@@ -718,7 +718,7 @@ def test_actual_production_wrapper_boundaries(
                 "evidence_artifact": {"id": 13, "digest": "sha256:" + "c" * 64},
                 "bundle_id": 10,
                 "bundle_digest": "sha256:" + "d" * 64,
-                "schema_versions": {"pricing": "1.3.0", "oracle": "1.15.0"},
+                "schema_versions": {"pricing": "1.4.0", "oracle": "1.15.0"},
                 "consumer_run": 14,
                 "consumer_attempt": 1,
                 "claim_id": 15,
@@ -764,13 +764,13 @@ def test_actual_production_wrapper_boundaries(
         assert evidence["candidate"] == "b" * 40
         assert evidence["consumer_run"] == 14
         assert evidence["applied"] == (
-            ["v2/db/migrations/031_upgrade_pricing_1_2_0_to_1_3_0.sql"]
+            ["v2/db/migrations/033_upgrade_pricing_1_3_0_to_1_4_0.sql"]
             if failure == "apply"
             else []
         )
         if failure == "apply":
-            assert evidence["before"] == {"pricing": "1.2.0", "oracle": "1.13.0"}
-            assert evidence["after"] == {"pricing": "1.3.0", "oracle": "1.15.0"}
+            assert evidence["before"] == {"pricing": "1.3.0", "oracle": "1.15.0"}
+            assert evidence["after"] == {"pricing": "1.4.0", "oracle": "1.15.0"}
         assert evidence["status"] == "ok"
 
 
@@ -866,7 +866,7 @@ def _saved_contract() -> tuple[dict[str, Any], dict[str, Any]]:
         "evidence_artifact": {"id": 13, "digest": "sha256:" + "c" * 64},
         "bundle_id": 10,
         "bundle_digest": "sha256:" + "d" * 64,
-        "schema_versions": {"pricing": "1.3.0", "oracle": "1.15.0"},
+        "schema_versions": {"pricing": "1.4.0", "oracle": "1.15.0"},
         "consumer_run": 14,
         "consumer_attempt": 1,
         "claim_id": 15,

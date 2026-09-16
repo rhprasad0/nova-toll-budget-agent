@@ -51,9 +51,11 @@ user chat sessions. Postgres retains history; the public window is seven days.
    until then the page correctly shows no results. Inspect its environment,
    occurrence timestamp, three verdicts, conversation, and tool evidence.
 
-Production remains capped at migration 032. A future reviewed production release
-must explicitly authorize migration 033 and provision its own writer and snapshot
-publication permissions before activation. Development data is never copied there.
+The production migration boundary now includes 033, targeting pricing 1.4.0 and
+Oracle 1.15.0. Before publishing a production release, complete the
+[release schema preflight](../manual-releases/README.md#2-check-schemas-before-publishing)
+and the fixed writer prerequisite below. Dashboard runtime activation and snapshot
+publication permissions remain separate work. Development data is never copied there.
 
 ### Fixed development role prerequisite
 
@@ -81,6 +83,40 @@ COMMIT;
 Migration 033 grants schema usage and SELECT/INSERT/UPDATE on the single new
 table. The writer cannot delete history or read/write pricing tables. No role
 creation or arbitrary SQL is added to the protected delivery workflow.
+
+### Fixed production role prerequisite
+
+This is a separate, human-reviewed administrator bootstrap before publishing the
+release. Verify AWS account `920534282028`, the fixed `nova-toll-db` instance,
+`nova_toll` database, and the existing TLS-verified administrator connection.
+Do not run development bootstrap SQL here or give CREATEROLE to the migrator.
+
+```sql
+BEGIN;
+DO $$ BEGIN
+  IF current_database() <> 'nova_toll'
+     OR shobj_description((SELECT oid FROM pg_database
+                          WHERE datname = current_database()), 'pg_database')
+        IS DISTINCT FROM 'environment=production' THEN
+    RAISE EXCEPTION 'wrong evaluation writer bootstrap target';
+  END IF;
+END $$;
+CREATE ROLE eval_writer LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+  NOINHERIT NOREPLICATION NOBYPASSRLS;
+COMMENT ON ROLE eval_writer IS 'environment=production';
+GRANT rds_iam TO eval_writer;
+GRANT CONNECT ON DATABASE nova_toll TO eval_writer;
+COMMIT;
+```
+
+If the role already exists, stop and inspect its attributes and memberships;
+do not silently reuse or replace an unknown role. Verify LOGIN, NOINHERIT,
+NOSUPERUSER, NOCREATEDB, NOCREATEROLE, NOREPLICATION, NOBYPASSRLS, the production
+comment, `rds_iam` membership only, and CONNECT on `nova_toll`. This bootstrap
+creates no application tables and runs no schema migration. Migration 033 grants
+only schema usage and SELECT/INSERT/UPDATE on `pricing.evaluation_runs` through
+the protected release workflow. Runtime AWS IAM and snapshot publication are
+not activated by this bootstrap.
 
 ## Local checks
 

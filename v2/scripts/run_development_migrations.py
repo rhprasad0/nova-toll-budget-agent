@@ -65,7 +65,7 @@ PRODUCTION_RDS_ENDPOINT: Final = re.compile(
     r"^nova-toll-db[.][a-z0-9-]+[.]us-east-1[.]rds[.]amazonaws[.]com$"
 )
 PRODUCTION_RDS_PORT: Final = "5432"
-PRODUCTION_MAX_MIGRATION_NUMBER: Final = 32
+PRODUCTION_MAX_MIGRATION_NUMBER: Final = 33
 
 
 @dataclass(frozen=True)
