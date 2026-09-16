@@ -79,6 +79,7 @@ output "policies" {{ value = {{ delivery = jsondecode(local.delivery), planner =
                 "apigateway:GET",
                 "s3:PutObject",
                 "kms:GenerateDataKey",
+                "kms:Decrypt",
             }
             if action == "s3:PutObject":
                 assert all(

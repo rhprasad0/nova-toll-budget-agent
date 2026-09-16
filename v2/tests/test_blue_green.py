@@ -560,7 +560,7 @@ def test_complete_release_state_machine(
         before: dict[str, Any],
         inputs: dict[str, Any],
     ) -> Path:
-        gate.validate_plan(plan(inputs), before, phase)
+        gate.validate_plan(plan(inputs, prior=before), before, phase)
         result = work / (phase + ".tfplan")
         result.write_bytes(phase.encode())
         return result
