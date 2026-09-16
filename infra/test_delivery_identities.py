@@ -1178,3 +1178,15 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def test_production_release_planner_can_verify_encrypted_immutable_retries():
+    source = (ROOT / "infra/blue-green.tf").read_text()
+    planner = terraform_block(source, 'resource "aws_iam_role_policy" "production_blue_green_plan"')
+    assert 'Action   = ["kms:Decrypt", "kms:GenerateDataKey"]' in planner
+    assert 'Resource = local.production_delivery_site_key_arn' in planner
+    assert '"kms:ViaService"                   = "s3.us-east-1.amazonaws.com"' in planner
+    assert '"kms:EncryptionContext:aws:s3:arn" = "arn:aws:s3:::tollchat-site-920534282028"' in planner
+    delivery = terraform_block(source, 'resource "aws_iam_role_policy" "production_blue_green"')
+    assert '"lambda:GetFunctionCodeSigningConfig"' in delivery
+    assert 'alarm:tollchat-v2-chat-proxy-${metric}-green' in delivery

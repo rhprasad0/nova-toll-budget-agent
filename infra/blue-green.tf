@@ -165,7 +165,7 @@ resource "aws_iam_role_policy" "production_blue_green" {
       {
         Sid    = "ReleaseSlots"
         Effect = "Allow"
-        Action = ["lambda:GetAlias", "lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:GetFunctionUrlConfig", "lambda:GetPolicy", "lambda:ListVersionsByFunction", "lambda:ListTags", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:PublishVersion", "lambda:UpdateAlias"]
+        Action = ["lambda:GetAlias", "lambda:GetFunctionCodeSigningConfig", "lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:GetFunctionUrlConfig", "lambda:GetPolicy", "lambda:ListVersionsByFunction", "lambda:ListTags", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:PublishVersion", "lambda:UpdateAlias"]
         Resource = flatten([for name in ["tollchat-v2-chat-proxy", "tollchat-v2-chat-proxy-green"] : [
           "arn:aws:lambda:us-east-1:920534282028:function:${name}",
           "arn:aws:lambda:us-east-1:920534282028:function:${name}:*"
@@ -220,6 +220,12 @@ resource "aws_iam_role_policy" "production_blue_green" {
         ])
       },
       {
+        Sid      = "ReadGreenProxyAlarms"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"]
+        Resource = [for metric in ["errors", "failures", "latency"] : "arn:aws:cloudwatch:us-east-1:920534282028:alarm:tollchat-v2-chat-proxy-${metric}-green"]
+      },
+      {
         Sid      = "ReadGreenTraceAlarms"
         Effect   = "Allow"
         Action   = ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"]
@@ -246,9 +252,9 @@ resource "aws_iam_role_policy" "production_blue_green_plan" {
         Resource = ["arn:aws:s3:::nova-toll-agentcore-920534282028/releases/*", "arn:aws:s3:::tollchat-site-920534282028/releases/*"]
       },
       {
-        Sid      = "EncryptImmutableSiteObjects"
+        Sid      = "VerifyAndEncryptImmutableSiteObjects"
         Effect   = "Allow"
-        Action   = ["kms:GenerateDataKey"]
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
         Resource = local.production_delivery_site_key_arn
         Condition = { StringEquals = {
           "kms:ViaService"                   = "s3.us-east-1.amazonaws.com"

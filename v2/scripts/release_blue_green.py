@@ -568,10 +568,20 @@ def observe(
 
 
 def recover(
-    root: Path, bundle: Path, foundation: Path, work: Path, prepared: dict[str, Any]
+    root: Path,
+    bundle: Path,
+    foundation: Path,
+    work: Path,
+    prepared: dict[str, Any],
+    *,
+    expected_identity: dict[str, Any] | None = None,
 ) -> bool:
     actual, identity = current(root)
-    gate.require(actual["slots"] == prepared["slots"], "stale_recovery")
+    gate.require(
+        actual["slots"] == prepared["slots"]
+        and (expected_identity is None or identity == expected_identity),
+        "stale_recovery",
+    )
     promoted = dict(
         prepared, active="green" if prepared["active"] == "blue" else "blue"
     )
@@ -592,8 +602,8 @@ def recover(
     readiness(restored["slots"][restored["active"]])
     probe(restored["slots"][restored["active"]])
     private_probe(root, restored["slots"][restored["active"]])
-    for slot in restored["slots"].values():
-        assets(slot)
+    for name, slot in restored["slots"].items():
+        assets(slot, document=name == restored["active"])
     return True
 
 
@@ -725,12 +735,16 @@ def main() -> int:
                 and identity["lineage"] == context["identity"]["lineage"],
                 "stale_recovery",
             )
-            result = {
-                "deployment": "failed",
-                "recovery": "recovered"
-                if recover(root, bundle, foundation, work, context["prepared"])
-                else "failed",
-            }
+            result["recovery"] = "failed"
+            if recover(
+                root,
+                bundle,
+                foundation,
+                work,
+                context["prepared"],
+                expected_identity=identity,
+            ):
+                result["recovery"] = "recovered"
         else:
             if args.saved_plan is not None:
                 document = json.loads(

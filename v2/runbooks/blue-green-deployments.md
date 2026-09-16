@@ -172,8 +172,13 @@ failed restore; never repeatedly apply a stale plan or mutate routing directly.
 
 Local tests exercise controller branches with mocked AWS/Terraform I/O: invalid
 candidate, healthy promotion, two failed probes, partial switch, stale state and
-restore failure. SQL tests run baseline and candidate contracts against the same
-upgraded disposable database. **These tests do not prove a live deployment.**
+restore failure. SQL tests run PR-base and candidate contracts against the same
+upgraded disposable database. The PR base is not necessarily the deployed retained
+release after skipped or failed delivery. Before approving migrations, the human
+reviewer must require disposable contract-test evidence using the actual retained
+release commit as the baseline (`bash v2/scripts/run_db_tests.sh <retained-commit>`),
+and review compatibility with both retained applications. Ordinary PR CI alone
+does not establish that deployed-release compatibility. **These tests do not prove a live deployment.**
 
 The [sanitized simulated rollback record](evidence/blue-green-simulated-rollback.json)
 records the executed controller-test outcomes separately from live evidence.
