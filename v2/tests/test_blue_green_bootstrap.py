@@ -18,15 +18,13 @@ def test_slot_permissions_keep_planners_off_routing(
     tmp_path: Path, environment: str
 ) -> None:
     root = Path(__file__).parents[2]
+    source = (root / "infra/blue-green.tf").read_text()
+    development, production = source.split('variable "production_blue_green"', 1)
     source = (
-        root
-        / "infra"
-        / (
-            "blue-green.tf"
-            if environment == "development"
-            else "production-blue-green.tf"
-        )
-    ).read_text()
+        development
+        if environment == "development"
+        else 'variable "production_blue_green"' + production
+    )
     account = "903859731897" if environment == "development" else "920534282028"
     name = environment + "_blue_green"
     for suffix in ("", "_plan"):
