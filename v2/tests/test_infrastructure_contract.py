@@ -1807,6 +1807,11 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
     capture_shells = re.findall(r"```sh\n(.*?)\n```", capture, flags=re.DOTALL)
     restore_shells = re.findall(r"```sh\n(.*?)\n```", rollback, flags=re.DOTALL)
     assert len(capture_shells) == len(restore_shells) == 1
+    assert capture_shells == ["bash v2/manual-releases/capture_production_recovery.sh"]
+    capture = (
+        V2_ROOT / "manual-releases" / "capture_production_recovery.sh"
+    ).read_text()
+    capture_shells.append(capture)
     for shell in [*capture_shells, *restore_shells]:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as script:
             script.write(shell)
@@ -2228,6 +2233,7 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
             child_environment.pop("RELEASE_EVIDENCE", None)
         return subprocess.run(
             ["bash", "-c", shell],
+            cwd=REPO_ROOT,
             env=child_environment,
             text=True,
             capture_output=True,

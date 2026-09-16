@@ -1580,7 +1580,8 @@ ORDER BY type.typname, privilege.grantee;
     monkeypatch.setenv("PGHOST", host)
     monkeypatch.setenv("PGPORT", port)
     monkeypatch.setenv("PGHOSTADDR", host)
-    # Exercise the actual production target at its authorized 032 ceiling.
+    # Keep historical adoption/rollback fixtures at their original 032 ceiling.
+    monkeypatch.setattr(runner, "PRODUCTION_MAX_MIGRATION_NUMBER", 32)
     no_op = runner.run_production()
     assert (
         no_op["before"]
@@ -1916,10 +1917,73 @@ COMMIT;
         input_sql="ALTER ROLE nova_toll_admin NOSUPERUSER;",
     )
     assert drop_privilege.returncode == 0, drop_privilege.stderr
+    # Missing writer rolls back 033; the preceding 032 has its own transaction.
+    monkeypatch.setattr(runner, "PRODUCTION_MAX_MIGRATION_NUMBER", 33)
+    with pytest.raises(runner.MigrationError):
+        runner.run_production()
+    unchanged = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        "--tuples-only",
+        "--no-align",
+        input_sql="SELECT version FROM pricing.schema_version WHERE singleton; "
+        "SELECT version FROM oracle.schema_version WHERE singleton; "
+        "SELECT to_regclass('pricing.evaluation_runs') IS NULL;",
+    )
+    assert unchanged.returncode == 0, unchanged.stderr
+    assert unchanged.stdout.splitlines() == ["1.3.0", "1.15.0", "t"]
+    role_bootstrap = (
+        adopt.ROOT / "v2/manual-releases/bootstrap_production_eval_writer.sql"
+    )
+    for username, database in (
+        ("postgres", "nova_toll"),
+        ("nova_toll_admin", "postgres"),
+    ):
+        rejected = run_psql(
+            "--username", username, "--dbname", database, "--file", str(role_bootstrap)
+        )
+        assert rejected.returncode != 0
+        assert "wrong evaluation writer bootstrap identity" in rejected.stderr
+    writer = run_psql(
+        "--username",
+        "nova_toll_admin",
+        "--dbname",
+        "nova_toll",
+        "--file",
+        str(role_bootstrap),
+    )
+    assert writer.returncode == 0, writer.stderr
+    existing = run_psql(
+        "--username",
+        "nova_toll_admin",
+        "--dbname",
+        "nova_toll",
+        "--file",
+        str(role_bootstrap),
+    )
+    assert existing.returncode != 0
+    assert "evaluation writer already exists" in existing.stderr
     upgraded = runner.run_production()
-    assert upgraded["before"] == {"pricing": "1.3.0", "oracle": "1.14.1"}
-    assert upgraded["after"] == {"pricing": "1.3.0", "oracle": "1.15.0"}
+    assert upgraded["before"] == {"pricing": "1.3.0", "oracle": "1.15.0"}
+    assert upgraded["after"] == {"pricing": "1.4.0", "oracle": "1.15.0"}
     assert upgraded["applied"] == [
-        "v2/db/migrations/032_upgrade_oracle_1_14_1_to_1_15_0.sql",
+        "v2/db/migrations/033_upgrade_pricing_1_3_0_to_1_4_0.sql",
     ]
     assert runner.run_production()["applied"] == []
+    privileges = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        "--tuples-only",
+        "--no-align",
+        input_sql="SELECT has_table_privilege('eval_writer', 'pricing.evaluation_runs', 'SELECT') "
+        "AND has_table_privilege('eval_writer', 'pricing.evaluation_runs', 'INSERT') "
+        "AND has_table_privilege('eval_writer', 'pricing.evaluation_runs', 'UPDATE') "
+        "AND NOT has_table_privilege('eval_writer', 'pricing.evaluation_runs', 'DELETE') "
+        "AND NOT has_table_privilege('eval_writer', 'pricing.trip_pricing_i95', 'SELECT');",
+    )
+    assert privileges.returncode == 0, privileges.stderr
+    assert privileges.stdout.strip() == "t"

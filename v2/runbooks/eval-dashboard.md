@@ -51,9 +51,11 @@ user chat sessions. Postgres retains history; the public window is seven days.
    until then the page correctly shows no results. Inspect its environment,
    occurrence timestamp, three verdicts, conversation, and tool evidence.
 
-Production remains capped at migration 032. A future reviewed production release
-must explicitly authorize migration 033 and provision its own writer and snapshot
-publication permissions before activation. Development data is never copied there.
+The production migration boundary now includes 033, targeting pricing 1.4.0 and
+Oracle 1.15.0. Before publishing a production release, complete the
+[release schema preflight](../manual-releases/README.md#2-check-schemas-before-publishing)
+and the fixed writer prerequisite below. Dashboard runtime activation and snapshot
+publication permissions remain separate work. Development data is never copied there.
 
 ### Fixed development role prerequisite
 
@@ -81,6 +83,38 @@ COMMIT;
 Migration 033 grants schema usage and SELECT/INSERT/UPDATE on the single new
 table. The writer cannot delete history or read/write pricing tables. No role
 creation or arbitrary SQL is added to the protected delivery workflow.
+
+### Fixed production role prerequisite
+
+This is a separate, human-reviewed administrator bootstrap before publishing the
+release. Verify AWS account `920534282028`, the fixed `nova-toll-db` instance,
+`nova_toll` database, and the existing TLS-verified administrator connection.
+Do not run development bootstrap SQL here or give CREATEROLE to the migrator.
+
+Run the checked-in [fixed role bootstrap](../manual-releases/bootstrap_production_eval_writer.sql)
+from the repository root using that administrator connection. Set `PGHOST` to
+the verified production endpoint, `PGPORT=5432`, and `PGSSLROOTCERT` to the pinned
+RDS CA bundle. Obtain the administrator credential through the existing managed
+secret path; keep it in process memory and never put it in a command or file.
+
+```bash
+PGDATABASE=nova_toll PGUSER=nova_toll_admin PGSSLMODE=verify-full \
+  psql -X --set ON_ERROR_STOP=1 --file v2/manual-releases/bootstrap_production_eval_writer.sql
+```
+
+The SQL checks the database name/comment and both administrator identities before
+creating the fixed role, then checks its attributes and membership before commit.
+It runs as one transaction and refuses an existing role. A failed command must
+stop release preparation; verify read-only state before any retry.
+
+If the role already exists, stop and inspect its attributes and memberships;
+do not silently reuse or replace an unknown role. Verify LOGIN, NOINHERIT,
+NOSUPERUSER, NOCREATEDB, NOCREATEROLE, NOREPLICATION, NOBYPASSRLS, the production
+comment, `rds_iam` membership only, and CONNECT on `nova_toll`. This bootstrap
+creates no application tables and runs no schema migration. Migration 033 grants
+only schema usage and SELECT/INSERT/UPDATE on `pricing.evaluation_runs` through
+the protected release workflow. Runtime AWS IAM and snapshot publication are
+not activated by this bootstrap.
 
 ## Local checks
 
