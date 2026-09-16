@@ -72,6 +72,17 @@ def test_migration_candidates_are_registered_and_exclude_bootstrap_files() -> No
 
 
 def test_production_release_schema_preflight() -> None:
+    manifest = json.loads(
+        (SCRIPTS.parents[1] / "infra/development-release-manifest.json").read_text()
+    )
+    for name in (
+        "run_development_migrations.py",
+        "run_production_migrations_workflow.sh",
+    ):
+        assert (
+            manifest["deployment_inputs"][f"v2/scripts/{name}"]
+            == hashlib.sha256((SCRIPTS / name).read_bytes()).hexdigest()
+        )
     schemas, versions = runner._registry()
     migrations: Any = runner._production_migrations(
         (*runner._migration_candidates(schemas), _migration(number=34))

@@ -17,7 +17,8 @@ On the exact candidate checkout, run the credential-free source preflight:
 (cd v2 && uv run pytest -q tests/test_development_migrations.py -k production_release_schema_preflight)
 ```
 
-This compares the canonical schema versions to the production migration cap and
+This checks the migration scripts' release-manifest checksums, compares the
+canonical schema versions to the production migration cap, and
 executes the wrapper's schema gate with those versions. It also verifies that
 unapproved future migrations and mismatched schema versions are rejected. A green
 development deployment alone does not establish production schema readiness.
