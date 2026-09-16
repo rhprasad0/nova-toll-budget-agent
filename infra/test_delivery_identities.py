@@ -425,7 +425,8 @@ def _check_production_planner() -> None:
         "check_production_release.py claim",
         "check_production_release.py revalidate",
         "verify_release_bundle.py verify",
-        "validate_production_plan.py --plan",
+        "release_blue_green.py prepare-plan --environment production",
+        "blue_green.py prepare --plan",
         "run_private_stage",
     ):
         require(command, PRODUCTION_PLAN)
@@ -456,11 +457,10 @@ def _check_production_planner() -> None:
     require("actions/artifacts/$BUNDLE_ID/zip", PRODUCTION_PLAN)
     require('--expected-digest "$BUNDLE_DIGEST"', PRODUCTION_PLAN)
     require("--verify-checkout", PRODUCTION_PLAN)
-    require("$overlay/v2/infra/build/loader.zip", PRODUCTION_PLAN)
-    require("$overlay/v2/infra/build/publisher.zip", PRODUCTION_PLAN)
-    require("$overlay/v2/infra/build/agentcore.zip", PRODUCTION_PLAN)
-    require("$overlay/v2/infra/build/chat-proxy.zip", PRODUCTION_PLAN)
-    require("$overlay/v2/infra/build/timed-checks.zip", PRODUCTION_PLAN)
+    require('--bundle-root "$overlay"', PRODUCTION_PLAN)
+    controller = (ROOT / "v2/scripts/release_blue_green.py").read_text()
+    for package in ("loader", "publisher", "agentcore", "chat-proxy", "timed-checks"):
+        require(f'"{package}"', controller)
 
     require(
         "terraform -chdir=candidate/infra init -input=false -backend-config=backend.production.hcl",
@@ -472,7 +472,7 @@ def _check_production_planner() -> None:
         PRODUCTION_PLAN,
     )
     require(
-        'terraform -chdir=candidate/v2/infra plan -input=false -out="$plan"',
+        '--terraform-root candidate/v2/infra',
         PRODUCTION_PLAN,
     )
     require('terraform -chdir=candidate/v2/infra show -json "$plan"', PRODUCTION_PLAN)
@@ -1178,3 +1178,15 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def test_production_release_planner_can_verify_encrypted_immutable_retries():
+    source = (ROOT / "infra/blue-green.tf").read_text()
+    planner = terraform_block(source, 'resource "aws_iam_role_policy" "production_blue_green_plan"')
+    assert 'Action   = ["kms:Decrypt", "kms:GenerateDataKey"]' in planner
+    assert 'Resource = local.production_delivery_site_key_arn' in planner
+    assert '"kms:ViaService"                   = "s3.us-east-1.amazonaws.com"' in planner
+    assert '"kms:EncryptionContext:aws:s3:arn" = "arn:aws:s3:::tollchat-site-920534282028"' in planner
+    delivery = terraform_block(source, 'resource "aws_iam_role_policy" "production_blue_green"')
+    assert '"lambda:GetFunctionCodeSigningConfig"' in delivery
+    assert 'alarm:tollchat-v2-chat-proxy-${metric}-green' in delivery

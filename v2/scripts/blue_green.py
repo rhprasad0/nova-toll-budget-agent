@@ -462,13 +462,21 @@ def validate_plan(
         if item.get("mode") == "data":
             require(actions in (["read"], ["no-op"]), "data_action")
             continue
+        if actions == ["no-op"]:
+            require(
+                item.get("provider_name")
+                in {
+                    "registry.terraform.io/hashicorp/aws",
+                    "registry.terraform.io/cloudflare/cloudflare",
+                },
+                "provider",
+            )
+            require(change["before"] == change["after"], "false_noop")
+            continue
         require(
             item.get("provider_name") == "registry.terraform.io/hashicorp/aws",
             "provider",
         )
-        if actions == ["no-op"]:
-            require(change["before"] == change["after"], "false_noop")
-            continue
         before: dict[str, Any] = change.get("before") or {}
         after: dict[str, Any] = change.get("after") or {}
         allow: set[str] = set()
@@ -579,7 +587,10 @@ def validate_plan(
 
 
 def validate_bootstrap(
-    plan: dict[str, Any], approved_sha256: str, saved_plan: bytes
+    plan: dict[str, Any],
+    approved_sha256: str,
+    saved_plan: bytes,
+    environment: str = "development",
 ) -> dict[str, Any]:
     """A separately human-reviewed *exact binary plan*, never an ordinary release."""
     require(
@@ -588,7 +599,8 @@ def validate_bootstrap(
         "bootstrap_approval",
     )
     require(
-        plan["variables"]["environment"]["value"] == "development",
+        environment in {"development", "production"}
+        and plan["variables"]["environment"]["value"] == environment,
         "bootstrap_environment",
     )
     require(
@@ -637,6 +649,9 @@ def main() -> int:
     parser.add_argument("--previous", type=Path)
     parser.add_argument("--saved-plan", type=Path)
     parser.add_argument("--approved-sha256")
+    parser.add_argument(
+        "--environment", choices=["development", "production"], default="development"
+    )
     args = parser.parse_args()
     try:
         if args.phase == "inputs":
@@ -653,7 +668,10 @@ def main() -> int:
             if args.saved_plan is None or args.approved_sha256 is None:
                 raise Rejected("bootstrap_approval")
             result = validate_bootstrap(
-                plan, args.approved_sha256, args.saved_plan.read_bytes()
+                plan,
+                args.approved_sha256,
+                args.saved_plan.read_bytes(),
+                args.environment,
             )
         else:
             require(args.previous is not None, "previous_state")

@@ -1,11 +1,18 @@
-# Blue-green development bootstrap
-
-Release validation and promotion land in the dependent PRs. Keep delivery
-disabled until all three changes and the separately reviewed bootstrap are complete.
+# Blue-green delivery
 
 **Bootstrap must be reviewed before enabling `DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED`.**
-Production still uses its existing gate; adopting this application layout there
-requires a separate bootstrap and workflow review after the development rehearsal.
+Production uses the same release phases behind `PRODUCTION_BLUE_GREEN_BOOTSTRAPPED`.
+Keep that flag disabled until a separate production bootstrap review after the
+development rehearsal. Its planner stages immutable objects and saves the exact
+preparation plan; the protected migration workflow revalidates that plan, applies
+compatible migrations, and finishes candidate validation, promotion, and observation.
+Production claims remain the existing numeric deployment IDs.
+
+For production bootstrap, populate `production_blue_green` in the foundation with
+the exact generated identities, and pass `--environment production` to the
+bootstrap binary-plan gate. The default gate only admits development plans.
+Review the production planner’s release-prefix-only object writes and the delivery
+role’s exact two-slot permissions; neither enables bootstrap resource creation.
 
 ## Architecture
 
@@ -111,3 +118,86 @@ before setup. **This inventory is not an approved plan.**
 
 AWS-generated IDs make bootstrap a sequence of dependent reviewed plans. Do not
 substitute wildcard final permissions or relax ordinary release gates.
+
+## Manual application recovery
+
+Automatic recovery ends with the observation window. For cancellation or runner
+loss, stop newer delivery work and hold the same `v2-development-apply`
+serialization boundary before manual recovery. No background watchdog runs.
+For production, hold `v2-production-release-delivery` instead. GitHub concurrency
+does not lock a local shell: disable new delivery and confirm no run is active
+before taking this operator-held boundary.
+
+Use the original admitted release checkout/bundle and verified foundation
+variables in an isolated worktree. Verify the bundle with
+`verify_release_bundle.py verify --verify-checkout`; do not rebuild artifacts.
+The private record is
+`releases/<candidate-id>/recovery/<run-id>:<attempt>.json` in the fixed artifact
+bucket. Read its exact S3 version from the delivery summary, or from the exact
+key after runner loss. Do not use an unversioned record.
+
+Review both retained identities and the current state lineage/serial. Compute
+the reviewed state identity hash without publishing state:
+
+```sh
+terraform -chdir="$APPLICATION_ROOT" state pull |
+  python3 -c 'import hashlib,json,sys; s=json.load(sys.stdin); v={k:s[k] for k in ("lineage","serial")}; print(hashlib.sha256(json.dumps(v,sort_keys=True,separators=(",",":")).encode()).hexdigest())'
+```
+
+Using the fixed delivery role or the recorded development SSO administrator role:
+
+```sh
+AWS_PROFILE=nova-toll-dev python3 v2/scripts/release_blue_green.py recover \
+  --environment development --terraform-root "$APPLICATION_ROOT" \
+  --bundle-root "$VERIFIED_BUNDLE" --foundation-vars "$FOUNDATION_VARS" \
+  --work-dir "$PRIVATE/recovery" --output "$PRIVATE/recovery-result.json" \
+  --claim "$ORIGINAL_RUN_ID:$ORIGINAL_ATTEMPT" --release-id "$CANDIDATE_ID" \
+  --record-version "$RECOVERY_RECORD_VERSION" \
+  --expected-state-sha256 "$REVIEWED_STATE_IDENTITY_SHA256"
+```
+
+Production uses the same command with `--environment production`, the fixed
+production delivery/admin credentials, and its original numeric deployment claim
+for `--claim`. Its record key is `releases/<candidate-id>/recovery/<claim-id>.json`.
+Use the production checkout, verified bundle, backend and foundation variables.
+
+The command checks claim, lineage, both descriptors and reviewed state identity,
+generates a fresh routing-only plan, rechecks serial before apply, and attempts
+restoration once. A newer release is rejected. Exit status remains nonzero on
+successful recovery: `deployment=failed, recovery=recovered`. Inspect that
+separate result. No migration or database downgrade is performed. Investigate a
+failed restore; never repeatedly apply a stale plan or mutate routing directly.
+
+## Rehearsal and evidence
+
+Local tests exercise controller branches with mocked AWS/Terraform I/O: invalid
+candidate, healthy promotion, two failed probes, partial switch, stale state and
+restore failure. SQL tests run PR-base and candidate contracts against the same
+upgraded disposable database. The PR base is not necessarily the deployed retained
+release after skipped or failed delivery. Before approving migrations, the human
+reviewer must require disposable contract-test evidence using the actual retained
+release commit as the baseline (`bash v2/scripts/run_db_tests.sh <retained-commit>`),
+and review compatibility with both retained applications. Ordinary PR CI alone
+does not establish that deployed-release compatibility. **These tests do not prove a live deployment.**
+
+The [sanitized simulated rollback record](evidence/blue-green-simulated-rollback.json)
+records the executed controller-test outcomes separately from live evidence.
+
+After bootstrap review, rehearse through protected exact-release delivery:
+
+1. Deliver a reviewed broken candidate. Validation fails while ordinary blue
+   public/private requests continue succeeding.
+2. Deliver good green, record its actual proxy/runtime identities, promote it,
+   and demonstrate the old-session restart.
+3. Inject a reviewed development post-promotion check failure. Two consecutive
+   failures must trigger exactly one restore. Record terminal streamed answers
+   from both public and private blue ingress and retained green assets.
+4. Deliver again to prove preparation preserves whichever slot is active.
+   Use the retained release commit as the disposable SQL test baseline.
+
+Preserve release IDs, published identities, timestamps, probe booleans,
+public/private verification outcomes and separate deployment/recovery status.
+Exclude candidate headers, cookies, prompts, private plans and credentials.
+
+**Live bootstrap and rollback rehearsal: not run; separately reviewed setup is
+required.** Shared database and capacity failures remain shared.

@@ -1,10 +1,12 @@
 """Credential-free release boundary and recovery rehearsal."""
 
 import base64
-from collections.abc import Iterable
+import json
+from collections.abc import Callable, Iterable
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
+from unittest.mock import Mock
 
 import pytest
 
@@ -206,6 +208,63 @@ def test_identity_rejects_primary_fallback_and_wrong_invoked_release() -> None:
             gate.verify_evidence(record, prepared, claim, now)
 
 
+@pytest.mark.parametrize(
+    "outcomes,expected_calls,expected_recovery",
+    [
+        ([False, False], 1, "recovered"),
+        ([False, True, False, True, True], 0, "not_attempted"),
+        ([True, False, False], 1, "recovered"),
+        ([True] * 5, 0, "not_attempted"),
+    ],
+)
+def test_observation_resets_failures_and_restores_at_most_once(
+    outcomes: list[bool], expected_calls: int, expected_recovery: str
+) -> None:
+    probes = iter(outcomes)
+    calls: list[str] = []
+    waits: list[float] = []
+    result = delivery.observe(
+        lambda: next(probes),
+        lambda: calls.append("restore") or True,
+        sleep=waits.append,
+        clock=lambda: 0,
+    )
+    assert len(calls) == expected_calls
+    assert result["recovery"] == expected_recovery
+    assert all(value == 60 for value in waits)
+    if calls:
+        assert result["deployment"] == "failed"
+    else:
+        assert result["deployment"] == "succeeded"
+
+
+def test_restore_failure_and_probe_exception_stay_failed() -> None:
+    def fail() -> NoReturn:
+        raise RuntimeError("private detail")
+
+    result = delivery.observe(fail, fail, sleep=lambda _: None, clock=lambda: 0)
+    assert result == {
+        "deployment": "failed",
+        "recovery": "failed",
+        "probes": [False, False],
+    }
+    assert "private detail" not in json.dumps(result)
+
+
+def test_stale_recovery_does_not_plan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    prepared = previous()
+    newer = deepcopy(prepared)
+    newer["slots"]["green"] = slot("green", "newer")
+    monkeypatch.setattr(delivery, "current", Mock(return_value=(newer, {})))
+    monkeypatch.setattr(
+        delivery, "plan", Mock(side_effect=AssertionError("stale recovery planned"))
+    )
+    with pytest.raises(gate.Rejected, match="stale_recovery"):
+        delivery.recover(tmp_path, tmp_path, tmp_path, tmp_path, prepared)
+
+
 def test_old_and_candidate_pages_keep_their_immutable_assets() -> None:
     source = b'<script src="/chat.mjs"></script><img src="/assets/logo.png">'
     blue = delivery.render_asset("index.html", source, "blue1")
@@ -403,3 +462,365 @@ def test_recovery_accepts_pre_promotion_output_after_partial_apply() -> None:
     ] = "wrong"
     with pytest.raises(gate.Rejected, match="release_output"):
         gate.validate_plan(saved, promoted, "recover")
+
+
+@pytest.mark.parametrize(
+    "scenario,expected",
+    [
+        ("healthy", ("succeeded", "not_attempted", "green")),
+        ("invalid_candidate", ("failed", "not_attempted", "blue")),
+        ("post_promotion_failure", ("failed", "recovered", "blue")),
+        ("partial_switch", ("failed", "recovered", "blue")),
+        ("restore_failure", ("failed", "failed", "green")),
+        ("final_state_failure", ("failed", "not_attempted", "unverified")),
+    ],
+)
+@pytest.mark.parametrize("target", ["development", "production"])
+def test_complete_release_state_machine(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    scenario: str,
+    expected: tuple[str, str, str],
+    target: str,
+) -> None:
+    import hashlib
+    import sys
+
+    initial = previous()
+    claim = "12:1" if target == "development" else "12"
+    account = "903859731897" if target == "development" else "920534282028"
+    role = (
+        "nova-toll-v2-development-delivery"
+        if target == "development"
+        else "nova-toll-production-deploy"
+    )
+    prepared = deepcopy(initial)
+    prepared["slots"]["green"] = slot("green", "release2")
+    live = deepcopy(initial)
+    serial = 10
+    applied: list[str] = []
+    probe_calls: list[str] = []
+    work = tmp_path / "work"
+    work.mkdir()
+    saved = work / "prepare.tfplan"
+    saved.write_bytes(b"approved-preparation")
+    delivery.write(
+        work / "context.json",
+        {
+            "claim": claim,
+            "previous": initial,
+            "identity": {"lineage": "test-lineage", "serial": serial},
+            "inputs": gate.desired(initial, prepared["slots"]["green"]),
+            "plan_sha256": hashlib.sha256(saved.read_bytes()).hexdigest(),
+        },
+    )
+
+    def current(_root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+        if scenario == "final_state_failure" and len(probe_calls) == 5:
+            raise gate.Rejected("state_unavailable")
+        return deepcopy(live), {"lineage": "test-lineage", "serial": serial}
+
+    monkeypatch.setattr(delivery, "current", current)
+
+    def terraform(_root: Path, *args: Any) -> str:
+        nonlocal serial
+        if args[0] == "show":
+            document = plan(gate.desired(initial, prepared["slots"]["green"]))
+            document["prior_state"] = {
+                "values": {"outputs": {"release_state": {"value": initial}}}
+            }
+            document["variables"]["foundation"] = {"value": {"vpc_id": "fixed"}}
+            return json.dumps(document)
+        assert args[0] == "apply"
+        phase = Path(args[-1]).stem
+        applied.append(phase)
+        if phase == "prepare":
+            live.update(deepcopy(prepared))
+        elif phase == "promote":
+            live["active"] = "green"
+            serial += 1
+            if scenario == "partial_switch":
+                raise gate.Rejected("terraform_failed")
+        else:
+            assert phase == "recover"
+            if scenario == "restore_failure":
+                raise gate.Rejected("terraform_failed")
+            live.update(deepcopy(prepared))
+        serial += 1
+        return ""
+
+    monkeypatch.setattr(delivery, "terraform", terraform)
+
+    def planned(
+        _root: Path,
+        _bundle: Path,
+        _foundation: Path,
+        _work: Path,
+        phase: str,
+        before: dict[str, Any],
+        inputs: dict[str, Any],
+    ) -> Path:
+        gate.validate_plan(plan(inputs, prior=before), before, phase)
+        result = work / (phase + ".tfplan")
+        result.write_bytes(phase.encode())
+        return result
+
+    monkeypatch.setattr(delivery, "plan", planned)
+    monkeypatch.setattr(
+        delivery,
+        "aws",
+        Mock(
+            return_value={
+                "Account": account,
+                "Arn": f"arn:aws:sts::{account}:assumed-role/{role}/test",
+            }
+        ),
+    )
+    monkeypatch.setattr(delivery, "wait_routing", Mock(return_value=None))
+    monkeypatch.setattr(delivery, "readiness", Mock(return_value=None))
+    monkeypatch.setattr(delivery, "private_probe", Mock(return_value=None))
+    monkeypatch.setattr(delivery, "assets", Mock(return_value=None))
+    monkeypatch.setattr(
+        delivery, "upload", Mock(return_value={"VersionId": "record-v1"})
+    )
+
+    def candidate(state: dict[str, Any], claim: str) -> dict[str, Any]:
+        if scenario == "invalid_candidate":
+            raise gate.Rejected("serving_identity")
+        serving = {
+            key: state["slots"]["green"][key]
+            for key in (
+                "release_id",
+                "proxy_arn",
+                "proxy_version",
+                "runtime_arn",
+                "runtime_version",
+                "endpoint",
+            )
+        }
+        return {
+            "claim": claim,
+            "state_sha256": gate.digest(state),
+            "checked_at": int(delivery.time.time()),
+            "checks": {key: True for key in gate.CHECKS},
+            "serving": dict(serving, runtime_release_id="release2"),
+        }
+
+    monkeypatch.setattr(delivery, "validate_candidate", candidate)
+
+    def probe_once(target: dict[str, Any]) -> dict[str, Any]:
+        probe_calls.append(target["release_id"])
+        if target["release_id"] == "release2" and scenario in {
+            "post_promotion_failure",
+            "restore_failure",
+        }:
+            raise gate.Rejected("canary_terminal")
+        return {"release_id": target["release_id"]}
+
+    monkeypatch.setattr(delivery, "probe", probe_once)
+    observe = delivery.observe
+
+    def observing(
+        probe: Callable[[], bool], restore: Callable[[], bool]
+    ) -> dict[str, Any]:
+        return observe(
+            probe,
+            restore,
+            sleep=lambda _: None,
+            clock=lambda: 0,
+        )
+
+    monkeypatch.setattr(delivery, "observe", observing)
+    output = tmp_path / "result.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release_blue_green.py",
+            "finish",
+            "--environment",
+            target,
+            "--terraform-root",
+            str(tmp_path),
+            "--bundle-root",
+            str(tmp_path),
+            "--foundation-vars",
+            str(tmp_path / "foundation.json"),
+            "--work-dir",
+            str(work),
+            "--output",
+            str(output),
+            "--claim",
+            claim,
+        ]
+        + (["--saved-plan", str(saved)] if target == "production" else []),
+    )
+    status = delivery.main()
+    result = json.loads(output.read_text())
+    assert (result["deployment"], result["recovery"], result["active"]) == expected
+    assert status == (0 if scenario == "healthy" else 1)
+    assert applied.count("recover") <= 1
+    assert applied == (
+        ["prepare"]
+        if scenario == "invalid_candidate"
+        else ["prepare", "promote"]
+        if scenario in {"healthy", "final_state_failure"}
+        else ["prepare", "promote", "recover"]
+    )
+    assert live["slots"]["blue"] == initial["slots"]["blue"]
+    if scenario == "healthy":
+        assert probe_calls == ["release2"] * 5
+    if scenario == "post_promotion_failure":
+        assert probe_calls == ["release2", "release2", "release1"]
+    delivery.write(
+        tmp_path / "demonstration.json",
+        {
+            "mode": "simulated",
+            "scenario": scenario,
+            "applied_phases": applied,
+            "deployment": result["deployment"],
+            "recovery": result["recovery"],
+            "active": result["active"],
+            "probes": result.get("probes", []),
+        },
+    )
+
+
+def test_recovery_rechecks_state_serial_after_plan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    prepared = previous()
+    states = iter([(prepared, {"serial": 10}), (prepared, {"serial": 11})])
+    monkeypatch.setattr(delivery, "current", Mock(side_effect=states))
+    monkeypatch.setattr(
+        delivery, "plan", Mock(return_value=tmp_path / "recover.tfplan")
+    )
+    monkeypatch.setattr(
+        delivery, "terraform", Mock(side_effect=AssertionError("stale plan applied"))
+    )
+    with pytest.raises(gate.Rejected, match="stale_recovery"):
+        delivery.recover(tmp_path, tmp_path, tmp_path, tmp_path, prepared)
+
+
+@pytest.mark.parametrize(
+    "release,claim",
+    [("../release", "12:1"), ("release2", "../12"), ("release2", "12/1")],
+)
+def test_recovery_record_keys_reject_arbitrary_paths(release: str, claim: str) -> None:
+    with pytest.raises(gate.Rejected):
+        delivery.recovery_key(release, claim)
+
+
+def test_probe_deadline_counts_as_failure_even_if_http_completed() -> None:
+    clock_values = iter([0, 61, 61, 61, 122])
+    result = delivery.observe(
+        lambda: True,
+        lambda: True,
+        sleep=lambda _: None,
+        clock=lambda: next(clock_values),
+    )
+    assert result["probes"] == [False, False]
+    assert result["deployment"] == "failed"
+    assert result["recovery"] == "recovered"
+
+
+def test_manual_recovery_rechecks_reviewed_identity_before_planning(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    prepared = previous()
+    monkeypatch.setattr(
+        delivery,
+        "current",
+        Mock(return_value=(prepared, {"lineage": "same", "serial": 12})),
+    )
+    planning = Mock()
+    monkeypatch.setattr(delivery, "plan", planning)
+    with pytest.raises(gate.Rejected, match="stale_recovery"):
+        delivery.recover(
+            tmp_path,
+            tmp_path,
+            tmp_path,
+            tmp_path,
+            prepared,
+            expected_identity={"lineage": "same", "serial": 11},
+        )
+    planning.assert_not_called()
+
+
+def test_recovery_verifies_restored_public_document(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    prepared = previous()
+    monkeypatch.setattr(
+        delivery, "current", Mock(return_value=(prepared, {"serial": 1}))
+    )
+    monkeypatch.setattr(
+        delivery, "plan", Mock(return_value=tmp_path / "recover.tfplan")
+    )
+    for name in ("terraform", "wait_routing", "readiness", "probe", "private_probe"):
+        monkeypatch.setattr(delivery, name, Mock())
+
+    def assets(slot: dict[str, Any], *, document: bool = False) -> None:
+        if slot == prepared["slots"]["blue"] and document:
+            raise gate.Rejected("candidate_document")
+
+    monkeypatch.setattr(delivery, "assets", assets)
+    with pytest.raises(gate.Rejected, match="candidate_document"):
+        delivery.recover(tmp_path, tmp_path, tmp_path, tmp_path, prepared)
+
+
+def test_failed_manual_restore_is_reported_as_attempted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import sys
+
+    state = previous()
+    identity = {"lineage": "same", "serial": 10}
+    monkeypatch.setattr(delivery, "current", Mock(return_value=(state, identity)))
+    monkeypatch.setattr(
+        delivery,
+        "load_recovery",
+        Mock(return_value={"prepared": state, "identity": identity}),
+    )
+    monkeypatch.setattr(
+        delivery, "recover", Mock(side_effect=gate.Rejected("terraform_failed"))
+    )
+    monkeypatch.setattr(
+        delivery,
+        "aws",
+        Mock(
+            return_value={
+                "Account": "903859731897",
+                "Arn": "arn:aws:sts::903859731897:assumed-role/nova-toll-v2-development-delivery/test",
+            }
+        ),
+    )
+    output = tmp_path / "result.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release_blue_green.py",
+            "recover",
+            "--claim",
+            "12:1",
+            "--release-id",
+            "release2",
+            "--record-version",
+            "version1",
+            "--expected-state-sha256",
+            gate.digest(identity),
+            "--terraform-root",
+            str(tmp_path),
+            "--bundle-root",
+            str(tmp_path),
+            "--foundation-vars",
+            str(tmp_path),
+            "--work-dir",
+            str(tmp_path),
+            "--output",
+            str(output),
+        ],
+    )
+    assert delivery.main() == 1
+    assert json.loads(output.read_text())["recovery"] == "failed"
