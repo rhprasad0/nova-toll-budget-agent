@@ -1738,7 +1738,7 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
     ]
     assert database_setup_uv == [
         {
-            "uses": "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d",
+            "uses": "astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4",
             "with": {"python-version": "3.13"},
         }
     ]
