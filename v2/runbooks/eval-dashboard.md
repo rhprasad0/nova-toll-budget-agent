@@ -91,23 +91,21 @@ release. Verify AWS account `920534282028`, the fixed `nova-toll-db` instance,
 `nova_toll` database, and the existing TLS-verified administrator connection.
 Do not run development bootstrap SQL here or give CREATEROLE to the migrator.
 
-```sql
-BEGIN;
-DO $$ BEGIN
-  IF current_database() <> 'nova_toll'
-     OR shobj_description((SELECT oid FROM pg_database
-                          WHERE datname = current_database()), 'pg_database')
-        IS DISTINCT FROM 'environment=production' THEN
-    RAISE EXCEPTION 'wrong evaluation writer bootstrap target';
-  END IF;
-END $$;
-CREATE ROLE eval_writer LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
-  NOINHERIT NOREPLICATION NOBYPASSRLS;
-COMMENT ON ROLE eval_writer IS 'environment=production';
-GRANT rds_iam TO eval_writer;
-GRANT CONNECT ON DATABASE nova_toll TO eval_writer;
-COMMIT;
+Run the checked-in [fixed role bootstrap](../manual-releases/bootstrap_production_eval_writer.sql)
+from the repository root using that administrator connection. Set `PGHOST` to
+the verified production endpoint, `PGPORT=5432`, and `PGSSLROOTCERT` to the pinned
+RDS CA bundle. Obtain the administrator credential through the existing managed
+secret path; keep it in process memory and never put it in a command or file.
+
+```bash
+PGDATABASE=nova_toll PGUSER=nova_toll_admin PGSSLMODE=verify-full \
+  psql -X --set ON_ERROR_STOP=1 --file v2/manual-releases/bootstrap_production_eval_writer.sql
 ```
+
+The SQL checks the database name/comment and both administrator identities before
+creating the fixed role, then checks its attributes and membership before commit.
+It runs as one transaction and refuses an existing role. A failed command must
+stop release preparation; verify read-only state before any retry.
 
 If the role already exists, stop and inspect its attributes and memberships;
 do not silently reuse or replace an unknown role. Verify LOGIN, NOINHERIT,

@@ -1917,8 +1917,7 @@ COMMIT;
         input_sql="ALTER ROLE nova_toll_admin NOSUPERUSER;",
     )
     assert drop_privilege.returncode == 0, drop_privilege.stderr
-    # The current production release includes 033. Missing writer must roll back
-    # the whole transaction, including the preceding Oracle migration.
+    # Missing writer rolls back 033; the preceding 032 has its own transaction.
     monkeypatch.setattr(runner, "PRODUCTION_MAX_MIGRATION_NUMBER", 33)
     with pytest.raises(runner.MigrationError):
         runner.run_production()
@@ -1934,24 +1933,42 @@ COMMIT;
         "SELECT to_regclass('pricing.evaluation_runs') IS NULL;",
     )
     assert unchanged.returncode == 0, unchanged.stderr
-    assert unchanged.stdout.splitlines() == ["1.3.0", "1.14.1", "t"]
+    assert unchanged.stdout.splitlines() == ["1.3.0", "1.15.0", "t"]
+    role_bootstrap = (
+        adopt.ROOT / "v2/manual-releases/bootstrap_production_eval_writer.sql"
+    )
+    for username, database in (
+        ("postgres", "nova_toll"),
+        ("nova_toll_admin", "postgres"),
+    ):
+        rejected = run_psql(
+            "--username", username, "--dbname", database, "--file", str(role_bootstrap)
+        )
+        assert rejected.returncode != 0
+        assert "wrong evaluation writer bootstrap identity" in rejected.stderr
     writer = run_psql(
         "--username",
-        "postgres",
+        "nova_toll_admin",
         "--dbname",
         "nova_toll",
-        input_sql="CREATE ROLE eval_writer LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
-        "NOINHERIT NOREPLICATION NOBYPASSRLS; "
-        "COMMENT ON ROLE eval_writer IS 'environment=production'; "
-        "GRANT rds_iam TO eval_writer; "
-        "GRANT CONNECT ON DATABASE nova_toll TO eval_writer;",
+        "--file",
+        str(role_bootstrap),
     )
     assert writer.returncode == 0, writer.stderr
+    existing = run_psql(
+        "--username",
+        "nova_toll_admin",
+        "--dbname",
+        "nova_toll",
+        "--file",
+        str(role_bootstrap),
+    )
+    assert existing.returncode != 0
+    assert "evaluation writer already exists" in existing.stderr
     upgraded = runner.run_production()
-    assert upgraded["before"] == {"pricing": "1.3.0", "oracle": "1.14.1"}
+    assert upgraded["before"] == {"pricing": "1.3.0", "oracle": "1.15.0"}
     assert upgraded["after"] == {"pricing": "1.4.0", "oracle": "1.15.0"}
     assert upgraded["applied"] == [
-        "v2/db/migrations/032_upgrade_oracle_1_14_1_to_1_15_0.sql",
         "v2/db/migrations/033_upgrade_pricing_1_3_0_to_1_4_0.sql",
     ]
     assert runner.run_production()["applied"] == []

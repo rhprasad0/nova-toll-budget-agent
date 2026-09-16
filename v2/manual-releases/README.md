@@ -1,6 +1,7 @@
 # Manual production releases
 
-This directory contains the operator instructions and recovery-capture script.
+This directory contains the operator instructions, recovery-capture script, and
+[fixed production role bootstrap](bootstrap_production_eval_writer.sql).
 Production deployment follows the [guarded release flow](../RUNBOOK.md#guarded-production-release).
 
 ## 1. Choose the candidate
