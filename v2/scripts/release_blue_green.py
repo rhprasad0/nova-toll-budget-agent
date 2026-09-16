@@ -87,6 +87,11 @@ def upload(
             "--expected-bucket-owner",
             account,
         )
+        gate.require(
+            head.get("ContentType") == content_type
+            and head.get("CacheControl") == cache,
+            "immutable_metadata",
+        )
     except checks.CheckFailure:
         head = aws(
             "s3api",
@@ -425,16 +430,25 @@ def assets(slot: dict[str, Any], *, document: bool = False) -> None:
     code, _, page = checks.request(jar, prefix + "/index.html")
     gate.require(code == 200, "retained_document")
     if document:
-        status, _, served = checks.request(jar, "/")
-        gate.require(status == 200 and served == page, "candidate_document")
+        status, content_type, served = checks.request(jar, "/")
+        gate.require(
+            status == 200 and content_type == "text/html" and served == page,
+            "candidate_document",
+        )
     paths = set(re.findall(rb'(?:src|href)="(/releases/[^"?#]+)', page))
     gate.require(
         bool(paths) and all(path.startswith((prefix + "/").encode()) for path in paths),
         "asset_prefix",
     )
+    paths.add((prefix + "/index.html").encode())
     for raw in paths:
         path = raw.decode()
-        code, _, body = checks.request(jar, path)
+        code, content_type, body = checks.request(jar, path)
+        expected_type = (
+            "text/javascript"
+            if path.endswith(".mjs")
+            else mimetypes.guess_type(path)[0] or "application/octet-stream"
+        )
         head = aws(
             "s3api",
             "head-object",
@@ -449,6 +463,7 @@ def assets(slot: dict[str, Any], *, document: bool = False) -> None:
         )
         gate.require(
             code == 200
+            and content_type == expected_type
             and head.get("ChecksumSHA256")
             == base64.b64encode(hashlib.sha256(body).digest()).decode(),
             "asset_content",

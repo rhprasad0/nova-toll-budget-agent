@@ -44,14 +44,30 @@ def previous() -> dict[str, Any]:
 
 
 def plan(
-    inputs: dict[str, Any], changes: Iterable[dict[str, Any]] = ()
+    inputs: dict[str, Any],
+    changes: Iterable[dict[str, Any]] = (),
+    prior: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    before = prior or previous()
+    after = deepcopy(before)
+    if "release_slots" in inputs:
+        after["active"] = inputs["active_slot"]
+        for name, descriptor in inputs["release_slots"].items():
+            after["slots"][name].update(descriptor)
     return {
         "complete": True,
         "errored": False,
         "resource_drift": [],
         "variables": {key: {"value": value} for key, value in inputs.items()},
         "resource_changes": list(changes),
+        "output_changes": {
+            "release_state": {
+                "actions": ["update"] if before != after else ["no-op"],
+                "before": before,
+                "after": after,
+                "after_unknown": False,
+            }
+        },
     }
 
 
@@ -81,13 +97,13 @@ def test_two_successive_releases_preserve_active_descriptor() -> None:
         original = deepcopy(state)
         candidate = slot(inactive, release)
         inputs = gate.desired(state, candidate)
-        gate.validate_plan(plan(inputs), state, "prepare")
+        gate.validate_plan(plan(inputs, prior=state), state, "prepare")
         assert inputs["release_slots"][state["active"]] == gate.descriptor(
             original["slots"][state["active"]]
         )
         state["slots"][inactive] = candidate
         promotion = gate.desired(state, promote=True)
-        gate.validate_plan(plan(promotion), state, "promote")
+        gate.validate_plan(plan(promotion, prior=state), state, "promote")
         state["active"] = promotion["active_slot"]
 
 
@@ -209,3 +225,181 @@ def test_old_and_candidate_pages_keep_their_immutable_assets() -> None:
     site = (Path(__file__).parents[1] / "infra/site.tf").read_text()
     assert site.count('target_origin_id           = "documents"') == 2
     assert site.count('path_pattern           = "/releases/*"') == 2
+
+
+@pytest.mark.parametrize(
+    "field", ["active", "runtime_arn", "proxy_url", "release_id", "runtime_version"]
+)
+def test_prepare_rejects_forged_release_outputs(field: str) -> None:
+    before = previous()
+    saved = plan(gate.desired(before, slot("green", "release2")))
+    output = saved["output_changes"]["release_state"]["after"]
+    if field == "active":
+        output["active"] = "green"
+    else:
+        output["slots"]["green"][field] = "forged"
+    with pytest.raises(gate.Rejected, match="release_output"):
+        gate.validate_plan(saved, before, "prepare")
+
+
+def test_outputs_allow_only_actual_candidate_version_unknowns() -> None:
+    before = previous()
+    saved = plan(
+        gate.desired(before, slot("green", "release2")),
+        [
+            change(
+                'aws_lambda_alias.tollchat_live["green"]',
+                {"function_version": "7"},
+                {},
+                unknown={"function_version": True},
+            )
+        ],
+    )
+    output = saved["output_changes"]["release_state"]
+    del output["after"]["slots"]["green"]["proxy_version"]
+    output["after_unknown"] = {"slots": {"green": {"proxy_version": True}}}
+    gate.validate_plan(saved, before, "prepare")
+    output["after_unknown"]["slots"]["blue"] = {"proxy_version": True}
+    with pytest.raises(gate.Rejected, match="release_output"):
+        gate.validate_plan(saved, before, "prepare")
+
+
+def test_private_preview_output_cannot_redirect_probes() -> None:
+    before = previous()
+    saved = plan(gate.desired(before, slot("green", "release2")))
+    saved["output_changes"]["private_preview"] = {
+        "actions": ["update"],
+        "before": {"origin": "trusted"},
+        "after": {"origin": "untrusted"},
+        "after_unknown": False,
+    }
+    with pytest.raises(gate.Rejected, match="shared_output"):
+        gate.validate_plan(saved, before, "prepare")
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("ContentType", "application/octet-stream"), ("CacheControl", "no-store")],
+)
+def test_existing_upload_requires_browser_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str, value: str
+) -> None:
+    import hashlib
+
+    source = tmp_path / "chat.mjs"
+    source.write_bytes(b"export {}")
+    metadata = {
+        "VersionId": "version1",
+        "ChecksumSHA256": base64.b64encode(
+            hashlib.sha256(source.read_bytes()).digest()
+        ).decode(),
+        "ContentType": "text/javascript",
+        "CacheControl": "immutable",
+    }
+
+    def head(*args: str) -> dict[str, str]:
+        return metadata
+
+    monkeypatch.setattr(delivery, "aws", head)
+    delivery.upload(source, "bucket", "key", "text/javascript", "immutable")
+    metadata[field] = value
+    with pytest.raises(gate.Rejected, match="immutable_metadata"):
+        delivery.upload(source, "bucket", "key", "text/javascript", "immutable")
+
+
+def test_assets_reject_correct_bytes_with_wrong_mime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hashlib
+
+    page = b'<script src="/releases/release2/chat.mjs"></script>'
+    script = b"export {}"
+
+    def request(jar: object, path: str) -> tuple[int, str, bytes]:
+        return (
+            200,
+            "text/html" if path.endswith(".html") else "application/octet-stream",
+            page if path.endswith(".html") else script,
+        )
+
+    def head(*args: str) -> dict[str, str]:
+        body = page if args[args.index("--key") + 1].endswith(".html") else script
+        return {
+            "ChecksumSHA256": base64.b64encode(hashlib.sha256(body).digest()).decode()
+        }
+
+    monkeypatch.setattr(delivery.checks, "request", request)
+    monkeypatch.setattr(delivery, "aws", head)
+    with pytest.raises(gate.Rejected, match="asset_content"):
+        delivery.assets(slot("green", "release2"))
+
+
+@pytest.mark.parametrize(
+    "host",
+    ["dev.tollchat.ai", "tollchat.ai", "api-vpce.execute-api.us-east-1.amazonaws.com"],
+)
+def test_session_cookie_uses_current_probe_host(
+    host: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import http.cookiejar
+
+    monkeypatch.setattr(delivery.checks, "profile_site", "https://" + host)
+    jar = http.cookiejar.CookieJar()
+    cookie = http.cookiejar.Cookie(
+        0,
+        delivery.checks.COOKIE,
+        "opaque",
+        None,
+        False,
+        host,
+        False,
+        False,
+        "/",
+        True,
+        True,
+        None,
+        True,
+        None,
+        None,
+        {"HttpOnly": ""},
+        False,
+    )
+    jar.set_cookie(cookie)
+    assert delivery.checks.token(jar) == "opaque"
+    cookie.domain_specified = True
+    with pytest.raises(delivery.checks.CheckFailure):
+        delivery.checks.token(jar)
+
+
+def test_output_known_version_must_match_alias_and_noop_is_supported() -> None:
+    before = previous()
+    gate.validate_plan(plan(gate.desired(before)), before, "prepare")
+    saved = plan(
+        gate.desired(before, slot("green", "release2")),
+        [
+            change(
+                'aws_lambda_alias.tollchat_live["green"]',
+                {"function_version": "7"},
+                {"function_version": "8"},
+            )
+        ],
+    )
+    with pytest.raises(gate.Rejected, match="release_output"):
+        gate.validate_plan(saved, before, "prepare")
+    saved["output_changes"]["release_state"]["after"]["slots"]["green"][
+        "proxy_version"
+    ] = "8"
+    gate.validate_plan(saved, before, "prepare")
+
+
+def test_recovery_accepts_pre_promotion_output_after_partial_apply() -> None:
+    prepared = previous()
+    promoted = dict(prepared, active="green")
+    saved = plan(gate.desired(promoted, promote=True), prior=prepared)
+    gate.validate_plan(saved, promoted, "recover")
+    saved["output_changes"]["release_state"]["before"] = deepcopy(prepared)
+    saved["output_changes"]["release_state"]["before"]["slots"]["blue"][
+        "proxy_version"
+    ] = "wrong"
+    with pytest.raises(gate.Rejected, match="release_output"):
+        gate.validate_plan(saved, promoted, "recover")

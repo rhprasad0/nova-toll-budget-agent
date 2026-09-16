@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -863,7 +864,7 @@ def token(jar: http.cookiejar.CookieJar) -> str:
     require(
         item.secure
         and item.path == "/"
-        and item.domain == "dev.tollchat.ai"
+        and item.domain == urllib.parse.urlsplit(profile_site).hostname
         and not item.domain_specified,
         "session_cookie_attributes",
     )

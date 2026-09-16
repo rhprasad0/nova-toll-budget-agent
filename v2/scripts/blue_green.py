@@ -344,6 +344,79 @@ def validate_plan(
         )
     else:
         require(slots == before_slots and active == inactive, "routing_only")
+    # Outputs are consumed as authority after apply; resource-only checks cannot
+    # prevent a configuration change from forging a retained release identity.
+    outputs = plan.get("output_changes", {})
+    require("release_state" in outputs, "release_output")
+    expected_state = deepcopy(previous)
+    expected_state["active"] = active
+    for name in SLOTS:
+        expected_state["slots"][name].update(slots[name])
+    expected_unknown: set[tuple[str, ...]] = set()
+    if phase == "prepare":
+        for field, resource, attribute in (
+            (
+                "runtime_version",
+                "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+                "agent_runtime_version",
+            ),
+            ("proxy_version", "aws_lambda_alias.tollchat_live", "function_version"),
+        ):
+            matches = [
+                item["change"]
+                for item in plan.get("resource_changes", [])
+                if item["address"] == f'{resource}["{inactive}"]'
+            ]
+            if matches:
+                require(len(matches) == 1, "release_output")
+                change = matches[0]
+                if change.get("after_unknown", {}).get(attribute) is True:
+                    expected_unknown.add(("slots", inactive, field))
+                    expected_state["slots"][inactive][field] = None
+                else:
+                    expected_state["slots"][inactive][field] = change["after"][
+                        attribute
+                    ]
+
+    def unknown_paths(
+        value: object, path: tuple[str, ...] = ()
+    ) -> set[tuple[str, ...]]:
+        if isinstance(value, dict):
+            return set[tuple[str, ...]]().union(
+                *(
+                    unknown_paths(child, (*path, key))
+                    for key, child in cast(dict[str, object], value).items()
+                )
+            )
+        require(type(value) is bool, "unknown_output")
+        return {path} if value else set()
+
+    for name, output in outputs.items():
+        if name != "release_state":
+            require(
+                output["actions"] == ["no-op"]
+                and output["before"] == output["after"]
+                and not has_unknown(output.get("after_unknown", False)),
+                "shared_output",
+            )
+            continue
+        before_state = deepcopy(output["before"])
+        if phase == "recover":
+            # A failed routing apply can retain the pre-promotion output.
+            require(before_state.get("active") in SLOTS, "release_output")
+            before_state["active"] = previous["active"]
+        require(
+            before_state == previous
+            and output["actions"] in (["no-op"], ["update"])
+            and unknown_paths(output.get("after_unknown", False)) == expected_unknown,
+            "release_output",
+        )
+        after_state = deepcopy(output["after"])
+        for _, name, field in expected_unknown:
+            require(after_state["slots"][name].get(field) is None, "release_output")
+            after_state["slots"][name][field] = None
+        require(after_state == expected_state, "release_output")
+
     seen: set[str] = set()
     count = 0
     for item in plan.get("resource_changes", []):
