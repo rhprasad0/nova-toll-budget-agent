@@ -15,7 +15,8 @@ Choose a new stable `vX.Y.Z` tag pointing to that commit.
 On the exact candidate checkout, run the credential-free source preflight:
 
 ```bash
-(cd v2 && uv run pytest -q tests/test_development_migrations.py -k production_release_schema_preflight)
+(cd v2 && TOLLCHAT_PRODUCTION_PREFLIGHT=1 uv run pytest -q tests/test_development_migrations.py \
+  -k 'production_migration_gate_matches_cap or production_release_schema_preflight')
 ```
 
 This checks the migration scripts' release-manifest checksums, compares the
@@ -23,6 +24,9 @@ canonical schema versions to the production migration cap, and
 executes the wrapper's schema gate with those versions. It also verifies that
 unapproved future migrations and mismatched schema versions are rejected. A green
 development deployment alone does not establish production schema readiness.
+Require both selected tests to pass; a skipped readiness test is not approval.
+Ordinary CI checks the production wrapper against the approved migration cap,
+but skips canonical-versus-production equality so development can advance first.
 
 Confirm all of the following before creating the release:
 
