@@ -3722,8 +3722,16 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert '--data-binary "@$RESET_REQUEST"' in DEPLOYMENT
     assert "write-out '%{content_type}'" in DEPLOYMENT
     assert "jq -e '.ok == true'" in DEPLOYMENT
-    assert agentcore.count('metric_name         = "V2ProxyFailure${local.slot_suffix[each.key]}"') == 1
-    assert agentcore.count('name      = "V2ProxyFailure${local.slot_suffix[each.key]}"') == 1
+    assert (
+        agentcore.count(
+            'metric_name         = "V2ProxyFailure${local.slot_suffix[each.key]}"'
+        )
+        == 1
+    )
+    assert (
+        agentcore.count('name      = "V2ProxyFailure${local.slot_suffix[each.key]}"')
+        == 1
+    )
     assert 'resource "aws_lambda_alias" "tollchat_live"' in agentcore
     assert 'name             = "live"' in agentcore
     assert (
