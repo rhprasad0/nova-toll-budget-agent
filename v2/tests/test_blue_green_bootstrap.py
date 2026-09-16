@@ -12,12 +12,24 @@ import pytest
 from scripts import blue_green as gate
 
 
-def test_bootstrap_requires_exact_reviewed_binary_and_declared_move() -> None:
+@pytest.mark.parametrize(
+    "resource",
+    [
+        "aws_lambda_function.tollchat_proxy",
+        "aws_cloudwatch_log_metric_filter.proxy_failure",
+        "aws_cloudwatch_metric_alarm.tollchat_proxy_errors",
+        "aws_cloudwatch_metric_alarm.tollchat_proxy_failures",
+        "aws_cloudwatch_metric_alarm.tollchat_proxy_latency",
+    ],
+)
+def test_bootstrap_requires_exact_reviewed_binary_and_declared_move(
+    resource: str,
+) -> None:
     raw = b"reviewed binary plan"
     digest = hashlib.sha256(raw).hexdigest()
     change = {
-        "address": 'aws_lambda_function.tollchat_proxy["blue"]',
-        "previous_address": "aws_lambda_function.tollchat_proxy",
+        "address": f'{resource}["blue"]',
+        "previous_address": resource,
         "change": {"actions": ["no-op"]},
     }
     plan = {

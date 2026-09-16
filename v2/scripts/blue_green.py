@@ -92,6 +92,10 @@ BOOTSTRAP_MOVES = {
         for name in (
             *SLOT_RESOURCES,
             "aws_cloudwatch_log_group.tollchat_proxy",
+            "aws_cloudwatch_log_metric_filter.proxy_failure",
+            "aws_cloudwatch_metric_alarm.tollchat_proxy_errors",
+            "aws_cloudwatch_metric_alarm.tollchat_proxy_failures",
+            "aws_cloudwatch_metric_alarm.tollchat_proxy_latency",
             "aws_lambda_permission.tollchat_api",
             "aws_lambda_function_url.public_chat",
             "aws_lambda_permission.public_chat_url",

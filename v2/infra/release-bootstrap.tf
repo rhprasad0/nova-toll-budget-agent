@@ -93,3 +93,23 @@ removed {
   from = aws_s3_object.site_assets
   lifecycle { destroy = false }
 }
+
+moved {
+  from = aws_cloudwatch_log_metric_filter.proxy_failure
+  to   = aws_cloudwatch_log_metric_filter.proxy_failure["blue"]
+}
+
+moved {
+  from = aws_cloudwatch_metric_alarm.tollchat_proxy_errors
+  to   = aws_cloudwatch_metric_alarm.tollchat_proxy_errors["blue"]
+}
+
+moved {
+  from = aws_cloudwatch_metric_alarm.tollchat_proxy_failures
+  to   = aws_cloudwatch_metric_alarm.tollchat_proxy_failures["blue"]
+}
+
+moved {
+  from = aws_cloudwatch_metric_alarm.tollchat_proxy_latency
+  to   = aws_cloudwatch_metric_alarm.tollchat_proxy_latency["blue"]
+}

@@ -668,22 +668,24 @@ resource "aws_lambda_permission" "tollchat_api" {
 }
 
 resource "aws_cloudwatch_log_metric_filter" "proxy_failure" {
-  name           = "V2ProxyFailure${local.suffix}"
-  log_group_name = aws_cloudwatch_log_group.tollchat_proxy["blue"].name
+  for_each       = var.release_slots
+  name           = "V2ProxyFailure${local.slot_suffix[each.key]}"
+  log_group_name = aws_cloudwatch_log_group.tollchat_proxy[each.key].name
   pattern        = "PROXY_FAILURE"
 
   metric_transformation {
     namespace = "NovaToll"
-    name      = "V2ProxyFailure${local.suffix}"
+    name      = "V2ProxyFailure${local.slot_suffix[each.key]}"
     value     = "1"
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_errors" {
-  alarm_name          = "tollchat-v2-chat-proxy-errors${local.suffix}"
+  for_each            = var.release_slots
+  alarm_name          = "tollchat-v2-chat-proxy-errors${local.slot_suffix[each.key]}"
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
-  dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy["blue"].function_name }
+  dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy[each.key].function_name }
   period              = 300
   evaluation_periods  = 1
   statistic           = "Sum"
@@ -694,9 +696,10 @@ resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_failures" {
-  alarm_name          = "tollchat-v2-chat-proxy-failures${local.suffix}"
+  for_each            = var.release_slots
+  alarm_name          = "tollchat-v2-chat-proxy-failures${local.slot_suffix[each.key]}"
   namespace           = "NovaToll"
-  metric_name         = "V2ProxyFailure${local.suffix}"
+  metric_name         = "V2ProxyFailure${local.slot_suffix[each.key]}"
   period              = 300
   evaluation_periods  = 1
   statistic           = "Sum"
@@ -707,10 +710,11 @@ resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_failures" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_latency" {
-  alarm_name          = "tollchat-v2-chat-proxy-latency${local.suffix}"
+  for_each            = var.release_slots
+  alarm_name          = "tollchat-v2-chat-proxy-latency${local.slot_suffix[each.key]}"
   namespace           = "AWS/Lambda"
   metric_name         = "Duration"
-  dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy["blue"].function_name }
+  dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy[each.key].function_name }
   period              = 300
   evaluation_periods  = 2
   datapoints_to_alarm = 1

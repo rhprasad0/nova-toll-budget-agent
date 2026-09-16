@@ -3233,6 +3233,43 @@ def test_v2_has_an_independent_state_and_identity():
     assert 'value    = "noindex"' in site
 
 
+def test_blue_green_monitors_both_retained_proxies_without_routing_changes():
+    agentcore = (V2_ROOT / "infra/agentcore.tf").read_text()
+    bootstrap = (V2_ROOT / "infra/release-bootstrap.tf").read_text()
+    for kind, name in [
+        ("aws_cloudwatch_log_metric_filter", "proxy_failure"),
+        ("aws_cloudwatch_metric_alarm", "tollchat_proxy_errors"),
+        ("aws_cloudwatch_metric_alarm", "tollchat_proxy_failures"),
+        ("aws_cloudwatch_metric_alarm", "tollchat_proxy_latency"),
+    ]:
+        block = terraform_block(agentcore, f'resource "{kind}" "{name}"')
+        assert_assignment(block, "for_each", "var.release_slots")
+        assert "local.slot_suffix[each.key]" in block
+        assert "var.active_slot" not in block
+        assert f"from = {kind}.{name}" in bootstrap
+        assert f'to   = {kind}.{name}["blue"]' in bootstrap
+        if name == "proxy_failure":
+            assert_assignment(
+                block,
+                "log_group_name",
+                "aws_cloudwatch_log_group.tollchat_proxy[each.key].name",
+            )
+        elif name != "tollchat_proxy_failures":
+            assert_assignment(
+                block,
+                "dimensions",
+                "{ FunctionName = aws_lambda_function.tollchat_proxy[each.key].function_name }",
+            )
+    policy = terraform_block(
+        (FOUNDATION_ROOT / "blue-green.tf").read_text(),
+        'resource "aws_iam_role_policy" "development_blue_green"',
+    )
+    assert '"lambda:GetFunctionCodeSigningConfig"' in policy
+    assert '"cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"' in policy
+    assert 'for metric in ["errors", "failures", "latency"]' in policy
+    assert "alarm:tollchat-v2-chat-proxy-${metric}-dev-green" in policy
+
+
 def test_v2_declares_a_private_agentcore_application_with_protected_trace_archive():
     agentcore_path = V2_ROOT / "infra" / "agentcore.tf"
     assert agentcore_path.exists()

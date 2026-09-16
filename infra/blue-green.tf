@@ -40,7 +40,7 @@ resource "aws_iam_role_policy" "development_blue_green" {
       {
         Sid    = "ReleaseSlots"
         Effect = "Allow"
-        Action = ["lambda:GetAlias", "lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:GetFunctionUrlConfig", "lambda:GetPolicy", "lambda:ListVersionsByFunction", "lambda:ListTags", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:PublishVersion", "lambda:UpdateAlias"]
+        Action = ["lambda:GetAlias", "lambda:GetFunction", "lambda:GetFunctionCodeSigningConfig", "lambda:GetFunctionConfiguration", "lambda:GetFunctionUrlConfig", "lambda:GetPolicy", "lambda:ListVersionsByFunction", "lambda:ListTags", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:PublishVersion", "lambda:UpdateAlias"]
         Resource = flatten([for name in ["tollchat-v2-chat-proxy-dev", "tollchat-v2-chat-proxy-dev-green"] : [
           "arn:aws:lambda:us-east-1:903859731897:function:${name}",
           "arn:aws:lambda:us-east-1:903859731897:function:${name}:*"
@@ -93,6 +93,12 @@ resource "aws_iam_role_policy" "development_blue_green" {
           "arn:aws:logs:us-east-1:903859731897:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev-green",
           "arn:aws:logs:us-east-1:903859731897:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev-green:*",
         ])
+      },
+      {
+        Sid      = "ReadGreenProxyAlarms"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"]
+        Resource = [for metric in ["errors", "failures", "latency"] : "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-chat-proxy-${metric}-dev-green"]
       },
       {
         Sid      = "ReadGreenTraceAlarms"
