@@ -124,6 +124,9 @@ substitute wildcard final permissions or relax ordinary release gates.
 Automatic recovery ends with the observation window. For cancellation or runner
 loss, stop newer delivery work and hold the same `v2-development-apply`
 serialization boundary before manual recovery. No background watchdog runs.
+For production, hold `v2-production-release-delivery` instead. GitHub concurrency
+does not lock a local shell: disable new delivery and confirm no run is active
+before taking this operator-held boundary.
 
 Use the original admitted release checkout/bundle and verified foundation
 variables in an isolated worktree. Verify the bundle with
@@ -152,6 +155,11 @@ AWS_PROFILE=nova-toll-dev python3 v2/scripts/release_blue_green.py recover \
   --record-version "$RECOVERY_RECORD_VERSION" \
   --expected-state-sha256 "$REVIEWED_STATE_IDENTITY_SHA256"
 ```
+
+Production uses the same command with `--environment production`, the fixed
+production delivery/admin credentials, and its original numeric deployment claim
+for `--claim`. Its record key is `releases/<candidate-id>/recovery/<claim-id>.json`.
+Use the production checkout, verified bundle, backend and foundation variables.
 
 The command checks claim, lineage, both descriptors and reviewed state identity,
 generates a fresh routing-only plan, rechecks serial before apply, and attempts
