@@ -205,6 +205,7 @@ jobs:
   plan:
     name: Read-only development application plan
     needs: build
+    if: vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true'
     runs-on: ubuntu-latest
     environment: development-plan
     permissions:
@@ -396,9 +397,13 @@ jobs:
 
           terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" init -input=false -lockfile=readonly \
             -backend-config=backend.development.hcl >"$APPLICATION_INIT_LOG" 2>&1
+          terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" output -json release_state >"$RUNNER_TEMP/retained-slots.json" 2>"$PLAN_LOG"
+          python3 "$GITHUB_WORKSPACE/trusted/v2/scripts/blue_green.py" inputs \
+            --previous "$RUNNER_TEMP/retained-slots.json" >"$RUNNER_TEMP/retained-slots.tfvars.json" 2>"$PLAN_LOG"
           terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" plan -input=false -lock=false -out="$PLAN" \
             -var-file=development.tfvars \
             -var-file="$FOUNDATION_VARS" \
+            -var-file="$RUNNER_TEMP/retained-slots.tfvars.json" \
             -var loader_package_path="$STAGING/loader.zip" \
             -var publisher_package_path="$STAGING/publisher.zip" \
             -var agentcore_package_path="$STAGING/agentcore.zip" \
@@ -429,6 +434,7 @@ jobs:
         if: always()
         run: |
           set +e
+          rm -f -- "$RUNNER_TEMP/retained-slots.json" "$RUNNER_TEMP/retained-slots.tfvars.json"
           rm -rf -- "$RUNNER_TEMP/v2-development-packages" \
             "$RUNNER_TEMP/development-release-verification.json" \
             "$RUNNER_TEMP/development-foundation-output.json" "$RUNNER_TEMP/foundation.tfvars.json" \

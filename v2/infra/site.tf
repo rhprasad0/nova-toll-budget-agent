@@ -1,9 +1,10 @@
-locals {
-  site_assets = fileset("${path.module}/../agent/assets", "**")
-}
-
 resource "aws_s3_bucket" "site" {
   bucket = "tollchat-site-${data.aws_caller_identity.current.account_id}${local.suffix}"
+}
+
+resource "aws_s3_bucket_versioning" "site" {
+  bucket = aws_s3_bucket.site.id
+  versioning_configuration { status = "Enabled" }
 }
 
 resource "aws_s3_bucket_public_access_block" "site" {
@@ -36,7 +37,7 @@ data "aws_iam_policy_document" "site_kms" {
     condition {
       test     = "StringEquals"
       variable = "AWS:SourceArn"
-      values   = [aws_cloudfront_distribution.site.arn]
+      values   = [aws_cloudfront_distribution.site.arn, aws_cloudfront_distribution.staging.arn]
     }
   }
 }
@@ -64,26 +65,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "site" {
   }
 }
 
-resource "aws_s3_object" "index" {
-  bucket        = aws_s3_bucket.site.id
-  key           = "index.html"
-  content       = file("${path.module}/../agent/dev_chat.html")
-  content_type  = "text/html; charset=utf-8"
-  cache_control = "no-cache"
 
-  depends_on = [aws_s3_object.site_assets, aws_s3_bucket_server_side_encryption_configuration.site, aws_bedrockagentcore_agent_runtime_endpoint.tollchat, aws_cloudwatch_log_data_protection_policy.agentcore]
-}
-
-resource "aws_s3_object" "chat" {
-  bucket        = aws_s3_bucket.site.id
-  key           = "chat.mjs"
-  source        = "${path.module}/../agent/public_chat.mjs"
-  source_hash   = filebase64sha256("${path.module}/../agent/public_chat.mjs")
-  content_type  = "text/javascript; charset=utf-8"
-  cache_control = "no-cache"
-
-  depends_on = [aws_s3_object.site_assets, aws_s3_bucket_server_side_encryption_configuration.site]
-}
 
 resource "aws_s3_object" "usage" {
   bucket        = aws_s3_bucket.site.id
@@ -99,25 +81,7 @@ resource "aws_s3_object" "usage" {
   depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
 }
 
-resource "aws_s3_object" "faq" {
-  bucket        = aws_s3_bucket.site.id
-  key           = "faq.html"
-  content       = file("${path.module}/../agent/faq.html")
-  content_type  = "text/html; charset=utf-8"
-  cache_control = "no-cache"
 
-  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site, aws_bedrockagentcore_agent_runtime_endpoint.tollchat, aws_cloudwatch_log_data_protection_policy.agentcore]
-}
-
-resource "aws_s3_object" "privacy" {
-  bucket        = aws_s3_bucket.site.id
-  key           = "privacy.txt"
-  content       = file("${path.module}/../agent/privacy.txt")
-  content_type  = "text/plain; charset=utf-8"
-  cache_control = "no-cache"
-
-  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site, aws_bedrockagentcore_agent_runtime_endpoint.tollchat, aws_cloudwatch_log_data_protection_policy.agentcore]
-}
 
 resource "aws_s3_object" "terms" {
   bucket        = aws_s3_bucket.site.id
@@ -142,24 +106,6 @@ resource "aws_s3_object" "robots" {
   depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
 }
 
-resource "aws_s3_object" "site_assets" {
-  for_each = local.site_assets
-
-  bucket      = aws_s3_bucket.site.id
-  key         = "assets/${each.value}"
-  source      = "${path.module}/../agent/assets/${each.value}"
-  source_hash = filebase64sha256("${path.module}/../agent/assets/${each.value}")
-  content_type = endswith(each.value, ".css") ? "text/css; charset=utf-8" : (
-    endswith(each.value, ".mjs") ? "text/javascript; charset=utf-8" : (
-      endswith(each.value, ".json") ? "application/json; charset=utf-8" : (
-        endswith(each.value, ".png") ? "image/png" : "text/plain; charset=utf-8"
-      )
-    )
-  )
-  cache_control = "no-cache"
-
-  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
-}
 
 resource "aws_cloudwatch_log_group" "usage_publisher" {
   name              = "/aws/lambda/tollchat-v2-usage-publisher${local.suffix}"
@@ -174,8 +120,9 @@ resource "aws_cloudfront_origin_access_control" "site" {
 }
 
 resource "aws_lambda_function_url" "public_chat" {
-  function_name      = aws_lambda_function.tollchat_proxy.function_name
-  qualifier          = aws_lambda_alias.tollchat_live.name
+  for_each           = var.release_slots
+  function_name      = aws_lambda_function.tollchat_proxy[each.key].function_name
+  qualifier          = aws_lambda_alias.tollchat_live[each.key].name
   authorization_type = "AWS_IAM"
   invoke_mode        = "RESPONSE_STREAM"
 }
@@ -221,7 +168,7 @@ resource "aws_wafv2_web_acl" "public_chat" {
 
   data_protection_config {
     dynamic "data_protection" {
-      for_each = toset(["cookie", "authorization", "referer"])
+      for_each = toset(["cookie", "authorization", "referer", "aws-cf-cd-tollchat"])
       content {
         field {
           field_type = "SINGLE_HEADER"
@@ -418,10 +365,11 @@ resource "aws_cloudfront_response_headers_policy" "development_noindex" {
 }
 
 resource "aws_cloudfront_distribution" "site" {
-  enabled             = true
-  default_root_object = "index.html"
-  price_class         = "PriceClass_100"
-  aliases             = local.custom_domain_enabled ? local.domains : []
+  enabled                         = true
+  continuous_deployment_policy_id = aws_cloudfront_continuous_deployment_policy.candidate.id
+  default_root_object             = "index.html"
+  price_class                     = "PriceClass_100"
+  aliases                         = local.custom_domain_enabled ? local.domains : []
 
   origin {
     domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
@@ -430,7 +378,7 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   origin {
-    domain_name              = trimsuffix(trimprefix(aws_lambda_function_url.public_chat.function_url, "https://"), "/")
+    domain_name              = trimsuffix(trimprefix(aws_lambda_function_url.public_chat[var.active_slot].function_url, "https://"), "/")
     origin_id                = "public-chat"
     origin_access_control_id = aws_cloudfront_origin_access_control.public_chat.id
     connection_attempts      = 1
@@ -446,13 +394,20 @@ resource "aws_cloudfront_distribution" "site" {
     }
   }
 
+  origin {
+    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                = "documents"
+    origin_path              = var.release_slots[var.active_slot].asset_prefix
+    origin_access_control_id = aws_cloudfront_origin_access_control.site.id
+  }
+
   default_cache_behavior {
     allowed_methods            = ["GET", "HEAD"]
     cached_methods             = ["GET", "HEAD"]
-    target_origin_id           = "site"
+    target_origin_id           = "documents"
     viewer_protocol_policy     = "redirect-to-https"
     compress                   = true
-    cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
     response_headers_policy_id = local.is_production ? null : aws_cloudfront_response_headers_policy.development_noindex[0].id
 
     function_association {
@@ -477,6 +432,33 @@ resource "aws_cloudfront_distribution" "site" {
     }
   }
 
+  ordered_cache_behavior {
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "site"
+    path_pattern           = "/releases/*"
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = true
+    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  }
+
+  dynamic "ordered_cache_behavior" {
+    for_each = ["/tolls/*", "/usage.json", "/evals/*", "/evals.html", "/eval-dashboard*", "/evals.json", "/assets/evals*", "/robots.txt", "/sitemap.xml"]
+    content {
+      allowed_methods        = ["GET", "HEAD"]
+      cached_methods         = ["GET", "HEAD"]
+      target_origin_id       = "site"
+      path_pattern           = ordered_cache_behavior.value
+      viewer_protocol_policy = "redirect-to-https"
+      compress               = true
+      cache_policy_id        = data.aws_cloudfront_cache_policy.caching_disabled.id
+      function_association {
+        event_type   = "viewer-request"
+        function_arn = aws_cloudfront_function.public_report_routes.arn
+      }
+    }
+  }
+
   web_acl_id = aws_wafv2_web_acl.public_chat.arn
 
   restrictions {
@@ -494,20 +476,22 @@ resource "aws_cloudfront_distribution" "site" {
 }
 
 resource "aws_lambda_permission" "public_chat_url" {
+  for_each               = var.release_slots
   statement_id           = "AllowCloudFrontFunctionUrlV2"
   action                 = "lambda:InvokeFunctionUrl"
-  function_name          = aws_lambda_function.tollchat_proxy.function_name
-  qualifier              = aws_lambda_alias.tollchat_live.name
+  function_name          = aws_lambda_function.tollchat_proxy[each.key].function_name
+  qualifier              = aws_lambda_alias.tollchat_live[each.key].name
   principal              = "cloudfront.amazonaws.com"
   source_arn             = aws_cloudfront_distribution.site.arn
   function_url_auth_type = "AWS_IAM"
 }
 
 resource "aws_lambda_permission" "public_chat_invoke" {
+  for_each                 = var.release_slots
   statement_id             = "AllowCloudFrontFunctionInvokeV2"
   action                   = "lambda:InvokeFunction"
-  function_name            = aws_lambda_function.tollchat_proxy.function_name
-  qualifier                = aws_lambda_alias.tollchat_live.name
+  function_name            = aws_lambda_function.tollchat_proxy[each.key].function_name
+  qualifier                = aws_lambda_alias.tollchat_live[each.key].name
   principal                = "cloudfront.amazonaws.com"
   source_arn               = aws_cloudfront_distribution.site.arn
   invoked_via_function_url = true
@@ -523,7 +507,7 @@ resource "aws_s3_bucket_policy" "site" {
       Principal = { Service = "cloudfront.amazonaws.com" }
       Action    = "s3:GetObject"
       Resource  = "${aws_s3_bucket.site.arn}/*"
-      Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.site.arn } }
+      Condition = { StringEquals = { "AWS:SourceArn" = [aws_cloudfront_distribution.site.arn, aws_cloudfront_distribution.staging.arn] } }
     }]
   })
 }
@@ -642,4 +626,157 @@ resource "aws_s3_object" "evals" {
   content_type  = "text/html; charset=utf-8"
   cache_control = "no-cache"
   depends_on    = [aws_s3_bucket_server_side_encryption_configuration.site]
+}
+
+resource "aws_cloudfront_distribution" "staging" {
+  enabled             = true
+  staging             = true
+  default_root_object = "index.html"
+  price_class         = "PriceClass_100"
+  aliases             = []
+
+  origin {
+    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                = "site"
+    origin_access_control_id = aws_cloudfront_origin_access_control.site.id
+  }
+
+  origin {
+    domain_name              = trimsuffix(trimprefix(aws_lambda_function_url.public_chat[local.inactive_slot].function_url, "https://"), "/")
+    origin_id                = "public-chat"
+    origin_access_control_id = aws_cloudfront_origin_access_control.public_chat.id
+    connection_attempts      = 1
+    connection_timeout       = 5
+
+    custom_origin_config {
+      http_port                = 80
+      https_port               = 443
+      origin_keepalive_timeout = 5
+      origin_protocol_policy   = "https-only"
+      origin_read_timeout      = 55
+      origin_ssl_protocols     = ["TLSv1.2"]
+    }
+  }
+
+  origin {
+    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                = "documents"
+    origin_path              = var.release_slots[local.inactive_slot].asset_prefix
+    origin_access_control_id = aws_cloudfront_origin_access_control.site.id
+  }
+
+  default_cache_behavior {
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    target_origin_id           = "documents"
+    viewer_protocol_policy     = "redirect-to-https"
+    compress                   = true
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
+    response_headers_policy_id = local.is_production ? null : aws_cloudfront_response_headers_policy.development_noindex[0].id
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.public_report_routes.arn
+    }
+  }
+
+  ordered_cache_behavior {
+    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods           = ["GET", "HEAD"]
+    target_origin_id         = "public-chat"
+    path_pattern             = "/api/*"
+    viewer_protocol_policy   = "https-only"
+    compress                 = false
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_except_host.id
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.public_chat_routes.arn
+    }
+  }
+
+  ordered_cache_behavior {
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "site"
+    path_pattern           = "/releases/*"
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = true
+    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  }
+
+  dynamic "ordered_cache_behavior" {
+    for_each = ["/tolls/*", "/usage.json", "/evals/*", "/evals.html", "/eval-dashboard*", "/evals.json", "/assets/evals*", "/robots.txt", "/sitemap.xml"]
+    content {
+      allowed_methods        = ["GET", "HEAD"]
+      cached_methods         = ["GET", "HEAD"]
+      target_origin_id       = "site"
+      path_pattern           = ordered_cache_behavior.value
+      viewer_protocol_policy = "redirect-to-https"
+      compress               = true
+      cache_policy_id        = data.aws_cloudfront_cache_policy.caching_disabled.id
+      function_association {
+        event_type   = "viewer-request"
+        function_arn = aws_cloudfront_function.public_report_routes.arn
+      }
+    }
+  }
+
+  web_acl_id = aws_wafv2_web_acl.public_chat.arn
+
+  restrictions {
+    geo_restriction { restriction_type = "none" }
+  }
+
+  viewer_certificate {
+    acm_certificate_arn = local.is_production ? aws_acm_certificate_validation.site[0].certificate_arn : (
+      local.development_custom_domain_enabled ? aws_acm_certificate.site[0].arn : null
+    )
+    cloudfront_default_certificate = !local.custom_domain_enabled
+    ssl_support_method             = local.custom_domain_enabled ? "sni-only" : null
+    minimum_protocol_version       = local.custom_domain_enabled ? "TLSv1.2_2021" : "TLSv1"
+  }
+}
+
+data "aws_ssm_parameter" "candidate_header" {
+  name            = "/nova-toll/${var.environment}/candidate-header"
+  with_decryption = true
+}
+
+resource "aws_cloudfront_continuous_deployment_policy" "candidate" {
+  enabled = true
+  staging_distribution_dns_names {
+    items    = [aws_cloudfront_distribution.staging.domain_name]
+    quantity = 1
+  }
+  traffic_config {
+    type = "SingleHeader"
+    single_header_config {
+      header = "aws-cf-cd-tollchat"
+      value  = data.aws_ssm_parameter.candidate_header.value
+    }
+  }
+}
+
+resource "aws_lambda_permission" "public_chat_url_staging" {
+  for_each               = var.release_slots
+  statement_id           = "AllowCloudFrontStagingUrlV2"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.tollchat_proxy[each.key].function_name
+  qualifier              = aws_lambda_alias.tollchat_live[each.key].name
+  principal              = "cloudfront.amazonaws.com"
+  source_arn             = aws_cloudfront_distribution.staging.arn
+  function_url_auth_type = "AWS_IAM"
+}
+
+resource "aws_lambda_permission" "public_chat_invoke_staging" {
+  for_each                 = var.release_slots
+  statement_id             = "AllowCloudFrontStagingInvokeV2"
+  action                   = "lambda:InvokeFunction"
+  function_name            = aws_lambda_function.tollchat_proxy[each.key].function_name
+  qualifier                = aws_lambda_alias.tollchat_live[each.key].name
+  principal                = "cloudfront.amazonaws.com"
+  source_arn               = aws_cloudfront_distribution.staging.arn
+  invoked_via_function_url = true
 }

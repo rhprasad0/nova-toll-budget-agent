@@ -45,6 +45,8 @@ const dependencies = (client, sessionClient = { async send() {
   randomBytes: () => Buffer.alloc(32, 7),
   randomUUID: () => sessionId,
   runtimeArn: "runtime-arn",
+  runtimeEndpoint: "blue",
+  releaseId: "release-blue",
 });
 const chunks = async function* (...values) {
   for (const value of values) yield new TextEncoder().encode(value);
@@ -131,6 +133,7 @@ test("public first chat creates a leased session without usage fields", async ()
   await bodyText(response.body);
 
   assert.deepEqual(writes.map(({ name }) => name), ["PutItemCommand", "UpdateItemCommand"]);
+  assert.equal(writes[0].input.Item.release_id.S, "release-blue");
   assert.equal("usage_excluded" in writes[0].input.Item, false);
   assert.equal("counted_response_ids" in writes[0].input.Item, false);
   assert.doesNotMatch(JSON.stringify(writes[0].input), /usage#all/);
@@ -171,6 +174,7 @@ test("legacy usage fields do not block a hashed session lease or release", async
         Attributes: {
           credential_hash: { S: "ignored" },
           runtime_session_id: { S: sessionId },
+        release_id: { S: "release-blue" },
           usage_excluded: { BOOL: false },
           counted_response_ids: { SS: ["old-request"] },
         },
@@ -236,6 +240,7 @@ test("session state rejection never invokes the runtime", async () => {
       expectedStatus: 409,
       item: {
         runtime_session_id: { S: sessionId },
+        release_id: { S: "release-blue" },
         expires_at: { N: "1700003600" },
         last_seen_at: { N: "1700000000" },
         lease_until: { N: "1700000010" },
@@ -246,6 +251,7 @@ test("session state rejection never invokes the runtime", async () => {
       expectedStatus: 401,
       item: {
         runtime_session_id: { S: sessionId },
+        release_id: { S: "release-blue" },
         expires_at: { N: "1699999999" },
         last_seen_at: { N: "1700000000" },
       },
@@ -410,5 +416,56 @@ test("config is available without a frontend", async () => {
     { httpMethod: "GET", path: "/api/config", requestContext: { domainName: domain }, headers: {} },
     dependencies({}),
   );
-  assert.deepEqual(JSON.parse(response.body), { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 });
+  assert.deepEqual(JSON.parse(response.body), { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5, release_id: "release-blue" });
+});
+
+test("foreign and legacy sessions expire before chat or reset, including leased sessions", async () => {
+  for (const release of [undefined, "release-green"]) {
+    for (const path of ["/api/chat", "/api/reset"]) {
+      let invoked = false;
+      const deps = dependencies({ async send() { invoked = true; } }, {
+        async send(command) {
+          assert.match(command.input.ConditionExpression, /release_id = :release_id/);
+          assert.equal(command.input.ExpressionAttributeValues[":release_id"].S, "release-blue");
+          const error = new Error("condition failed");
+          error.name = "ConditionalCheckFailedException";
+          error.Item = {
+            ...(release ? { release_id: { S: release } } : {}),
+            expires_at: { N: "1700003600" },
+            last_seen_at: { N: "1700000000" },
+            lease_until: { N: "1700000010" },
+          };
+          throw error;
+        },
+      });
+      const response = await route(event(path, path === "/api/chat" ? { message: "Price it" } : {}), deps);
+      assert.equal(response.statusCode, 401);
+      assert.equal(JSON.parse(response.body).error.message, "The application was updated. Start a new conversation.");
+      assert.match(response.headers["Set-Cookie"], /Max-Age=0/);
+      assert.equal(invoked, false);
+    }
+  }
+});
+
+test("both operations invoke only the configured named endpoint", async () => {
+  for (const path of ["/api/chat", "/api/reset"]) {
+    const calls = [];
+    const deps = dependencies({ async send(command) {
+      calls.push(command.input);
+      return { contentType: "text/event-stream", response: chunks('data: {"type":"answer","text":"Done","blocked":false}\n\n') };
+    } });
+    deps.runtimeEndpoint = "green";
+    const response = await route(event(path, path === "/api/chat" ? { message: "Price it" } : {}), deps);
+    assert.equal(response.statusCode, 200);
+    await bodyText(response.body);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].qualifier, "green");
+  }
+});
+
+test("missing release identity or unpinned endpoint fails closed", async () => {
+  for (const overrides of [{ releaseId: undefined }, { runtimeEndpoint: undefined }, { runtimeEndpoint: "DEFAULT" }]) {
+    const response = await route(event("/api/chat", { message: "Price it" }), { ...dependencies({}), ...overrides });
+    assert.equal(response.statusCode, 503);
+  }
 });

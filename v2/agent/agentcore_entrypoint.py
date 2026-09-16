@@ -197,6 +197,11 @@ def _canary_event(messages: Sequence[object]) -> dict[str, object]:
     return {
         "type": "canary",
         "schema_version": 1,
+        **(
+            {"release_id": os.environ["TOLLCHAT_RELEASE_ID"]}
+            if os.environ.get("TOLLCHAT_RELEASE_ID")
+            else {}
+        ),
         "call_count": len(calls),
         "tool_name_match": tool_name == "get_current_toll_price",
         "route_profile_match": route_profile_match,

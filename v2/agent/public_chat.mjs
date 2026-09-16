@@ -184,14 +184,17 @@ const start = () => {
         return;
       }
       const response = await post("/api/reset", {}).catch(() => null);
+      let expired;
       if (!response?.ok) {
         const error = response ? await responseError(response) : SAFE_ERROR;
         if (error.code !== "session_expired") {
           applyEvent(newTurn(transcript), SAFE_ERROR);
           return;
         }
+        expired = error;
       }
       transcript.replaceChildren();
+      if (expired) applyEvent(newTurn(transcript), { type: "error", code: expired.code, message: expired.message });
       setBusy(false);
       await new Promise(() => {});
     });
@@ -230,11 +233,14 @@ const start = () => {
     setBusy(true);
     try {
       const response = await post("/api/reset", {});
+      let expired;
       if (!response.ok) {
         const error = await responseError(response);
         if (error.code !== "session_expired") throw error;
+        expired = error;
       }
       transcript.replaceChildren();
+      if (expired) applyEvent(newTurn(transcript), { type: "error", code: expired.code, message: expired.message });
       starterWrap.hidden = false;
     } catch {
       applyEvent(newTurn(transcript), SAFE_ERROR);

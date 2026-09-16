@@ -217,10 +217,10 @@ locals {
     "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-usage-publisher-failed-invocations-dev",
   ]
   development_delivery_athena_workgroup_arn = "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
-  development_delivery_agentcore_trace_log_group_arns = [
+  development_delivery_agentcore_trace_log_group_arns = concat([
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
-  ]
+  ], local.green_trace_log_arns)
   development_delivery_agentcore_trace_firehose_arn      = "arn:aws:firehose:${local.development_delivery_region}:${local.development_delivery_account_id}:deliverystream/nova-toll-v2-agentcore-traces-dev"
   development_delivery_agentcore_trace_logs_role_arn     = "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-agentcore-traces-logs-dev"
   development_delivery_agentcore_trace_firehose_role_arn = "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-agentcore-traces-firehose-dev"

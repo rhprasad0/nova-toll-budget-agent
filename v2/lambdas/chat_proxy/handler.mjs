@@ -54,8 +54,8 @@ const forbidden = () => json(403, {
 });
 
 const clearCookie = `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`;
-const expired = () => json(401, {
-  error: { code: "session_expired", message: "Your chat expired. Please send your question again." },
+const expired = (updated = false) => json(401, {
+  error: { code: "session_expired", message: updated ? "The application was updated. Start a new conversation." : "Your chat expired. Please send your question again." },
 }, { "Set-Cookie": clearCookie });
 const busy = () => json(409, {
   error: { code: "session_busy", message: "Wait for the current response to finish." },
@@ -129,6 +129,7 @@ const createSession = async (dependencies, leaseId) => {
     Item: {
       credential_hash: { S: tokenHash(token) },
       runtime_session_id: { S: runtimeSessionId },
+      release_id: { S: dependencies.releaseId },
       created_at: { N: String(now) },
       last_seen_at: { N: String(now) },
       expires_at: { N: String(now + MAX_SESSION_SECONDS) },
@@ -154,6 +155,7 @@ const updateSession = async (dependencies, token, update, leaseId) => {
       ConditionExpression: [
         "attribute_exists(credential_hash)",
         "attribute_not_exists(revoked_at)",
+        "release_id = :release_id",
         "expires_at > :now",
         "last_seen_at > :idle_cutoff",
         "(attribute_not_exists(lease_until) OR lease_until <= :now)",
@@ -161,6 +163,7 @@ const updateSession = async (dependencies, token, update, leaseId) => {
       ExpressionAttributeValues: {
         ":now": { N: String(now) },
         ":idle_cutoff": { N: String(now - IDLE_SECONDS) },
+        ":release_id": { S: dependencies.releaseId },
         ...(acquiring ? {
           ":lease_id": { S: leaseId },
           ":lease_until": { N: String(now + LEASE_SECONDS) },
@@ -175,6 +178,7 @@ const updateSession = async (dependencies, token, update, leaseId) => {
   } catch (error) {
     if (conditionalFailure(error)) {
       const item = error.Item;
+      if (item && item.release_id?.S !== dependencies.releaseId) return { kind: "updated" };
       const activeLease = Number(item?.lease_until?.N) > now;
       const current = Number(item?.expires_at?.N) > now
         && Number(item?.last_seen_at?.N) > now - IDLE_SECONDS
@@ -212,7 +216,8 @@ const validEvent = (value, allowCanary = false) => {
   }
   if (value.type === "canary") {
     return allowCanary
-      && exactKeys(value, ["type", "schema_version", "call_count", "tool_name_match", "route_profile_match", "correlation_match", "result_success", "total_usd", "success"])
+      && exactKeys(value, ["type", "schema_version", "call_count", "tool_name_match", "route_profile_match", "correlation_match", "result_success", "total_usd", "success", ...(value.release_id !== undefined ? ["release_id"] : [])])
+      && (value.release_id === undefined || (typeof value.release_id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value.release_id)))
       && value.schema_version === 1 && Number.isInteger(value.call_count) && value.call_count >= 0
       && ["tool_name_match", "route_profile_match", "correlation_match", "result_success", "success"].every((key) => typeof value[key] === "boolean")
       && (value.total_usd === null || (typeof value.total_usd === "string" && /^\d{1,4}\.\d{2}$/.test(value.total_usd)));
@@ -262,11 +267,14 @@ async function* ndjsonFromSse(
 }
 
 export async function route(event, dependencies) {
-  const { client, runtimeArn } = dependencies;
+  const { client, runtimeArn, runtimeEndpoint, releaseId } = dependencies;
+  if (!releaseId || !runtimeEndpoint || runtimeEndpoint === "DEFAULT") {
+    return json(503, { error: SAFE_ERROR });
+  }
   const method = event.httpMethod ?? event.requestContext?.http?.method;
   const path = event.path ?? event.rawPath;
   if (method === "GET" && path === "/api/config") {
-    return json(200, { chatEnabled: true, maxMessageChars: MAX_MESSAGE_CHARS, maxTurns: 5 });
+    return json(200, { chatEnabled: true, maxMessageChars: MAX_MESSAGE_CHARS, maxTurns: 5, release_id: releaseId });
   }
   if (method !== "POST" || !["/api/chat", "/api/reset"].includes(path)) {
     return json(404, { error: { code: "not_found" } });
@@ -283,12 +291,12 @@ export async function route(event, dependencies) {
       if (supplied.kind === "missing") return json(200, { ok: true }, { "Set-Cookie": clearCookie });
       const session = await updateSession(dependencies, supplied.token, "revoked_at");
       if (session.kind === "busy") return busy();
-      if (session.kind === "expired") return expired();
+      if (session.kind === "expired" || session.kind === "updated") return expired(session.kind === "updated");
       cookie = clearCookie;
       await client.send(new StopRuntimeSessionCommand({
         agentRuntimeArn: runtimeArn,
         runtimeSessionId: session.runtimeSessionId,
-        qualifier: "preview",
+        qualifier: runtimeEndpoint,
       }));
       return json(200, { ok: true }, { "Set-Cookie": cookie });
     }
@@ -304,7 +312,7 @@ export async function route(event, dependencies) {
     } else {
       const session = await updateSession(dependencies, supplied.token, "last_seen_at", leaseId);
       if (session.kind === "busy") return busy();
-      if (session.kind === "expired") return expired();
+      if (session.kind === "expired" || session.kind === "updated") return expired(session.kind === "updated");
       runtimeSessionId = session.runtimeSessionId;
       sessionToken = supplied.token;
     }
@@ -319,7 +327,7 @@ export async function route(event, dependencies) {
     const result = await client.send(new InvokeAgentRuntimeCommand({
       agentRuntimeArn: runtimeArn,
       runtimeSessionId,
-      qualifier: "preview",
+      qualifier: runtimeEndpoint,
       payload: new TextEncoder().encode(JSON.stringify({
         prompt: body.message.trim(),
           ...(validPost(event)
@@ -336,6 +344,12 @@ export async function route(event, dependencies) {
         "Content-Type": "application/x-ndjson",
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
+        "X-TollChat-Release": releaseId,
+        "X-TollChat-Proxy": dependencies.proxyArn ?? "",
+        "X-TollChat-Proxy-Version": dependencies.proxyVersion ?? "",
+        "X-TollChat-Runtime": runtimeArn,
+        "X-TollChat-Runtime-Version": dependencies.runtimeVersion ?? "",
+        "X-TollChat-Endpoint": runtimeEndpoint,
         ...(cookie ? { "Set-Cookie": cookie } : {}),
       },
       body: ndjsonFromSse(
@@ -368,10 +382,14 @@ const dependencies = deployed ? {
   randomBytes,
   randomUUID,
   runtimeArn: process.env.AGENTCORE_RUNTIME_ARN,
+  runtimeEndpoint: process.env.AGENTCORE_RUNTIME_ENDPOINT,
+  releaseId: process.env.RELEASE_ID,
+  runtimeVersion: process.env.AGENTCORE_RUNTIME_VERSION,
+  proxyVersion: process.env.AWS_LAMBDA_FUNCTION_VERSION,
 } : {};
 
-export const handler = deployed ? globalThis.awslambda.streamifyResponse(async (event, responseStream) => {
-  const response = await route(event, dependencies);
+export const handler = deployed ? globalThis.awslambda.streamifyResponse(async (event, responseStream, context) => {
+  const response = await route(event, { ...dependencies, proxyArn: context.invokedFunctionArn.split(":").slice(0, 7).join(":") });
   const stream = globalThis.awslambda.HttpResponseStream.from(responseStream, {
     statusCode: response.statusCode,
     headers: response.headers,
