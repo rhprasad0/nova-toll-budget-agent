@@ -1,7 +1,4 @@
-# Blue-green development bootstrap
-
-Release validation and promotion land in the dependent PRs. Keep delivery
-disabled until all three changes and the separately reviewed bootstrap are complete.
+# Blue-green development delivery
 
 **Bootstrap must be reviewed before enabling `DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED`.**
 Production still uses its existing gate; adopting this application layout there
@@ -111,3 +108,73 @@ before setup. **This inventory is not an approved plan.**
 
 AWS-generated IDs make bootstrap a sequence of dependent reviewed plans. Do not
 substitute wildcard final permissions or relax ordinary release gates.
+
+## Manual application recovery
+
+Automatic recovery ends with the observation window. For cancellation or runner
+loss, stop newer delivery work and hold the same `v2-development-apply`
+serialization boundary before manual recovery. No background watchdog runs.
+
+Use the original admitted release checkout/bundle and verified foundation
+variables in an isolated worktree. Verify the bundle with
+`verify_release_bundle.py verify --verify-checkout`; do not rebuild artifacts.
+The private record is
+`releases/<candidate-id>/recovery/<run-id>:<attempt>.json` in the fixed artifact
+bucket. Read its exact S3 version from the delivery summary, or from the exact
+key after runner loss. Do not use an unversioned record.
+
+Review both retained identities and the current state lineage/serial. Compute
+the reviewed state identity hash without publishing state:
+
+```sh
+terraform -chdir="$APPLICATION_ROOT" state pull |
+  python3 -c 'import hashlib,json,sys; s=json.load(sys.stdin); v={k:s[k] for k in ("lineage","serial")}; print(hashlib.sha256(json.dumps(v,sort_keys=True,separators=(",",":")).encode()).hexdigest())'
+```
+
+Using the fixed delivery role or the recorded development SSO administrator role:
+
+```sh
+AWS_PROFILE=nova-toll-dev python3 v2/scripts/release_blue_green.py recover \
+  --environment development --terraform-root "$APPLICATION_ROOT" \
+  --bundle-root "$VERIFIED_BUNDLE" --foundation-vars "$FOUNDATION_VARS" \
+  --work-dir "$PRIVATE/recovery" --output "$PRIVATE/recovery-result.json" \
+  --claim "$ORIGINAL_RUN_ID:$ORIGINAL_ATTEMPT" --release-id "$CANDIDATE_ID" \
+  --record-version "$RECOVERY_RECORD_VERSION" \
+  --expected-state-sha256 "$REVIEWED_STATE_IDENTITY_SHA256"
+```
+
+The command checks claim, lineage, both descriptors and reviewed state identity,
+generates a fresh routing-only plan, rechecks serial before apply, and attempts
+restoration once. A newer release is rejected. Exit status remains nonzero on
+successful recovery: `deployment=failed, recovery=recovered`. Inspect that
+separate result. No migration or database downgrade is performed. Investigate a
+failed restore; never repeatedly apply a stale plan or mutate routing directly.
+
+## Rehearsal and evidence
+
+Local tests exercise controller branches with mocked AWS/Terraform I/O: invalid
+candidate, healthy promotion, two failed probes, partial switch, stale state and
+restore failure. SQL tests run baseline and candidate contracts against the same
+upgraded disposable database. **These tests do not prove a live deployment.**
+
+The [sanitized simulated rollback record](evidence/blue-green-simulated-rollback.json)
+records the executed controller-test outcomes separately from live evidence.
+
+After bootstrap review, rehearse through protected exact-release delivery:
+
+1. Deliver a reviewed broken candidate. Validation fails while ordinary blue
+   public/private requests continue succeeding.
+2. Deliver good green, record its actual proxy/runtime identities, promote it,
+   and demonstrate the old-session restart.
+3. Inject a reviewed development post-promotion check failure. Two consecutive
+   failures must trigger exactly one restore. Record terminal streamed answers
+   from both public and private blue ingress and retained green assets.
+4. Deliver again to prove preparation preserves whichever slot is active.
+   Use the retained release commit as the disposable SQL test baseline.
+
+Preserve release IDs, published identities, timestamps, probe booleans,
+public/private verification outcomes and separate deployment/recovery status.
+Exclude candidate headers, cookies, prompts, private plans and credentials.
+
+**Live bootstrap and rollback rehearsal: not run; separately reviewed setup is
+required.** Shared database and capacity failures remain shared.

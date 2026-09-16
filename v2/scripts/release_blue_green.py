@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import base64
 import hashlib
 import http.cookiejar
@@ -13,6 +14,7 @@ import re
 import subprocess
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -527,3 +529,351 @@ def validate_candidate(prepared: dict[str, Any], claim: str) -> dict[str, Any]:
     finally:
         checks.candidate_header = None
         checks.serving_expected = None
+
+
+def observe(
+    probe_once: Callable[[], bool],
+    restore: Callable[[], bool],
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+) -> dict[str, Any]:
+    failures = 0
+    results: list[bool] = []
+    for index in range(5):
+        started = clock()
+        try:
+            ok = probe_once() is True and clock() - started <= 60
+        except Exception:
+            ok = False
+        results.append(ok)
+        failures = 0 if ok else failures + 1
+        if failures == 2:
+            try:
+                recovered = restore() is True
+            except Exception:
+                recovered = False
+            return {
+                "deployment": "failed",
+                "recovery": "recovered" if recovered else "failed",
+                "probes": results,
+            }
+        if index < 4:
+            sleep(max(0, 60 - (clock() - started)))
+    return {
+        "deployment": "succeeded",
+        "recovery": "not_attempted",
+        "probes": results,
+    }
+
+
+def recover(
+    root: Path, bundle: Path, foundation: Path, work: Path, prepared: dict[str, Any]
+) -> bool:
+    actual, identity = current(root)
+    gate.require(actual["slots"] == prepared["slots"], "stale_recovery")
+    promoted = dict(
+        prepared, active="green" if prepared["active"] == "blue" else "blue"
+    )
+    saved = plan(
+        root,
+        bundle,
+        foundation,
+        work,
+        "recover",
+        promoted,
+        gate.desired(promoted, promote=True),
+    )
+    gate.require(current(root)[1] == identity, "stale_recovery")
+    terraform(root, "apply", "-input=false", str(saved))
+    restored, _ = current(root)
+    gate.require(restored == prepared, "restore_state")
+    wait_routing(root, restored)
+    readiness(restored["slots"][restored["active"]])
+    probe(restored["slots"][restored["active"]])
+    private_probe(root, restored["slots"][restored["active"]])
+    for slot in restored["slots"].values():
+        assets(slot)
+    return True
+
+
+def recovery_key(release: str, claim: str) -> str:
+    gate.require(
+        re.fullmatch(r"[a-zA-Z0-9_-]{1,128}", release) is not None, "release_id"
+    )
+    gate.require(re.fullmatch(r"[0-9]+:[0-9]+", claim) is not None, "recovery_claim")
+    return f"releases/{release}/recovery/{claim}.json"
+
+
+def load_recovery(work: Path, release: str, claim: str, version: str) -> dict[str, Any]:
+    gate.require(bool(version) and version != "null", "recovery_version")
+    path = work / "context.json"
+    aws(
+        "s3api",
+        "get-object",
+        "--bucket",
+        artifact_bucket,
+        "--key",
+        recovery_key(release, claim),
+        "--version-id",
+        version,
+        "--expected-bucket-owner",
+        account,
+        str(path),
+    )
+    context = json.loads(path.read_text())
+    gate.require(
+        context["claim"] == claim and context["environment"] == environment,
+        "recovery_claim",
+    )
+    inactive = "green" if context["prepared"]["active"] == "blue" else "blue"
+    gate.require(
+        context["prepared"]["slots"][inactive]["release_id"] == release,
+        "recovery_release",
+    )
+    return context
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("phase", choices=["prepare-plan", "finish", "recover"])
+    for name in (
+        "terraform-root",
+        "bundle-root",
+        "foundation-vars",
+        "work-dir",
+        "output",
+    ):
+        parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--claim", required=True)
+    parser.add_argument(
+        "--environment", choices=["development", "production"], default="development"
+    )
+    parser.add_argument("--saved-plan", type=Path)
+    parser.add_argument("--release-id")
+    parser.add_argument("--record-version")
+    parser.add_argument("--expected-state-sha256")
+    args = parser.parse_args()
+    os.umask(0o077)
+    args.work_dir.mkdir(parents=True, exist_ok=True)
+    root, bundle, foundation, work = (
+        args.terraform_root.resolve(),
+        args.bundle_root.resolve(),
+        args.foundation_vars.resolve(),
+        args.work_dir.resolve(),
+    )
+    result: dict[str, Any] = {"deployment": "failed", "recovery": "not_attempted"}
+    recovery_record: dict[str, str] | None = None
+    authorized = False
+    try:
+        configure(args.environment)
+        caller = aws("sts", "get-caller-identity")
+        gate.require(caller["Account"] == account, "account")
+        role = (
+            "nova-toll-v2-development-delivery"
+            if environment == "development"
+            else (
+                "nova-toll-production-planner"
+                if args.phase == "prepare-plan"
+                else "nova-toll-production-deploy"
+            )
+        )
+        gate.require(
+            caller["Arn"].startswith(f"arn:aws:sts::{account}:assumed-role/{role}/")
+            or (
+                args.phase == "recover"
+                and environment == "development"
+                and caller["Arn"].startswith(
+                    "arn:aws:sts::903859731897:assumed-role/AWSReservedSSO_AdministratorAccess_00c1146592545487/"
+                )
+            ),
+            "delivery_role",
+        )
+        authorized = True
+        context_file = work / "context.json"
+        if args.phase == "prepare-plan":
+            previous, identity = current(root)
+            write(work / "previous.json", previous)
+            candidate = prepare_descriptor(bundle, previous)
+            inputs = gate.desired(previous, candidate)
+            saved = plan(root, bundle, foundation, work, "prepare", previous, inputs)
+            write(
+                context_file,
+                {
+                    "claim": args.claim,
+                    "previous": previous,
+                    "identity": identity,
+                    "inputs": inputs,
+                    "plan_sha256": hashlib.sha256(saved.read_bytes()).hexdigest(),
+                },
+            )
+            result = {"deployment": "prepared_plan", "recovery": "not_attempted"}
+        elif args.phase == "recover":
+            gate.require(
+                all((args.release_id, args.record_version, args.expected_state_sha256)),
+                "manual_recovery_identity",
+            )
+            context = load_recovery(
+                work, args.release_id, args.claim, args.record_version
+            )
+            _, identity = current(root)
+            gate.require(
+                gate.digest(identity) == args.expected_state_sha256
+                and identity["lineage"] == context["identity"]["lineage"],
+                "stale_recovery",
+            )
+            result = {
+                "deployment": "failed",
+                "recovery": "recovered"
+                if recover(root, bundle, foundation, work, context["prepared"])
+                else "failed",
+            }
+        else:
+            if args.saved_plan is not None:
+                document = json.loads(
+                    terraform(root, "show", "-json", str(args.saved_plan.resolve()))
+                )
+                previous = document["prior_state"]["values"]["outputs"][
+                    "release_state"
+                ]["value"]
+                if not foundation.exists():
+                    write(
+                        foundation,
+                        {"foundation": document["variables"]["foundation"]["value"]},
+                    )
+                gate.validate_plan(document, previous, "prepare")
+                actual, identity = current(root)
+                gate.require(actual == previous, "stale_prepare")
+                inputs = {
+                    key: document["variables"][key]["value"]
+                    for key in ("active_slot", "release_slots")
+                }
+                (work / "prepare.tfplan").write_bytes(args.saved_plan.read_bytes())
+                write(
+                    context_file,
+                    {
+                        "claim": args.claim,
+                        "previous": previous,
+                        "identity": identity,
+                        "inputs": inputs,
+                        "plan_sha256": hashlib.sha256(
+                            args.saved_plan.read_bytes()
+                        ).hexdigest(),
+                    },
+                )
+            context = json.loads(context_file.read_text())
+            gate.require(context["claim"] == args.claim, "release_claim")
+            previous, identity = current(root)
+            gate.require(
+                previous == context["previous"] and identity == context["identity"],
+                "stale_prepare",
+            )
+            saved = work / "prepare.tfplan"
+            gate.require(
+                hashlib.sha256(saved.read_bytes()).hexdigest()
+                == context["plan_sha256"],
+                "saved_plan",
+            )
+            terraform(root, "apply", "-input=false", str(saved))
+            prepared, _ = current(root)
+            gate.require(
+                gate.desired(prepared) == context["inputs"], "prepared_identity"
+            )
+            context["prepared"] = prepared
+            context["environment"] = environment
+            write(context_file, context)
+            wait_routing(root, prepared)
+            private_probe(root, prepared["slots"][prepared["active"]])
+            evidence = validate_candidate(prepared, args.claim)
+            write(work / "candidate-evidence.json", evidence)
+            gate.require(current(root)[0] == prepared, "stale_promotion")
+            gate.verify_evidence(evidence, prepared, args.claim)
+            saved = plan(
+                root,
+                bundle,
+                foundation,
+                work,
+                "promote",
+                prepared,
+                gate.desired(prepared, promote=True),
+            )
+            gate.verify_evidence(evidence, current(root)[0], args.claim)
+            inactive = "green" if prepared["active"] == "blue" else "blue"
+            key = recovery_key(prepared["slots"][inactive]["release_id"], args.claim)
+            record = upload(
+                context_file,
+                artifact_bucket,
+                key,
+                "application/json",
+                "private, no-store",
+            )
+            recovery_record = {"key": key, "version_id": record["VersionId"]}
+            write(args.output, {**result, "recovery_record": recovery_record})
+            try:
+                terraform(root, "apply", "-input=false", str(saved))
+                promoted, _ = current(root)
+                gate.require(
+                    gate.desired(promoted) == gate.desired(prepared, promote=True),
+                    "promoted_identity",
+                )
+                gate.require(
+                    promoted["slots"] == prepared["slots"], "promoted_artifacts"
+                )
+                wait_routing(root, promoted)
+                private_probe(root, promoted["slots"][promoted["active"]])
+            except Exception:
+                result = {"deployment": "failed", "recovery": "failed"}
+                if recover(root, bundle, foundation, work, prepared):
+                    result["recovery"] = "recovered"
+            else:
+                result = observe(
+                    lambda: bool(probe(promoted["slots"][promoted["active"]])),
+                    lambda: recover(root, bundle, foundation, work, prepared),
+                )
+                result["active"] = current(root)[0]["active"]
+    except (
+        gate.Rejected,
+        checks.CheckFailure,
+        KeyError,
+        ValueError,
+        TypeError,
+        OSError,
+        subprocess.SubprocessError,
+    ):
+        pass
+    if recovery_record is not None:
+        result["recovery_record"] = recovery_record
+    if authorized and args.phase != "prepare-plan":
+        try:
+            final_state, _ = current(root)
+            result["active"] = final_state["active"]
+            result["releases"] = {
+                name: {
+                    key: slot[key]
+                    for key in (
+                        "release_id",
+                        "proxy_arn",
+                        "proxy_version",
+                        "runtime_arn",
+                        "runtime_version",
+                        "endpoint",
+                        "asset_prefix",
+                    )
+                }
+                for name, slot in final_state["slots"].items()
+            }
+        except (
+            gate.Rejected,
+            KeyError,
+            ValueError,
+            OSError,
+            subprocess.SubprocessError,
+        ):
+            result["active"] = "unverified"
+    write(args.output, result)
+    print(json.dumps(result, sort_keys=True))
+    return 0 if result["deployment"] in {"succeeded", "prepared_plan"} else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
