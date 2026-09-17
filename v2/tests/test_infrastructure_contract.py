@@ -4411,7 +4411,7 @@ def test_public_site_publishes_the_v2_ui_and_legal_assets():
     ):
         assert "v2/agent/" + path in FIXED_PATHS
     assert (
-        "origin_path              = var.release_slots[var.active_slot].asset_prefix"
+        "origin_path                 = var.release_slots[var.active_slot].asset_prefix"
         in site
     )
     assert 'path_pattern           = "/releases/*"' in site
@@ -4668,6 +4668,10 @@ def test_timed_package_is_threaded_through_all_plan_paths():
         in (V2_ROOT / "scripts/release_blue_green.py").read_text()
     )
     assert '--bundle-root "$overlay"' in PRODUCTION_PLAN_WORKFLOW
+    assert (
+        'blue_green.py prepare --plan "$plan_json" --saved-plan "$plan"'
+        in PRODUCTION_PLAN_WORKFLOW
+    )
     assert "-target" not in PRODUCTION_PLAN_WORKFLOW
 
 

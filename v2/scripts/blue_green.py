@@ -16,6 +16,12 @@ import time
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, cast
+from zipfile import BadZipFile, ZipFile
+
+# Review the environment expression again before updating this source pin.
+AGENTCORE_SOURCE_SHA256 = (
+    "6a11d9487ffe0948f18963c456d2e6ab3f9bf35680be90c9d5b3d9aace38329e"
+)
 
 SLOTS = ("blue", "green")
 DESCRIPTOR_KEYS = {
@@ -303,11 +309,19 @@ def origins(
     )
     old["public-chat"]["domain_name"] = new["public-chat"]["domain_name"]
     old["documents"]["origin_path"] = new["documents"]["origin_path"]
+    # AWS provider 6.60 represents an omitted IP type as either null or "".
+    for side in (old, new):
+        for config in side["public-chat"].get("custom_origin_config", []):
+            if config.get("ip_address_type") in {None, ""}:
+                config.pop("ip_address_type", None)
     require(old == new, "shared_origin_changed")
 
 
 def validate_plan(
-    plan: dict[str, Any], previous: dict[str, Any], phase: str
+    plan: dict[str, Any],
+    previous: dict[str, Any],
+    phase: str,
+    saved_plan: Path | None = None,
 ) -> dict[str, Any]:
     """Gate the entire saved plan, including no-op moves and shared resources."""
     require(phase in {"prepare", "promote", "recover"}, "phase")
@@ -503,7 +517,15 @@ def validate_plan(
             ),
             "action",
         )
-        require(changed(before, after) <= allow, "field_boundary")
+        fields = changed(before, after)
+        if (
+            address == "aws_api_gateway_deployment.tollchat"
+            and before.get("description") in {None, ""}
+            and after.get("description") in {None, ""}
+        ):
+            # A replacement plans null for the provider's empty read-back default.
+            fields.discard("description")
+        require(fields <= allow, "field_boundary")
         unknown_values = deepcopy(change.get("after_unknown", {}))
         if address == f'aws_lambda_function.tollchat_proxy["{inactive}"]':
             target = slots[inactive]
@@ -513,16 +535,56 @@ def validate_plan(
                 AGENTCORE_RUNTIME_ARN=previous["slots"][inactive]["runtime_arn"],
                 AGENTCORE_RUNTIME_ENDPOINT=previous["slots"][inactive]["endpoint"],
             )
-            actual_environment = deepcopy(after["environment"][0]["variables"])
-            actual_environment.pop("AGENTCORE_RUNTIME_VERSION", None)
-            require(actual_environment == expected_environment, "proxy_configuration")
             environment_unknown = unknown_values.pop("environment", [])
-            require(
-                not has_unknown(environment_unknown)
-                or environment_unknown
-                == [{"variables": {"AGENTCORE_RUNTIME_VERSION": True}}],
-                "unknown_proxy_configuration",
-            )
+            if environment_unknown == [{"variables": True}]:
+                require(
+                    phase == "prepare" and after["environment"] == [{}],
+                    "unknown_proxy_configuration",
+                )
+                require(saved_plan is not None, "proxy_source_proof")
+                assert saved_plan is not None
+                try:
+                    with ZipFile(saved_plan) as archive:
+                        names = archive.namelist()
+                        source = "tfconfig/m-/agentcore.tf"
+                        require(names.count(source) == 1, "proxy_source_proof")
+                        require(
+                            archive.getinfo(source).file_size == 28263,
+                            "proxy_source_proof",
+                        )
+                        require(
+                            not any(
+                                Path(name).parent.as_posix() == "tfconfig/m-"
+                                and (
+                                    Path(name).name
+                                    in {"override.tf", "override.tf.json"}
+                                    or Path(name).name.endswith(
+                                        ("_override.tf", "_override.tf.json")
+                                    )
+                                )
+                                for name in names
+                            ),
+                            "proxy_source_proof",
+                        )
+                        require(
+                            hashlib.sha256(archive.read(source)).hexdigest()
+                            == AGENTCORE_SOURCE_SHA256,
+                            "proxy_source_proof",
+                        )
+                except (BadZipFile, OSError) as error:
+                    raise Rejected("proxy_source_proof") from error
+            else:
+                actual_environment = deepcopy(after["environment"][0]["variables"])
+                actual_environment.pop("AGENTCORE_RUNTIME_VERSION", None)
+                require(
+                    actual_environment == expected_environment, "proxy_configuration"
+                )
+                require(
+                    not has_unknown(environment_unknown)
+                    or environment_unknown
+                    == [{"variables": {"AGENTCORE_RUNTIME_VERSION": True}}],
+                    "unknown_proxy_configuration",
+                )
             require(
                 after["s3_key"] == target["proxy_key"]
                 and after["s3_object_version"] == target["proxy_object_version"]
@@ -676,7 +738,7 @@ def main() -> int:
         else:
             require(args.previous is not None, "previous_state")
             result = validate_plan(
-                plan, json.loads(args.previous.read_text()), args.phase
+                plan, json.loads(args.previous.read_text()), args.phase, args.saved_plan
             )
         print(json.dumps(result, sort_keys=True))
         return 0
