@@ -1170,6 +1170,7 @@ def test_development_private_transport_preserves_tls_hostname(
     tls.wrap_socket = Mock()
     monkeypatch.setattr(check.ssl, "create_default_context", Mock(return_value=tls))
     connection.connect()
+    assert tls.minimum_version == check.ssl.TLSVersion.TLSv1_2
     connect.assert_called_once_with(("fd7a:115c:a1e0:b1a:0:1:ac1f:e131", 443), 7)
     tls.wrap_socket.assert_called_once_with(
         connect.return_value, server_hostname=hostname

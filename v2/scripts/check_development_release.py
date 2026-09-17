@@ -470,9 +470,9 @@ class DevelopmentPrivateConnection(http.client.HTTPSConnection):
             int(ipaddress.ip_address("fd7a:115c:a1e0:b1a:0:1:0:0")) | int(address)
         )
         self.sock = socket.create_connection((str(transport), self.port), self.timeout)
-        self.sock = ssl.create_default_context().wrap_socket(
-            self.sock, server_hostname=self.host
-        )
+        context = ssl.create_default_context()
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        self.sock = context.wrap_socket(self.sock, server_hostname=self.host)
 
 
 class DevelopmentPrivateHTTPSHandler(urllib.request.HTTPSHandler):
