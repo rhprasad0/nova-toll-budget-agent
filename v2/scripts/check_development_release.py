@@ -60,7 +60,6 @@ profile_functions = {
 }
 profile_production = False
 candidate_header: str | None = None
-rehearsal_failure = False  # Temporary development rehearsal; removed after the drill.
 serving_expected: dict[str, Any] | None = None
 serving_observed: dict[str, Any] = {}
 profile_path_prefix = ""
@@ -515,14 +514,6 @@ def request(
         headers["Cookie"] = f"{COOKIE}={cookie}"
     if canary:
         headers["x-tollchat-canary"] = CANARY_MARKER
-    if (
-        canary
-        and rehearsal_failure
-        and not profile_production
-        and profile_site == "https://dev.tollchat.ai"
-        and not profile_path_prefix
-    ):
-        headers["x-tollchat-drill"] = "runtime-exception-v2"
     data = None if body is None else json.dumps(body).encode()
     if data is not None:
         headers["Content-Type"] = "application/json"

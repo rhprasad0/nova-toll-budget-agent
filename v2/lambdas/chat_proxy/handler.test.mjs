@@ -80,21 +80,6 @@ test("private same-origin chat streams only approved v2 events", async () => {
   assert.equal(new TextDecoder().decode(calls[0].payload), '{"prompt":"Price it"}');
 });
 
-test("the existing runtime drill forwards only its fixed failure mode", async () => {
-  const calls = [];
-  const client = { async send(command) {
-    calls.push(command.input);
-    return { contentType: "text/event-stream", response: chunks('data: {"type":"error","code":"agent_unavailable","message":"TollChat could not complete that request. Please try again."}\n\n') };
-  } };
-  const request = event("/api/chat", { message: "Price it" });
-  request.headers["x-tollchat-drill"] = "runtime-exception-v2";
-  const response = await route(request, dependencies(client));
-  assert.deepEqual(JSON.parse(new TextDecoder().decode(calls[0].payload)), {
-    prompt: "Price it", failure_mode: "runtime_exception_v2",
-  });
-  assert.match(await bodyText(response.body), /"type":"error"/);
-});
-
 test("the exact marker carries one bounded canary event and rejects it otherwise", async () => {
   const prompt = "What is the current toll from the Leesburg Bypass entrance to Route 28 for a two-axle vehicle with E-ZPass?";
   const canary = '{"type":"canary","schema_version":1,"call_count":1,"tool_name_match":true,"route_profile_match":true,"correlation_match":true,"result_success":true,"total_usd":"4.25","success":true}';
