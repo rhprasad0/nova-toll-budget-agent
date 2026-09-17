@@ -1036,3 +1036,133 @@ def test_private_probe_restores_transport_after_failure(
     assert delivery.checks.profile_site == "https://public.example"
     assert delivery.checks.profile_path_prefix == ""
     assert delivery.checks.profile_private_via6 is False
+
+
+@pytest.mark.parametrize(
+    "proof", ["reviewed", "missing", "changed", "override", "invalid", "duplicate"]
+)
+def test_unknown_proxy_environment_requires_saved_reviewed_source(
+    tmp_path: Path, proof: str
+) -> None:
+    from zipfile import ZipFile
+
+    before = previous()
+    target = slot("green", "release2")
+    saved = plan(
+        gate.desired(before, target),
+        [
+            change(
+                'aws_lambda_function.tollchat_proxy["green"]',
+                {"environment": [{"variables": {"RELEASE_ID": "release0"}}]},
+                {
+                    "environment": [{}],
+                    "s3_key": target["proxy_key"],
+                    "s3_object_version": target["proxy_object_version"],
+                    "source_code_hash": target["proxy_sha256"],
+                },
+                unknown={"environment": [{"variables": True}]},
+            )
+        ],
+    )
+    binary = tmp_path / "prepare.tfplan"
+    source = (Path(__file__).parents[1] / "infra/agentcore.tf").read_bytes()
+    if proof == "changed":
+        source = source.replace(b"RELEASE_ID", b"UNTRUSTED_ID")
+    with ZipFile(binary, "w") as archive:
+        archive.writestr("tfconfig/m-/agentcore.tf", source)
+        if proof == "duplicate":
+            with pytest.warns(UserWarning, match="Duplicate name"):
+                archive.writestr("tfconfig/m-/agentcore.tf", source)
+        if proof == "override":
+            archive.writestr("tfconfig/m-/environment_override.tf", "")
+    if proof == "invalid":
+        binary.write_bytes(b"not a saved plan")
+    if proof == "reviewed":
+        gate.validate_plan(saved, before, "prepare", binary)
+    else:
+        with pytest.raises(gate.Rejected, match="proxy_source_proof"):
+            gate.validate_plan(
+                saved, before, "prepare", None if proof == "missing" else binary
+            )
+
+
+@pytest.mark.parametrize(
+    "mutation", [{"EXTRA": "unexpected"}, {"AGENTCORE_RUNTIME_VERSION": "999"}]
+)
+def test_readiness_rejects_any_proxy_environment_mismatch(
+    monkeypatch: pytest.MonkeyPatch, mutation: dict[str, str]
+) -> None:
+    target = slot("green", "release2")
+    environment = dict(
+        target["proxy_environment"],
+        RELEASE_ID=target["release_id"],
+        AGENTCORE_RUNTIME_ARN=target["runtime_arn"],
+        AGENTCORE_RUNTIME_ENDPOINT=target["endpoint"],
+        AGENTCORE_RUNTIME_VERSION=target["runtime_version"],
+    )
+    environment.update(mutation)
+    aws = Mock(
+        return_value={
+            "Configuration": {
+                "CodeSha256": target["proxy_sha256"],
+                "Version": target["proxy_version"],
+                "State": "Active",
+                "Environment": {"Variables": environment},
+            }
+        }
+    )
+    monkeypatch.setattr(delivery, "aws", aws)
+    with pytest.raises(gate.Rejected, match="proxy_pairing"):
+        delivery.readiness(target)
+    assert aws.call_count == 1
+
+
+@pytest.mark.parametrize("ip_type", [None, "", "ipv4", "ipv6", "dualstack"])
+def test_origins_only_normalizes_omitted_ip_type(ip_type: str | None) -> None:
+    before: list[dict[str, Any]] = [
+        {"origin_id": "site"},
+        {"origin_id": "documents", "origin_path": "/releases/old"},
+        {
+            "origin_id": "public-chat",
+            "domain_name": "api.example.test",
+            "custom_origin_config": [{"ip_address_type": ""}],
+        },
+    ]
+    after = deepcopy(before)
+    after[1]["origin_path"] = "/releases/new"
+    after[2]["custom_origin_config"][0]["ip_address_type"] = ip_type
+    if ip_type in {None, ""}:
+        gate.origins(before, after, api="api.example.test", prefix="/releases/new")
+    else:
+        with pytest.raises(gate.Rejected, match="shared_origin_changed"):
+            gate.origins(before, after, api="api.example.test", prefix="/releases/new")
+
+
+@pytest.mark.parametrize("phase", ["promote", "recover"])
+@pytest.mark.parametrize("description", [None, "", "changed"])
+def test_routing_replacement_only_normalizes_empty_description(
+    phase: str, description: str | None
+) -> None:
+    before = previous()
+    saved = plan(
+        gate.desired(before, promote=True),
+        [
+            change(
+                "aws_api_gateway_deployment.tollchat",
+                {
+                    "description": "",
+                    "id": "old",
+                    "created_date": "then",
+                    "triggers": {"redeployment": "old"},
+                },
+                {"description": description, "triggers": {"redeployment": "new"}},
+                actions=["create", "delete"],
+                unknown={"id": True, "created_date": True},
+            )
+        ],
+    )
+    if description in {None, ""}:
+        gate.validate_plan(saved, before, phase)
+    else:
+        with pytest.raises(gate.Rejected, match="field_boundary"):
+            gate.validate_plan(saved, before, phase)

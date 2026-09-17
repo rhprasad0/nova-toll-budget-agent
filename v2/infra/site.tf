@@ -15,38 +15,32 @@ resource "aws_s3_bucket_public_access_block" "site" {
   restrict_public_buckets = true
 }
 
-data "aws_iam_policy_document" "site_kms" {
-  statement {
-    sid       = "EnableAccountIamPolicies"
-    actions   = ["kms:*"]
-    resources = ["*"]
-    principals {
-      type        = "AWS"
-      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
-    }
-  }
-
-  statement {
-    sid       = "AllowCloudFrontDecrypt"
-    actions   = ["kms:Decrypt"]
-    resources = ["*"]
-    principals {
-      type        = "Service"
-      identifiers = ["cloudfront.amazonaws.com"]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "AWS:SourceArn"
-      values   = [aws_cloudfront_distribution.site.arn, aws_cloudfront_distribution.staging.arn]
-    }
-  }
-}
-
 resource "aws_kms_key" "site" {
   description             = "TollChat v2 public site assets"
   enable_key_rotation     = true
   deletion_window_in_days = 30
-  policy                  = data.aws_iam_policy_document.site_kms.json
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EnableAccountIamPolicies"
+        Effect    = "Allow"
+        Action    = "kms:*"
+        Resource  = "*"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+      },
+      {
+        Sid       = "AllowCloudFrontDecrypt"
+        Effect    = "Allow"
+        Action    = "kms:Decrypt"
+        Resource  = "*"
+        Principal = { Service = "cloudfront.amazonaws.com" }
+        Condition = {
+          StringEquals = { "AWS:SourceArn" = [aws_cloudfront_distribution.site.arn, aws_cloudfront_distribution.staging.arn] }
+        }
+      },
+    ]
+  })
 }
 
 resource "aws_kms_alias" "site" {
@@ -372,17 +366,19 @@ resource "aws_cloudfront_distribution" "site" {
   aliases                         = local.custom_domain_enabled ? local.domains : []
 
   origin {
-    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
-    origin_id                = "site"
-    origin_access_control_id = aws_cloudfront_origin_access_control.site.id
+    response_completion_timeout = 0
+    domain_name                 = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                   = "site"
+    origin_access_control_id    = aws_cloudfront_origin_access_control.site.id
   }
 
   origin {
-    domain_name              = trimsuffix(trimprefix(aws_lambda_function_url.public_chat[var.active_slot].function_url, "https://"), "/")
-    origin_id                = "public-chat"
-    origin_access_control_id = aws_cloudfront_origin_access_control.public_chat.id
-    connection_attempts      = 1
-    connection_timeout       = 5
+    response_completion_timeout = 0
+    domain_name                 = trimsuffix(trimprefix(aws_lambda_function_url.public_chat[var.active_slot].function_url, "https://"), "/")
+    origin_id                   = "public-chat"
+    origin_access_control_id    = aws_cloudfront_origin_access_control.public_chat.id
+    connection_attempts         = 1
+    connection_timeout          = 5
 
     custom_origin_config {
       http_port                = 80
@@ -395,10 +391,11 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   origin {
-    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
-    origin_id                = "documents"
-    origin_path              = var.release_slots[var.active_slot].asset_prefix
-    origin_access_control_id = aws_cloudfront_origin_access_control.site.id
+    response_completion_timeout = 0
+    domain_name                 = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                   = "documents"
+    origin_path                 = var.release_slots[var.active_slot].asset_prefix
+    origin_access_control_id    = aws_cloudfront_origin_access_control.site.id
   }
 
   default_cache_behavior {
@@ -636,17 +633,19 @@ resource "aws_cloudfront_distribution" "staging" {
   aliases             = []
 
   origin {
-    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
-    origin_id                = "site"
-    origin_access_control_id = aws_cloudfront_origin_access_control.site.id
+    response_completion_timeout = 0
+    domain_name                 = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                   = "site"
+    origin_access_control_id    = aws_cloudfront_origin_access_control.site.id
   }
 
   origin {
-    domain_name              = trimsuffix(trimprefix(aws_lambda_function_url.public_chat[local.inactive_slot].function_url, "https://"), "/")
-    origin_id                = "public-chat"
-    origin_access_control_id = aws_cloudfront_origin_access_control.public_chat.id
-    connection_attempts      = 1
-    connection_timeout       = 5
+    response_completion_timeout = 0
+    domain_name                 = trimsuffix(trimprefix(aws_lambda_function_url.public_chat[local.inactive_slot].function_url, "https://"), "/")
+    origin_id                   = "public-chat"
+    origin_access_control_id    = aws_cloudfront_origin_access_control.public_chat.id
+    connection_attempts         = 1
+    connection_timeout          = 5
 
     custom_origin_config {
       http_port                = 80
@@ -659,10 +658,11 @@ resource "aws_cloudfront_distribution" "staging" {
   }
 
   origin {
-    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
-    origin_id                = "documents"
-    origin_path              = var.release_slots[local.inactive_slot].asset_prefix
-    origin_access_control_id = aws_cloudfront_origin_access_control.site.id
+    response_completion_timeout = 0
+    domain_name                 = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                   = "documents"
+    origin_path                 = var.release_slots[local.inactive_slot].asset_prefix
+    origin_access_control_id    = aws_cloudfront_origin_access_control.site.id
   }
 
   default_cache_behavior {
