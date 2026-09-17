@@ -510,7 +510,7 @@ def validate_candidate(prepared: dict[str, Any], claim: str) -> dict[str, Any]:
     # Stay below the existing per-IP WAF budget, including session reset requests.
     checks.public_post_spacing = 35.0 if environment == "development" else 17.0
     try:
-        observed = rehearsal_probe(slot)
+        observed = probe(slot)
         assets(slot, document=True)
         candidate_canary = dict(LAST_CANARY)
         candidate_canary.update(checks.security_checks())
@@ -945,7 +945,9 @@ def main() -> int:
                         result["recovery"] = "recovered"
                 else:
                     result = observe(
-                        lambda: bool(probe(promoted["slots"][promoted["active"]])),
+                        lambda: bool(
+                            rehearsal_probe(promoted["slots"][promoted["active"]])
+                        ),
                         lambda: recover(root, bundle, foundation, work, prepared),
                     )
                     result["active"] = current(root)[0]["active"]

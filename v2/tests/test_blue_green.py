@@ -108,28 +108,41 @@ def test_rehearsal_probe_is_scoped_and_restores_after_failure(
     assert delivery.checks.rehearsal_failure is False
 
 
-def test_rehearsal_candidate_rejection_clears_drill_and_header(
+def test_rehearsal_observation_restores_once_without_faulting_recovery(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(delivery, "environment", "development")
     monkeypatch.setenv("TOLLCHAT_DEV_REHEARSAL", "true")
-    monkeypatch.setattr(delivery, "readiness", Mock())
-    monkeypatch.setattr(
-        delivery, "aws", Mock(return_value={"Parameter": {"Value": "fake-header"}})
-    )
     monkeypatch.setattr(delivery.checks, "rehearsal_failure", False)
+    probes: list[str] = []
+    restores: list[bool] = []
 
-    def fail(target: dict[str, Any]) -> NoReturn:
-        assert target == previous()["slots"]["green"]
-        assert delivery.checks.rehearsal_failure is True
-        assert delivery.checks.candidate_header == "fake-header"
-        raise gate.Rejected("controlled_runtime_failure")
+    def probe(target: dict[str, Any]) -> dict[str, Any]:
+        probes.append(target["release_id"])
+        if delivery.checks.rehearsal_failure:
+            raise gate.Rejected("controlled_runtime_failure")
+        return {"release_id": target["release_id"]}
 
-    monkeypatch.setattr(delivery, "probe", fail)
-    with pytest.raises(gate.Rejected, match="controlled_runtime_failure"):
-        delivery.validate_candidate(previous(), "1:1")
+    def restore() -> bool:
+        assert delivery.checks.rehearsal_failure is False
+        restores.append(True)
+        return bool(delivery.probe(slot("blue", "release1")))
+
+    monkeypatch.setattr(delivery, "probe", probe)
+    result = delivery.observe(
+        lambda: bool(delivery.rehearsal_probe(slot("green", "release2"))),
+        restore,
+        sleep=lambda _: None,
+        clock=lambda: 0,
+    )
+    assert result == {
+        "deployment": "failed",
+        "recovery": "recovered",
+        "probes": [False, False],
+    }
+    assert probes == ["release2", "release2", "release1"]
+    assert restores == [True]
     assert delivery.checks.rehearsal_failure is False
-    assert delivery.checks.candidate_header is None
 
 
 def plan(
