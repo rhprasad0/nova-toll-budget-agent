@@ -297,10 +297,24 @@ def has_unknown(value: object) -> bool:
     raise Rejected("unknown_shape")
 
 
+def normalized_origins(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    result = deepcopy(values)
+    # AWS provider 6.60 refreshes an omitted public-chat IP type as "".
+    for origin in result:
+        if origin["origin_id"] == "public-chat":
+            for config in origin.get("custom_origin_config", []):
+                if config.get("ip_address_type") in {None, ""}:
+                    config.pop("ip_address_type", None)
+    return result
+
+
 def origins(
     before: list[dict[str, Any]], after: list[dict[str, Any]], *, api: str, prefix: str
 ) -> None:
-    old, new = ({v["origin_id"]: deepcopy(v) for v in side} for side in (before, after))
+    old, new = (
+        {v["origin_id"]: v for v in normalized_origins(side)}
+        for side in (before, after)
+    )
     require(set(old) == set(new) == {"site", "documents", "public-chat"}, "origins")
     require(
         new["public-chat"]["domain_name"] == api
@@ -309,11 +323,6 @@ def origins(
     )
     old["public-chat"]["domain_name"] = new["public-chat"]["domain_name"]
     old["documents"]["origin_path"] = new["documents"]["origin_path"]
-    # AWS provider 6.60 represents an omitted IP type as either null or "".
-    for side in (old, new):
-        for config in side["public-chat"].get("custom_origin_config", []):
-            if config.get("ip_address_type") in {None, ""}:
-                config.pop("ip_address_type", None)
     require(old == new, "shared_origin_changed")
 
 
@@ -327,11 +336,29 @@ def validate_plan(
     require(phase in {"prepare", "promote", "recover"}, "phase")
     state(previous)
     require(
-        plan.get("errored") is False
-        and plan.get("complete") is True
-        and not plan.get("resource_drift"),
+        plan.get("errored") is False and plan.get("complete") is True,
         "incomplete_or_drift",
     )
+    for item in plan.get("resource_drift", []):
+        change = item["change"]
+        require(
+            item["address"]
+            in {
+                "aws_cloudfront_distribution.site",
+                "aws_cloudfront_distribution.staging",
+            }
+            and item.get("mode") == "managed"
+            and item.get("provider_name") == "registry.terraform.io/hashicorp/aws"
+            and not any(key in item for key in ("previous_address", "deposed"))
+            and change.get("importing") is None
+            and change["actions"] == ["update"]
+            and not has_unknown(change.get("after_unknown", {})),
+            "incomplete_or_drift",
+        )
+        before, after = (deepcopy(change[key]) for key in ("before", "after"))
+        for side in (before, after):
+            side["origin"] = normalized_origins(side["origin"])
+        require(before == after, "incomplete_or_drift")
     variables = {key: item["value"] for key, item in plan["variables"].items()}
     slots, active = variables["release_slots"], variables["active_slot"]
     before_slots = {key: descriptor(value) for key, value in previous["slots"].items()}
