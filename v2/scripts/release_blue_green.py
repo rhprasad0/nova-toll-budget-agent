@@ -446,19 +446,6 @@ def probe(slot: dict[str, Any]) -> dict[str, Any]:
     return observed
 
 
-def rehearsal_probe(slot: dict[str, Any]) -> dict[str, Any]:
-    """Temporary request-scoped fault; ordinary and recovery probes stay healthy."""
-    previous = checks.rehearsal_failure
-    checks.rehearsal_failure = (
-        environment == "development"
-        and os.environ.get("TOLLCHAT_DEV_REHEARSAL") == "true"
-    )
-    try:
-        return probe(slot)
-    finally:
-        checks.rehearsal_failure = previous
-
-
 def private_probe(root: Path, slot: dict[str, Any]) -> None:
     preview = json.loads(terraform(root, "output", "-json", "private_preview"))
     public_site = checks.profile_site
@@ -966,9 +953,7 @@ def main() -> int:
                         result["recovery"] = "recovered"
                 else:
                     result = observe(
-                        lambda: bool(
-                            rehearsal_probe(promoted["slots"][promoted["active"]])
-                        ),
+                        lambda: bool(probe(promoted["slots"][promoted["active"]])),
                         lambda: recover(root, bundle, foundation, work, prepared),
                     )
                     result["active"] = current(root)[0]["active"]

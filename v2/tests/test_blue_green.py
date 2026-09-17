@@ -83,68 +83,6 @@ def previous() -> dict[str, Any]:
     }
 
 
-@pytest.mark.parametrize(
-    "target,enabled,expected",
-    [
-        ("development", "true", True),
-        ("development", "", False),
-        ("production", "true", False),
-    ],
-)
-def test_rehearsal_probe_is_scoped_and_restores_after_failure(
-    monkeypatch: pytest.MonkeyPatch, target: str, enabled: str, expected: bool
-) -> None:
-    monkeypatch.setattr(delivery, "environment", target)
-    monkeypatch.setenv("TOLLCHAT_DEV_REHEARSAL", enabled)
-    monkeypatch.setattr(delivery.checks, "rehearsal_failure", False)
-
-    def fail(_slot: dict[str, Any]) -> NoReturn:
-        assert delivery.checks.rehearsal_failure is expected
-        raise gate.Rejected("controlled_runtime_failure")
-
-    monkeypatch.setattr(delivery, "probe", fail)
-    with pytest.raises(gate.Rejected, match="controlled_runtime_failure"):
-        delivery.rehearsal_probe(slot("green", "release2"))
-    assert delivery.checks.rehearsal_failure is False
-
-
-def test_rehearsal_observation_restores_once_without_faulting_recovery(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(delivery, "environment", "development")
-    monkeypatch.setenv("TOLLCHAT_DEV_REHEARSAL", "true")
-    monkeypatch.setattr(delivery.checks, "rehearsal_failure", False)
-    probes: list[str] = []
-    restores: list[bool] = []
-
-    def probe(target: dict[str, Any]) -> dict[str, Any]:
-        probes.append(target["release_id"])
-        if delivery.checks.rehearsal_failure:
-            raise gate.Rejected("controlled_runtime_failure")
-        return {"release_id": target["release_id"]}
-
-    def restore() -> bool:
-        assert delivery.checks.rehearsal_failure is False
-        restores.append(True)
-        return bool(delivery.probe(slot("blue", "release1")))
-
-    monkeypatch.setattr(delivery, "probe", probe)
-    result = delivery.observe(
-        lambda: bool(delivery.rehearsal_probe(slot("green", "release2"))),
-        restore,
-        sleep=lambda _: None,
-        clock=lambda: 0,
-    )
-    assert result == {
-        "deployment": "failed",
-        "recovery": "recovered",
-        "probes": [False, False],
-    }
-    assert probes == ["release2", "release2", "release1"]
-    assert restores == [True]
-    assert delivery.checks.rehearsal_failure is False
-
-
 def plan(
     inputs: dict[str, Any],
     changes: Iterable[dict[str, Any]] = (),
