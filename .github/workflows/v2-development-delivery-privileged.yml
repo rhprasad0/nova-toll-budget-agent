@@ -179,6 +179,8 @@ jobs:
     if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true' && github.triggering_actor == github.actor
     runs-on: ubuntu-latest
     environment: development
+    env:
+      TOLLCHAT_DEV_REHEARSAL: "true"
     outputs:
       verified: ${{ steps.verify-release.outputs.verified }}
       canary: ${{ steps.verify-release.outputs.canary }}

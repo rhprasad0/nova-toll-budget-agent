@@ -8,7 +8,7 @@
     "lock_identity": "V2-AWS60"
   },
   "deployment_inputs": {
-    ".github/workflows/v2-development-delivery-privileged.yml": "06d147d2ac9e9048e95fa667c333529fba8191b139d9128c9ce70597e5aacb74",
+    ".github/workflows/v2-development-delivery-privileged.yml": "965b7773efcc25da060f56e0937c94fa53f511e0243644147cf2d972241b0daf",
     ".github/workflows/v2-development-delivery.yml": "080f458903e9b4d6300140dd20eeba6358fda82441df7e54c819213176589020",
     ".github/workflows/v2-development-migrations.yml": "9f077e65b48623e6b3022bb9d0316926a51bd1fd8e44433b5098a9bbbc53531e",
     ".github/workflows/v2-development-plan.yml": "53bbeb668dd707fba830a159c46f618606d2e5ee8e3cfc8a412b9ee5f784ea15",
@@ -158,7 +158,7 @@
     "v2/scripts/build_release_bundle.sh": "40bf8759eddb5b75a5b0e44b3fbd568f2252f1e5fa034163da8111c444a5c6e8",
     "v2/scripts/build_timed_checks_zip.sh": "836065aec814e27a8c97744874e8ed298e4a16b1240e01c743f8143bc50e65d2",
     "v2/scripts/check_development_admission.py": "60222d03555f2dad9373947b7fa1dbb0db817e78300c9fe373db37afd21f972b",
-    "v2/scripts/check_development_release.py": "ee2a717adc6db641ccdb098b975eecb04030b32d4f905b49c281392ee3d86ea2",
+    "v2/scripts/check_development_release.py": "96b1bbd485a033936471b1bc9c02cc77483575f7f161228b5f192b0c946a1ff1",
     "v2/scripts/check_production_release.py": "c7be6364b1d89340595b98c0948069b5fd1f79f672e7aa362f86b871dbb87b2c",
     "v2/scripts/classify_deployment_error.py": "8c736cbd2a8957f347408b92553efd0971bb50d42e6c8f658f5ff7602079b405",
     "v2/scripts/development_deployment_status.py": "95821a2343c6e3f85823c9f96fd813bf1e0d708888d4cc2ccec0467e3fe09719",
@@ -166,7 +166,7 @@
     "v2/scripts/loader-requirements.txt": "7e35ab33589fae931d8bac07a7e32f868c02c4f37b629eb4208075a98fd918b4",
     "v2/scripts/publisher-requirements.in": "443323b60ce646abe57f80efe6a842af9467d089d73459b84830450825fabdcc",
     "v2/scripts/publisher-requirements.txt": "cb3079cc8c5512aa65994c7dd3c2e31a5f98386e53a7d059622badf96be11019",
-    "v2/scripts/release_blue_green.py": "3930991d42bbf46456c2be54b334fa11595bcb3dd7eadf8e3697cc17924bd152",
+    "v2/scripts/release_blue_green.py": "faba6736f5bde12dffdebfecff73041a4ac2f39de4cccdff73e893bfdc194d13",
     "v2/scripts/run_development_migrations.py": "ec8908095ee551a5574fed67199292355edef4bfd8cecc36afdd778efca8d4a4",
     "v2/scripts/run_development_migrations_workflow.sh": "06279a34ca06825152139ddf18d1f593d0d8d94e5dee1388e9eedf7af67c1185",
     "v2/scripts/run_private_stage.sh": "e6335bce0b7971d425e457e35df7d4fc1c5fcce212cc338322a65f9c535fdf76",
