@@ -19,6 +19,46 @@ MIGRATION_WORKFLOW = ROOT / ".github/workflows/v2-production-migrations.yml"
 KMS = "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7"
 
 
+def test_production_cutover_requires_a_separate_human_gate_after_preparation() -> None:
+    jobs = yaml.safe_load(WORKFLOW.read_text())["jobs"]
+    assert jobs["prepare"]["with"]["phase"] == "prepare-production"
+    approval = jobs["approve-cutover"]
+    assert approval["needs"] == "prepare"
+    assert approval["environment"] == "production-cutover"
+    assert approval["permissions"] == {}
+    assert "approve-cutover" in jobs["migrate"]["needs"]
+    assert "needs.approve-cutover.result == 'success'" in jobs["migrate"]["if"]
+    assert jobs["migrate"]["with"]["phase"] == "promote-production"
+    assert (
+        jobs["migrate"]["with"]["prepared"] == "${{ needs.prepare.outputs.prepared }}"
+    )
+    steps = yaml.safe_load(MIGRATION_WORKFLOW.read_text())["jobs"]["migrate"]["steps"]
+    for step in steps:
+        if (
+            step.get("id") == "saved-plan"
+            or step.get("name")
+            in {
+                "Verify exact saved plan and state before migration",
+                "Revalidate exact saved plan and state before apply",
+                "Run fixed production migrations",
+                "Fetch pinned RDS CA bundle",
+            }
+            or step.get("with", {})
+            .get("role-to-assume", "")
+            .endswith("production-migrations")
+        ):
+            assert step["if"] == "inputs.phase == 'prepare-production'"
+    protection = next(
+        i
+        for i, step in enumerate(steps)
+        if "cutover-environment" in step.get("run", "")
+    )
+    first_credentials = next(
+        i for i, step in enumerate(steps) if "role-to-assume" in step.get("with", {})
+    )
+    assert protection < first_credentials
+
+
 def _step(name: str) -> str:
     workflow: dict[str, Any] = yaml.safe_load(WORKFLOW.read_text())
     return next(

@@ -5251,7 +5251,15 @@ def test_production_release_plan_workflows_keep_trust_before_credentials_and_app
     )
 
     jobs = cast(dict[str, dict[str, object]], planner["jobs"])
-    assert set(jobs) == {"admission", "claim", "planner", "migrate", "release-result"}
+    assert set(jobs) == {
+        "admission",
+        "claim",
+        "planner",
+        "prepare",
+        "approve-cutover",
+        "migrate",
+        "release-result",
+    }
     assert jobs["admission"]["permissions"] == {
         "contents": "read",
         "actions": "read",

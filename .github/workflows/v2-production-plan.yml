@@ -317,7 +317,7 @@ jobs:
           jq -r '"### Saved production plan\n\n```json\n" + ({candidate,bundle_id,bundle_digest,evidence_artifact,plan_counts,expires_at,state,saved_plan:{bucket:.saved_plan.bucket,key:.saved_plan.key,version_id:.saved_plan.version_id,checksum:.saved_plan.checksum}} | tojson) + "\n```"' "$RUNNER_TEMP/production-saved-plan-validated.json" >>"$GITHUB_STEP_SUMMARY" || return
         }
         run_private_stage release-status "$RUNNER_TEMP/production-summary.out" "$error" publish_saved_plan
-  migrate:
+  prepare:
     needs: [claim, planner]
     if: needs.planner.result == 'success'
     permissions:
@@ -327,6 +327,32 @@ jobs:
       id-token: write
     uses: rhprasad0/nova-toll-budget-agent/.github/workflows/v2-production-migrations.yml@main
     with:
+      phase: prepare-production
+      admission: ${{ needs.claim.outputs.admission }}
+      saved_plan: ${{ needs.planner.outputs.saved_plan }}
+    secrets:
+      TS_PRODUCTION_OAUTH_CLIENT_ID: ${{ secrets.TS_PRODUCTION_OAUTH_CLIENT_ID }}
+      TS_PRODUCTION_OAUTH_SECRET: ${{ secrets.TS_PRODUCTION_OAUTH_SECRET }}
+  approve-cutover:
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: production-cutover
+    permissions: {}
+    steps:
+    - name: Human approved the prepared candidate
+      run: echo "Production cutover approved; candidate will be revalidated before traffic switches."
+  migrate:
+    needs: [claim, planner, prepare, approve-cutover]
+    if: needs.prepare.result == 'success' && needs.approve-cutover.result == 'success'
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+      id-token: write
+    uses: rhprasad0/nova-toll-budget-agent/.github/workflows/v2-production-migrations.yml@main
+    with:
+      phase: promote-production
+      prepared: ${{ needs.prepare.outputs.prepared }}
       admission: ${{ needs.claim.outputs.admission }}
       saved_plan: ${{ needs.planner.outputs.saved_plan }}
     secrets:

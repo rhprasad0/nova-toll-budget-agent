@@ -25,6 +25,73 @@ release = _module("check_production_release.py")
 gate = _module("validate_production_plan.py")
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        "none",
+        "bypass",
+        "reviewer",
+        "extra-reviewer",
+        "no-review",
+        "self-review",
+        "branch",
+        "tag",
+    ],
+)
+def test_cutover_requires_only_ryan_and_main(
+    monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    reviewers: list[dict[str, Any]] = [{"type": "User", "reviewer": {"id": 91573985}}]
+    rule: dict[str, Any] = {
+        "type": "required_reviewers",
+        "prevent_self_review": False,
+        "reviewers": reviewers,
+    }
+    environment: dict[str, Any] = {
+        "name": "production-cutover",
+        "can_admins_bypass": False,
+        "protection_rules": [rule],
+        "deployment_branch_policy": {
+            "protected_branches": False,
+            "custom_branch_policies": True,
+        },
+    }
+    policy = {"name": "main", "type": "branch"}
+    if change == "bypass":
+        environment["can_admins_bypass"] = True
+    elif change == "reviewer":
+        reviewers[0]["reviewer"]["id"] = 123
+    elif change == "extra-reviewer":
+        reviewers.append({"type": "Team", "reviewer": {"id": 123}})
+    elif change == "no-review":
+        environment["protection_rules"] = []
+    elif change == "self-review":
+        rule["prevent_self_review"] = True
+    elif change == "branch":
+        policy["name"] = "*"
+    elif change == "tag":
+        policy["type"] = "tag"
+
+    def api(method: str, path: str) -> dict[str, Any]:
+        assert method == "GET"
+        assert path in {
+            "environments/production-cutover",
+            "environments/production-cutover/deployment-branch-policies",
+        }
+        return (
+            {"branch_policies": [policy]} if path.endswith("policies") else environment
+        )
+
+    monkeypatch.setattr(release, "api", api)
+    if change == "none":
+        assert release.verify_cutover_environment() == {
+            "cutover_protection": "verified"
+        }
+    else:
+        with pytest.raises(release.AdmissionError, match="cutover_protection"):
+            release.verify_cutover_environment()
+
+
 def test_stable_tag_rejects_prerelease_suffixes() -> None:
     assert release.TAG.fullmatch("v1.2.3")
     assert not release.TAG.fullmatch("v1.2.3-rc.1")

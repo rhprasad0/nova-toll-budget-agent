@@ -9,7 +9,16 @@ on:
       saved_plan:
         required: true
         type: string
+      phase:
+        required: true
+        type: string
+      prepared:
+        required: false
+        default: '{}'
+        type: string
     outputs:
+      prepared:
+        value: ${{ jobs.migrate.outputs.prepared }}
       delivery_evidence:
         value: ${{ jobs.migrate.outputs.delivery_evidence }}
     secrets:
@@ -23,7 +32,7 @@ permissions:
 
 jobs:
   migrate:
-    if: github.ref == 'refs/heads/main' && vars.PRODUCTION_BLUE_GREEN_BOOTSTRAPPED == 'true'
+    if: github.ref == 'refs/heads/main' && vars.PRODUCTION_BLUE_GREEN_BOOTSTRAPPED == 'true' && (inputs.phase == 'prepare-production' || inputs.phase == 'promote-production')
     runs-on: ubuntu-latest
     timeout-minutes: 75
     environment: production
@@ -33,6 +42,7 @@ jobs:
       deployments: read
       id-token: write
     outputs:
+      prepared: ${{ steps.prepared.outputs.prepared }}
       delivery_evidence: ${{ steps.delivery-evidence.outputs.delivery_evidence }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -75,6 +85,7 @@ jobs:
           }
           run_private_stage release-verification "$RUNNER_TEMP/production-bind.out" "$RUNNER_TEMP/production-bind.err" bind_admission
       - id: saved-plan
+        if: inputs.phase == 'prepare-production'
         env:
           SAVED_PLAN: ${{ inputs.saved_plan }}
         run: |
@@ -121,6 +132,7 @@ jobs:
             exit "$status"
           }
           trap step_exit EXIT
+          run_private_stage release-verification "$RUNNER_TEMP/cutover-protection.out" "$RUNNER_TEMP/cutover-protection.err" python3 trusted/v2/scripts/check_production_release.py cutover-environment --output "$RUNNER_TEMP/cutover-protection.json"
           run_private_stage release-verification "$RUNNER_TEMP/production-revalidation.out" "$RUNNER_TEMP/production-revalidation.err" python3 trusted/v2/scripts/check_production_release.py revalidate --admission "$RUNNER_TEMP/admission.json" --output "$RUNNER_TEMP/revalidated.json"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -175,12 +187,14 @@ jobs:
           terraform_wrapper: false
           terraform_version: 1.15.8
       - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        if: inputs.phase == 'prepare-production'
         with:
           role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-deploy
           aws-region: us-east-1
           inline-session-policy: ${{ steps.saved-plan.outputs.session_policy }}
           unset-current-credentials: true
       - name: Verify exact saved plan and state before migration
+        if: inputs.phase == 'prepare-production'
         env:
           PLAN_BUCKET: ${{ steps.saved-plan.outputs.plan_bucket }}
           PLAN_KEY: ${{ steps.saved-plan.outputs.plan_key }}
@@ -213,6 +227,7 @@ jobs:
           }
           run_private_stage release-verification "$RUNNER_TEMP/production-preflight.out" "$RUNNER_TEMP/production-preflight.err" preflight
       - name: Clear deploy credentials before Tailscale
+        if: inputs.phase == 'prepare-production'
         run: |
           set -euo pipefail
           rm -f -- "$RUNNER_TEMP/production-state.json" "$RUNNER_TEMP/production-head.json" "$RUNNER_TEMP/production-state-head.json" "$RUNNER_TEMP/production-cloudflare-preflight" "$RUNNER_TEMP/production-plan.tfplan"
@@ -226,11 +241,13 @@ jobs:
           oauth-secret: ${{ secrets.TS_PRODUCTION_OAUTH_SECRET }}
           tags: tag:ci
       - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        if: inputs.phase == 'prepare-production'
         with:
           role-to-assume: arn:aws:iam::920534282028:role/nova-toll-v2-production-migrations
           aws-region: us-east-1
           unset-current-credentials: true
       - name: Fetch pinned RDS CA bundle
+        if: inputs.phase == 'prepare-production'
         working-directory: candidate/v2
         run: |
           set -euo pipefail
@@ -256,6 +273,7 @@ jobs:
           }
           run_private_stage rds-ca "$RUNNER_TEMP/production-ca.out" "$RUNNER_TEMP/production-ca.err" fetch_ca
       - name: Run fixed production migrations
+        if: inputs.phase == 'prepare-production'
         working-directory: candidate
         env:
           PRODUCTION_MIGRATION_CANDIDATE: ${{ steps.admission.outputs.candidate }}
@@ -265,9 +283,12 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-deploy
           aws-region: us-east-1
-          inline-session-policy: ${{ steps.saved-plan.outputs.session_policy }}
+          # Cutover has no reason to read any saved preparation plan.
+          inline-session-policy: >-
+            ${{ steps.saved-plan.outputs.session_policy || '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","NotAction":["s3:GetObject","s3:GetObjectVersion"],"Resource":"*"},{"Effect":"Allow","Action":["s3:GetObject","s3:GetObjectVersion"],"NotResource":"arn:aws:s3:::nova-toll-tfstate-920534282028/plans/*"}]}' }}
           unset-current-credentials: true
       - name: Revalidate exact saved plan and state before apply
+        if: inputs.phase == 'prepare-production'
         env:
           GH_TOKEN: ${{ github.token }}
           ADMISSION: ${{ inputs.admission }}
@@ -307,6 +328,8 @@ jobs:
           run_private_stage release-verification "$RUNNER_TEMP/production-recheck.out" "$RUNNER_TEMP/production-recheck.err" recheck
       - name: Apply the one verified production plan and check readiness
         env:
+          PHASE: ${{ inputs.phase }}
+          PREPARED: ${{ inputs.prepared }}
           CANDIDATE: ${{ steps.admission.outputs.candidate }}
           STATE: ${{ steps.saved-plan.outputs.state }}
           ADMISSION: ${{ inputs.admission }}
@@ -327,14 +350,33 @@ jobs:
           run_private_stage artifact-metadata "$RUNNER_TEMP/production-cloudflare-check.out" "$RUNNER_TEMP/production-cloudflare.err" test -n "$CLOUDFLARE_API_TOKEN"
           export CLOUDFLARE_API_TOKEN
           run_private_stage release-init "$RUNNER_TEMP/production-apply-init.out" "$RUNNER_TEMP/production-apply.err" terraform -chdir=v2/infra init -input=false -backend-config=backend.production.hcl
-          CANARY_EVIDENCE_FILE="$RUNNER_TEMP/production-canary-evidence.json" CANARY_COMMIT="$CANDIDATE" CANARY_RUN_ID="$GITHUB_RUN_ID" CANARY_ATTEMPT="$GITHUB_RUN_ATTEMPT" CANARY_DEPLOYMENT_ID="$(jq -er .claim_id <<<"$ADMISSION")" CANARY_ARTIFACT_ID="$(jq -er .bundle_id <<<"$ADMISSION")" CANARY_ARTIFACT_DIGEST="$(jq -er .bundle_digest <<<"$ADMISSION")" GITHUB_SHA="$CANDIDATE" run_private_stage apply "$RUNNER_TEMP/production-apply.out" "$RUNNER_TEMP/production-apply.err" python3 "$GITHUB_WORKSPACE/trusted/v2/scripts/release_blue_green.py" finish --environment production --terraform-root v2/infra --bundle-root release-overlay --foundation-vars "$RUNNER_TEMP/blue-green-foundation.tfvars.json" --work-dir "$RUNNER_TEMP/blue-green" --claim "$(jq -er .claim_id <<<"$ADMISSION")" --saved-plan "$RUNNER_TEMP/production-plan.tfplan" --output "$RUNNER_TEMP/blue-green-result.json"
+          if [[ "$PHASE" == prepare-production ]]; then
+            phase_args=(--saved-plan "$RUNNER_TEMP/production-plan.tfplan")
+          else
+            printf '%s' "$PREPARED" | jq -e --arg candidate "$CANDIDATE" --argjson admission "$ADMISSION" 'select(.candidate == $candidate and .claim_id == $admission.claim_id and .result.deployment == "awaiting_approval")' >"$RUNNER_TEMP/prepared.json"
+            jq -e '.migration' "$RUNNER_TEMP/prepared.json" >"$RUNNER_TEMP/v2-production-migrations-evidence.json"
+            record_version="$(jq -er '.result.recovery_record.version_id | select(type == "string" and length > 0)' "$RUNNER_TEMP/prepared.json")"
+            phase_args=(--release-id "$CANDIDATE" --record-version "$record_version")
+          fi
+          CANARY_EVIDENCE_FILE="$RUNNER_TEMP/production-canary-evidence.json" CANARY_COMMIT="$CANDIDATE" CANARY_RUN_ID="$GITHUB_RUN_ID" CANARY_ATTEMPT="$GITHUB_RUN_ATTEMPT" CANARY_DEPLOYMENT_ID="$(jq -er .claim_id <<<"$ADMISSION")" CANARY_ARTIFACT_ID="$(jq -er .bundle_id <<<"$ADMISSION")" CANARY_ARTIFACT_DIGEST="$(jq -er .bundle_digest <<<"$ADMISSION")" GITHUB_SHA="$CANDIDATE" run_private_stage apply "$RUNNER_TEMP/production-apply.out" "$RUNNER_TEMP/production-apply.err" python3 "$GITHUB_WORKSPACE/trusted/v2/scripts/release_blue_green.py" "$PHASE" --environment production --terraform-root v2/infra --bundle-root release-overlay --foundation-vars "$RUNNER_TEMP/blue-green-foundation.tfvars.json" --work-dir "$RUNNER_TEMP/blue-green" --claim "$(jq -er .claim_id <<<"$ADMISSION")" "${phase_args[@]}" --output "$RUNNER_TEMP/blue-green-result.json"
           unset CLOUDFLARE_API_TOKEN
           run_private_stage readiness-state "$RUNNER_TEMP/production-state-after.json" "$RUNNER_TEMP/production-readiness.err" terraform -chdir=v2/infra state pull
           run_private_stage readiness-state "$RUNNER_TEMP/production-readiness-state.json" "$RUNNER_TEMP/production-readiness.err" terraform -chdir=v2/infra show -json
           run_private_stage readiness-state "$RUNNER_TEMP/production-state-after-head.json" "$RUNNER_TEMP/production-readiness.err" aws s3api head-object --bucket nova-toll-tfstate-920534282028 --key nova-toll/v2/terraform.tfstate --expected-bucket-owner 920534282028
-          run_private_stage readiness-state "$RUNNER_TEMP/production-state-after-match.out" "$RUNNER_TEMP/production-readiness.err" jq -ne --argjson expected "$STATE" --slurpfile state "$RUNNER_TEMP/production-state-after.json" --slurpfile head "$RUNNER_TEMP/production-state-after-head.json" '$state[0].lineage == $expected.lineage and ($state[0].serial >= $expected.serial) and ($head[0].VersionId != $expected.version_id or $state[0].serial > $expected.serial)'
+          if [[ "$PHASE" == prepare-production ]]; then
+            run_private_stage readiness-state "$RUNNER_TEMP/production-state-after-match.out" "$RUNNER_TEMP/production-readiness.err" jq -ne --argjson expected "$STATE" --slurpfile state "$RUNNER_TEMP/production-state-after.json" --slurpfile head "$RUNNER_TEMP/production-state-after-head.json" '$state[0].lineage == $expected.lineage and ($state[0].serial >= $expected.serial) and ($head[0].VersionId != $expected.version_id or $state[0].serial > $expected.serial)'
+          fi
           lock_released() { if aws s3api head-object --bucket nova-toll-tfstate-920534282028 --key nova-toll/v2/terraform.tfstate.tflock --expected-bucket-owner 920534282028 >"$RUNNER_TEMP/production-lock-private.out" 2>"$RUNNER_TEMP/production-lock-private.err"; then return 1; fi; grep -Eq '(404|Not Found)' "$RUNNER_TEMP/production-lock-private.err"; }
           run_private_stage readiness-state "$RUNNER_TEMP/production-lock.out" "$RUNNER_TEMP/production-readiness.err" lock_released
+      - id: prepared
+        if: inputs.phase == 'prepare-production'
+        env:
+          CANDIDATE: ${{ steps.admission.outputs.candidate }}
+          ADMISSION: ${{ inputs.admission }}
+        run: |
+          set -euo pipefail
+          jq -ce --arg candidate "$CANDIDATE" --argjson admission "$ADMISSION" --slurpfile result "$RUNNER_TEMP/blue-green-result.json" --slurpfile migration "$RUNNER_TEMP/v2-production-migrations-evidence.json" -n 'select($result[0].deployment == "awaiting_approval") | {candidate:$candidate,claim_id:$admission.claim_id,result:$result[0],migration:$migration[0]}' | sed 's/^/prepared=/' >>"$GITHUB_OUTPUT"
+          echo 'Candidate ready; public traffic unchanged. Test the candidate, then approve production-cutover.' >>"$GITHUB_STEP_SUMMARY"
       - name: Record deployment and recovery outcomes separately
         if: always()
         run: |
@@ -378,7 +420,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: success()
         with:
-          name: v2-production-migrations-evidence
+          name: v2-production-migrations-evidence-${{ inputs.phase }}
           path: ${{ runner.temp }}/v2-production-migrations-evidence.json
           if-no-files-found: error
           retention-days: 7

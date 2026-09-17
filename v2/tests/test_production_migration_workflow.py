@@ -818,8 +818,13 @@ elif name == "terraform":
   elif "show" in args: print("{}")
 elif name == "python3":
   if any("release_blue_green.py" in value for value in args):
-    assert "finish" in args and value("--environment") == "production"
-    assert pathlib.Path(value("--saved-plan")).read_bytes() == b"PLAN"
+    assert os.environ["PHASE"] in args and value("--environment") == "production"
+    if os.environ["PHASE"] == "prepare-production":
+      assert pathlib.Path(value("--saved-plan")).read_bytes() == b"PLAN"
+    else:
+      assert "--saved-plan" not in args
+      assert value("--release-id") == os.environ["CANDIDATE"]
+      assert value("--record-version") == "prepared-version"
     if failure == "apply": raise SystemExit(17)
     pathlib.Path(os.environ["APPLY_MARKER"]).write_text("apply")
     if failure == "readiness": raise SystemExit(17)
@@ -854,10 +859,56 @@ elif name == "python3":
         "GITHUB_OUTPUT": str(tmp_path / "output"),
         "GITHUB_RUN_ID": "14",
         "GITHUB_RUN_ATTEMPT": "1",
+        "PHASE": "prepare-production",
         "CANDIDATE": "b" * 40,
         "APPLY_MARKER": str(tmp_path / "applied"),
         "AWS_MARKER": str(tmp_path / "aws-called"),
     }
+
+
+@pytest.mark.parametrize(
+    "mutation", ["none", "candidate", "claim", "not-ready", "version"]
+)
+def test_actual_cutover_shell_resumes_without_reapplying_preparation(
+    tmp_path: Path, mutation: str
+) -> None:
+    env = _deploy_environment(tmp_path, "")
+    prepared: dict[str, Any] = {
+        "candidate": env["CANDIDATE"],
+        "claim_id": 15,
+        "result": {
+            "deployment": "awaiting_approval",
+            "recovery_record": {"version_id": "prepared-version"},
+        },
+        "migration": {"status": "ok"},
+    }
+    if mutation == "candidate":
+        prepared["candidate"] = "a" * 40
+    elif mutation == "claim":
+        prepared["claim_id"] = 99
+    elif mutation == "not-ready":
+        prepared["result"]["deployment"] = "failed"
+    elif mutation == "version":
+        prepared["result"]["recovery_record"]["version_id"] = ""
+    env.update(PHASE="promote-production", PREPARED=json.dumps(prepared), APPLY="true")
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            _workflow_step(
+                "Apply the one verified production plan and check readiness"
+            ),
+        ],
+        cwd=tmp_path / "candidate",
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert (result.returncode == 0) == (mutation == "none"), result.stderr
+    assert (tmp_path / "applied").exists() == (mutation == "none")
+    assert not (tmp_path / "runner" / "production-plan.tfplan").exists()
+    assert "PRIVATE_TOKEN" not in result.stdout + result.stderr
 
 
 def _saved_contract() -> tuple[dict[str, Any], dict[str, Any]]:
@@ -913,6 +964,8 @@ def _session_allows(
             if isinstance(statement.get("Action"), list)
             else action == statement.get("Action")
             if "Action" in statement
+            else action not in statement["NotAction"]
+            if isinstance(statement.get("NotAction"), list)
             else action != statement.get("NotAction")
         )
         if not applies:
@@ -929,6 +982,30 @@ def _session_allows(
         if expected is None or version == expected:
             return True
     return False
+
+
+def test_cutover_session_cannot_read_preparation_plans() -> None:
+    steps = yaml.safe_load(WORKFLOW.read_text())["jobs"]["migrate"]["steps"]
+    expression = [
+        step["with"]["inline-session-policy"]
+        for step in steps
+        if "inline-session-policy" in step.get("with", {})
+    ][-1]
+    policy = json.loads(expression.split(" || '")[1].removesuffix("' }}"))
+    bucket = "arn:aws:s3:::nova-toll-tfstate-920534282028"
+    for action in ("s3:GetObject", "s3:GetObjectVersion"):
+        assert not _session_allows(
+            policy, action, bucket + "/plans/any/release.tfplan", "v1"
+        )
+        assert _session_allows(
+            policy, action, bucket + "/nova-toll/v2/terraform.tfstate", "v1"
+        )
+        assert _session_allows(
+            policy,
+            action,
+            "arn:aws:s3:::nova-toll-agentcore-920534282028/releases/candidate/recovery/15.json",
+            "v1",
+        )
 
 
 def test_actual_saved_plan_emits_and_enforces_exact_session_policy(
