@@ -14,6 +14,31 @@ from scripts import blue_green as gate
 from scripts import release_blue_green as delivery
 
 
+def test_plan_package_paths_are_workspace_independent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    terraform = Mock(return_value="{}")
+    monkeypatch.setattr(delivery, "terraform", terraform)
+    monkeypatch.setattr(gate, "validate_plan", Mock())
+    for workspace in ("bootstrap", "trusted", "release-overlay"):
+        bundle = tmp_path / workspace
+        delivery.plan(
+            bundle / "v2/infra",
+            bundle,
+            tmp_path / "foundation.json",
+            tmp_path,
+            "prepare",
+            {},
+            {},
+        )
+        args = terraform.call_args_list[-2].args
+        assert {arg for arg in args[1:] if arg.startswith("-var=")} == {
+            "-var=loader_package_path=build/loader.zip",
+            "-var=publisher_package_path=build/publisher.zip",
+            "-var=timed_checks_package_path=build/timed-checks.zip",
+        }
+
+
 def slot(name: str, release: str) -> dict[str, Any]:
     return {
         "release_id": release,
@@ -824,3 +849,31 @@ def test_failed_manual_restore_is_reported_as_attempted(
     )
     assert delivery.main() == 1
     assert json.loads(output.read_text())["recovery"] == "failed"
+
+
+@pytest.mark.parametrize("environment", ["development", "production"])
+def test_private_probe_restores_transport_after_failure(
+    monkeypatch: pytest.MonkeyPatch, environment: str
+) -> None:
+    preview = {
+        "origin": "https://api-vpce-0123.execute-api.us-east-1.amazonaws.com",
+        "stage": "preview",
+    }
+    monkeypatch.setattr(delivery, "environment", environment)
+    monkeypatch.setattr(delivery, "terraform", Mock(return_value=json.dumps(preview)))
+    monkeypatch.setattr(delivery.checks, "profile_site", "https://public.example")
+    monkeypatch.setattr(delivery.checks, "profile_private_via6", False)
+    monkeypatch.setattr(delivery.checks, "profile_path_prefix", "")
+
+    def failed_probe(slot: dict[str, Any]) -> NoReturn:
+        assert delivery.checks.profile_private_via6 == (environment == "development")
+        assert delivery.checks.profile_site == preview["origin"]
+        assert delivery.checks.profile_path_prefix == "/preview"
+        raise ValueError("probe failed")
+
+    monkeypatch.setattr(delivery, "probe", failed_probe)
+    with pytest.raises(ValueError, match="probe failed"):
+        delivery.private_probe(Path("root"), {})
+    assert delivery.checks.profile_site == "https://public.example"
+    assert delivery.checks.profile_path_prefix == ""
+    assert delivery.checks.profile_private_via6 is False

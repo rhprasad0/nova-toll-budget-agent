@@ -2212,6 +2212,7 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
     cmp.write_text(
         "#!/usr/bin/env bash\n"
         'if [[ "${COMPARE_FAILURE:-}" == 1 ]]; then\n'
+        "  cat >/dev/null\n"
         "  printf '%s\\n' RAW_COMPARATOR_SENTINEL >&2\n"
         "  exit 43\n"
         "fi\n"
@@ -4659,7 +4660,7 @@ def test_timed_lambda_scheduler_and_failure_contract():
 
 def test_timed_package_is_threaded_through_all_plan_paths():
     assert (
-        '-var timed_checks_package_path="$STAGING/timed-checks.zip"'
+        "-var timed_checks_package_path=build/timed-checks.zip"
         in DEVELOPMENT_PLAN_WORKFLOW
     )
     assert (
@@ -5869,6 +5870,15 @@ def _assert_development_plan_workflow(source: str) -> None:
         "timed_checks_package_path",
     ):
         assert f"-var {package_variable}" in plan_source
+    assert (
+        'cp "$STAGING/"*.zip "$GITHUB_WORKSPACE/trusted/v2/infra/build/"' in plan_source
+    )
+    for variable, package in (
+        ("loader", "loader"),
+        ("publisher", "publisher"),
+        ("timed_checks", "timed-checks"),
+    ):
+        assert f"-var {variable}_package_path=build/{package}.zip" in plan_source
     assert "development-release-manifest.json" in plan_source
     assert "delivery_plan_validator.py" in plan_source
     assert "GITHUB_STEP_SUMMARY" in plan_source

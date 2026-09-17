@@ -232,7 +232,7 @@ def plan(
         ("timed_checks", "timed-checks"),
     ):
         args.append(
-            f"-var={variable}_package_path={bundle / 'v2/infra/build' / (name + '.zip')}"
+            f"-var={variable}_package_path={os.path.relpath(bundle / 'v2/infra/build' / (name + '.zip'), root)}"
         )
     terraform(root, *args)
     gate.validate_plan(
@@ -416,14 +416,17 @@ def probe(slot: dict[str, Any]) -> dict[str, Any]:
 def private_probe(root: Path, slot: dict[str, Any]) -> None:
     preview = json.loads(terraform(root, "output", "-json", "private_preview"))
     public_site = checks.profile_site
+    prior_transport = checks.profile_private_via6
     try:
         checks.profile_site = preview["origin"]
         gate.require(preview["stage"] == "preview", "private_stage")
         checks.profile_path_prefix = "/preview"
+        checks.profile_private_via6 = environment == "development"
         probe(slot)
     finally:
         checks.profile_site = public_site
         checks.profile_path_prefix = ""
+        checks.profile_private_via6 = prior_transport
 
 
 def assets(slot: dict[str, Any], *, document: bool = False) -> None:
@@ -478,6 +481,9 @@ def validate_candidate(prepared: dict[str, Any], claim: str) -> dict[str, Any]:
     checks.candidate_header = aws(
         "ssm", "get-parameter", "--name", header_parameter, "--with-decryption"
     )["Parameter"]["Value"]
+    previous_spacing = checks.public_post_spacing
+    # Stay below the existing per-IP WAF budget, including session reset requests.
+    checks.public_post_spacing = 35.0 if environment == "development" else 17.0
     try:
         observed = probe(slot)
         assets(slot, document=True)
@@ -529,6 +535,7 @@ def validate_candidate(prepared: dict[str, Any], claim: str) -> dict[str, Any]:
     finally:
         checks.candidate_header = None
         checks.serving_expected = None
+        checks.public_post_spacing = previous_spacing
 
 
 def observe(

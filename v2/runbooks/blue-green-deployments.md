@@ -168,6 +168,17 @@ successful recovery: `deployment=failed, recovery=recovered`. Inspect that
 separate result. No migration or database downgrade is performed. Investigate a
 failed restore; never repeatedly apply a stale plan or mutate routing directly.
 
+Development private probes connect through the existing Tailscale site-1 4via6
+route while retaining the API hostname for TLS, HTTP and origin checks. Public
+candidate checks pace chat and reset requests below the existing WAF limit
+(35 seconds apart in development; 17 in production). Allow several minutes for
+validation; pacing occurs outside the individual canary deadline.
+
+Shared loader, publisher and timed-check packages use paths relative to the
+Terraform module (`build/*.zip`) in both planning and delivery. Bootstrap must
+use these same paths: absolute workstation or runner paths cause unchanged
+packages to appear as shared-resource updates, which the release gates reject.
+
 ## Rehearsal and evidence
 
 Local tests exercise controller branches with mocked AWS/Terraform I/O: invalid
