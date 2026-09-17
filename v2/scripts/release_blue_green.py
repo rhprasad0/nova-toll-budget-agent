@@ -248,7 +248,7 @@ def plan(
         args.append(f"-var={variable}_package_path=build/{name}.zip")
     terraform(root, *args)
     gate.validate_plan(
-        json.loads(terraform(root, "show", "-json", str(saved))), previous, phase
+        json.loads(terraform(root, "show", "-json", str(saved))), previous, phase, saved
     )
     return saved
 
@@ -336,9 +336,14 @@ def readiness(slot: dict[str, Any]) -> None:
     )
     proxy_environment = function["Environment"]["Variables"]
     gate.require(
-        proxy_environment["RELEASE_ID"] == slot["release_id"]
-        and proxy_environment["AGENTCORE_RUNTIME_ARN"] == slot["runtime_arn"]
-        and proxy_environment["AGENTCORE_RUNTIME_ENDPOINT"] == slot["endpoint"],
+        proxy_environment
+        == dict(
+            slot["proxy_environment"],
+            RELEASE_ID=slot["release_id"],
+            AGENTCORE_RUNTIME_ARN=slot["runtime_arn"],
+            AGENTCORE_RUNTIME_ENDPOINT=slot["endpoint"],
+            AGENTCORE_RUNTIME_VERSION=slot["runtime_version"],
+        ),
         "proxy_pairing",
     )
     alias = aws(
@@ -838,7 +843,7 @@ def main() -> int:
                                 ]
                             },
                         )
-                    gate.validate_plan(document, previous, "prepare")
+                    gate.validate_plan(document, previous, "prepare", args.saved_plan)
                     actual, identity = current(root)
                     gate.require(actual == previous, "stale_prepare")
                     inputs = {
