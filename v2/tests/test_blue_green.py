@@ -1136,3 +1136,33 @@ def test_origins_only_normalizes_omitted_ip_type(ip_type: str | None) -> None:
     else:
         with pytest.raises(gate.Rejected, match="shared_origin_changed"):
             gate.origins(before, after, api="api.example.test", prefix="/releases/new")
+
+
+@pytest.mark.parametrize("phase", ["promote", "recover"])
+@pytest.mark.parametrize("description", [None, "", "changed"])
+def test_routing_replacement_only_normalizes_empty_description(
+    phase: str, description: str | None
+) -> None:
+    before = previous()
+    saved = plan(
+        gate.desired(before, promote=True),
+        [
+            change(
+                "aws_api_gateway_deployment.tollchat",
+                {
+                    "description": "",
+                    "id": "old",
+                    "created_date": "then",
+                    "triggers": {"redeployment": "old"},
+                },
+                {"description": description, "triggers": {"redeployment": "new"}},
+                actions=["create", "delete"],
+                unknown={"id": True, "created_date": True},
+            )
+        ],
+    )
+    if description in {None, ""}:
+        gate.validate_plan(saved, before, phase)
+    else:
+        with pytest.raises(gate.Rejected, match="field_boundary"):
+            gate.validate_plan(saved, before, phase)

@@ -517,7 +517,15 @@ def validate_plan(
             ),
             "action",
         )
-        require(changed(before, after) <= allow, "field_boundary")
+        fields = changed(before, after)
+        if (
+            address == "aws_api_gateway_deployment.tollchat"
+            and before.get("description") in {None, ""}
+            and after.get("description") in {None, ""}
+        ):
+            # A replacement plans null for the provider's empty read-back default.
+            fields.discard("description")
+        require(fields <= allow, "field_boundary")
         unknown_values = deepcopy(change.get("after_unknown", {}))
         if address == f'aws_lambda_function.tollchat_proxy["{inactive}"]':
             target = slots[inactive]
