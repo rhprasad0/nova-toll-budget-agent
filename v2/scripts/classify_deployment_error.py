@@ -122,6 +122,10 @@ def classify(paths: list[str]) -> str:
         text = "\n".join(_read(path) for path in paths)
     except (OSError, UnicodeError):
         return "diagnostic_unavailable"
+    return classify_text(text)
+
+
+def classify_text(text: str) -> str:
     lowered = text.casefold()
     for reason, patterns in PATTERNS:
         if any(re.search(pattern, lowered) for pattern in patterns):

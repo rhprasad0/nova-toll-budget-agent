@@ -1166,3 +1166,48 @@ def test_routing_replacement_only_normalizes_empty_description(
     else:
         with pytest.raises(gate.Rejected, match="field_boundary"):
             gate.validate_plan(saved, before, phase)
+
+
+def test_terraform_failure_classification_survives_private_stage_without_leaks(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    import subprocess
+
+    real_run = subprocess.run
+    monkeypatch.setattr(
+        delivery.subprocess,
+        "run",
+        Mock(
+            return_value=subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="private-state-marker",
+                stderr="Error: AccessDeniedException private-key-marker",
+            )
+        ),
+    )
+    with pytest.raises(gate.Rejected, match="terraform_failed"):
+        delivery.terraform(tmp_path, "plan")
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "Terraform failed: access denied\n"
+    monkeypatch.setattr(delivery.subprocess, "run", real_run)
+    script = Path(__file__).parents[1] / "scripts/run_private_stage.sh"
+    result = real_run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; run_private_stage plan "$2" "$3" bash -c \'echo "$1" >&2; exit 1\' -- "$4"',
+            "check",
+            str(script),
+            str(tmp_path / "out"),
+            str(tmp_path / "err"),
+            captured.err,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "reason=access_denied" in result.stdout + result.stderr
+    assert "private-" not in result.stdout + result.stderr
