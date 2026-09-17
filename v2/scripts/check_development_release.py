@@ -5,12 +5,16 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import http.client
 import http.cookiejar
+import ipaddress
 import json
 import os
 import re
 import secrets
 import signal
+import socket
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -59,6 +63,9 @@ candidate_header: str | None = None
 serving_expected: dict[str, Any] | None = None
 serving_observed: dict[str, Any] = {}
 profile_path_prefix = ""
+profile_private_via6 = False
+public_post_spacing = 0.0
+last_public_post = 0.0
 profile_trace_bucket = "aws-waf-logs-tollchat-agent-reports-903859731897-dev"
 
 
@@ -440,6 +447,44 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError("redirect rejected")
 
 
+class DevelopmentPrivateConnection(http.client.HTTPSConnection):
+    """Use site-1 transport while retaining the API hostname for TLS and HTTP."""
+
+    def connect(self) -> None:
+        require(
+            not profile_production
+            and self.host == urllib.parse.urlsplit(profile_site).hostname
+            and profile_path_prefix == "/preview"
+            and re.fullmatch(
+                r"[a-z0-9]+-vpce-[a-f0-9]+[.]execute-api[.]us-east-1[.]amazonaws[.]com",
+                self.host,
+            )
+            is not None,
+            "private_transport_host",
+        )
+        address = ipaddress.ip_address(socket.gethostbyname(self.host))
+        require(
+            address in ipaddress.ip_network("172.31.0.0/16"), "private_transport_ip"
+        )
+        transport = ipaddress.ip_address(
+            int(ipaddress.ip_address("fd7a:115c:a1e0:b1a:0:1:0:0")) | int(address)
+        )
+        self.sock = socket.create_connection((str(transport), self.port), self.timeout)
+        self.sock = ssl.create_default_context().wrap_socket(
+            self.sock, server_hostname=self.host
+        )
+
+
+class DevelopmentPrivateHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
+        return self.do_open(DevelopmentPrivateConnection, req)
+
+
+def wait_for_public_post() -> None:
+    if public_post_spacing and not profile_path_prefix:
+        time.sleep(max(0.0, last_public_post + public_post_spacing - time.monotonic()))
+
+
 def request(
     jar: http.cookiejar.CookieJar,
     path: str,
@@ -453,6 +498,10 @@ def request(
         path.startswith("/") and not path.startswith("//"),
         "request_path",
     )
+    global last_public_post
+    if body is not None and not profile_path_prefix:
+        wait_for_public_post()
+        last_public_post = time.monotonic()
     origin = profile_site if origin is None else origin
     headers = {
         "Origin": origin,
@@ -469,9 +518,15 @@ def request(
     if data is not None:
         headers["Content-Type"] = "application/json"
         headers["x-amz-content-sha256"] = hashlib.sha256(data).hexdigest()
-    opener = urllib.request.build_opener(
-        NoRedirect(), urllib.request.HTTPCookieProcessor(jar)
-    )
+    handlers: list[urllib.request.BaseHandler] = [
+        NoRedirect(),
+        urllib.request.HTTPCookieProcessor(jar),
+    ]
+    if profile_private_via6:
+        handlers.extend(
+            [urllib.request.ProxyHandler({}), DevelopmentPrivateHTTPSHandler()]
+        )
+    opener = urllib.request.build_opener(*handlers)
     req = urllib.request.Request(
         profile_site + profile_path_prefix + path, data=data, headers=headers
     )
@@ -720,6 +775,7 @@ def _canary_contract() -> dict[str, str]:
 
 def canary(values: dict[str, Any]) -> dict[str, Any]:
     """Run the one fixed synthetic request and return bounded release evidence."""
+    wait_for_public_post()
     started = time.monotonic()
     previous_handler = signal.getsignal(signal.SIGALRM)
     previous_timer = signal.getitimer(signal.ITIMER_REAL)

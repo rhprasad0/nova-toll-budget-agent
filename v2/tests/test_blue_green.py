@@ -824,3 +824,31 @@ def test_failed_manual_restore_is_reported_as_attempted(
     )
     assert delivery.main() == 1
     assert json.loads(output.read_text())["recovery"] == "failed"
+
+
+@pytest.mark.parametrize("environment", ["development", "production"])
+def test_private_probe_restores_transport_after_failure(
+    monkeypatch: pytest.MonkeyPatch, environment: str
+) -> None:
+    preview = {
+        "origin": "https://api-vpce-0123.execute-api.us-east-1.amazonaws.com",
+        "stage": "preview",
+    }
+    monkeypatch.setattr(delivery, "environment", environment)
+    monkeypatch.setattr(delivery, "terraform", Mock(return_value=json.dumps(preview)))
+    monkeypatch.setattr(delivery.checks, "profile_site", "https://public.example")
+    monkeypatch.setattr(delivery.checks, "profile_private_via6", False)
+    monkeypatch.setattr(delivery.checks, "profile_path_prefix", "")
+
+    def failed_probe(slot: dict[str, Any]) -> NoReturn:
+        assert delivery.checks.profile_private_via6 == (environment == "development")
+        assert delivery.checks.profile_site == preview["origin"]
+        assert delivery.checks.profile_path_prefix == "/preview"
+        raise ValueError("probe failed")
+
+    monkeypatch.setattr(delivery, "probe", failed_probe)
+    with pytest.raises(ValueError, match="probe failed"):
+        delivery.private_probe(Path("root"), {})
+    assert delivery.checks.profile_site == "https://public.example"
+    assert delivery.checks.profile_path_prefix == ""
+    assert delivery.checks.profile_private_via6 is False
