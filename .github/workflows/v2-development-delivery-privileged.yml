@@ -180,7 +180,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: development
     env:
-      TOLLCHAT_DEV_REHEARSAL: "true"
+      TOLLCHAT_DEV_REHEARSAL: "true" # Fresh stage-A release after prerequisite fixes.
     outputs:
       verified: ${{ steps.verify-release.outputs.verified }}
       canary: ${{ steps.verify-release.outputs.canary }}
