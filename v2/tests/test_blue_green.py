@@ -1151,6 +1151,83 @@ def test_origins_only_normalizes_omitted_ip_type(ip_type: str | None) -> None:
             gate.origins(before, after, api="api.example.test", prefix="/releases/new")
 
 
+@pytest.mark.parametrize("distribution", ["site", "staging"])
+@pytest.mark.parametrize("phase", ["prepare", "promote", "recover"])
+def test_plan_only_accepts_omitted_cloudfront_ip_type_drift(
+    distribution: str, phase: str
+) -> None:
+    prior = previous()
+    inputs = (
+        gate.desired(prior, slot("green", "release2"))
+        if phase == "prepare"
+        else gate.desired(prior, promote=True)
+    )
+    document = plan(inputs)
+    before: dict[str, Any] = {
+        "etag": "same",
+        "origin": [
+            {
+                "origin_id": "public-chat",
+                "domain_name": "api.example.test",
+                "custom_origin_config": [{"ip_address_type": None}],
+            }
+        ],
+    }
+    after = deepcopy(before)
+    after["origin"][0]["custom_origin_config"][0]["ip_address_type"] = ""
+    drift = change(f"aws_cloudfront_distribution.{distribution}", before, after)
+    document["resource_drift"] = [drift]
+    original = deepcopy(document)
+    gate.validate_plan(document, prior, phase)
+    assert document == original
+    # The real refresh shape must not hide any neighboring drift or move.
+    for path, value in [
+        (("address",), "aws_lambda_function.loader"),
+        (("mode",), "data"),
+        (("provider_name",), "untrusted"),
+        (("previous_address",), "aws_cloudfront_distribution.old"),
+        (("deposed",), "old"),
+        (("change", "importing"), {"id": "unexpected"}),
+        (("change", "actions"), ["delete", "create"]),
+        (("change", "after_unknown"), {"etag": True}),
+        (("change", "after", "etag"), "changed"),
+        (("change", "after", "origin", 0, "domain_name"), "other.example.test"),
+        (
+            (
+                "change",
+                "after",
+                "origin",
+                0,
+                "custom_origin_config",
+                0,
+                "ip_address_type",
+            ),
+            "ipv4",
+        ),
+        (
+            (
+                "change",
+                "after",
+                "origin",
+                0,
+                "custom_origin_config",
+                0,
+                "ip_address_type",
+            ),
+            "ipv6",
+        ),
+        (("change", "after", "origin", 0, "origin_id"), "site"),
+    ]:
+        modified = deepcopy(drift)
+        target: Any = modified
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+        document["resource_drift"] = [modified]
+        with pytest.raises(gate.Rejected, match="incomplete_or_drift"):
+            gate.validate_plan(document, prior, phase)
+
+
 @pytest.mark.parametrize("phase", ["promote", "recover"])
 @pytest.mark.parametrize("description", [None, "", "changed"])
 def test_routing_replacement_only_normalizes_empty_description(
