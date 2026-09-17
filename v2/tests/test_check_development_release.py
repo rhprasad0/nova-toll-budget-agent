@@ -1007,6 +1007,23 @@ def test_request_hashes_exact_json_bytes_and_skips_bodyless_hash(
     assert production_request.full_url == "https://tollchat.ai/api/config"
     assert production_request.get_header("Origin") == "https://tollchat.ai"
 
+    for canary, enabled, production, site, prefix, expected in (
+        (True, True, False, "https://dev.tollchat.ai", "", True),
+        (False, True, False, "https://dev.tollchat.ai", "", False),
+        (True, False, False, "https://dev.tollchat.ai", "", False),
+        (True, True, True, "https://tollchat.ai", "", False),
+        (True, True, False, "https://dev.tollchat.ai", "/preview", False),
+    ):
+        monkeypatch.setattr(check, "rehearsal_failure", enabled)
+        monkeypatch.setattr(check, "profile_production", production)
+        monkeypatch.setattr(check, "profile_site", site)
+        monkeypatch.setattr(check, "profile_path_prefix", prefix)
+        check.request(jar, "/api/chat", body, canary=canary)
+        headers = {k.lower(): v for k, v in captured.pop().header_items()}
+        assert headers.get("x-tollchat-drill") == (
+            "runtime-exception-v2" if expected else None
+        )
+
 
 def test_request_path_failure_has_fixed_reason(
     capsys: pytest.CaptureFixture[str],

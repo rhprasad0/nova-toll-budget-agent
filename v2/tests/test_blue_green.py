@@ -83,6 +83,55 @@ def previous() -> dict[str, Any]:
     }
 
 
+@pytest.mark.parametrize(
+    "target,enabled,expected",
+    [
+        ("development", "true", True),
+        ("development", "", False),
+        ("production", "true", False),
+    ],
+)
+def test_rehearsal_probe_is_scoped_and_restores_after_failure(
+    monkeypatch: pytest.MonkeyPatch, target: str, enabled: str, expected: bool
+) -> None:
+    monkeypatch.setattr(delivery, "environment", target)
+    monkeypatch.setenv("TOLLCHAT_DEV_REHEARSAL", enabled)
+    monkeypatch.setattr(delivery.checks, "rehearsal_failure", False)
+
+    def fail(_slot: dict[str, Any]) -> NoReturn:
+        assert delivery.checks.rehearsal_failure is expected
+        raise gate.Rejected("controlled_runtime_failure")
+
+    monkeypatch.setattr(delivery, "probe", fail)
+    with pytest.raises(gate.Rejected, match="controlled_runtime_failure"):
+        delivery.rehearsal_probe(slot("green", "release2"))
+    assert delivery.checks.rehearsal_failure is False
+
+
+def test_rehearsal_candidate_rejection_clears_drill_and_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(delivery, "environment", "development")
+    monkeypatch.setenv("TOLLCHAT_DEV_REHEARSAL", "true")
+    monkeypatch.setattr(delivery, "readiness", Mock())
+    monkeypatch.setattr(
+        delivery, "aws", Mock(return_value={"Parameter": {"Value": "fake-header"}})
+    )
+    monkeypatch.setattr(delivery.checks, "rehearsal_failure", False)
+
+    def fail(target: dict[str, Any]) -> NoReturn:
+        assert target == previous()["slots"]["green"]
+        assert delivery.checks.rehearsal_failure is True
+        assert delivery.checks.candidate_header == "fake-header"
+        raise gate.Rejected("controlled_runtime_failure")
+
+    monkeypatch.setattr(delivery, "probe", fail)
+    with pytest.raises(gate.Rejected, match="controlled_runtime_failure"):
+        delivery.validate_candidate(previous(), "1:1")
+    assert delivery.checks.rehearsal_failure is False
+    assert delivery.checks.candidate_header is None
+
+
 def plan(
     inputs: dict[str, Any],
     changes: Iterable[dict[str, Any]] = (),

@@ -318,6 +318,17 @@ def test_runtime_blocks_guardrail_content_and_returns_safe_failures(
     }
     assert pat_agent.prompts == []
 
+    drill_agent = FakeAgent()
+    drill_runtime = TollChatRuntime(lambda: drill_agent, FakeGuardrail())
+    assert collect(
+        drill_runtime, {"prompt": "price it", "failure_mode": "runtime_exception_v2"}
+    )[-1] == {
+        "type": "error",
+        "code": "agent_unavailable",
+        "message": "TollChat could not complete that request. Please try again.",
+    }
+    assert drill_agent.prompts == []
+
     class FailingAgent(FakeAgent):
         async def stream_async(
             self, prompt: str, *, limits: Limits | None = None

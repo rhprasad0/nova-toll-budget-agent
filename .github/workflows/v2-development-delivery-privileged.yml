@@ -179,6 +179,8 @@ jobs:
     if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true' && github.triggering_actor == github.actor
     runs-on: ubuntu-latest
     environment: development
+    env:
+      TOLLCHAT_DEV_REHEARSAL: "true"
     outputs:
       verified: ${{ steps.verify-release.outputs.verified }}
       canary: ${{ steps.verify-release.outputs.canary }}
@@ -626,7 +628,7 @@ jobs:
         if: always()
         run: |
           if test -f "$RUNNER_TEMP/blue-green-result.json"; then
-            jq '{deployment,recovery,active,probes,releases,recovery_record}' "$RUNNER_TEMP/blue-green-result.json" >>"$GITHUB_STEP_SUMMARY"
+            jq '{deployment,recovery,active,probes,releases,recovery_record}' "$RUNNER_TEMP/blue-green-result.json" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Cleanup private delivery files

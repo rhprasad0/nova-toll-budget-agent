@@ -425,6 +425,19 @@ def probe(slot: dict[str, Any]) -> dict[str, Any]:
     return observed
 
 
+def rehearsal_probe(slot: dict[str, Any]) -> dict[str, Any]:
+    """Temporary request-scoped fault; ordinary and recovery probes stay healthy."""
+    previous = checks.rehearsal_failure
+    checks.rehearsal_failure = (
+        environment == "development"
+        and os.environ.get("TOLLCHAT_DEV_REHEARSAL") == "true"
+    )
+    try:
+        return probe(slot)
+    finally:
+        checks.rehearsal_failure = previous
+
+
 def private_probe(root: Path, slot: dict[str, Any]) -> None:
     preview = json.loads(terraform(root, "output", "-json", "private_preview"))
     public_site = checks.profile_site
@@ -497,7 +510,7 @@ def validate_candidate(prepared: dict[str, Any], claim: str) -> dict[str, Any]:
     # Stay below the existing per-IP WAF budget, including session reset requests.
     checks.public_post_spacing = 35.0 if environment == "development" else 17.0
     try:
-        observed = probe(slot)
+        observed = rehearsal_probe(slot)
         assets(slot, document=True)
         candidate_canary = dict(LAST_CANARY)
         candidate_canary.update(checks.security_checks())
