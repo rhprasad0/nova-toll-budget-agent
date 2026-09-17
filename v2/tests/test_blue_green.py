@@ -2,11 +2,13 @@
 
 import base64
 import json
+import re
 from collections.abc import Callable, Iterable
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, NoReturn
 from unittest.mock import Mock
+from urllib.parse import urljoin
 
 import pytest
 
@@ -14,20 +16,29 @@ from scripts import blue_green as gate
 from scripts import release_blue_green as delivery
 
 
+@pytest.mark.parametrize("separate_bundle", [False, True])
+@pytest.mark.parametrize("phase", ["prepare", "promote", "recover"])
 def test_plan_package_paths_are_workspace_independent(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, separate_bundle: bool, phase: str
 ) -> None:
     terraform = Mock(return_value="{}")
     monkeypatch.setattr(delivery, "terraform", terraform)
     monkeypatch.setattr(gate, "validate_plan", Mock())
     for workspace in ("bootstrap", "trusted", "release-overlay"):
         bundle = tmp_path / workspace
+        root = bundle / "v2/infra"
+        if separate_bundle:
+            bundle = bundle / "release-overlay"
+        packages = bundle / "v2/infra/build"
+        packages.mkdir(parents=True)
+        for name in ("loader", "publisher", "timed-checks"):
+            (packages / f"{name}.zip").write_bytes(name.encode())
         delivery.plan(
-            bundle / "v2/infra",
+            root,
             bundle,
             tmp_path / "foundation.json",
             tmp_path,
-            "prepare",
+            phase,
             {},
             {},
         )
@@ -37,6 +48,8 @@ def test_plan_package_paths_are_workspace_independent(
             "-var=publisher_package_path=build/publisher.zip",
             "-var=timed_checks_package_path=build/timed-checks.zip",
         }
+        for name in ("loader", "publisher", "timed-checks"):
+            assert (root / "build" / f"{name}.zip").read_bytes() == name.encode()
 
 
 def slot(name: str, release: str) -> dict[str, Any]:
@@ -311,6 +324,23 @@ def test_old_and_candidate_pages_keep_their_immutable_assets() -> None:
     assert site.count('path_pattern           = "/releases/*"') == 2
 
 
+def test_released_chat_module_dependencies_resolve_to_uploaded_assets() -> None:
+    agent = Path(__file__).parents[1] / "agent"
+    prefix = "https://example.test/releases/green1/"
+    for source, destination in (
+        ("public_chat.mjs", "chat.mjs"),
+        ("assets/commute-map.mjs", "assets/commute-map.mjs"),
+    ):
+        original = (agent / source).read_bytes()
+        rendered = delivery.render_asset(destination, original, "green1").decode()
+        references = re.findall(r"[\"\']((?:\./|/releases/)[^\"\']+)[\"\']", rendered)
+        assert references
+        for reference in references:
+            url = urljoin(prefix + destination, reference)
+            assert url.startswith(prefix)
+            assert (agent / url.removeprefix(prefix)).is_file(), url
+
+
 @pytest.mark.parametrize(
     "field", ["active", "runtime_arn", "proxy_url", "release_id", "runtime_version"]
 )
@@ -538,6 +568,10 @@ def test_complete_release_state_machine(
     work.mkdir()
     saved = work / "prepare.tfplan"
     saved.write_bytes(b"approved-preparation")
+    packages = tmp_path / "v2/infra/build"
+    packages.mkdir(parents=True)
+    for name in ("loader", "publisher", "timed-checks"):
+        (packages / f"{name}.zip").write_bytes(name.encode())
     delivery.write(
         work / "context.json",
         {
@@ -566,6 +600,9 @@ def test_complete_release_state_machine(
             document["variables"]["foundation"] = {"value": {"vpc_id": "fixed"}}
             return json.dumps(document)
         assert args[0] == "apply"
+        if target == "production":
+            for name in ("loader", "publisher", "timed-checks"):
+                assert (_root / "build" / f"{name}.zip").read_bytes() == name.encode()
         phase = Path(args[-1]).stem
         applied.append(phase)
         if phase == "prepare":
