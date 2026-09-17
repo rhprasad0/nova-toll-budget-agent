@@ -11,6 +11,7 @@ import json
 import mimetypes
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import time
@@ -127,8 +128,10 @@ def upload(
 
 def render_asset(relative: str, source: bytes, release: str) -> bytes:
     if relative.endswith((".html", ".mjs", ".css")):
-        return source.replace(
-            b"/assets/", f"/releases/{release}/assets/".encode()
+        return re.sub(
+            rb"(?<=[\"'(])/assets/",
+            f"/releases/{release}/assets/".encode(),
+            source,
         ).replace(b'"/chat.mjs"', f'"/releases/{release}/chat.mjs"'.encode())
     return source
 
@@ -206,6 +209,16 @@ def prepare_descriptor(bundle: Path, previous: dict[str, Any]) -> dict[str, Any]
     return result
 
 
+def stage_packages(root: Path, bundle: Path) -> None:
+    for name in ("loader", "publisher", "timed-checks"):
+        package = Path("build") / f"{name}.zip"
+        source = bundle / "v2/infra" / package
+        destination = root / package
+        if source.resolve() != destination.resolve():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+
+
 def plan(
     root: Path,
     bundle: Path,
@@ -215,6 +228,7 @@ def plan(
     previous: dict[str, Any],
     inputs: dict[str, Any],
 ) -> Path:
+    stage_packages(root, bundle)
     variables = work / f"{phase}.tfvars.json"
     write(variables, inputs)
     saved = work / f"{phase}.tfplan"
@@ -231,9 +245,7 @@ def plan(
         ("publisher", "publisher"),
         ("timed_checks", "timed-checks"),
     ):
-        args.append(
-            f"-var={variable}_package_path={os.path.relpath(bundle / 'v2/infra/build' / (name + '.zip'), root)}"
-        )
+        args.append(f"-var={variable}_package_path=build/{name}.zip")
     terraform(root, *args)
     gate.validate_plan(
         json.loads(terraform(root, "show", "-json", str(saved))), previous, phase
@@ -797,6 +809,7 @@ def main() -> int:
                 }
             else:
                 if args.saved_plan is not None:
+                    stage_packages(root, bundle)
                     document = json.loads(
                         terraform(root, "show", "-json", str(args.saved_plan.resolve()))
                     )

@@ -6412,6 +6412,7 @@ def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup(
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(release, "terraform", rejected)
+        patch.setattr(release, "stage_packages", lambda *_: None)
         with pytest.raises(gate.Rejected):
             release.plan(
                 tmp_path,
