@@ -32,6 +32,12 @@ resource "aws_iam_role_policy" "development_blue_green" {
     Version = "2012-10-17"
     Statement = [
       {
+        Sid      = "ReadDevelopmentDynamoDBDefaultKey"
+        Effect   = "Allow"
+        Action   = ["kms:DescribeKey"]
+        Resource = "arn:aws:kms:us-east-1:903859731897:key/5d52b63e-177b-49aa-8864-a6812ccc1599"
+      },
+      {
         Sid      = "ReadGreenDefaultEndpoint"
         Effect   = "Allow"
         Action   = ["bedrock-agentcore:GetAgentRuntimeEndpoint"]

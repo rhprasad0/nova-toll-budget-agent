@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from collections.abc import Callable
@@ -22,9 +23,11 @@ from typing import Any
 if __package__:
     from . import blue_green as gate
     from . import check_development_release as checks
+    from . import classify_deployment_error as diagnostics
 else:
     import blue_green as gate
     import check_development_release as checks
+    import classify_deployment_error as diagnostics
 
 account = "903859731897"
 artifact_bucket = "nova-toll-agentcore-903859731897"
@@ -61,7 +64,20 @@ def terraform(root: Path, *args: str) -> str:
         timeout=1200,
         check=False,
     )
-    gate.require(result.returncode == 0, "terraform_failed")
+    if result.returncode != 0:
+        reason = diagnostics.classify_text(
+            result.stderr[-diagnostics.MAX_BYTES :]
+            + "\n"
+            + result.stdout[-diagnostics.MAX_BYTES :]
+        )
+        # Only classifier constants cross the private Terraform log boundary.
+        label = (
+            "backend configuration"
+            if reason == "backend_config"
+            else reason.replace("_", " ")
+        )
+        print(f"Terraform failed: {label}", file=sys.stderr)
+        raise gate.Rejected("terraform_failed")
     return result.stdout
 
 
