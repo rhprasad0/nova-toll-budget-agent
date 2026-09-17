@@ -5,7 +5,9 @@ Production uses the same release phases behind `PRODUCTION_BLUE_GREEN_BOOTSTRAPP
 Keep that flag disabled until a separate production bootstrap review after the
 development rehearsal. Its planner stages immutable objects and saves the exact
 preparation plan; the protected migration workflow revalidates that plan, applies
-compatible migrations, and finishes candidate validation, promotion, and observation.
+compatible migrations, and validates the candidate. **Production then waits for
+Ryan to approve cutover.** Green stays running as the candidate while blue keeps
+serving ordinary traffic (the colors alternate on subsequent releases).
 Production claims remain the existing numeric deployment IDs.
 
 For production bootstrap, populate `production_blue_green` in the foundation with
@@ -43,6 +45,7 @@ Lambda ARN/version, runtime ARN/version/endpoint, and runtime-emitted release ID
 | Bootstrap | Review exact development identities, permissions, resource moves, proxy allocations, protected traces and saved plan | Ordinary release gates still reject moves |
 | Prepare | Gate one saved inactive-slot plan; run approved compatible migrations under the fixed migration role; re-assume delivery and apply that exact plan | Ordinary routing stays active |
 | Validate | Readiness, grounded terminal answer, guardrail rejection, archive redaction, origin/session/reset, assets and actual identity; absent/wrong headers reach primary | No promotion |
+| Approve (production) | Persist the exact prepared state in the existing private, versioned recovery record; wait for Ryan's `production-cutover` approval | Candidate remains running; public/private traffic remains on the active slot |
 | Promote | Recheck claim, evidence and state; persist recovery record; apply a separate routing-only plan | Inspect state and attempt one fresh restoration plan |
 | Observe | Wait for public/private deployment; five core probes one minute apart, each with a 60-second deadline | Two consecutive failures trigger one rollback; success resets the count |
 | Recover | Fresh gated Terraform plan restores retained public/private routing; verify both streamed answers and retained assets | Report recovery separately; deployment remains failed |
@@ -62,6 +65,47 @@ pinned to its published version without weighted alias routing.
 Both retained pages reference `/releases/<id>/*` on the bucket-root origin.
 Document caching is disabled. Shared reports keep their existing root paths.
 Uploads use conditional writes and checksum/version verification.
+
+## Production cutover approval
+
+The existing `production` environment still protects preparation and migration.
+A separate `production-cutover` environment protects the later approval job,
+after preparation and candidate validation succeed. That job has no AWS
+credentials. The following protected job reuses the existing delivery identity;
+no IAM expansion or new deployment service is needed.
+
+Configure `production-cutover` with required reviewer `rhprasad0` (user ID
+`91573985`) only, administrator bypass disabled, self-review allowed so Ryan
+can approve his own release, and a custom deployment policy allowing only the
+`main` branch. The workflow verifies these settings before obtaining delivery
+credentials; a missing or weakened gate stops the release.
+
+In the Actions run, inspect the preparation summary and test the candidate using
+the existing private SSM header. Then select **Review deployments → production-cutover
+→ Approve and deploy**. Approval of preparation does not approve cutover.
+GitHub may also request the existing `production` environment approval for the
+resumed protected job; keep that protection in place.
+
+After approval, the workflow revalidates the release claim, artifact and checkout,
+loads the exact S3 version of the prepared record, and requires an unchanged state
+lineage, serial and both slot descriptors. It runs fresh candidate/security/private
+checks and gates a new routing-only plan before switching traffic. It does not
+rerun migrations or reapply the earlier preparation plan. The legacy automatic
+`finish --environment production` command is rejected.
+
+No timer switches traffic. Rejecting approval, cancelling, or exceeding GitHub's
+30-day approval wait fails the run and leaves the candidate provisioned and
+ordinary routing unchanged. Expired release artifacts or intervening changes can
+require a newly reviewed release sooner; an old approval never overrides the
+fresh checks. The existing production concurrency group holds the release
+sequence during the wait.
+
+Automatic rollback remains enabled after approved cutover: two consecutive
+observation failures trigger one saved-plan restore. This approval governs
+promotion, not emergency restoration of the previously serving release.
+
+[GitHub environment approval behavior](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments)
+and [environment configuration](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
 
 ## Sessions
 

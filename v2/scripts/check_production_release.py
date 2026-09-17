@@ -645,6 +645,39 @@ def revalidate(admission: dict[str, Any]) -> dict[str, Any]:
     return admission
 
 
+def verify_cutover_environment() -> dict[str, str]:
+    """Require the fixed human reviewer before preparing or promoting production."""
+    environment = _mapping(api("GET", "environments/production-cutover"))
+    reviewers = [
+        rule
+        for rule in environment.get("protection_rules", [])
+        if rule.get("type") == "required_reviewers"
+    ]
+    if (
+        environment.get("name") != "production-cutover"
+        or environment.get("can_admins_bypass") is not False
+        or len(reviewers) != 1
+        or reviewers[0].get("prevent_self_review") is not False
+        or [
+            (entry.get("type"), entry.get("reviewer", {}).get("id"))
+            for entry in reviewers[0].get("reviewers", [])
+        ]
+        != [("User", 91573985)]
+        or environment.get("deployment_branch_policy")
+        != {"protected_branches": False, "custom_branch_policies": True}
+    ):
+        raise AdmissionError("cutover_protection")
+    policies = _mapping(
+        api("GET", "environments/production-cutover/deployment-branch-policies")
+    )
+    if [
+        (policy.get("name"), policy.get("type"))
+        for policy in policies.get("branch_policies", [])
+    ] != [("main", "branch")]:
+        raise AdmissionError("cutover_protection")
+    return {"cutover_protection": "verified"}
+
+
 def _timestamp(value: object) -> datetime:
     if not isinstance(value, str):
         raise AdmissionError("malformed")
@@ -773,6 +806,8 @@ def _parser() -> argparse.ArgumentParser:
     revalidate_command = commands.add_parser("revalidate")
     revalidate_command.add_argument("--admission", type=Path, required=True)
     revalidate_command.add_argument("--output", type=Path, required=True)
+    cutover = commands.add_parser("cutover-environment")
+    cutover.add_argument("--output", type=Path, required=True)
     saved_plan = commands.add_parser("validate-saved-plan")
     saved_plan.add_argument("--admission", type=Path, required=True)
     saved_plan.add_argument("--saved-plan", type=Path, required=True)
@@ -783,7 +818,9 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Iterable[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        if args.command == "admit":
+        if args.command == "cutover-environment":
+            result = verify_cutover_environment()
+        elif args.command == "admit":
             result = admit(
                 args.event_file,
                 args.listener_run,

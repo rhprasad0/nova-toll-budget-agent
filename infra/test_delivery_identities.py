@@ -401,7 +401,7 @@ def _check_production_planner() -> None:
         "contents: read\n      actions: read\n      deployments: read\n      id-token: write",
         PRODUCTION_PLAN,
     )
-    assert "environment: production" not in PRODUCTION_PLAN
+    assert "environment: production\n" not in PRODUCTION_PLAN
 
     actions = re.findall(r"uses:\s+([^@\s]+)@([0-9a-f]{40})", PRODUCTION_PLAN)
     assert {name for name, _ in actions} == {

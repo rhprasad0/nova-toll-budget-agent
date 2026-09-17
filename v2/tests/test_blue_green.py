@@ -498,6 +498,9 @@ def test_recovery_accepts_pre_promotion_output_after_partial_apply() -> None:
         ("partial_switch", ("failed", "recovered", "blue")),
         ("restore_failure", ("failed", "failed", "green")),
         ("final_state_failure", ("failed", "not_attempted", "unverified")),
+        ("stale_cutover", ("failed", "not_attempted", "blue")),
+        ("changed_candidate", ("failed", "not_attempted", "blue")),
+        ("unhealthy_after_approval", ("failed", "not_attempted", "blue")),
     ],
 )
 @pytest.mark.parametrize("target", ["development", "production"])
@@ -511,6 +514,12 @@ def test_complete_release_state_machine(
     import hashlib
     import sys
 
+    if target == "development" and scenario in {
+        "stale_cutover",
+        "changed_candidate",
+        "unhealthy_after_approval",
+    }:
+        pytest.skip("Production approval boundary only")
     initial = previous()
     claim = "12:1" if target == "development" else "12"
     account = "903859731897" if target == "development" else "920534282028"
@@ -609,8 +618,14 @@ def test_complete_release_state_machine(
         delivery, "upload", Mock(return_value={"VersionId": "record-v1"})
     )
 
+    candidate_checks = 0
+
     def candidate(state: dict[str, Any], claim: str) -> dict[str, Any]:
-        if scenario == "invalid_candidate":
+        nonlocal candidate_checks
+        candidate_checks += 1
+        if scenario == "invalid_candidate" or (
+            scenario == "unhealthy_after_approval" and candidate_checks == 2
+        ):
             raise gate.Rejected("serving_identity")
         serving = {
             key: state["slots"]["green"][key]
@@ -662,7 +677,7 @@ def test_complete_release_state_machine(
         "argv",
         [
             "release_blue_green.py",
-            "finish",
+            "prepare-production" if target == "production" else "finish",
             "--environment",
             target,
             "--terraform-root",
@@ -682,12 +697,42 @@ def test_complete_release_state_machine(
     )
     status = delivery.main()
     result = json.loads(output.read_text())
+    if target == "production" and scenario != "invalid_candidate":
+        assert status == 0
+        assert result["deployment"] == "awaiting_approval"
+        assert result["active"] == "blue"
+        assert applied == ["prepare"]
+        assert not probe_calls
+        context = json.loads((work / "context.json").read_text())
+        assert context["prepared_identity"]["serial"] == serial
+        if scenario == "stale_cutover":
+            serial += 1
+        if scenario == "changed_candidate":
+            live["slots"]["green"]["runtime_version"] = "99"
+        monkeypatch.setattr(delivery, "load_recovery", Mock(return_value=context))
+        delivery.write(tmp_path / "release-manifest.json", {"commit_sha": "release2"})
+        monkeypatch.setenv("GITHUB_SHA", "release2")
+        resume_args = sys.argv[:-2]
+        resume_args[1] = "promote-production"
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [*resume_args, "--release-id", "release2", "--record-version", "record-v1"],
+        )
+        status = delivery.main()
+        result = json.loads(output.read_text())
     assert (result["deployment"], result["recovery"], result["active"]) == expected
     assert status == (0 if scenario == "healthy" else 1)
     assert applied.count("recover") <= 1
     assert applied == (
         ["prepare"]
-        if scenario == "invalid_candidate"
+        if scenario
+        in {
+            "invalid_candidate",
+            "stale_cutover",
+            "changed_candidate",
+            "unhealthy_after_approval",
+        }
         else ["prepare", "promote"]
         if scenario in {"healthy", "final_state_failure"}
         else ["prepare", "promote", "recover"]
@@ -695,6 +740,7 @@ def test_complete_release_state_machine(
     assert live["slots"]["blue"] == initial["slots"]["blue"]
     if scenario == "healthy":
         assert probe_calls == ["release2"] * 5
+        assert candidate_checks == (2 if target == "production" else 1)
     if scenario == "post_promotion_failure":
         assert probe_calls == ["release2", "release2", "release1"]
     delivery.write(
@@ -709,6 +755,33 @@ def test_complete_release_state_machine(
             "probes": result.get("probes", []),
         },
     )
+
+
+def test_production_cannot_use_automatic_finish(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import sys
+
+    arguments = [
+        "release_blue_green.py",
+        "finish",
+        "--environment",
+        "production",
+        "--claim",
+        "12",
+    ]
+    for flag in ("terraform-root", "bundle-root", "foundation-vars", "work-dir"):
+        arguments.extend(["--" + flag, str(tmp_path)])
+    output = tmp_path / "result.json"
+    arguments.extend(["--output", str(output)])
+    monkeypatch.setattr(sys, "argv", arguments)
+    aws = Mock(
+        side_effect=AssertionError("Legacy production finish must not reach AWS")
+    )
+    monkeypatch.setattr(delivery, "aws", aws)
+    assert delivery.main() == 1
+    assert json.loads(output.read_text())["deployment"] == "failed"
+    aws.assert_not_called()
 
 
 def test_recovery_rechecks_state_serial_after_plan(
