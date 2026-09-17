@@ -232,7 +232,7 @@ def plan(
         ("timed_checks", "timed-checks"),
     ):
         args.append(
-            f"-var={variable}_package_path={bundle / 'v2/infra/build' / (name + '.zip')}"
+            f"-var={variable}_package_path={os.path.relpath(bundle / 'v2/infra/build' / (name + '.zip'), root)}"
         )
     terraform(root, *args)
     gate.validate_plan(

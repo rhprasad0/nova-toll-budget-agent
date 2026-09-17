@@ -174,6 +174,11 @@ candidate checks pace chat and reset requests below the existing WAF limit
 (35 seconds apart in development; 17 in production). Allow several minutes for
 validation; pacing occurs outside the individual canary deadline.
 
+Shared loader, publisher and timed-check packages use paths relative to the
+Terraform module (`build/*.zip`) in both planning and delivery. Bootstrap must
+use these same paths: absolute workstation or runner paths cause unchanged
+packages to appear as shared-resource updates, which the release gates reject.
+
 ## Rehearsal and evidence
 
 Local tests exercise controller branches with mocked AWS/Terraform I/O: invalid

@@ -14,6 +14,31 @@ from scripts import blue_green as gate
 from scripts import release_blue_green as delivery
 
 
+def test_plan_package_paths_are_workspace_independent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    terraform = Mock(return_value="{}")
+    monkeypatch.setattr(delivery, "terraform", terraform)
+    monkeypatch.setattr(gate, "validate_plan", Mock())
+    for workspace in ("bootstrap", "trusted", "release-overlay"):
+        bundle = tmp_path / workspace
+        delivery.plan(
+            bundle / "v2/infra",
+            bundle,
+            tmp_path / "foundation.json",
+            tmp_path,
+            "prepare",
+            {},
+            {},
+        )
+        args = terraform.call_args_list[-2].args
+        assert {arg for arg in args[1:] if arg.startswith("-var=")} == {
+            "-var=loader_package_path=build/loader.zip",
+            "-var=publisher_package_path=build/publisher.zip",
+            "-var=timed_checks_package_path=build/timed-checks.zip",
+        }
+
+
 def slot(name: str, release: str) -> dict[str, Any]:
     return {
         "release_id": release,
