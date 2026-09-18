@@ -169,8 +169,9 @@ Keep `PRODUCTION_BLUE_GREEN_BOOTSTRAPPED` disabled and hold the production
 serialization boundary below throughout setup. Complete source PR CI and human
 review, deliver the final merged SHA through protected development delivery, and
 verify its retained bundle/digest, readiness, installed schemas and canary evidence.
-Disable development delivery again after verification. Preserve the application
-model, prompt, schedules, fixed migration limits and account isolation.
+Keep `DEVELOPMENT_DELIVERY_ENABLED=true` after verification so subsequent reviewed
+main changes continue through protected development delivery. Preserve the
+application model, prompt, schedules, fixed migration limits and account isolation.
 
 1. **Activate evaluation publishing before blue-green bootstrap.** Follow the
    [evaluation activation procedure](eval-dashboard.md#production-runtime-activation).
@@ -291,16 +292,25 @@ AWS_PROFILE=nova-toll-dev python3 v2/scripts/release_blue_green.py recover \
   --expected-state-sha256 "$REVIEWED_STATE_IDENTITY_SHA256"
 ```
 
-Production uses the same command with `--environment production`, the fixed
-production delivery/admin credentials, and its original numeric deployment claim
-for `--claim`. Its record key is `releases/<candidate-id>/recovery/<claim-id>.json`.
-Use the production checkout, verified bundle, backend and foundation variables.
+For production, dispatch `v2-production-recovery.yml` from `main` with the original
+numeric `claim_id`, exact `record_version`, and reviewed `expected_state_sha256`.
+Approve its protected `production` environment. The workflow serializes with
+production delivery and uses the existing deployment role; no local production
+administrator session is required. Its record key is
+`releases/<candidate-id>/recovery/<claim-id>.json` in the fixed production bucket.
+It verifies the completed original release run and development evidence, restores
+the exact admitted bundle and original candidate checkout, and reads foundation
+variables from the versioned record. Records without an exact bundle ID/digest
+binding are rejected. The serving application need not pass a health check before
+restoration; both ingress paths must pass afterward.
 
 The command checks claim, lineage, both descriptors and reviewed state identity,
 generates a fresh routing-only plan, rechecks serial before apply, and attempts
 restoration once. A newer release is rejected. Exit status remains nonzero on
 successful recovery: `deployment=failed, recovery=recovered`. Inspect that
-separate result. No migration or database downgrade is performed. Investigate a
+separate result. The production workflow reports that recovery operation as
+successful while preserving `deployment=failed`. No migration or database
+downgrade is performed. Investigate a
 failed restore; never repeatedly apply a stale plan or mutate routing directly.
 
 Development private probes connect through the existing Tailscale site-1 4via6

@@ -552,6 +552,8 @@ def test_complete_release_state_machine(
         pytest.skip("Production approval boundary only")
     initial = previous()
     claim = "12:1" if target == "development" else "12"
+    monkeypatch.setenv("CANARY_ARTIFACT_ID", "42")
+    monkeypatch.setenv("CANARY_ARTIFACT_DIGEST", "sha256:" + "a" * 64)
     account = "903859731897" if target == "development" else "920534282028"
     role = (
         "nova-toll-v2-development-delivery"
@@ -741,6 +743,7 @@ def test_complete_release_state_machine(
         assert applied == ["prepare"]
         assert not probe_calls
         context = json.loads((work / "context.json").read_text())
+        assert context["bundle"] == {"id": "42", "digest": "sha256:" + "a" * 64}
         assert context["prepared_identity"]["serial"] == serial
         if scenario == "stale_cutover":
             serial += 1
@@ -835,6 +838,50 @@ def test_recovery_rechecks_state_serial_after_plan(
     )
     with pytest.raises(gate.Rejected, match="stale_recovery"):
         delivery.recover(tmp_path, tmp_path, tmp_path, tmp_path, prepared)
+
+
+@pytest.mark.parametrize(
+    "change", [None, "legacy", "id", "digest", "commit", "package"]
+)
+def test_production_recovery_requires_exact_original_bundle(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, change: str | None
+) -> None:
+    import base64
+    import hashlib
+
+    monkeypatch.setenv("CANARY_ARTIFACT_ID", "42")
+    monkeypatch.setenv("CANARY_ARTIFACT_DIGEST", "sha256:" + "a" * 64)
+    prepared = previous()
+    packages = tmp_path / "v2/infra/build"
+    packages.mkdir(parents=True)
+    for kind, name in (("runtime", "agentcore"), ("proxy", "chat-proxy")):
+        raw = name.encode()
+        (packages / f"{name}.zip").write_bytes(raw)
+        digest = hashlib.sha256(raw)
+        prepared["slots"]["green"][f"{kind}_sha256"] = (
+            digest.hexdigest()
+            if kind == "runtime"
+            else base64.b64encode(digest.digest()).decode()
+        )
+    identity = {"id": "42", "digest": "sha256:" + "a" * 64}
+    context = {"bundle": identity, "prepared": prepared}
+    if change == "legacy":
+        context.pop("bundle")
+    if change == "id":
+        identity["id"] = "43"
+    if change == "digest":
+        identity["digest"] = "sha256:" + "b" * 64
+    if change == "package":
+        (packages / "agentcore.zip").write_bytes(b"rebuilt")
+    delivery.write(
+        tmp_path / "release-manifest.json",
+        {"commit_sha": "other" if change == "commit" else "release1"},
+    )
+    if change is None:
+        delivery.verify_recovery_bundle(context, tmp_path, "release1")
+    else:
+        with pytest.raises(gate.Rejected):
+            delivery.verify_recovery_bundle(context, tmp_path, "release1")
 
 
 @pytest.mark.parametrize(

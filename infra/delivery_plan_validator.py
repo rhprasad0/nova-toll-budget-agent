@@ -37,6 +37,7 @@ PRODUCTION_CONTROL_MARKER = "v2/scripts/run_production_migrations.py"
 PRODUCTION_CONTROL_INPUTS = frozenset(
     {
     ".github/workflows/v2-production-migrations.yml",
+    ".github/workflows/v2-production-recovery.yml",
     "v2/scripts/adopt_production_baseline.py",
     "v2/scripts/check_production_release.py",
     PRODUCTION_CONTROL_MARKER,

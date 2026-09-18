@@ -658,7 +658,10 @@ def recovery_key(release: str, claim: str) -> str:
 
 
 def load_recovery(work: Path, release: str, claim: str, version: str) -> dict[str, Any]:
-    gate.require(bool(version) and version != "null", "recovery_version")
+    gate.require(
+        re.fullmatch(r"[!-~]{1,1024}", version) is not None and version != "null",
+        "recovery_version",
+    )
     path = work / "context.json"
     aws(
         "s3api",
@@ -684,6 +687,42 @@ def load_recovery(work: Path, release: str, claim: str, version: str) -> dict[st
         "recovery_release",
     )
     return context
+
+
+def production_bundle_identity() -> dict[str, str]:
+    identity = {
+        "id": os.environ.get("CANARY_ARTIFACT_ID", ""),
+        "digest": os.environ.get("CANARY_ARTIFACT_DIGEST", ""),
+    }
+    gate.require(
+        re.fullmatch(r"[1-9][0-9]*", identity["id"]) is not None
+        and re.fullmatch(r"sha256:[0-9a-f]{64}", identity["digest"]) is not None,
+        "recovery_bundle",
+    )
+    return identity
+
+
+def verify_recovery_bundle(context: dict[str, Any], bundle: Path, release: str) -> None:
+    gate.require(
+        context.get("bundle") == production_bundle_identity(), "recovery_bundle"
+    )
+    manifest = json.loads((bundle / "release-manifest.json").read_text())
+    gate.require(manifest["commit_sha"] == release, "recovery_release")
+    prepared = context["prepared"]
+    gate.desired(prepared)  # Validate both retained descriptors before planning.
+    inactive = "green" if prepared["active"] == "blue" else "blue"
+    for kind, filename in (("runtime", "agentcore"), ("proxy", "chat-proxy")):
+        digest = hashlib.sha256(
+            (bundle / f"v2/infra/build/{filename}.zip").read_bytes()
+        )
+        expected = (
+            digest.hexdigest()
+            if kind == "runtime"
+            else base64.b64encode(digest.digest()).decode()
+        )
+        gate.require(
+            prepared["slots"][inactive][f"{kind}_sha256"] == expected, "recovery_bundle"
+        )
 
 
 def main() -> int:
@@ -760,6 +799,8 @@ def main() -> int:
             "delivery_role",
         )
         authorized = True
+        if args.phase == "prepare-production":
+            production_bundle_identity()
         context_file = work / "context.json"
         if args.phase == "prepare-plan":
             previous, identity = current(root)
@@ -786,6 +827,9 @@ def main() -> int:
             context = load_recovery(
                 work, args.release_id, args.claim, args.record_version
             )
+            if environment == "production":
+                verify_recovery_bundle(context, bundle, args.release_id)
+                write(foundation, context["foundation"])
             _, identity = current(root)
             gate.require(
                 gate.digest(identity) == args.expected_state_sha256
@@ -889,6 +933,7 @@ def main() -> int:
                 if environment == "production":
                     context["prepared_identity"] = prepared_identity
                     context["foundation"] = json.loads(foundation.read_text())
+                    context["bundle"] = production_bundle_identity()
                 write(context_file, context)
             wait_routing(root, prepared)
             private_probe(root, prepared["slots"][prepared["active"]])
