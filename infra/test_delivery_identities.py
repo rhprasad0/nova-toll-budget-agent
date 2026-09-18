@@ -978,6 +978,7 @@ def main() -> None:
             "ReadProductionAgentCoreDefaultEndpoint",
             "PassProductionAgentCoreRuntimeRole",
             "ReadProductionDynamoDBDefaultKey",
+            "ReadProductionAlertsKeyForTimedChecks",
         }
     ]
     assert rendered_deploy_application == application_statements
