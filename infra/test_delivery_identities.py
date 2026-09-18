@@ -822,7 +822,7 @@ def main() -> None:
     assert production_policies_digest(
         (planner_documents, planner_statements, application_statements, deploy_documents)
     ) == (
-        "d4d45fabe9af7a4176276b77da67f9041d3da2e9e95515cfadd3925e840b4263"
+        "f905c5e50a33561531e97913f91dd3d7637c6b803fa28e14f9abe30451002a9b"
     )
     production_locals = terraform_block(IAM, "locals", 3)
     for sid in (
@@ -843,7 +843,7 @@ def main() -> None:
             1,
         )
         assert production_policies_digest(rendered_production_policies(leaked_trace_sid)) != (
-            "d4d45fabe9af7a4176276b77da67f9041d3da2e9e95515cfadd3925e840b4263"
+            "f905c5e50a33561531e97913f91dd3d7637c6b803fa28e14f9abe30451002a9b"
         )
     assert len(planner_documents) == 10
     assert len(planner_documents) <= 10
@@ -915,16 +915,12 @@ def main() -> None:
             for statement in documents["data"]["Statement"]
             if statement["Sid"] == "ReadProductionDynamoDBDefaultKey"
         ] == [expected_dynamodb_default_key_read]
-    assert [
-        statement
-        for statement in planner_documents["data"]["Statement"]
-        if statement["Sid"] == "ReadProductionAlertsKeyForTimedChecks"
-    ] == [expected_alerts_key_read]
-    assert not any(
-        statement["Sid"] == "ReadProductionAlertsKeyForTimedChecks"
-        for policy in deploy_documents.values()
-        for statement in policy["Statement"]
-    )
+        # Cutover and recovery refresh the full application plan under the deploy role.
+        assert [
+            statement
+            for statement in documents["data"]["Statement"]
+            if statement["Sid"] == "ReadProductionAlertsKeyForTimedChecks"
+        ] == [expected_alerts_key_read]
     assert not any(
         statement["Sid"] == "ReadAlertsKeyForTimedChecks"
         for statement in application_statements
@@ -982,6 +978,7 @@ def main() -> None:
             "ReadProductionAgentCoreDefaultEndpoint",
             "PassProductionAgentCoreRuntimeRole",
             "ReadProductionDynamoDBDefaultKey",
+            "ReadProductionAlertsKeyForTimedChecks",
         }
     ]
     assert rendered_deploy_application == application_statements
