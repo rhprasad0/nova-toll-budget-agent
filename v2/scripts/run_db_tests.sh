@@ -10,6 +10,7 @@ retirement_dependent_db="nova_toll_v2_retirement_dependent_test"
 retirement_role_db="nova_toll_v2_retirement_role_test"
 migration_db="nova_toll_v2_migration_test"
 base_ref="${1:-}"
+retained_contract_ref="$base_ref"
 cleanup_allowed=false
 if [[ -z "$base_ref" ]]; then
   echo "usage: $0 BASE_GIT_REF" >&2
@@ -46,7 +47,9 @@ require_disposable_cluster() {
 require_disposable_cluster
 export NOVA_TOLL_EXPECTED_RDS_ENDPOINT="${PGHOST:-localhost}"
 if [[ "$base_ref" == "0000000000000000000000000000000000000000" ]]; then
-  # New tags have no base; migration 026's parent is its declared 1.2.0 source.
+  # New tags have no push predecessor; use their own application contracts.
+  retained_contract_ref=HEAD
+  # Keep replaying upgrades from migration 026's declared 1.2.0 source.
   base_ref="$(git log --diff-filter=A --format='%H^' -1 -- \
     v2/db/migrations/026_upgrade_pricing_1_2_0_to_1_3_0.sql)"
 fi
@@ -878,11 +881,12 @@ BEGIN
 END $$;
 UPDATE pricing.schema_version SET version = '1.3.0' WHERE singleton;
 SQL
-# Run both retained application contracts against the same upgraded disposable
-# schema. Contract fixtures roll back their data; the database is never downgraded.
+# Run baseline and candidate contracts against the same upgraded disposable schema;
+# new tags use the candidate as their baseline. Fixtures roll back their data;
+# the database is never downgraded.
 retained_contracts="$migration_source_dir/retained-contracts"
 mkdir "$retained_contracts"
-git archive "$base_ref" v2/tests | tar -x --directory "$retained_contracts"
+git archive "$retained_contract_ref" v2/tests | tar -x --directory "$retained_contracts"
 for contracts in "$retained_contracts/v2/tests" v2/tests; do
   for contract in pricing_analysis pricing_ballpark monotonic_upsert oracle_restore \
     oracle_route oracle_prompt_points oracle_pricing_route oracle_i66_pricing \
