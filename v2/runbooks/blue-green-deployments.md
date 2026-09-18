@@ -163,6 +163,97 @@ before setup. **This inventory is not an approved plan.**
 AWS-generated IDs make bootstrap a sequence of dependent reviewed plans. Do not
 substitute wildcard final permissions or relax ordinary release gates.
 
+### Production ordering and approval packet
+
+Keep `PRODUCTION_BLUE_GREEN_BOOTSTRAPPED` disabled and hold the production
+serialization boundary below throughout setup. Complete source PR CI and human
+review, deliver the final merged SHA through protected development delivery, and
+verify its retained bundle/digest, readiness, installed schemas and canary evidence.
+Disable development delivery again after verification. Preserve the application
+model, prompt, schedules, fixed migration limits and account isolation.
+
+1. **Activate evaluation publishing before blue-green bootstrap.** Follow the
+   [evaluation activation procedure](eval-dashboard.md#production-runtime-activation).
+   For this activation only, retain PR #527's original checkout
+   `b5d91ee4f99270d40976a8aec2173b7e7897c65c` in an isolated worktree. Prove its
+   `v2/infra/timed_checks.tf` matches the merged reviewed change. Its pre-blue-green
+   infrastructure keeps staging resources out of the two-resource activation plan.
+   Recheck production identity, deployed packages, schema versions, writer grants
+   and recovery evidence. Generate a **fresh private saved plan** using the deployed
+   packages; old activation plans are invalid. Require only the timed-check Lambda's
+   two evaluation variables and its IAM policy's three dashboard statements to
+   change. Reject code/hash changes, removed permissions, schedules, routing or
+   other resource mutations. Present the binary checksum and exact effects for
+   human approval, then apply only that binary. This approval activates shared
+   publishing immediately, independently of traffic cutover.
+2. Verify the unchanged Lambda code hash and exact configuration. Use bounded
+   read-only production queries to check `pricing.evaluation_runs`, `eval_writer`
+   privileges and installed versions; do not rerun role creation or migration 033.
+   Follow the next real scheduled occurrence through **database record → production
+   `evals.json` → rendered dashboard**, matching occurrence identity, timestamps and
+   ToolCallCount/Completeness/Correctness verdicts. Capture browser evidence and
+   retain actual results, including failures. Never backfill or manufacture an
+   occurrence; investigate missing completion after the existing 25-minute allowance.
+3. Capture original serving runtime/proxy versions and retained assets. Reuse the
+   verified development release bundle with distinct blue/green bootstrap release
+   IDs. Review dependent saved setup plans for bucket versioning, immutable artifacts,
+   the production candidate-header SecureString and green runtime provisioning.
+   Establish exact green trace trust and generated resource identities. Perform only
+   declared moves, imports and retained-object handoffs; remove temporary provisioning
+   permissions after ownership transfers.
+4. Prepare the application bootstrap plan with **`active_slot=blue`**. Explicitly
+   review changes to serving blue and existing sessions: bootstrap may update blue
+   before the later cutover approval, and release/session fencing can expire existing
+   conversations. Preserve activated evaluation configuration. Show any package-path
+   normalization separately and prove deployed code hashes remain identical for
+   those normalization changes. Gate the same binary before human approval:
+   ```sh
+   python3 v2/scripts/blue_green.py bootstrap --environment production \
+     --plan "$PRIVATE/bootstrap.json" --saved-plan "$PRIVATE/bootstrap.tfplan" \
+     --approved-sha256 "$REVIEWED_PLAN_SHA256"
+   ```
+   Apply only that approved binary. Populate foundation `production_blue_green`
+   permissions using actual runtime, staging-distribution and deployment-policy IDs.
+5. Verify both slots' identities, immutable assets, origin restrictions, session
+   handling, guardrails and protected traces; ordinary public/private traffic must
+   still serve healthy blue. Require ordinary release plans to leave shared
+   infrastructure unchanged. Have `pre_release_reviewer` assess the final candidate,
+   bootstrap evidence and remaining gates before enabling production delivery.
+   Retire the historical activation checkout after bootstrap; subsequent operations
+   use the current reviewed source.
+
+Publish the next unused stable release tag at the exact development-verified SHA.
+Require release admission, artifact verification, a zero-change foundation plan and
+the reviewed inactive-slot preparation plan. After the `production` approval, the
+workflow connects Tailscale as `tag:ci` and checks the fixed production
+`/preview/api/config` endpoint **before migrations or application apply**, requiring
+HTTP 200 and `chatEnabled=true`. The HTTPS destination is pinned to `172.31.225.174`
+(endpoint `vpce-0a618eb71eb2882b1`, interface `eni-0bc7a43fe0b90c14c`, verified
+2026-09-18). If the interface changes, verify its replacement and update both the
+ACL and preflight through review. An owner-device probe does not establish CI access.
+
+At `production-cutover`, supply the run URL, candidate SHA, validation summary and
+exact recovery-record identity. Capture browser screenshots before explicit human
+approval. Browse `https://tollchat.ai` with the
+`aws-cf-cd-tollchat` header from the existing
+`/nova-toll/production/candidate-header` SSM SecureString to requests for that
+production origin only (for example, a scoped Playwright route); the reviewed
+CloudFront policy selects staging for matching requests. Keep the header and
+cookies out of screenshots, logs and saved evidence. Verify the candidate identity,
+chat/session/reset behavior and assets, then inspect ordinary public/private blue
+traffic separately. `/eval-dashboard` uses the shared production publisher; it is
+not isolated by slot and there is no additional public API.
+
+After approval, fresh candidate/state checks and a new routing-only plan still gate
+cutover; honor any additional protected-environment approval GitHub requests. Observe
+the five existing probes one minute apart. Two consecutive failures trigger one
+routing restore; verify both ingress paths after recovery. Never roll back the
+database automatically. Completion requires both ingress paths serving the approved
+candidate, a healthy retained slot, the observation window, a clean final plan and
+a fresh persisted/published/rendered evaluation. Save sanitized release/recovery
+evidence and limitations. A failed check holds the next stage; source or state changes
+invalidate earlier plans and require fresh review.
+
 ## Manual application recovery
 
 Automatic recovery ends with the observation window. For cancellation or runner

@@ -240,6 +240,25 @@ jobs:
           oauth-client-id: ${{ secrets.TS_PRODUCTION_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_PRODUCTION_OAUTH_SECRET }}
           tags: tag:ci
+      - name: Check fixed production private API connectivity
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          source trusted/v2/scripts/run_private_stage.sh
+          trap 'rm -f -- "$RUNNER_TEMP/production-api-config.json"' EXIT
+          check_private_api() {
+            local status
+            status="$(curl --silent --show-error --noproxy '*' --proto '=https' --tlsv1.2 \
+              --connect-timeout 5 --max-time 20 --max-filesize 65536 \
+              --resolve mxey1r2rhc-vpce-0a618eb71eb2882b1.execute-api.us-east-1.amazonaws.com:443:172.31.225.174 \
+              --output "$RUNNER_TEMP/production-api-config.json" --write-out '%{http_code}' \
+              https://mxey1r2rhc-vpce-0a618eb71eb2882b1.execute-api.us-east-1.amazonaws.com/preview/api/config)" || return
+            test "$status" = 200 || return
+            jq -e 'type == "object" and .chatEnabled == true' "$RUNNER_TEMP/production-api-config.json" >/dev/null
+          }
+          run_private_stage release-verification "$RUNNER_TEMP/production-api.out" "$RUNNER_TEMP/production-api.err" check_private_api
       - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
         if: inputs.phase == 'prepare-production'
         with:

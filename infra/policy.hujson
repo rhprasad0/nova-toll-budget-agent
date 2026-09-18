@@ -39,12 +39,17 @@
             "ip":  ["*"],
         },
 
-        // Production CI can reach RDS through the subnet router, and nothing else --
-        // not the rest of the VPC, not the exit node, not other devices.
+        // Production CI can reach RDS through the subnet router.
         {
             "src": ["tag:ci"],
             "dst": ["172.31.0.0/16"],
             "ip":  ["tcp:5432"],
+        },
+        // Production delivery checks only this private API endpoint over HTTPS.
+        {
+            "src": ["tag:ci"],
+            "dst": ["tollchat-api-production"],
+            "ip":  ["tcp:443"],
         },
         // Development uses the site-1 4via6 route because its VPC overlaps
         // production's IPv4 CIDR; it has no IPv4 or exit-node grant.
@@ -76,6 +81,9 @@
     // went private). Update if RDS's underlying host ever changes it.
     "hosts": {
         "nova-toll-rds": "172.31.83.200",
+        // execute-api endpoint vpce-0a618eb71eb2882b1, ENI eni-0bc7a43fe0b90c14c.
+        // Verified 2026-09-18; update the fixed workflow preflight too if replaced.
+        "tollchat-api-production": "172.31.225.174",
         // Current development RDS address, transported over site-1 4via6.
         "nova-toll-rds-development": "fd7a:115c:a1e0:b1a:0:1:ac1f:e1a2/128",
         // execute-api endpoint vpce-08cbfa8812c559801, ENI eni-010cdf8d107c97b30.
@@ -95,8 +103,11 @@
         },
         {
             "src":    "tag:ci",
-            "accept": ["nova-toll-rds:5432"],
+            "accept": ["nova-toll-rds:5432", "tollchat-api-production:443"],
             "deny":   [
+                "tollchat-api-production:22",
+                "tollchat-api-production:80",
+                "nova-toll-rds:443",
                 "nova-toll-rds-development:5432",
                 "tollchat-api-development:443",
                 "8.8.8.8:443",
@@ -107,6 +118,7 @@
             "src":    "tag:ci-development",
             "accept": ["nova-toll-rds-development:5432", "tollchat-api-development:443"],
             "deny":   [
+                "tollchat-api-production:443",
                 "nova-toll-rds:5432",
                 "nova-toll-rds-development:443",
                 "tollchat-api-development:22",
