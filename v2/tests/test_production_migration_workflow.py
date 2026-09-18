@@ -110,6 +110,81 @@ def _workflow_step(name: str) -> str:
     )
 
 
+@pytest.mark.parametrize(
+    "response,status,curl_status",
+    [
+        ('{"chatEnabled":true}', "200", 0),
+        ('{"chatEnabled":false}', "200", 0),
+        ('{"chatEnabled":"true"}', "200", 0),
+        ("{}", "200", 0),
+        ("PRIVATE_SENTINEL", "200", 0),
+        ('{"chatEnabled":true}', "302", 0),
+        ('{"chatEnabled":true}', "503", 0),
+        ('{"chatEnabled":true}', "200", 28),
+    ],
+)
+def test_fixed_private_api_preflight_stops_before_production_mutations(
+    tmp_path: Path, response: str, status: str, curl_status: int
+) -> None:
+    name = "Check fixed production private API connectivity"
+    steps = yaml.safe_load(WORKFLOW.read_text())["jobs"]["migrate"]["steps"]
+    preflight = next(i for i, step in enumerate(steps) if step.get("name") == name)
+    assert "tailscale/github-action@" in steps[preflight - 1]["uses"]
+    assert "if" not in steps[preflight]  # Both preparation and promotion.
+    assert steps[preflight]["timeout-minutes"] == 1
+    for protected in (
+        "Run fixed production migrations",
+        "Apply the one verified production plan and check readiness",
+    ):
+        assert preflight < next(
+            i for i, step in enumerate(steps) if step.get("name") == protected
+        )
+    (tmp_path / "trusted").symlink_to(ROOT, target_is_directory=True)
+    runner = tmp_path / "runner"
+    runner.mkdir()
+    binary = tmp_path / "bin"
+    binary.mkdir()
+    curl = binary / "curl"
+    curl.write_text(
+        f"#!{sys.executable}\n"
+        "import os, pathlib, sys\n"
+        "args = sys.argv[1:]\n"
+        "host = 'mxey1r2rhc-vpce-0a618eb71eb2882b1.execute-api.us-east-1.amazonaws.com'\n"
+        "assert args[-1] == f'https://{host}/preview/api/config'\n"
+        "for flag, value in {'--resolve':f'{host}:443:172.31.225.174', "
+        "'--connect-timeout':'5', '--max-time':'20', '--max-filesize':'65536', "
+        "'--noproxy':'*', '--proto':'=https', '--write-out':'%{http_code}'}.items():\n"
+        "    assert args[args.index(flag) + 1] == value\n"
+        "assert '--location' not in args and '-L' not in args\n"
+        "pathlib.Path(args[args.index('--output') + 1]).write_text(os.environ['RESPONSE'])\n"
+        "print('PRIVATE_SENTINEL', file=sys.stderr)\n"
+        "print(os.environ['STATUS'], end='')\n"
+        "sys.exit(int(os.environ['CURL_STATUS']))\n"
+    )
+    curl.chmod(0o700)
+    result = subprocess.run(
+        ["bash", "-c", _workflow_step(name)],
+        cwd=tmp_path,
+        env={
+            "PATH": str(binary) + os.pathsep + os.defpath,
+            "RUNNER_TEMP": str(runner),
+            "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+            "RESPONSE": response,
+            "STATUS": status,
+            "CURL_STATUS": str(curl_status),
+        },
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert "PRIVATE_SENTINEL" not in result.stdout + result.stderr
+    assert not (runner / "production-api-config.json").exists()
+    success = response == '{"chatEnabled":true}' and status == "200" and not curl_status
+    assert (result.returncode == 0) == success, result.stderr
+    assert ("status=pass" if success else "status=fail") in result.stderr
+
+
 def _admission() -> dict[str, object]:
     return {
         "release_id": 7,

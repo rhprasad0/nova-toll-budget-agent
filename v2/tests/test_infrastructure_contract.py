@@ -12064,6 +12064,29 @@ def test_development_foundation_runbook_shell_blocks_initialize_handoffs():
 SLICE_2A_POLICY = (REPO_ROOT / "infra" / "policy.hujson").read_text()
 
 
+def test_production_ci_private_api_grant_preserves_environment_isolation():
+    source = re.sub(r"//[^\n]*", "", SLICE_2A_POLICY)
+    policy = json.loads(re.sub(r",\s*([}\]])", r"\1", source))
+    assert policy["hosts"]["tollchat-api-production"] == "172.31.225.174"
+    grants = [grant for grant in policy["grants"] if grant["src"] == ["tag:ci"]]
+    assert grants == [
+        {"src": ["tag:ci"], "dst": ["172.31.0.0/16"], "ip": ["tcp:5432"]},
+        {"src": ["tag:ci"], "dst": ["tollchat-api-production"], "ip": ["tcp:443"]},
+    ]
+    tests = {test["src"]: test for test in policy["tests"]}
+    assert "tollchat-api-production:443" in tests["tag:ci"]["accept"]
+    assert {
+        "tollchat-api-production:22",
+        "tollchat-api-production:80",
+        "nova-toll-rds:443",
+        "tollchat-api-development:443",
+        "nova-toll-rds-development:5432",
+        "tollchat-preview-test:443",
+        "8.8.8.8:443",
+    } <= set(tests["tag:ci"]["deny"])
+    assert "tollchat-api-production:443" in tests["tag:ci-development"]["deny"]
+
+
 def _slice_2a_policy_sections(source: str) -> tuple[str, str, str]:
     tag_owners = re.search(r'"tagOwners"\s*:\s*\{(.*?)\n\s*\},', source, re.DOTALL)
     auto_approvers = re.search(
