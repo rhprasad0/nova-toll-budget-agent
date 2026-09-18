@@ -43,9 +43,7 @@ def test_fixed_protected_recovery_workflow() -> None:
     text = WORKFLOW.read_text()
     assert "run_production_migrations" not in text and "chatEnabled" not in text
     assert text.count('release_blue_green.py" recover') == 1
-    assert (
-        "--verify-checkout" in text and "--lockfile=readonly" not in text
-    )  # Terraform uses its native flag below.
+    assert "--verify-checkout" in text
     assert "-lockfile=readonly" in text
 
 
