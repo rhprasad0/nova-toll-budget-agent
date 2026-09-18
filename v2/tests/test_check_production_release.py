@@ -97,6 +97,95 @@ def test_stable_tag_rejects_prerelease_suffixes() -> None:
     assert not release.TAG.fullmatch("v1.2.3-rc.1")
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        "success",
+        "failure",
+        "cancelled",
+        "active",
+        "rerun",
+        "repository",
+        "branch",
+        "claim",
+        "candidate",
+        "bundle",
+        "version",
+        "state",
+    ],
+)
+def test_recovery_admission_is_read_only_and_requires_original_terminal_run(
+    monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    candidate = "a" * 40
+    payload = {
+        "release_id": 7,
+        "tag": "v1.2.3",
+        "candidate": candidate,
+        "listener_run": 11,
+        "listener_attempt": 1,
+        "consumer_run": 14,
+        "consumer_attempt": 1,
+    }
+    deployment = {
+        "sha": candidate,
+        "environment": "production-release",
+        "task": "production-release-plan",
+        "payload": payload,
+    }
+    consumer = {
+        "repository": {"full_name": release.REPOSITORY},
+        "path": ".github/workflows/v2-production-plan.yml@main",
+        "event": "workflow_run",
+        "head_branch": "main",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": change
+        if change in {"success", "failure", "cancelled"}
+        else "failure",
+    }
+    evidence = {"artifact_id": 42, "artifact_digest": "sha256:" + "b" * 64}
+    if change == "active":
+        consumer["status"] = "in_progress"
+    if change == "rerun":
+        consumer["run_attempt"] = 2
+    if change == "repository":
+        consumer["repository"] = {"full_name": "other/repo"}
+    if change == "branch":
+        consumer["head_branch"] = "other"
+    if change == "claim":
+        deployment["environment"] = "development-release"
+    if change == "candidate":
+        payload["candidate"] = "c" * 40
+    if change == "bundle":
+        evidence["artifact_digest"] = "bad"
+
+    def read_only(method: str, path: str) -> object:
+        assert (method, path) == ("GET", "deployments/99")
+        return deployment
+
+    monkeypatch.setattr(release, "api", read_only)
+    monkeypatch.setattr(
+        release, "_listener_event", lambda _: ({"id": 11, "head_sha": candidate}, {})
+    )
+    monkeypatch.setattr(release, "_release", lambda _: (7, "v1.2.3", candidate))
+    monkeypatch.setattr(release, "_run", lambda _: consumer)
+    monkeypatch.setattr(
+        release,
+        "_development",
+        lambda _: ({}, evidence, {"pricing": "1.4.0", "oracle": "1.15.0"}),
+    )
+    version = "null" if change == "version" else "exact-version"
+    state = "bad" if change == "state" else "d" * 64
+    if change in {"success", "failure", "cancelled"}:
+        result = release.recovery_admission("99", version, state)
+        assert result["candidate"] == candidate and result["bundle_id"] == 42
+        assert result["record_version"] == version
+    else:
+        with pytest.raises(release.AdmissionError):
+            release.recovery_admission("99", version, state)
+
+
 def test_saved_plan_rejects_valid_looking_wrong_bindings() -> None:
     now = datetime.now(UTC).replace(microsecond=0)
     admission: dict[str, Any] = {

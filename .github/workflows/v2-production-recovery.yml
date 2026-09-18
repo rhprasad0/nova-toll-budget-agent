@@ -1,0 +1,156 @@
+name: v2 production recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      claim_id:
+        description: Original numeric production deployment claim
+        required: true
+        type: string
+      record_version:
+        description: Exact version of the original private recovery record
+        required: true
+        type: string
+      expected_state_sha256:
+        description: Reviewed current Terraform lineage and serial hash
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v2-production-release-delivery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.repository == 'rhprasad0/nova-toll-budget-agent' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Verify original release and retained development evidence
+        id: admission
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLAIM_ID: ${{ inputs.claim_id }}
+          RECORD_VERSION: ${{ inputs.record_version }}
+          EXPECTED_STATE_SHA256: ${{ inputs.expected_state_sha256 }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          private="$RUNNER_TEMP/production-recovery"
+          mkdir "$private"
+          python3 trusted/v2/scripts/check_production_release.py recovery-admission \
+            --claim-id "$CLAIM_ID" --record-version "$RECORD_VERSION" \
+            --expected-state-sha256 "$EXPECTED_STATE_SHA256" --output "$private/admission.json"
+          jq -r '"candidate=\(.candidate)"' "$private/admission.json" >>"$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ steps.admission.outputs.candidate }}
+          path: candidate
+          persist-credentials: false
+      - name: Verify the original bundle against the original candidate checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          private="$RUNNER_TEMP/production-recovery"
+          admission="$private/admission.json"
+          bundle="$private/release.zip"
+          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/artifacts/$(jq -er .bundle_id "$admission")/zip" | dd of="$bundle" bs=1048576 count=513 iflag=fullblock status=none
+          test "$(stat -c %s "$bundle")" -le 536870912
+          python3 -c 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); sizes=[i.file_size for i in z.infolist()]; raise SystemExit(not sizes or max(sizes)>268435456 or sum(sizes)>536870912)' "$bundle"
+          python3 trusted/v2/scripts/verify_release_bundle.py verify \
+            --archive "$bundle" --output "$GITHUB_WORKSPACE/candidate/release-overlay" \
+            --root "$GITHUB_WORKSPACE/candidate" --verify-checkout \
+            --expected-digest "$(jq -er .bundle_digest "$admission")" \
+            --commit "$(jq -er .candidate "$admission")" \
+            --pricing-version "$(jq -er .schema_versions.pricing "$admission")" \
+            --oracle-version "$(jq -er .schema_versions.oracle "$admission")" \
+            >"$private/bundle.log" 2>&1
+          cp -a candidate/release-overlay/v2/agent/. candidate/v2/agent/
+          cp candidate/release-overlay/v2/analytics/agent_registry.ndjson candidate/v2/analytics/agent_registry.ndjson
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
+        with:
+          terraform_wrapper: false
+          terraform_version: 1.15.8
+      - uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888
+        with:
+          oauth-client-id: ${{ secrets.TS_PRODUCTION_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_PRODUCTION_OAUTH_SECRET }}
+          tags: tag:ci
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        with:
+          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-deploy
+          aws-region: us-east-1
+          unset-current-credentials: true
+      - name: Restore retained routing once and verify both ingress paths
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          private="$RUNNER_TEMP/production-recovery"
+          admission="$private/admission.json"
+          trap 'unset CLOUDFLARE_API_TOKEN' EXIT
+          aws sts get-caller-identity >"$private/caller.json"
+          jq -e '.Account == "920534282028" and (.Arn | test("^arn:aws:sts::920534282028:assumed-role/nova-toll-production-deploy/"))' "$private/caller.json" >/dev/null
+          aws ssm get-parameter --name /nova-toll/cloudflare-read-api-token --with-decryption --query Parameter.Value --output text >"$private/cloudflare-token"
+          CLOUDFLARE_API_TOKEN="$(<"$private/cloudflare-token")"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          export CLOUDFLARE_API_TOKEN
+          terraform -chdir=v2/infra init -input=false -lockfile=readonly -backend-config=backend.production.hcl >"$private/init.log" 2>&1
+          export CANARY_ARTIFACT_ID="$(jq -er .bundle_id "$admission")"
+          export CANARY_ARTIFACT_DIGEST="$(jq -er .bundle_digest "$admission")"
+          status=0
+          python3 "$GITHUB_WORKSPACE/trusted/v2/scripts/release_blue_green.py" recover \
+            --environment production --terraform-root v2/infra --bundle-root release-overlay \
+            --foundation-vars "$private/foundation.tfvars.json" --work-dir "$private/controller" \
+            --claim "$(jq -er .claim_id "$admission")" --release-id "$(jq -er .candidate "$admission")" \
+            --record-version "$(jq -er .record_version "$admission")" \
+            --expected-state-sha256 "$(jq -er .expected_state_sha256 "$admission")" \
+            --output "$private/result.json" >"$private/recovery.log" 2>&1 || status=$?
+          # The deployment stays failed even when this recovery operation succeeds.
+          test "$status" -eq 1
+          jq -e --slurpfile context "$private/controller/context.json" '
+            .deployment == "failed" and .recovery == "recovered" and
+            .active == $context[0].prepared.active and
+            (.releases | keys) == ["blue", "green"] and
+            (.releases == ($context[0].prepared.slots | map_values({release_id,proxy_arn,proxy_version,runtime_arn,runtime_version,endpoint,asset_prefix})))
+          ' "$private/result.json" >/dev/null
+      - name: Retain sanitized recovery outcome and clear private material
+        if: always()
+        run: |
+          set -euo pipefail
+          private="$RUNNER_TEMP/production-recovery"
+          if test -f "$private/result.json"; then
+            jq '{deployment,recovery,active,releases,recovery_record}' "$private/result.json" >"$RUNNER_TEMP/production-recovery-result.json"
+            cat "$RUNNER_TEMP/production-recovery-result.json" >>"$GITHUB_STEP_SUMMARY"
+          fi
+          rm -rf -- "$private" "$GITHUB_WORKSPACE/candidate/release-overlay" "$GITHUB_WORKSPACE/candidate/v2/infra/.terraform"
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN; do
+            unset "$name" || true
+            printf '%s=\n' "$name" >>"$GITHUB_ENV"
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: v2-production-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/production-recovery-result.json
+          if-no-files-found: ignore
+          retention-days: 90

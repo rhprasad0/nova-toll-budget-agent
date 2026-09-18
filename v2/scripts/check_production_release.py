@@ -678,6 +678,65 @@ def verify_cutover_environment() -> dict[str, str]:
     return {"cutover_protection": "verified"}
 
 
+def recovery_admission(
+    claim_id: str, record_version: str, expected_state_sha256: str
+) -> dict[str, Any]:
+    """Read the original claim without claiming or retrying a release."""
+    identity = _positive(claim_id)
+    if (
+        not re.fullmatch(r"[!-~]{1,1024}", record_version)
+        or record_version == "null"
+        or not re.fullmatch(r"[0-9a-f]{64}", expected_state_sha256)
+    ):
+        raise AdmissionError("recovery_identity")
+    deployment = _mapping(api("GET", f"deployments/{identity}"))
+    payload = deployment.get("payload")
+    if isinstance(payload, str):
+        payload = _load(payload.encode())
+    payload = _mapping(payload)
+    candidate = _sha(deployment.get("sha"))
+    listener, release = _listener_event(_positive(payload.get("listener_run")))
+    release_id, tag, released_candidate = _release(release)
+    consumer_id = _positive(payload.get("consumer_run"))
+    consumer = _run(consumer_id)
+    if (
+        deployment.get("environment") != PRODUCTION_ENVIRONMENT
+        or deployment.get("task") != "production-release-plan"
+        or candidate != released_candidate
+        or listener.get("head_sha") != candidate
+        or payload
+        != {
+            "release_id": release_id,
+            "tag": tag,
+            "candidate": candidate,
+            "listener_run": _positive(listener.get("id")),
+            "listener_attempt": 1,
+            "consumer_run": consumer_id,
+            "consumer_attempt": 1,
+        }
+        or _mapping(consumer.get("repository")).get("full_name") != REPOSITORY
+        or consumer.get("path", "").split("@", 1)[0]
+        != ".github/workflows/v2-production-plan.yml"
+        or consumer.get("event") != "workflow_run"
+        or consumer.get("head_branch") != "main"
+        or consumer.get("run_attempt") != 1
+        or consumer.get("status") != "completed"
+        or consumer.get("conclusion")
+        not in {"success", "failure", "cancelled", "timed_out"}
+    ):
+        raise AdmissionError("recovery_provenance")
+    _, evidence, versions = _development(candidate)
+    return {
+        "claim_id": identity,
+        "candidate": candidate,
+        "bundle_id": _positive(evidence.get("artifact_id")),
+        "bundle_digest": _digest(evidence.get("artifact_digest")),
+        "schema_versions": versions,
+        "record_version": record_version,
+        "expected_state_sha256": expected_state_sha256,
+    }
+
+
 def _timestamp(value: object) -> datetime:
     if not isinstance(value, str):
         raise AdmissionError("malformed")
@@ -808,6 +867,11 @@ def _parser() -> argparse.ArgumentParser:
     revalidate_command.add_argument("--output", type=Path, required=True)
     cutover = commands.add_parser("cutover-environment")
     cutover.add_argument("--output", type=Path, required=True)
+    recovery = commands.add_parser("recovery-admission")
+    recovery.add_argument("--claim-id", required=True)
+    recovery.add_argument("--record-version", required=True)
+    recovery.add_argument("--expected-state-sha256", required=True)
+    recovery.add_argument("--output", type=Path, required=True)
     saved_plan = commands.add_parser("validate-saved-plan")
     saved_plan.add_argument("--admission", type=Path, required=True)
     saved_plan.add_argument("--saved-plan", type=Path, required=True)
@@ -820,6 +884,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     try:
         if args.command == "cutover-environment":
             result = verify_cutover_environment()
+        elif args.command == "recovery-admission":
+            result = recovery_admission(
+                args.claim_id, args.record_version, args.expected_state_sha256
+            )
         elif args.command == "admit":
             result = admit(
                 args.event_file,
