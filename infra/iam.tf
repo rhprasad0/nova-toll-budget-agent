@@ -1996,7 +1996,7 @@ locals {
     })
     data = jsonencode({
       Version   = "2012-10-17"
-      Statement = concat(slice(local.production_delivery_application_policy_statements, 17, 24), [local.production_delivery_dynamodb_default_key_statement])
+      Statement = concat(slice(local.production_delivery_application_policy_statements, 17, 24), [local.production_delivery_dynamodb_default_key_statement, local.production_delivery_alerts_key_statement])
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
