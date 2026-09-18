@@ -1,0 +1,81 @@
+{
+  "evidence_type": "simulated-controller-tests",
+  "live_rehearsal": false,
+  "command": "cd v2 && python -m pytest tests/test_blue_green.py -q",
+  "scenarios": [
+    {
+      "active": "green",
+      "applied_phases": [
+        "prepare",
+        "promote"
+      ],
+      "deployment": "succeeded",
+      "mode": "simulated",
+      "probes": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "recovery": "not_attempted",
+      "scenario": "healthy"
+    },
+    {
+      "active": "blue",
+      "applied_phases": [
+        "prepare"
+      ],
+      "deployment": "failed",
+      "mode": "simulated",
+      "probes": [],
+      "recovery": "not_attempted",
+      "scenario": "invalid_candidate"
+    },
+    {
+      "active": "blue",
+      "applied_phases": [
+        "prepare",
+        "promote",
+        "recover"
+      ],
+      "deployment": "failed",
+      "mode": "simulated",
+      "probes": [
+        false,
+        false
+      ],
+      "recovery": "recovered",
+      "scenario": "post_promotion_failure"
+    },
+    {
+      "active": "blue",
+      "applied_phases": [
+        "prepare",
+        "promote",
+        "recover"
+      ],
+      "deployment": "failed",
+      "mode": "simulated",
+      "probes": [],
+      "recovery": "recovered",
+      "scenario": "partial_switch"
+    },
+    {
+      "active": "green",
+      "applied_phases": [
+        "prepare",
+        "promote",
+        "recover"
+      ],
+      "deployment": "failed",
+      "mode": "simulated",
+      "probes": [
+        false,
+        false
+      ],
+      "recovery": "failed",
+      "scenario": "restore_failure"
+    }
+  ]
+}

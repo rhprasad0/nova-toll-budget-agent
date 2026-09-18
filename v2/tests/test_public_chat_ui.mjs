@@ -162,3 +162,16 @@ test("public report routes rewrite toll directories with or without trailing sla
     assert.equal(context.rewrite({ request: { method: "GET", uri } }).uri, expected);
   }
 });
+
+test("release changes show the restart message without replaying the prompt", async () => {
+  let calls = 0;
+  const messages = [];
+  await runRequest(async () => {
+    calls += 1;
+    const error = new Error("The application was updated. Start a new conversation.");
+    error.code = "session_expired";
+    throw error;
+  }, () => assert.fail("must use restart path"), () => {}, (error) => messages.push(error.message));
+  assert.equal(calls, 1);
+  assert.deepEqual(messages, ["The application was updated. Start a new conversation."]);
+});

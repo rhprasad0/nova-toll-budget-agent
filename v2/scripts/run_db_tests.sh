@@ -878,18 +878,23 @@ BEGIN
 END $$;
 UPDATE pricing.schema_version SET version = '1.3.0' WHERE singleton;
 SQL
-psql --dbname "$bootstrap_db" --file v2/tests/pricing_analysis_contract.sql
-psql --dbname "$bootstrap_db" --file v2/tests/pricing_ballpark_contract.sql
-psql --dbname "$bootstrap_db" --file v2/tests/monotonic_upsert_contract.sql
-psql --dbname "$bootstrap_db" --file v2/tests/oracle_restore_contract.sql
-psql --dbname "$bootstrap_db" --file v2/tests/oracle_route_contract.sql
-psql --dbname "$bootstrap_db" --file v2/tests/oracle_prompt_points_contract.sql
-psql --dbname "$bootstrap_db" --file v2/tests/oracle_pricing_route_contract.sql
-psql --dbname "$bootstrap_db" --file v2/tests/oracle_i66_pricing_contract.sql
-psql --dbname "$bootstrap_db" --file v2/tests/oracle_i95_pricing_contract.sql
-psql --dbname "$bootstrap_db" --file v2/tests/oracle_ballpark_contract.sql
-psql --dbname "$bootstrap_db" --file v2/tests/oracle_report_contract.sql
-psql --dbname "$bootstrap_db" --file v2/tests/oracle_security_contract.sql
+# Run both retained application contracts against the same upgraded disposable
+# schema. Contract fixtures roll back their data; the database is never downgraded.
+retained_contracts="$migration_source_dir/retained-contracts"
+mkdir "$retained_contracts"
+git archive "$base_ref" v2/tests | tar -x --directory "$retained_contracts"
+for contracts in "$retained_contracts/v2/tests" v2/tests; do
+  for contract in pricing_analysis pricing_ballpark monotonic_upsert oracle_restore \
+    oracle_route oracle_prompt_points oracle_pricing_route oracle_i66_pricing \
+    oracle_i95_pricing oracle_ballpark oracle_report oracle_security; do
+    case "$contract" in
+      oracle_prompt_points|oracle_report|oracle_security)
+        psql --dbname "$bootstrap_db" --command BEGIN \
+          --file "$contracts/${contract}_contract.sql" --command ROLLBACK ;;
+      *) psql --dbname "$bootstrap_db" --file "$contracts/${contract}_contract.sql" ;;
+    esac
+  done
+done
 
 psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
 UPDATE oracle.schema_version SET version = '0.9.0' WHERE singleton;

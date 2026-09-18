@@ -131,6 +131,8 @@ BUNDLE_FIXED_INPUTS = {
     "v2/db/oracle/data.sql",
 }
 BUNDLE_OPTIONAL_INPUTS = {
+    "v2/scripts/blue_green.py",
+    "v2/scripts/release_blue_green.py",
     "v2/scripts/check_development_admission.py",
     "v2/scripts/check_development_release.py",
     "v2/scripts/classify_deployment_error.py",

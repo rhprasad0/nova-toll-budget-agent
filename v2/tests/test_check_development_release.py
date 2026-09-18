@@ -1147,3 +1147,59 @@ def test_redirect_and_oversized_response_fail_closed(
     with pytest.raises(ValueError):
         check.request(http.cookiejar.CookieJar(), "/api/config")
     assert "reason=response_size" in capsys.readouterr().err
+
+
+def test_development_private_transport_preserves_tls_hostname(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import Mock
+
+    hostname = "api123-vpce-0123.execute-api.us-east-1.amazonaws.com"
+    monkeypatch.setattr(check, "profile_site", "https://" + hostname)
+    monkeypatch.setattr(check, "profile_production", False)
+    monkeypatch.setattr(check, "profile_path_prefix", "/preview")
+    monkeypatch.setattr(
+        check.socket, "gethostbyname", Mock(return_value="172.31.225.49")
+    )
+    connect = Mock()
+    monkeypatch.setattr(check.socket, "create_connection", connect)
+    connection = check.DevelopmentPrivateConnection(hostname, timeout=7)
+    context = check.ssl.create_default_context()
+    assert context.check_hostname and context.verify_mode == check.ssl.CERT_REQUIRED
+    tls = Mock(wraps=context)
+    tls.wrap_socket = Mock()
+    monkeypatch.setattr(check.ssl, "create_default_context", Mock(return_value=tls))
+    connection.connect()
+    assert tls.minimum_version == check.ssl.TLSVersion.TLSv1_2
+    connect.assert_called_once_with(("fd7a:115c:a1e0:b1a:0:1:ac1f:e131", 443), 7)
+    tls.wrap_socket.assert_called_once_with(
+        connect.return_value, server_hostname=hostname
+    )
+
+    connect.reset_mock()
+    monkeypatch.setattr(check.socket, "gethostbyname", Mock(return_value="1.2.3.4"))
+    with pytest.raises(check.CheckFailure, match="private_transport_ip"):
+        connection.connect()
+    connect.assert_not_called()
+    monkeypatch.setattr(check, "profile_production", True)
+    with pytest.raises(check.CheckFailure, match="private_transport_host"):
+        connection.connect()
+
+
+def test_public_post_pacing_leaves_private_transport_unpaced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import Mock
+
+    sleep = Mock()
+    monkeypatch.setattr(check.time, "sleep", sleep)
+    monkeypatch.setattr(check.time, "monotonic", lambda: 110.0)
+    monkeypatch.setattr(check, "public_post_spacing", 35.0)
+    monkeypatch.setattr(check, "last_public_post", 100.0)
+    monkeypatch.setattr(check, "profile_path_prefix", "")
+    check.wait_for_public_post()
+    sleep.assert_called_once_with(25.0)
+    sleep.reset_mock()
+    monkeypatch.setattr(check, "profile_path_prefix", "/preview")
+    check.wait_for_public_post()
+    sleep.assert_not_called()

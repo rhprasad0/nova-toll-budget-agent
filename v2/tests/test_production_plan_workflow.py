@@ -11,10 +11,52 @@ from typing import Any, cast
 import pytest
 import yaml
 
+from tests.test_blue_green import gate, plan, previous
+
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/v2-production-plan.yml"
 MIGRATION_WORKFLOW = ROOT / ".github/workflows/v2-production-migrations.yml"
 KMS = "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7"
+
+
+def test_production_cutover_requires_a_separate_human_gate_after_preparation() -> None:
+    jobs = yaml.safe_load(WORKFLOW.read_text())["jobs"]
+    assert jobs["prepare"]["with"]["phase"] == "prepare-production"
+    approval = jobs["approve-cutover"]
+    assert approval["needs"] == "prepare"
+    assert approval["environment"] == "production-cutover"
+    assert approval["permissions"] == {}
+    assert "approve-cutover" in jobs["migrate"]["needs"]
+    assert "needs.approve-cutover.result == 'success'" in jobs["migrate"]["if"]
+    assert jobs["migrate"]["with"]["phase"] == "promote-production"
+    assert (
+        jobs["migrate"]["with"]["prepared"] == "${{ needs.prepare.outputs.prepared }}"
+    )
+    steps = yaml.safe_load(MIGRATION_WORKFLOW.read_text())["jobs"]["migrate"]["steps"]
+    for step in steps:
+        if (
+            step.get("id") == "saved-plan"
+            or step.get("name")
+            in {
+                "Verify exact saved plan and state before migration",
+                "Revalidate exact saved plan and state before apply",
+                "Run fixed production migrations",
+                "Fetch pinned RDS CA bundle",
+            }
+            or step.get("with", {})
+            .get("role-to-assume", "")
+            .endswith("production-migrations")
+        ):
+            assert step["if"] == "inputs.phase == 'prepare-production'"
+    protection = next(
+        i
+        for i, step in enumerate(steps)
+        if "cutover-environment" in step.get("run", "")
+    )
+    first_credentials = next(
+        i for i, step in enumerate(steps) if "role-to-assume" in step.get("with", {})
+    )
+    assert protection < first_credentials
 
 
 def _step(name: str) -> str:
@@ -52,6 +94,16 @@ name = pathlib.Path(sys.argv[0]).name
 print("PRIVATE_SENTINEL", file=sys.stderr)
 def value(flag):
     return args[args.index(flag) + 1]
+if name == "python3":
+    if any("release_blue_green.py" in arg for arg in args):
+        assert value("--environment") == "production"
+        assert value("--claim") == "14"
+        if mode == "plan": sys.exit(18)
+        work = pathlib.Path(value("--work-dir")); work.mkdir()
+        (work / "prepare.tfplan").write_bytes(b"PRIVATE_PLAN")
+        (work / "previous.json").write_text(os.environ["PREVIOUS"])
+        sys.exit(0)
+    os.execv(sys.executable, [sys.executable, *args])
 if name == "jq":
     if mode == "summary" and "release_id" in args:
         sys.exit(17)
@@ -96,7 +148,7 @@ elif name == "terraform":
             sys.exit(18)
         pathlib.Path(next(arg.split("=", 1)[1] for arg in args if arg.startswith("-out="))).write_bytes(b"PRIVATE_PLAN")
     elif "show" in args:
-        plan = {"resource_changes": [{"address": "aws_s3_bucket.site", "mode": "managed", "provider_name": "registry.terraform.io/hashicorp/aws", "change": {"actions": ["no-op"], "after_unknown": {}}}], "output_changes": {}}
+        plan = json.loads(os.environ["PLAN_DOCUMENT"])
         if mode == "validator":
             plan["resource_drift"] = [{"private-malicious-plan-value": "PRIVATE_SENTINEL"}]
         print(json.dumps(plan))
@@ -115,7 +167,7 @@ def _environment(tmp_path: Path, failure: str) -> dict[str, str]:
     temporary.mkdir()
     binary = tmp_path / "bin"
     binary.mkdir()
-    for name in ("aws", "terraform", "jq"):
+    for name in ("aws", "terraform", "jq", "python3"):
         path = binary / name
         path.write_text(f"#!{sys.executable}\n" + FAKE_COMMAND)
         path.chmod(0o700)
@@ -156,6 +208,8 @@ def _environment(tmp_path: Path, failure: str) -> dict[str, str]:
     return {
         "PATH": str(binary) + os.pathsep + os.defpath,
         "REAL_JQ": jq,
+        "PREVIOUS": json.dumps(previous()),
+        "PLAN_DOCUMENT": json.dumps(plan(gate.desired(previous()))),
         "FAILURE": failure,
         "GITHUB_WORKSPACE": str(tmp_path),
         "RUNNER_TEMP": str(temporary),
@@ -241,7 +295,7 @@ def test_actual_planner_shell_fails_privately_and_saves_exact_evidence(
         assert result.stderr.count("status=fail") == 1, result.stderr
         assert f"stage={stage} status=fail" in result.stderr
         if failure == "validator":
-            assert result.stdout == "production_plan_rejection=drift\n"
+            assert result.stdout == ""
             assert "private-malicious-plan-value" not in result.stdout + result.stderr
         if failure in {"account", "plan", "validator", "upload"}:
             assert not (tmp_path / "uploaded").exists()

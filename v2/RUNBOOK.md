@@ -443,6 +443,8 @@ historical objects remain pending a separately approved retirement procedure.
 
 Use only the procedure that owns the intended operation:
 
+- [Blue-green development delivery and application recovery](runbooks/blue-green-deployments.md)
+  requires its separately reviewed bootstrap before activation.
 - [Development application release and database validation (#331)](runbooks/development-release.md)
   is the operative development release path.
 - [Development bootstrap/import boundary (#332)](runbooks/development-bootstrap-import.md)

@@ -40,6 +40,14 @@ app if it would actually help.
 
 # Coding agents
 
+For a pre-release review, ask Codex to use `pre_release_reviewer`, defined in
+`.codex/agents/pre_release_reviewer.toml`. Example: "Use pre_release_reviewer to
+review candidate <SHA> against deployed production <SHA>, and recommend checks
+that would catch production failures before rollout." Supply release/plan evidence
+when available. The agent reviews and recommends; it does not deploy or act as an
+automatic CI gate. Start a new Codex session in the checkout containing the agent.
+This reviewer uses `gpt-6-astra` with `high` reasoning effort.
+
 The Root model and reasoning effort remain selected by the host/user; do not pin
 them in repository config.
 
