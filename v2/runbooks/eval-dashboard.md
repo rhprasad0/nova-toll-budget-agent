@@ -1,7 +1,7 @@
 # Scheduled evaluation dashboard
 
-The public route is `/eval-dashboard` in both environments. Development publishes
-first; production activation and release remain separate work.
+The public route is `/eval-dashboard` in both environments. Each environment publishes
+its own snapshot; production requires the activation prerequisite below.
 
 The timed-check Lambda records each scheduled occurrence in
 `pricing.evaluation_runs`, then publishes `evals.json` to the existing site bucket
@@ -54,8 +54,8 @@ user chat sessions. Postgres retains history; the public window is seven days.
 The production migration boundary now includes 033, targeting pricing 1.4.0 and
 Oracle 1.15.0. Before publishing a production release, complete the
 [release schema preflight](../manual-releases/README.md#2-check-schemas-before-publishing)
-and the fixed writer prerequisite below. Dashboard runtime activation and snapshot
-publication permissions remain separate work. Development data is never copied there.
+and the fixed writer prerequisite below. Complete the production runtime activation
+below before treating the dashboard as ready. Development data is never copied there.
 
 ### Fixed development role prerequisite
 
@@ -115,6 +115,45 @@ creates no application tables and runs no schema migration. Migration 033 grants
 only schema usage and SELECT/INSERT/UPDATE on `pricing.evaluation_runs` through
 the protected release workflow. Runtime AWS IAM and snapshot publication are
 not activated by this bootstrap.
+
+## Production runtime activation
+
+A successful site release or scheduled evaluation does not prove publication is
+active. Before declaring the production dashboard ready, verify all three layers:
+pricing 1.4.0 with `pricing.evaluation_runs` and the fixed `eval_writer` grants;
+the Lambda configuration and IAM below; and publication from a real scheduled run.
+Use bounded read-only database checks through the existing TLS-verified production
+connection. Do not rerun role bootstrap or migration 033 to activate the runtime.
+
+1. Prepare a private saved production Terraform plan from the reviewed source,
+   with the **currently deployed packages** and the production backend/account
+   (`920534282028`). Target only `aws_iam_role_policy.timed_checks_lambda` and
+   `aws_lambda_function.timed_checks`. Review dependency-expanded actions too.
+2. Require exactly three added IAM statements: `ConnectEvaluationHistory` for
+   the production RDS resource's `eval_writer`; `PublishEvaluationSnapshot` for
+   `s3:PutObject` on `tollchat-site-920534282028/evals.json`; and
+   `EncryptEvaluationSnapshot` for `kms:GenerateDataKey`/`kms:Decrypt` on the
+   production site key. Require exactly two added Lambda variables:
+   `EVAL_DB_USER=eval_writer` and
+   `EVAL_DASHBOARD_BUCKET=tollchat-site-920534282028`.
+3. Reject removed or changed existing variables/permissions, package changes,
+   unrelated changes, deletes, replacements, or changes to development. Ordinary
+   release identities and finite plan guards remain unchanged. Complete CI and
+   human review through a PR; after merge, an authorized administrator applies
+   this exact saved plan before the next protected production release. If the
+   source, deployed packages, or state changed since review, regenerate and
+   review the plan first. Never apply it alongside another deployment.
+4. Verify the Lambda is Active with a successful update, the exact variables and
+   permissions, and the unchanged code hash. On the next real scheduled run,
+   verify `evals.json` exists, declares `environment=production`, and contains
+   the scheduled occurrence, three verdicts, conversation, and tool evidence.
+   Confirm the public dashboard renders that occurrence and development remains
+   unchanged. A successful `timed_checks_result` alone is insufficient.
+
+There is no historical backfill: evaluations run before activation did not store
+public dashboard evidence. Do not manually invoke an old occurrence to fabricate
+it. If activation must be reverted, review a fresh private plan restoring only
+these two resources' prior configuration; retain the history table and grants.
 
 ## Local checks
 

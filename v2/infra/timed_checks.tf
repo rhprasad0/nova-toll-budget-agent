@@ -1,4 +1,5 @@
 locals {
+  eval_db_user               = local.is_production ? "eval_writer" : "eval_writer_development"
   timed_checks_zip_hash      = var.timed_checks_package_path != "" ? filebase64sha256(var.timed_checks_package_path) : ""
   timed_check_alerts_enabled = local.is_production || var.enable_development_timed_check_alerts
   timed_check_schedules = {
@@ -77,29 +78,20 @@ resource "aws_iam_role_policy_attachment" "timed_checks_lambda_vpc" {
 }
 
 data "aws_iam_policy_document" "timed_checks_lambda" {
-  dynamic "statement" {
-    for_each = local.is_development ? [1] : []
-    content {
-      sid       = "ConnectEvaluationHistory"
-      actions   = ["rds-db:connect"]
-      resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/eval_writer_development"]
-    }
+  statement {
+    sid       = "ConnectEvaluationHistory"
+    actions   = ["rds-db:connect"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.eval_db_user}"]
   }
-  dynamic "statement" {
-    for_each = local.is_development ? [1] : []
-    content {
-      sid       = "PublishEvaluationSnapshot"
-      actions   = ["s3:PutObject"]
-      resources = ["${aws_s3_bucket.site.arn}/evals.json"]
-    }
+  statement {
+    sid       = "PublishEvaluationSnapshot"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.site.arn}/evals.json"]
   }
-  dynamic "statement" {
-    for_each = local.is_development ? [1] : []
-    content {
-      sid       = "EncryptEvaluationSnapshot"
-      actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
-      resources = [aws_kms_key.site.arn]
-    }
+  statement {
+    sid       = "EncryptEvaluationSnapshot"
+    actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
+    resources = [aws_kms_key.site.arn]
   }
   statement {
     sid       = "DescribeRdsEndpoint"
@@ -261,10 +253,9 @@ resource "aws_lambda_function" "timed_checks" {
       DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"
       TIMED_CHECK_ALERTS_ENABLED = tostring(local.timed_check_alerts_enabled)
       ENVIRONMENT                = var.environment
-      }, local.is_development ? {
-      EVAL_DASHBOARD_BUCKET = aws_s3_bucket.site.id
-      EVAL_DB_USER          = "eval_writer_development"
-      } : {}, local.timed_check_alerts_enabled ? {
+      EVAL_DASHBOARD_BUCKET      = aws_s3_bucket.site.id
+      EVAL_DB_USER               = local.eval_db_user
+      }, local.timed_check_alerts_enabled ? {
       ALERTS_TOPIC_ARN = var.foundation.alerts_topic_arn
     } : {})
   }
