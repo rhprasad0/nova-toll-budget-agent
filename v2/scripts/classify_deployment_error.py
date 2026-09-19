@@ -8,6 +8,20 @@ import sys
 from pathlib import Path
 
 MAX_BYTES = 64 * 1024
+GATE_REASONS = (
+    "public_chat_identity",
+    "public_chat_code",
+    "phase_boundary",
+    "field_boundary",
+    "cost_release_boundary",
+    "unknown_target",
+    "provider",
+    "false_noop",
+    "moved_or_duplicate",
+    "action",
+    "release_output",
+    "gate_rejected",
+)
 REASONS = (
     "access_denied",
     "expired_credentials",
@@ -21,6 +35,7 @@ REASONS = (
     "malformed_input",
     "unclassified",
     "diagnostic_unavailable",
+    *GATE_REASONS,
 )
 
 PATTERNS = (
@@ -126,6 +141,12 @@ def classify(paths: list[str]) -> str:
 
 
 def classify_text(text: str) -> str:
+    # Only exact, finite markers emitted by the release gate may cross the
+    # private-log boundary. Never echo exception text or arbitrary reason values.
+    for line in text.splitlines():
+        for reason in GATE_REASONS:
+            if line == f"deployment_gate_reason={reason}":
+                return reason
     lowered = text.casefold()
     for reason, patterns in PATTERNS:
         if any(re.search(pattern, lowered) for pattern in patterns):

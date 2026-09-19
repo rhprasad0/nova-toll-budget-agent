@@ -172,6 +172,78 @@ def test_preparation_rejects_active_and_shared_mutations(address: str) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "fault",
+    [
+        None,
+        "old_code",
+        "new_code",
+        "identity",
+        "runtime",
+        "unknown_code",
+        "action",
+        "production",
+        "promote",
+        "recover",
+    ],
+)
+def test_only_reviewed_development_chat_annotation_transition(
+    fault: str | None,
+) -> None:
+    code = (
+        Path(__file__).resolve().parents[1] / "agent/public-api-gate.js"
+    ).read_text()
+    # The reviewed change adds exactly one JSDoc line to the original handler.
+    original = code.split("\n", 1)[1]
+    before = previous()
+    if fault == "production":
+        for value in before["slots"].values():
+            value["proxy_arn"] = value["proxy_arn"].replace(
+                "903859731897", "920534282028"
+            )
+    phase = fault if fault in {"promote", "recover"} else "prepare"
+    inputs = (
+        gate.desired(before, slot("green", "release2"))
+        if phase == "prepare"
+        else gate.desired(before, promote=True)
+    )
+    config = {
+        "name": "tollchat-v2-public-chat-routes-dev",
+        "arn": "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-chat-routes-dev",
+        "runtime": "cloudfront-js-2.0",
+        "publish": True,
+        "code": original,
+        "etag": "old",
+        "live_stage_etag": "old",
+        "status": "DEPLOYED",
+    }
+    updated = dict(config, code=code, etag=None, live_stage_etag=None, status=None)
+    mutation = change(
+        "aws_cloudfront_function.public_chat_routes",
+        config,
+        updated,
+        unknown={"etag": True, "live_stage_etag": True, "status": True},
+    )
+    if fault == "old_code":
+        config["code"] = original + "\n"
+    elif fault == "new_code":
+        updated["code"] = code + "\n"
+    elif fault == "identity":
+        config["name"] = updated["name"] = "another-function"
+    elif fault == "runtime":
+        updated["runtime"] = "cloudfront-js-1.0"
+    elif fault == "unknown_code":
+        mutation["change"]["after_unknown"]["code"] = True
+    elif fault == "action":
+        mutation["change"]["actions"] = ["delete", "create"]
+    document = plan(inputs, [mutation], prior=before)
+    if fault is None:
+        assert gate.validate_plan(document, before, phase)["mutations"] == 1
+    else:
+        with pytest.raises(gate.Rejected):
+            gate.validate_plan(document, before, phase)
+
+
 @pytest.mark.parametrize("phase", ["promote", "recover"])
 def test_routing_phases_reject_rebuilds_and_unrelated_changes(phase: str) -> None:
     before = previous()
