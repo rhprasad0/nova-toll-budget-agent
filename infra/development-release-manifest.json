@@ -516,6 +516,14 @@
       ]
     },
     {
+      "address": "aws_cloudfront_function.public_chat_routes",
+      "action": "update",
+      "operation_class": "cloudfront-code",
+      "changed_fields": [
+        "code"
+      ]
+    },
+    {
       "address": "aws_cloudfront_function.public_report_routes",
       "action": "update",
       "operation_class": "cloudfront-code",
@@ -1004,6 +1012,18 @@
       "address": "aws_cloudwatch_metric_alarm.telemetry_pii[\"preview\"]",
       "action": "cloudwatch:UntagResource",
       "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-pii-findings-preview-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudfront_function.public_chat_routes",
+      "action": "cloudfront:UpdateFunction",
+      "resource": "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-chat-routes-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudfront_function.public_chat_routes",
+      "action": "cloudfront:PublishFunction",
+      "resource": "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-chat-routes-dev",
       "conditions": {}
     },
     {
