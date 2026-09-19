@@ -22,6 +22,7 @@ dev = [
     "ruff",
     "strands-agents-evals==1.1.0",
     "tiktoken==0.14.0",
+    "types-boto3[bedrock-agentcore,bedrock-runtime,ce,cloudwatch,events,iam,logs,rds,s3,ssm,sts]==1.43.72",
 ]
 
 [tool.pyright]
@@ -30,17 +31,23 @@ include = [".", "../infra"]
 extraPaths = [".", "..", "scripts", "../infra"]
 venvPath = "."
 venv = ".venv"
+executionEnvironments = [
+  {root = "lambdas/fetcher", extraPaths = ["lambdas/fetcher", ".", ".."]},
+  {root = "lambdas/loader", extraPaths = ["lambdas/loader", ".", ".."]},
+  {root = ".", extraPaths = [".", "..", "scripts", "../infra"]},
+  {root = "../infra", extraPaths = [".", "..", "scripts", "../infra"]},
+]
 reportMissingTypeStubs = false
-exclude = ["**/__pycache__", ".venv", "infra/build", "lambdas/fetcher/tests", "lambdas/loader/tests", "lambdas/publisher/tests"]
+reportUnnecessaryTypeIgnoreComment = true
+exclude = ["**/__pycache__", ".venv", "infra/build", "**/node_modules"]
 
 [tool.ruff]
+# Resolve application and shared infrastructure imports when invoked from v2.
+src = [".", ".."]
 extend-exclude = ["infra/build"]
 
 [tool.ruff.lint]
 select = ["ANN", "B", "DTZ", "E4", "E7", "E9", "F", "I", "RUF", "SIM", "UP"]
-
-[tool.ruff.lint.per-file-ignores]
-"**/tests/*.py" = ["ANN"]
 
 [tool.pytest.ini_options]
 addopts = '-m "not live"'

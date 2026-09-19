@@ -1052,6 +1052,25 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                         validate_plan(plan, manifest)["reason_code"], reason
                     )
 
+    def test_current_loader_release_changes_only_package_hash(self) -> None:
+        manifest = cast(
+            Manifest,
+            json.loads(
+                (
+                    Path(__file__).resolve().parent
+                    / "development-release-manifest.json"
+                ).read_text()
+            ),
+        )
+        self.assertEqual(
+            validate_plan(lambda_plan(filename="old.zip"), manifest)["status"],
+            "accepted",
+        )
+        self.assertEqual(
+            validate_plan(lambda_plan(), manifest)["reason_code"],
+            "manifest_mutation_mismatch",
+        )
+
     def test_later_publisher_release_can_use_hash_only_manifest_declaration(
         self,
     ) -> None:
@@ -1072,7 +1091,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             for record in later_manifest["mutations"]
             if record["address"] == "aws_lambda_function.loader"
         )
-        self.assertEqual(loader["changed_fields"], ["filename", "source_code_hash"])
+        self.assertEqual(loader["changed_fields"], ["source_code_hash"])
         result = validate_plan(
             _plan(
                 [
@@ -3333,10 +3352,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             ).read_text(encoding="utf-8")
         )
         expected_mutations: dict[str, tuple[str, tuple[str, ...]]] = {
-            "aws_lambda_function.loader": (
-                "lambda-code",
-                ("filename", "source_code_hash"),
-            ),
+            "aws_lambda_function.loader": ("lambda-code", ("source_code_hash",)),
             "aws_lambda_function.publisher": ("lambda-code", ("source_code_hash",)),
             "aws_s3_object.agentcore": ("artifact-upload", ("source_hash",)),
             "aws_s3_object.tollchat_proxy": ("artifact-upload", ("source_hash",)),

@@ -183,7 +183,7 @@ def _publish_i95_success(*, watermark: str, s3_key: str, row_count: int) -> None
 
 
 def _connect(*, host: str, port: int, dbname: str, user: str) -> object:
-    import psycopg  # type: ignore[import-not-found]
+    import psycopg
 
     rds = cast(Any, boto3.client("rds"))  # pyright: ignore[reportUnknownMemberType]
     token = cast(
@@ -192,7 +192,7 @@ def _connect(*, host: str, port: int, dbname: str, user: str) -> object:
     )
     return cast(
         object,
-        psycopg.connect(  # pyright: ignore[reportUnknownMemberType]
+        psycopg.connect(
             host=host,
             port=port,
             dbname=dbname,
@@ -260,3 +260,7 @@ def handler(event: dict[str, Any], _context: object) -> None:
             raise ValueError(f"raw object exceeds allowed size: {key}")
         rows = _parse_payload(feed, raw_body.decode("utf-8"))
         _load(feed, rows, s3_key=key)
+
+
+# Explicit helper API exercised by the offline contract tests.
+__all__ = ("_event_objects", "_load")

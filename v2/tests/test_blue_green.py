@@ -592,7 +592,7 @@ def test_complete_release_state_machine(
 
     monkeypatch.setattr(delivery, "current", current)
 
-    def terraform(_root: Path, *args: Any) -> str:
+    def terraform(_root: Path, *args: str) -> str:
         nonlocal serial
         if args[0] == "show":
             document = plan(gate.desired(initial, prepared["slots"]["green"]))

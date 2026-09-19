@@ -1107,3 +1107,21 @@ TOOL_CONTRACT = {
     "operationErrorSchema": _OPERATION_ERROR_SCHEMA,
     "operationErrorTemplate": _SAFE_ERROR,
 }
+
+
+# Explicit helper API exercised by the offline contract tests.
+__all__ = (
+    "_OUTPUT_ADAPTER",
+    "_PROGRESS_MESSAGES",
+    "_SAFE_ERROR",
+    "_BallparkRequest",
+    "_BallparkRouteDb",
+    "_NoCompleteResponse",
+    "_OperationError",
+    "_ProgressEvent",
+    "_SummaryRow",
+    "_build_ballpark_response",
+    "_build_summary_query_inputs",
+    "_progress_event",
+    "_resolve_unambiguous_eastern_datetime",
+)

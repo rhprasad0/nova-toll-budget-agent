@@ -15,7 +15,8 @@ from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, NoReturn, cast
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 import pytest
 import yaml
@@ -690,7 +691,7 @@ def _terraform_rendered_development_plan_policies() -> tuple[
         )
 
 
-def test_account_contract_records_the_replacement_development_boundary():
+def test_account_contract_records_the_replacement_development_boundary() -> None:
     accounts = ACCOUNT_CONTRACT["accounts"]
     assert ACCOUNT_CONTRACT["region"] == "us-east-1"
     assert accounts["management"]["id"] == "407645373626"
@@ -721,7 +722,7 @@ def test_account_contract_records_the_replacement_development_boundary():
     assert "not an AWS shared-read grant" in shared_access["cloudflare_dns"]
 
 
-def test_account_local_backends_keep_production_paths_and_lockfiles_distinct():
+def test_account_local_backends_keep_production_paths_and_lockfiles_distinct() -> None:
     foundation_production = (FOUNDATION_ROOT / "backend.production.hcl").read_text()
     foundation_development = (FOUNDATION_ROOT / "backend.development.hcl").read_text()
     application_production = (V2_ROOT / "infra" / "backend.production.hcl").read_text()
@@ -754,7 +755,7 @@ def test_account_local_backends_keep_production_paths_and_lockfiles_distinct():
     assert "nova-toll-tfstate-920534282028" not in application_development
 
 
-def test_all_backends_pin_native_kms_encryption_and_locking():
+def test_all_backends_pin_native_kms_encryption_and_locking() -> None:
     for backend_path in (
         FOUNDATION_ROOT / "backend.production.hcl",
         FOUNDATION_ROOT / "backend.development.hcl",
@@ -768,7 +769,7 @@ def test_all_backends_pin_native_kms_encryption_and_locking():
         assert "s3:x-amz-server-side-encryption" not in backend
 
 
-def test_provider_account_guards_derive_from_the_account_contract():
+def test_provider_account_guards_derive_from_the_account_contract() -> None:
     foundation = FOUNDATION_PROVIDER
     application = (V2_ROOT / "infra" / "providers.tf").read_text()
 
@@ -786,7 +787,7 @@ def test_provider_account_guards_derive_from_the_account_contract():
         assert "920534282028" not in provider
 
 
-def test_tfstate_bucket_is_hardened_and_denies_foreign_accounts():
+def test_tfstate_bucket_is_hardened_and_denies_foreign_accounts() -> None:
     s3 = (FOUNDATION_ROOT / "s3.tf").read_text()
     kms = (FOUNDATION_ROOT / "kms.tf").read_text()
     policy = terraform_block(s3, 'data "aws_iam_policy_document" "tfstate_bucket"')
@@ -829,7 +830,7 @@ def test_tfstate_bucket_is_hardened_and_denies_foreign_accounts():
     assert "deletion_window_in_days = 30" in key
 
 
-def test_foundation_names_and_budget_use_the_caller_account():
+def test_foundation_names_and_budget_use_the_caller_account() -> None:
     foundation_s3 = (FOUNDATION_ROOT / "s3.tf").read_text()
     foundation_agentcore = FOUNDATION_AGENTCORE
     foundation_audit = (FOUNDATION_ROOT / "audit.tf").read_text()
@@ -852,7 +853,9 @@ def test_foundation_names_and_budget_use_the_caller_account():
     assert "cloudflare-development-dns-api-token" in foundation_terraform
 
 
-def test_foundation_output_and_application_input_are_the_exact_non_secret_boundary():
+def test_foundation_output_and_application_input_are_the_exact_non_secret_boundary() -> (
+    None
+):
     output = (FOUNDATION_ROOT / "outputs.tf").read_text()
     variable = APPLICATION_VARIABLES.split('variable "foundation"', maxsplit=1)[
         1
@@ -881,7 +884,7 @@ def test_foundation_output_and_application_input_are_the_exact_non_secret_bounda
         assert forbidden not in output.lower()
 
 
-def test_development_foundation_cannot_advertise_the_shared_vpc_route():
+def test_development_foundation_cannot_advertise_the_shared_vpc_route() -> None:
     variables = (FOUNDATION_ROOT / "variables.tf").read_text()
     router = FOUNDATION_TAILSCALE
     development_handoff = DEPLOYMENT.split(
@@ -939,7 +942,7 @@ def test_development_foundation_cannot_advertise_the_shared_vpc_route():
     assert "environment-specific ACL identity" in DEPLOYMENT
 
 
-def test_v2_uses_the_typed_boundary_without_foundation_discovery():
+def test_v2_uses_the_typed_boundary_without_foundation_discovery() -> None:
     terraform_sources = "\n".join(
         path.read_text() for path in (V2_ROOT / "infra").glob("*.tf")
     )
@@ -979,7 +982,7 @@ def test_v2_uses_the_typed_boundary_without_foundation_discovery():
         assert f"var.foundation.{field}" in terraform_sources
 
 
-def test_foundation_rds_database_name_tracks_environment_contract():
+def test_foundation_rds_database_name_tracks_environment_contract() -> None:
     rds = (FOUNDATION_ROOT / "rds.tf").read_text()
     instance = terraform_block(rds, 'resource "aws_db_instance" "main"')
     assert _hcl_attribute(instance, "db_name") == (
@@ -1013,7 +1016,7 @@ def test_foundation_rds_database_name_tracks_environment_contract():
         assert re.search(r"(?m)^\s*DB_NAME\s*=\s*local\.database_name$", runtime)
 
 
-def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
+def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids() -> None:
     runbook = DEPLOYMENT
     for text in (
         "guarded\nproduction planner",
@@ -1126,7 +1129,7 @@ def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
     assert "terraform apply" not in production
 
 
-def test_development_foundation_shell_is_plan_only_and_retains_exact_handoff():
+def test_development_foundation_shell_is_plan_only_and_retains_exact_handoff() -> None:
     development = DEPLOYMENT.split(
         "### Development foundation handoff (#330; no application release)",
         maxsplit=1,
@@ -1219,7 +1222,7 @@ def test_development_foundation_shell_is_plan_only_and_retains_exact_handoff():
     assert '"$DEVELOPMENT_FOUNDATION_VARS"' not in shell
 
 
-def test_development_absence_probes_fail_closed_on_unexpected_errors():
+def test_development_absence_probes_fail_closed_on_unexpected_errors() -> None:
     development = DEPLOYMENT.split(
         "### Development foundation handoff (#330; no application release)",
         maxsplit=1,
@@ -1271,7 +1274,9 @@ probe() {{ printf '%s' '{error}' >&2; return 1; }}
         assert probe_status(helper, "ExpiredToken") != 0
 
 
-def test_development_foundation_reads_and_cleans_the_budget_recipient_ephemerally():
+def test_development_foundation_reads_and_cleans_the_budget_recipient_ephemerally() -> (
+    None
+):
     development = DEPLOYMENT.split(
         "### Development foundation handoff (#330; no application release)",
         maxsplit=1,
@@ -1445,7 +1450,7 @@ def test_development_foundation_reads_and_cleans_the_budget_recipient_ephemerall
     assert not accepts("")
 
 
-def test_development_foundation_gate_requires_the_complete_expected_set():
+def test_development_foundation_gate_requires_the_complete_expected_set() -> None:
     development = DEPLOYMENT.split(
         "### Development foundation handoff (#330; no application release)",
         maxsplit=1,
@@ -1565,7 +1570,7 @@ def test_development_foundation_gate_requires_the_complete_expected_set():
         assert not passes(changed)
 
 
-def test_ci_installs_proxy_dependencies_once_before_testing():
+def test_ci_installs_proxy_dependencies_once_before_testing() -> None:
     steps = yaml.safe_load(CI_WORKFLOW)["jobs"]["v2-loader"]["steps"]
     install = next(
         step
@@ -1594,7 +1599,7 @@ def test_ci_installs_proxy_dependencies_once_before_testing():
     ).get("devDependencies")
 
 
-def test_v2_pr_validation_has_no_aws_access_or_mutation_commands():
+def test_v2_pr_validation_has_no_aws_access_or_mutation_commands() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
     for forbidden in (
         "configure-aws-credentials",
@@ -1609,7 +1614,9 @@ def test_v2_pr_validation_has_no_aws_access_or_mutation_commands():
         assert forbidden not in workflow
 
 
-def test_backend_and_provider_configuration_has_no_credential_or_workspace_coupling():
+def test_backend_and_provider_configuration_has_no_credential_or_workspace_coupling() -> (
+    None
+):
     configuration = "\n".join(
         path.read_text()
         for path in (
@@ -1635,7 +1642,7 @@ def test_backend_and_provider_configuration_has_no_credential_or_workspace_coupl
         assert forbidden not in configuration
 
 
-def test_legacy_development_inventory_hands_cleanup_to_issue_333():
+def test_legacy_development_inventory_hands_cleanup_to_issue_333() -> None:
     for text in (
         "920534282028",
         "nova-toll/v2/development/terraform.tfstate",
@@ -1663,7 +1670,7 @@ def test_legacy_development_inventory_hands_cleanup_to_issue_333():
     assert "not independent buckets" in LEGACY_DEVELOPMENT_INVENTORY
 
 
-def test_foundation_budget_preserves_the_production_notification_contract():
+def test_foundation_budget_preserves_the_production_notification_contract() -> None:
     budget = FOUNDATION_BUDGET.read_text()
     variables = (FOUNDATION_ROOT / "variables.tf").read_text()
 
@@ -1704,7 +1711,7 @@ def test_foundation_budget_preserves_the_production_notification_contract():
     assert "import {" not in budget
 
 
-def test_foundation_publishes_raw_events_without_a_legacy_loader():
+def test_foundation_publishes_raw_events_without_a_legacy_loader() -> None:
     notification = FOUNDATION_TRIGGERS.split(
         'resource "aws_s3_bucket_notification" "raw"', maxsplit=1
     )[1]
@@ -1716,7 +1723,7 @@ def test_foundation_publishes_raw_events_without_a_legacy_loader():
     assert 'resource "aws_lambda_function" "loader"' not in FOUNDATION_LAMBDA
 
 
-def test_foundation_has_no_site_and_terraform_ci_only_validates():
+def test_foundation_has_no_site_and_terraform_ci_only_validates() -> None:
     assert not (FOUNDATION_ROOT / "site.tf").exists()
     workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
     assert workflow.count("terraform fmt -check -recursive") == 2
@@ -1730,7 +1737,7 @@ def test_foundation_has_no_site_and_terraform_ci_only_validates():
     assert 'resource "aws_iam_role" "github_ci"' not in FOUNDATION_IAM
 
 
-def test_shared_foundation_and_router_volume_are_tagged_shared():
+def test_shared_foundation_and_router_volume_are_tagged_shared() -> None:
     assert 'environment = "shared"' in FOUNDATION_PROVIDER
     assert 'shared_with = "development"' in FOUNDATION_PROVIDER
     volume_tags = FOUNDATION_TAILSCALE.split("volume_tags = {", maxsplit=1)[1]
@@ -1747,7 +1754,7 @@ def test_shared_foundation_and_router_volume_are_tagged_shared():
     assert '"shared"' not in environment
 
 
-def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
+def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
 
     assert 'backend "s3" {}' in (FOUNDATION_ROOT / "versions.tf").read_text()
@@ -2034,7 +2041,9 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
         assert text in readme
 
 
-def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path):
+def test_manual_routing_restore_documentation_shells_are_bounded(
+    tmp_path: Path,
+) -> None:
     capture = RUNBOOK.split(
         "Before approving or deploying a production release", maxsplit=1
     )[1].split("Historical `usage.json`", maxsplit=1)[0]
@@ -3024,7 +3033,9 @@ def test_manual_routing_restore_documentation_shells_are_bounded(tmp_path: Path)
     ]
 
 
-def test_manual_oracle_migration_030_contract_is_offline_guarded_and_syntax_checked():
+def test_manual_oracle_migration_030_contract_is_offline_guarded_and_syntax_checked() -> (
+    None
+):
     section = DEPLOYMENT.split("## Manual Oracle migration 030", maxsplit=1)[1].split(
         "## Environment-tag inventory", maxsplit=1
     )[0]
@@ -3161,7 +3172,7 @@ def test_manual_oracle_migration_030_contract_is_offline_guarded_and_syntax_chec
     assert target_skip < process_body.index("return 0", target_skip)
 
 
-def test_pull_request_workflows_have_no_production_access():
+def test_pull_request_workflows_have_no_production_access() -> None:
     trusted_planner = (
         "rhprasad0/nova-toll-budget-agent/.github/workflows/"
         "v2-development-plan.yml@main"
@@ -3210,7 +3221,7 @@ def test_pull_request_workflows_have_no_production_access():
             assert forbidden not in workflow
 
 
-def test_shared_dynamodb_endpoint_admits_v2_session_table():
+def test_shared_dynamodb_endpoint_admits_v2_session_table() -> None:
     endpoint = FOUNDATION_AGENTCORE.split(
         'resource "aws_vpc_endpoint" "dynamodb"', maxsplit=1
     )[1].split('resource "aws_s3_bucket" "agentcore_artifacts"', maxsplit=1)[0]
@@ -3221,7 +3232,7 @@ def test_shared_dynamodb_endpoint_admits_v2_session_table():
     assert '"dynamodb:TransactWriteItems"' not in endpoint
 
 
-def test_v2_has_an_independent_state_and_identity():
+def test_v2_has_an_independent_state_and_identity() -> None:
     assert 'environment"' in (V2_ROOT / "infra" / "variables.tf").read_text()
     assert (
         "nova-toll/v2/development/terraform.tfstate"
@@ -3263,7 +3274,7 @@ def test_v2_has_an_independent_state_and_identity():
     assert 'value    = "noindex"' in site
 
 
-def test_blue_green_monitors_both_retained_proxies_without_routing_changes():
+def test_blue_green_monitors_both_retained_proxies_without_routing_changes() -> None:
     agentcore = (V2_ROOT / "infra/agentcore.tf").read_text()
     bootstrap = (V2_ROOT / "infra/release-bootstrap.tf").read_text()
     for kind, name in [
@@ -3300,7 +3311,9 @@ def test_blue_green_monitors_both_retained_proxies_without_routing_changes():
     assert "alarm:tollchat-v2-chat-proxy-${metric}-dev-green" in policy
 
 
-def test_v2_declares_a_private_agentcore_application_with_protected_trace_archive():
+def test_v2_declares_a_private_agentcore_application_with_protected_trace_archive() -> (
+    None
+):
     agentcore_path = V2_ROOT / "infra" / "agentcore.tf"
     assert agentcore_path.exists()
     agentcore = agentcore_path.read_text()
@@ -3403,7 +3416,7 @@ def test_v2_declares_a_private_agentcore_application_with_protected_trace_archiv
     assert "exc_info" not in subscriptions
 
 
-def test_agentcore_trace_archive_has_shared_privacy_notice_and_retention():
+def test_agentcore_trace_archive_has_shared_privacy_notice_and_retention() -> None:
     from scripts.verify_release_bundle import FIXED_PATHS
 
     agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
@@ -3435,7 +3448,9 @@ def test_agentcore_trace_archive_has_shared_privacy_notice_and_retention():
     assert "put-function-concurrency" not in DEPLOYMENT
 
 
-def test_agentcore_trace_envelope_becomes_raw_ndjson_and_projects_query_fields():
+def test_agentcore_trace_envelope_becomes_raw_ndjson_and_projects_query_fields() -> (
+    None
+):
     agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
     firehose = terraform_block(
         agentcore, 'resource "aws_kinesis_firehose_delivery_stream" "agentcore_traces"'
@@ -3680,7 +3695,7 @@ def test_agentcore_trace_envelope_becomes_raw_ndjson_and_projects_query_fields()
         )
 
 
-def test_agentcore_trace_protection_applies_to_both_environments():
+def test_agentcore_trace_protection_applies_to_both_environments() -> None:
     agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
     protection = (V2_ROOT / "infra" / "trace_redaction.tf").read_text()
     runtime = terraform_block(
@@ -3717,7 +3732,7 @@ def test_agentcore_trace_protection_applies_to_both_environments():
     assert "logs:Unmask" not in foundation
 
 
-def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
+def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm() -> None:
     agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
     main = (V2_ROOT / "infra" / "main.tf").read_text()
     site = (V2_ROOT / "infra" / "site.tf").read_text()
@@ -3824,7 +3839,7 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert 'resource "aws_acm_certificate" "site"' in site
 
 
-def test_development_plan_policy_requires_reservations_and_valid_default_edge():
+def test_development_plan_policy_requires_reservations_and_valid_default_edge() -> None:
     release = DEPLOYMENT.split(
         "### Development application release and database validation (#331)", maxsplit=1
     )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
@@ -3913,7 +3928,7 @@ def test_development_plan_policy_requires_reservations_and_valid_default_edge():
         assert not passes(candidate)
 
 
-def test_development_secret_fetch_keeps_arn_out_of_argv_and_evidence():
+def test_development_secret_fetch_keeps_arn_out_of_argv_and_evidence() -> None:
     release = DEPLOYMENT.split(
         "### Development application release and database validation (#331)", maxsplit=1
     )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
@@ -3943,7 +3958,9 @@ def test_development_secret_fetch_keeps_arn_out_of_argv_and_evidence():
     )
 
 
-def test_development_release_scans_before_apply_and_never_bootstraps_deployed_database():
+def test_development_release_scans_before_apply_and_never_bootstraps_deployed_database() -> (
+    None
+):
     release = DEPLOYMENT.split(
         "### Development application release and database validation (#331)", maxsplit=1
     )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
@@ -3966,7 +3983,7 @@ def test_development_release_scans_before_apply_and_never_bootstraps_deployed_da
     assert "psql --dbname nova_toll_development --file" in release
 
 
-def test_development_site_has_no_cloudflare_reads_or_writes():
+def test_development_site_has_no_cloudflare_reads_or_writes() -> None:
     site = (V2_ROOT / "infra" / "site.tf").read_text()
     development_tfvars = (V2_ROOT / "infra" / "development.tfvars").read_text()
     zone = site.split('data "cloudflare_zone" "tollchat"', maxsplit=1)[1].split(
@@ -4006,7 +4023,7 @@ def test_development_site_has_no_cloudflare_reads_or_writes():
     assert "development DNS/certificate validation" in DEPLOYMENT
 
 
-def test_public_report_surface_is_canonical_crawlable_and_isolated():
+def test_public_report_surface_is_canonical_crawlable_and_isolated() -> None:
     site = (V2_ROOT / "infra" / "site.tf").read_text()
     robots = (V2_ROOT / "agent" / "robots.txt").read_text()
 
@@ -4060,7 +4077,7 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
     )
 
 
-def test_public_report_launch_is_selected_environment_and_correlated():
+def test_public_report_launch_is_selected_environment_and_correlated() -> None:
     launch = DEPLOYMENT.split("## Public report launch", 1)[1].split(
         "## Smoke test", 1
     )[0]
@@ -4246,7 +4263,7 @@ def test_public_report_launch_is_selected_environment_and_correlated():
     assert not manifest_passes({**manifest, "result_sha256": "A" * 64})
 
 
-def test_agent_measurement_retains_historical_metadata_without_active_sink():
+def test_agent_measurement_retains_historical_metadata_without_active_sink() -> None:
     measurement_path = V2_ROOT / "infra" / "agent_measurement.tf"
     assert measurement_path.exists()
     measurement = measurement_path.read_text()
@@ -4296,7 +4313,7 @@ def test_agent_measurement_retains_historical_metadata_without_active_sink():
     assert "usage.json" not in measurement
 
 
-def test_agent_measurement_keeps_cloudflare_dns_only():
+def test_agent_measurement_keeps_cloudflare_dns_only() -> None:
     site = (V2_ROOT / "infra" / "site.tf").read_text()
     for resource in ('cloudflare_dns_record" "apex', 'cloudflare_dns_record" "www'):
         block = site.split(f'resource "{resource}"', maxsplit=1)[1].split(
@@ -4306,7 +4323,7 @@ def test_agent_measurement_keeps_cloudflare_dns_only():
     assert 'resource "cloudflare_bot_management"' not in site
 
 
-def test_account_local_release_contract_and_foundation_gates_fail_closed():
+def test_account_local_release_contract_and_foundation_gates_fail_closed() -> None:
     for text in (
         "AWS_PROFILE=nova-toll-dev",
         'get-caller-identity --query Account --output text)" = "903859731897"',
@@ -4374,7 +4391,7 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed():
     assert "foundation-plan path" not in handoff
 
 
-def test_agent_measurement_privacy_notice_precedes_logging():
+def test_agent_measurement_privacy_notice_precedes_logging() -> None:
     privacy = (V2_ROOT / "agent" / "privacy.txt").read_text()
     for text in (
         "seven days",
@@ -4395,7 +4412,7 @@ def test_agent_measurement_privacy_notice_precedes_logging():
     assert "aws_s3_bucket_lifecycle_configuration" in measurement
 
 
-def test_agent_registry_and_rollup_outputs_are_retained_inert_metadata():
+def test_agent_registry_and_rollup_outputs_are_retained_inert_metadata() -> None:
     registry = [
         json.loads(line)
         for line in (V2_ROOT / "analytics" / "agent_registry.ndjson")
@@ -4424,7 +4441,7 @@ def test_agent_registry_and_rollup_outputs_are_retained_inert_metadata():
         assert not (V2_ROOT / "lambdas" / "agent_usage_rollup" / name).exists()
 
 
-def test_public_site_publishes_the_v2_ui_and_legal_assets():
+def test_public_site_publishes_the_v2_ui_and_legal_assets() -> None:
     from scripts.verify_release_bundle import FIXED_PATHS
 
     site = (V2_ROOT / "infra" / "site.tf").read_text()
@@ -4457,14 +4474,14 @@ def test_public_site_publishes_the_v2_ui_and_legal_assets():
     assert "TollChat counts anonymous chat sessions" not in page
 
 
-def test_agent_referrer_rules_match_only_exact_url_authorities():
+def test_agent_referrer_rules_match_only_exact_url_authorities() -> None:
     site = (V2_ROOT / "infra" / "site.tf").read_text()
     assert "assistant_referrers" not in site
     assert 'dynamic "rule" {' not in site
     assert 'name     = "agent-route-report"' not in site
 
 
-def test_retained_usage_snapshot_and_log_have_no_current_writer():
+def test_retained_usage_snapshot_and_log_have_no_current_writer() -> None:
     agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
     site = (V2_ROOT / "infra" / "site.tf").read_text()
 
@@ -4490,7 +4507,7 @@ def test_retained_usage_snapshot_and_log_have_no_current_writer():
     assert '"dynamodb:TransactWriteItems"' not in proxy_policy
 
 
-def test_usage_rollout_has_no_retired_foundation_step():
+def test_usage_rollout_has_no_retired_foundation_step() -> None:
     pre_bootstrap_runbook = DEPLOYMENT.split(
         "### Development bootstrap/import boundary", maxsplit=1
     )[0]
@@ -4503,7 +4520,7 @@ def test_usage_rollout_has_no_retired_foundation_step():
     assert "--consistent-read" not in DEPLOYMENT
 
 
-def test_metrics_aware_rollback_preserves_the_aggregate():
+def test_metrics_aware_rollback_preserves_the_aggregate() -> None:
     rollback = DEPLOYMENT.split("## Rollback", maxsplit=1)[1]
     assert "scheduler get-schedule" in rollback
     assert "scheduler update-schedule" in rollback
@@ -4520,7 +4537,7 @@ def test_metrics_aware_rollback_preserves_the_aggregate():
     assert "do not roll back automatically" in rollback
 
 
-def test_v2_agent_packages_are_required_for_real_deployments():
+def test_v2_agent_packages_are_required_for_real_deployments() -> None:
     variables = (V2_ROOT / "infra" / "variables.tf").read_text()
     agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
     build = V2_ROOT / "scripts" / "build_agentcore_zips.sh"
@@ -4531,7 +4548,7 @@ def test_v2_agent_packages_are_required_for_real_deployments():
     assert build.exists()
 
 
-def test_reviewed_zip_builders_use_store_mode():
+def test_reviewed_zip_builders_use_store_mode() -> None:
     expected_calls = {
         "build_loader_zip.sh": r'zip -qX0 "\$BUILD/loader\.zip" -@',
         "build_publisher_zip.sh": r'zip -qX0 "\$BUILD/publisher\.zip" -@',
@@ -4543,7 +4560,7 @@ def test_reviewed_zip_builders_use_store_mode():
         assert re.search(rf"(?m)^[ \t]*\([^\n]*\| {archive_call}\)$", script)
 
 
-def test_timed_builder_import_smoke_is_secret_isolated():
+def test_timed_builder_import_smoke_is_secret_isolated() -> None:
     script = (V2_ROOT / "scripts" / "build_timed_checks_zip.sh").read_text()
     assert "env -i" in script
     assert "PYTHONNOUSERSITE=1" in script
@@ -4559,7 +4576,7 @@ def test_timed_builder_import_smoke_is_secret_isolated():
     )
 
 
-def test_timed_lambda_scheduler_and_failure_contract():
+def test_timed_lambda_scheduler_and_failure_contract() -> None:
     pairs = set(
         next(
             ast.literal_eval(node.value)
@@ -4687,7 +4704,7 @@ def test_timed_lambda_scheduler_and_failure_contract():
     assert 'ip_protocol = "-1"' not in TIMED_CHECKS_TF
 
 
-def test_eval_dashboard_is_configured_in_both_environments():
+def test_eval_dashboard_is_configured_in_both_environments() -> None:
     assert_assignment(
         TIMED_CHECKS_TF,
         "eval_db_user",
@@ -4730,7 +4747,7 @@ def test_eval_dashboard_is_configured_in_both_environments():
     assert_assignment(base_environment, "EVAL_DB_USER", "local.eval_db_user")
 
 
-def test_timed_package_is_threaded_through_all_plan_paths():
+def test_timed_package_is_threaded_through_all_plan_paths() -> None:
     assert (
         "-var timed_checks_package_path=build/timed-checks.zip"
         in DEVELOPMENT_PLAN_WORKFLOW
@@ -4747,7 +4764,7 @@ def test_timed_package_is_threaded_through_all_plan_paths():
     assert "-target" not in PRODUCTION_PLAN_WORKFLOW
 
 
-def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
+def test_public_openai_egress_has_a_narrow_expiring_trivy_exception() -> None:
     ignores = (REPO_ROOT / ".trivyignore.yaml").read_text()
     exception = """  - id: AVD-AWS-0104
     paths: [v2/infra/agentcore.tf]
@@ -4768,7 +4785,7 @@ def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
     )
 
 
-def test_eventbridge_has_both_failure_paths_and_bounded_retries():
+def test_eventbridge_has_both_failure_paths_and_bounded_retries() -> None:
     raw_rule = terraform_block(
         MAIN_TF, 'resource "aws_cloudwatch_event_rule" "raw_objects"'
     )
@@ -4903,7 +4920,7 @@ def test_eventbridge_has_both_failure_paths_and_bounded_retries():
     assert_assignment(raw_notification, "eventbridge", "true")
 
 
-def test_loader_network_and_data_access_are_scoped():
+def test_loader_network_and_data_access_are_scoped() -> None:
     assert "${data.aws_s3_bucket.raw.arn}/*" not in MAIN_TF
     assert '"${local.raw_bucket_arn}/raw/feed=i95/*"' in MAIN_TF
     assert '"${local.raw_bucket_arn}/raw/feed=i66/*"' in MAIN_TF
@@ -4911,7 +4928,7 @@ def test_loader_network_and_data_access_are_scoped():
     assert 'resource "aws_vpc_security_group_egress_rule" "loader_to_s3"' in MAIN_TF
 
 
-def test_report_publisher_is_weekly_bounded_and_least_privilege():
+def test_report_publisher_is_weekly_bounded_and_least_privilege() -> None:
     variables = (V2_ROOT / "infra" / "variables.tf").read_text()
     assert 'variable "publisher_package_path"' in variables
     assert 'function_name = "toll-v2-report-publisher${local.suffix}"' in MAIN_TF
@@ -5064,7 +5081,7 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
     assert_assignment(publisher_queue_alarms, "alarm_actions", "local.alarm_actions")
 
 
-def test_report_publisher_scheduler_and_environment_contract():
+def test_report_publisher_scheduler_and_environment_contract() -> None:
     assert 'reader         = "pricing_reader"' in ENVIRONMENT_TF
     assert 'reader         = "pricing_reader_development"' in ENVIRONMENT_TF
     schedule = terraform_block(MAIN_TF, 'resource "aws_scheduler_schedule" "publisher"')
@@ -5133,7 +5150,7 @@ def test_report_publisher_scheduler_and_environment_contract():
         assert obsolete not in MAIN_TF
 
 
-def test_timed_connectivity_role_uses_the_internal_pricing_caller():
+def test_timed_connectivity_role_uses_the_internal_pricing_caller() -> None:
     policy = MAIN_TF.split('data "aws_iam_policy_document" "timed_checks"', maxsplit=1)[
         1
     ].split('resource "aws_iam_role_policy" "timed_checks"', maxsplit=1)[0]
@@ -5155,7 +5172,7 @@ def test_timed_connectivity_role_uses_the_internal_pricing_caller():
     assert "/pricing_reader" not in policy
 
 
-def test_exact_plan_success_path_is_private_ordered_and_fail_closed():
+def test_exact_plan_success_path_is_private_ordered_and_fail_closed() -> None:
     development = DEPLOYMENT.split(
         "### Development foundation handoff (#330; no application release)",
         maxsplit=1,
@@ -5240,7 +5257,7 @@ def test_exact_plan_success_path_is_private_ordered_and_fail_closed():
     ) < success.index("probe_denied s3api head-object")
 
 
-def test_issue330_repairs_preserve_roles_and_migration_gate():
+def test_issue330_repairs_preserve_roles_and_migration_gate() -> None:
     handoff = DEPLOYMENT.split("## Account-local foundation handoff", maxsplit=1)[1]
     development = DEPLOYMENT.split(
         "### Development foundation handoff (#330; no application release)",
@@ -5292,7 +5309,9 @@ def _workflow_run_source(job: dict[str, object]) -> str:
     )
 
 
-def test_production_release_plan_workflows_keep_trust_before_credentials_and_apply_disabled():
+def test_production_release_plan_workflows_keep_trust_before_credentials_and_apply_disabled() -> (
+    None
+):
     listener = cast(
         dict[str, object],
         yaml.safe_load(
@@ -5447,7 +5466,7 @@ def _jq_validator_accepts(predicate: str, payload: object) -> bool:
     return result.returncode == 0
 
 
-def test_development_foundation_output_validators_fail_closed_and_match():
+def test_development_foundation_output_validators_fail_closed_and_match() -> None:
     workflow = cast(
         dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
     )
@@ -5998,7 +6017,7 @@ def _assert_development_plan_workflow(source: str) -> None:
                 )
 
 
-def test_development_plan_workflow_digest_matches_reviewed_manifest():
+def test_development_plan_workflow_digest_matches_reviewed_manifest() -> None:
     manifest = json.loads(
         (REPO_ROOT / "infra" / "development-release-manifest.json").read_text()
     )
@@ -6008,7 +6027,7 @@ def test_development_plan_workflow_digest_matches_reviewed_manifest():
     )
 
 
-def test_development_delivery_selected_input_digests_match_reviewed_manifest():
+def test_development_delivery_selected_input_digests_match_reviewed_manifest() -> None:
     manifest = json.loads(
         (REPO_ROOT / "infra" / "development-release-manifest.json").read_text()
     )
@@ -6026,7 +6045,7 @@ def test_development_delivery_selected_input_digests_match_reviewed_manifest():
         )
 
 
-def test_development_plan_workflow_is_reusable_and_fail_closed():
+def test_development_plan_workflow_is_reusable_and_fail_closed() -> None:
     _assert_development_plan_workflow(DEVELOPMENT_PLAN_WORKFLOW)
     for original, replacement in (
         ("workflow_call:", "push:"),
@@ -6111,7 +6130,7 @@ def _assert_required_event_callers(source: str) -> None:
     _assert_terraform_trigger(TERRAFORM_WORKFLOW)
 
 
-def test_deployed_plan_gate_requires_success_after_bootstrap():
+def test_deployed_plan_gate_requires_success_after_bootstrap() -> None:
     workflow = yaml.safe_load(CI_WORKFLOW)
     source = workflow["jobs"]["development-plan"]["steps"][0]["run"]
     for bootstrapped, called, planned, accepted in (
@@ -6145,7 +6164,7 @@ def _assert_terraform_trigger(source: str) -> None:
     assert "paths-ignore" not in source
 
 
-def test_required_event_callers_are_unfiltered_and_fail_closed():
+def test_required_event_callers_are_unfiltered_and_fail_closed() -> None:
     _assert_required_event_callers(CI_WORKFLOW)
     for original, replacement in (
         (
@@ -6181,7 +6200,9 @@ def test_required_event_callers_are_unfiltered_and_fail_closed():
     )
 
 
-def test_development_delivery_staging_snippet_accepts_only_verified_package_bytes():
+def test_development_delivery_staging_snippet_accepts_only_verified_package_bytes() -> (
+    None
+):
     workflow = cast(
         dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
     )
@@ -6279,7 +6300,7 @@ def test_development_delivery_staging_snippet_accepts_only_verified_package_byte
         assert run_staging().returncode != 0
 
 
-def test_development_delivery_private_stage_helper_sanitizes_mock_failures():
+def test_development_delivery_private_stage_helper_sanitizes_mock_failures() -> None:
     workflow = cast(
         dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
     )
@@ -6395,7 +6416,7 @@ def test_development_delivery_private_stage_helper_sanitizes_mock_failures():
         assert str(root) not in result.stdout + result.stderr
 
 
-def test_development_delivery_classifier_is_bounded_and_allowlisted():
+def test_development_delivery_classifier_is_bounded_and_allowlisted() -> None:
     classifier = REPO_ROOT / "v2" / "scripts" / "classify_deployment_error.py"
     cases = {
         "access_denied": "AccessDeniedException: forbidden",
@@ -6482,7 +6503,7 @@ def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup(
     state = previous()
     called: list[Any] = []
 
-    def rejected(*args: Any) -> NoReturn:
+    def rejected(*args: object) -> NoReturn:
         called.append(args[1])
         raise gate.Rejected("terraform_failed")
 
@@ -6536,7 +6557,9 @@ def test_development_delivery_apply_readiness_and_cleanup_failures_are_bounded(
     assert "private-state" not in result.stdout + result.stderr
 
 
-def test_development_delivery_extracts_only_validated_migration_after_versions():
+def test_development_delivery_extracts_only_validated_migration_after_versions() -> (
+    None
+):
     workflow = cast(
         dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
     )
@@ -6618,7 +6641,7 @@ def test_development_delivery_extracts_only_validated_migration_after_versions()
         assert "secret malformed evidence" not in result.stdout + result.stderr
 
 
-def test_slice2_delivery_diagnostics_keep_machine_outputs_and_fixed_labels():
+def test_slice2_delivery_diagnostics_keep_machine_outputs_and_fixed_labels() -> None:
     delivery = DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW
     migration = (
         REPO_ROOT / "v2/scripts/run_development_migrations_workflow.sh"
@@ -6731,7 +6754,9 @@ def test_retained_artifact_bootstrap_handles_jq_outcomes_without_public_errors(
     assert "private-evaluation-error" not in evaluation.stdout + evaluation.stderr
 
 
-def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_plan():
+def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_plan() -> (
+    None
+):
     workflow = yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
     steps = workflow["jobs"]["deploy"]["steps"]
     sources = [step.get("run", "") for step in steps]
@@ -6768,7 +6793,9 @@ def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_pla
     assert '--work-dir "$RUNNER_TEMP/blue-green"' in sources[finish]
 
 
-def test_development_oidc_validator_rejects_malformed_and_wrong_claim_fixtures():
+def test_development_oidc_validator_rejects_malformed_and_wrong_claim_fixtures() -> (
+    None
+):
     workflow = cast(
         dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
     )
@@ -6861,7 +6888,7 @@ def test_development_oidc_validator_rejects_malformed_and_wrong_claim_fixtures()
         assert run(token_for(claims), deployment_id=deployment_id).returncode != 0
 
 
-def test_oidc_step_never_expands_workflow_inputs_as_shell_code(tmp_path: Path):
+def test_oidc_step_never_expands_workflow_inputs_as_shell_code(tmp_path: Path) -> None:
     workflow = cast(
         dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
     )
@@ -6995,7 +7022,7 @@ def test_oidc_cleanup_failure_is_bounded_and_nonzero(tmp_path: Path) -> None:
     assert (result.stdout + result.stderr).count("stage=oidc-cleanup status=fail") == 1
 
 
-def test_development_oidc_proof_schema_rejects_extra_fields_and_stale_sha():
+def test_development_oidc_proof_schema_rejects_extra_fields_and_stale_sha() -> None:
     workflow = cast(
         dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
     )
@@ -7678,7 +7705,9 @@ def _assert_application_roles_are_bootstrap_owned() -> None:
             assert _hcl_scalar(role, "permissions_boundary") in (None, "")
 
 
-def test_development_agentcore_execution_trust_is_exact_and_confused_deputy_bound():
+def test_development_agentcore_execution_trust_is_exact_and_confused_deputy_bound() -> (
+    None
+):
     source = (V2_ROOT / "infra" / "agentcore.tf").read_text()
     policy = terraform_block(
         source, 'data "aws_iam_policy_document" "agentcore_assume"'
@@ -7733,7 +7762,7 @@ def _must_reject_after_marker(
         assertion(mutated)
 
 
-def test_development_delivery_workflow_is_parsed_and_split_before_oidc():
+def test_development_delivery_workflow_is_parsed_and_split_before_oidc() -> None:
     _assert_development_delivery_caller(DEVELOPMENT_DELIVERY_WORKFLOW)
     _assert_development_delivery_privileged(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
     caller = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
@@ -7866,7 +7895,7 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc():
     )
 
 
-def test_development_delivery_iam_is_parsed_and_adversarial_mutations_fail():
+def test_development_delivery_iam_is_parsed_and_adversarial_mutations_fail() -> None:
     _assert_development_delivery_trust(FOUNDATION_IAM)
     _assert_development_delivery_state_and_application_policy(FOUNDATION_IAM)
     _assert_application_roles_are_bootstrap_owned()
@@ -8652,7 +8681,7 @@ def _assert_development_plan_policy(source: str) -> None:
         assert "local.development_plan_policy_documents" in resource
 
 
-def test_development_plan_iam_is_exact_and_adversarial_mutations_fail():
+def test_development_plan_iam_is_exact_and_adversarial_mutations_fail() -> None:
     _assert_development_plan_trust(FOUNDATION_IAM)
     _assert_development_plan_policy(FOUNDATION_IAM)
     for original, replacement in (
@@ -8704,7 +8733,7 @@ def test_development_plan_iam_is_exact_and_adversarial_mutations_fail():
         )
 
 
-def test_development_plan_policy_set_is_deterministic_and_bounded():
+def test_development_plan_policy_set_is_deterministic_and_bounded() -> None:
     documents, aggregate = _terraform_rendered_development_plan_policies()
     assert set(documents) == {
         "state",
@@ -8990,7 +9019,7 @@ def _assert_agentcore_trace_identity_reads(source: str) -> None:
         } == document_expected
 
 
-def test_development_delivery_direct_api_denials_are_resource_scoped():
+def test_development_delivery_direct_api_denials_are_resource_scoped() -> None:
     by_sid = _policy_by_sid(
         _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
     )
@@ -9161,7 +9190,7 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
     )
 
 
-def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
+def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded() -> None:
     delivery = _policy_by_sid(
         _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
     )
@@ -9531,7 +9560,7 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded():
         )
 
 
-def test_development_delivery_policy_set_is_deterministic_and_bounded():
+def test_development_delivery_policy_set_is_deterministic_and_bounded() -> None:
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
     assert len(statements) == 67
     expected_groups = {
@@ -10300,7 +10329,7 @@ def _assert_development_bootstrap_iam_rollback_contract(script: str) -> None:
     )
 
 
-def test_development_bootstrap_iam_rollbacks_are_ambiguity_safe():
+def test_development_bootstrap_iam_rollbacks_are_ambiguity_safe() -> None:
     script = _development_bootstrap_script()
     _assert_development_bootstrap_iam_rollback_contract(script)
     for function_name, command_prefix in (
@@ -10326,7 +10355,7 @@ def test_development_bootstrap_iam_rollbacks_are_ambiguity_safe():
             _assert_development_bootstrap_iam_rollback_contract(mutated)
 
 
-def test_development_bootstrap_runbook_is_executable_and_fail_closed():
+def test_development_bootstrap_runbook_is_executable_and_fail_closed() -> None:
     script = _development_bootstrap_script()
     result = subprocess.run(
         ["bash", "-n"], input=script, text=True, capture_output=True, check=False
@@ -10334,7 +10363,9 @@ def test_development_bootstrap_runbook_is_executable_and_fail_closed():
     assert result.returncode == 0, result.stderr
 
 
-def test_development_bootstrap_rejects_unsafe_role_comparison_and_mixed_plan_mutations():
+def test_development_bootstrap_rejects_unsafe_role_comparison_and_mixed_plan_mutations() -> (
+    None
+):
     script = _development_bootstrap_script()
     _assert_development_bootstrap_contract(script)
     for original, replacement in (
@@ -10408,7 +10439,9 @@ def test_development_bootstrap_rejects_unsafe_role_comparison_and_mixed_plan_mut
         _assert_development_bootstrap_contract(without_approval)
 
 
-def test_development_bootstrap_canonicalizes_encoded_policy_documents_and_rejects_malformed_input():
+def test_development_bootstrap_canonicalizes_encoded_policy_documents_and_rejects_malformed_input() -> (
+    None
+):
     script = _development_bootstrap_script()
     match = re.search(
         r"canonicalize_json\(\) \{.*?python3 - \"\$input\" \"\$output\" <<'PY'\n(.*?)\nPY",
@@ -10440,7 +10473,7 @@ def test_development_bootstrap_canonicalizes_encoded_policy_documents_and_reject
         assert result.returncode != 0
 
 
-def test_development_bootstrap_decodes_encoded_lambda_policy_response():
+def test_development_bootstrap_decodes_encoded_lambda_policy_response() -> None:
     script = _development_bootstrap_script()
     canonicalizer_match = re.search(
         r"(canonicalize_json\(\) \{.*?\n\})\n\ndecode_lambda_policy_response",
@@ -10487,7 +10520,9 @@ def test_development_bootstrap_decodes_encoded_lambda_policy_response():
             assert result.returncode == 0, result.stderr
 
 
-def test_development_bootstrap_effective_policy_fixtures_reject_extra_inline_and_attached_policies():
+def test_development_bootstrap_effective_policy_fixtures_reject_extra_inline_and_attached_policies() -> (
+    None
+):
     script = _development_bootstrap_script()
     policy_match = re.search(
         r'jq -e \'(\.PolicyNames == \[\])\' "\$ROLE_POLICY_NAMES"',
@@ -10559,7 +10594,7 @@ def test_development_bootstrap_effective_policy_fixtures_reject_extra_inline_and
     )
 
 
-def test_development_bootstrap_rejects_stale_packages_and_wrong_state_ids():
+def test_development_bootstrap_rejects_stale_packages_and_wrong_state_ids() -> None:
     script = _development_bootstrap_script()
     manifest_match = re.search(
         r"""python3 - "\$REVIEWED_V2_PACKAGE_MANIFEST" "\$REVIEWED_V2_PACKAGE_DIR" <<'PY'\n(.*?)\nPY""",
@@ -10633,7 +10668,9 @@ def test_development_bootstrap_rejects_stale_packages_and_wrong_state_ids():
         )
 
 
-def test_development_bootstrap_mocked_failures_are_approval_gated_and_reverse_ordered():
+def test_development_bootstrap_mocked_failures_are_approval_gated_and_reverse_ordered() -> (
+    None
+):
     """Exercise the bounded mutation/compensation protocol without AWS access."""
     harness = dedent(
         r"""
@@ -10758,7 +10795,7 @@ def test_development_bootstrap_mocked_failures_are_approval_gated_and_reverse_or
             assert log[0] == scenario
 
 
-def test_development_bootstrap_mocked_lock_and_import_ownership_races():
+def test_development_bootstrap_mocked_lock_and_import_ownership_races() -> None:
     harness = dedent(
         r"""
         set -euo pipefail
@@ -10972,7 +11009,9 @@ def test_development_bootstrap_mocked_lock_and_import_ownership_races():
         assert not (directory / "state").exists()
 
 
-def test_development_bootstrap_state_membership_is_pipefail_safe_for_large_lists():
+def test_development_bootstrap_state_membership_is_pipefail_safe_for_large_lists() -> (
+    None
+):
     harness = dedent(
         r"""
         set -euo pipefail
@@ -11024,7 +11063,7 @@ def test_development_bootstrap_state_membership_is_pipefail_safe_for_large_lists
         ]
 
 
-def test_development_bootstrap_mocked_lambda_permission_ownership_races():
+def test_development_bootstrap_mocked_lambda_permission_ownership_races() -> None:
     harness = dedent(
         r"""
         set -euo pipefail
@@ -11130,7 +11169,9 @@ def test_development_bootstrap_mocked_lambda_permission_ownership_races():
                     }
 
 
-def test_development_bootstrap_stale_prelock_snapshot_never_deletes_prior_run_resources():
+def test_development_bootstrap_stale_prelock_snapshot_never_deletes_prior_run_resources() -> (
+    None
+):
     harness = dedent(
         r"""
         set -euo pipefail
@@ -11210,7 +11251,7 @@ def test_development_bootstrap_stale_prelock_snapshot_never_deletes_prior_run_re
         assert (directory / "permissions").read_text().strip() == "reviewed-permissions"
 
 
-def test_development_bootstrap_mocked_region_lock_and_rollback_guards():
+def test_development_bootstrap_mocked_region_lock_and_rollback_guards() -> None:
     harness = dedent(
         r"""
         set -euo pipefail
@@ -11363,7 +11404,7 @@ def test_development_bootstrap_mocked_region_lock_and_rollback_guards():
             assert log_path.read_text().splitlines() == expected_events
 
 
-def _foundation_plan_validator():
+def _foundation_plan_validator() -> ModuleType:
     spec = importlib.util.spec_from_file_location(
         "development_foundation_plan_validator", DEVELOPMENT_FOUNDATION_PLAN_VALIDATOR
     )
@@ -11374,7 +11415,7 @@ def _foundation_plan_validator():
 
 
 def _foundation_change(
-    mode: str, address: str, actions: list[str], **change: Any
+    mode: str, address: str, actions: list[str], **change: object
 ) -> dict[str, Any]:
     return {
         "mode": mode,
@@ -11383,8 +11424,11 @@ def _foundation_change(
     }
 
 
-def test_development_foundation_plan_validator_accepts_only_exact_replacement():
-    validator = _foundation_plan_validator()
+def test_development_foundation_plan_validator_accepts_only_exact_replacement() -> None:
+    if TYPE_CHECKING:
+        from scripts import validate_development_foundation_plan as validator
+    else:
+        validator = _foundation_plan_validator()
     snapshot_identifier = "nova-toll-db-development-cutover-20260904t150735z"
     route_trust = json.dumps(
         {
@@ -11754,8 +11798,11 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
 
 def test_development_foundation_plan_context_and_acl_fixture_are_bounded(
     tmp_path: Path,
-):
-    validator = _foundation_plan_validator()
+) -> None:
+    if TYPE_CHECKING:
+        from scripts import validate_development_foundation_plan as validator
+    else:
+        validator = _foundation_plan_validator()
     backend = tmp_path / "backend.hcl"
     backend.write_text(validator.EXPECTED_BACKEND)
     source_revision = subprocess.run(
@@ -11846,7 +11893,7 @@ def test_development_foundation_plan_context_and_acl_fixture_are_bounded(
     assert '"tag:nova-toll-router"' in refreshed
 
 
-def test_development_foundation_runbook_shell_blocks_initialize_handoffs():
+def test_development_foundation_runbook_shell_blocks_initialize_handoffs() -> None:
     handoff = DEPLOYMENT.split("### Development foundation replacement handoff", 1)[
         1
     ].split("### Guarded production release", 1)[0]
@@ -12093,7 +12140,7 @@ def test_development_foundation_runbook_shell_blocks_initialize_handoffs():
 SLICE_2A_POLICY = (REPO_ROOT / "infra" / "policy.hujson").read_text()
 
 
-def test_production_ci_private_api_grant_preserves_environment_isolation():
+def test_production_ci_private_api_grant_preserves_environment_isolation() -> None:
     source = re.sub(r"//[^\n]*", "", SLICE_2A_POLICY)
     policy = json.loads(re.sub(r",\s*([}\]])", r"\1", source))
     assert policy["hosts"]["tollchat-api-production"] == "172.31.225.174"
@@ -12166,7 +12213,7 @@ def _assert_slice_2a_policy(source: str) -> None:
     assert '"nova-toll-rds": "172.31.83.200"' in source
 
 
-def test_slice_2a_policy_is_scoped_and_preserves_production_entries():
+def test_slice_2a_policy_is_scoped_and_preserves_production_entries() -> None:
     _assert_slice_2a_policy(SLICE_2A_POLICY)
     baseline = subprocess.run(
         ["git", "show", "HEAD:infra/policy.hujson"],
@@ -12204,7 +12251,7 @@ def test_slice_2a_policy_is_scoped_and_preserves_production_entries():
         _must_reject(_assert_slice_2a_policy, SLICE_2A_POLICY, original, replacement)
 
 
-def test_slice_3b3a_route_control_contract_is_fixed_and_least_privilege():
+def test_slice_3b3a_route_control_contract_is_fixed_and_least_privilege() -> None:
     helper = (
         V2_ROOT / "scripts" / "approve_development_tailscale_route.py"
     ).read_text()
@@ -12457,7 +12504,7 @@ def _assert_slice_2b_connectivity_workflow(source: str) -> None:
     assert "inputs.phase != 'route-diagnostic'" not in source
 
 
-def test_slice_2b_connectivity_workflow_is_manual_main_only_and_dev_scoped():
+def test_slice_2b_connectivity_workflow_is_manual_main_only_and_dev_scoped() -> None:
     _assert_slice_2b_connectivity_workflow(DEVELOPMENT_CONNECTIVITY_WORKFLOW)
     for original, replacement in (
         ("workflow_dispatch:", "push:"),
@@ -12496,7 +12543,7 @@ def test_slice_2b_connectivity_workflow_is_manual_main_only_and_dev_scoped():
         )
 
 
-def test_slice_2b_production_denial_uses_os_route_and_bounded_socket_failures():
+def test_slice_2b_production_denial_uses_os_route_and_bounded_socket_failures() -> None:
     function = re.search(
         r"(?ms)^          verify_production_denial\(\) \{\n(.*?)^          \}\n          if ! PROD_DENIAL_STATE=",
         DEVELOPMENT_CONNECTIVITY_WORKFLOW,
@@ -12595,7 +12642,9 @@ def _assert_timed_role_trust_is_environment_conditional(source: str) -> None:
     assert 'sts:AssumeRole"' not in trust
 
 
-def test_slice_2b_timed_role_trust_is_environment_conditional_and_adversarial_safe():
+def test_slice_2b_timed_role_trust_is_environment_conditional_and_adversarial_safe() -> (
+    None
+):
     _assert_timed_role_trust_is_environment_conditional(MAIN_TF)
     for original, replacement in (
         ('values = var.environment == "development" ? [', "values = ["),
@@ -12617,7 +12666,9 @@ def test_slice_2b_timed_role_trust_is_environment_conditional_and_adversarial_sa
         )
 
 
-def test_slice_2b_timed_role_trust_adds_only_the_development_environment_subject():
+def test_slice_2b_timed_role_trust_adds_only_the_development_environment_subject() -> (
+    None
+):
     trust = MAIN_TF.split(
         'data "aws_iam_policy_document" "timed_checks_assume"', maxsplit=1
     )[1].split('resource "aws_iam_role" "timed_checks"', maxsplit=1)[0]
@@ -12636,7 +12687,7 @@ def test_slice_2b_timed_role_trust_adds_only_the_development_environment_subject
     assert 'sts:AssumeRole"' not in trust
 
 
-def test_slice_2b_runbook_documents_bounded_secret_route_and_activation_gates():
+def test_slice_2b_runbook_documents_bounded_secret_route_and_activation_gates() -> None:
     for required in (
         "one-off",
         "non-ephemeral",
@@ -12680,7 +12731,9 @@ def test_slice_2b_runbook_documents_bounded_secret_route_and_activation_gates():
     )
 
 
-def test_slice_3_development_custom_domain_is_explicit_and_production_preserving():
+def test_slice_3_development_custom_domain_is_explicit_and_production_preserving() -> (
+    None
+):
     assert 'variable "enable_development_custom_domain"' in APPLICATION_VARIABLES
     variable = terraform_block(
         APPLICATION_VARIABLES, 'variable "enable_development_custom_domain"'
@@ -12724,7 +12777,7 @@ def test_slice_3_development_custom_domain_is_explicit_and_production_preserving
     assert 'output "development_acm_validation_records"' in SITE_TF
 
 
-def test_slice_3_development_delivery_cannot_administer_custom_domain():
+def test_slice_3_development_delivery_cannot_administer_custom_domain() -> None:
     policy = terraform_block(
         FOUNDATION_IAM, 'data "aws_iam_policy_document" "development_delivery"'
     )
@@ -12748,7 +12801,7 @@ def test_slice_3_development_delivery_cannot_administer_custom_domain():
     ] == certificate["actions"]
 
 
-def test_slice_3_foundation_dns_role_has_exact_oidc_and_ssm_boundary():
+def test_slice_3_foundation_dns_role_has_exact_oidc_and_ssm_boundary() -> None:
     trust = terraform_block(
         FOUNDATION_IAM,
         'data "aws_iam_policy_document" "production_foundation_dns_assume"',
@@ -12787,7 +12840,7 @@ def test_slice_3_foundation_dns_role_has_exact_oidc_and_ssm_boundary():
     assert "secretsmanager:" not in policy
 
 
-def test_slice_3_dns_workflow_is_manual_protected_and_secret_safe():
+def test_slice_3_dns_workflow_is_manual_protected_and_secret_safe() -> None:
     workflow = cast(dict[str, object], yaml.safe_load(FOUNDATION_DNS_WORKFLOW))
     assert "workflow_dispatch:" in FOUNDATION_DNS_WORKFLOW
     assert "push:" not in FOUNDATION_DNS_WORKFLOW
@@ -12832,7 +12885,7 @@ def test_slice_3_dns_workflow_is_manual_protected_and_secret_safe():
         assert re.fullmatch(r"[^@]+@[0-9a-f]{40}", action)
 
 
-def test_slice_3_dns_allowlist_contract_covers_adversarial_records_and_order():
+def test_slice_3_dns_allowlist_contract_covers_adversarial_records_and_order() -> None:
     for required in (
         "result_info",
         "total_count != count",
@@ -13302,7 +13355,7 @@ def test_slice3_rollback_legacy_https_health_fails_closed(
         assert result.returncode == expected, result.stderr
 
 
-def test_slice_3_runbook_documents_the_staged_order_and_rollback():
+def test_slice_3_runbook_documents_the_staged_order_and_rollback() -> None:
     handoff = DEPLOYMENT.split("##### Exact DNS workflow operations and ordering", 1)[1]
     assert handoff.index("legacy_alias_released=true") < handoff.index(
         "before applying the reviewed development alias"
@@ -13331,7 +13384,7 @@ def test_slice_3_runbook_documents_the_staged_order_and_rollback():
         assert required in DEPLOYMENT
 
 
-def test_development_migrations_iam_is_development_only_and_least_privilege():
+def test_development_migrations_iam_is_development_only_and_least_privilege() -> None:
     assume = _top_level_terraform_block(
         FOUNDATION_IAM,
         'data "aws_iam_policy_document" "development_migrations_assume"',
@@ -13384,7 +13437,7 @@ def test_development_migrations_iam_is_development_only_and_least_privilege():
 
 def test_development_migrations_workflow_is_main_only_private_and_sanitized(
     tmp_path: Path,
-):
+) -> None:
     workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_MIGRATIONS_WORKFLOW))
     assert _workflow_trigger(workflow) == {"workflow_dispatch": None}
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
@@ -13470,7 +13523,9 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
         assert forbidden not in DEVELOPMENT_MIGRATIONS_WORKFLOW
 
 
-def test_development_migrations_workflow_is_main_only_private_and_sanitized_owner_gate():
+def test_development_migrations_workflow_is_main_only_private_and_sanitized_owner_gate() -> (
+    None
+):
     def assert_owner_gate(source: str) -> None:
         workflow = cast(dict[str, object], yaml.safe_load(source))
         jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
@@ -13507,7 +13562,9 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized_owne
         )
 
 
-def test_development_migrations_runbook_requires_post_merge_order_and_allowlist():
+def test_development_migrations_runbook_requires_post_merge_order_and_allowlist() -> (
+    None
+):
     section = DEPLOYMENT.split(
         "##### Protected development migration workflow (#305 slice 3)", 1
     )[1]

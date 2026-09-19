@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 """Fail-closed admission and replay claim for a production release plan."""
 
 from __future__ import annotations
@@ -165,11 +164,11 @@ def _artifacts(run_id: int, name: str) -> dict[str, Any]:
         values = response.get("artifacts")
         if not isinstance(values, list):
             raise AdmissionError("malformed")
-        for value in values:
+        for value in cast(list[object], values):
             artifact = _mapping(value)
             if artifact.get("name") == name:
                 found.append(artifact)
-        if len(values) < 100:
+        if len(cast(list[object], values)) < 100:
             break
         page += 1
         if page > 1000:
@@ -294,7 +293,7 @@ def _development(
     values = response.get("workflow_runs")
     if not isinstance(values, list):
         raise AdmissionError("malformed")
-    runs = [_mapping(value) for value in values]
+    runs = [_mapping(value) for value in cast(list[object], values)]
     matches = [
         run
         for run in runs
@@ -433,7 +432,7 @@ def _development(
     )
     if not isinstance(statuses, list) or not statuses:
         raise AdmissionError("evidence")
-    latest = _mapping(statuses[0])
+    latest = _mapping(cast(list[object], statuses)[0])
     if (
         latest.get("state") != "success"
         or latest.get("environment") != "development-release"
@@ -520,7 +519,7 @@ def claim(admission: dict[str, Any]) -> dict[str, Any]:
         )
         if not isinstance(values, list):
             raise AdmissionError("malformed")
-        for value in values:
+        for value in cast(list[object], values):
             deployment = _mapping(value)
             payload = deployment.get("payload")
             if isinstance(payload, str):
@@ -529,10 +528,11 @@ def claim(admission: dict[str, Any]) -> dict[str, Any]:
                 except (json.JSONDecodeError, AdmissionError) as error:
                     raise AdmissionError("malformed") from error
             if isinstance(payload, dict) and (
-                payload.get("release_id") == release_id or payload.get("tag") == tag
+                cast(dict[str, object], payload).get("release_id") == release_id
+                or cast(dict[str, object], payload).get("tag") == tag
             ):
                 raise AdmissionError("replay")
-        if len(values) < 100:
+        if len(cast(list[object], values)) < 100:
             break
         page += 1
         if page > 1000:
@@ -916,3 +916,6 @@ def main(argv: Iterable[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+# Explicitly exercised contract helpers.
+__all__ = ["_artifacts", "_development", "_listener_event"]

@@ -806,7 +806,7 @@ def _build_price_comparisons(
 
 
 def _build_i66_component(
-    leg: route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+    leg: route_validation._I66FacilityLeg,
     rows: list[_I66ComparisonRow],
 ) -> _I66Component | _UnavailableComponent:
     """Build one I-66 component from normalized comparison rows."""
@@ -885,7 +885,7 @@ def _build_i66_component(
 
 
 def _build_i95_i495_component(
-    leg: route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+    leg: route_validation._I95FacilityLeg,
     rows: list[_I95ComparisonRow],
 ) -> _I95Component | _UnavailableComponent:
     """Build one I-95/I-495 component from normalized comparison rows."""
@@ -968,7 +968,7 @@ def _build_i95_i495_component(
 
 
 def price_greenway_leg(
-    leg: route_validation._GreenwayFacilityLeg,  # pyright: ignore[reportPrivateUsage]
+    leg: route_validation._GreenwayFacilityLeg,
     evaluated_at: datetime,
 ) -> _GreenwayComponent:
     """Price one validated Greenway facility leg from the published schedule."""
@@ -1020,7 +1020,7 @@ def price_greenway_leg(
 
 
 def price_dtr_leg(
-    leg: route_validation._DtrFacilityLeg,  # pyright: ignore[reportPrivateUsage]
+    leg: route_validation._DtrFacilityLeg,
     evaluated_at: datetime,
 ) -> _DtrComponent:
     """Price one validated DTR charge from the published schedule."""
@@ -1105,7 +1105,7 @@ def price_dtr_leg(
 
 def build_current_price_result(
     request: _PricingRequest,
-    pricing_route: route_validation._PricingRouteResponse,  # pyright: ignore[reportPrivateUsage]
+    pricing_route: route_validation._PricingRouteResponse,
     evaluated_at: datetime | None,
     pricing_inputs: dict[str, object],
 ) -> dict[str, Any]:
@@ -1319,7 +1319,7 @@ async def get_current_toll_price(
             if facility == "i95_i495":
                 for leg in facility_legs:
                     i95_leg = cast(
-                        route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+                        route_validation._I95FacilityLeg,
                         leg,
                     )
                     rows = await asyncio.to_thread(
@@ -1330,7 +1330,7 @@ async def get_current_toll_price(
             elif facility == "i66":
                 for leg in facility_legs:
                     i66_leg = cast(
-                        route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+                        route_validation._I66FacilityLeg,
                         leg,
                     )
                     rows = await asyncio.to_thread(
@@ -1345,7 +1345,7 @@ async def get_current_toll_price(
                 for leg in facility_legs:
                     price_greenway_leg(
                         cast(
-                            route_validation._GreenwayFacilityLeg,  # pyright: ignore[reportPrivateUsage]
+                            route_validation._GreenwayFacilityLeg,
                             leg,
                         ),
                         evaluated_at,
@@ -1354,7 +1354,7 @@ async def get_current_toll_price(
                 for leg in facility_legs:
                     price_dtr_leg(
                         cast(
-                            route_validation._DtrFacilityLeg,  # pyright: ignore[reportPrivateUsage]
+                            route_validation._DtrFacilityLeg,
                             leg,
                         ),
                         evaluated_at,
@@ -1391,3 +1391,26 @@ TOOL_CONTRACT = {
     "operationErrorSchema": _OPERATION_ERROR_SCHEMA,
     "operationErrorTemplate": _SAFE_ERROR,
 }
+
+
+# Explicit helper API exercised by the offline contract tests.
+
+# Explicit exports for the domain contract tests.
+__all__ = (
+    "_OUTPUT_ADAPTER",
+    "_PROGRESS_MESSAGES",
+    "_SAFE_ERROR",
+    "_I66ComparisonRow",
+    "_I66ObservedComponent",
+    "_I66ScheduleComponent",
+    "_I95ComparisonRow",
+    "_I95Component",
+    "_OperationError",
+    "_PricingRequest",
+    "_ProgressEvent",
+    "_UnavailableComponent",
+    "_build_i66_component",
+    "_build_i95_i495_component",
+    "_count_valid_prior_week_bins",
+    "_fetch_i95_i495_comparisons",
+)

@@ -1,15 +1,16 @@
-# pyright: basic
-
 from __future__ import annotations
 
 import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import BinaryIO
 
 import pytest
 
 from eval import ballpark_hallucination_batch as batch
+
+type JSON = str | int | float | bool | list[JSON] | dict[str, JSON] | None
 
 
 def _case() -> dict[str, object]:
@@ -28,7 +29,7 @@ def _case() -> dict[str, object]:
         "planned_annual_commute_days": 240,
         "gross_annual_income_usd": "120000.00",
     }
-    payload = {
+    payload: dict[str, JSON] = {
         "evaluated_at": "2026-08-22T17:15:34-04:00",
         "target_window": {
             "start_date": "2026-05-30",
@@ -217,13 +218,13 @@ def test_active_queue_counts_only_nonterminal_luna_rows() -> None:
     class Client:
         class batches:
             @staticmethod
-            def list(*, limit: int):
+            def list(*, limit: int) -> list[SimpleNamespace]:
                 assert limit == 100
                 return batches
 
         class files:
             @staticmethod
-            def content(file_id: str):
+            def content(file_id: str) -> SimpleNamespace:
                 return SimpleNamespace(text={"luna": luna, "other": other}[file_id])
 
     assert batch.active_luna_tokens(Client) == batch.preflight(luna)["tiktoken_tokens"]
@@ -249,23 +250,23 @@ def test_submit_uploads_exact_packet_and_persists_batch_ids(tmp_path: Path) -> N
     class Client:
         class files:
             @staticmethod
-            def create(*, file, purpose: str):
+            def create(*, file: BinaryIO, purpose: str) -> SimpleNamespace:
                 assert purpose == "batch"
                 uploads.append(file.read())
                 return SimpleNamespace(id="file-123")
 
             @staticmethod
-            def content(_file_id: str):
+            def content(_file_id: str) -> None:
                 raise AssertionError("no active batches expected")
 
         class batches:
             @staticmethod
-            def list(*, limit: int):
+            def list(*, limit: int) -> list[SimpleNamespace]:
                 assert limit == 100
                 return []
 
             @staticmethod
-            def create(**kwargs):
+            def create(**kwargs: object) -> SimpleNamespace:
                 assert kwargs["endpoint"] == "/v1/responses"
                 assert kwargs["completion_window"] == "24h"
                 return SimpleNamespace(id="batch-123", status="validating")
@@ -302,12 +303,12 @@ def test_submit_recovers_batch_created_before_manifest_was_persisted(
     class Client:
         class files:
             @staticmethod
-            def content(_file_id: str):
+            def content(_file_id: str) -> None:
                 raise AssertionError("recovery must happen before the queue recount")
 
         class batches:
             @staticmethod
-            def list(*, limit: int):
+            def list(*, limit: int) -> list[SimpleNamespace]:
                 assert limit == 100
                 return [
                     SimpleNamespace(
@@ -323,7 +324,7 @@ def test_submit_recovers_batch_created_before_manifest_was_persisted(
                 ]
 
             @staticmethod
-            def create(**_kwargs):
+            def create(**_kwargs: object) -> None:
                 raise AssertionError("an existing Batch must not be duplicated")
 
     manifest = batch.submit(manifest_path, Client)
@@ -400,7 +401,7 @@ def test_collect_returns_pending_then_grades_terminal_batch(
     class Client:
         class batches:
             @staticmethod
-            def retrieve(_batch_id: str):
+            def retrieve(_batch_id: str) -> SimpleNamespace:
                 return SimpleNamespace(
                     status=state["status"],
                     output_file_id="output" if state["status"] == "completed" else None,
@@ -409,17 +410,16 @@ def test_collect_returns_pending_then_grades_terminal_batch(
 
         class files:
             @staticmethod
-            def content(file_id: str):
+            def content(file_id: str) -> SimpleNamespace:
                 assert file_id == "output"
                 return SimpleNamespace(text=output)
 
     assert batch.collect(manifest_path, Client) == {"status": "in_progress"}
 
-    monkeypatch.setattr(
-        batch,
-        "grade_outputs",
-        lambda _case, rows: {"counts": {"responses": len(rows)}, "verdicts": []},
-    )
+    def grade(_case: object, rows: list[object]) -> dict[str, JSON]:
+        return {"counts": {"responses": len(rows)}, "verdicts": []}
+
+    monkeypatch.setattr(batch, "grade_outputs", grade)
     state["status"] = "completed"
     result = batch.collect(manifest_path, Client)
 

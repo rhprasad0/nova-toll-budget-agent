@@ -1,34 +1,67 @@
 """Redact telemetry copies before ADOT exports them; never change agent state."""
 
-# ruff: noqa: ANN401
 # ADOT/OTel expose no exporter-replacement API. The small wiring adapter below
 # is version-locked and tested against both AWS and upstream batch processors.
-# pyright: reportPrivateUsage=false, reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 from __future__ import annotations
 
 import json
 import logging
 import os
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import copy
 from dataclasses import replace
 from importlib.metadata import version
 from time import monotonic
-from typing import Any, cast
+from typing import Protocol, TypedDict, Unpack, cast
 
 import boto3
 from botocore.config import Config
 from opentelemetry import trace
 from opentelemetry._logs import get_logger_provider
 from opentelemetry.instrumentation.utils import suppress_instrumentation
-from opentelemetry.sdk._logs import ReadableLogRecord
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor, LogRecordExporter
+from opentelemetry.sdk._logs import LoggerProvider, ReadableLogRecord
+from opentelemetry.sdk._logs.export import (
+    BatchLogRecordProcessor,
+    LogRecordExporter,
+    LogRecordExportResult,
+)
+from opentelemetry.sdk._shared_internal import BatchProcessor
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import Event, ReadableSpan
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
+from opentelemetry.sdk.trace import Event, ReadableSpan, TracerProvider
+from opentelemetry.sdk.trace.export import (
+    BatchSpanProcessor,
+    SpanExporter,
+    SpanExportResult,
+)
 from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.trace import Link, Status
+from opentelemetry.util.types import AnyValue, Attributes
+
+
+class GuardrailText(TypedDict):
+    text: str
+
+
+class GuardrailContent(TypedDict):
+    text: GuardrailText
+
+
+class GuardrailRequest(TypedDict):
+    guardrailIdentifier: str
+    guardrailVersion: str
+    source: str
+    outputScope: str
+    content: list[GuardrailContent]
+
+
+class GuardrailClient(Protocol):
+    def apply_guardrail(
+        self, **kwargs: Unpack[GuardrailRequest]
+    ) -> Mapping[str, object]: ...
+
+
+type Telemetry = ReadableSpan | ReadableLogRecord
 
 OMITTED = "[CONTENT OMITTED: redaction unavailable]"
 MAX_TEXT = 10_000
@@ -104,7 +137,7 @@ def protect_console() -> None:
     """
     factory = logging.getLogRecordFactory()
 
-    def record(*args: Any, **kwargs: Any) -> logging.LogRecord:
+    def record(*args: object, **kwargs: object) -> logging.LogRecord:
         item = factory(*args, **kwargs)
         diagnostic = (
             item.name == __name__
@@ -123,7 +156,9 @@ def protect_console() -> None:
 class Redactor:
     """One batch, one bounded in-memory cache; failures never return raw text."""
 
-    def __init__(self, client: Any, guardrail_id: str, guardrail_version: str) -> None:
+    def __init__(
+        self, client: GuardrailClient, guardrail_id: str, guardrail_version: str
+    ) -> None:
         self.client = client
         self.guardrail_id = guardrail_id
         self.guardrail_version = guardrail_version
@@ -152,13 +187,14 @@ class Redactor:
                 result = value
             elif response.get("action") == "GUARDRAIL_INTERVENED":
                 outputs = response.get("outputs")
+                typed_outputs = cast(list[Mapping[str, object]], outputs)
                 if (
                     isinstance(outputs, list)
-                    and len(outputs) == 1
-                    and isinstance(outputs[0].get("text"), str)
-                    and outputs[0]["text"]
+                    and len(typed_outputs) == 1
+                    and isinstance(typed_outputs[0].get("text"), str)
+                    and typed_outputs[0]["text"]
                 ):
-                    result = outputs[0]["text"]
+                    result = cast(str, typed_outputs[0]["text"])
         except Exception:
             pass  # Do not expose exception text, request bodies, or assessments.
         if result == OMITTED:
@@ -166,7 +202,7 @@ class Redactor:
         self.cache[value] = result
         return result
 
-    def value(self, value: Any) -> Any:
+    def value(self, value: object) -> AnyValue:
         if isinstance(value, str):
             # Scan serialized content together so detection keeps its context.
             return self.text(value)
@@ -174,7 +210,9 @@ class Redactor:
             try:
                 encoded = json.dumps(value, ensure_ascii=False)
                 masked = self.text(encoded)
-                return json.loads(masked) if masked != OMITTED else OMITTED
+                return (
+                    cast(AnyValue, json.loads(masked)) if masked != OMITTED else OMITTED
+                )
             except (TypeError, ValueError, RecursionError):
                 return OMITTED
         if value is None or isinstance(value, bool):
@@ -184,9 +222,11 @@ class Redactor:
             return value if masked == str(value) else masked
         return OMITTED
 
-    def attributes(self, attributes: Mapping[str, Any] | None) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        content: dict[str, Any] = {}
+    def attributes(
+        self, attributes: Mapping[str, AnyValue] | None
+    ) -> dict[str, AnyValue]:
+        result: dict[str, AnyValue] = {}
+        content: dict[str, AnyValue] = {}
         for key, value in (attributes or {}).items():
             if (
                 key in {"session.id", "gen_ai.conversation.id"}
@@ -206,12 +246,13 @@ class Redactor:
                 continue
             elif key == "gen_ai.agent.tools" and isinstance(value, str):
                 try:
-                    tools = json.loads(value)
+                    tools = cast(object, json.loads(value))
                     if not isinstance(tools, list) or not all(
-                        isinstance(name, str) and name for name in tools
+                        isinstance(name, str) and name
+                        for name in cast(list[object], tools)
                     ):
                         raise ValueError
-                    content["tollchat.agent.tool_names"] = tools
+                    content["tollchat.agent.tool_names"] = cast(list[str], tools)
                 except (TypeError, ValueError):
                     _logger.warning("telemetry_redaction_failed")
                     result["tollchat.agent.tool_names"] = OMITTED
@@ -242,27 +283,28 @@ class Redactor:
     def span(self, span: ReadableSpan) -> ReadableSpan:
         # Copy every mutable payload container; sibling exporters still see the original.
         result = copy(span)
-        result._name = self.text(span.name)
-        result._attributes = self.attributes(span.attributes)
-        result._resource = self.resource(span.resource)
-        result._events = [
+        result._name = self.text(span.name)  # pyright: ignore[reportPrivateUsage]
+        result._attributes = cast(Attributes, self.attributes(span.attributes))  # pyright: ignore[reportPrivateUsage]
+        result._resource = self.resource(span.resource)  # pyright: ignore[reportPrivateUsage]
+        result._events = [  # pyright: ignore[reportPrivateUsage]
             Event(
                 self.text(e.name),
                 {}
                 if e.name == "gen_ai.system.message"
-                else self.attributes(e.attributes),
+                else cast(Attributes, self.attributes(e.attributes)),
                 e.timestamp,
             )
             for e in span.events
         ]
-        result._links = [
-            Link(link.context, self.attributes(link.attributes)) for link in span.links
+        result._links = [  # pyright: ignore[reportPrivateUsage]
+            Link(link.context, cast(Attributes, self.attributes(link.attributes)))
+            for link in span.links
         ]
-        result._status = Status(
+        result._status = Status(  # pyright: ignore[reportPrivateUsage]
             span.status.status_code,
             self.text(span.status.description) if span.status.description else None,
         )
-        result._instrumentation_scope = self.scope(span.instrumentation_scope)
+        result._instrumentation_scope = self.scope(span.instrumentation_scope)  # pyright: ignore[reportPrivateUsage]
         return result
 
     def log(self, record: ReadableLogRecord) -> ReadableLogRecord:
@@ -282,14 +324,20 @@ class RedactingExporter:
     """Delegate only sanitized copies to the existing AWS exporter."""
 
     def __init__(
-        self, exporter: Any, client: Any, guardrail_id: str, guardrail_version: str
+        self,
+        exporter: SpanExporter | LogRecordExporter,
+        client: GuardrailClient,
+        guardrail_id: str,
+        guardrail_version: str,
     ) -> None:
         self.exporter = exporter
         self.client = client
         self.guardrail_id = guardrail_id
         self.guardrail_version = guardrail_version
 
-    def export(self, batch: Sequence[Any]) -> Any:
+    def export(
+        self, batch: Sequence[Telemetry]
+    ) -> SpanExportResult | LogRecordExportResult:
         redactor = Redactor(self.client, self.guardrail_id, self.guardrail_version)
         try:
             safe = [
@@ -299,12 +347,15 @@ class RedactingExporter:
                 for item in batch
             ]
             with suppress_instrumentation():
-                return self.exporter.export(safe)
+                return cast(
+                    Callable[
+                        [Sequence[Telemetry]], SpanExportResult | LogRecordExportResult
+                    ],
+                    self.exporter.export,
+                )(safe)
         except Exception:
             _logger.error("telemetry_export_failed")
             # OTel workers handle export failure; there is deliberately no raw fallback.
-            from opentelemetry.sdk._logs.export import LogRecordExportResult
-            from opentelemetry.sdk.trace.export import SpanExportResult
 
             return (
                 SpanExportResult.FAILURE
@@ -312,17 +363,23 @@ class RedactingExporter:
                 else LogRecordExportResult.FAILURE
             )
 
-    def shutdown(self, *args: Any, **kwargs: Any) -> Any:
-        return self.exporter.shutdown(*args, **kwargs)
+    def shutdown(self, *args: object, **kwargs: object) -> object:
+        return cast(Callable[..., object], self.exporter.shutdown)(*args, **kwargs)
 
-    def force_flush(self, *args: Any, **kwargs: Any) -> Any:
-        return self.exporter.force_flush(*args, **kwargs)
+    def force_flush(self, *args: object, **kwargs: object) -> object:
+        return cast(Callable[..., object], self.exporter.force_flush)(*args, **kwargs)
+
+
+class ExporterReference(Protocol):
+    """AWS size-aware log batching retains a second exporter reference."""
+
+    _exporter: SpanExporter | LogRecordExporter | RedactingExporter
 
 
 def wrap_exporters(
-    provider: Any,
-    log_provider: Any,
-    client: Any,
+    provider: TracerProvider,
+    log_provider: LoggerProvider,
+    client: GuardrailClient,
     guardrail_id: str,
     guardrail_version: str,
 ) -> int:
@@ -332,34 +389,39 @@ def wrap_exporters(
     )
     from opentelemetry.processor.baggage import BaggageSpanProcessor
 
-    spans = provider._active_span_processor._span_processors
-    logs = log_provider._multi_log_record_processor._log_record_processors
-    targets = []
+    spans = provider._active_span_processor._span_processors  # pyright: ignore[reportPrivateUsage]
+    logs = log_provider._multi_log_record_processor._log_record_processors  # pyright: ignore[reportPrivateUsage]
+    targets: list[
+        tuple[BatchSpanProcessor | BatchLogRecordProcessor, BatchProcessor[Telemetry]]
+    ] = []
     for processor in (*spans, *logs):
         if type(processor) in (GenAiNestedClientSpanProcessor, BaggageSpanProcessor):
             continue
         if not isinstance(processor, (BatchSpanProcessor, BatchLogRecordProcessor)):
             raise RuntimeError("unsupported telemetry processor")
-        batch = processor._batch_processor
-        if not isinstance(batch._exporter, (SpanExporter, LogRecordExporter)):
+        batch = cast(BatchProcessor[Telemetry], processor._batch_processor)  # pyright: ignore[reportPrivateUsage]
+        if not isinstance(batch._exporter, (SpanExporter, LogRecordExporter)):  # pyright: ignore[reportPrivateUsage]
             raise RuntimeError("unsupported telemetry exporter")
         if (
             hasattr(processor, "_exporter")
-            and cast(Any, processor)._exporter is not batch._exporter
+            and cast(ExporterReference, processor)._exporter is not batch._exporter  # pyright: ignore[reportPrivateUsage]
         ):
             raise RuntimeError("inconsistent telemetry exporter")
         targets.append((processor, batch))
     if not targets or not any(isinstance(p, BatchSpanProcessor) for p, _ in targets):
         raise RuntimeError("missing trace exporter")
     for processor, batch in targets:
-        with batch._export_lock:
+        with batch._export_lock:  # pyright: ignore[reportPrivateUsage]
             wrapped = RedactingExporter(
-                batch._exporter, client, guardrail_id, guardrail_version
+                cast(SpanExporter | LogRecordExporter, batch._exporter),  # pyright: ignore[reportPrivateUsage]
+                client,
+                guardrail_id,
+                guardrail_version,
             )
-            batch._exporter = wrapped
+            batch._exporter = wrapped  # pyright: ignore[reportPrivateUsage]
             if hasattr(processor, "_exporter"):
-                processor._exporter = (
-                    wrapped  # AWS size-aware log batches use this second reference.
+                cast(ExporterReference, processor)._exporter = (  # pyright: ignore[reportPrivateUsage]
+                    wrapped  # AWS size-aware batches use this second reference.
                 )
     return len(targets)
 
@@ -392,7 +454,8 @@ def initialize() -> None:
 
         initialize_adot(swallow_exceptions=False)
         with suppress_instrumentation():
-            client = boto3.client(
+            # Optional boto3 service overloads reference uninstalled unrelated stubs.
+            client = boto3.client(  # pyright: ignore[reportUnknownMemberType]
                 "bedrock-runtime",
                 config=Config(
                     connect_timeout=5,
@@ -401,9 +464,9 @@ def initialize() -> None:
                 ),
             )
         wrap_exporters(
-            trace.get_tracer_provider(),
-            get_logger_provider(),
-            client,
+            cast(TracerProvider, trace.get_tracer_provider()),
+            cast(LoggerProvider, get_logger_provider()),
+            cast(GuardrailClient, client),
             guardrail_id,
             guardrail_version,
         )

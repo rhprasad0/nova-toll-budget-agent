@@ -3,15 +3,18 @@
 import importlib.util
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 SCRIPT = Path(__file__).parents[1] / "scripts/development_deployment_status.py"
-spec = importlib.util.spec_from_file_location("deployment_status", SCRIPT)
-assert spec and spec.loader
-status = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(status)
+if TYPE_CHECKING:
+    from scripts import development_deployment_status as status
+else:
+    spec = importlib.util.spec_from_file_location("deployment_status", SCRIPT)
+    assert spec and spec.loader
+    status = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(status)
 
 
 @pytest.fixture
@@ -261,7 +264,10 @@ def test_wrong_identity_or_evidence_fails_closed(
     ),
 )
 def test_deployment_id_zero_negative_malformed_or_unequal_fails_closed(
-    context: tuple[Any, ...], monkeypatch: pytest.MonkeyPatch, source: str, value: Any
+    context: tuple[Any, ...],
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    value: object,
 ) -> None:
     needs, _, _, calls, _ = context
     if source == "record":
@@ -283,7 +289,7 @@ def test_deployment_id_zero_negative_malformed_or_unequal_fails_closed(
 
 @pytest.mark.parametrize("bad", ["private string", [], None])
 def test_nested_non_mapping_outputs_fail_closed(
-    context: tuple[Any, ...], monkeypatch: pytest.MonkeyPatch, bad: Any
+    context: tuple[Any, ...], monkeypatch: pytest.MonkeyPatch, bad: object
 ) -> None:
     needs, _, _, calls, _ = context
     needs["build"]["outputs"] = bad

@@ -1378,3 +1378,22 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+# Explicitly exercised contract helpers.
+__all__ = [
+    "_assert_migration_tree",
+    "_assert_source_bytes",
+    "_final_sql",
+    "_history_preflight_sql",
+    "_migration_candidates",
+    "_migration_sql",
+    "_parse_result",
+    "_production_baselines",
+    "_production_migrations",
+    "_psql_environment",
+    "_psql_path",
+    "_registry",
+    "_remove_terminal_commit",
+    "_render_development_migration",
+    "_session_sql",
+]

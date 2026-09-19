@@ -1014,8 +1014,8 @@ def _publish(
 
 
 def _connect(*, reader: bool = False) -> object:
-    import psycopg  # type: ignore[import-not-found]
-    from psycopg.rows import dict_row  # type: ignore[import-not-found]
+    import psycopg
+    from psycopg.rows import dict_row
 
     host, port = os.environ["DB_HOST"], int(os.environ["DB_PORT"])
     user = os.environ.get("DB_READER_USER") if reader else os.environ["DB_USER"]
@@ -1201,3 +1201,27 @@ def _log_success(generation_id: str, route_count: int, invoked_at: datetime) -> 
         )
     )
     logger.info("V2_REPORT_GENERATION_OK both %s %s", generation_id, route_count)
+
+
+# Explicit helper API exercised by the offline contract tests.
+__all__ = (
+    "_EASTERN",
+    "_Leg",
+    "_Path",
+    "_cleanup_stale",
+    "_expected_watermark",
+    "_hour_starts",
+    "_hourly_i66_rows",
+    "_hourly_rows",
+    "_i66_expected_slots",
+    "_i66_schedule",
+    "_publish",
+    "_record_failure",
+    "_render_report_html",
+    "_report_document",
+    "_route_key",
+    "_selected_i66_prices",
+    "_selected_prices",
+    "_validate_paths",
+    "_week_window",
+)

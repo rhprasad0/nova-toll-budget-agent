@@ -349,3 +349,13 @@ if __name__ == "__main__":
         " ".join(sys.argv[1:]) or "What is the current toll from Leesburg to Route 28?"
     )
     print(agent(prompt))
+
+
+# Explicit helper API exercised by the offline contract tests.
+__all__ = (
+    "_DUPLICATE_TOOL_MESSAGE",
+    "_PROMPT_POINTS_ADAPTER",
+    "_CachedResponsesModel",
+    "_build_model",
+    "_render_system_prompt_values",
+)

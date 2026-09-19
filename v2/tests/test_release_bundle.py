@@ -12,21 +12,27 @@ import sys
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-release_manifest = cast(Any, importlib.import_module("infra.release_manifest"))
+if TYPE_CHECKING:
+    from infra import release_manifest
+else:
+    release_manifest = importlib.import_module("infra.release_manifest")
 
-SPEC = importlib.util.spec_from_file_location(
-    "verify_release_bundle",
-    Path(__file__).parents[1] / "scripts/verify_release_bundle.py",
-)
-assert SPEC and SPEC.loader
-bundle = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = bundle
-SPEC.loader.exec_module(bundle)
+if TYPE_CHECKING:
+    from scripts import verify_release_bundle as bundle
+else:
+    SPEC = importlib.util.spec_from_file_location(
+        "verify_release_bundle",
+        Path(__file__).parents[1] / "scripts/verify_release_bundle.py",
+    )
+    assert SPEC and SPEC.loader
+    bundle = importlib.util.module_from_spec(SPEC)
+    sys.modules[SPEC.name] = bundle
+    SPEC.loader.exec_module(bundle)
 
 COMMIT = "a" * 40
 Entry = tuple[str, bytes, int | None]

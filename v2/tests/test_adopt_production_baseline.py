@@ -1596,7 +1596,7 @@ ORDER BY type.typname, privilege.grantee;
     def production_migration(sql: str, migration_id: str, *, succeeds: bool) -> None:
         rendered = tmp_path / f"{migration_id}.sql"
         rendered.write_text(sql, encoding="utf-8")
-        runner._remove_terminal_commit(rendered)  # pyright: ignore[reportPrivateUsage]
+        runner._remove_terminal_commit(rendered)
         migration = runner.Migration(
             path=f"v2/db/migrations/{migration_id}.sql",
             schema="pricing",
@@ -1606,13 +1606,13 @@ ORDER BY type.typname, privilege.grantee;
             number=31,
             source_sha256="a" * 64,
         )
-        session = runner._session_sql(  # pyright: ignore[reportPrivateUsage]
+        session = runner._session_sql(
             (migration,),
             {"pricing": "1.3.1", "oracle": "1.15.0"},
             {migration.path: rendered},
             "a" * 40,
             "12345678-1234-4234-8234-123456789abc",
-            runner._production_baselines(),  # pyright: ignore[reportPrivateUsage]
+            runner._production_baselines(),
             runner.PRODUCTION_PROFILE,
         )
         result = subprocess.run(
@@ -1620,7 +1620,7 @@ ORDER BY type.typname, privilege.grantee;
             input=session,
             capture_output=True,
             text=True,
-            env=runner._psql_environment(runner.PRODUCTION_PROFILE),  # pyright: ignore[reportPrivateUsage]
+            env=runner._psql_environment(runner.PRODUCTION_PROFILE),
             check=False,
         )
         assert (result.returncode == 0) is succeeds, result.stderr
@@ -1864,7 +1864,7 @@ SELECT has_database_privilege('schema_migrator_production', current_database(), 
     # Exercise the pending production path after the separately privileged 031.
     previous = next(
         baseline
-        for baseline in runner._production_baselines()  # pyright: ignore[reportPrivateUsage]
+        for baseline in runner._production_baselines()
         if baseline.schema == "oracle" and baseline.version == "1.14.0"
     )
     reset = run_psql(

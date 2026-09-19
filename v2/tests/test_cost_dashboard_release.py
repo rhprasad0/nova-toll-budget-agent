@@ -10,7 +10,7 @@ import subprocess
 import sys
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from zipfile import ZipFile
 
 import pytest
@@ -20,7 +20,7 @@ from scripts import cost_dashboard_release as gate
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_asset_pins_and_archive_contract():
+def test_asset_pins_and_archive_contract() -> None:
     for name, digest in gate.ASSET_SHA256.items():
         if "/" in name:
             environment, asset = name.split("/")
@@ -55,7 +55,7 @@ def test_asset_pins_and_archive_contract():
 
 
 @pytest.mark.parametrize("environment", ["development", "production"])
-def test_billing_policy_limits(environment: str):
+def test_billing_policy_limits(environment: str) -> None:
     statements = {row["Sid"]: row for row in gate.policy(environment)["Statement"]}
     assert statements["ReadAccountBilling"]["Action"] == ["ce:GetCostAndUsage"]
     assert statements["PublishSnapshot"]["Resource"].endswith("/costs.json")
@@ -80,7 +80,7 @@ def test_billing_policy_limits(environment: str):
     ] not in json.dumps(statements)
 
 
-def test_routes_only_add_the_four_billing_behaviors():
+def test_routes_only_add_the_four_billing_behaviors() -> None:
     model = {
         "path_pattern": "/eval-dashboard*",
         "target_origin_id": "site",
@@ -106,10 +106,16 @@ def test_routes_only_add_the_four_billing_behaviors():
         gate.routes(after, before)
 
 
-def test_billing_routes_keep_the_active_chat_release():
+def test_billing_routes_keep_the_active_chat_release() -> None:
     sys.path.insert(0, str(ROOT))
-    legacy = importlib.import_module("infra.delivery_plan_validator")
-    rehearsal = importlib.import_module("test_blue_green")
+    if TYPE_CHECKING:
+        from infra import delivery_plan_validator as legacy
+    else:
+        legacy = importlib.import_module("infra.delivery_plan_validator")
+    if TYPE_CHECKING:
+        import test_blue_green as rehearsal
+    else:
+        rehearsal = importlib.import_module("test_blue_green")
     state = rehearsal.previous()
     before: dict[str, Any] = {
         "arn": "arn:aws:cloudfront::903859731897:distribution/E33DVF3KT7BTAC",
@@ -158,7 +164,7 @@ def test_billing_routes_keep_the_active_chat_release():
 
 
 @pytest.mark.parametrize("environment", ["development", "production"])
-def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str):
+def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str) -> None:
     provider_dir = ROOT / "v2/infra/.terraform/providers"
     if not shutil.which("terraform") or not provider_dir.is_dir():
         pytest.skip(
@@ -295,7 +301,10 @@ locals {{
             gate.validate(unknown_role, environment, plan)
     if environment == "development":
         sys.path.insert(0, str(ROOT))
-        legacy = importlib.import_module("infra.delivery_plan_validator")
+        if TYPE_CHECKING:
+            from infra import delivery_plan_validator as legacy
+        else:
+            legacy = importlib.import_module("infra.delivery_plan_validator")
         plan = {
             "terraform_version": "1.15.8",
             "applyable": True,
@@ -356,7 +365,10 @@ locals {{
         )
         assert result["status"] == "accepted", result
         # Exercise the same real resources through the retained-slot gate.
-        rehearsal = importlib.import_module("test_blue_green")
+        if TYPE_CHECKING:
+            import test_blue_green as rehearsal
+        else:
+            rehearsal = importlib.import_module("test_blue_green")
         state = rehearsal.previous()
         prepared = rehearsal.plan(
             rehearsal.gate.desired(state, rehearsal.slot("green", "release2")),
@@ -368,7 +380,7 @@ locals {{
             rehearsal.gate.validate_plan(prepared, state, "promote")
 
 
-def test_provider_report_routes_keep_known_defaults(tmp_path: Path):
+def test_provider_report_routes_keep_known_defaults(tmp_path: Path) -> None:
     provider_dir = ROOT / "v2/infra/.terraform/providers"
     if not shutil.which("terraform") or not provider_dir.is_dir():
         pytest.skip("Initialize the pinned Terraform provider for this check")
@@ -499,7 +511,10 @@ def test_provider_report_routes_keep_known_defaults(tmp_path: Path):
 def test_first_billing_refresh_preserves_release_authority(
     environment: str, phase: str
 ) -> None:
-    rehearsal = importlib.import_module("test_blue_green")
+    if TYPE_CHECKING:
+        import test_blue_green as rehearsal
+    else:
+        rehearsal = importlib.import_module("test_blue_green")
     suffix = "-dev" if environment == "development" else ""
     account = gate.ACCOUNTS[environment]
     name = "tollchat-v2-cost-publisher" + suffix

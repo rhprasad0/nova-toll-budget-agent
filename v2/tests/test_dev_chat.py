@@ -1,16 +1,17 @@
 """Offline contracts for the v2 loopback streaming console."""
 
-# pyright: basic
-
 import asyncio
 import json
 import threading
 import tomllib
 import urllib.error
 import urllib.request
+from collections.abc import AsyncIterator
 from datetime import date
 from hashlib import sha256
+from http.client import HTTPResponse
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -18,7 +19,7 @@ from agent import dev_chat
 from agent.dev_chat import DevChat, create_server
 
 
-def test_local_console_uses_refreshable_aws_login_credentials():
+def test_local_console_uses_refreshable_aws_login_credentials() -> None:
     root = Path(__file__).parents[1]
     dependencies = tomllib.loads((root / "pyproject.toml").read_text())["project"][
         "dependencies"
@@ -31,26 +32,26 @@ def test_local_console_uses_refreshable_aws_login_credentials():
 
 
 class _Metrics:
-    def get_summary(self):
+    def get_summary(self) -> dict[str, object]:
         return {"total_cycles": 2, "tool_usage": {"get_current_toll_price": 1}}
 
 
 class _Result:
     metrics = _Metrics()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "## Price\n\nHello 👋 **$4.25**"
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, object]:
         return {"message": {"role": "assistant", "content": [{"text": str(self)}]}}
 
 
 class _Agent:
-    def __init__(self, number, factory_kwargs):
+    def __init__(self, number: int, factory_kwargs: dict[str, object]) -> None:
         self.number = number
         self.factory_kwargs = factory_kwargs
 
-    async def stream_async(self, prompt):
+    async def stream_async(self, prompt: str) -> AsyncIterator[dict[str, object]]:
         yield {"init_event_loop": True}
         yield {"data": f"{self.number}: {prompt} 👋"}
         yield {
@@ -85,26 +86,28 @@ class _Agent:
 
 
 class _Factory:
-    def __init__(self):
-        self.agents = []
+    def __init__(self) -> None:
+        self.agents: list[_Agent] = []
 
-    def __call__(self, **kwargs):
+    def __call__(self, **kwargs: object) -> _Agent:
         agent = _Agent(len(self.agents) + 1, kwargs)
         self.agents.append(agent)
         return agent
 
 
 class _FailingAgent:
-    async def stream_async(self, _prompt):
+    async def stream_async(self, _prompt: str) -> AsyncIterator[dict[str, object]]:
         yield {"data": "partial"}
         raise ValueError("secret failure details")
 
 
-async def _collect(app, session_id="browser", message="hello"):
+async def _collect(
+    app: DevChat, session_id: str = "browser", message: str = "hello"
+) -> list[dict[str, Any]]:
     return [event async for event in app.stream(session_id, message)]
 
 
-def test_streams_raw_events_text_tools_result_and_reuses_session():
+def test_streams_raw_events_text_tools_result_and_reuses_session() -> None:
     factory = _Factory()
     app = DevChat(factory)
 
@@ -136,7 +139,9 @@ def test_streams_raw_events_text_tools_result_and_reuses_session():
     assert factory.agents[0].factory_kwargs == {}
 
 
-def test_reset_and_new_york_date_create_fresh_agents(monkeypatch):
+def test_reset_and_new_york_date_create_fresh_agents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     dates = iter((date(2026, 8, 22), date(2026, 8, 22), date(2026, 8, 23)))
     monkeypatch.setattr(dev_chat, "_new_york_date", lambda: next(dates))
     factory = _Factory()
@@ -153,13 +158,18 @@ def test_reset_and_new_york_date_create_fresh_agents(monkeypatch):
     ("session_id", "message"),
     [("", "hello"), ("bad/id", "hello"), ("ok", " "), ("ok", 1)],
 )
-def test_rejects_invalid_input(session_id, message):
+def test_rejects_invalid_input(session_id: str, message: str | int) -> None:
     with pytest.raises((TypeError, ValueError)):
         DevChat(_Factory()).validate(session_id, message)
 
 
-def test_agent_failure_emits_one_safe_terminal_error(caplog):
-    app = DevChat(lambda **_kwargs: _FailingAgent())
+def test_agent_failure_emits_one_safe_terminal_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def _strict_callback_1(**_kwargs: object) -> object:
+        return _FailingAgent()
+
+    app = DevChat(_strict_callback_1)
 
     events = asyncio.run(_collect(app))
 
@@ -173,8 +183,10 @@ def test_agent_failure_emits_one_safe_terminal_error(caplog):
     assert "browser" not in caplog.text
 
 
-def test_agent_construction_failure_emits_one_safe_terminal_error(caplog):
-    def fail(**_kwargs):
+def test_agent_construction_failure_emits_one_safe_terminal_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def fail(**_kwargs: object) -> None:
         raise ValueError("startup secret details")
 
     events = asyncio.run(_collect(DevChat(fail)))
@@ -189,7 +201,7 @@ def test_agent_construction_failure_emits_one_safe_terminal_error(caplog):
     assert "startup secret details" in caplog.text
 
 
-def test_http_server_serves_assets_streams_ndjson_and_resets():
+def test_http_server_serves_assets_streams_ndjson_and_resets() -> None:
     factory = _Factory()
     app = DevChat(factory)
     server = create_server(app, port=0)
@@ -423,8 +435,12 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
 
 
 def _post(
-    url, body, *, origin: str | None = "same-origin", content_type="application/json"
-):
+    url: str,
+    body: object,
+    *,
+    origin: str | None = "same-origin",
+    content_type: str = "application/json",
+) -> HTTPResponse:
     if origin == "same-origin":
         origin = url.removesuffix("/api/chat").removesuffix("/api/reset")
     headers = {"Content-Type": content_type}

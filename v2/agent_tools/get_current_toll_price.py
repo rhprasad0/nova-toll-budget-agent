@@ -27,4 +27,4 @@ async def get_current_toll_price(
         yield event
 
 
-get_current_toll_price.tool_spec = TOOL_SPEC  # pyright: ignore[reportAttributeAccessIssue]
+get_current_toll_price.tool_spec = TOOL_SPEC

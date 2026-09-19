@@ -49,7 +49,7 @@ def _record_field(record: logging.LogRecord, field: str) -> str:
     return cast(str, getattr(record, field))
 
 
-def _record_value(record: logging.LogRecord, field: str) -> Any:
+def _record_value(record: logging.LogRecord, field: str) -> object:
     return getattr(record, field)
 
 
@@ -838,11 +838,11 @@ def test_unscored_experiment_errors_use_generic_handler_path_without_sns(
 
     original_to_file = EvaluationReport.to_file
 
-    def to_file(report: Any, path: str) -> None:
+    def to_file(report: EvaluationReport, path: str) -> None:
         events.append("write")
         original_to_file(report, path)
 
-    def display(_report: Any, *, include_input: bool) -> None:
+    def display(_report: object, *, include_input: bool) -> None:
         assert include_input is False
         events.append("display")
 

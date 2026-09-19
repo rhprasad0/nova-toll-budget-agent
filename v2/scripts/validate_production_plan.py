@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 """Gate a complete production application plan before private storage."""
 
 from __future__ import annotations
@@ -87,23 +86,23 @@ def _unknown(value: object) -> None:
     if isinstance(value, bool):
         return
     if isinstance(value, list):
-        for item in value:
+        for item in cast(list[object], value):
             _unknown(item)
         return
     if isinstance(value, dict):
-        for item in value.values():
+        for item in cast(dict[str, object], value).values():
             _unknown(item)
         return
     raise PlanError("unknown-shape")
 
 
 def _actions(change: dict[str, Any]) -> tuple[str, ...]:
-    actions = change.get("actions")
+    actions: object = change.get("actions")
     if not isinstance(actions, list) or any(
-        not isinstance(action, str) for action in actions
+        not isinstance(action, str) for action in cast(list[object], actions)
     ):
         raise PlanError("actions")
-    return tuple(actions)
+    return tuple(cast(list[str], actions))
 
 
 def validate(plan: dict[str, Any], inventory_root: Path) -> dict[str, int]:
@@ -117,7 +116,7 @@ def validate(plan: dict[str, Any], inventory_root: Path) -> dict[str, int]:
     outputs = plan.get("output_changes", {})
     if not isinstance(outputs, dict):
         raise PlanError("outputs")
-    for name, output in outputs.items():
+    for name, output in cast(dict[str, object], outputs).items():
         if (
             name not in ALLOWED_OUTPUTS
             or not isinstance(output, dict)
@@ -133,9 +132,10 @@ def validate(plan: dict[str, Any], inventory_root: Path) -> dict[str, int]:
         "read": 0,
         "replace": 0,
     }
-    for item in changes:
+    for raw_item in cast(list[object], changes):
+        item = cast(dict[str, object], raw_item)
         if (
-            not isinstance(item, dict)
+            not isinstance(raw_item, dict)
             or item.get("previous_address") is not None
             or item.get("deposed") is not None
         ):
@@ -154,8 +154,8 @@ def validate(plan: dict[str, Any], inventory_root: Path) -> dict[str, int]:
             raise PlanError("provider")
         if provider.endswith("/archive") and mode != "data":
             raise PlanError("provider")
-        _unknown(change.get("after_unknown", {}))
-        actions = _actions(change)
+        _unknown(cast(dict[str, object], change).get("after_unknown", {}))
+        actions = _actions(cast(dict[str, object], change))
         if mode == "data":
             if base not in data or actions not in {("read",), ("no-op",)}:
                 raise PlanError("data")
@@ -183,8 +183,11 @@ def validate(plan: dict[str, Any], inventory_root: Path) -> dict[str, int]:
             ):
                 raise PlanError("replacement")
             if base == "aws_bedrock_guardrail_version.tollchat":
-                after = change.get("after")
-                if not isinstance(after, dict) or after.get("skip_destroy") is not True:
+                after = cast(dict[str, object], change).get("after")
+                if (
+                    not isinstance(after, dict)
+                    or cast(dict[str, object], after).get("skip_destroy") is not True
+                ):
                     raise PlanError("replacement")
             counts["replace"] += 1
         elif actions in {("create",), ("update",), ("no-op",)}:

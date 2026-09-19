@@ -1,6 +1,5 @@
-# pyright: basic
-
 import asyncio
+from collections.abc import Callable
 from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any, cast
@@ -11,6 +10,8 @@ from pydantic import ValidationError
 from strands.types.tools import ToolResult, ToolUse
 
 from agent_tools import get_annual_toll_ballpark as ballpark
+
+type JSON = str | int | float | bool | list[JSON] | dict[str, JSON] | None
 
 _EASTERN = ZoneInfo("America/New_York")
 
@@ -33,7 +34,9 @@ def _input() -> dict[str, Any]:
     }
 
 
-def _route(*, status: str = "valid", facility_legs=None):
+def _route(
+    *, status: str = "valid", facility_legs: list[dict[str, JSON]] | None = None
+) -> ballpark._BallparkRouteDb:
     if status == "valid":
         return ballpark._BallparkRouteDb.model_validate(
             {
@@ -65,7 +68,7 @@ def _route(*, status: str = "valid", facility_legs=None):
     )
 
 
-def _i95_northbound_restart_route():
+def _i95_northbound_restart_route() -> ballpark._BallparkRouteDb:
     return ballpark._BallparkRouteDb.model_validate(
         {
             "status": "invalid_origin",
@@ -87,8 +90,8 @@ def _i95_northbound_restart_route():
     )
 
 
-def test_ballpark_route_accepts_cross_direction_gap():
-    route = ballpark._BallparkRouteDb.model_validate(  # pyright: ignore[reportPrivateUsage]
+def test_ballpark_route_accepts_cross_direction_gap() -> None:
+    route = ballpark._BallparkRouteDb.model_validate(
         {
             "status": "valid",
             "reason": None,
@@ -115,7 +118,7 @@ def test_ballpark_route_accepts_cross_direction_gap():
     assert route.general_purpose_gaps[0].i95_direction == "NB"
 
 
-def _greenway_route():
+def _greenway_route() -> ballpark._BallparkRouteDb:
     return ballpark._BallparkRouteDb.model_validate(
         {
             "status": "valid",
@@ -137,7 +140,7 @@ def _greenway_route():
     )
 
 
-def _i95_to_greenway_route():
+def _i95_to_greenway_route() -> ballpark._BallparkRouteDb:
     return ballpark._BallparkRouteDb.model_validate(
         {
             "status": "valid",
@@ -226,7 +229,7 @@ def _i95_to_greenway_route():
     )
 
 
-def _summary(*, complete=1):
+def _summary(*, complete: int = 1) -> ballpark._SummaryRow:
     return ballpark._SummaryRow.model_validate(
         {
             "eligible_date_count": 1,
@@ -277,7 +280,7 @@ def _summary(*, complete=1):
     )
 
 
-def _tool_use(data: Any) -> ToolUse:
+def _tool_use(data: object) -> ToolUse:
     return cast(
         ToolUse,
         {
@@ -288,8 +291,8 @@ def _tool_use(data: Any) -> ToolUse:
     )
 
 
-async def _invoke(data: Any) -> tuple[list[dict[str, Any]], ToolResult]:
-    events = []
+async def _invoke(data: object) -> tuple[list[dict[str, Any]], ToolResult]:
+    events: list[dict[str, Any]] = []
     result = None
     async for event in ballpark.get_annual_toll_ballpark.stream(
         _tool_use(data), {"agent": object()}
@@ -297,34 +300,68 @@ async def _invoke(data: Any) -> tuple[list[dict[str, Any]], ToolResult]:
         if event.get("type") == "tool_stream":
             value = event["tool_stream_event"]["data"]
             if isinstance(value, dict) and "stage" in value:
-                events.append(value)
+                events.append(cast(dict[str, Any], value))
         if "tool_result" in event:
             result = event["tool_result"]
     assert result is not None
     return events, result
 
 
+def _callback_1(value: dict[str, JSON]) -> object:
+    return value.update({"weekdays": ["monday", "monday"]})
+
+
+def _callback_2(value: dict[str, JSON]) -> object:
+    return value.update({"weekdays": []})
+
+
+def _callback_3(value: dict[str, JSON]) -> object:
+    return value.update({"planned_annual_commute_days": 160})
+
+
+def _callback_4(value: dict[str, JSON]) -> object:
+    return value.pop("gross_annual_income_usd")
+
+
+def _callback_5(value: dict[str, JSON]) -> object:
+    return value.update({"gross_annual_income_usd": "120000"})
+
+
+def _callback_6(value: dict[str, JSON]) -> object:
+    return cast(dict[str, JSON], value["outbound"]).update({"departure_time": "8am"})
+
+
+def _callback_7(value: dict[str, JSON]) -> object:
+    return value.update({"pricing_profile": {"vehicle_class": "truck"}})
+
+
+def _strict_callback_1(value: dict[str, JSON]) -> object:
+    return value.update({"extra": True})
+
+
 @pytest.mark.parametrize(
     "mutation",
     [
-        lambda value: value.update({"extra": True}),
-        lambda value: value.update({"weekdays": ["monday", "monday"]}),
-        lambda value: value.update({"weekdays": []}),
-        lambda value: value.update({"planned_annual_commute_days": 160}),
-        lambda value: value.pop("gross_annual_income_usd"),
-        lambda value: value.update({"gross_annual_income_usd": "120000"}),
-        lambda value: value["outbound"].update({"departure_time": "8am"}),
-        lambda value: value.update({"pricing_profile": {"vehicle_class": "truck"}}),
+        _strict_callback_1,
+        _callback_1,
+        _callback_2,
+        _callback_3,
+        _callback_4,
+        _callback_5,
+        _callback_6,
+        _callback_7,
     ],
 )
-def test_request_is_strict_and_profile_is_implicit(mutation):
+def test_request_is_strict_and_profile_is_implicit(
+    mutation: Callable[[dict[str, JSON]], object],
+) -> None:
     data = _input()
     mutation(data)
     with pytest.raises(ValidationError):
         ballpark._BallparkRequest.model_validate(data)
 
 
-def test_overnight_fails_before_database(monkeypatch):
+def test_overnight_fails_before_database(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         ballpark.route_validation,
         "connect_to_pricing_database",
@@ -339,7 +376,7 @@ def test_overnight_fails_before_database(monkeypatch):
     ]
 
 
-def test_wall_time_resolution_rejects_dst_gap_and_fold():
+def test_wall_time_resolution_rejects_dst_gap_and_fold() -> None:
     assert (
         ballpark._resolve_unambiguous_eastern_datetime(date(2026, 3, 8), time(2, 30))
         is None
@@ -353,7 +390,7 @@ def test_wall_time_resolution_rejects_dst_gap_and_fold():
     ) == datetime(2026, 3, 9, 8, tzinfo=_EASTERN)
 
 
-def test_fixed_rates_are_computed_for_each_sample_date():
+def test_fixed_rates_are_computed_for_each_sample_date() -> None:
     request = ballpark._BallparkRequest.model_validate(
         {
             **_input(),
@@ -374,7 +411,7 @@ def test_fixed_rates_are_computed_for_each_sample_date():
     assert [item["price_usd"] for item in prices] == ["5.80", "5.25"]
 
 
-def test_compact_response_uses_database_scenarios():
+def test_compact_response_uses_database_scenarios() -> None:
     request = ballpark._BallparkRequest.model_validate(_input())
     response = ballpark._build_ballpark_response(
         request,
@@ -409,7 +446,7 @@ def test_compact_response_uses_database_scenarios():
     )
 
 
-def test_annual_vehicle_cost_rounds_only_after_annualizing():
+def test_annual_vehicle_cost_rounds_only_after_annualizing() -> None:
     request = ballpark._BallparkRequest.model_validate(
         {
             **_input(),
@@ -432,7 +469,7 @@ def test_annual_vehicle_cost_rounds_only_after_annualizing():
     assert output["vehicle_cost"] == {"daily_usd": "15.83", "annual_usd": "3799.94"}
 
 
-def test_no_complete_response_keeps_compact_coverage():
+def test_no_complete_response_keeps_compact_coverage() -> None:
     response = ballpark._build_ballpark_response(
         ballpark._BallparkRequest.model_validate(_input()),
         datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
@@ -445,7 +482,7 @@ def test_no_complete_response_keeps_compact_coverage():
     assert response.vehicle_cost.annual_usd == Decimal("1972.80")
 
 
-def test_canonical_offer_decision_math():
+def test_canonical_offer_decision_math() -> None:
     request = ballpark._BallparkRequest.model_validate(
         {
             **_input(),
@@ -486,7 +523,7 @@ def test_canonical_offer_decision_math():
     }
 
 
-def test_cost_can_exceed_estimated_after_tax_income():
+def test_cost_can_exceed_estimated_after_tax_income() -> None:
     request = ballpark._BallparkRequest.model_validate(
         {**_input(), "gross_annual_income_usd": "1000.00"}
     )
@@ -510,7 +547,7 @@ def test_cost_can_exceed_estimated_after_tax_income():
     )
 
 
-def test_database_summary_rejects_cross_field_inconsistency():
+def test_database_summary_rejects_cross_field_inconsistency() -> None:
     inconsistent = _summary().model_dump(mode="python")
     inconsistent["complete_pair_count"] = 84
     with pytest.raises(ValidationError, match="coverage is inconsistent"):
@@ -524,30 +561,47 @@ def test_database_summary_rejects_cross_field_inconsistency():
         )
 
 
-def test_streams_stages_and_returns_summary(monkeypatch):
+def test_streams_stages_and_returns_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _callback_15(self: object) -> object:
+        return None
+
+    def _callback_16(self: object) -> object:
+        return None
+
+    def _strict_callback_12(self: object) -> object:
+        return None
+
     connection = type(
         "Connection",
         (),
         {
-            "commit": lambda self: None,
-            "rollback": lambda self: None,
-            "close": lambda self: None,
+            "commit": _strict_callback_12,
+            "rollback": _callback_15,
+            "close": _callback_16,
         },
     )()
     monkeypatch.setattr(
         ballpark.route_validation, "connect_to_pricing_database", lambda: connection
     )
-    monkeypatch.setattr(
-        ballpark,
-        "_start_transaction_and_fetch_routes_and_dates",
-        lambda *_: (
+
+    def _callback_8(*_: object) -> object:
+        return (
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(), _route()),
             [date(2026, 8, 19)],
             Decimal("20.00"),
-        ),
+        )
+
+    monkeypatch.setattr(
+        ballpark,
+        "_start_transaction_and_fetch_routes_and_dates",
+        _callback_8,
     )
-    monkeypatch.setattr(ballpark, "_fetch_and_validate_summary", lambda *_: _summary())
+
+    def _strict_callback_2(*_: object) -> object:
+        return _summary()
+
+    monkeypatch.setattr(ballpark, "_fetch_and_validate_summary", _strict_callback_2)
     events, result = asyncio.run(_invoke(_input()))
     assert [(event["stage"], event["status"]) for event in events] == [
         ("route_validation", "running"),
@@ -561,32 +615,51 @@ def test_streams_stages_and_returns_summary(monkeypatch):
     assert output["scenarios"]["p90"]["annual_toll_usd"] == "1296.00"
 
 
-def test_streams_i95_to_greenway_round_trip_to_summary(monkeypatch):
+def test_streams_i95_to_greenway_round_trip_to_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _callback_17(self: object) -> object:
+        return None
+
+    def _callback_18(self: object) -> object:
+        return None
+
+    def _strict_callback_13(self: object) -> object:
+        return None
+
     connection = type(
         "Connection",
         (),
         {
-            "commit": lambda self: None,
-            "rollback": lambda self: None,
-            "close": lambda self: None,
+            "commit": _strict_callback_13,
+            "rollback": _callback_17,
+            "close": _callback_18,
         },
     )()
     outbound = _i95_to_greenway_route()
     monkeypatch.setattr(
         ballpark.route_validation, "connect_to_pricing_database", lambda: connection
     )
-    monkeypatch.setattr(
-        ballpark,
-        "_start_transaction_and_fetch_routes_and_dates",
-        lambda *_: (
+
+    def _callback_9(*_: object) -> object:
+        return (
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (outbound, _greenway_route()),
             [date(2026, 8, 19)],
             Decimal("20.00"),
-        ),
+        )
+
+    monkeypatch.setattr(
+        ballpark,
+        "_start_transaction_and_fetch_routes_and_dates",
+        _callback_9,
     )
 
-    def summary(_, routes, *__):
+    def summary(
+        _: object,
+        routes: tuple[ballpark._BallparkRouteDb, ballpark._BallparkRouteDb],
+        *__: object,
+    ) -> ballpark._SummaryRow:
         assert [leg.route_step_id for leg in routes[0].facility_legs] == [
             "step-1",
             "step-2",
@@ -622,53 +695,81 @@ def test_streams_i95_to_greenway_round_trip_to_summary(monkeypatch):
     )
 
 
-def test_route_unavailable_stops_before_summary(monkeypatch):
+def test_route_unavailable_stops_before_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     connection = object()
     monkeypatch.setattr(
         ballpark.route_validation, "connect_to_pricing_database", lambda: connection
     )
-    monkeypatch.setattr(
-        ballpark,
-        "_start_transaction_and_fetch_routes_and_dates",
-        lambda *_: (
+
+    def _callback_10(*_: object) -> object:
+        return (
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(status="no_supported_route"), _route()),
             [date(2026, 8, 19)],
             None,
-        ),
+        )
+
+    monkeypatch.setattr(
+        ballpark,
+        "_start_transaction_and_fetch_routes_and_dates",
+        _callback_10,
     )
+
+    def _strict_callback_3(*_: object) -> object:
+        return pytest.fail("summary should not run")
+
     monkeypatch.setattr(
         ballpark,
         "_fetch_and_validate_summary",
-        lambda *_: pytest.fail("summary should not run"),
+        _strict_callback_3,
     )
-    monkeypatch.setattr(ballpark, "_close_connection", lambda *_args, **_kwargs: None)
+
+    def _strict_callback_4(*_args: object, **_kwargs: object) -> object:
+        return None
+
+    monkeypatch.setattr(ballpark, "_close_connection", _strict_callback_4)
     _, result = asyncio.run(_invoke(_input()))
     output = cast(Any, result["content"])[0]["json"]
     assert output["reason"] == "route_unavailable"
 
 
-def test_missing_priced_leg_distance_stops_before_summary(monkeypatch):
+def test_missing_priced_leg_distance_stops_before_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     connection = object()
     monkeypatch.setattr(
         ballpark.route_validation, "connect_to_pricing_database", lambda: connection
     )
-    monkeypatch.setattr(
-        ballpark,
-        "_start_transaction_and_fetch_routes_and_dates",
-        lambda *_: (
+
+    def _callback_11(*_: object) -> object:
+        return (
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(), _route()),
             [date(2026, 8, 19)],
             None,
-        ),
+        )
+
+    monkeypatch.setattr(
+        ballpark,
+        "_start_transaction_and_fetch_routes_and_dates",
+        _callback_11,
     )
+
+    def _strict_callback_5(*_: object) -> object:
+        return pytest.fail("summary should not run")
+
     monkeypatch.setattr(
         ballpark,
         "_fetch_and_validate_summary",
-        lambda *_: pytest.fail("summary should not run"),
+        _strict_callback_5,
     )
-    monkeypatch.setattr(ballpark, "_close_connection", lambda *_args, **_kwargs: None)
+
+    def _strict_callback_6(*_args: object, **_kwargs: object) -> object:
+        return None
+
+    monkeypatch.setattr(ballpark, "_close_connection", _strict_callback_6)
 
     _, result = asyncio.run(_invoke(_input()))
 
@@ -679,27 +780,41 @@ def test_missing_priced_leg_distance_stops_before_summary(monkeypatch):
     }
 
 
-def test_northbound_i95_restart_stops_before_annual_summary(monkeypatch):
+def test_northbound_i95_restart_stops_before_annual_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     connection = object()
     monkeypatch.setattr(
         ballpark.route_validation, "connect_to_pricing_database", lambda: connection
     )
-    monkeypatch.setattr(
-        ballpark,
-        "_start_transaction_and_fetch_routes_and_dates",
-        lambda *_: (
+
+    def _callback_12(*_: object) -> object:
+        return (
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_i95_northbound_restart_route(), _route()),
             [date(2026, 8, 19)],
             None,
-        ),
+        )
+
+    monkeypatch.setattr(
+        ballpark,
+        "_start_transaction_and_fetch_routes_and_dates",
+        _callback_12,
     )
+
+    def _strict_callback_7(*_: object) -> object:
+        return pytest.fail("summary should not run")
+
     monkeypatch.setattr(
         ballpark,
         "_fetch_and_validate_summary",
-        lambda *_: pytest.fail("summary should not run"),
+        _strict_callback_7,
     )
-    monkeypatch.setattr(ballpark, "_close_connection", lambda *_args, **_kwargs: None)
+
+    def _strict_callback_8(*_args: object, **_kwargs: object) -> object:
+        return None
+
+    monkeypatch.setattr(ballpark, "_close_connection", _strict_callback_8)
 
     _, result = asyncio.run(_invoke(_input()))
 
@@ -710,27 +825,41 @@ def test_northbound_i95_restart_stops_before_annual_summary(monkeypatch):
     )
 
 
-def test_history_failure_is_safe(monkeypatch, caplog):
+def test_history_failure_is_safe(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     secret = "private historical row"
     monkeypatch.setattr(
         ballpark.route_validation, "connect_to_pricing_database", lambda: object()
     )
-    monkeypatch.setattr(
-        ballpark,
-        "_start_transaction_and_fetch_routes_and_dates",
-        lambda *_: (
+
+    def _callback_13(*_: object) -> object:
+        return (
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(), _route()),
             [date(2026, 8, 19)],
             Decimal("20.00"),
-        ),
+        )
+
+    monkeypatch.setattr(
+        ballpark,
+        "_start_transaction_and_fetch_routes_and_dates",
+        _callback_13,
     )
+
+    def _strict_callback_9(*_: object) -> object:
+        raise RuntimeError(secret)
+
     monkeypatch.setattr(
         ballpark,
         "_fetch_and_validate_summary",
-        lambda *_: (_ for _ in ()).throw(RuntimeError(secret)),
+        _strict_callback_9,
     )
-    monkeypatch.setattr(ballpark, "_close_connection", lambda *_args, **_kwargs: None)
+
+    def _strict_callback_10(*_args: object, **_kwargs: object) -> object:
+        return None
+
+    monkeypatch.setattr(ballpark, "_close_connection", _strict_callback_10)
     with caplog.at_level("ERROR"):
         events, result = asyncio.run(_invoke(_input()))
     assert events[-1] == ballpark._progress_event("historical_pricing", "failed")
@@ -738,25 +867,35 @@ def test_history_failure_is_safe(monkeypatch, caplog):
     assert secret not in caplog.text
 
 
-def test_cleanup_failure_is_safe(monkeypatch, caplog):
+def test_cleanup_failure_is_safe(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     secret = "private cleanup detail"
     monkeypatch.setattr(
         ballpark.route_validation, "connect_to_pricing_database", lambda: object()
     )
-    monkeypatch.setattr(
-        ballpark,
-        "_start_transaction_and_fetch_routes_and_dates",
-        lambda *_: (
+
+    def _callback_14(*_: object) -> object:
+        return (
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(status="no_supported_route"), _route()),
             [date(2026, 8, 19)],
             None,
-        ),
+        )
+
+    monkeypatch.setattr(
+        ballpark,
+        "_start_transaction_and_fetch_routes_and_dates",
+        _callback_14,
     )
+
+    def _strict_callback_11(*_args: object, **_kwargs: object) -> object:
+        raise RuntimeError(secret)
+
     monkeypatch.setattr(
         ballpark,
         "_close_connection",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError(secret)),
+        _strict_callback_11,
     )
     with caplog.at_level("ERROR"):
         asyncio.run(_invoke(_input()))

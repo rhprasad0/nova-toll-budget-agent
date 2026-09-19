@@ -1,16 +1,17 @@
-# pyright: basic
-
 import copy
 import logging
-from typing import Any, cast
+from collections.abc import Callable, Sequence
+from typing import Self, cast
 
 import pytest
 from strands.types.tools import ToolUse
 
 from agent_tools import validate_toll_route as route_tool
 
+type JSON = str | int | float | bool | list[JSON] | dict[str, JSON] | None
 
-def _tool_use(input_data: Any, tool_use_id: str = "tool-123") -> ToolUse:
+
+def _tool_use(input_data: object, tool_use_id: str = "tool-123") -> ToolUse:
     return cast(
         ToolUse,
         {
@@ -21,7 +22,7 @@ def _tool_use(input_data: Any, tool_use_id: str = "tool-123") -> ToolUse:
     )
 
 
-def _valid_row():
+def _valid_row() -> dict[str, JSON]:
     return {
         "status": "valid",
         "reason": None,
@@ -33,7 +34,7 @@ def _valid_row():
     }
 
 
-def _unavailable_row():
+def _unavailable_row() -> dict[str, JSON]:
     return {
         "status": "currently_unavailable",
         "reason": {
@@ -69,7 +70,7 @@ def _unavailable_row():
     }
 
 
-def _northbound_suffix_row():
+def _northbound_suffix_row() -> dict[str, JSON]:
     row = _unavailable_row()
     row.update(
         {
@@ -83,7 +84,7 @@ def _northbound_suffix_row():
             "connection_types": ["general_purpose_gap", "airport_access"],
         }
     )
-    row["general_purpose_gaps"][0].update(
+    cast(dict[str, JSON], cast(list[JSON], row["general_purpose_gaps"])[0]).update(
         {
             "connection_id": "source:i95_shared:Southbound:182SO:2239ND",
             "boundary_point_id": "i495:192SD",
@@ -91,11 +92,11 @@ def _northbound_suffix_row():
             "fallback_required": False,
         }
     )
-    row["i95_evidence"]["availability"] = "northbound"
+    cast(dict[str, JSON], row["i95_evidence"])["availability"] = "northbound"
     return row
 
 
-def _southbound_westpark_row(origin_point_id="i95:2233SO"):
+def _southbound_westpark_row(origin_point_id: str = "i95:2233SO") -> dict[str, JSON]:
     connection_id = "source:i95_shared:Southbound:2233SO:1859ND"
     airport = origin_point_id == "airport_dca"
     return {
@@ -124,13 +125,13 @@ def _southbound_westpark_row(origin_point_id="i95:2233SO"):
             }
         ],
         "i95_evidence": {
-            **_unavailable_row()["i95_evidence"],
+            **cast(dict[str, JSON], _unavailable_row()["i95_evidence"]),
             "availability": "southbound",
         },
     }
 
 
-def _i95_northbound_restart_row():
+def _i95_northbound_restart_row() -> dict[str, JSON]:
     return {
         "status": "invalid_origin",
         "reason": {
@@ -150,8 +151,8 @@ def _i95_northbound_restart_row():
     }
 
 
-def _pricing_route_row():
-    route = {
+def _pricing_route_row() -> dict[str, JSON]:
+    route: dict[str, JSON] = {
         "status": "valid",
         "reason": None,
         "point_ids": ["point-1", "point-2", "point-3", "point-4", "point-5"],
@@ -161,7 +162,7 @@ def _pricing_route_row():
             "connection-3",
             "connection-4",
         ],
-        "connection_types": ["within_facility"] * 4,
+        "connection_types": cast(list[JSON], ["within_facility"] * 4),
         "general_purpose_gaps": [],
         "i95_evidence": None,
     }
@@ -223,11 +224,12 @@ def _pricing_route_row():
     }
 
 
-def _endpoints(row):
-    return row["point_ids"][0], row["point_ids"][-1]
+def _endpoints(row: dict[str, JSON]) -> tuple[str, str]:
+    points = cast(list[str], row["point_ids"])
+    return points[0], points[-1]
 
 
-def _availability_transition_row(status):
+def _availability_transition_row(status: str) -> dict[str, JSON]:
     row = copy.deepcopy(_northbound_suffix_row())
     evidence = copy.deepcopy(_unavailable_row()["i95_evidence"])
     if status == "currently_unavailable":
@@ -238,7 +240,7 @@ def _availability_transition_row(status):
         reason_code = "i95_stale_evidence"
         availability = "unknown"
         fallback_required = None
-    evidence["availability"] = availability
+    cast(dict[str, JSON], evidence)["availability"] = availability
     row.update(
         {
             "status": status,
@@ -253,73 +255,110 @@ def _availability_transition_row(status):
             "facility_legs": [],
         }
     )
-    row["general_purpose_gaps"][0]["fallback_required"] = fallback_required
+    cast(dict[str, JSON], cast(list[JSON], row["general_purpose_gaps"])[0])[
+        "fallback_required"
+    ] = fallback_required
     return row
 
 
-def _dtr_charge_row(charge_indexes):
+def _dtr_charge_row(charge_indexes: Sequence[int]) -> dict[str, JSON]:
     row = _pricing_route_row()
-    first = row["facility_legs"][3]
-    first["pricing_key"]["charge_index"] = charge_indexes[0]
+    first = cast(list[JSON], row["facility_legs"])[3]
+    cast(dict[str, JSON], cast(dict[str, JSON], first)["pricing_key"])[
+        "charge_index"
+    ] = charge_indexes[0]
     second = copy.deepcopy(first)
-    second["route_step_id"] = "step-5"
-    second["pricing_key"]["charge_index"] = charge_indexes[1]
-    row["facility_legs"].insert(4, second)
-    row["facility_legs"][5]["route_step_id"] = "step-6"
+    cast(dict[str, JSON], second)["route_step_id"] = "step-5"
+    cast(dict[str, JSON], cast(dict[str, JSON], second)["pricing_key"])[
+        "charge_index"
+    ] = charge_indexes[1]
+    cast(list[JSON], row["facility_legs"]).insert(4, second)
+    cast(dict[str, JSON], cast(list[JSON], row["facility_legs"])[5])[
+        "route_step_id"
+    ] = "step-6"
     return row
 
 
 class _Cursor:
-    def __init__(self, rows, error=None):
+    def __init__(
+        self, rows: list[dict[str, JSON]], error: Exception | None = None
+    ) -> None:
         self.rows = rows
         self.error = error
-        self.calls = []
+        self.calls: list[tuple[str, tuple[str, str]]] = []
 
-    def __enter__(self):
+    def __enter__(self) -> "Self":
         return self
 
-    def __exit__(self, *_args):
+    def __exit__(self, *_args: object) -> None:
         return None
 
-    def execute(self, sql, params):
+    def execute(self, sql: str, params: tuple[str, str]) -> None:
         self.calls.append((sql, params))
         if self.error:
             raise self.error
 
-    def fetchall(self):
+    def fetchall(self) -> list[dict[str, JSON]]:
         return self.rows
 
 
 class _Connection:
-    def __init__(self, rows, *, query_error=None, close_error=None):
+    def __init__(
+        self,
+        rows: list[dict[str, JSON]],
+        *,
+        query_error: Exception | None = None,
+        close_error: Exception | None = None,
+    ) -> None:
         self.cursor_instance = _Cursor(rows, query_error)
         self.close_error = close_error
         self.closed = False
 
-    def cursor(self):
+    def cursor(self) -> _Cursor:
         return self.cursor_instance
 
-    def close(self):
+    def close(self) -> None:
         self.closed = True
         if self.close_error:
             raise self.close_error
 
 
-def _invoke(monkeypatch, row):
+def _invoke(
+    monkeypatch: pytest.MonkeyPatch, row: dict[str, JSON]
+) -> tuple[dict[str, object], _Connection]:
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "connect_to_database", lambda: connection)
-    origin_point_id = row["point_ids"][0] if row["point_ids"] else "origin"
-    destination_point_id = row["point_ids"][-1] if row["point_ids"] else "destination"
-    if row["reason"] and "origin_point_id" in row["reason"]["details"]:
-        origin_point_id = row["reason"]["details"]["origin_point_id"]
-        destination_point_id = row["reason"]["details"]["destination_point_id"]
-    elif row["reason"] and "point_id" in row["reason"]["details"]:
+    origin_point_id = (
+        cast(list[JSON], row["point_ids"])[0] if row["point_ids"] else "origin"
+    )
+    destination_point_id = (
+        cast(list[str], row["point_ids"])[-1] if row["point_ids"] else "destination"
+    )
+    if row["reason"] and "origin_point_id" in cast(
+        dict[str, JSON], cast(dict[str, JSON], row["reason"])["details"]
+    ):
+        origin_point_id = cast(
+            dict[str, JSON], cast(dict[str, JSON], row["reason"])["details"]
+        )["origin_point_id"]
+        destination_point_id = cast(
+            dict[str, JSON], cast(dict[str, JSON], row["reason"])["details"]
+        )["destination_point_id"]
+    elif row["reason"] and "point_id" in cast(
+        dict[str, JSON], cast(dict[str, JSON], row["reason"])["details"]
+    ):
         if row["status"] == "invalid_origin":
-            origin_point_id = row["reason"]["details"]["point_id"]
-            if row["reason"]["code"] == "i95_northbound_requires_i495_restart":
+            origin_point_id = cast(
+                dict[str, JSON], cast(dict[str, JSON], row["reason"])["details"]
+            )["point_id"]
+            if (
+                cast(dict[str, JSON], row["reason"])["code"]
+                == "i95_northbound_requires_i495_restart"
+            ):
                 destination_point_id = "i495:1859ND"
         else:
-            destination_point_id = row["reason"]["details"]["point_id"]
+            destination_point_id = cast(
+                dict[str, JSON], cast(dict[str, JSON], row["reason"])["details"]
+            )["point_id"]
     result = route_tool.validate_toll_route(
         _tool_use(
             {
@@ -343,7 +382,11 @@ def _invoke(monkeypatch, row):
         },
     ],
 )
-def test_invalid_input_is_logged_and_never_connects(monkeypatch, caplog, input_data):
+def test_invalid_input_is_logged_and_never_connects(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    input_data: object,
+) -> None:
     monkeypatch.setattr(
         route_tool,
         "connect_to_database",
@@ -360,8 +403,8 @@ def test_invalid_input_is_logged_and_never_connects(monkeypatch, caplog, input_d
         ],
     }
     assert len(caplog.records) == 1
-    assert caplog.records[0].toolUseId == "tool-123"
-    assert caplog.records[0].failureStage == "input_validation"
+    assert caplog.records[0].__dict__["toolUseId"] == "tool-123"
+    assert caplog.records[0].__dict__["failureStage"] == "input_validation"
     assert "TOP-SECRET" not in caplog.text
 
 
@@ -432,7 +475,9 @@ def test_invalid_input_is_logged_and_never_connects(monkeypatch, caplog, input_d
         },
     ],
 )
-def test_documented_domain_rows_are_successful(monkeypatch, row):
+def test_documented_domain_rows_are_successful(
+    monkeypatch: pytest.MonkeyPatch, row: dict[str, JSON]
+) -> None:
     result, connection = _invoke(monkeypatch, row)
     assert result == {
         "toolUseId": "tool-123",
@@ -443,7 +488,9 @@ def test_documented_domain_rows_are_successful(monkeypatch, row):
 
 
 @pytest.mark.parametrize("origin_point_id", ["airport_dca", "i95:2233SO"])
-def test_southbound_prefix_route_to_westpark_is_valid(monkeypatch, origin_point_id):
+def test_southbound_prefix_route_to_westpark_is_valid(
+    monkeypatch: pytest.MonkeyPatch, origin_point_id: str
+) -> None:
     row = _southbound_westpark_row(origin_point_id)
 
     result, connection = _invoke(monkeypatch, row)
@@ -456,9 +503,11 @@ def test_southbound_prefix_route_to_westpark_is_valid(monkeypatch, origin_point_
     assert connection.closed
 
 
-def test_route_rejects_unknown_gap_boundary(monkeypatch):
+def test_route_rejects_unknown_gap_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
     row = _southbound_westpark_row()
-    row["general_purpose_gaps"][0]["boundary_point_id"] = "i495:999SD"
+    cast(dict[str, JSON], cast(list[JSON], row["general_purpose_gaps"])[0])[
+        "boundary_point_id"
+    ] = "i495:999SD"
 
     result, connection = _invoke(monkeypatch, row)
 
@@ -466,7 +515,9 @@ def test_route_rejects_unknown_gap_boundary(monkeypatch):
     assert connection.closed
 
 
-def test_query_uses_bound_parameters_and_closes(monkeypatch):
+def test_query_uses_bound_parameters_and_closes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     result, connection = _invoke(monkeypatch, _valid_row())
     assert result["status"] == "success"
     assert connection.cursor_instance.calls == [
@@ -478,26 +529,33 @@ def test_query_uses_bound_parameters_and_closes(monkeypatch):
     assert connection.closed
 
 
-def test_iam_tls_connection_contract(monkeypatch):
+def test_iam_tls_connection_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     class RDS:
-        def __init__(self):
-            self.calls = []
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
 
-        def generate_db_auth_token(self, **kwargs):
+        def generate_db_auth_token(self, **kwargs: object) -> str:
             self.calls.append(kwargs)
             return "temporary-token"
 
     rds = RDS()
-    connect_calls = []
+    connect_calls: list[dict[str, object]] = []
     sentinel = object()
     import psycopg
     from psycopg.rows import dict_row
 
-    monkeypatch.setattr(route_tool.boto3, "client", lambda service: rds)
+    def _strict_callback_1(service: str) -> object:
+        return rds
+
+    monkeypatch.setattr(route_tool.boto3, "client", _strict_callback_1)
+
+    def _strict_callback_2(**kwargs: object) -> object:
+        return connect_calls.append(kwargs) or sentinel
+
     monkeypatch.setattr(
         psycopg,
         "connect",
-        lambda **kwargs: connect_calls.append(kwargs) or sentinel,
+        _strict_callback_2,
     )
     monkeypatch.setenv("DB_HOST", "db.example.test")
     monkeypatch.setenv("DB_PORT", "5432")
@@ -558,7 +616,11 @@ def test_iam_tls_connection_contract(monkeypatch):
         [{**_valid_row(), "secret_extra_column": "rejected"}],
     ],
 )
-def test_bad_database_rows_are_sanitized_logged_and_closed(monkeypatch, caplog, rows):
+def test_bad_database_rows_are_sanitized_logged_and_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    rows: list[dict[str, JSON]],
+) -> None:
     connection = _Connection(rows)
     monkeypatch.setattr(route_tool, "connect_to_database", lambda: connection)
     with caplog.at_level(logging.ERROR):
@@ -577,10 +639,12 @@ def test_bad_database_rows_are_sanitized_logged_and_closed(monkeypatch, caplog, 
     ]
     assert connection.closed
     assert len(caplog.records) == 1
-    assert caplog.records[0].failureStage == "response_validation"
+    assert caplog.records[0].__dict__["failureStage"] == "response_validation"
 
 
-def test_connection_error_is_sanitized_and_logged(monkeypatch, caplog):
+def test_connection_error_is_sanitized_and_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     monkeypatch.setattr(
         route_tool,
         "connect_to_database",
@@ -598,8 +662,8 @@ def test_connection_error_is_sanitized_and_logged(monkeypatch, caplog):
 
     assert result["status"] == "error"
     assert "password" not in result["content"][0].get("text", "")
-    assert caplog.records[0].failureStage == "connection"
-    assert caplog.records[0].exceptionType == "RuntimeError"
+    assert caplog.records[0].__dict__["failureStage"] == "connection"
+    assert caplog.records[0].__dict__["exceptionType"] == "RuntimeError"
 
 
 @pytest.mark.parametrize(
@@ -611,8 +675,12 @@ def test_connection_error_is_sanitized_and_logged(monkeypatch, caplog):
     ],
 )
 def test_database_errors_are_sanitized_logged_and_closed(
-    monkeypatch, caplog, query_error, close_error, expected_stage
-):
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    query_error: Exception | None,
+    close_error: Exception | None,
+    expected_stage: str,
+) -> None:
     connection = _Connection(
         [_valid_row()], query_error=query_error, close_error=close_error
     )
@@ -633,20 +701,36 @@ def test_database_errors_are_sanitized_logged_and_closed(
     ]
     assert connection.closed
     assert len(caplog.records) == 1
-    assert caplog.records[0].failureStage == expected_stage
+    assert caplog.records[0].__dict__["failureStage"] == expected_stage
+
+
+def _callback_1(row: dict[str, JSON]) -> object:
+    return cast(
+        dict[str, JSON], cast(list[JSON], row["general_purpose_gaps"])[0]
+    ).update({"connection_id": "wrong-connection"})
+
+
+def _callback_2(row: dict[str, JSON]) -> object:
+    return cast(
+        dict[str, JSON], cast(dict[str, JSON], row["reason"])["details"]
+    ).update({"availability": "unknown"})
+
+
+def _strict_callback_3(row: dict[str, JSON]) -> object:
+    return row.update({"i95_evidence": None})
 
 
 @pytest.mark.parametrize(
     "mutation",
     [
-        lambda row: row["general_purpose_gaps"][0].update(
-            {"connection_id": "wrong-connection"}
-        ),
-        lambda row: row.update({"i95_evidence": None}),
-        lambda row: row["reason"]["details"].update({"availability": "unknown"}),
+        _callback_1,
+        _strict_callback_3,
+        _callback_2,
     ],
 )
-def test_cross_field_contract_violations_fail_safely(monkeypatch, mutation):
+def test_cross_field_contract_violations_fail_safely(
+    monkeypatch: pytest.MonkeyPatch, mutation: Callable[[dict[str, JSON]], object]
+) -> None:
     row = copy.deepcopy(_unavailable_row())
     mutation(row)
     result, connection = _invoke(monkeypatch, row)
@@ -654,7 +738,7 @@ def test_cross_field_contract_violations_fail_safely(monkeypatch, mutation):
     assert connection.closed
 
 
-def test_path_must_match_requested_endpoints(monkeypatch):
+def test_path_must_match_requested_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
     connection = _Connection([_valid_row()])
     monkeypatch.setattr(route_tool, "connect_to_database", lambda: connection)
     result = route_tool.validate_toll_route(
@@ -669,7 +753,7 @@ def test_path_must_match_requested_endpoints(monkeypatch):
     assert connection.closed
 
 
-def test_cyclic_path_fails_safely(monkeypatch):
+def test_cyclic_path_fails_safely(monkeypatch: pytest.MonkeyPatch) -> None:
     row = _valid_row()
     row.update(
         {
@@ -680,7 +764,7 @@ def test_cyclic_path_fails_safely(monkeypatch):
                 "i66:4:exit:EB",
             ],
             "connection_ids": ["connection-1", "connection-2", "connection-3"],
-            "connection_types": ["within_facility"] * 3,
+            "connection_types": cast(list[JSON], ["within_facility"] * 3),
         }
     )
     result, connection = _invoke(monkeypatch, row)
@@ -699,7 +783,7 @@ def test_cyclic_path_fails_safely(monkeypatch):
         {
             **_valid_row(),
             "i95_evidence": {
-                **_unavailable_row()["i95_evidence"],
+                **cast(dict[str, JSON], _unavailable_row()["i95_evidence"]),
                 "availability": "northbound",
             },
         },
@@ -713,21 +797,25 @@ def test_cyclic_path_fails_safely(monkeypatch):
                 },
             },
             "i95_evidence": {
-                **_unavailable_row()["i95_evidence"],
+                **cast(dict[str, JSON], _unavailable_row()["i95_evidence"]),
                 "availability": "northbound",
             },
         },
     ],
 )
-def test_contradictory_i95_evidence_fails_safely(monkeypatch, row):
+def test_contradictory_i95_evidence_fails_safely(
+    monkeypatch: pytest.MonkeyPatch, row: dict[str, JSON]
+) -> None:
     result, connection = _invoke(monkeypatch, row)
     assert result["status"] == "error"
     assert connection.closed
 
 
 @pytest.mark.parametrize("alternatives", [[], None])
-def test_incompatible_ramp_alternatives_follow_contract(monkeypatch, alternatives):
-    returned_alternatives = (
+def test_incompatible_ramp_alternatives_follow_contract(
+    monkeypatch: pytest.MonkeyPatch, alternatives: list[JSON] | None
+) -> None:
+    returned_alternatives: list[JSON] = (
         []
         if alternatives == []
         else [
@@ -743,7 +831,7 @@ def test_incompatible_ramp_alternatives_follow_contract(monkeypatch, alternative
             }
         ]
     )
-    row = {
+    row: dict[str, JSON] = {
         "status": "invalid_origin",
         "reason": {
             "code": "origin_ramp_incompatible",
@@ -764,52 +852,64 @@ def test_incompatible_ramp_alternatives_follow_contract(monkeypatch, alternative
     assert connection.closed
 
 
+def _callback_9(details: dict[str, JSON]) -> object:
+    return details.update({"suggested_restart_point_id": "i495:192SD"})
+
+
+def _callback_10(details: dict[str, JSON]) -> object:
+    return details.update({"suggested_destination_point_id": "i95:201ND"})
+
+
+def _callback_11(details: dict[str, JSON]) -> object:
+    return details.update({"suggested_destination_point_id": "i495:186ND"})
+
+
+def _strict_callback_5(details: dict[str, JSON]) -> object:
+    return details.update({"alternatives": []})
+
+
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [
         (
-            lambda details: details.update({"alternatives": []}),
+            _strict_callback_5,
             "Extra inputs are not permitted",
         ),
         (
-            lambda details: details.update(
-                {"suggested_restart_point_id": "i495:192SD"}
-            ),
+            _callback_9,
             "Input should be 'i495:192NO'",
         ),
         (
-            lambda details: details.update(
-                {"suggested_destination_point_id": "i95:201ND"}
-            ),
+            _callback_10,
             "String should match pattern",
         ),
         (
-            lambda details: details.update(
-                {"suggested_destination_point_id": "i495:186ND"}
-            ),
+            _callback_11,
             "restart destination does not match the request",
         ),
     ],
 )
 def test_i95_northbound_restart_rejects_malformed_details(
-    monkeypatch, mutation, message
-):
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: Callable[[dict[str, JSON]], object],
+    message: str,
+) -> None:
     row = _i95_northbound_restart_row()
-    mutation(row["reason"]["details"])
+    mutation(cast(dict[str, JSON], cast(dict[str, JSON], row["reason"])["details"]))
     result, connection = _invoke(monkeypatch, row)
 
     assert result["status"] == "error"
     assert connection.closed
 
 
-def test_pricing_route_returns_typed_facility_legs(monkeypatch):
+def test_pricing_route_returns_typed_facility_legs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     row = _pricing_route_row()
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
 
-    response = route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-        *_endpoints(row)
-    )
+    response = route_tool.fetch_validated_pricing_route(*_endpoints(row))
 
     assert [leg.model_dump(mode="json") for leg in response.facility_legs] == row[
         "facility_legs"
@@ -823,22 +923,24 @@ def test_pricing_route_returns_typed_facility_legs(monkeypatch):
     assert connection.closed
 
 
-def test_pricing_route_accepts_cross_direction_gap(monkeypatch):
-    row = {**_northbound_suffix_row(), "facility_legs": []}
+def test_pricing_route_accepts_cross_direction_gap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row: dict[str, JSON] = {**_northbound_suffix_row(), "facility_legs": []}
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
 
-    response = route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-        *_endpoints(row)
-    )
+    response = route_tool.fetch_validated_pricing_route(*_endpoints(row))
 
     assert response.general_purpose_gaps[0].boundary_point_id == "i495:192SD"
     assert response.general_purpose_gaps[0].i95_direction == "NB"
     assert connection.closed
 
 
-def test_pricing_route_allows_greenway_dtr_handoff_charge(monkeypatch):
-    row = {
+def test_pricing_route_allows_greenway_dtr_handoff_charge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row: dict[str, JSON] = {
         "status": "valid",
         "reason": None,
         "point_ids": ["greenway:28:exit:EB", "dtr:28:entry:EB"],
@@ -862,16 +964,16 @@ def test_pricing_route_allows_greenway_dtr_handoff_charge(monkeypatch):
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
 
-    response = route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-        *_endpoints(row)
-    )
+    response = route_tool.fetch_validated_pricing_route(*_endpoints(row))
 
     assert response.facility_legs[0].facility == "dtr"
     assert connection.closed
 
 
-def test_pricing_route_rejects_other_priced_handoff(monkeypatch):
-    row = {
+def test_pricing_route_rejects_other_priced_handoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row: dict[str, JSON] = {
         **_valid_row(),
         "point_ids": ["i66:5:exit:WB", "i495:187SO"],
         "connection_ids": ["i66_to_i495"],
@@ -893,35 +995,33 @@ def test_pricing_route_rejects_other_priced_handoff(monkeypatch):
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
 
     with pytest.raises(ValueError, match="unexpected priced toll handoff"):
-        route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            *_endpoints(row)
-        )
+        route_tool.fetch_validated_pricing_route(*_endpoints(row))
 
     assert connection.closed
 
 
-def test_pricing_route_allows_valid_route_without_tolls(monkeypatch):
-    row = {**_valid_row(), "facility_legs": []}
+def test_pricing_route_allows_valid_route_without_tolls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row: dict[str, JSON] = {**_valid_row(), "facility_legs": []}
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
 
-    response = route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-        *_endpoints(row)
-    )
+    response = route_tool.fetch_validated_pricing_route(*_endpoints(row))
     assert response.status == "valid"
     assert response.facility_legs == []
     assert connection.closed
 
 
 @pytest.mark.parametrize("status", ["currently_unavailable", "unknown_availability"])
-def test_pricing_route_returns_typed_availability_transition(monkeypatch, status):
+def test_pricing_route_returns_typed_availability_transition(
+    monkeypatch: pytest.MonkeyPatch, status: str
+) -> None:
     row = _availability_transition_row(status)
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
 
-    response = route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-        *_endpoints(row)
-    )
+    response = route_tool.fetch_validated_pricing_route(*_endpoints(row))
 
     assert response.status == status
     assert response.facility_legs == []
@@ -930,67 +1030,100 @@ def test_pricing_route_returns_typed_availability_transition(monkeypatch, status
     assert connection.closed
 
 
-def test_pricing_route_rejects_valid_status_with_required_fallback(monkeypatch):
+def test_pricing_route_rejects_valid_status_with_required_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     row = copy.deepcopy(_northbound_suffix_row())
-    row["i95_evidence"]["availability"] = "southbound"
-    row["general_purpose_gaps"][0]["fallback_required"] = True
+    cast(dict[str, JSON], row["i95_evidence"])["availability"] = "southbound"
+    cast(dict[str, JSON], cast(list[JSON], row["general_purpose_gaps"])[0])[
+        "fallback_required"
+    ] = True
     row["facility_legs"] = []
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
 
     with pytest.raises(ValueError, match="valid routes cannot require a fallback"):
-        route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            *_endpoints(row)
-        )
+        route_tool.fetch_validated_pricing_route(*_endpoints(row))
 
     assert connection.closed
 
 
-def test_pricing_route_rejects_legs_on_availability_transition(monkeypatch, caplog):
+def test_pricing_route_rejects_legs_on_availability_transition(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     row = _availability_transition_row("currently_unavailable")
-    row["facility_legs"] = _pricing_route_row()["facility_legs"][:1]
+    row["facility_legs"] = cast(list[JSON], _pricing_route_row()["facility_legs"])[:1]
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
 
     with caplog.at_level(logging.ERROR), pytest.raises(ValueError):
-        route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            *_endpoints(row)
-        )
+        route_tool.fetch_validated_pricing_route(*_endpoints(row))
 
     assert connection.closed
     assert len(caplog.records) == 1
-    assert caplog.records[0].failureStage == "response_validation"
+    assert caplog.records[0].__dict__["failureStage"] == "response_validation"
+
+
+def _callback_3(row: dict[str, JSON]) -> object:
+    return cast(
+        dict[str, JSON],
+        cast(dict[str, JSON], cast(list[JSON], row["facility_legs"])[0])["pricing_key"],
+    ).update({"od_pair_id": 1144})
+
+
+def _callback_4(row: dict[str, JSON]) -> object:
+    return cast(dict[str, JSON], cast(list[JSON], row["facility_legs"])[1]).update(
+        {"route_step_id": "step-7"}
+    )
+
+
+def _callback_5(row: dict[str, JSON]) -> object:
+    return cast(dict[str, JSON], cast(list[JSON], row["facility_legs"])[1]).update(
+        {"connection_ids": ["unknown-connection"]}
+    )
+
+
+def _callback_6(row: dict[str, JSON]) -> object:
+    return cast(dict[str, JSON], cast(list[JSON], row["facility_legs"])[0]).update(
+        {"point_ids": ["wrong-point", "point-2"]}
+    )
+
+
+def _callback_7(row: dict[str, JSON]) -> object:
+    return cast(dict[str, JSON], cast(list[JSON], row["facility_legs"])[0]).update(
+        {"connection_ids": ["connection-4"]}
+    )
+
+
+def _callback_8(row: dict[str, JSON]) -> object:
+    return row.update(
+        {"point_ids": ["different-point", "point-2", "point-3", "point-4", "point-5"]}
+    )
+
+
+def _strict_callback_4(row: dict[str, JSON]) -> object:
+    return cast(dict[str, JSON], cast(list[JSON], row["facility_legs"])[0]).update(
+        {"unexpected": "secret-row"}
+    )
 
 
 @pytest.mark.parametrize(
     "mutation",
     [
-        lambda row: row["facility_legs"][0].update({"unexpected": "secret-row"}),
-        lambda row: row["facility_legs"][0]["pricing_key"].update({"od_pair_id": 1144}),
-        lambda row: row["facility_legs"][1].update({"route_step_id": "step-7"}),
-        lambda row: row["facility_legs"][1].update(
-            {"connection_ids": ["unknown-connection"]}
-        ),
-        lambda row: row["facility_legs"][0].update(
-            {"point_ids": ["wrong-point", "point-2"]}
-        ),
-        lambda row: row["facility_legs"][0].update(
-            {"connection_ids": ["connection-4"]}
-        ),
-        lambda row: row.update(
-            {
-                "point_ids": [
-                    "different-point",
-                    "point-2",
-                    "point-3",
-                    "point-4",
-                    "point-5",
-                ]
-            }
-        ),
+        _strict_callback_4,
+        _callback_3,
+        _callback_4,
+        _callback_5,
+        _callback_6,
+        _callback_7,
+        _callback_8,
     ],
 )
-def test_pricing_route_contract_violations_are_logged(monkeypatch, caplog, mutation):
+def test_pricing_route_contract_violations_are_logged(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    mutation: Callable[[dict[str, JSON]], object],
+) -> None:
     original = _pricing_route_row()
     row = copy.deepcopy(original)
     mutation(row)
@@ -998,22 +1131,25 @@ def test_pricing_route_contract_violations_are_logged(monkeypatch, caplog, mutat
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
 
     with caplog.at_level(logging.ERROR), pytest.raises(ValueError):
-        route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            *_endpoints(original)
-        )
+        route_tool.fetch_validated_pricing_route(*_endpoints(original))
 
     assert connection.closed
     assert len(caplog.records) == 1
-    assert caplog.records[0].failureStage == "response_validation"
-    assert caplog.records[0].exceptionType in {"ValidationError", "ValueError"}
+    assert caplog.records[0].__dict__["failureStage"] == "response_validation"
+    assert caplog.records[0].__dict__["exceptionType"] in {
+        "ValidationError",
+        "ValueError",
+    }
     assert "secret-row" not in caplog.text
     assert "different-point" not in caplog.text
 
 
 @pytest.mark.parametrize("charge_indexes", [(2, 1), (1, 1)])
 def test_pricing_route_rejects_noncanonical_charge_order(
-    monkeypatch, caplog, charge_indexes
-):
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    charge_indexes: Sequence[int],
+) -> None:
     row = _dtr_charge_row(charge_indexes)
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
@@ -1022,48 +1158,53 @@ def test_pricing_route_rejects_noncanonical_charge_order(
         caplog.at_level(logging.ERROR),
         pytest.raises(ValueError, match="charge indexes are not ordered"),
     ):
-        route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            *_endpoints(row)
-        )
+        route_tool.fetch_validated_pricing_route(*_endpoints(row))
 
     assert connection.closed
     assert len(caplog.records) == 1
-    assert caplog.records[0].failureStage == "response_validation"
+    assert caplog.records[0].__dict__["failureStage"] == "response_validation"
 
 
-def test_pricing_route_allows_omitted_zero_price_charge_indexes(monkeypatch):
+def test_pricing_route_allows_omitted_zero_price_charge_indexes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     row = _dtr_charge_row((1, 3))
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
 
-    response = route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-        *_endpoints(row)
-    )
+    response = route_tool.fetch_validated_pricing_route(*_endpoints(row))
 
     assert [
         leg.pricing_key.charge_index
         for leg in response.facility_legs
         if leg.connection_ids == ["connection-3"]
-        and isinstance(leg.pricing_key, route_tool._ChargePricingKey)  # pyright: ignore[reportPrivateUsage]
+        and isinstance(leg.pricing_key, route_tool._ChargePricingKey)
     ] == [1, 3]
 
 
-def test_pricing_route_rejects_mixed_source_keys_on_one_connection(monkeypatch):
+def test_pricing_route_rejects_mixed_source_keys_on_one_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     row = _dtr_charge_row((1, 2))
-    row["facility_legs"][4]["pricing_key"]["source_route_key"] = "wrong-route"
+    cast(
+        dict[str, JSON],
+        cast(dict[str, JSON], cast(list[JSON], row["facility_legs"])[4])["pricing_key"],
+    )["source_route_key"] = "wrong-route"
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
 
     with pytest.raises(ValueError, match="mixes source route keys"):
-        route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            *_endpoints(row)
-        )
+        route_tool.fetch_validated_pricing_route(*_endpoints(row))
 
     assert connection.closed
 
 
 @pytest.mark.parametrize("rows", [[], [_pricing_route_row(), _pricing_route_row()]])
-def test_pricing_route_requires_exactly_one_row(monkeypatch, caplog, rows):
+def test_pricing_route_requires_exactly_one_row(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    rows: list[dict[str, JSON]],
+) -> None:
     route = _pricing_route_row()
     connection = _Connection(rows)
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
@@ -1072,19 +1213,19 @@ def test_pricing_route_requires_exactly_one_row(monkeypatch, caplog, rows):
         caplog.at_level(logging.ERROR),
         pytest.raises(ValueError, match="must return exactly one row"),
     ):
-        route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            *_endpoints(route)
-        )
+        route_tool.fetch_validated_pricing_route(*_endpoints(route))
 
     assert connection.closed
     assert len(caplog.records) == 1
-    assert caplog.records[0].failureStage == "response_validation"
+    assert caplog.records[0].__dict__["failureStage"] == "response_validation"
 
 
-def test_pricing_route_connection_failure_is_safely_logged(monkeypatch, caplog):
+def test_pricing_route_connection_failure_is_safely_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     secret = "password=do-not-log"
 
-    def fail_connection():
+    def fail_connection() -> None:
         raise RuntimeError(secret)
 
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", fail_connection)
@@ -1093,13 +1234,11 @@ def test_pricing_route_connection_failure_is_safely_logged(monkeypatch, caplog):
         caplog.at_level(logging.ERROR),
         pytest.raises(RuntimeError, match="password=do-not-log"),
     ):
-        route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            *_endpoints(_pricing_route_row())
-        )
+        route_tool.fetch_validated_pricing_route(*_endpoints(_pricing_route_row()))
 
     assert len(caplog.records) == 1
-    assert caplog.records[0].failureStage == "connection"
-    assert caplog.records[0].exceptionType == "RuntimeError"
+    assert caplog.records[0].__dict__["failureStage"] == "connection"
+    assert caplog.records[0].__dict__["exceptionType"] == "RuntimeError"
     assert "password=do-not-log" not in caplog.text
 
 
@@ -1112,22 +1251,24 @@ def test_pricing_route_connection_failure_is_safely_logged(monkeypatch, caplog):
     ],
 )
 def test_pricing_route_database_failures_are_safely_logged(
-    monkeypatch, caplog, query_error, close_error, expected_stage
-):
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    query_error: Exception | None,
+    close_error: Exception | None,
+    expected_stage: str,
+) -> None:
     connection = _Connection(
         [_pricing_route_row()], query_error=query_error, close_error=close_error
     )
     monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
 
     with caplog.at_level(logging.ERROR), pytest.raises(RuntimeError):
-        route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            *_endpoints(_pricing_route_row())
-        )
+        route_tool.fetch_validated_pricing_route(*_endpoints(_pricing_route_row()))
 
     assert connection.closed
     assert len(caplog.records) == 1
-    assert caplog.records[0].failureStage == expected_stage
-    assert caplog.records[0].exceptionType == "RuntimeError"
+    assert caplog.records[0].__dict__["failureStage"] == expected_stage
+    assert caplog.records[0].__dict__["exceptionType"] == "RuntimeError"
     assert "query-secret" not in caplog.text
     assert "close-secret" not in caplog.text
     if query_error is not None and close_error is not None:

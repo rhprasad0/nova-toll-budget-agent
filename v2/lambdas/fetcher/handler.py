@@ -16,7 +16,7 @@ import re
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
-from typing import Any, Protocol, TypedDict, cast
+from typing import Any, Literal, Protocol, TypedDict, cast
 
 import boto3
 
@@ -90,7 +90,7 @@ _clients: dict[str, object] = {}
 _tokens: dict[str, str] | None = None
 
 
-def _client(name: str) -> object:
+def _client(name: Literal["ssm", "s3", "cloudwatch"]) -> object:
     if name not in _clients:
         _clients[name] = cast(
             object,
@@ -236,3 +236,7 @@ def handler(event: dict[str, Any] | None, _context: object) -> dict[str, list[st
         # without ever touching the other feed's attempt above.
         raise RuntimeError(f"poll failed for feed(s): {', '.join(failed_feeds)}")
     return {"keys": keys}
+
+
+# Explicit exports for the offline handler contract tests.
+__all__ = ("_clients", "_fetch_feed", "_s3_key")

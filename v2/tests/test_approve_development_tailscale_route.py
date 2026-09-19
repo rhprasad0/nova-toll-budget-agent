@@ -14,7 +14,7 @@ from scripts import approve_development_tailscale_route as route
 
 
 class Response:
-    def __init__(self, body: object, status: int = 200):
+    def __init__(self, body: object, status: int = 200) -> None:
         self.status = status
         self.body = json.dumps(body).encode() if not isinstance(body, bytes) else body
 
@@ -29,11 +29,11 @@ class Response:
 
 
 class UrlFake:
-    def __init__(self, responses: list[Response | BaseException]):
+    def __init__(self, responses: list[Response | BaseException]) -> None:
         self.responses = deque(responses)
         self.requests: list[Any] = []
 
-    def __call__(self, request: Any, **kwargs: object) -> Response:
+    def __call__(self, request: object, **kwargs: object) -> Response:
         self.requests.append(request)
         response = self.responses.popleft()
         if isinstance(response, BaseException):
@@ -42,7 +42,7 @@ class UrlFake:
 
 
 class AwsFake:
-    def __init__(self, invocation: dict[str, object] | None = None):
+    def __init__(self, invocation: dict[str, object] | None = None) -> None:
         self.calls: list[list[str]] = []
         self.call_kwargs: list[dict[str, object]] = []
         self.invocation: dict[str, object] = invocation or {
@@ -65,7 +65,7 @@ class AwsFake:
 
 
 class AwsExploding:
-    def __init__(self, error: BaseException):
+    def __init__(self, error: BaseException) -> None:
         self.error = error
 
     def __call__(
@@ -82,7 +82,7 @@ class AwsNonzero:
 
 
 class AwsIdentitySequence(AwsFake):
-    def __init__(self, node_ids: list[str]):
+    def __init__(self, node_ids: list[str]) -> None:
         super().__init__()
         self.node_ids = iter(node_ids)
 

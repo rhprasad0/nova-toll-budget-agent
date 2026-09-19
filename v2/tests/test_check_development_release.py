@@ -10,17 +10,21 @@ import socket
 import time
 from email.message import Message
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 from urllib.request import Request
 
 import pytest
 
-spec = importlib.util.spec_from_file_location(
-    "release_check", Path(__file__).parents[1] / "scripts/check_development_release.py"
-)
-assert spec and spec.loader
-check = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(check)
+if TYPE_CHECKING:
+    from scripts import check_development_release as check
+else:
+    spec = importlib.util.spec_from_file_location(
+        "release_check",
+        Path(__file__).parents[1] / "scripts/check_development_release.py",
+    )
+    assert spec and spec.loader
+    check = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(check)
 
 
 def no_sleep(_seconds: float) -> None:
@@ -395,9 +399,9 @@ def test_canary_requires_all_observed_evidence_and_grounded_money(
         _jar: http.cookiejar.CookieJar,
         _path: str,
         body: dict[str, Any] | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> tuple[int, str, bytes]:
-        prompt_calls.append((body, kwargs["canary"]))
+        prompt_calls.append((body, cast(bool, kwargs["canary"])))
         return (
             200,
             "application/x-ndjson",
@@ -544,7 +548,7 @@ def test_security_checks_block_guardrail_and_find_redacted_address_trace(
         _jar: http.cookiejar.CookieJar,
         _path: str,
         body: dict[str, Any] | None = None,
-        **_kwargs: Any,
+        **_kwargs: object,
     ) -> tuple[int, str, bytes]:
         assert body is not None
         prompt = str(body["message"])
@@ -591,7 +595,7 @@ def test_security_checks_fail_closed_when_archived_trace_exposes_address(
         _jar: http.cookiejar.CookieJar,
         _path: str,
         body: dict[str, Any] | None = None,
-        **_kwargs: Any,
+        **_kwargs: object,
     ) -> tuple[int, str, bytes]:
         assert body is not None
         blocked = body["message"] == check.GUARDRAIL_PROMPT
