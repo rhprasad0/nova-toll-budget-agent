@@ -79,7 +79,6 @@ EXACT_INPUTS = {
     "v2/agent/__init__.py",
     "v2/agent/agentcore_entrypoint.py",
     "v2/agent/dev_chat.html",
-    "v2/agent/costs.html",
     "v2/agent/faq.html",
     "v2/agent/privacy.txt",
     "v2/agent/public-api-gate.js",
@@ -100,13 +99,11 @@ EXACT_INPUTS = {
     "v2/lambdas/loader/parse_csv.py",
     "v2/lambdas/loader/parse_xml.py",
     "v2/lambdas/publisher/handler.py",
-    "v2/lambdas/publisher/costs.py",
     "v2/lambdas/timed_checks/handler.py",
     "v2/pyproject.toml",
     "v2/scripts/build_agentcore_zips.sh",
     "v2/scripts/build_loader_zip.sh",
     "v2/scripts/build_publisher_zip.sh",
-    "v2/scripts/cost_dashboard_release.py",
     "v2/scripts/build_timed_checks_zip.sh",
     "v2/scripts/loader-requirements.in",
     "v2/scripts/loader-requirements.txt",
@@ -120,6 +117,12 @@ EXACT_INPUTS = {
     "v2/uv.lock",
 }
 INPUT_PREFIXES = ("v2/agent/assets/", "v2/agent_tools/")
+COST_MARKER = "v2/infra/costs.tf"
+COST_INPUTS = {
+    "v2/agent/costs.html",
+    "v2/lambdas/publisher/costs.py",
+    "v2/scripts/cost_dashboard_release.py",
+}
 BUNDLE_MARKER = "v2/scripts/build_release_bundle.sh"
 BUNDLE_FIXED_INPUTS = {
     BUNDLE_MARKER,
@@ -284,8 +287,11 @@ def _tracked_inputs(repo_root: Path, timed_enabled: bool = False) -> list[str]:
         path
         for path in tracked
         if _selected(path, bundle_enabled, timed_enabled, production_controls_enabled)
+        or (COST_MARKER in tracked_set and path in COST_INPUTS)
     )
     if not paths or set(EXACT_INPUTS) - set(paths):
+        _reject("inventory_incomplete")
+    if COST_MARKER in tracked_set and not COST_INPUTS.issubset(paths):
         _reject("inventory_incomplete")
     return paths
 
