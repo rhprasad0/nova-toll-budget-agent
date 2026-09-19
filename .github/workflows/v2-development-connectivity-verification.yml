@@ -75,6 +75,8 @@ jobs:
           set +x
           test "$GITHUB_REF" = "refs/heads/main"
           ROUTE_SUMMARY="$(python3 scripts/approve_development_tailscale_route.py)"
+          # Markdown code-fence backticks are literal, not command substitutions.
+          # shellcheck disable=SC2016
           printf '## Development Tailscale route approval\n\n```json\n%s\n```\n' "$ROUTE_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Diagnose development Tailscale route
@@ -87,6 +89,8 @@ jobs:
           set +x
           test "$GITHUB_REF" = "refs/heads/main"
           ROUTE_SUMMARY="$(python3 scripts/approve_development_tailscale_route.py --read-only)"
+          # Markdown code-fence backticks are literal, not command substitutions.
+          # shellcheck disable=SC2016
           printf '## Development Tailscale route diagnostic\n\n```json\n%s\n```\n' "$ROUTE_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
@@ -213,6 +217,8 @@ jobs:
               --arg role "nova-toll-v2-timed-checks-dev" \
               --arg route "$EXPECTED_ROUTE" \
               '{commit_sha:$commit_sha,run_id:$run_id,run_attempt:$run_attempt,ref:$ref,phase:"pre-bootstrap",development_account:$account,role:$role,expected_route:$route,site_one_4via6_transport_valid:true,pre_bootstrap_route_transport_valid:true}')"
+            # Markdown code-fence backticks are literal, not command substitutions.
+            # shellcheck disable=SC2016
             printf '## Development pre-bootstrap route/transport proof\n\n```json\n%s\n```\n' "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -309,7 +315,6 @@ jobs:
           if ! test "$PROD_ROUTE_STATE" = expected-denial; then
             exit 1
           fi
-          PROD_SOCKET_DENIED=true
 
           SUMMARY="$(jq -cn \
             --arg commit_sha "$GITHUB_SHA" \
@@ -324,4 +329,6 @@ jobs:
             --argjson production_route_denied true \
             --argjson production_socket_denied true \
             '{commit_sha:$commit_sha,run_id:$run_id,run_attempt:$run_attempt,ref:$ref,development_account:$account,role:$role,expected_route:$route,site_one_4via6_transport_valid:true,query_database:$database,query_user:$user,production_route_denied:$production_route_denied,production_socket_denied:$production_socket_denied}')"
+          # Markdown code-fence backticks are literal, not command substitutions.
+          # shellcheck disable=SC2016
           printf '## Development connectivity verification\n\n```json\n%s\n```\n' "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"

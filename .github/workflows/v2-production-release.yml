@@ -50,7 +50,6 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          marker="$RUNNER_TEMP/v2-production-release-event-status"
           emit() { printf '%s\n' "$1" >&2; printf '%s\n' "$1" >>"$GITHUB_STEP_SUMMARY"; }
           if [[ "${{ steps.upload.outcome }}" == success ]]; then
             emit 'stage=artifact-metadata status=pass elapsed=0 exit=0 reason=unclassified'

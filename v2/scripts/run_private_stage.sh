@@ -85,6 +85,8 @@ run_private_stage() {
     esac
   fi
   _run_private_stage_emit "stage=$stage status=fail elapsed=$elapsed exit=$status reason=$reason"
+  # Callers read this flag after the helper returns to avoid duplicate failure reports.
+  # shellcheck disable=SC2034
   PRIVATE_STAGE_REPORTED=1
   return "$status"
 }

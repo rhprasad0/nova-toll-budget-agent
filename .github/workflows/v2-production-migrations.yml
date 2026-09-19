@@ -58,6 +58,8 @@ jobs:
           set -euo pipefail
           set +x
           umask 077
+          # ShellCheck resolves the same helper before CI creates the trusted checkout.
+          # shellcheck source=v2/scripts/run_private_stage.sh
           source trusted/v2/scripts/run_private_stage.sh
           PRIVATE_STAGE_REPORTED=0
           PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -92,6 +94,8 @@ jobs:
           set -euo pipefail
           set +x
           umask 077
+          # ShellCheck resolves the same helper before CI creates the trusted checkout.
+          # shellcheck source=v2/scripts/run_private_stage.sh
           source trusted/v2/scripts/run_private_stage.sh
           PRIVATE_STAGE_REPORTED=0
           PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -119,6 +123,8 @@ jobs:
           set -euo pipefail
           set +x
           umask 077
+          # ShellCheck resolves the same helper before CI creates the trusted checkout.
+          # shellcheck source=v2/scripts/run_private_stage.sh
           source trusted/v2/scripts/run_private_stage.sh
           PRIVATE_STAGE_REPORTED=0
           PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -153,6 +159,8 @@ jobs:
           umask 077
           bundle="$RUNNER_TEMP/production-migration-release.zip"
           overlay="$GITHUB_WORKSPACE/candidate/release-overlay"
+          # ShellCheck resolves the same helper before CI creates the trusted checkout.
+          # shellcheck source=v2/scripts/run_private_stage.sh
           source trusted/v2/scripts/run_private_stage.sh
           PRIVATE_STAGE_REPORTED=0
           PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -206,6 +214,8 @@ jobs:
           set -euo pipefail
           set +x
           umask 077
+          # ShellCheck resolves the same helper before CI creates the trusted checkout.
+          # shellcheck source=v2/scripts/run_private_stage.sh
           source trusted/v2/scripts/run_private_stage.sh
           PRIVATE_STAGE_REPORTED=0
           PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -246,6 +256,8 @@ jobs:
           set -euo pipefail
           set +x
           umask 077
+          # ShellCheck resolves the same helper before CI creates the trusted checkout.
+          # shellcheck source=v2/scripts/run_private_stage.sh
           source trusted/v2/scripts/run_private_stage.sh
           trap 'rm -f -- "$RUNNER_TEMP/production-api-config.json"' EXIT
           check_private_api() {
@@ -271,6 +283,8 @@ jobs:
         run: |
           set -euo pipefail
           set +x
+          # ShellCheck resolves the same helper before CI creates the trusted checkout.
+          # shellcheck source=v2/scripts/run_private_stage.sh
           source "$GITHUB_WORKSPACE/trusted/v2/scripts/run_private_stage.sh"
           PRIVATE_STAGE_REPORTED=0
           PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -322,6 +336,8 @@ jobs:
           set -euo pipefail
           set +x
           umask 077
+          # ShellCheck resolves the same helper before CI creates the trusted checkout.
+          # shellcheck source=v2/scripts/run_private_stage.sh
           source trusted/v2/scripts/run_private_stage.sh
           PRIVATE_STAGE_REPORTED=0
           PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -357,6 +373,8 @@ jobs:
           set -euo pipefail
           set +x
           umask 077
+          # ShellCheck resolves the same helper before CI creates the trusted checkout.
+          # shellcheck source=v2/scripts/run_private_stage.sh
           source "$GITHUB_WORKSPACE/trusted/v2/scripts/run_private_stage.sh"
           PRIVATE_STAGE_REPORTED=0
           PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -383,6 +401,8 @@ jobs:
           run_private_stage readiness-state "$RUNNER_TEMP/production-readiness-state.json" "$RUNNER_TEMP/production-readiness.err" terraform -chdir=v2/infra show -json
           run_private_stage readiness-state "$RUNNER_TEMP/production-state-after-head.json" "$RUNNER_TEMP/production-readiness.err" aws s3api head-object --bucket nova-toll-tfstate-920534282028 --key nova-toll/v2/terraform.tfstate --expected-bucket-owner 920534282028
           if [[ "$PHASE" == prepare-production ]]; then
+            # The stage wrapper hides jq from ShellCheck; its filters must stay literal.
+            # shellcheck disable=SC2016
             run_private_stage readiness-state "$RUNNER_TEMP/production-state-after-match.out" "$RUNNER_TEMP/production-readiness.err" jq -ne --argjson expected "$STATE" --slurpfile state "$RUNNER_TEMP/production-state-after.json" --slurpfile head "$RUNNER_TEMP/production-state-after-head.json" '$state[0].lineage == $expected.lineage and ($state[0].serial >= $expected.serial) and ($head[0].VersionId != $expected.version_id or $state[0].serial > $expected.serial)'
           fi
           lock_released() { if aws s3api head-object --bucket nova-toll-tfstate-920534282028 --key nova-toll/v2/terraform.tfstate.tflock --expected-bucket-owner 920534282028 >"$RUNNER_TEMP/production-lock-private.out" 2>"$RUNNER_TEMP/production-lock-private.err"; then return 1; fi; grep -Eq '(404|Not Found)' "$RUNNER_TEMP/production-lock-private.err"; }
@@ -423,6 +443,8 @@ jobs:
           set -euo pipefail
           set +x
           umask 077
+          # ShellCheck resolves the same helper before CI creates the trusted checkout.
+          # shellcheck source=v2/scripts/run_private_stage.sh
           source trusted/v2/scripts/run_private_stage.sh
           PRIVATE_STAGE_REPORTED=0
           PRIVATE_STAGE_SUMMARY_FAILED=0

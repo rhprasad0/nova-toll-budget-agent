@@ -176,6 +176,8 @@ run_private_stage "migration-runner" "$MIGRATION_STDOUT_LOG" "$MIGRATION_STDERR_
 RUNNER_JSON="$(<"$MIGRATION_STDOUT_LOG")"
 unset PGPASSWORD
 
+# The stage wrapper hides jq from ShellCheck; its filters must stay literal.
+# shellcheck disable=SC2016
 run_private_stage "migration-evidence" "$MIGRATION_STDOUT_LOG" "$MIGRATION_STDERR_LOG" jq -e \
   --arg commit "$GITHUB_SHA" \
   --arg database "$DB_NAME" \
@@ -198,6 +200,8 @@ run_private_stage "migration-evidence" "$MIGRATION_STDOUT_LOG" "$MIGRATION_STDER
 EVIDENCE="$RUNNER_TEMP/v2-development-migrations-evidence.json"
 run_private_stage "migration-evidence" "$MIGRATION_STDOUT_LOG" "$MIGRATION_STDERR_LOG" \
   test ! -e "$EVIDENCE"
+# The stage wrapper hides jq from ShellCheck; its filters must stay literal.
+# shellcheck disable=SC2016
 run_private_stage "migration-evidence" "$MIGRATION_STDOUT_LOG" "$MIGRATION_STDERR_LOG" jq -cn \
   --arg commit_sha "$GITHUB_SHA" \
   --arg github_run_id "$GITHUB_RUN_ID" \
@@ -217,6 +221,8 @@ run_private_stage "migration-evidence" "$MIGRATION_STDOUT_LOG" "$MIGRATION_STDER
   and .status == "ok" and .route_valid == true and .transport_valid == true
 ' "$EVIDENCE" >/dev/null
 MIGRATION_SUMMARY_LOG="${RUNNER_TEMP}/development-migration-summary.log"
+# The stage wrapper hides jq from ShellCheck; its filters must stay literal.
+# shellcheck disable=SC2016
 run_private_stage "migration-summary" "$MIGRATION_SUMMARY_LOG" "$MIGRATION_SUMMARY_LOG" \
   jq -r '"## Development migration evidence\n\n```json\n" + tojson + "\n```"' "$EVIDENCE"
 if ! cat "$MIGRATION_SUMMARY_LOG" >>"$GITHUB_STEP_SUMMARY"; then
