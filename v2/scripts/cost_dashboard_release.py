@@ -458,7 +458,7 @@ def validate(
     }.items():
         if field in expected and after.get(field) is None:
             after[field] = default
-    omitted_defaults = {"acl", "managed_policy_arns"}
+    omitted_defaults = {"acl", "managed_policy_arns", "inline_policy"}
     if address == "aws_lambda_function.costs":
         omitted_defaults |= {"logging_config", "tracing_config", "ephemeral_storage"}
     if address.startswith("aws_s3_object."):

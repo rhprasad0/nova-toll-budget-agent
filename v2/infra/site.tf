@@ -449,6 +449,19 @@ resource "aws_cloudfront_distribution" "site" {
       viewer_protocol_policy = "redirect-to-https"
       compress               = true
       cache_policy_id        = data.aws_cloudfront_cache_policy.caching_disabled.id
+      # Keep provider read-back defaults known when adding ordered behaviors.
+      default_ttl                = 0
+      max_ttl                    = 0
+      trusted_key_groups         = []
+      trusted_signers            = []
+      response_headers_policy_id = ""
+      realtime_log_config_arn    = ""
+      origin_request_policy_id   = ""
+      field_level_encryption_id  = ""
+      smooth_streaming           = false
+      grpc_config {
+        enabled = false
+      }
       function_association {
         event_type   = "viewer-request"
         function_arn = aws_cloudfront_function.public_report_routes.arn
@@ -716,6 +729,19 @@ resource "aws_cloudfront_distribution" "staging" {
       viewer_protocol_policy = "redirect-to-https"
       compress               = true
       cache_policy_id        = data.aws_cloudfront_cache_policy.caching_disabled.id
+      # Keep provider read-back defaults known when adding ordered behaviors.
+      default_ttl                = 0
+      max_ttl                    = 0
+      trusted_key_groups         = []
+      trusted_signers            = []
+      response_headers_policy_id = ""
+      realtime_log_config_arn    = ""
+      origin_request_policy_id   = ""
+      field_level_encryption_id  = ""
+      smooth_streaming           = false
+      grpc_config {
+        enabled = false
+      }
       function_association {
         event_type   = "viewer-request"
         function_arn = aws_cloudfront_function.public_report_routes.arn
