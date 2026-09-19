@@ -16,7 +16,7 @@ from copy import deepcopy
 from pathlib import Path
 from textwrap import dedent
 from types import ModuleType
-from typing import Any, NoReturn, cast
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 import pytest
 import yaml
@@ -11425,7 +11425,10 @@ def _foundation_change(
 
 
 def test_development_foundation_plan_validator_accepts_only_exact_replacement() -> None:
-    validator = _foundation_plan_validator()
+    if TYPE_CHECKING:
+        from scripts import validate_development_foundation_plan as validator
+    else:
+        validator = _foundation_plan_validator()
     snapshot_identifier = "nova-toll-db-development-cutover-20260904t150735z"
     route_trust = json.dumps(
         {
@@ -11796,7 +11799,10 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement() 
 def test_development_foundation_plan_context_and_acl_fixture_are_bounded(
     tmp_path: Path,
 ) -> None:
-    validator = _foundation_plan_validator()
+    if TYPE_CHECKING:
+        from scripts import validate_development_foundation_plan as validator
+    else:
+        validator = _foundation_plan_validator()
     backend = tmp_path / "backend.hcl"
     backend.write_text(validator.EXPECTED_BACKEND)
     source_revision = subprocess.run(

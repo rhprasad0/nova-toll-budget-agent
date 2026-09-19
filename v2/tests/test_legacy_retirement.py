@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -62,22 +62,28 @@ DB_HOST = "nova-toll-db.abc.us-east-1.rds.amazonaws.com"
 DB_PORT = 5432
 SECRET_ARN = "arn:aws:secretsmanager:us-east-1:920534282028:secret:nova-toll-db-fixture"
 
-_validator_spec = importlib.util.spec_from_file_location(
-    "legacy_retirement_validator_fixture", PLAN_VALIDATOR
-)
-assert _validator_spec and _validator_spec.loader
-_validator_module = importlib.util.module_from_spec(_validator_spec)
-sys.modules[_validator_spec.name] = _validator_module
-_validator_spec.loader.exec_module(_validator_module)
+if TYPE_CHECKING:
+    from scripts import validate_legacy_retirement_plan as _validator_module
+else:
+    _validator_spec = importlib.util.spec_from_file_location(
+        "legacy_retirement_validator_fixture", PLAN_VALIDATOR
+    )
+    assert _validator_spec and _validator_spec.loader
+    _validator_module = importlib.util.module_from_spec(_validator_spec)
+    sys.modules[_validator_spec.name] = _validator_module
+    _validator_spec.loader.exec_module(_validator_module)
 INSTANCE_ADDRESSES = _validator_module.LEGACY_APPLICATION_INSTANCE_ADDRESSES
 
-_database_spec = importlib.util.spec_from_file_location(
-    "legacy_database_retirement_fixture", DATABASE_RETIRER
-)
-assert _database_spec and _database_spec.loader
-_database_module = importlib.util.module_from_spec(_database_spec)
-sys.modules[_database_spec.name] = _database_module
-_database_spec.loader.exec_module(_database_module)
+if TYPE_CHECKING:
+    from scripts import retire_legacy_development_database as _database_module
+else:
+    _database_spec = importlib.util.spec_from_file_location(
+        "legacy_database_retirement_fixture", DATABASE_RETIRER
+    )
+    assert _database_spec and _database_spec.loader
+    _database_module = importlib.util.module_from_spec(_database_spec)
+    sys.modules[_database_spec.name] = _database_module
+    _database_spec.loader.exec_module(_database_module)
 
 
 def _instance_identifier(address: str) -> str:

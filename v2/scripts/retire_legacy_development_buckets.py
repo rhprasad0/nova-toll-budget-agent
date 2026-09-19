@@ -2317,3 +2317,29 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+# Explicit exports for the offline contract tests.
+__all__ = (
+    "_archive_item",
+    "_bucket_configuration",
+    "_canonical",
+    "_change_waf_filter",
+    "_disable_lifecycle",
+    "_lifecycle_request",
+    "_list_old_bucket",
+    "_list_shared_key",
+    "_load_archive_manifest",
+    "_record_from_dict",
+    "_record_sort",
+    "_reject_ambient_credentials",
+    "_require_archive_evidence_binding",
+    "_require_freeze_evidence",
+    "_s3",
+    "_snapshot_digest",
+    "_stream_digest",
+    "_validate_semantic_proof",
+    "_verify_frozen_writers",
+    "_verify_resumed_writers",
+    "_waf_configuration",
+    "_waf_request",
+)

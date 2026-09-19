@@ -23,11 +23,14 @@ from botocore.validate import (
 
 V2_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = V2_ROOT / "scripts" / "retire_legacy_development_buckets.py"
-SPEC = importlib.util.spec_from_file_location("legacy_bucket_retirement", SCRIPT)
-assert SPEC and SPEC.loader
-module = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = module
-SPEC.loader.exec_module(module)
+if TYPE_CHECKING:
+    from scripts import retire_legacy_development_buckets as module
+else:
+    SPEC = importlib.util.spec_from_file_location("legacy_bucket_retirement", SCRIPT)
+    assert SPEC and SPEC.loader
+    module = importlib.util.module_from_spec(SPEC)
+    sys.modules[SPEC.name] = module
+    SPEC.loader.exec_module(module)
 
 
 def _record(
@@ -241,6 +244,8 @@ def test_guarded_response_drops_only_transport_metadata() -> None:
     assert aws.call("s3", "describe") == {"Value": "semantic"}
 
 
+# Partial client casts below preserve the offline sentinels: unexpected AWS calls
+# must still fail, while patched operations receive their annotated client type.
 def test_rejects_suspended_bucket_versioning(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_s3(_aws: object, operation: str, **_kwargs: object) -> dict[str, object]:
         if operation == "get_bucket_versioning":
@@ -251,7 +256,9 @@ def test_rejects_suspended_bucket_versioning(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(module, "_s3", fake_s3)
     try:
         with pytest.raises(module.RetirementError, match="suspended"):
-            module._bucket_configuration(object(), module.SITE_BUCKET)
+            module._bucket_configuration(
+                cast(module.GuardedAWS, object()), module.SITE_BUCKET
+            )
     finally:
         monkeypatch.setattr(module, "_s3", original)
 
@@ -268,7 +275,9 @@ def test_rejects_malformed_inventory_pagination(
     monkeypatch.setattr(module, "_s3", fake_s3)
     try:
         with pytest.raises(module.RetirementError, match="pagination flag"):
-            module._list_old_bucket(object(), module.SITE_BUCKET)
+            module._list_old_bucket(
+                cast(module.GuardedAWS, object()), module.SITE_BUCKET
+            )
     finally:
         monkeypatch.setattr(module, "_s3", original)
 
@@ -289,7 +298,9 @@ def test_rejects_malformed_shared_version_pagination(
     monkeypatch.setattr(module, "_s3", fake_s3)
     try:
         with pytest.raises(module.RetirementError, match="pagination flag"):
-            module._list_shared_key(object(), module.SHARED_KEYS[0])
+            module._list_shared_key(
+                cast(module.GuardedAWS, object()), module.SHARED_KEYS[0]
+            )
     finally:
         monkeypatch.setattr(module, "_s3", original)
 
@@ -350,7 +361,9 @@ def test_delete_marker_is_manifest_identity_only_and_never_copied() -> None:
             raise AssertionError("delete markers must not call CopyObject")
 
     archived = module._archive_item(
-        NoCallClient(), marker, "arn:aws:kms:us-east-1:920534282028:key/retained"
+        cast(module.GuardedAWS, NoCallClient()),
+        marker,
+        "arn:aws:kms:us-east-1:920534282028:key/retained",
     )
     assert archived["archived_delete_marker"] is True
     assert archived["archive_key"] is None
@@ -399,7 +412,9 @@ def test_archive_copy_preserves_source_identity_and_streamed_digest() -> None:
 
     fake = FakeAWS()
     result = module._archive_item(
-        fake, record, "arn:aws:kms:us-east-1:920534282028:key/retained"
+        cast(module.GuardedAWS, fake),
+        record,
+        "arn:aws:kms:us-east-1:920534282028:key/retained",
     )
     assert result["archive_version_id"] == "archive-v1"
     copy_call = next(
@@ -457,7 +472,9 @@ def test_archive_manifest_load_binds_exact_version_and_digest() -> None:
         "kms_key_id": kms_key_id,
     }
     assert (
-        module._load_archive_manifest(FakeAWS(), snapshot, kms_key_id, archive_state)
+        module._load_archive_manifest(
+            cast(module.GuardedAWS, FakeAWS()), snapshot, kms_key_id, archive_state
+        )
         == manifest
     )
     assert calls[0][1]["VersionId"] == "manifest-v17"
@@ -506,7 +523,7 @@ def test_purge_verifies_archive_before_first_delete(
     monkeypatch.setattr(module, "_verify_archive_objects", reject_archive)
     with pytest.raises(module.RetirementError, match="bad archive"):
         module.purge_snapshot(
-            FakeAWS(),
+            cast(module.GuardedAWS, FakeAWS()),
             _snapshot(),
             "arn:aws:kms:us-east-1:920534282028:key/retained",
             {"drain_seconds": 900, "before": {}},
@@ -553,7 +570,7 @@ def test_purge_uses_exact_etag_and_stops_on_conditional_failure(
     monkeypatch.setattr(module, "capture_snapshot", frozen_capture)
     with pytest.raises(module.RetirementError, match="outcome is unknown"):
         module.purge_snapshot(
-            FakeAWS(),
+            cast(module.GuardedAWS, FakeAWS()),
             local_snapshot,
             "arn:aws:kms:us-east-1:920534282028:key/retained",
             {"drain_seconds": 900},
@@ -591,7 +608,7 @@ def test_changed_metadata_or_tags_with_same_etag_fails_stability() -> None:
         ),
     ],
 )
-def test_unknown_bucket_key_or_version_fails_closed(bad_record: object) -> None:
+def test_unknown_bucket_key_or_version_fails_closed(bad_record: ObjectRecord) -> None:
     with pytest.raises(module.RetirementError):
         module.validate_records([*_records(), bad_record])
 
@@ -696,10 +713,12 @@ def test_waf_inventory_reads_all_pages_before_selecting_acl(mode: str) -> None:
             return {"LoggingConfiguration": {"ResourceArn": arn}}
 
     if mode == "later":
-        assert module._waf_configuration(AWS()) == {"ResourceArn": arn}
+        assert module._waf_configuration(cast(module.GuardedAWS, AWS())) == {
+            "ResourceArn": arn
+        }
     else:
         with pytest.raises(module.RetirementError):
-            module._waf_configuration(AWS())
+            module._waf_configuration(cast(module.GuardedAWS, AWS()))
     assert requests == [
         {"Scope": "CLOUDFRONT"},
         {"Scope": "CLOUDFRONT", "NextMarker": "next-page"},
@@ -833,7 +852,7 @@ def test_resume_frozen_is_read_only_and_requires_a_full_900_second_window(
     monkeypatch.setattr(module, "_athena_idle", fake_athena)
 
     state = module.resume_frozen(
-        object(),
+        cast(module.GuardedAWS, object()),
         baseline,
         proof,
         snapshot=snapshot,
@@ -852,7 +871,7 @@ def test_resume_frozen_is_read_only_and_requires_a_full_900_second_window(
     short_clock = iter((100.0, 999.0))
     with pytest.raises(module.RetirementError, match="900 seconds"):
         module.resume_frozen(
-            object(),
+            cast(module.GuardedAWS, object()),
             baseline,
             proof,
             snapshot=snapshot,
@@ -867,28 +886,38 @@ def test_resume_frozen_is_read_only_and_requires_a_full_900_second_window(
     monkeypatch.setattr(module, "writer_state", fake_writer)
     monkeypatch.setattr(module, "capture_snapshot", fake_snapshot)
     monkeypatch.setattr(module.time, "monotonic", lambda: 1000.0)
-    module._require_freeze_evidence(object(), state, snapshot=snapshot)
+    module._require_freeze_evidence(
+        cast(module.GuardedAWS, object()), state, snapshot=snapshot
+    )
 
     invalid = copy.deepcopy(state)
     invalid["after_snapshot_sha256"] = "0" * 64
     with pytest.raises(module.RetirementError, match="different snapshot"):
-        module._require_freeze_evidence(object(), invalid, snapshot=snapshot)
+        module._require_freeze_evidence(
+            cast(module.GuardedAWS, object()), invalid, snapshot=snapshot
+        )
 
     for value in (999.0, 1001.0, float("nan"), float("inf")):
         invalid = copy.deepcopy(state)
         invalid["drain_completed_monotonic"] = value
         with pytest.raises(module.RetirementError, match="900 elapsed"):
-            module._require_freeze_evidence(object(), invalid, snapshot=snapshot)
+            module._require_freeze_evidence(
+                cast(module.GuardedAWS, object()), invalid, snapshot=snapshot
+            )
     for start, completion in ((-1.0, 899.0), (-901.0, -1.0)):
         invalid = copy.deepcopy(state)
         invalid["drain_started_monotonic"] = start
         invalid["drain_completed_monotonic"] = completion
         with pytest.raises(module.RetirementError, match="900 elapsed"):
-            module._require_freeze_evidence(object(), invalid, snapshot=snapshot)
+            module._require_freeze_evidence(
+                cast(module.GuardedAWS, object()), invalid, snapshot=snapshot
+            )
     invalid = copy.deepcopy(state)
     invalid["semantic_proof"]["functions"][0]["checks"]["Environment"] = False
     with pytest.raises(module.RetirementError, match="digest"):
-        module._require_freeze_evidence(object(), invalid, snapshot=snapshot)
+        module._require_freeze_evidence(
+            cast(module.GuardedAWS, object()), invalid, snapshot=snapshot
+        )
 
     # Post-purge verification must check the smaller intended inventory, not
     # demand the original unmanaged objects still exist in the writer gate.
@@ -909,7 +938,9 @@ def test_resume_frozen_is_read_only_and_requires_a_full_900_second_window(
 
     monkeypatch.setattr(module, "_load_archive_manifest", archive_readback)
     monkeypatch.setattr(module, "_verify_archive_objects", archive_objects)
-    result = module.verify_post_purge(object(), snapshot, "retained-cmk", state, {})
+    result = module.verify_post_purge(
+        cast(module.GuardedAWS, object()), snapshot, "retained-cmk", state, {}
+    )
     assert result == {
         "managed_old_objects": 23,
         "shared_versions": 2,
@@ -923,7 +954,7 @@ def test_freeze_evidence_requires_elapsed_drain(
     monkeypatch.setattr(module.time, "monotonic", lambda: 100.0)
     with pytest.raises(module.RetirementError, match="900-second drain"):
         module._require_freeze_evidence(
-            object(),
+            cast(module.GuardedAWS, object()),
             {
                 "drain_seconds": module.DRAIN_SECONDS,
                 "freeze_completed_monotonic": 1.0,

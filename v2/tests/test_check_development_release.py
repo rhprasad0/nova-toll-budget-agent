@@ -10,17 +10,21 @@ import socket
 import time
 from email.message import Message
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.request import Request
 
 import pytest
 
-spec = importlib.util.spec_from_file_location(
-    "release_check", Path(__file__).parents[1] / "scripts/check_development_release.py"
-)
-assert spec and spec.loader
-check = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(check)
+if TYPE_CHECKING:
+    from scripts import check_development_release as check
+else:
+    spec = importlib.util.spec_from_file_location(
+        "release_check",
+        Path(__file__).parents[1] / "scripts/check_development_release.py",
+    )
+    assert spec and spec.loader
+    check = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(check)
 
 
 def no_sleep(_seconds: float) -> None:

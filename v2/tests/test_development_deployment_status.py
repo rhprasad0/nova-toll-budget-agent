@@ -3,15 +3,18 @@
 import importlib.util
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 SCRIPT = Path(__file__).parents[1] / "scripts/development_deployment_status.py"
-spec = importlib.util.spec_from_file_location("deployment_status", SCRIPT)
-assert spec and spec.loader
-status = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(status)
+if TYPE_CHECKING:
+    from scripts import development_deployment_status as status
+else:
+    spec = importlib.util.spec_from_file_location("deployment_status", SCRIPT)
+    assert spec and spec.loader
+    status = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(status)
 
 
 @pytest.fixture

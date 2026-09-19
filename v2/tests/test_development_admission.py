@@ -4,17 +4,20 @@ import importlib.util
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
-SPEC = importlib.util.spec_from_file_location(
-    "check_development_admission",
-    Path(__file__).parents[1] / "scripts/check_development_admission.py",
-)
-assert SPEC and SPEC.loader
-admission = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(admission)
+if TYPE_CHECKING:
+    from scripts import check_development_admission as admission
+else:
+    SPEC = importlib.util.spec_from_file_location(
+        "check_development_admission",
+        Path(__file__).parents[1] / "scripts/check_development_admission.py",
+    )
+    assert SPEC and SPEC.loader
+    admission = importlib.util.module_from_spec(SPEC)
+    SPEC.loader.exec_module(admission)
 
 REPOSITORY = "rhprasad0/nova-toll-budget-agent"
 SHA = "a" * 40
