@@ -435,10 +435,10 @@ def validate_snapshot(
     require(value["environment"] == environment and value["currency"] == "USD")
     require(
         value["scope"]
-        == (
-            "aws-production+aws-development+openai-organization"
+        in (
+            {"aws-production+aws-development+openai-organization"}
             if environment == "production"
-            else "aws-development"
+            else {"aws-development", "aws-development+openai-organization"}
         )
     )
     published = timestamp(value["published_at"])
@@ -455,7 +455,7 @@ def validate_snapshot(
             source,
             "status scope currency requested retrieved_at finalized_through estimated daily aws_services aws_environments",
         )
-        disabled = name == "openai" and environment == "development"
+        disabled = name == "openai" and value["scope"] == "aws-development"
         allowed = {"not_configured"} if disabled else {"available", "unavailable"}
         require(
             source["status"] in allowed and value["attempt"]["sources"][name] in allowed
@@ -551,6 +551,10 @@ def build_snapshot(
     }
     if previous is not None and attempt["status"] == "failed":
         result = copy.deepcopy(validate_snapshot(previous, environment, published_at))
+        if result["scope"] == "aws-development":
+            # Migrate retained AWS-only data without claiming a fresh publication.
+            result["scope"] = "aws-development+openai-organization"
+            result["sources"]["openai"] = blank_source("openai", result["requested"])
         result["attempt"] = attempt
     else:
         windows = periods(now.date())
@@ -560,7 +564,7 @@ def build_snapshot(
             "environment": environment,
             "scope": "aws-production+aws-development+openai-organization"
             if environment == "production"
-            else "aws-development",
+            else "aws-development+openai-organization",
             "currency": "USD",
             "periods": windows,
             "requested": requested(windows),
@@ -606,20 +610,13 @@ def handler(_event: dict[str, Any], context: object) -> dict[str, str]:
         previous = None
     now = datetime.now(UTC).replace(microsecond=0)
     period = requested(periods(now.date()))
-    sources = {
-        name: blank_source(
-            name, period, environment == "development" and name == "openai"
-        )
-        for name in source_ids(environment)
-    }
+    sources = {name: blank_source(name, period) for name in source_ids(environment)}
 
     def budget() -> None:
         # Reserve time to publish a sanitized failed attempt after provider I/O.
         require(runtime_context.get_remaining_time_in_millis() >= 60000)
 
     for name in sources:
-        if sources[name]["status"] == "not_configured":
-            continue
         try:
             budget()
             if name == "aws_" + environment:

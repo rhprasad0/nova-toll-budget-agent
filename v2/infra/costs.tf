@@ -27,7 +27,7 @@ resource "aws_iam_role_policy" "costs" {
   role = aws_iam_role.costs.name
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = concat([
+    Statement = [
       {
         Sid    = "ReadAccountBilling", Effect = "Allow"
         Action = ["ce:GetCostAndUsage"], Resource = "*"
@@ -52,21 +52,20 @@ resource "aws_iam_role_policy" "costs" {
       {
         Sid    = "WriteLogs", Effect = "Allow"
         Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = "${local.cost_log_arn}:*"
+      },
+      {
+        Sid    = "ReadBillingKey", Effect = "Allow"
+        Action = ["ssm:GetParameter"], Resource = local.cost_key_arn
+      },
+      {
+        Sid    = "DecryptBillingKey", Effect = "Allow"
+        Action = ["kms:Decrypt"], Resource = "arn:aws:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/*"
+        Condition = { StringEquals = {
+          "kms:ViaService"                      = "ssm.${data.aws_region.current.region}.amazonaws.com"
+          "kms:EncryptionContext:PARAMETER_ARN" = local.cost_key_arn
+        } }
       }
-      ], [for statement in [
-        {
-          Sid    = "ReadBillingKey", Effect = "Allow"
-          Action = ["ssm:GetParameter"], Resource = local.cost_key_arn
-        },
-        {
-          Sid    = "DecryptBillingKey", Effect = "Allow"
-          Action = ["kms:Decrypt"], Resource = "arn:aws:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/*"
-          Condition = { StringEquals = {
-            "kms:ViaService"                      = "ssm.${data.aws_region.current.region}.amazonaws.com"
-            "kms:EncryptionContext:PARAMETER_ARN" = local.cost_key_arn
-          } }
-        }
-    ] : statement if local.is_production])
+    ]
   })
 }
 

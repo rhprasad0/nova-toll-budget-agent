@@ -32,11 +32,11 @@ RESOURCES = {
 # Reviewed public bytes. Update these pins when changing these public assets.
 ASSET_SHA256: dict[str, str] = {
     "costs.css": "caef4ba5afe4813d1424db6e4d6ca628d803843113ee8050f39a8110abfd1995",
-    "costs.mjs": "bfe5185d893b74bb66a48f3389e9a2fdae1dd1270f4a82b3b388e58f0ecbe856",
+    "costs.mjs": "be63bd9bc6f8f371a0abf6805402c2b5d1d7c271b6bfb0aa0ac1c9ce1bf2eb15",
     "public-report-routes.js": "529643c7cad9c5bb46955f9b68b10013efb9b73e442c057957032cb4a140719a",
-    "development/costs.html": "d45aa24e7720fb5cb31a545ec6233cb7e27d6965221687b0ae106a9e3972a0f6",
+    "development/costs.html": "b7de8751c3ee8c28faea43db150b19c1267ee3c203e02a202e290a067edc348a",
     "development/evals.html": "05150cfaa397498efbbbdef5ba173aba12db18244b87a39cbdc5d66175dab7b0",
-    "production/costs.html": "d043cb3c3eab74176ff87c7fc73e9c03e54ba87650464bae266961c8eac0b23c",
+    "production/costs.html": "cb80c0b6ee3765c7cbb020c997f0b6dc3352dc9b9bc830b0410a238e79d2a1dd",
     "production/evals.html": "1f5216ba4cb3538ab482ab5d5e3e5389e7240689db7eeb0ee9dea2ec52d6bd79",
 }
 
@@ -101,28 +101,25 @@ def policy(environment: str) -> dict[str, Any]:
             "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
             "Resource": f"arn:aws:logs:us-east-1:{account}:log-group:/aws/lambda/{name}:*",
         },
+        {
+            "Sid": "ReadBillingKey",
+            "Effect": "Allow",
+            "Action": ["ssm:GetParameter"],
+            "Resource": secret,
+        },
+        {
+            "Sid": "DecryptBillingKey",
+            "Effect": "Allow",
+            "Action": ["kms:Decrypt"],
+            "Resource": f"arn:aws:kms:us-east-1:{account}:key/*",
+            "Condition": {
+                "StringEquals": {
+                    "kms:ViaService": "ssm.us-east-1.amazonaws.com",
+                    "kms:EncryptionContext:PARAMETER_ARN": secret,
+                }
+            },
+        },
     ]
-    if environment == "production":
-        statements += [
-            {
-                "Sid": "ReadBillingKey",
-                "Effect": "Allow",
-                "Action": ["ssm:GetParameter"],
-                "Resource": secret,
-            },
-            {
-                "Sid": "DecryptBillingKey",
-                "Effect": "Allow",
-                "Action": ["kms:Decrypt"],
-                "Resource": f"arn:aws:kms:us-east-1:{account}:key/*",
-                "Condition": {
-                    "StringEquals": {
-                        "kms:ViaService": "ssm.us-east-1.amazonaws.com",
-                        "kms:EncryptionContext:PARAMETER_ARN": secret,
-                    }
-                },
-            },
-        ]
     return {"Version": "2012-10-17", "Statement": statements}
 
 
@@ -143,7 +140,7 @@ def routes(before: dict[str, Any], after: dict[str, Any]) -> None:
 
 
 def validate_drift(item: dict[str, Any], environment: str) -> None:
-    """Accept only the observed first refresh of the fixed billing resources."""
+    """Accept only fixed billing defaults and the reviewed policy read-back."""
     address, change = item["address"], item["change"]
     fields: dict[str, set[str]] = {
         "aws_cloudfront_function.public_report_routes": set(),
@@ -165,15 +162,34 @@ def validate_drift(item: dict[str, Any], environment: str) -> None:
         name = "tollchat-v2-cost-publisher" + (
             "-dev" if environment == "development" else ""
         )
-        policies = after["inline_policy"]
-        require(before["inline_policy"] == [] and len(policies) == 1)
-        require(set(policies[0]) == {"name", "policy"})
-        require(
-            policies[0]["name"] == name
-            and json.loads(policies[0]["policy"]) == policy(environment)
-            and after["arn"] == f"arn:aws:iam::{ACCOUNTS[environment]}:role/{name}"
-        )
-        after["inline_policy"] = []
+        current = policy(environment)
+        legacy = {
+            **current,
+            "Statement": [
+                row
+                for row in current["Statement"]
+                if row["Sid"] not in {"ReadBillingKey", "DecryptBillingKey"}
+            ],
+        }
+        # aws_iam_role observes the separately managed inline policy one plan
+        # after its update. Admit only the reviewed development AWS-only policy.
+        for values in (before["inline_policy"], after["inline_policy"]):
+            if values == []:
+                continue
+            require(len(values) == 1 and set(values[0]) == {"name", "policy"})
+            observed = json.loads(values[0]["policy"])
+            require(values[0]["name"] == name)
+            require(
+                observed == current
+                or (environment == "development" and observed == legacy)
+            )
+        require(after["inline_policy"])
+        if before["inline_policy"]:
+            require(environment == "development")
+            require(json.loads(before["inline_policy"][0]["policy"]) == legacy)
+            require(json.loads(after["inline_policy"][0]["policy"]) == current)
+        require(after["arn"] == f"arn:aws:iam::{ACCOUNTS[environment]}:role/{name}")
+        before["inline_policy"] = after["inline_policy"] = []
     if address == "aws_cloudfront_function.public_report_routes":
         require(before["status"] == "IN_PROGRESS" and after["status"] == "DEPLOYED")
         suffix = "-dev" if environment == "development" else ""

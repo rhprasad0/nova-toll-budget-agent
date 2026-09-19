@@ -62,7 +62,14 @@ def test_billing_policy_limits(environment: str):
     assert statements["FindSnapshot"]["Condition"] == {
         "StringEquals": {"s3:prefix": "costs.json"}
     }
-    assert ("ReadBillingKey" in statements) == (environment == "production")
+    assert statements["ReadBillingKey"]["Resource"] == (
+        f"arn:aws:ssm:us-east-1:{gate.ACCOUNTS[environment]}"
+        ":parameter/nova-toll/openai_billing_api_key"
+    )
+    assert statements["DecryptBillingKey"]["Condition"]["StringEquals"] == {
+        "kms:ViaService": "ssm.us-east-1.amazonaws.com",
+        "kms:EncryptionContext:PARAMETER_ARN": statements["ReadBillingKey"]["Resource"],
+    }
     for statement in statements.values():
         assert not any(
             action.startswith(("rds", "bedrock", "sts:"))
@@ -623,6 +630,40 @@ def test_first_billing_refresh_preserves_release_authority(
                 ):
                     rehearsal.gate.validate_plan(document, state, phase)
     role = next(drift for drift in drifts if drift["address"] == "aws_iam_role.costs")
+    if environment == "development":
+        legacy_policy = gate.policy(environment)
+        legacy_policy["Statement"] = [
+            row
+            for row in legacy_policy["Statement"]
+            if row["Sid"] not in {"ReadBillingKey", "DecryptBillingKey"}
+        ]
+        legacy = [{"name": name, "policy": json.dumps(legacy_policy)}]
+        for old, new in (
+            ([], legacy),
+            (legacy, role["change"]["after"]["inline_policy"]),
+        ):
+            transition = deepcopy(role)
+            transition["change"]["before"]["inline_policy"] = old
+            transition["change"]["after"]["inline_policy"] = new
+            document["resource_drift"] = [transition]
+            rehearsal.gate.validate_plan(document, state, phase)
+        for side in ("before", "after"):
+            invalid = deepcopy(transition)
+            invalid["change"][side]["inline_policy"][0]["policy"] = "{}"
+            document["resource_drift"] = [invalid]
+            with pytest.raises(rehearsal.gate.Rejected, match="incomplete_or_drift"):
+                rehearsal.gate.validate_plan(document, state, phase)
+        reversed_transition = deepcopy(transition)
+        (
+            reversed_transition["change"]["before"],
+            reversed_transition["change"]["after"],
+        ) = (
+            reversed_transition["change"]["after"],
+            reversed_transition["change"]["before"],
+        )
+        document["resource_drift"] = [reversed_transition]
+        with pytest.raises(rehearsal.gate.Rejected, match="incomplete_or_drift"):
+            rehearsal.gate.validate_plan(document, state, phase)
     for policies in (
         role["change"]["after"]["inline_policy"] * 2,
         [
