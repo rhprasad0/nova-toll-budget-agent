@@ -15,11 +15,13 @@ import { routeData } from "../agent/assets/commute-routes.mjs";
 
 const { formatAnnualToll, validateEstimateSnapshot } = commuteMap;
 
+/** @type {import("../agent/assets/commute-map.mjs").EstimateSnapshot} */
 const commuteEstimates = JSON.parse(await readFile(
   new URL("../agent/assets/commute-estimates.json", import.meta.url),
   "utf8",
 ));
 
+/** @param {...string} chunks */
 const stream = (...chunks) => new ReadableStream({
   start(controller) {
     for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
@@ -53,6 +55,7 @@ const fakeView = () => {
 };
 
 test("consumes split NDJSON events through one terminal result", async () => {
+  /** @type {import("../agent/dev_chat.mjs").StreamEvent[]} */
   const seen = [];
   await consumeNdjson(stream(
     '{"type":"event","sequence":0,"event":{"data":"Hi 👋"},"text_',
@@ -62,7 +65,7 @@ test("consumes split NDJSON events through one terminal result", async () => {
 
   assert.equal(seen.length, 2);
   assert.equal(seen[0].text_delta, "Hi 👋");
-  assert.equal(seen[1].final.text, "Hi 👋");
+  assert.equal(seen[1].final?.text, "Hi 👋");
 });
 
 test("rejects malformed and unterminated streams", async () => {
@@ -78,16 +81,19 @@ test("rejects malformed and unterminated streams", async () => {
 });
 
 test("bounds raw events and batches streamed Markdown into one animation frame", () => {
-  const originalRequest = globalThis.requestAnimationFrame;
-  const originalCancel = globalThis.cancelAnimationFrame;
+  // These two browser APIs are deliberately supplied by this Node test.
+  const animationGlobals = /** @type {{requestAnimationFrame?: typeof requestAnimationFrame, cancelAnimationFrame?: typeof cancelAnimationFrame}} */ (globalThis);
+  const originalRequest = animationGlobals.requestAnimationFrame;
+  const originalCancel = animationGlobals.cancelAnimationFrame;
+  /** @type {Map<number, FrameRequestCallback>} */
   const frames = new Map();
   let nextFrame = 0;
-  globalThis.requestAnimationFrame = (callback) => {
+  animationGlobals.requestAnimationFrame = (callback) => {
     const id = ++nextFrame;
     frames.set(id, callback);
     return id;
   };
-  globalThis.cancelAnimationFrame = (id) => frames.delete(id);
+  animationGlobals.cancelAnimationFrame = (id) => frames.delete(id);
 
   try {
     const closed = fakeView();
@@ -118,9 +124,9 @@ test("bounds raw events and batches streamed Markdown into one animation frame",
     assert.equal(streaming.answer.innerHTML, "");
     assert.equal(streaming.article.scrolls, 0);
 
-    const [frameId, render] = frames.entries().next().value;
+    const [frameId, render] = /** @type {[number, FrameRequestCallback]} */ (frames.entries().next().value);
     frames.delete(frameId);
-    render();
+    render(0);
     assert.match(streaming.answer.innerHTML, /Hello <strong>driver<\/strong> 👋/);
     assert.equal(streaming.article.scrolls, 1);
 
@@ -149,10 +155,10 @@ test("bounds raw events and batches streamed Markdown into one animation frame",
     assert.equal(streaming.answer.textContent, "Request failed");
     assert.equal(streaming.article.scrolls, 3);
   } finally {
-    if (originalRequest) globalThis.requestAnimationFrame = originalRequest;
-    else delete globalThis.requestAnimationFrame;
-    if (originalCancel) globalThis.cancelAnimationFrame = originalCancel;
-    else delete globalThis.cancelAnimationFrame;
+    if (originalRequest) animationGlobals.requestAnimationFrame = originalRequest;
+    else delete animationGlobals.requestAnimationFrame;
+    if (originalCancel) animationGlobals.cancelAnimationFrame = originalCancel;
+    else delete animationGlobals.cancelAnimationFrame;
   }
 });
 
@@ -277,6 +283,7 @@ test("checked-in coverage snapshot contains every grouped v2 oracle point", asyn
   const tp1 = snapshot.locations.find(({ coordinates }) => (
     coordinates[0] === -77.15413222704926 && coordinates[1] === 38.79347384215561
   ));
+  assert.ok(tp1);
   assert.deepEqual(tp1.points.map(({ label, direction, role }) => ({ label, direction, role })), [
     {
       label: "I-495 Express northbound start at I-95 (TP1NB)",
@@ -358,6 +365,8 @@ test("coverage details expose readable names and directions but not point IDs", 
 test("I-495 and trimmed I-95 stay connected at the Van Dorn TP1 vertex", () => {
   const i495 = routeData.features.find(({ properties }) => properties.facility === "i495");
   const i95 = routeData.features.find(({ properties }) => properties.facility === "i95");
+  assert.ok(i495);
+  assert.ok(i95);
   const start = [-77.205634, 38.799923];
   const junction = [-77.154508, 38.793504];
   const connector = i495.geometry.coordinates.find((line) => (

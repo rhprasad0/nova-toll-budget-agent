@@ -1,5 +1,10 @@
+/** @typedef {{type: "tool", index: number, label: string, status: string} | {type: "answer", text: string, blocked: boolean} | {type: "error", code: string, message: string}} PublicEvent */
+/** @typedef {HTMLElement} PublicElement */
+/** @typedef {{activities: {append(...nodes: PublicElement[]): void}, answer: {innerHTML: string, textContent: string | null, className: string}, article?: {scrollIntoView(options?: ScrollIntoViewOptions): void}, items: Map<number, PublicElement>, createElement(tag: string): PublicElement}} TurnView */
+/** @typedef {Error & {code?: string}} ResponseError */
 import { renderAssistantMarkdown } from "./assets/chat-markdown.mjs";
 
+/** @type {PublicEvent} */
 const SAFE_ERROR = {
   type: "error",
   code: "agent_unavailable",
@@ -13,6 +18,7 @@ const STARTER_PROMPTS = Object.freeze([
     + "year, on a $130,000 gross annual salary?",
 ]);
 
+/** @param {string} path @param {object} body */
 export const post = async (path, body) => {
   const payload = JSON.stringify(body);
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload));
@@ -27,7 +33,9 @@ export const post = async (path, body) => {
   });
 };
 
-const validEvent = (event) => {
+/** @param {unknown} input @returns {input is PublicEvent} */
+const validEvent = (input) => {
+  const event = /** @type {PublicEvent} */ (input);
   if (!event || typeof event !== "object") return false;
   if (event.type === "tool") return Number.isInteger(event.index)
     && event.index >= 0 && typeof event.label === "string" && TOOL_STATUSES.has(event.status);
@@ -37,6 +45,7 @@ const validEvent = (event) => {
     && typeof event.message === "string";
 };
 
+/** @param {ReadableStream<Uint8Array>} stream @param {(event: PublicEvent) => void} onEvent */
 export async function consumeNdjson(stream, onEvent) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -50,6 +59,7 @@ export async function consumeNdjson(stream, onEvent) {
       const line = buffer.slice(0, newline);
       buffer = buffer.slice(newline + 1);
       if (!line) continue;
+      /** @type {unknown} */
       const event = JSON.parse(line);
       if (!validEvent(event)) throw new Error("invalid stream event");
       if (terminal) throw new Error("event after terminal");
@@ -62,6 +72,7 @@ export async function consumeNdjson(stream, onEvent) {
   if (!terminal) throw new Error("missing terminal event");
 }
 
+/** @param {TurnView} view @param {PublicEvent} event */
 export const applyEvent = (view, event) => {
   if (event.type === "tool") {
     let item = view.items.get(event.index);
@@ -92,21 +103,24 @@ export const applyEvent = (view, event) => {
   view.article?.scrollIntoView({ block: "end" });
 };
 
+/** @param {(onEvent: (event: PublicEvent) => void) => Promise<void>} request @param {(event: PublicEvent) => void} onEvent @param {(busy: boolean) => void} setBusy @param {(error: ResponseError) => void} onSessionExpired */
 export async function runRequest(request, onEvent, setBusy, onSessionExpired = () => {}) {
   setBusy(true);
   try {
     await request(onEvent);
   } catch (error) {
-    if (error?.code === "session_expired") onSessionExpired(error);
+    if (/** @type {ResponseError | null} */ (error)?.code === "session_expired") onSessionExpired(/** @type {ResponseError} */ (error));
     else onEvent(SAFE_ERROR);
   } finally {
     setBusy(false);
   }
 }
 
+/** @param {Pick<KeyboardEvent, "key" | "shiftKey" | "isComposing"> & {keyCode?: number}} event @param {boolean} busy */
 export const shouldSubmitOnEnter = (event, busy) => event.key === "Enter"
   && !event.shiftKey && !event.isComposing && event.keyCode !== 229 && !busy;
 
+/** @param {HTMLElement} transcript @returns {TurnView} */
 const newTurn = (transcript) => {
   const article = document.createElement("article");
   article.className = "assistant-turn";
@@ -127,21 +141,23 @@ const newTurn = (transcript) => {
   };
 };
 
+/** @param {Response} response */
 const responseError = async (response) => {
   const data = await response.json().catch(() => ({}));
-  const error = new Error(data.error?.message || SAFE_ERROR.message);
+  const error = /** @type {ResponseError} */ (new Error(data.error?.message || SAFE_ERROR.message));
   error.code = data.error?.code;
   return error;
 };
 
 const start = () => {
-  const transcript = document.querySelector("#transcript");
-  const form = document.querySelector("#chat");
-  const input = document.querySelector("#message");
-  const submit = form.querySelector("button");
-  const reset = document.querySelector("#reset");
-  const starterWrap = document.querySelector("#starter-wrap");
-  const starterButtons = [...document.querySelectorAll("[data-prompt-index]")];
+  const transcript = /** @type {HTMLElement} */ (document.querySelector("#transcript"));
+  const form = /** @type {HTMLFormElement} */ (document.querySelector("#chat"));
+  const input = /** @type {HTMLTextAreaElement} */ (document.querySelector("#message"));
+  const submit = /** @type {HTMLButtonElement} */ (form.querySelector("button"));
+  const reset = /** @type {HTMLButtonElement} */ (document.querySelector("#reset"));
+  const starterWrap = /** @type {HTMLElement} */ (document.querySelector("#starter-wrap"));
+  const starterButtons = [.../** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll("[data-prompt-index]"))];
+  /** @param {boolean} busy */
   const setBusy = (busy) => {
     input.disabled = busy;
     submit.disabled = busy;
@@ -154,8 +170,8 @@ const start = () => {
     .then(({ mountCommuteMap }) => mountCommuteMap())
     .catch((error) => {
       console.error("TollChat map failed", error);
-      document.querySelector("#map-loading").hidden = true;
-      document.querySelector("#map-error").hidden = false;
+      /** @type {HTMLElement} */ (document.querySelector("#map-loading")).hidden = true;
+      /** @type {HTMLElement} */ (document.querySelector("#map-error")).hidden = false;
     });
 
   for (const button of starterButtons) {
@@ -194,7 +210,7 @@ const start = () => {
         expired = error;
       }
       transcript.replaceChildren();
-      if (expired) applyEvent(newTurn(transcript), { type: "error", code: expired.code, message: expired.message });
+      if (expired) applyEvent(newTurn(transcript), { type: "error", code: /** @type {string} */ (expired.code), message: expired.message });
       setBusy(false);
       await new Promise(() => {});
     });
@@ -224,7 +240,7 @@ const start = () => {
     }, (item) => applyEvent(view, item), setBusy, (error) => {
       transcript.replaceChildren();
       applyEvent(newTurn(transcript), {
-        type: "error", code: error.code, message: error.message,
+        type: "error", code: /** @type {string} */ (error.code), message: error.message,
       });
     });
   });
@@ -240,7 +256,7 @@ const start = () => {
         expired = error;
       }
       transcript.replaceChildren();
-      if (expired) applyEvent(newTurn(transcript), { type: "error", code: expired.code, message: expired.message });
+      if (expired) applyEvent(newTurn(transcript), { type: "error", code: /** @type {string} */ (expired.code), message: expired.message });
       starterWrap.hidden = false;
     } catch {
       applyEvent(newTurn(transcript), SAFE_ERROR);

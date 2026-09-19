@@ -8,6 +8,7 @@ const { chromium } = require("playwright");
   try {
     const page = await browser.newPage();
     await page.clock.install({ time: new Date("2026-09-15T21:24:00Z") });
+    /** @type {string[]} */
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     const scenarios = Array.from({ length: 6 }, (_, i) => ({
@@ -97,8 +98,7 @@ const { chromium } = require("playwright");
     status = 503;
     await page.clock.runFor(60000);
     await page.waitForFunction(() =>
-      document
-        .querySelector("#freshness")
+      /** @type {HTMLElement & {textContent: string}} */ (document.querySelector("#freshness"))
         .textContent.includes("Refresh failed"),
     );
     assert.match(await page.locator("#metrics").innerText(), /1 of 1/);
@@ -106,8 +106,7 @@ const { chromium } = require("playwright");
     data = { ...snapshot, environment: "production" };
     await page.reload();
     await page.waitForFunction(() =>
-      document
-        .querySelector("#freshness")
+      /** @type {HTMLElement & {textContent: string}} */ (document.querySelector("#freshness"))
         .textContent.includes("not available"),
     );
     assert.equal(await page.locator(".scenario").count(), 0);

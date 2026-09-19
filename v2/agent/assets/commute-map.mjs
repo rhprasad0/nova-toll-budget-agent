@@ -1,3 +1,7 @@
+/** @typedef {typeof import("./commute-estimates.json")} EstimateSnapshot */
+/** @typedef {EstimateSnapshot['estimates'][number]} Estimate */
+/** @typedef {{schema_version: number, locations: {coordinates: number[], points: {point_id: string, facility: string, label: string, direction: string | null, role: string}[]}[]}} CoverageSnapshot */
+/** @typedef {CoverageSnapshot['locations'][number]} Location */
 import { routeData } from "./commute-routes.mjs";
 
 const EXPECTED_IDS = ["dumfries", "springfield-franconia", "leesburg", "i66-west"];
@@ -10,6 +14,7 @@ const COLORS = {
   dulles: "#51d49b",
   greenway: "#8e6ad8",
 };
+/** @type {Record<string, string>} */
 const COVERAGE_COLORS = {
   i66: COLORS.i66,
   i95: COLORS.i95,
@@ -21,6 +26,7 @@ const COVERAGE_COLORS = {
 };
 const COVERAGE_FACILITIES = new Set(Object.keys(COVERAGE_COLORS));
 const COVERAGE_DIRECTIONS = new Set(["NB", "SB", "EB", "WB"]);
+/** @type {Record<string, string>} */
 const DIRECTION_NAMES = {
   NB: "Northbound",
   SB: "Southbound",
@@ -61,12 +67,12 @@ const TP1_CONNECTOR = [
   [-77.1554, 38.793337], [-77.154988, 38.793412], [-77.154738, 38.793466],
   TP1_JUNCTION,
 ];
-const i95 = routeData.features.find(({ properties }) => properties.facility === "i95");
+const i95 = /** @type {typeof routeData.features[number]} */ (routeData.features.find(({ properties }) => properties.facility === "i95"));
 // ponytail: indices match the pinned TIGER/Line 2019 geometry; revisit if that archive changes.
 i95.geometry.coordinates = i95.geometry.coordinates
   .map((line, index) => index === 2 ? line.slice(8) : index === 3 ? line.slice(7) : line)
   .filter((_, index) => !I95_EAST_FRAGMENTS.has(index));
-routeData.features.find(({ properties }) => properties.facility === "i495")
+/** @type {typeof routeData.features[number]} */ (routeData.features.find(({ properties }) => properties.facility === "i495"))
   .geometry.coordinates.push(TP1_CONNECTOR);
 
 const invalid = () => {
@@ -77,11 +83,15 @@ const invalidCoverage = () => {
   throw new Error("invalid coverage location snapshot");
 };
 
+/** @param {Estimate["outbound"]} trip */
 const validTrip = (trip) => trip && typeof trip === "object"
   && typeof trip.origin_point_id === "string" && trip.origin_point_id
   && typeof trip.destination_point_id === "string" && trip.destination_point_id;
 
-export function validateEstimateSnapshot(snapshot) {
+/** @param {unknown} input @returns {EstimateSnapshot} */
+export function validateEstimateSnapshot(input) {
+  // The existing checks below validate the external JSON before it is returned.
+  const snapshot = /** @type {EstimateSnapshot} */ (input);
   if (!snapshot || typeof snapshot !== "object" || snapshot.schema_version !== 1
     || snapshot.destination !== "Washington, DC" || !Number.isFinite(Date.parse(snapshot.generated_at))
     || !snapshot.assumptions || snapshot.assumptions.planned_annual_commute_days !== 240
@@ -102,7 +112,7 @@ export function validateEstimateSnapshot(snapshot) {
         || !Number.isInteger(coverage.complete_pair_count)
         || typeof coverage.coverage_percent !== "string"
         || !scenarios || ["p25", "p50", "p90"].some(
-          (name) => !MONEY.test(scenarios[name]?.annual_toll_usd),
+          (name) => !MONEY.test(scenarios[/** @type {keyof typeof scenarios} */ (name)]?.annual_toll_usd),
         )
         || Number(scenarios.p25.annual_toll_usd) > Number(scenarios.p50.annual_toll_usd)
         || Number(scenarios.p50.annual_toll_usd) > Number(scenarios.p90.annual_toll_usd);
@@ -110,7 +120,9 @@ export function validateEstimateSnapshot(snapshot) {
   return snapshot;
 }
 
-export function validateCoverageLocations(snapshot) {
+/** @param {unknown} input @returns {CoverageSnapshot} */
+export function validateCoverageLocations(input) {
+  const snapshot = /** @type {CoverageSnapshot} */ (input);
   if (!snapshot || typeof snapshot !== "object" || snapshot.schema_version !== 1
     || !Array.isArray(snapshot.locations) || !snapshot.locations.length
     || snapshot.locations.length > 500) invalidCoverage();
@@ -133,7 +145,7 @@ export function validateCoverageLocations(snapshot) {
         || pointsSeen.has(point.point_id) || !COVERAGE_FACILITIES.has(point.facility)
         || typeof point.label !== "string" || !point.label || point.label.length > 200
         || !["entry", "exit", "airport"].includes(point.role)
-        || (airport ? point.direction !== null : !COVERAGE_DIRECTIONS.has(point.direction))
+        || (airport ? point.direction !== null : !COVERAGE_DIRECTIONS.has(/** @type {string} */ (point.direction)))
         || airport !== point.facility.startsWith("airport_")) invalidCoverage();
       pointsSeen.add(point.point_id);
     }
@@ -141,26 +153,30 @@ export function validateCoverageLocations(snapshot) {
   return snapshot;
 }
 
+/** @param {Location} location */
 const isTp1 = (location) => location.points.length === TP1_POINT_IDS.size
   && location.points.every(({ point_id: pointId }) => TP1_POINT_IDS.has(pointId));
 
+/** @param {Location} location */
 export const coverageCoordinates = (location) => (
   isTp1(location) ? TP1_JUNCTION : location.coordinates
 );
 
+/** @param {Location} location */
 export function coverageDetail(location) {
   if (isTp1(location)) return {
     kicker: "Supported route point",
     title: "I-495/I-95 near Van Dorn Street",
     paragraphs: ["Northbound entrance · Southbound exit"],
   };
+  /** @type {Map<string, Set<string>>} */
   const names = new Map();
   for (const point of location.points) {
     const access = point.role === "airport"
       ? "Supported origin or destination"
-      : `${DIRECTION_NAMES[point.direction]} ${point.role === "entry" ? "entrance" : "exit"}`;
+      : `${DIRECTION_NAMES[/** @type {string} */ (point.direction)]} ${point.role === "entry" ? "entrance" : "exit"}`;
     if (!names.has(point.label)) names.set(point.label, new Set());
-    names.get(point.label).add(access);
+    /** @type {Set<string>} */ (names.get(point.label)).add(access);
   }
   const rows = [...names.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
@@ -174,12 +190,14 @@ export function coverageDetail(location) {
   };
 }
 
+/** @param {string | number} value */
 export const formatAnnualToll = (value) => `${new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   maximumFractionDigits: 0,
 }).format(Number(value))}/yr`;
 
+/** @param {HTMLElement} detail @param {string} kicker @param {string} title @param {string[]} paragraphs */
 const setDetail = (detail, kicker, title, paragraphs) => {
   const tag = document.createElement("span");
   const heading = document.createElement("strong");
@@ -194,18 +212,19 @@ const setDetail = (detail, kicker, title, paragraphs) => {
 };
 
 const showError = () => {
-  document.querySelector("#map-loading").hidden = true;
-  document.querySelector("#map-error").hidden = false;
+  /** @type {HTMLElement} */ (document.querySelector("#map-loading")).hidden = true;
+  /** @type {HTMLElement} */ (document.querySelector("#map-error")).hidden = false;
 };
 
+/** @param {Location} location */
 const markerColor = (location) => {
   const facilities = new Set(location.points.map(({ facility }) => facility));
-  return facilities.size === 1 ? COVERAGE_COLORS[facilities.values().next().value] : "#ffffff";
+  return facilities.size === 1 ? COVERAGE_COLORS[/** @type {string} */ (facilities.values().next().value)] : "#ffffff";
 };
 
 export async function mountCommuteMap() {
-  const detail = document.querySelector("#map-detail");
-  const reset = document.querySelector("#reset-map");
+  const detail = /** @type {HTMLElement} */ (document.querySelector("#map-detail"));
+  const reset = /** @type {HTMLButtonElement} */ (document.querySelector("#reset-map"));
   reset.disabled = true;
   const [estimateResponse, coverageResponse] = await Promise.all([
     fetch("/assets/commute-estimates.json", { cache: "no-store" }),
@@ -234,11 +253,13 @@ export async function mountCommuteMap() {
   }), "bottom-right");
 
   let ready = false;
+  /** @type {HTMLElement | undefined} */
   let selected;
   const clearSelection = () => {
     selected?.removeAttribute("data-selected");
     selected = undefined;
   };
+  /** @param {HTMLElement} marker */
   const selectMarker = (marker) => {
     clearSelection();
     selected = marker;
@@ -249,6 +270,7 @@ export async function mountCommuteMap() {
     "Small pins show the place names and directions TollChat supports in route questions.",
     `Estimate snapshot generated ${new Date(snapshot.generated_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}.`,
   ]);
+  /** @param {Estimate} estimate @param {HTMLElement} marker */
   const selectEstimate = (estimate, marker) => {
     selectMarker(marker);
     const { scenarios, coverage: evidence } = estimate;
@@ -258,6 +280,7 @@ export async function mountCommuteMap() {
       "This historical ballpark covers tolls for a 2-axle E-ZPass vehicle over 240 commute days. It is not a forecast or a quote from a toll operator.",
     ]);
   };
+  /** @param {Location} location @param {HTMLElement} marker */
   const selectCoverage = (location, marker) => {
     selectMarker(marker);
     const selectedDetail = coverageDetail(location);
@@ -338,8 +361,8 @@ export async function mountCommuteMap() {
     new maplibregl.Marker({ element: destination, anchor: "center" })
       .setLngLat([-77.0369, 38.9072])
       .addTo(map);
-    document.querySelector("#map-loading").hidden = true;
-    document.querySelector("#map-error").hidden = true;
+    /** @type {HTMLElement} */ (document.querySelector("#map-loading")).hidden = true;
+    /** @type {HTMLElement} */ (document.querySelector("#map-error")).hidden = true;
     reset.disabled = false;
     showGuide();
   });

@@ -32,8 +32,8 @@ RESOURCES = {
 # Reviewed public bytes. Update these pins when changing these public assets.
 ASSET_SHA256: dict[str, str] = {
     "costs.css": "caef4ba5afe4813d1424db6e4d6ca628d803843113ee8050f39a8110abfd1995",
-    "costs.mjs": "be63bd9bc6f8f371a0abf6805402c2b5d1d7c271b6bfb0aa0ac1c9ce1bf2eb15",
-    "public-report-routes.js": "529643c7cad9c5bb46955f9b68b10013efb9b73e442c057957032cb4a140719a",
+    "costs.mjs": "49e45c2f4001944e027c35c4485e148df778986f8d3524d3e9e4f8dc79904ddd",
+    "public-report-routes.js": "a3a436e0f34f493030ebe787884f1b033dfba2a031c2a5cb4a88688e1ff0a799",
     "development/costs.html": "b7de8751c3ee8c28faea43db150b19c1267ee3c203e02a202e290a067edc348a",
     "development/evals.html": "05150cfaa397498efbbbdef5ba173aba12db18244b87a39cbdc5d66175dab7b0",
     "production/costs.html": "cb80c0b6ee3765c7cbb020c997f0b6dc3352dc9b9bc830b0410a238e79d2a1dd",

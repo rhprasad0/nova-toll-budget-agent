@@ -1,3 +1,6 @@
+/** @typedef {import("../agent/public_chat.mjs").PublicEvent} PublicEvent */
+/** @typedef {import("../agent/public_chat.mjs").ResponseError} ResponseError */
+/** @typedef {{tagName: string, className: string, textContent: string, innerHTML: string, children: MockElement[], dataset: DOMStringMap, append(...children: MockElement[]): void}} MockElement */
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -11,6 +14,7 @@ import {
   shouldSubmitOnEnter,
 } from "../agent/public_chat.mjs";
 
+/** @returns {MockElement} */
 const element = (tagName = "div") => ({
   tagName,
   className: "",
@@ -22,12 +26,14 @@ const element = (tagName = "div") => ({
 });
 
 const turn = () => ({
-  activities: element("ol"),
+  activities: /** @type {HTMLElement} */ (/** @type {unknown} */ (element("ol"))),
   answer: element("div"),
   items: new Map(),
-  createElement: element,
+  // The DOM fake implements precisely the operations applyEvent consumes.
+  createElement: /** @type {(tag: string) => HTMLElement} */ (/** @type {unknown} */ (element)),
 });
 
+/** @param {...string} events */
 const stream = (...events) => new ReadableStream({
   start(controller) {
     for (const event of events) controller.enqueue(new TextEncoder().encode(event));
@@ -37,10 +43,11 @@ const stream = (...events) => new ReadableStream({
 
 test("posts the exact proxy body with the CloudFront payload hash", async () => {
   const originalFetch = globalThis.fetch;
+  /** @type {{path: RequestInfo | URL, body: string, headers: Record<string, string>} | undefined} */
   let request;
   globalThis.fetch = async (path, options) => {
-    request = { path, ...options };
-    return { ok: true };
+    request = /** @type {{path: RequestInfo | URL, body: string, headers: Record<string, string>}} */ ({ path, ...options });
+    return new Response();
   };
   try {
     await post("/api/chat", { message: "Price it" });
@@ -48,6 +55,7 @@ test("posts the exact proxy body with the CloudFront payload hash", async () => 
     globalThis.fetch = originalFetch;
   }
 
+  assert.ok(request);
   assert.equal(request.path, "/api/chat");
   assert.equal(request.body, '{"message":"Price it"}');
   assert.equal(request.headers["content-type"], "application/json");
@@ -75,6 +83,7 @@ test("renders deployed tool and terminal events", () => {
 });
 
 test("parses one terminal NDJSON event and rejects private envelopes", async () => {
+  /** @type {PublicEvent[]} */
   const seen = [];
   await consumeNdjson(stream(
     '{"type":"tool","index":0,"label":"Checking current toll price","status":"running"}\n',
@@ -96,9 +105,11 @@ test("parses one terminal NDJSON event and rejects private envelopes", async () 
 });
 
 test("session expiry takes the restart path and failures stay generic", async () => {
+  /** @type {PublicEvent[]} */
   const events = [];
+  /** @type {ResponseError[]} */
   const expired = [];
-  const error = new Error("Your chat expired.");
+  const error = /** @type {ResponseError} */ (new Error("Your chat expired."));
   error.code = "session_expired";
   await runRequest(
     async () => { throw error; },
@@ -106,7 +117,7 @@ test("session expiry takes the restart path and failures stay generic", async ()
     () => {},
     (value) => expired.push(value),
   );
-  assert.deepEqual(events, []);
+  assert.deepEqual(events, /** @type {PublicEvent[]} */ ([]));
   assert.deepEqual(expired, [error]);
 
   await runRequest(
@@ -114,8 +125,10 @@ test("session expiry takes the restart path and failures stay generic", async ()
     (event) => events.push(event),
     () => {},
   );
-  assert.equal(events.at(-1).code, "agent_unavailable");
-  assert.doesNotMatch(events.at(-1).message, /secret/);
+  const last = events.at(-1);
+  assert.ok(last && last.type === "error");
+  assert.equal(last.code, "agent_unavailable");
+  assert.doesNotMatch(last.message, /secret/);
 });
 
 test("keyboard submission preserves newline and composition behavior", () => {
@@ -127,7 +140,7 @@ test("keyboard submission preserves newline and composition behavior", () => {
 
 test("public API gate allows only the deployed operations", async () => {
   const source = await readFile(new URL("../agent/public-api-gate.js", import.meta.url), "utf8");
-  const context = {};
+  const context = /** @type {{gate(event: {request: {method: string, uri: string}}): {statusCode?: number, uri?: string}}} */ ({});
   vm.runInNewContext(`${source}\nthis.gate = handler;`, context);
 
   for (const [method, uri] of [
@@ -143,7 +156,7 @@ test("public API gate allows only the deployed operations", async () => {
 
 test("public report routes rewrite toll directories with or without trailing slashes", async () => {
   const source = await readFile(new URL("../agent/public-report-routes.js", import.meta.url), "utf8");
-  const context = {};
+  const context = /** @type {{rewrite(event: {request: {method: string, uri: string}}): {uri: string}}} */ ({});
   vm.runInNewContext(`${source}\nthis.rewrite = handler;`, context);
 
   for (const [uri, expected] of [
@@ -165,10 +178,11 @@ test("public report routes rewrite toll directories with or without trailing sla
 
 test("release changes show the restart message without replaying the prompt", async () => {
   let calls = 0;
+  /** @type {string[]} */
   const messages = [];
   await runRequest(async () => {
     calls += 1;
-    const error = new Error("The application was updated. Start a new conversation.");
+    const error = /** @type {ResponseError} */ (new Error("The application was updated. Start a new conversation."));
     error.code = "session_expired";
     throw error;
   }, () => assert.fail("must use restart path"), () => {}, (error) => messages.push(error.message));
