@@ -1,5 +1,8 @@
 # AgentCore deployment
 
+The [billing cost dashboard runbook](runbooks/cost-dashboard.md) covers its
+account scopes, failure behavior, and development-first rollout checks.
+
 Trusted development planning runs automatically in PR and merge-queue CI. Its
 reusable plan validates the event-derived candidate and runs a read-only
 Terraform plan in the reviewer-free `development-plan` environment; it never

@@ -440,7 +440,7 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   dynamic "ordered_cache_behavior" {
-    for_each = ["/tolls/*", "/usage.json", "/evals/*", "/evals.html", "/eval-dashboard*", "/evals.json", "/assets/evals*", "/robots.txt", "/sitemap.xml"]
+    for_each = ["/tolls/*", "/usage.json", "/evals/*", "/evals.html", "/eval-dashboard*", "/evals.json", "/assets/evals*", "/cost-dashboard*", "/costs.html", "/costs.json", "/assets/costs*", "/robots.txt", "/sitemap.xml"]
     content {
       allowed_methods        = ["GET", "HEAD"]
       cached_methods         = ["GET", "HEAD"]
@@ -707,7 +707,7 @@ resource "aws_cloudfront_distribution" "staging" {
   }
 
   dynamic "ordered_cache_behavior" {
-    for_each = ["/tolls/*", "/usage.json", "/evals/*", "/evals.html", "/eval-dashboard*", "/evals.json", "/assets/evals*", "/robots.txt", "/sitemap.xml"]
+    for_each = ["/tolls/*", "/usage.json", "/evals/*", "/evals.html", "/eval-dashboard*", "/evals.json", "/assets/evals*", "/cost-dashboard*", "/costs.html", "/costs.json", "/assets/costs*", "/robots.txt", "/sitemap.xml"]
     content {
       allowed_methods        = ["GET", "HEAD"]
       cached_methods         = ["GET", "HEAD"]

@@ -1,5 +1,7 @@
 # TollChat
 
+[Cost dashboard](https://tollchat.ai/cost-dashboard) · Daily AWS and OpenAI billing; per-answer cost is not yet measured.
+
 **A deployed AI application with separate development and production environments, deterministic pricing tools, input and output guardrails, and PII redaction before trace export.**
 
 [Live demo](https://tollchat.ai/) · [Engineering evidence](#engineering-evidence) ·

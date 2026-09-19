@@ -20,8 +20,9 @@
     "infra/backend.development.hcl": "a3ae667db1382bdffc851cffcc29f3d127df34d3ce31179e75758b2eda5526cf",
     "infra/blue-green.tf": "b764e82a7ca6d22ed3149eb64b59723066596993dc759fd89f09eb6e0ee5d4f7",
     "infra/budget.tf": "01980ebb992a5256e5cdb3ae4b3da19a197e5011b83551d94b638d0dfc1d3ec7",
+    "infra/costs-delivery.tf": "4dfe2f91e68536bcd9257207c0a2b73f89e7cc533af182eb407542abd18e2ae7",
     "infra/data.tf": "e8e443e33a9d908f405eec54fa6bee2075fa8c228e293d734d1b0a5fc0428bc1",
-    "infra/delivery_plan_validator.py": "b2d3e5cd4bade0526f6c451e2a0e27e2f8501e544158e58e58051714b2b3c2e7",
+    "infra/delivery_plan_validator.py": "9e2a3ab14408d62204f15879e6b52d89414deb31bb0dc8f55f7bd110d85aec3e",
     "infra/development-tracing.tf": "489b1cb626e528a6fb0dc68d8d2dbf8e3beb24d40a7b3d7fa92631f00e920c97",
     "infra/iam.tf": "969e7b53b4c457f58f840d665737d72df3d3fafdb7adf6c2d41b862d9eb373e0",
     "infra/kms.tf": "be9512e49926805d56b6c521793c08880929948b820f943f0a2c5a0f9e589168",
@@ -32,7 +33,7 @@
     "infra/outputs.tf": "252052ed70c9b1e03232a2b4d3ccbf12d65712209a5f262401fec2b13aa965f6",
     "infra/providers.tf": "698c60284f5f3621a8fdd47ae29684254d54bb1b57db4fbe5aa42f453a8b57e5",
     "infra/rds.tf": "52085157d4398808227e100f56481ceae1669a8394f98b326fa219c1413a4d40",
-    "infra/release_manifest.py": "d8a0004bc21c5ff849cb04906781ea19238e4d239e134f7267cd73a183ceacb1",
+    "infra/release_manifest.py": "0b996111fc715a3df210980a2b2b51f3aaac9e13cc805de332816b3a716122dc",
     "infra/router-nat.tf": "42b11c0581cb52a13bd40662fe736e9caee6177f894aaca1d29c52dfdde416bb",
     "infra/s3.tf": "e74b230347830bd268099bdacad255656f4c60d68d53159e1240a8b56dbc2d6d",
     "infra/ssm.tf": "84d24c7793f7ac21208a7a67b4796cd4a107dd22ff4d01d6ae05c3390e88c68e",
@@ -49,6 +50,8 @@
     "v2/agent/assets/commute-estimates.json": "8174f18481adbc5d32505fa6290a318a83e4926b49b287451db07dc3b3552558",
     "v2/agent/assets/commute-map.mjs": "bd615b5ff18b6042d365277a305f102d0a7bfa361c4eeb8d0d197323a7b72057",
     "v2/agent/assets/commute-routes.mjs": "abfb43356804b4d3e150edc98deabe8ddffc4d65e7ac812e1cb5fc5f81366e6b",
+    "v2/agent/assets/costs.css": "caef4ba5afe4813d1424db6e4d6ca628d803843113ee8050f39a8110abfd1995",
+    "v2/agent/assets/costs.mjs": "bfe5185d893b74bb66a48f3389e9a2fdae1dd1270f4a82b3b388e58f0ecbe856",
     "v2/agent/assets/coverage-locations.json": "9aab142b12e6d185c450d000787c50b1f5fabbf6c48eab1c139e1150ffe66070",
     "v2/agent/assets/evals.css": "5109a2fbbdcc7a73673c249cb8e14be4f309ea0222d74501166d37aa74044017",
     "v2/agent/assets/evals.mjs": "2977e6c18e7cb9828f5bf9c670520c05f97fcb95b4826a4c8ff4bf293d9d5ba3",
@@ -61,12 +64,13 @@
     "v2/agent/assets/markdown-it.esm.min.mjs": "eb0a6cb2beb08326ea4d3e0e3b25ac72c1e6f119a619d9bbe061e72000ffa118",
     "v2/agent/assets/tollchat-annual-commute-example.png": "c648fb2b4be4a8f4741d807a0b6e946aff6bcfbc20529bc288900e39beb6bb6a",
     "v2/agent/assets/tollchat-logo.png": "da0167c64714b0e37c234d18695aecf6f81226627ca21e105e1fcc43c397e1a6",
-    "v2/agent/dev_chat.html": "ba691bafe85efe376cdcf65780805e939c9492587839deca0f60ced5580f1ea9",
-    "v2/agent/evals.html": "5f8baf80f46e2284d6533203a61e2fc98fed7ed720d409f1d0490d10591e58cd",
+    "v2/agent/costs.html": "981e331dd6a0805aec99889b17f18c97c50bb2c7ddc02d985865d06352382a77",
+    "v2/agent/dev_chat.html": "5b708ba38dd2a4fd4a4f43355fbfeb1d4dd09708a6af0fca5cd5ef910837a2ba",
+    "v2/agent/evals.html": "2f3bd028bea706e34bc7b15b552dc739b1b26b7f265678c164baba806d37cb2f",
     "v2/agent/faq.html": "09d9433615f842f51714135b3f2d5bd52cf764a4a6bb3bc45d4275871c5e37c7",
     "v2/agent/privacy.txt": "00b192c03648aaec4913aafc8e3ad30bff05d73497de7466a78fbcef1969e0f5",
     "v2/agent/public-api-gate.js": "695db31f3ab2a4f5a3ff38959b02b0bba34fd577737e1a4eae1222cd649a2bf8",
-    "v2/agent/public-report-routes.js": "7198632a414b271e6119659c5f1c24b443af0018786f456410f7f899095790ed",
+    "v2/agent/public-report-routes.js": "529643c7cad9c5bb46955f9b68b10013efb9b73e442c057957032cb4a140719a",
     "v2/agent/public_chat.mjs": "d503e7e80b68b0549c4412c6a553223af67a2d8d90155a1ec957cd2d5bd5b9e3",
     "v2/agent/robots.txt": "006953aa1ea1e823fdbde642b82832eca750db1ef7d22edffee8d8a7deabf879",
     "v2/agent/telemetry.py": "d21ee4588683dcbed28c6e457345e40fc6060756859758b20b44fb5424d72c3c",
@@ -126,6 +130,7 @@
     "v2/infra/agent_measurement.tf": "4044474e5f57758fbd70b25cb53dc9a17ad00189761811d5ca2968e0e1576502",
     "v2/infra/agentcore.tf": "6a11d9487ffe0948f18963c456d2e6ab3f9bf35680be90c9d5b3d9aace38329e",
     "v2/infra/backend.development.hcl": "e9140a8f8120f479e04d22def7149d32e63fd34d5e82d04db9bda51e4ccbf313",
+    "v2/infra/costs.tf": "d7d721130b037a9ccfd56b3ea180dfe8ddb6b6a870d9d5a884aa2f30507e12ec",
     "v2/infra/data.tf": "6288fa2b14e10e503499a59a8cca7a763d4f23ea9d27f167d922ae41cd24569b",
     "v2/infra/development.tfvars": "73f91fa50c80c95491b83d664d7a7b1f9661198026b94977e10c63b36f475fff",
     "v2/infra/environment.tf": "ef2d5db8e58b72bf603b0c65fff677ffd0d7c956dc4241ac922d3e66db76d7dc",
@@ -134,7 +139,7 @@
     "v2/infra/providers.tf": "b5fc8bb0f92ed4990625aebbe95811d683f36d48a9f18ad3520238d79b95e4aa",
     "v2/infra/release-bootstrap.tf": "65fbaa8f39b2a6d365ff41e58ac8505e8d463a0b41b81021d9c79822e9c17f55",
     "v2/infra/releases.tf": "81588ec85c0c1e0018040660537930a5cd9d48b78ac4ba64d9b51caceb932ff4",
-    "v2/infra/site.tf": "d78fdb2a282cb7f1d2979a66c6dc386c46afc5556f22f291c1e2d9670d953d25",
+    "v2/infra/site.tf": "fd0be261750fbeb3980f6550ba2c52459f9e0d7c6bc166d34ea628dce1a0c0a1",
     "v2/infra/telemetry-log-policy.tf": "641ab81e8c947e3c04196e856addee12bdd06a06c1e9a9f14cdb8b5f8830c03a",
     "v2/infra/timed_checks.tf": "ee5e0944787e4edca8ed116687bef33268ea299ac50df6282b7ce810ee2c76c2",
     "v2/infra/trace_redaction.tf": "70bd43bf038c175f47ff2ff9a125c911d0452b12ced42081fdd93808dbf60569",
@@ -147,20 +152,22 @@
     "v2/lambdas/loader/handler.py": "4d89b33bc8380e3af4ca0bc718713ffd4ab37ab43ea4e29b1524a6ac9d5a6533",
     "v2/lambdas/loader/parse_csv.py": "313d5d0843f9e884e7649dc66da3ebc5cdb015e2484899f4152d5ab9fb7b19ac",
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
+    "v2/lambdas/publisher/costs.py": "9201c0b76e46e7bc9b2f2d816813d1cd6cb274f8bd404dcb59711c657f73539b",
     "v2/lambdas/publisher/handler.py": "8f28ad63fff9dfbb89562c3ca755f264b28d36093f2051ea6699aeca9e4a510a",
     "v2/lambdas/timed_checks/handler.py": "b7f952df617bddccc03d4e34245a40b49fdb66f4af74e4f1ed884540221ae3ea",
     "v2/pyproject.toml": "ea77ede3b884a31b975cff723d02fd797342aff3d168068a9ae38689b5b141a8",
     "v2/scripts/adopt_production_baseline.py": "eb4e85b5a6d92f11906c3a53a4adfe304bf136f386cb8791a5b9fd814e36db4f",
-    "v2/scripts/blue_green.py": "dc0dea310d9bad7254211dd4ccf3e4f506c712c494a8881744f004189b3c7b97",
+    "v2/scripts/blue_green.py": "da7db388f950fbfe4e96b13774327ceff95d5dd90a942a669216c7c24031fcd0",
     "v2/scripts/build_agentcore_zips.sh": "574086ee097150d0557ff6b8d04a831c9c78c2efc1311d4768dea07cb56ae7e7",
     "v2/scripts/build_loader_zip.sh": "018e0f5ff41f8619d8903481928bfb40e765c9356af132cf6104a4ad40fa5646",
-    "v2/scripts/build_publisher_zip.sh": "174e88fd65a997a16c08cf7f838105b7d19a2e3d1fc0a63d460ad43bcaf4834b",
+    "v2/scripts/build_publisher_zip.sh": "c0fdf37b027063d285a935779276b1c26b6a0b8b2cc9d9f1b6c574383d2cd505",
     "v2/scripts/build_release_bundle.sh": "40bf8759eddb5b75a5b0e44b3fbd568f2252f1e5fa034163da8111c444a5c6e8",
     "v2/scripts/build_timed_checks_zip.sh": "836065aec814e27a8c97744874e8ed298e4a16b1240e01c743f8143bc50e65d2",
     "v2/scripts/check_development_admission.py": "60222d03555f2dad9373947b7fa1dbb0db817e78300c9fe373db37afd21f972b",
-    "v2/scripts/check_development_release.py": "ee2a717adc6db641ccdb098b975eecb04030b32d4f905b49c281392ee3d86ea2",
+    "v2/scripts/check_development_release.py": "51b49b5028f0721d05ec6ee9aa299cc854b3d9ab4eb2cc0e4aaad9dfd2f5db59",
     "v2/scripts/check_production_release.py": "4be6678bf5c5f5621e952285461498b453dd7e5f164f2b5e64818d09303ce5e7",
     "v2/scripts/classify_deployment_error.py": "da7bdd0029783c19b0b3c16eb62db7107538d63ff391d2e0560f7601afb75d98",
+    "v2/scripts/cost_dashboard_release.py": "5af14c046359bfe2386c6166114b85c09d789672f892e98a06abb7d9ccbc3e53",
     "v2/scripts/development_deployment_status.py": "95821a2343c6e3f85823c9f96fd813bf1e0d708888d4cc2ccec0467e3fe09719",
     "v2/scripts/loader-requirements.in": "38c314f1e9470587a6b566f2c8ed28cdf2ed3df2d87d349c3cbfc9f5a707230e",
     "v2/scripts/loader-requirements.txt": "7e35ab33589fae931d8bac07a7e32f868c02c4f37b629eb4208075a98fd918b4",
@@ -174,7 +181,7 @@
     "v2/scripts/run_production_migrations_workflow.sh": "f4d54fbf40e2892697af40f4ffef6ac228964a5a8aff2ede5023a3e7ba4bc490",
     "v2/scripts/timed-checks-requirements.in": "8218bd738a1337e889d04756b2f7c53f1693503b97c519dcc8a10a423b2837e5",
     "v2/scripts/timed-checks-requirements.txt": "c7f9d037e3fb740603863c144cfc053ebb4e52b25024318b68390bf1518e0515",
-    "v2/scripts/verify_release_bundle.py": "3abf1816a1f208646134696eacc905470e7b94c46ff04f3e1b9a05e510601eb4",
+    "v2/scripts/verify_release_bundle.py": "ef5261e25b548727df96da06f01421bb18398b0fdda8d2f01d112e99a81f2a96",
     "v2/timed_checks.py": "97fe53756b8ef3fd9cf5b17a8b00d3c5d59496030ce955ea40a90b3271d1d6cf",
     "v2/uv.lock": "949ab5c944868e37fa31b97c4bbca5befb41a175b240c8daec02eb0ce8c0082e"
   },
@@ -182,7 +189,7 @@
     "agentcore.zip": "cac1852c892674465c16bd70ad911b19326b831443cc5c507bc23155ed277617",
     "chat-proxy.zip": "c6161a58c2692db229613f6ccd793f2646a57fc743773a0b86a5f8a44fa72d15",
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
-    "publisher.zip": "d5643ad399bf9d8e3bdeb6c4a84694c3254136f8fc709754973a4631553c4516",
+    "publisher.zip": "0725ca136960565456614f1a78bbfab9b35091434c58372aa3398114f03e33a0",
     "timed-checks.zip": "4225b216dea0490f3d7acf3e142ddb23ce5ba515d5e873e47363277ab2657293"
   },
   "mutations": [
@@ -517,14 +524,10 @@
     },
     {
       "address": "aws_s3_object.evals",
-      "action": "create",
+      "action": "update",
       "operation_class": "site-object-upload",
       "changed_fields": [
-        "cache_control",
-        "content",
-        "content_type",
-        "source",
-        "source_hash"
+        "content"
       ]
     },
     {
@@ -547,6 +550,148 @@
         "content_type",
         "source",
         "source_hash"
+      ]
+    },
+    {
+      "address": "aws_iam_role.costs",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "assume_role_policy",
+        "force_detach_policies",
+        "max_session_duration",
+        "name",
+        "path"
+      ]
+    },
+    {
+      "address": "aws_iam_role_policy.costs",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "name",
+        "policy",
+        "role"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_log_group.costs",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "name",
+        "retention_in_days"
+      ]
+    },
+    {
+      "address": "aws_lambda_function.costs",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "architectures",
+        "environment",
+        "filename",
+        "function_name",
+        "handler",
+        "memory_size",
+        "package_type",
+        "publish",
+        "reserved_concurrent_executions",
+        "role",
+        "runtime",
+        "source_code_hash",
+        "timeout"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_event_rule.costs",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "event_bus_name",
+        "name",
+        "schedule_expression",
+        "state"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_event_target.costs",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "arn",
+        "event_bus_name",
+        "input",
+        "retry_policy",
+        "rule",
+        "target_id"
+      ]
+    },
+    {
+      "address": "aws_lambda_permission.costs",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "action",
+        "function_name",
+        "principal",
+        "source_account",
+        "source_arn",
+        "statement_id"
+      ]
+    },
+    {
+      "address": "aws_s3_object.cost_dashboard",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "bucket",
+        "cache_control",
+        "content",
+        "content_type",
+        "key"
+      ]
+    },
+    {
+      "address": "aws_s3_object.cost_assets[\"costs.css\"]",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "bucket",
+        "cache_control",
+        "content_type",
+        "key",
+        "source",
+        "source_hash"
+      ]
+    },
+    {
+      "address": "aws_s3_object.cost_assets[\"costs.mjs\"]",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "bucket",
+        "cache_control",
+        "content_type",
+        "key",
+        "source",
+        "source_hash"
+      ]
+    },
+    {
+      "address": "aws_cloudfront_distribution.site",
+      "action": "update",
+      "operation_class": "cost-routing",
+      "changed_fields": [
+        "ordered_cache_behavior"
+      ]
+    },
+    {
+      "address": "aws_cloudfront_distribution.staging",
+      "action": "update",
+      "operation_class": "cost-routing",
+      "changed_fields": [
+        "ordered_cache_behavior"
       ]
     }
   ],
@@ -911,6 +1056,122 @@
       "address": "aws_s3_object.site_assets[\"evals.mjs\"]",
       "action": "s3:PutObject",
       "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_iam_role.costs",
+      "action": "iam:CreateRole",
+      "resource": "arn:aws:iam::903859731897:role/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_iam_role.costs",
+      "action": "iam:TagRole",
+      "resource": "arn:aws:iam::903859731897:role/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_iam_role_policy.costs",
+      "action": "iam:PutRolePolicy",
+      "resource": "arn:aws:iam::903859731897:role/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_log_group.costs",
+      "action": "logs:CreateLogGroup",
+      "resource": "arn:aws:logs:us-east-1:903859731897:log-group:/aws/lambda/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_log_group.costs",
+      "action": "logs:PutRetentionPolicy",
+      "resource": "arn:aws:logs:us-east-1:903859731897:log-group:/aws/lambda/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_log_group.costs",
+      "action": "logs:TagResource",
+      "resource": "arn:aws:logs:us-east-1:903859731897:log-group:/aws/lambda/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_lambda_function.costs",
+      "action": "lambda:CreateFunction",
+      "resource": "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_lambda_function.costs",
+      "action": "lambda:PutFunctionConcurrency",
+      "resource": "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_lambda_function.costs",
+      "action": "iam:PassRole",
+      "resource": "arn:aws:iam::903859731897:role/tollchat-v2-cost-publisher-dev",
+      "conditions": {
+        "iam:PassedToService": "lambda.amazonaws.com"
+      }
+    },
+    {
+      "address": "aws_lambda_function.costs",
+      "action": "lambda:TagResource",
+      "resource": "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_event_rule.costs",
+      "action": "events:PutRule",
+      "resource": "arn:aws:events:us-east-1:903859731897:rule/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_event_rule.costs",
+      "action": "events:TagResource",
+      "resource": "arn:aws:events:us-east-1:903859731897:rule/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_event_target.costs",
+      "action": "events:PutTargets",
+      "resource": "arn:aws:events:us-east-1:903859731897:rule/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_lambda_permission.costs",
+      "action": "lambda:AddPermission",
+      "resource": "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.cost_dashboard",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/costs.html",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.cost_assets[\"costs.css\"]",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/assets/costs.css",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.cost_assets[\"costs.mjs\"]",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/assets/costs.mjs",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudfront_distribution.site",
+      "action": "cloudfront:UpdateDistribution",
+      "resource": "arn:aws:cloudfront::903859731897:distribution/*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudfront_distribution.staging",
+      "action": "cloudfront:UpdateDistribution",
+      "resource": "arn:aws:cloudfront::903859731897:distribution/*",
       "conditions": {}
     }
   ]

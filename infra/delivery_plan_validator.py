@@ -14,8 +14,13 @@ import json
 import re
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "v2"))
+from scripts import cost_dashboard_release as cost_release
 
 
 EXPECTED_IDENTITY = MappingProxyType(
@@ -195,6 +200,7 @@ REDACTED_TRACE_NOTICE_DIGESTS = {'aws_s3_object.index': 'c4d4867169f6040c265f349
 # Reviewed dashboard links preserve the existing redacted telemetry notices.
 DASHBOARD_NOTICE_DIGESTS = {'aws_s3_object.faq': '09d9433615f842f51714135b3f2d5bd52cf764a4a6bb3bc45d4275871c5e37c7', 'aws_s3_object.index': 'ba691bafe85efe376cdcf65780805e939c9492587839deca0f60ced5580f1ea9'}
 REDACTED_NOTICE_VERSIONS = {address: {digest, DASHBOARD_NOTICE_DIGESTS.get(address, digest)} for address, digest in REDACTED_TRACE_NOTICE_DIGESTS.items()}
+REDACTED_NOTICE_VERSIONS["aws_s3_object.index"].add("5b708ba38dd2a4fd4a4f43355fbfeb1d4dd09708a6af0fca5cd5ef910837a2ba")
 
 TRACE_READ_ONLY_FIELDS = {
     "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]": (
@@ -697,6 +703,37 @@ def _build_contract() -> dict[str, Mutation]:
             _permission("cloudwatch:TagResource", alarm_arn),
             _permission("cloudwatch:UntagResource", alarm_arn),
             create_identity=(("alarm_name", alarm_name),),
+        )
+    # Only the fixed billing resources use the shared production/development gate.
+    cost_name = "tollchat-v2-cost-publisher-dev"
+    cost_role = f"arn:aws:iam::{ACCOUNT}:role/{cost_name}"
+    cost_function = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{cost_name}"
+    cost_rule = f"arn:aws:events:{REGION}:{ACCOUNT}:rule/{cost_name}"
+    cost_log = f"arn:aws:logs:{REGION}:{ACCOUNT}:log-group:/aws/lambda/{cost_name}"
+    billing = {
+        "aws_iam_role.costs": (("name", "assume_role_policy", "path", "max_session_duration", "force_detach_policies"), ("iam:CreateRole", cost_role), ("iam:TagRole", cost_role)),
+        "aws_iam_role_policy.costs": (("name", "role", "policy"), ("iam:PutRolePolicy", cost_role)),
+        "aws_cloudwatch_log_group.costs": (("name", "retention_in_days"), ("logs:CreateLogGroup", cost_log), ("logs:PutRetentionPolicy", cost_log)),
+        "aws_lambda_function.costs": (("function_name", "role", "runtime", "handler", "architectures", "timeout", "memory_size", "reserved_concurrent_executions", "package_type", "publish", "environment", "filename", "source_code_hash"), ("lambda:CreateFunction", cost_function), ("lambda:PutFunctionConcurrency", cost_function)),
+        "aws_cloudwatch_event_rule.costs": (("name", "event_bus_name", "schedule_expression", "state"), ("events:PutRule", cost_rule)),
+        "aws_cloudwatch_event_target.costs": (("rule", "event_bus_name", "target_id", "arn", "input", "retry_policy"), ("events:PutTargets", cost_rule)),
+        "aws_lambda_permission.costs": (("statement_id", "action", "function_name", "principal", "source_arn", "source_account"), ("lambda:AddPermission", cost_function)),
+        "aws_s3_object.cost_dashboard": (("bucket", "key", "content", "content_type", "cache_control"), ("s3:PutObject", f"{SITE_BUCKET}/costs.html")),
+        **{f'aws_s3_object.cost_assets["{asset}"]': (("bucket", "key", "source", "source_hash", "content_type", "cache_control"), ("s3:PutObject", f"{SITE_BUCKET}/assets/{asset}")) for asset in ("costs.css", "costs.mjs")},
+    }
+    for address, (fields, *permissions) in billing.items():
+        required = [_permission(action, resource) for action, resource in permissions]
+        if address == "aws_lambda_function.costs":
+            required += [_permission("iam:PassRole", cost_role, conditions={"iam:PassedToService": "lambda.amazonaws.com"}), _permission("lambda:TagResource", cost_function)]
+        if address == "aws_cloudwatch_event_rule.costs":
+            required.append(_permission("events:TagResource", cost_rule))
+        if address == "aws_cloudwatch_log_group.costs":
+            required.append(_permission("logs:TagResource", cost_log))
+        result[address] = _mutation(fields, ("create", "update"), "cost-publication", *required)
+    for name in ("site", "staging"):
+        result[f"aws_cloudfront_distribution.{name}"] = _mutation(
+            ("ordered_cache_behavior",), ("update",), "cost-routing",
+            _permission("cloudfront:UpdateDistribution", f"arn:aws:cloudfront::{ACCOUNT}:distribution/*"),
         )
     return result
 
@@ -1630,6 +1667,8 @@ def _validate_derived_unknowns(
     }
     for address, action, operation_class, paths in pending:
         spec = CONTRACT.get(address)
+        if operation_class == "cost-publication":
+            continue  # The billing gate already rejects unknown authority fields.
         for path in paths:
             if path in TRACE_READ_ONLY_FIELDS.get(address, ()):
                 continue
@@ -2087,6 +2126,18 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 "source_code_hash" in changed_set
                 and bool(changed_set & {"s3_bucket", "s3_key", "s3_object_version"})
             ):
+                _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
+        if spec.operation_class == "cost-routing":
+            try:
+                cost_release.routes(before, after)
+                if not isinstance(before.get("arn"), str) or not before["arn"].startswith(f"arn:aws:cloudfront::{ACCOUNT}:distribution/") or before["arn"] != after["arn"]:
+                    raise ValueError("cost_routing_identity")
+            except (ValueError, KeyError, TypeError):
+                _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
+        if spec.operation_class == "cost-publication":
+            try:
+                cost_release.validate(resource, "development", plan)
+            except (ValueError, KeyError, TypeError):
                 _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
         if spec.operation_class.startswith("telemetry-"):
             _validate_telemetry_value(after, address, action, spec.operation_class)

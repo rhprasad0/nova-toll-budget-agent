@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="cost-environment" content="${environment}">
+  <title>TollChat · What it costs</title>
+  <link rel="icon" href="/assets/favicon.png">
+  <link rel="stylesheet" href="/assets/evals.css">
+  <link rel="stylesheet" href="/assets/costs.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to costs</a>
+  <div class="demo"><strong id="deployment">${environment} · Billing</strong> · Refreshed daily · USD · UTC</div>
+  <div class="wrap">
+    <header class="nav">
+      <a class="brand" href="/"><span class="mark" aria-hidden="true">T</span><span class="brand-name">tollchat<span style="color:var(--blue)">.</span></span><span class="nav-caption">Engineering notebook</span></a>
+      <nav class="nav-links" aria-label="Project pages"><a href="/">Chat</a><a href="/cost-dashboard" aria-current="page">Cost</a><a href="/eval-dashboard">Evaluation results</a></nav>
+    </header>
+    <main id="main">
+      <section class="cost-hero" aria-labelledby="title">
+        <div><p class="eyebrow">The cost of running TollChat</p><h1 id="title">Real infrastructure.<br><span>An open bill.</span></h1><p class="lede">What it costs to build, test, and run this reference implementation. AWS infrastructure and OpenAI API usage, together in one place.</p></div>
+        <div class="period"><span class="pill">Provisional</span><strong id="period-label">Awaiting billing snapshot</strong><span>Month to date · USD · UTC</span></div>
+      </section>
+      <div id="state-notice" class="state-notice" role="status" hidden></div>
+      <section class="cost-metrics" aria-label="Month-to-date provider spend">
+        <article class="cost-metric primary"><h2 class="cost-label">Total provider spend</h2><p id="total" class="cost-value">–</p><p id="total-note" class="cost-note">AWS + OpenAI API · Same reporting period</p></article>
+        <article class="cost-metric"><h2 class="cost-label"><span class="provider-mark" aria-hidden="true"></span>AWS</h2><p id="aws" class="cost-value">–</p><p id="aws-note" class="cost-note">Unblended cost</p></article>
+        <article class="cost-metric"><h2 class="cost-label"><span class="provider-mark openai" aria-hidden="true"></span>OpenAI API</h2><p id="openai" class="cost-value">–</p><p id="openai-note" class="cost-note">Organization-wide · Provider-reported</p></article>
+      </section>
+      <p id="source-subtotals" class="source-subtotals"></p>
+      <div class="context-line"><span>Includes production, development, shared infrastructure, and unallocated spend.</span><a href="#methodology">How we measure ↓</a></div>
+      <section class="panel" aria-labelledby="trend-title">
+        <div class="section-head"><div><h2 id="trend-title">The daily bill</h2><p id="trend-period">Last 30 completed days</p></div><div class="legend" aria-label="Chart legend"><span><i class="provider-mark" aria-hidden="true"></i>AWS</span><span><i class="provider-mark openai" aria-hidden="true"></i>OpenAI API</span></div></div>
+        <div id="trend"><p class="fine">Loading billing snapshot…</p></div>
+        <p class="chart-key">Daily costs in USD. Credits appear below zero. Billing may revise earlier days.</p>
+        <details id="daily-details"><summary>View daily amounts</summary><div class="table-wrap"><table><caption>Requested dates in UTC; provider totals remain provisional. Amounts round only for display.</caption><thead><tr><th scope="col">Date</th><th scope="col">AWS</th><th scope="col">OpenAI</th><th scope="col">Total</th></tr></thead><tbody id="daily-rows"></tbody></table></div></details>
+      </section>
+      <div class="breakdowns">
+        <section class="panel" aria-labelledby="services-title"><div class="section-head"><div><h2 id="services-title">Where the AWS money goes</h2><p id="service-period">Month to date · Available AWS sources</p></div></div><div id="services"></div><p class="panel-foot">EC2 – Other is AWS’s billing category for costs such as storage and data transfer. OpenAI API spend is shown separately above.</p></section>
+        <section class="panel" aria-labelledby="environment-title"><div class="section-head"><div><h2 id="environment-title">Across the environments</h2><p id="environment-period">Month to date · Available AWS sources</p></div></div><div class="allocation" id="allocation" aria-hidden="true"></div><table class="env-table"><caption class="sr-only">AWS month-to-date spend by environment</caption><tbody id="environments"></tbody></table><p class="panel-foot">Shared infrastructure supports the project across environments. Unallocated charges are included in the total; they have no recognized environment billing tag.</p></section>
+      </div>
+      <section class="inference panel" aria-labelledby="inference-title">
+        <div class="section-head"><div><p class="eyebrow" style="margin-bottom:10px">A different question</p><h2 id="inference-title">What does one answer cost?</h2><p>Inference is already part of provider spend. Per-answer attribution is not yet available.</p></div></div>
+        <div class="inference-grid"><div class="empty-estimate"><span class="pill">Not measured yet</span><h3>Per-turn inference cost is unavailable</h3><p>Completed turns, model calls, and failed or retried calls need to be measured together. Missing usage is not free usage.</p></div><div><ul class="coverage"><li><span>Public chat</span><span>Coverage not established</span></li><li><span>Controlled probes</span><span>Awaiting measurements</span></li><li><span>Simulated users</span><span>Not separately measured</span></li><li><span>Evaluation judges</span><span>Not separately measured</span></li></ul></div></div>
+        <p class="panel-foot">Infrastructure keeps the system available between chats. Dividing the entire cloud bill by a few conversations would not tell you the cost of an additional answer.</p>
+      </section>
+      <details id="methodology" class="methodology"><summary>How these numbers are measured</summary><div class="method-grid">
+        <div><h3>Provider totals, without overlap</h3><p>AWS uses <a href="https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_GetCostAndUsage.html">Cost Explorer</a> unblended cost for this deployment’s account. The production dashboard also reads development’s published AWS aggregate. OpenAI uses its <a href="https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/usage/methods/costs">organization Costs API</a>, without project filtering. A combined total requires every source to cover matching UTC dates in USD. Development shows its AWS account only; OpenAI is unavailable by design. AWS-hosted model charges remain within AWS. Token estimates are never added again.</p></div>
+        <div><h3>Coverage and allocation</h3><p>All spend in these accounts and this OpenAI organization is treated as TollChat spend, including development and evaluations. No returned charges are excluded. Credits and adjustments retain their sign. AWS uses the lowercase environment tag: production, development, or shared; other charges are unallocated. OpenAI workload allocation is not established.</p></div>
+        <div><h3>Dates and freshness</h3><p>Queries cover the union of month to date and the last 30 completed days, ending at midnight UTC today. On the first of a month, month to date has no completed days. Requested dates are not a guarantee that providers have finished reporting them. Neither source confirms a finalized-through date here. Development refreshes at 08:00 UTC and production at 09:00 UTC daily. Failed refreshes retain the last valid snapshot; publication older than 48 hours is flagged.</p><p id="retrieval-times" style="margin-top:8px"></p></div>
+        <div><h3>Future per-turn estimates</h3><p>For each controlled scenario: attributed inference cost, including measured failed calls and retries, divided by completed assistant turns. A turn runs from one submitted user message to its terminal answer and may use multiple model calls. Usage, verified rate sources, effective dates, and non-overlapping token categories are required before any estimate is shown.</p></div>
+      </div></details>
+      <noscript><p class="state-notice">JavaScript is needed to display billing amounts. <a href="/costs.json">Read the aggregate JSON snapshot.</a></p></noscript>
+    </main>
+    <footer><span id="publication-label">No snapshot loaded</span><a href="https://github.com/rhprasad0/nova-toll-budget-agent/issues/543">Issue #543 ↗</a></footer>
+  </div>
+  <script type="module" src="/assets/costs.mjs"></script>
+</body>
+</html>

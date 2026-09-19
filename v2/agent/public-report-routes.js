@@ -3,6 +3,9 @@ function handler(event) {
   if (request.uri === "/eval-dashboard" || request.uri === "/eval-dashboard/") {
     request.uri = "/evals.html";
   }
+  if (request.uri === "/cost-dashboard" || request.uri === "/cost-dashboard/") {
+    request.uri = "/costs.html";
+  }
   if (request.uri.startsWith("/tolls/") && !request.uri.includes(".")) {
     request.uri += request.uri.endsWith("/") ? "index.html" : "/index.html";
   }

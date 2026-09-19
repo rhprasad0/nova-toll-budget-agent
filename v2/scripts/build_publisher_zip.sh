@@ -13,7 +13,7 @@ uv python install 3.13 >/dev/null
 
 rm -rf "$STAGE" "$BUILD/publisher.zip"
 mkdir -p "$STAGE/agent_tools"
-cp "$V2_ROOT/lambdas/publisher/handler.py" "$STAGE/"
+cp "$V2_ROOT/lambdas/publisher/handler.py" "$V2_ROOT/lambdas/publisher/costs.py" "$STAGE/"
 cp "$V2_ROOT/agent_tools/current_price_domain.py" \
   "$V2_ROOT/agent_tools/validate_toll_route.py" "$STAGE/agent_tools/"
 curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
