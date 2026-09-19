@@ -5,12 +5,13 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from eval import run_evaluation, simulated
 from pydantic import BaseModel
 from strands import Agent
 from strands_evals import ActorSimulator, Case
 from strands_evals.types.evaluation import EvaluationData
 from strands_evals.types.simulation import ActorResponse
+
+from eval import run_evaluation, simulated
 
 
 @pytest.mark.parametrize("actor_finishes", [True, False])

@@ -4,8 +4,9 @@ from collections.abc import Callable, Sequence
 from typing import Self, cast
 
 import pytest
-from agent_tools import validate_toll_route as route_tool
 from strands.types.tools import ToolUse
+
+from agent_tools import validate_toll_route as route_tool
 
 type JSON = str | int | float | bool | list[JSON] | dict[str, JSON] | None
 

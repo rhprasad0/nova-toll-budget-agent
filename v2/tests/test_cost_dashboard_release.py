@@ -14,6 +14,7 @@ from typing import Any
 from zipfile import ZipFile
 
 import pytest
+
 from scripts import cost_dashboard_release as gate
 
 ROOT = Path(__file__).resolve().parents[2]

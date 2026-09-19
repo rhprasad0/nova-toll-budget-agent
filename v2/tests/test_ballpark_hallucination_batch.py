@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import BinaryIO
 
 import pytest
+
 from eval import ballpark_hallucination_batch as batch
 
 type JSON = str | int | float | bool | list[JSON] | dict[str, JSON] | None

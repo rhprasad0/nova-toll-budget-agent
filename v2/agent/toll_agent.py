@@ -14,9 +14,6 @@ from typing import Annotated, Any, Literal, cast, override
 from zoneinfo import ZoneInfo
 
 import boto3
-from agent_tools import validate_toll_route as route_validation
-from agent_tools.get_annual_toll_ballpark import get_annual_toll_ballpark
-from agent_tools.get_current_toll_price import get_current_toll_price
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 from strands import Agent
 from strands.hooks import (
@@ -31,6 +28,10 @@ from strands.models.openai_responses import OpenAIResponsesModel
 from strands.types.content import Messages
 from strands.types.streaming import StreamEvent
 from strands.types.tools import ToolChoice, ToolSpec
+
+from agent_tools import validate_toll_route as route_validation
+from agent_tools.get_annual_toll_ballpark import get_annual_toll_ballpark
+from agent_tools.get_current_toll_price import get_current_toll_price
 
 _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"

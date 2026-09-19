@@ -12,18 +12,19 @@ from types import SimpleNamespace
 from typing import Any, Self, TypedDict, cast
 
 import pytest
-from agent import toll_agent
-from agent.toll_agent import DuplicateToolUseGuard, build_agent, build_system_prompt
-from agent_tools import get_annual_toll_ballpark as ballpark_tool
-from agent_tools import get_current_toll_price as current_tool
 from pydantic import ValidationError
-from scripts import check_agent_contract_versions as version_check
 from strands.hooks import (
     AfterToolCallEvent,
     BeforeInvocationEvent,
     BeforeToolCallEvent,
 )
 from strands.models.openai_responses import OpenAIResponsesModel
+
+from agent import toll_agent
+from agent.toll_agent import DuplicateToolUseGuard, build_agent, build_system_prompt
+from agent_tools import get_annual_toll_ballpark as ballpark_tool
+from agent_tools import get_current_toll_price as current_tool
+from scripts import check_agent_contract_versions as version_check
 
 
 class Release(TypedDict):

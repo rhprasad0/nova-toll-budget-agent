@@ -6,9 +6,10 @@ from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 import pytest
-from agent_tools import get_annual_toll_ballpark as ballpark
 from pydantic import ValidationError
 from strands.types.tools import ToolResult, ToolUse
+
+from agent_tools import get_annual_toll_ballpark as ballpark
 
 type JSON = str | int | float | bool | list[JSON] | dict[str, JSON] | None
 

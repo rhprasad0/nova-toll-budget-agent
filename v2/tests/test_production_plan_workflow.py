@@ -10,6 +10,7 @@ from typing import Any, cast
 
 import pytest
 import yaml
+
 from tests.test_blue_green import gate, plan, previous
 
 ROOT = Path(__file__).resolve().parents[2]

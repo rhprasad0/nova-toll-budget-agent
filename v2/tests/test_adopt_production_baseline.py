@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from typing import NoReturn, cast
 
 import pytest
+
 from scripts import adopt_production_baseline as adopt
 from scripts import run_development_migrations as runner
 from scripts.adopt_production_baseline import (

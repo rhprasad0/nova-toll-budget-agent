@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import TypedDict
 
 import pytest
+
 from agent_tools import current_price_domain as pricing_domain
 from agent_tools import get_annual_toll_ballpark as ballpark_tool
 from agent_tools import get_current_toll_price as pricing_tool

@@ -3,6 +3,7 @@
 import os
 
 import pytest
+
 from timed_checks import run_route_checks
 
 pytestmark = pytest.mark.live

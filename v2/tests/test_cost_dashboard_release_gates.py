@@ -5,6 +5,7 @@ from copy import deepcopy
 from typing import Any
 
 import pytest
+
 from scripts import cost_dashboard_release as gate
 
 

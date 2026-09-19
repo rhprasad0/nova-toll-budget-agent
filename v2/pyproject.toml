@@ -42,6 +42,8 @@ reportUnnecessaryTypeIgnoreComment = true
 exclude = ["**/__pycache__", ".venv", "infra/build", "**/node_modules"]
 
 [tool.ruff]
+# Resolve application and shared infrastructure imports when invoked from v2.
+src = [".", ".."]
 extend-exclude = ["infra/build"]
 
 [tool.ruff.lint]

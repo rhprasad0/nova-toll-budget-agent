@@ -11,6 +11,7 @@ from unittest.mock import Mock
 from urllib.parse import urljoin
 
 import pytest
+
 from scripts import blue_green as gate
 from scripts import release_blue_green as delivery
 

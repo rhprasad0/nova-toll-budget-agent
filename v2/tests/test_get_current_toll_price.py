@@ -9,12 +9,13 @@ from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 import pytest
-from agent_tools import current_price_domain as pricing_tool
-from agent_tools import get_current_toll_price as pricing_transport
 from pydantic import BaseModel
 from strands.tools.loader import load_tools_from_module_path
 from strands.tools.registry import ToolRegistry
 from strands.types.tools import ToolResult, ToolUse
+
+from agent_tools import current_price_domain as pricing_tool
+from agent_tools import get_current_toll_price as pricing_transport
 
 type FixtureValue = JSON | datetime | Decimal
 

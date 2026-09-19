@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from scripts.validate_router_nat_plan import ACCOUNTS, CIDRS, ENDPOINTS, validate
 
 

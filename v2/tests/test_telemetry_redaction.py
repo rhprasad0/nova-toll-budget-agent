@@ -12,14 +12,6 @@ from typing import Unpack, cast
 from unittest.mock import Mock
 
 import pytest
-from agent.telemetry import (
-    OMITTED,
-    GuardrailRequest,
-    RedactingExporter,
-    Redactor,
-    protect_console,
-    wrap_exporters,
-)
 from amazon.opentelemetry.distro.aws_batch_unsampled_span_processor import (
     BatchUnsampledSpanProcessor,
 )
@@ -44,6 +36,15 @@ from opentelemetry.sdk.trace.export import (
     SpanExportResult,
 )
 from opentelemetry.trace import SpanContext, Status, StatusCode, TraceFlags
+
+from agent.telemetry import (
+    OMITTED,
+    GuardrailRequest,
+    RedactingExporter,
+    Redactor,
+    protect_console,
+    wrap_exporters,
+)
 
 # Exercise the SDK's private replacement seam, which has no public equivalent.
 

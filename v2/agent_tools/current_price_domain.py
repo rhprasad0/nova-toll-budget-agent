@@ -12,7 +12,6 @@ from statistics import median
 from typing import Annotated, Any, Literal, Protocol, Self, cast
 from zoneinfo import ZoneInfo
 
-from agent_tools import validate_toll_route as route_validation
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -20,6 +19,8 @@ from pydantic import (
     TypeAdapter,
     model_validator,
 )
+
+from agent_tools import validate_toll_route as route_validation
 
 logger = logging.getLogger(__name__)
 

@@ -6,10 +6,11 @@ from typing import TypedDict, cast
 
 import boto3
 import pytest
-from agent.toll_agent import build_agent, load_prompt_points
 from strands import Agent
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
 from strands.types.tools import ToolUse
+
+from agent.toll_agent import build_agent, load_prompt_points
 
 pytestmark = pytest.mark.live
 

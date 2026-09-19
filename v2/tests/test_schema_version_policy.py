@@ -1,4 +1,5 @@
 import pytest
+
 from scripts.check_schema_versions import (
     RegisteredSchema,
     owning_schemas,

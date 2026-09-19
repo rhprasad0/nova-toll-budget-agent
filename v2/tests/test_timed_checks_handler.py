@@ -8,11 +8,12 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from eval import run_evaluation, simulated
-from lambdas.timed_checks import handler as runner
 from strands_evals import Case
 from strands_evals.evaluators import Evaluator
 from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
+
+from eval import run_evaluation, simulated
+from lambdas.timed_checks import handler as runner
 from timed_checks import SCHEDULE_WINDOW_PAIRS
 
 

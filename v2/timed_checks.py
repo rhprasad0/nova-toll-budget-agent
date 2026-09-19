@@ -11,9 +11,10 @@ from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 import boto3
+from strands.types.tools import ToolResult, ToolUse
+
 from agent_tools import get_annual_toll_ballpark as ballpark
 from agent_tools import get_current_toll_price as pricing_tool
-from strands.types.tools import ToolResult, ToolUse
 
 MAX_DELAY_SECONDS = 600
 NEW_YORK = ZoneInfo("America/New_York")

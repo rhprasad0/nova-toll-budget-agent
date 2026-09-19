@@ -9,6 +9,7 @@ from io import BytesIO
 from typing import Any, NoReturn, cast
 
 import pytest
+
 from scripts import approve_development_tailscale_route as route
 
 

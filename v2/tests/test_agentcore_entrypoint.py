@@ -9,6 +9,11 @@ from collections.abc import AsyncIterator
 from typing import cast
 
 import pytest
+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
+from opentelemetry.trace import StatusCode
+from pytest import LogCaptureFixture
+from strands.types.agent import Limits
+
 from agent.agentcore_entrypoint import (
     BLOCKED_MESSAGE,
     CANARY_MARKER,
@@ -18,10 +23,6 @@ from agent.agentcore_entrypoint import (
     _canary_event,  # pyright: ignore[reportPrivateUsage]
 )
 from agent.telemetry import protect_console
-from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
-from opentelemetry.trace import StatusCode
-from pytest import LogCaptureFixture
-from strands.types.agent import Limits
 
 
 @pytest.mark.parametrize("enabled", ["", "false"])
