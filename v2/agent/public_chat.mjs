@@ -1,4 +1,4 @@
-/** @typedef {{type: "tool", index: number, label: string, status: string} | {type: "answer", text: string, blocked: boolean} | {type: "error", code: string, message: string}} PublicEvent */
+/** @typedef {{type: "tool", index: number, label: string, status: string} | {type: "text", text: string} | {type: "answer", text: string, blocked: boolean} | {type: "error", code: string, message: string}} PublicEvent */
 /** @typedef {HTMLElement} PublicElement */
 /** @typedef {{activities: {append(...nodes: PublicElement[]): void}, answer: {innerHTML: string, textContent: string | null, className: string}, article?: {scrollIntoView(options?: ScrollIntoViewOptions): void}, items: Map<number, PublicElement>, createElement(tag: string): PublicElement}} TurnView */
 /** @typedef {Error & {code?: string}} ResponseError */
@@ -39,6 +39,8 @@ const validEvent = (input) => {
   if (!event || typeof event !== "object") return false;
   if (event.type === "tool") return Number.isInteger(event.index)
     && event.index >= 0 && typeof event.label === "string" && TOOL_STATUSES.has(event.status);
+  if (event.type === "text") return Object.keys(event).length === 2
+    && typeof event.text === "string" && event.text.length > 0;
   if (event.type === "answer") return typeof event.text === "string"
     && typeof event.blocked === "boolean";
   return event.type === "error" && typeof event.code === "string"
@@ -97,7 +99,7 @@ export const applyEvent = (view, event) => {
     view.answer.textContent = event.message;
     view.answer.className = "answer error";
   } else {
-    view.answer.className = event.blocked ? "answer error" : "answer";
+    view.answer.className = event.type === "answer" && event.blocked ? "answer error" : "answer";
     view.answer.innerHTML = renderAssistantMarkdown(event.text);
   }
   view.article?.scrollIntoView({ block: "end" });
@@ -130,6 +132,7 @@ const newTurn = (transcript) => {
   const answer = document.createElement("div");
   answer.className = "answer";
   answer.setAttribute("aria-live", "polite");
+  answer.textContent = "Working…";
   article.append(activities, answer);
   transcript.append(article);
   return {

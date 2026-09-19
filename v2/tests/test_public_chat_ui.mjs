@@ -82,6 +82,59 @@ test("renders deployed tool and terminal events", () => {
   assert.match(view.answer.innerHTML, /<strong>\$4\.25<\/strong>/);
 });
 
+test("approved snapshots replace provisional Markdown and terminal responses replace it", () => {
+  const view = turn();
+  view.answer.textContent = "Working…";
+  applyEvent(view, { type: "text", text: "Checking the **price**." });
+  assert.match(view.answer.innerHTML, /<strong>price<\/strong>/);
+  applyEvent(view, { type: "text", text: "The toll is **$4.25**." });
+  assert.doesNotMatch(view.answer.innerHTML, /Checking/);
+  assert.match(view.answer.innerHTML, /<strong>\$4\.25<\/strong>/);
+  applyEvent(view, { type: "answer", text: "Blocked", blocked: true });
+  assert.equal(view.answer.innerHTML, "<p>Blocked</p>\n");
+  assert.equal(view.answer.className, "answer error");
+  applyEvent(view, { type: "error", code: "agent_unavailable", message: "Unavailable" });
+  assert.equal(view.answer.textContent, "Unavailable");
+});
+
+test("renders text while the stream is still open, including split UTF-8 frames", async () => {
+  const view = turn();
+  const text = '{"type":"text","text":"Price: **€4** <script>"}\n';
+  const bytes = new TextEncoder().encode(text);
+  /** @type {ReadableStreamDefaultController<Uint8Array> | undefined} */
+  let controller;
+  const body = new ReadableStream({ start(value) { controller = value; } });
+  assert.ok(controller);
+  let rendered = () => {};
+  /** @type {Promise<void>} */
+  const firstText = new Promise((resolve) => { rendered = resolve; });
+  const consuming = consumeNdjson(body, (event) => {
+    applyEvent(view, event);
+    if (event.type === "text") rendered();
+  });
+  for (const byte of bytes) controller.enqueue(new Uint8Array([byte]));
+  await firstText;
+  assert.match(view.answer.innerHTML, /<strong>€4<\/strong>/);
+  assert.match(view.answer.innerHTML, /&lt;script&gt;/);
+  controller.enqueue(new TextEncoder().encode('{"type":"answer","text":"Final","blocked":false}\n'));
+  controller.close();
+  await consuming;
+  assert.equal(view.answer.innerHTML, "<p>Final</p>\n");
+});
+
+test("rejects incomplete or invalid text streams", async () => {
+  for (const events of [
+    ['{"type":"text","text":"Partial"}\n'],
+    ['{"type":"text","text":42}\n'],
+    ['{"type":"text","text":""}\n'],
+    ['{"type":"text","text":"Partial","reasoning":"private"}\n'],
+    ['{"type":"text","text":"Unterminated"}'],
+    ['{"type":"answer","text":"Done","blocked":false}\n', '{"type":"text","text":"Late"}\n'],
+  ]) {
+    await assert.rejects(() => consumeNdjson(stream(...events), () => {}));
+  }
+});
+
 test("parses one terminal NDJSON event and rejects private envelopes", async () => {
   /** @type {PublicEvent[]} */
   const seen = [];
