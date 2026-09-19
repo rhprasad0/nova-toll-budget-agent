@@ -1086,6 +1086,9 @@ def test_plan_gate_cli_reports_only_a_finite_summary_reason(
     )
     assert result.returncode == 1
     events = summary.read_text().splitlines()
+    events = [
+        event for event in events if not event.startswith("shared_mutation_inventory=")
+    ]
     assert (
         events[0] == "stage=validator status=start elapsed=0 exit=0 reason=unclassified"
     )

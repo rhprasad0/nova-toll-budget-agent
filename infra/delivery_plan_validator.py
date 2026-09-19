@@ -21,6 +21,7 @@ from typing import Any, NoReturn, TypeGuard, cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "v2"))
 from scripts import cost_dashboard_release as cost_release
+from scripts import shared_packages
 
 type JSON = bool | int | float | str | list[JSON] | dict[str, JSON] | None
 
@@ -1047,7 +1048,7 @@ _PRODUCTION_ACCOUNT = "920534282028"
 _PRODUCTION_MARKERS = re.compile(
     r"(?:^|[-_/:.])(?:production|prod)(?:$|[-_/:.])"
     r"|(?<![A-Za-z0-9.-])(?:www\.)?tollchat\.ai(?::\d+)?(?=$|[/?#])",
-    re.I,
+    re.IGNORECASE,
 )
 _AUTHORIZATION_FIELDS = frozenset(
     {
@@ -2516,7 +2517,9 @@ def _mutation_result(
     }
 
 
-def _parse_plan(plan: JSON) -> list[dict[str, Any]]:
+def _parse_plan(
+    plan: JSON, package_evidence: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
     if (
         not isinstance(plan, dict)
         or not set(plan).issubset(_PLAN_KEYS)
@@ -2849,7 +2852,7 @@ def _parse_plan(plan: JSON) -> list[dict[str, Any]]:
                 )
         if spec.operation_class == "cost-publication":
             try:
-                cost_release.validate(resource, "development", plan)
+                cost_release.validate(resource, "development", plan, package_evidence)
             except (ValueError, KeyError, TypeError):
                 _reject(
                     "unsupported_field_delta",
@@ -3221,7 +3224,10 @@ def _validate_manifest_entry(
 
 
 def validate_plan(
-    plan: object, manifest: object, identity: object = None
+    plan: object,
+    manifest: object,
+    identity: object = None,
+    package_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate a plan and release manifest, returning only sanitized data."""
     plan = cast(JSON, plan)
@@ -3233,7 +3239,18 @@ def validate_plan(
         ):
             _reject("production_target")
         _validate_identity(identity)
-        records = _parse_plan(plan)
+        if package_evidence is not None:
+            shared_packages.check_evidence(package_evidence)
+            if package_evidence["environment"] != "development":
+                _reject("production_target")
+            packages = cast(dict[str, Any], manifest).get("packages", {})
+            if any(
+                name in packages and packages[name] != row["sha256"]
+                for name, row in package_evidence["packages"].items()
+            ):
+                _reject("shared_package_evidence")
+        shared_packages.report(cast(dict[str, Any], plan), "premerge")
+        records = _parse_plan(plan, package_evidence)
         validate_trace_notices(records)
         # Runtime/policy no-ops prove notice consistency, not deployment mutations.
         records = [
@@ -3288,6 +3305,22 @@ def validate_plan(
                     }
                 )
             sanitized_records.append(_mutation_result(record, declaration, normalized))
+        for resource in cast(dict[str, Any], plan)["resource_changes"]:
+            if resource["address"] == shared_packages.CHAT_ROUTES:
+                try:
+                    shared_packages.validate_chat(resource, "development")
+                except (ValueError, KeyError, TypeError):
+                    _reject("public_chat_code", address=resource["address"])
+            if resource["address"] in shared_packages.RESOURCES:
+                try:
+                    shared_packages.validate(
+                        resource,
+                        cast(dict[str, Any], plan),
+                        package_evidence,
+                        allow_create=resource["address"] == "aws_lambda_function.costs",
+                    )
+                except (ValueError, KeyError, TypeError):
+                    _reject("shared_package_boundary", address=resource["address"])
         fingerprint = _fingerprint(
             {
                 "identity": dict(EXPECTED_IDENTITY),
@@ -3304,11 +3337,13 @@ def validate_plan(
         }
     except InvalidPlan as error:
         result: dict[str, Any] = {"status": "rejected", "reason_code": error.reason}
-        if error.address is not None:
+        if error.address in CONTRACT:
             result["address"] = error.address
-        if error.action is not None:
+        if error.action in _ACTIONS:
             result["action"] = error.action
-        if error.operation_class is not None:
+        if error.operation_class in {
+            spec.operation_class for spec in CONTRACT.values()
+        }:
             result["operation_class"] = error.operation_class
         return result
     except Exception:
@@ -3331,10 +3366,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("plan")
     parser.add_argument("manifest")
     parser.add_argument("--identity", required=True)
+    parser.add_argument("--package-evidence")
     args = parser.parse_args(argv)
     try:
         result = validate_plan(
-            _load_json(args.plan), _load_json(args.manifest), _load_json(args.identity)
+            _load_json(args.plan),
+            _load_json(args.manifest),
+            _load_json(args.identity),
+            cast(dict[str, Any], _load_json(args.package_evidence))
+            if args.package_evidence
+            else None,
         )
     except Exception:
         result = {"status": "rejected", "reason_code": "malformed_input"}

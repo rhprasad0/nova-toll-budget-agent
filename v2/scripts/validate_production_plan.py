@@ -14,8 +14,10 @@ from typing import Any, cast
 
 try:
     from scripts import cost_dashboard_release as cost_release
+    from scripts import shared_packages
 except ModuleNotFoundError:
     import cost_dashboard_release as cost_release
+    import shared_packages
 
 RESOURCE = re.compile(r'(?m)^(resource|data)\s+"([a-z0-9_]+)"\s+"([a-z0-9_]+)"\s*\{')
 ALLOWED_OUTPUTS = {
@@ -40,6 +42,8 @@ REJECTION_REASONS = frozenset(
     {
         "action",
         "cost_release_boundary",
+        "shared_package_boundary",
+        "public_chat_code",
         "actions",
         "address",
         "data",
@@ -105,7 +109,12 @@ def _actions(change: dict[str, Any]) -> tuple[str, ...]:
     return tuple(cast(list[str], actions))
 
 
-def validate(plan: dict[str, Any], inventory_root: Path) -> dict[str, int]:
+def validate(
+    plan: dict[str, Any],
+    inventory_root: Path,
+    package_evidence: dict[str, Any] | None = None,
+) -> dict[str, int]:
+    shared_packages.report(plan, "prepare")
     managed, data = _inventory(inventory_root)
     changes = plan.get("resource_changes")
     drift = plan.get("resource_drift", [])
@@ -163,11 +172,32 @@ def validate(plan: dict[str, Any], inventory_root: Path) -> dict[str, int]:
             continue
         if mode != "managed" or base not in managed:
             raise PlanError("managed")
+        if base == shared_packages.CHAT_ROUTES:
+            try:
+                shared_packages.validate_chat(item, "production")
+            except (ValueError, KeyError, TypeError) as error:
+                raise PlanError("public_chat_code") from error
+        if base in shared_packages.RESOURCES:
+            try:
+                shared_packages.check_evidence(package_evidence)
+                if (
+                    package_evidence is None
+                    or package_evidence["environment"] != "production"
+                ):
+                    raise ValueError("environment")
+                shared_packages.validate(
+                    item,
+                    plan,
+                    package_evidence,
+                    allow_create=base == "aws_lambda_function.costs",
+                )
+            except (ValueError, KeyError, TypeError) as error:
+                raise PlanError("shared_package_boundary") from error
         if base in {
             address.split("[", 1)[0] for address in cost_release.RESOURCES
         } and actions != ("no-op",):
             try:
-                cost_release.validate(item, "production", plan)
+                cost_release.validate(item, "production", plan, package_evidence)
             except (ValueError, KeyError, TypeError) as error:
                 raise PlanError("cost_release_boundary") from error
         replacement = len(actions) == 2 and set(actions) == {"create", "delete"}
@@ -201,6 +231,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--inventory-root", type=Path, required=True)
+    parser.add_argument("--package-evidence", type=Path)
     args = parser.parse_args(argv)
     try:
         value = json.loads(args.plan.read_text(encoding="utf-8"))
@@ -208,7 +239,13 @@ def main(argv: Iterable[str] | None = None) -> int:
             raise PlanError("shape")
         print(
             json.dumps(
-                validate(cast(dict[str, Any], value), args.inventory_root),
+                validate(
+                    cast(dict[str, Any], value),
+                    args.inventory_root,
+                    json.loads(args.package_evidence.read_text())
+                    if args.package_evidence
+                    else None,
+                ),
                 sort_keys=True,
             )
         )

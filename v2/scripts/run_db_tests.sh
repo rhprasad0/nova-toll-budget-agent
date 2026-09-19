@@ -22,7 +22,6 @@ if [[ "$#" -eq 3 ]]; then
   fi
   profile="$3"
 fi
-retained_contract_ref="$base_ref"
 cleanup_allowed=false
 if [[ -z "$base_ref" ]]; then
   echo "usage: $0 BASE_GIT_REF" >&2
@@ -59,8 +58,6 @@ require_disposable_cluster() {
 require_disposable_cluster
 export NOVA_TOLL_EXPECTED_RDS_ENDPOINT="${PGHOST:-localhost}"
 if [[ "$base_ref" == "0000000000000000000000000000000000000000" ]]; then
-  # New tags have no push predecessor; use their own application contracts.
-  retained_contract_ref=HEAD
   # Keep replaying upgrades from migration 026's declared 1.2.0 source.
   base_ref="$(git log --diff-filter=A --format='%H^' -1 -- \
     v2/db/migrations/026_upgrade_pricing_1_2_0_to_1_3_0.sql)"
@@ -893,9 +890,9 @@ BEGIN
 END $$;
 UPDATE pricing.schema_version SET version = '1.3.0' WHERE singleton;
 SQL
-# Run baseline and candidate contracts against the same upgraded disposable schema;
-# new tags use the candidate as their baseline. Fixtures roll back their data;
-# the database is never downgraded.
+# Run the reviewed serving baseline and candidate contracts against the same
+# upgraded disposable schema. Fixtures roll back data; never downgrade schemas.
+retained_contract_ref="$(python3 -c 'import json; print(json.load(open("v2/scripts/shared-package-compatibility.json"))["baseline"])')"
 retained_contracts="$migration_source_dir/retained-contracts"
 mkdir "$retained_contracts"
 git archive "$retained_contract_ref" v2/tests | tar -x --directory "$retained_contracts"

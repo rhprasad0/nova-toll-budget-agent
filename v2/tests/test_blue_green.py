@@ -1,6 +1,7 @@
 """Credential-free release boundary and recovery rehearsal."""
 
 import base64
+import hashlib
 import json
 import re
 from collections.abc import Callable, Iterable
@@ -14,6 +15,27 @@ import pytest
 
 from scripts import blue_green as gate
 from scripts import release_blue_green as delivery
+from scripts import shared_packages
+
+
+def shared_fixture(bundle: Path, environment: str = "development") -> dict[str, Any]:
+    files: list[dict[str, str]] = []
+    for name in ("loader", "publisher", "timed-checks"):
+        path = bundle / f"v2/infra/build/{name}.zip"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(name.encode())
+        files.append(
+            {
+                "path": f"v2/infra/build/{name}.zip",
+                "sha256": hashlib.sha256(name.encode()).hexdigest(),
+            }
+        )
+    delivery.write(
+        bundle / "release-manifest.json", {"commit_sha": "a" * 40, "files": files}
+    )
+    return shared_packages.from_bundle(
+        bundle, environment, shared_packages.ACCOUNTS[environment], "a" * 40
+    )
 
 
 @pytest.mark.parametrize("separate_bundle", [False, True])
@@ -24,6 +46,8 @@ def test_plan_package_paths_are_workspace_independent(
     terraform = Mock(return_value="{}")
     monkeypatch.setattr(delivery, "terraform", terraform)
     monkeypatch.setattr(gate, "validate_plan", Mock())
+    monkeypatch.setenv("GITHUB_SHA", "a" * 40)
+    delivery.configure("development")
     for workspace in ("bootstrap", "trusted", "release-overlay"):
         bundle = tmp_path / workspace
         root = bundle / "v2/infra"
@@ -33,6 +57,7 @@ def test_plan_package_paths_are_workspace_independent(
         packages.mkdir(parents=True)
         for name in ("loader", "publisher", "timed-checks"):
             (packages / f"{name}.zip").write_bytes(name.encode())
+        shared_fixture(bundle)
         delivery.plan(
             root,
             bundle,
@@ -76,11 +101,14 @@ def slot(name: str, release: str) -> dict[str, Any]:
     }
 
 
-def previous() -> dict[str, Any]:
-    return {
+def previous(environment: str = "development") -> dict[str, Any]:
+    result = {
         "active": "blue",
         "slots": {"blue": slot("blue", "release1"), "green": slot("green", "release0")},
     }
+    if environment == "production":
+        return json.loads(json.dumps(result).replace("903859731897", "920534282028"))
+    return result
 
 
 def plan(
@@ -594,6 +622,10 @@ def test_recovery_accepts_pre_promotion_output_after_partial_apply() -> None:
 @pytest.mark.parametrize(
     "scenario,expected",
     [
+        ("compatibility_failure", ("failed", "not_attempted", "blue")),
+        ("tampered_package", ("failed", "not_attempted", "blue")),
+        ("shared_preparation_failure", ("failed", "not_attempted", "blue")),
+        ("shared_readback_failure", ("failed", "recovered", "blue")),
         ("healthy", ("succeeded", "not_attempted", "green")),
         ("invalid_candidate", ("failed", "not_attempted", "blue")),
         ("post_promotion_failure", ("failed", "recovered", "blue")),
@@ -622,7 +654,7 @@ def test_complete_release_state_machine(
         "unhealthy_after_approval",
     }:
         pytest.skip("Production approval boundary only")
-    initial = previous()
+    initial = previous(target)
     claim = "12:1" if target == "development" else "12"
     monkeypatch.setenv("CANARY_ARTIFACT_ID", "42")
     monkeypatch.setenv("CANARY_ARTIFACT_DIGEST", "sha256:" + "a" * 64)
@@ -633,7 +665,11 @@ def test_complete_release_state_machine(
         else "nova-toll-production-deploy"
     )
     prepared = deepcopy(initial)
-    prepared["slots"]["green"] = slot("green", "release2")
+    prepared["slots"]["green"] = slot("green", "a" * 40)
+    if target == "production":
+        prepared = json.loads(
+            json.dumps(prepared).replace("903859731897", "920534282028")
+        )
     live = deepcopy(initial)
     serial = 10
     applied: list[str] = []
@@ -646,6 +682,45 @@ def test_complete_release_state_machine(
     packages.mkdir(parents=True)
     for name in ("loader", "publisher", "timed-checks"):
         (packages / f"{name}.zip").write_bytes(name.encode())
+    expected_packages = shared_fixture(tmp_path, target)
+    monkeypatch.setattr(
+        shared_packages,
+        "compatibility",
+        Mock(return_value={"baseline": "release1", "status": "reviewed"}),
+    )
+    monkeypatch.setattr(
+        delivery, "package_evidence", Mock(return_value=expected_packages)
+    )
+    monkeypatch.setattr(
+        delivery,
+        "shared_readiness",
+        Mock(return_value=dict.fromkeys(shared_packages.FUNCTIONS, "verified")),
+    )
+    delivery.configure(target)
+    delivery.stage_packages(tmp_path, tmp_path)
+    if scenario == "compatibility_failure":
+        monkeypatch.setattr(
+            shared_packages,
+            "compatibility",
+            Mock(side_effect=ValueError("shared_compatibility")),
+        )
+    if scenario == "tampered_package":
+        (tmp_path / "build/loader.zip").write_bytes(b"tampered")
+        # Production stages verified bytes before validating the saved plan;
+        # model tampering after staging and before the final byte check.
+        if target == "production":
+            monkeypatch.setattr(delivery, "stage_packages", Mock())
+    if scenario in {"shared_preparation_failure", "shared_readback_failure"}:
+        statuses = dict.fromkeys(shared_packages.FUNCTIONS, "unknown")
+        verified = dict.fromkeys(shared_packages.FUNCTIONS, "verified")
+        def readback(_expected: dict[str, Any], *, wait: bool = True) -> dict[str, str]:
+            return (
+                verified
+                if scenario == "shared_readback_failure" and "promote" not in applied
+                else statuses
+            )
+
+        monkeypatch.setattr(delivery, "shared_readiness", readback)
     delivery.write(
         work / "context.json",
         {
@@ -654,6 +729,7 @@ def test_complete_release_state_machine(
             "identity": {"lineage": "test-lineage", "serial": serial},
             "inputs": gate.desired(initial, prepared["slots"]["green"]),
             "plan_sha256": hashlib.sha256(saved.read_bytes()).hexdigest(),
+            "shared_packages": expected_packages,
         },
     )
 
@@ -667,7 +743,10 @@ def test_complete_release_state_machine(
     def terraform(_root: Path, *args: str) -> str:
         nonlocal serial
         if args[0] == "show":
-            document = plan(gate.desired(initial, prepared["slots"]["green"]))
+            document = plan(
+                gate.desired(initial, prepared["slots"]["green"]), prior=initial
+            )
+            document["variables"]["environment"] = {"value": target}
             document["prior_state"] = {
                 "values": {"outputs": {"release_state": {"value": initial}}}
             }
@@ -754,14 +833,14 @@ def test_complete_release_state_machine(
             "state_sha256": gate.digest(state),
             "checked_at": int(delivery.time.time()),
             "checks": {key: True for key in gate.CHECKS},
-            "serving": dict(serving, runtime_release_id="release2"),
+            "serving": dict(serving, runtime_release_id="a" * 40),
         }
 
     monkeypatch.setattr(delivery, "validate_candidate", candidate)
 
     def probe_once(target: dict[str, Any]) -> dict[str, Any]:
         probe_calls.append(target["release_id"])
-        if target["release_id"] == "release2" and scenario in {
+        if target["release_id"] == "a" * 40 and scenario in {
             "post_promotion_failure",
             "restore_failure",
         }:
@@ -808,7 +887,12 @@ def test_complete_release_state_machine(
     )
     status = delivery.main()
     result = json.loads(output.read_text())
-    if target == "production" and scenario != "invalid_candidate":
+    if target == "production" and scenario not in {
+        "invalid_candidate",
+        "compatibility_failure",
+        "tampered_package",
+        "shared_preparation_failure",
+    }:
         assert status == 0
         assert result["deployment"] == "awaiting_approval"
         assert result["active"] == "blue"
@@ -822,14 +906,14 @@ def test_complete_release_state_machine(
         if scenario == "changed_candidate":
             live["slots"]["green"]["runtime_version"] = "99"
         monkeypatch.setattr(delivery, "load_recovery", Mock(return_value=context))
-        delivery.write(tmp_path / "release-manifest.json", {"commit_sha": "release2"})
-        monkeypatch.setenv("GITHUB_SHA", "release2")
+        delivery.write(tmp_path / "release-manifest.json", {"commit_sha": "a" * 40})
+        monkeypatch.setenv("GITHUB_SHA", "a" * 40)
         resume_args = sys.argv[:-2]
         resume_args[1] = "promote-production"
         monkeypatch.setattr(
             sys,
             "argv",
-            [*resume_args, "--release-id", "release2", "--record-version", "record-v1"],
+            [*resume_args, "--release-id", "a" * 40, "--record-version", "record-v1"],
         )
         status = delivery.main()
         result = json.loads(output.read_text())
@@ -837,10 +921,13 @@ def test_complete_release_state_machine(
     assert status == (0 if scenario == "healthy" else 1)
     assert applied.count("recover") <= 1
     assert applied == (
-        ["prepare"]
+        []
+        if scenario in {"compatibility_failure", "tampered_package"}
+        else ["prepare"]
         if scenario
         in {
             "invalid_candidate",
+            "shared_preparation_failure",
             "stale_cutover",
             "changed_candidate",
             "unhealthy_after_approval",
@@ -851,10 +938,10 @@ def test_complete_release_state_machine(
     )
     assert live["slots"]["blue"] == initial["slots"]["blue"]
     if scenario == "healthy":
-        assert probe_calls == ["release2"] * 5
+        assert probe_calls == ["a" * 40] * 5
         assert candidate_checks == (2 if target == "production" else 1)
     if scenario == "post_promotion_failure":
-        assert probe_calls == ["release2", "release2", "release1"]
+        assert probe_calls == ["a" * 40, "a" * 40, "release1"]
     delivery.write(
         tmp_path / "demonstration.json",
         {
@@ -1030,11 +1117,21 @@ def test_failed_manual_restore_is_reported_as_attempted(
 
     state = previous()
     identity = {"lineage": "same", "serial": 10}
+    expected_packages = shared_fixture(tmp_path)
+    monkeypatch.setattr(
+        delivery, "package_evidence", Mock(return_value=expected_packages)
+    )
     monkeypatch.setattr(delivery, "current", Mock(return_value=(state, identity)))
     monkeypatch.setattr(
         delivery,
         "load_recovery",
-        Mock(return_value={"prepared": state, "identity": identity}),
+        Mock(
+            return_value={
+                "prepared": state,
+                "identity": identity,
+                "shared_packages": expected_packages,
+            }
+        ),
     )
     monkeypatch.setattr(
         delivery, "recover", Mock(side_effect=gate.Rejected("terraform_failed"))

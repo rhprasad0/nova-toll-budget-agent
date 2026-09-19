@@ -19,9 +19,13 @@ from typing import Any, cast
 from zipfile import BadZipFile, ZipFile
 
 try:
+    from scripts import classify_deployment_error as diagnostics
     from scripts import cost_dashboard_release as cost_release
+    from scripts import shared_packages
 except ModuleNotFoundError:
+    import classify_deployment_error as diagnostics
     import cost_dashboard_release as cost_release
+    import shared_packages
 
 # Review the environment expression again before updating this source pin.
 AGENTCORE_SOURCE_SHA256 = (
@@ -336,8 +340,10 @@ def validate_plan(
     previous: dict[str, Any],
     phase: str,
     saved_plan: Path | None = None,
+    package_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Gate the entire saved plan, including no-op moves and shared resources."""
+    shared_packages.report(plan, phase)
     require(phase in {"prepare", "promote", "recover"}, "phase")
     state(previous)
     require(
@@ -352,6 +358,15 @@ def validate_plan(
         ),
         "",
     )
+    if package_evidence is not None:
+        shared_packages.check_evidence(package_evidence)
+        require(
+            package_evidence["environment"] == environment, "shared_package_evidence"
+        )
+        require(
+            plan["variables"]["environment"]["value"] == environment,
+            "shared_package_evidence",
+        )
     for item in plan.get("resource_drift", []):
         change = item["change"]
         require(
@@ -386,6 +401,12 @@ def validate_plan(
     for slot in slots.values():
         descriptor(slot)
     inactive = "green" if previous["active"] == "blue" else "blue"
+    if package_evidence is not None:
+        candidate_slot = previous["active"] if phase == "recover" else inactive
+        require(
+            slots[candidate_slot]["release_id"] == package_evidence["release"],
+            "shared_package_evidence",
+        )
     if phase == "prepare":
         require(
             active == previous["active"] and slots[active] == before_slots[active],
@@ -523,6 +544,25 @@ def validate_plan(
         if item.get("mode") == "data":
             require(actions in (["read"], ["no-op"]), "data_action")
             continue
+        if address in shared_packages.RESOURCES:
+            require(phase == "prepare" or actions == ["no-op"], "phase_boundary")
+            try:
+                if address == "aws_lambda_function.costs":
+                    cost_release.validate(item, environment, plan, package_evidence)
+                else:
+                    shared_packages.validate(item, plan, package_evidence)
+            except (ValueError, KeyError, TypeError) as error:
+                raise Rejected("shared_package_boundary") from error
+            count += actions != ["no-op"]
+            continue
+        if (
+            actions == ["no-op"]
+            and address == "aws_cloudfront_function.public_chat_routes"
+        ):
+            try:
+                shared_packages.validate_chat(item, environment)
+            except (ValueError, KeyError, TypeError) as error:
+                raise Rejected("public_chat_code") from error
         if actions == ["no-op"]:
             require(
                 item.get("provider_name")
@@ -544,7 +584,7 @@ def validate_plan(
         if phase == "prepare":
             if address in cost_release.RESOURCES:
                 try:
-                    cost_release.validate(item, environment, plan)
+                    cost_release.validate(item, environment, plan, package_evidence)
                 except (ValueError, KeyError, TypeError) as error:
                     raise Rejected("cost_release_boundary") from error
                 count += 1
@@ -558,34 +598,10 @@ def validate_plan(
                 set[str](),
             )
             if address == "aws_cloudfront_function.public_chat_routes":
-                # One reviewed development transition: add JSDoc without
-                # changing the shared request handler's executable code.
-                require(environment == "development", "phase_boundary")
-                require(
-                    after.get("name") == "tollchat-v2-public-chat-routes-dev"
-                    and after.get("arn")
-                    == "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-chat-routes-dev",
-                    "public_chat_identity",
-                )
-                for value, code_sha256 in (
-                    (
-                        before.get("code"),
-                        "695db31f3ab2a4f5a3ff38959b02b0bba34fd577737e1a4eae1222cd649a2bf8",
-                    ),
-                    (
-                        after.get("code"),
-                        "1c93d8b91885a207b674a8abc7f9ec6bcd5747b6d6b373082d27fe681fd3e082",
-                    ),
-                ):
-                    require(
-                        isinstance(value, str)
-                        and hashlib.sha256(value.encode()).hexdigest() == code_sha256,
-                        "public_chat_code",
-                    )
-                require(
-                    not has_unknown(change.get("after_unknown", {}).get("code", False)),
-                    "public_chat_code",
-                )
+                try:
+                    shared_packages.validate_chat(item, environment)
+                except (ValueError, KeyError, TypeError) as error:
+                    raise Rejected("public_chat_code") from error
                 allow = {"code", "etag", "live_stage_etag", "status"}
             if address == "aws_cloudfront_distribution.staging":
                 allow = {"origin", "etag", "last_modified_time", "status"}
@@ -811,6 +827,7 @@ def main() -> int:
     parser.add_argument("--previous", type=Path)
     parser.add_argument("--saved-plan", type=Path)
     parser.add_argument("--approved-sha256")
+    parser.add_argument("--package-evidence", type=Path)
     parser.add_argument(
         "--environment", choices=["development", "production"], default="development"
     )
@@ -837,12 +854,28 @@ def main() -> int:
             )
         else:
             require(args.previous is not None, "previous_state")
+            require(args.package_evidence is not None, "shared_package_evidence")
+            package_evidence = json.loads(args.package_evidence.read_text())
+            require(
+                package_evidence["environment"] == args.environment,
+                "shared_package_evidence",
+            )
             result = validate_plan(
-                plan, json.loads(args.previous.read_text()), args.phase, args.saved_plan
+                plan,
+                json.loads(args.previous.read_text()),
+                args.phase,
+                args.saved_plan,
+                package_evidence,
             )
         print(json.dumps(result, sort_keys=True))
         return 0
-    except (Rejected, KeyError, TypeError, ValueError, OSError):
+    except (Rejected, KeyError, TypeError, ValueError, OSError) as error:
+        reason = (
+            str(error)
+            if isinstance(error, ValueError) and str(error) in diagnostics.GATE_REASONS
+            else "gate_rejected"
+        )
+        print(f"deployment_gate_reason={reason}", file=sys.stderr)
         print("blue-green gate: rejected", file=sys.stderr)
         return 1
 
