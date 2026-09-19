@@ -4758,7 +4758,11 @@ def test_timed_package_is_threaded_through_all_plan_paths() -> None:
     )
     assert '--bundle-root "$overlay"' in PRODUCTION_PLAN_WORKFLOW
     assert (
-        'blue_green.py prepare --plan "$plan_json" --saved-plan "$plan"'
+        'blue_green.py prepare --environment production --plan "$plan_json" --saved-plan "$plan"'
+        in PRODUCTION_PLAN_WORKFLOW
+    )
+    assert (
+        '--package-evidence "$RUNNER_TEMP/blue-green/package-evidence.json"'
         in PRODUCTION_PLAN_WORKFLOW
     )
     assert "-target" not in PRODUCTION_PLAN_WORKFLOW

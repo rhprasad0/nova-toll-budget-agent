@@ -11,7 +11,7 @@ from typing import Any, cast
 import pytest
 import yaml
 
-from tests.test_blue_green import gate, plan, previous
+from tests.test_blue_green import gate, plan, previous, slot
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/v2-production-plan.yml"
@@ -102,6 +102,7 @@ if name == "python3":
         work = pathlib.Path(value("--work-dir")); work.mkdir()
         (work / "prepare.tfplan").write_bytes(b"PRIVATE_PLAN")
         (work / "previous.json").write_text(os.environ["PREVIOUS"])
+        (work / "package-evidence.json").write_text(json.dumps({"environment":"production","account":"920534282028","release":"a"*40,"packages":{name:{"path":"build/"+name,"sha256":"0"*64} for name in ("loader.zip","publisher.zip","timed-checks.zip")}}))
         sys.exit(0)
     os.execv(sys.executable, [sys.executable, *args])
 if name == "jq":
@@ -205,11 +206,14 @@ def _environment(tmp_path: Path, failure: str) -> dict[str, str]:
             }
         )
     )
+    retained = previous("production")
+    document = plan(gate.desired(retained, slot("green", "a" * 40)), prior=retained)
+    document["variables"]["environment"] = {"value": "production"}
     return {
         "PATH": str(binary) + os.pathsep + os.defpath,
         "REAL_JQ": jq,
-        "PREVIOUS": json.dumps(previous()),
-        "PLAN_DOCUMENT": json.dumps(plan(gate.desired(previous()))),
+        "PREVIOUS": json.dumps(retained),
+        "PLAN_DOCUMENT": json.dumps(document),
         "FAILURE": failure,
         "GITHUB_WORKSPACE": str(tmp_path),
         "RUNNER_TEMP": str(temporary),

@@ -334,6 +334,7 @@ jobs:
             --candidate-sha "$CANDIDATE_SHA" \
             --run-id "$GITHUB_RUN_ID" \
             --evidence "$STAGING/development-release-evidence.json" \
+            --shared-evidence "$STAGING/shared-package-evidence.json" \
             >"$RUNNER_TEMP/development-release-verification.json"
           jq -e '.status == "accepted" and .reason_code == "ok"' \
             "$RUNNER_TEMP/development-release-verification.json" >/dev/null
@@ -421,7 +422,8 @@ jobs:
           test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST" || MANIFEST_VALID=false
           test -f "$IDENTITY" && test ! -L "$IDENTITY" && test -r "$IDENTITY" || IDENTITY_VALID=false
           python3 "$GITHUB_WORKSPACE/trusted/infra/delivery_plan_validator.py" \
-            "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" >"$VALIDATION"
+            "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" \
+            --package-evidence "$STAGING/shared-package-evidence.json" >"$VALIDATION"
           VALIDATOR_STATUS=$?
           set -e
           jq -e 'type == "object" and (.status == "accepted" or .status == "rejected") and (.reason_code | type == "string")' \

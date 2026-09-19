@@ -1,0 +1,13 @@
+{
+  "baseline": "4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe",
+  "packages": {
+    "loader.zip": "089969a77cd61816f1471656ad6dfda793b595c3f9244a1027c2e11ad71054fb",
+    "publisher.zip": "dd27878fdd0020520590046c5217a11d6a5c264075159c3fd2be6b8f24410218",
+    "timed-checks.zip": "9637d59e2543c39f230f4a6c075c8439f2c9bb3fee46e6ce49f1a3eec123d062"
+  },
+  "schemas": {
+    "application-schemas.json": "7db6fcb374162aaa157116b4107dab3160854ffeb5603557771043faf0dce85d",
+    "oracle/schema.sql": "75376bd53bee64f93ddc152eba702c6391b1c9e97bc01b127f75e9f7ea1cbc35",
+    "schema.sql": "9bed36a8a09b3f49dabf0f640702b2c72ad6955f6fb24db66825898016f6ed72"
+  }
+}

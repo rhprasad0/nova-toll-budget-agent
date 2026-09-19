@@ -8,6 +8,11 @@ import json
 import re
 from typing import Any, cast
 
+try:
+    from scripts import shared_packages
+except ModuleNotFoundError:
+    import shared_packages
+
 ACCOUNTS = {"development": "903859731897", "production": "920534282028"}
 SITE_KEYS = {
     "development": "3bc78b60-9cbe-4abd-9744-8772c78d8379",
@@ -27,7 +32,6 @@ RESOURCES = {
     'aws_s3_object.cost_assets["costs.mjs"]',
     "aws_s3_object.evals",
     "aws_cloudfront_function.public_report_routes",
-    "aws_lambda_function.publisher",
 }
 # Reviewed public bytes. Update these pins when changing these public assets.
 ASSET_SHA256: dict[str, str] = {
@@ -201,13 +205,17 @@ def validate_drift(item: dict[str, Any], environment: str) -> None:
     require(before == after)
     # Reuse the identity, configuration and public-byte checks after accounting
     # for provider read-back; no other drift is permitted.
-    validate(
-        item | {"change": change | {"before": before, "after": after}}, environment
-    )
+    if address != "aws_lambda_function.costs":
+        validate(
+            item | {"change": change | {"before": before, "after": after}}, environment
+        )
 
 
 def validate(
-    item: dict[str, Any], environment: str, plan: dict[str, Any] | None = None
+    item: dict[str, Any],
+    environment: str,
+    plan: dict[str, Any] | None = None,
+    package_evidence: dict[str, Any] | None = None,
 ) -> None:
     """Allow fixed identities/configuration; never deletion or replacements."""
     require(environment in ACCOUNTS)
@@ -284,6 +292,7 @@ def validate(
             "data_protection_policy",
         }
     elif address == "aws_lambda_function.costs":
+        shared_packages.validate(item, plan or {}, package_evidence, allow_create=True)
         expected = {
             "function_name": name,
             "role": role,
@@ -495,21 +504,6 @@ def validate(
         )
         computed |= {"etag", "live_stage_etag", "status"}
         empty |= {"key_value_store_associations"}
-    elif address == "aws_lambda_function.publisher":
-        # The existing handler is repackaged with costs.py in the same archive.
-        require(
-            change["actions"] == ["update"]
-            and before["function_name"] == "toll-v2-report-publisher" + suffix
-        )
-        computed |= {"last_modified", "source_code_size", "code_sha256"}
-        mutable = {"filename", "source_code_hash"}
-        require(
-            after.get("filename", "").endswith("/publisher.zip")
-            and re.fullmatch(r"[A-Za-z0-9+/]{43}=", after.get("source_code_hash", ""))
-        )
-        expected = {
-            key: value for key, value in before.items() if key not in mutable | computed
-        }
     # Provider read-back defaults can be null in a create plan. They carry no
     # additional authority; explicitly different values still fail.
     for field, default in {

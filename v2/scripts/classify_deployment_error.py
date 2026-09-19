@@ -9,6 +9,12 @@ from pathlib import Path
 
 MAX_BYTES = 64 * 1024
 GATE_REASONS = (
+    "shared_package_boundary",
+    "shared_package_evidence",
+    "shared_package_path",
+    "shared_package_hash",
+    "shared_readback",
+    "shared_compatibility",
     "public_chat_identity",
     "public_chat_code",
     "phase_boundary",
