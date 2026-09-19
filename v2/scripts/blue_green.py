@@ -557,6 +557,36 @@ def validate_plan(
                 ),
                 set[str](),
             )
+            if address == "aws_cloudfront_function.public_chat_routes":
+                # One reviewed development transition: add JSDoc without
+                # changing the shared request handler's executable code.
+                require(environment == "development", "phase_boundary")
+                require(
+                    after.get("name") == "tollchat-v2-public-chat-routes-dev"
+                    and after.get("arn")
+                    == "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-chat-routes-dev",
+                    "public_chat_identity",
+                )
+                for value, code_sha256 in (
+                    (
+                        before.get("code"),
+                        "695db31f3ab2a4f5a3ff38959b02b0bba34fd577737e1a4eae1222cd649a2bf8",
+                    ),
+                    (
+                        after.get("code"),
+                        "1c93d8b91885a207b674a8abc7f9ec6bcd5747b6d6b373082d27fe681fd3e082",
+                    ),
+                ):
+                    require(
+                        isinstance(value, str)
+                        and hashlib.sha256(value.encode()).hexdigest() == code_sha256,
+                        "public_chat_code",
+                    )
+                require(
+                    not has_unknown(change.get("after_unknown", {}).get("code", False)),
+                    "public_chat_code",
+                )
+                allow = {"code", "etag", "live_stage_etag", "status"}
             if address == "aws_cloudfront_distribution.staging":
                 allow = {"origin", "etag", "last_modified_time", "status"}
             if address in {

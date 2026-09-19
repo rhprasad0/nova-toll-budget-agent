@@ -1002,8 +1002,17 @@ def main() -> int:
                         lambda: recover(root, bundle, foundation, work, prepared),
                     )
                     result["active"] = current(root)[0]["active"]
+    except gate.Rejected as error:
+        result["deployment"] = "failed"
+        # Terraform failures already emit a bounded classifier diagnostic.
+        if str(error) != "terraform_failed":
+            reason = (
+                str(error)
+                if str(error) in diagnostics.GATE_REASONS
+                else "gate_rejected"
+            )
+            print(f"deployment_gate_reason={reason}", file=sys.stderr)
     except (
-        gate.Rejected,
         checks.CheckFailure,
         KeyError,
         ValueError,
