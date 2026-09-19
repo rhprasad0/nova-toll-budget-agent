@@ -566,12 +566,10 @@
     },
     {
       "address": "aws_iam_role_policy.costs",
-      "action": "create",
+      "action": "update",
       "operation_class": "cost-publication",
       "changed_fields": [
-        "name",
-        "policy",
-        "role"
+        "policy"
       ]
     },
     {
@@ -585,22 +583,10 @@
     },
     {
       "address": "aws_lambda_function.costs",
-      "action": "create",
+      "action": "update",
       "operation_class": "cost-publication",
       "changed_fields": [
-        "architectures",
-        "environment",
-        "filename",
-        "function_name",
-        "handler",
-        "memory_size",
-        "package_type",
-        "publish",
-        "reserved_concurrent_executions",
-        "role",
-        "runtime",
-        "source_code_hash",
-        "timeout"
+        "source_code_hash"
       ]
     },
     {
@@ -642,14 +628,10 @@
     },
     {
       "address": "aws_s3_object.cost_dashboard",
-      "action": "create",
+      "action": "update",
       "operation_class": "cost-publication",
       "changed_fields": [
-        "bucket",
-        "cache_control",
-        "content",
-        "content_type",
-        "key"
+        "content"
       ]
     },
     {
@@ -667,14 +649,9 @@
     },
     {
       "address": "aws_s3_object.cost_assets[\"costs.mjs\"]",
-      "action": "create",
+      "action": "update",
       "operation_class": "cost-publication",
       "changed_fields": [
-        "bucket",
-        "cache_control",
-        "content_type",
-        "key",
-        "source",
         "source_hash"
       ]
     },
