@@ -261,14 +261,31 @@ locals {{
         for item in plan["resource_changes"]
         if item["address"] == "aws_iam_role.costs"
     )
-    bad = deepcopy(plan)
-    next(
-        resource
-        for resource in bad["configuration"]["root_module"]["resources"]
-        if resource["address"] == iam["address"]
-    )["expressions"]["managed_policy_arns"] = {"references": ["untrusted.arn"]}
-    with pytest.raises(ValueError):
-        gate.validate(iam, environment, bad)
+    for field in ("managed_policy_arns", "inline_policy"):
+        # A real create plan leaves these omitted read-back fields unknown.
+        unknown_role = deepcopy(iam)
+        unknown_role["change"]["after"][field] = None
+        unknown_role["change"]["after_unknown"][field] = True
+        gate.validate(unknown_role, environment, plan)
+        bad = deepcopy(plan)
+        config = next(
+            resource
+            for resource in bad["configuration"]["root_module"]["resources"]
+            if resource["address"] == iam["address"]
+        )
+        config["expressions"][field] = {"references": ["untrusted.policy"]}
+        with pytest.raises(ValueError):
+            gate.validate(unknown_role, environment, bad)
+        for resources in ([], [config, config]):
+            with pytest.raises(ValueError):
+                gate.validate(
+                    unknown_role,
+                    environment,
+                    {"configuration": {"root_module": {"resources": resources}}},
+                )
+        unknown_role["change"]["after"][field] = [{"policy": "untrusted"}]
+        with pytest.raises(ValueError):
+            gate.validate(unknown_role, environment, plan)
     if environment == "development":
         sys.path.insert(0, str(ROOT))
         legacy = importlib.import_module("infra.delivery_plan_validator")
@@ -298,3 +315,129 @@ locals {{
         rehearsal.gate.validate_plan(prepared, state, "prepare")
         with pytest.raises(rehearsal.gate.Rejected):
             rehearsal.gate.validate_plan(prepared, state, "promote")
+
+
+def test_provider_report_routes_keep_known_defaults(tmp_path: Path):
+    provider_dir = ROOT / "v2/infra/.terraform/providers"
+    if not shutil.which("terraform") or not provider_dir.is_dir():
+        pytest.skip("Initialize the pinned Terraform provider for this check")
+    blocks = re.findall(
+        r'  dynamic "ordered_cache_behavior" \{\n.*?\n  }\n',
+        (ROOT / "v2/infra/site.tf").read_text(),
+        re.S,
+    )
+    assert len(blocks) == 2
+    source = """terraform {
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "6.60.0" }
+  }
+}
+"""
+    for index, block in enumerate(blocks):
+        block = block.replace(
+            "data.aws_cloudfront_cache_policy.caching_disabled.id",
+            '"4135ea2d-6df8-44a3-9df3-4b5a84be39ad"',
+        ).replace(
+            "aws_cloudfront_function.public_report_routes.arn",
+            '"arn:aws:cloudfront::903859731897:function/test-report-routes"',
+        )
+        source += (
+            f'resource "aws_cloudfront_distribution" "report{index}" {{\n'
+            + """
+  enabled = true
+  origin {
+    domain_name = "example.s3.amazonaws.com"
+    origin_id = "site"
+    s3_origin_config { origin_access_identity = "" }
+  }
+  default_cache_behavior {
+    target_origin_id = "site"
+    allowed_methods = ["GET", "HEAD"]
+    cached_methods = ["GET", "HEAD"]
+    viewer_protocol_policy = "redirect-to-https"
+    cache_policy_id = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+  }
+  restrictions {
+    geo_restriction { restriction_type = "none" }
+  }
+  viewer_certificate { cloudfront_default_certificate = true }
+"""
+            + block
+            + "}\n"
+        )
+    (tmp_path / "main.tf").write_text(source)
+    (tmp_path / "routes.tftest.hcl").write_text(
+        'mock_provider "aws" {}\nrun "routes" { command = plan }\n'
+    )
+    (tmp_path / ".terraform").mkdir()
+    (tmp_path / ".terraform/providers").symlink_to(
+        provider_dir, target_is_directory=True
+    )
+    shutil.copyfile(
+        ROOT / "v2/infra/.terraform.lock.hcl", tmp_path / ".terraform.lock.hcl"
+    )
+    result = subprocess.run(
+        ["terraform", f"-chdir={tmp_path}", "test", "-json", "-verbose"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    events = [json.loads(line) for line in result.stdout.splitlines()]
+    assert result.returncode == 0, [
+        row.get("diagnostic") for row in events if row.get("diagnostic")
+    ]
+    plan = next(row["test_plan"] for row in events if row["type"] == "test_plan")
+    defaults = {
+        "default_ttl": 0,
+        "max_ttl": 0,
+        "trusted_key_groups": [],
+        "trusted_signers": [],
+        "response_headers_policy_id": "",
+        "realtime_log_config_arn": "",
+        "origin_request_policy_id": "",
+        "field_level_encryption_id": "",
+        "smooth_streaming": False,
+        "grpc_config": [{"enabled": False}],
+    }
+    for item in plan["resource_changes"]:
+        after = {
+            "ordered_cache_behavior": item["change"]["after"]["ordered_cache_behavior"]
+        }
+        before = {
+            "ordered_cache_behavior": [
+                dict(row, **defaults)
+                for row in after["ordered_cache_behavior"]
+                if row["path_pattern"] not in gate.COST_ROUTES
+            ]
+        }
+        # Without explicit configuration, real read-back defaults differ from
+        # null/unknown values when new list entries shift robots and sitemap.
+        gate.routes(before, after)
+        for field, value in {
+            **{
+                key: ["untrusted"]
+                if isinstance(value, list)
+                else 1
+                if isinstance(value, int)
+                else "untrusted"
+                for key, value in defaults.items()
+            },
+            "grpc_config": [{"enabled": True}],
+            "target_origin_id": "public-chat",
+            "cache_policy_id": "untrusted",
+            "allowed_methods": ["GET", "POST"],
+            "viewer_protocol_policy": "allow-all",
+            "function_association": [],
+        }.items():
+            bad = deepcopy(after)
+            next(
+                row
+                for row in bad["ordered_cache_behavior"]
+                if row["path_pattern"] == "/costs.json"
+            )[field] = value
+            with pytest.raises(ValueError):
+                gate.routes(before, bad)
+        retained = deepcopy(before)
+        retained["ordered_cache_behavior"][0]["trusted_signers"] = ["existing-signer"]
+        with pytest.raises(ValueError):
+            gate.routes(retained, after)
