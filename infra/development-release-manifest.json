@@ -44,7 +44,7 @@
     "infra/versions.tf": "f36522386a6e5e733d6d0ed5b61cccb33ba5e08737233da00698682beae671a5",
     "v2/agent-sops/nova-toll-pricing-assistant.sop.md": "cf5e755b10e468e0f990a8d1dfb183817599a99c9eb779f6272ee37003c05abe",
     "v2/agent/__init__.py": "9a7c5def20c27bee02ace31193aa0ab9b8548e1502db2f894fcf67d3b86a5e88",
-    "v2/agent/agentcore_entrypoint.py": "e4cc5175afc9cae53f112e4332d7efb7ab8c383c6bc5d442489d33daf2a49f30",
+    "v2/agent/agentcore_entrypoint.py": "4e8549dc086a05936da4ce7ad2441f40886297f5332e708a47701cc941a15081",
     "v2/agent/assets/LICENSE.txt": "792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473",
     "v2/agent/assets/chat-markdown.mjs": "693ec770b15a5b6a822ae37dab40e7d052ddc526ef2e96282a06c2328d99b32d",
     "v2/agent/assets/commute-estimates.json": "8174f18481adbc5d32505fa6290a318a83e4926b49b287451db07dc3b3552558",
@@ -186,7 +186,7 @@
     "v2/uv.lock": "949ab5c944868e37fa31b97c4bbca5befb41a175b240c8daec02eb0ce8c0082e"
   },
   "packages": {
-    "agentcore.zip": "cac1852c892674465c16bd70ad911b19326b831443cc5c507bc23155ed277617",
+    "agentcore.zip": "f1715009f733b78e25237a7e7856f706858f1676dd08a644b7ed5683822faa65",
     "chat-proxy.zip": "c6161a58c2692db229613f6ccd793f2646a57fc743773a0b86a5f8a44fa72d15",
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
     "publisher.zip": "76e1e5a3e62d53fc6ecb48deb81fd5bf498e96836c8ad50ba2ddde30ed084ca5",
