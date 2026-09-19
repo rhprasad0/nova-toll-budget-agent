@@ -18,6 +18,11 @@ from pathlib import Path
 from typing import Any, cast
 from zipfile import BadZipFile, ZipFile
 
+try:
+    from scripts import cost_dashboard_release as cost_release
+except ModuleNotFoundError:
+    import cost_dashboard_release as cost_release
+
 # Review the environment expression again before updating this source pin.
 AGENTCORE_SOURCE_SHA256 = (
     "6a11d9487ffe0948f18963c456d2e6ab3f9bf35680be90c9d5b3d9aace38329e"
@@ -522,6 +527,22 @@ def validate_plan(
         after: dict[str, Any] = change.get("after") or {}
         allow: set[str] = set()
         if phase == "prepare":
+            environment = next(
+                (
+                    env
+                    for env, account in cost_release.ACCOUNTS.items()
+                    if f":{account}:"
+                    in previous["slots"][previous["active"]]["proxy_arn"]
+                ),
+                "",
+            )
+            if address in cost_release.RESOURCES:
+                try:
+                    cost_release.validate(item, environment, plan)
+                except (ValueError, KeyError, TypeError) as error:
+                    raise Rejected("cost_release_boundary") from error
+                count += 1
+                continue
             allow = next(
                 (
                     fields
@@ -532,6 +553,22 @@ def validate_plan(
             )
             if address == "aws_cloudfront_distribution.staging":
                 allow = {"origin", "etag", "last_modified_time", "status"}
+            if address in {
+                "aws_cloudfront_distribution.site",
+                "aws_cloudfront_distribution.staging",
+            } and before.get("ordered_cache_behavior") != after.get(
+                "ordered_cache_behavior"
+            ):
+                try:
+                    cost_release.routes(before, after)
+                except (ValueError, KeyError, TypeError) as error:
+                    raise Rejected("cost_release_boundary") from error
+                allow |= {
+                    "ordered_cache_behavior",
+                    "etag",
+                    "last_modified_time",
+                    "status",
+                }
         else:
             allow = ROUTING_RESOURCES.get(address, set())
         require(bool(allow), "phase_boundary")
@@ -645,7 +682,7 @@ def validate_plan(
         )
         if address.startswith("aws_cloudfront_distribution."):
             target_slot = (
-                inactive
+                (inactive if address.endswith(".staging") else previous["active"])
                 if phase == "prepare"
                 else (previous["active"] if address.endswith(".staging") else active)
             )

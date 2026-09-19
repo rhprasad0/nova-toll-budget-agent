@@ -13,6 +13,11 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, cast
 
+try:
+    from scripts import cost_dashboard_release as cost_release
+except ModuleNotFoundError:
+    import cost_dashboard_release as cost_release
+
 RESOURCE = re.compile(r'(?m)^(resource|data)\s+"([a-z0-9_]+)"\s+"([a-z0-9_]+)"\s*\{')
 ALLOWED_OUTPUTS = {
     "development_acm_certificate_arn",
@@ -35,6 +40,7 @@ PERSISTENT = (
 REJECTION_REASONS = frozenset(
     {
         "action",
+        "cost_release_boundary",
         "actions",
         "address",
         "data",
@@ -157,6 +163,13 @@ def validate(plan: dict[str, Any], inventory_root: Path) -> dict[str, int]:
             continue
         if mode != "managed" or base not in managed:
             raise PlanError("managed")
+        if base in {
+            address.split("[", 1)[0] for address in cost_release.RESOURCES
+        } and actions != ("no-op",):
+            try:
+                cost_release.validate(item, "production", plan)
+            except (ValueError, KeyError, TypeError) as error:
+                raise PlanError("cost_release_boundary") from error
         replacement = len(actions) == 2 and set(actions) == {"create", "delete"}
         destructive = "delete" in actions
         if base.startswith(PERSISTENT) and destructive:
