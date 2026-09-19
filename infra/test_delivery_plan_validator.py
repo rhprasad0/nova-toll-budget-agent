@@ -3344,7 +3344,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         self.assertIn("release_blue_green.py prepare-plan", workflow)
         self.assertIn("release_blue_green.py finish", workflow)
         self.assertIn(
-            "jq '{deployment,recovery,active,probes,releases,recovery_record}'",
+            "jq '{deployment,recovery,active,probes,releases,recovery_record,shared_components}'",
             workflow,
         )
         self.assertNotIn('cat "$PLAN_LOG"', workflow)
@@ -4832,6 +4832,25 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0)
             self.assertEqual(json.loads(result.stdout)["status"], "accepted")
+
+            plan_path.write_text(json.dumps(_plan([])), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    "python3",
+                    "infra/delivery_plan_validator.py",
+                    str(plan_path),
+                    str(manifest_path),
+                    "--identity",
+                    str(identity_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(
+                json.loads(result.stdout)["reason_code"], "shared_package_evidence"
+            )
 
             for missing in (manifest_path, identity_path):
                 missing.unlink()

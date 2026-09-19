@@ -420,7 +420,7 @@ jobs:
         if: always()
         run: |
           if test -f "$RUNNER_TEMP/blue-green-result.json"; then
-            jq '{deployment,recovery,active,probes,releases,recovery_record}' "$RUNNER_TEMP/blue-green-result.json" >>"$GITHUB_STEP_SUMMARY"
+            jq '{deployment,recovery,active,probes,releases,recovery_record,shared_components}' "$RUNNER_TEMP/blue-green-result.json" >>"$GITHUB_STEP_SUMMARY"
           fi
       - name: Clear deploy credentials before evidence upload
         if: always()

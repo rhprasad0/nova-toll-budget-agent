@@ -491,9 +491,12 @@ def test_exact_chat_transition_in_every_policy(
             )
 
 
-def test_production_cli_requires_matching_evidence(tmp_path: Path) -> None:
+@pytest.mark.parametrize("empty", [False, True])
+def test_production_cli_requires_matching_evidence(tmp_path: Path, empty: bool) -> None:
     document, _, expected = package_plan("production", partial="s3")
     document["output_changes"] = {}
+    if empty:
+        document["resource_changes"] = []
     (tmp_path / "plan").write_text(json.dumps(document))
     (tmp_path / "evidence").write_text(json.dumps(expected))
     command = [
@@ -507,6 +510,9 @@ def test_production_cli_requires_matching_evidence(tmp_path: Path) -> None:
     assert subprocess.run(command, capture_output=True).returncode == 1
     command += ["--package-evidence", str(tmp_path / "evidence")]
     assert subprocess.run(command, capture_output=True).returncode == 0
-    expected["packages"]["loader.zip"]["sha256"] = "1" * 64
+    if empty:
+        expected["release"] = "invalid"
+    else:
+        expected["packages"]["loader.zip"]["sha256"] = "1" * 64
     (tmp_path / "evidence").write_text(json.dumps(expected))
     assert subprocess.run(command, capture_output=True).returncode == 1

@@ -237,18 +237,18 @@ def main(argv: Iterable[str] | None = None) -> int:
         value = json.loads(args.plan.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
             raise PlanError("shape")
-        print(
-            json.dumps(
-                validate(
-                    cast(dict[str, Any], value),
-                    args.inventory_root,
-                    json.loads(args.package_evidence.read_text())
-                    if args.package_evidence
-                    else None,
-                ),
-                sort_keys=True,
-            )
+        expected = (
+            json.loads(args.package_evidence.read_text())
+            if args.package_evidence
+            else None
         )
+        counts = validate(cast(dict[str, Any], value), args.inventory_root, expected)
+        try:
+            expected = shared_packages.check_evidence(expected)
+            shared_packages.require(expected["environment"] == "production")
+        except (ValueError, KeyError, TypeError) as error:
+            raise PlanError("shared_package_boundary") from error
+        print(json.dumps(counts, sort_keys=True))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, PlanError) as error:
         reason = "io" if isinstance(error, OSError) else "shape"
         if isinstance(error, PlanError):

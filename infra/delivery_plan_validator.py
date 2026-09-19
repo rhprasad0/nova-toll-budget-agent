@@ -3377,6 +3377,8 @@ def main(argv: list[str] | None = None) -> int:
             if args.package_evidence
             else None,
         )
+        if result["status"] == "accepted" and args.package_evidence is None:
+            result = {"status": "rejected", "reason_code": "shared_package_evidence"}
     except Exception:
         result = {"status": "rejected", "reason_code": "malformed_input"}
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))

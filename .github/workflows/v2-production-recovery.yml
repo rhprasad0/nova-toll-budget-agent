@@ -140,7 +140,7 @@ jobs:
           set -euo pipefail
           private="$RUNNER_TEMP/production-recovery"
           if test -f "$private/result.json"; then
-            jq '{deployment,recovery,active,releases,recovery_record}' "$private/result.json" >"$RUNNER_TEMP/production-recovery-result.json"
+            jq '{deployment,recovery,active,releases,recovery_record,shared_components}' "$private/result.json" >"$RUNNER_TEMP/production-recovery-result.json"
             cat "$RUNNER_TEMP/production-recovery-result.json" >>"$GITHUB_STEP_SUMMARY"
           fi
           rm -rf -- "$private" "$GITHUB_WORKSPACE/candidate/release-overlay" "$GITHUB_WORKSPACE/candidate/v2/infra/.terraform"
