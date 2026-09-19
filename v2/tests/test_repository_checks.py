@@ -259,3 +259,23 @@ def test_full_runner_resolves_paths_from_another_directory(
         "src = " + json.dumps([str(repository.root / "v2"), str(repository.root)])
         in ruff
     )
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    [
+        ".github/workflows/ci.yml",
+        "v2/lambdas/chat_proxy/package-lock.json",
+        ".gitignore",
+    ],
+)
+def test_checker_inputs_select_all_groups(
+    repository: Repository, configuration: str
+) -> None:
+    source = repository.root / configuration
+    repository.write(
+        configuration, (source.read_text() if source.exists() else "") + "\n"
+    )
+    repository.git("add", configuration)
+    assert repository.run().returncode == 0
+    assert {call[0] for call in repository.calls()} == set(CHECKERS)
