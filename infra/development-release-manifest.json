@@ -198,7 +198,6 @@
       "action": "update",
       "operation_class": "lambda-code",
       "changed_fields": [
-        "filename",
         "source_code_hash"
       ]
     },
