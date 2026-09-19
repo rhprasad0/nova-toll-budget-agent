@@ -87,13 +87,46 @@ The unapplied [analytics retirement plan](plans/ANALYTICS-RETIREMENT-PLAN.md)
 documents the source-retired usage and agent-route analytics scopes without
 granting execution authority.
 
-From `v2/`, run the core application checks and deterministic release builds:
+Install Node.js 22.22.1 and uv, then set up the locked development tools from
+the repository root (Linux amd64/arm64):
+
+```sh
+uv sync --locked --project v2
+npm ci --ignore-scripts --prefix v2
+npm ci --ignore-scripts --prefix v2/lambdas/chat_proxy
+v2/scripts/install_check_tools.sh
+export PATH="$HOME/.local/bin:$PATH"
+git config core.hooksPath .githooks
+python3 v2/scripts/check_repository.py
+```
+
+The installer verifies pinned release checksums for ShellCheck 0.11.0,
+actionlint 1.7.12 and Gitleaks 8.30.1. On other platforms install those same
+versions yourself. Python dependencies are locked in `uv.lock`; ESLint and
+TypeScript are development dependencies locked in `package-lock.json`. No
+JavaScript compilation is required.
+
+Fresh clones need this setup: Git does not automatically enable repository hooks.
+**CI is the authoritative gate** because local hooks can be bypassed. The hook
+requires Gitleaks on every commit and checks each affected language group in full.
+Checker/configuration changes select every group; additions, renames and deletions
+count. It rejects index/working-copy differences in checked inputs, including
+partially staged files. Resolve or stage those changes before committing; the hook
+never stashes, rewrites, restages, installs packages, or runs behavioral tests.
+
+The full runner checks authored Python, JavaScript, shell and workflows, including
+tests. It uses explicit configurations and resolves paths independently of the
+invocation directory. Only dependency/build/worktree directories and the named
+upstream Markdown/MapLibre distributions are excluded. Narrow external-tool
+exceptions must remain useful; blanket and unused suppressions fail. Terraform
+formatting/validation and disposable database contracts retain their existing CI
+jobs, and behavioral checks run after the shared static gate.
+
+From `v2/`, run the offline tests and deterministic release builds:
 
 ```sh
 uv sync --locked
-uv run ruff check .
-uv run ruff format --check .
-uv run pyright
+python3 scripts/check_repository.py
 uv run python eval/run_evaluation.py --check
 uv run coverage run -m pytest
 uv run coverage report

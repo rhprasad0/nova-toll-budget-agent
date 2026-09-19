@@ -39,9 +39,19 @@ jobs:
           terraform_wrapper: false
           terraform_version: "1.15.8"
       - run: uv sync --locked
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run pyright
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22.22.1"
+          cache: npm
+          cache-dependency-path: v2/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --prefix lambdas/chat_proxy
+      - name: Install pinned shell, workflow and secret checkers
+        run: |
+          ./scripts/install_check_tools.sh "$RUNNER_TEMP/repository-check-tools"
+          echo "$RUNNER_TEMP/repository-check-tools" >> "$GITHUB_PATH"
+      - name: Check all authored code
+        run: python3 scripts/check_repository.py
       - run: uv run python eval/run_evaluation.py --check
       - run: uv run python scripts/check_tool_contract_versions.py "$TOOL_CONTRACT_BASE_REF"
         env:
