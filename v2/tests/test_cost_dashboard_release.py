@@ -441,3 +441,203 @@ def test_provider_report_routes_keep_known_defaults(tmp_path: Path):
         retained["ordered_cache_behavior"][0]["trusted_signers"] = ["existing-signer"]
         with pytest.raises(ValueError):
             gate.routes(retained, after)
+
+
+@pytest.mark.parametrize("environment", ["development", "production"])
+@pytest.mark.parametrize("phase", ["prepare", "promote", "recover"])
+def test_first_billing_refresh_preserves_release_authority(environment, phase):
+    rehearsal = importlib.import_module("test_blue_green")
+    suffix = "-dev" if environment == "development" else ""
+    account = gate.ACCOUNTS[environment]
+    name = "tollchat-v2-cost-publisher" + suffix
+    before = {
+        "aws_cloudwatch_event_rule.costs": {
+            "name": name,
+            "event_bus_name": "default",
+            "state": "ENABLED",
+            "schedule_expression": "cron(0 8 * * ? *)"
+            if suffix
+            else "cron(0 9 * * ? *)",
+            "is_enabled": True,
+            "tags": None,
+        },
+        "aws_cloudwatch_log_group.costs": {
+            "name": "/aws/lambda/" + name,
+            "retention_in_days": 7 if suffix else 30,
+            "tags": None,
+        },
+        "aws_iam_role.costs": {
+            "name": name,
+            "arn": f"arn:aws:iam::{account}:role/{name}",
+            "path": "/",
+            "max_session_duration": 3600,
+            "force_detach_policies": False,
+            "inline_policy": [],
+            "tags": None,
+            "assume_role_policy": json.dumps(
+                {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": "sts:AssumeRole",
+                            "Principal": {"Service": "lambda.amazonaws.com"},
+                        }
+                    ],
+                }
+            ),
+        },
+        "aws_lambda_function.costs": {
+            "function_name": name,
+            "role": f"arn:aws:iam::{account}:role/{name}",
+            "runtime": "python3.13",
+            "handler": "costs.handler",
+            "architectures": ["x86_64"],
+            "timeout": 300,
+            "memory_size": 256,
+            "reserved_concurrent_executions": 1,
+            "package_type": "Zip",
+            "publish": False,
+            "environment": [
+                {
+                    "variables": {
+                        "DEPLOYMENT_ENVIRONMENT": environment,
+                        "COST_BUCKET": f"tollchat-site-{account}{suffix}",
+                    }
+                }
+            ],
+            "filename": "build/publisher.zip",
+            "source_code_hash": base64.b64encode(b"a" * 32).decode(),
+            "tags": None,
+            "layers": None,
+        },
+        "aws_cloudfront_function.public_report_routes": {
+            "name": "tollchat-v2-public-report-routes" + suffix,
+            "arn": f"arn:aws:cloudfront::{account}:function/tollchat-v2-public-report-routes{suffix}",
+            "runtime": "cloudfront-js-2.0",
+            "publish": True,
+            "comment": "Resolve canonical TollChat report directories",
+            "code": (ROOT / "v2/agent/public-report-routes.js").read_text(),
+            "status": "IN_PROGRESS",
+        },
+    }
+    for asset in ("costs.html", "costs.css", "costs.mjs"):
+        address = (
+            "aws_s3_object.cost_dashboard"
+            if asset.endswith("html")
+            else f'aws_s3_object.cost_assets["{asset}"]'
+        )
+        value = {
+            "bucket": f"tollchat-site-{account}{suffix}",
+            "key": asset if asset.endswith("html") else "assets/" + asset,
+            "cache_control": "no-cache",
+            "tags": None,
+            "metadata": None,
+            "content_type": {
+                "html": "text/html",
+                "css": "text/css",
+                "mjs": "text/javascript",
+            }[asset.split(".")[-1]]
+            + "; charset=utf-8",
+        }
+        if asset.endswith("html"):
+            value["content"] = (
+                (ROOT / "v2/agent" / asset)
+                .read_text()
+                .replace("${environment}", environment)
+            )
+        else:
+            value.update(
+                source="../agent/assets/" + asset,
+                source_hash=base64.b64encode(
+                    bytes.fromhex(gate.ASSET_SHA256[asset])
+                ).decode(),
+            )
+        before[address] = value
+    drifts = []
+    for address, value in before.items():
+        after = deepcopy(value)
+        for field in ("tags", "metadata"):
+            if field in after:
+                after[field] = {}
+        if "layers" in after:
+            after["layers"] = []
+        if "inline_policy" in after:
+            after["inline_policy"] = [
+                {"name": name, "policy": json.dumps(gate.policy(environment))}
+            ]
+        if "status" in after:
+            after["status"] = "DEPLOYED"
+        drifts.append(rehearsal.change(address, value, after))
+    state = rehearsal.previous()
+    if environment == "production":
+        state = json.loads(
+            json.dumps(state).replace(gate.ACCOUNTS["development"], account)
+        )
+    inputs = (
+        rehearsal.gate.desired(state, rehearsal.slot("green", "release2"))
+        if phase == "prepare"
+        else rehearsal.gate.desired(state, promote=True)
+    )
+    document = rehearsal.plan(inputs, prior=state)
+    document["resource_drift"] = drifts
+    original = deepcopy(document)
+    rehearsal.gate.validate_plan(document, state, phase)
+    assert document == original
+    # Every accepted read-back must still reject a neighboring authority change.
+    for drift in drifts:
+        for path, value in [
+            (("address",), "aws_lambda_function.loader"),
+            (("mode",), "data"),
+            (("provider_name",), "untrusted"),
+            (("previous_address",), "old"),
+            (("deposed",), "old"),
+            (("change", "importing"), {"id": "unexpected"}),
+            (("change", "actions"), ["delete", "create"]),
+            (("change", "after_unknown"), {"arn": True}),
+            (("change", "after", "region"), "eu-west-1"),
+        ]:
+            bad = deepcopy(drift)
+            target = bad
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+            document["resource_drift"] = [bad]
+            with pytest.raises(rehearsal.gate.Rejected, match="incomplete_or_drift"):
+                rehearsal.gate.validate_plan(document, state, phase)
+        for field, value in (
+            ("tags", {"extra": "tag"}),
+            ("metadata", {"extra": "metadata"}),
+            ("layers", [{"arn": "unreviewed"}]),
+            ("status", "UNASSOCIATED"),
+            ("inline_policy", [{"name": name, "policy": "{}"}]),
+        ):
+            if field in drift["change"]["after"]:
+                bad = deepcopy(drift)
+                bad["change"]["after"][field] = value
+                document["resource_drift"] = [bad]
+                with pytest.raises(
+                    rehearsal.gate.Rejected, match="incomplete_or_drift"
+                ):
+                    rehearsal.gate.validate_plan(document, state, phase)
+    role = next(drift for drift in drifts if drift["address"] == "aws_iam_role.costs")
+    for policies in (
+        role["change"]["after"]["inline_policy"] * 2,
+        [
+            {
+                "name": name,
+                "policy": json.dumps(
+                    {
+                        "Version": "2012-10-17",
+                        "Statement": gate.policy(environment)["Statement"]
+                        + [{"Effect": "Allow", "Action": "ssm:*", "Resource": "*"}],
+                    }
+                ),
+            }
+        ],
+    ):
+        bad = deepcopy(role)
+        bad["change"]["after"]["inline_policy"] = policies
+        document["resource_drift"] = [bad]
+        with pytest.raises(rehearsal.gate.Rejected, match="incomplete_or_drift"):
+            rehearsal.gate.validate_plan(document, state, phase)

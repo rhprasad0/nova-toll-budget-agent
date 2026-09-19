@@ -142,6 +142,54 @@ def routes(before: dict[str, Any], after: dict[str, Any]) -> None:
     )
 
 
+def validate_drift(item: dict[str, Any], environment: str) -> None:
+    """Accept only the observed first refresh of the fixed billing resources."""
+    address, change = item["address"], item["change"]
+    fields: dict[str, set[str]] = {
+        "aws_cloudfront_function.public_report_routes": set(),
+        "aws_cloudwatch_event_rule.costs": {"tags"},
+        "aws_cloudwatch_log_group.costs": {"tags"},
+        "aws_iam_role.costs": {"tags"},
+        "aws_lambda_function.costs": {"tags", "layers"},
+        "aws_s3_object.cost_dashboard": {"tags", "metadata"},
+        'aws_s3_object.cost_assets["costs.css"]': {"tags", "metadata"},
+        'aws_s3_object.cost_assets["costs.mjs"]': {"tags", "metadata"},
+    }
+    require(address in fields and environment in ACCOUNTS)
+    before, after = (dict(change[key]) for key in ("before", "after"))
+    for field in fields[address]:
+        empty: object = [] if field == "layers" else {}
+        require(before[field] in (None, empty) and after[field] in (None, empty))
+        before[field] = after[field] = None
+    if address == "aws_iam_role.costs":
+        name = "tollchat-v2-cost-publisher" + (
+            "-dev" if environment == "development" else ""
+        )
+        policies = after["inline_policy"]
+        require(before["inline_policy"] == [] and len(policies) == 1)
+        require(set(policies[0]) == {"name", "policy"})
+        require(
+            policies[0]["name"] == name
+            and json.loads(policies[0]["policy"]) == policy(environment)
+            and after["arn"] == f"arn:aws:iam::{ACCOUNTS[environment]}:role/{name}"
+        )
+        after["inline_policy"] = []
+    if address == "aws_cloudfront_function.public_report_routes":
+        require(before["status"] == "IN_PROGRESS" and after["status"] == "DEPLOYED")
+        suffix = "-dev" if environment == "development" else ""
+        require(
+            after["arn"]
+            == f"arn:aws:cloudfront::{ACCOUNTS[environment]}:function/tollchat-v2-public-report-routes{suffix}"
+        )
+        after["status"] = before["status"]
+    require(before == after)
+    # Reuse the identity, configuration and public-byte checks after accounting
+    # for provider read-back; no other drift is permitted.
+    validate(
+        item | {"change": change | {"before": before, "after": after}}, environment
+    )
+
+
 def validate(
     item: dict[str, Any], environment: str, plan: dict[str, Any] | None = None
 ) -> None:
@@ -298,6 +346,7 @@ def validate(
             if suffix
             else "cron(0 9 * * ? *)",
             "state": "ENABLED",
+            "is_enabled": True,
         }
         computed |= {"name_prefix"}
         empty |= {
@@ -305,7 +354,6 @@ def validate(
             "event_pattern",
             "role_arn",
             "force_destroy",
-            "is_enabled",
         }
     elif address == "aws_cloudwatch_event_target.costs":
         expected = {
@@ -455,6 +503,7 @@ def validate(
         "package_type": "Zip",
         "publish": False,
         "event_bus_name": "default",
+        "is_enabled": True,
     }.items():
         if field in expected and after.get(field) is None:
             after[field] = default
