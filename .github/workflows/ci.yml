@@ -105,9 +105,21 @@ jobs:
         with:
           python-version: "3.13"
       - run: python3 v2/scripts/check_schema_versions.py "$SCHEMA_BASE_REF"
-      - run: v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF"
+      - name: Select database test profile
+        id: database-profile
+        env:
+          PROFILE_EVENT: ${{ github.event_name }}
+          PROFILE_REF: ${{ github.ref }}
+          PROFILE_HEAD: ${{ github.sha }}
+        run: |
+          profile="$(python3 v2/scripts/select_db_test_profile.py \
+            --event "$PROFILE_EVENT" --ref "$PROFILE_REF" \
+            --base "$SCHEMA_BASE_REF" --head "$PROFILE_HEAD")"
+          printf 'profile=%s\n' "$profile" >>"$GITHUB_OUTPUT"
+      - run: v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF" --profile "$DATABASE_PROFILE"
         env:
           POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+          DATABASE_PROFILE: ${{ steps.database-profile.outputs.profile }}
 
   trusted-development-plan:
     if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true'

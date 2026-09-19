@@ -158,6 +158,23 @@ until docker exec "$container_id" pg_isready --username "$PGUSER" --dbname postg
 v2/scripts/run_db_tests.sh "$(git rev-parse HEAD^)"
 ```
 
+The default `--profile full` preserves all exhaustive assertions. Use
+`--profile fast` for targeted route and report fixtures while retaining database
+bootstrap, migration, rollback, privilege, retirement, and adoption checks. Both
+profiles require the same empty disposable cluster. Contract logs identify the
+profile, retained/candidate version, elapsed seconds, and outcome. Identical
+retained and candidate contracts run once; changed versions both run.
+
+The required `v2-database` CI job selects full coverage for PR/merge-group changes
+under `v2/db/`, `v2/oracle/`, `v2/tests/`, `v2/scripts/`, either infrastructure
+directory, `.github/`, or the Python project/lock files. Ordinary PRs and main
+pushes use fast coverage; tags and uncertain comparisons use full coverage.
+Every development delivery independently runs full validation on its exact
+commit in the credential-free package-build job, before packaging or uploading
+the release. Failure blocks the privileged deployment and is recorded through
+the existing release result. Production retains its successful-development and
+full tag-validation requirements.
+
 Credential-free PR CI never runs `terraform plan` or `apply`. The protected
 production sequence is verified development bundle, stable `vX.Y.Z` admission
 and claim, exact candidate validation before planner credentials, one encrypted

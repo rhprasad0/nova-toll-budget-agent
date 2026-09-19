@@ -1,5 +1,11 @@
 \set ON_ERROR_STOP on
 
+-- Direct invocation retains the exhaustive contract by default.
+\if :{?full_contract}
+\else
+\set full_contract true
+\endif
+
 BEGIN;
 
 CREATE FUNCTION pg_temp.set_i95_state(
@@ -1304,6 +1310,7 @@ BEGIN
     END IF;
 END $$;
 
+\if :full_contract
 CREATE TEMP TABLE exhaustive_expected_routes ON COMMIT DROP AS
 WITH RECURSIVE walk(origin_point_id, point_id, visited_point_ids, depth) AS (
     SELECT
@@ -1441,6 +1448,7 @@ END $$;
 
 DROP TABLE exhaustive_actual_routes;
 DROP TABLE exhaustive_expected_routes;
+\endif
 
 INSERT INTO oracle.toll_route_point (
     point_id, network_id, source_node_id, point_type, direction,

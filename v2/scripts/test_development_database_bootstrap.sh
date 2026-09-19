@@ -33,10 +33,7 @@ if PGHOST=127.0.0.1 PGPORT=1 PGUSER=ambient PGPASSWORD=ambient \
   echo 'bootstrap accepted an unreachable sentinel connection' >&2
   exit 1
 fi
-if rg --fixed-strings --quiet "$sentinel" "$sentinel_output"; then
-  echo 'bootstrap leaked an administrator URL secret' >&2
-  exit 1
-fi
+python3 v2/scripts/assert_test_output.py "$sentinel" "$sentinel_output"
 
 NOVA_TOLL_EXPECTED_RDS_ENDPOINT=127.0.0.1 \
 NOVA_TOLL_ADMIN_URL="postgresql://review_user:${sentinel}@127.0.0.1:1/postgres?sslmode=verify-full&sslrootcert=%2Ftmp%2Fca%20bundle.pem" \
@@ -146,10 +143,7 @@ PY
     echo 'bootstrap accepted an invalid local forwarding port' >&2
     exit 1
   fi
-  if rg --fixed-strings --quiet "$sentinel" "$sentinel_output"; then
-    echo 'bootstrap leaked an invalid local forwarding URL secret' >&2
-    exit 1
-  fi
+  python3 v2/scripts/assert_test_output.py "$sentinel" "$sentinel_output"
 done
 
 NOVA_TOLL_EXPECTED_RDS_ENDPOINT=127.0.0.1 \
@@ -196,10 +190,7 @@ PY
     echo 'bootstrap accepted an invalid administrator TLS URL' >&2
     exit 1
   fi
-  if rg --fixed-strings --quiet "$sentinel" "$sentinel_output"; then
-    echo 'bootstrap leaked an invalid administrator URL secret' >&2
-    exit 1
-  fi
+  python3 v2/scripts/assert_test_output.py "$sentinel" "$sentinel_output"
 done
 
 if [[ -n "${POSTGRES_CONTAINER_ID:-}" ]]; then
@@ -226,10 +217,7 @@ if [[ -n "${POSTGRES_CONTAINER_ID:-}" ]]; then
     echo 'mismatched disposable container was accepted' >&2
     exit 1
   fi
-  if rg --fixed-strings --quiet 'destructive command reached' "$sentinel_output"; then
-    echo 'mismatched disposable container reached destructive fixture setup' >&2
-    exit 1
-  fi
+  python3 v2/scripts/assert_test_output.py 'destructive command reached' "$sentinel_output"
   docker rm --force "$mismatch_container" >/dev/null
   mismatch_container=''
   rm -rf -- "$interceptors"
