@@ -2446,6 +2446,30 @@ def _validate_resource_drift(value: JSON) -> None:
             _reject("malformed_input")
         seen.add(address)
 
+        if address == shared_packages.CHAT_ROUTES:
+            try:
+                shared_packages.validate_chat_drift(
+                    cast(dict[str, Any], resource), "development"
+                )
+            except (ValueError, KeyError, TypeError):
+                _reject("public_chat_code", address=address)
+        if address == "aws_cloudfront_distribution.site":
+            change = cast(dict[str, Any], resource["change"])
+            if not isinstance(change["before"], dict) or not isinstance(
+                change["after"], dict
+            ):
+                _reject("incomplete_or_drift", address=address)
+            before, after = (
+                cast(dict[str, Any], change[key]) for key in ("before", "after")
+            )
+            if before.get("etag") != after.get("etag"):
+                try:
+                    shared_packages.validate_site_revision_drift(
+                        cast(dict[str, Any], resource), "development"
+                    )
+                except (ValueError, KeyError, TypeError):
+                    _reject("incomplete_or_drift", address=address)
+
 
 def _resource_ok(value: str, patterns: tuple[str, ...]) -> bool:
     return any(fnmatch.fnmatchcase(value, pattern) for pattern in patterns)

@@ -374,6 +374,7 @@ def validate_plan(
             in {
                 "aws_cloudfront_distribution.site",
                 "aws_cloudfront_distribution.staging",
+                shared_packages.CHAT_ROUTES,
             }
             | cost_release.RESOURCES
             and item.get("mode") == "managed"
@@ -390,7 +391,19 @@ def validate_plan(
             except (ValueError, KeyError, TypeError) as error:
                 raise Rejected("incomplete_or_drift") from error
             continue
+        if item["address"] == shared_packages.CHAT_ROUTES:
+            try:
+                shared_packages.validate_chat_drift(item, environment)
+            except (ValueError, KeyError, TypeError) as error:
+                raise Rejected("incomplete_or_drift") from error
+            continue
         before, after = (deepcopy(change[key]) for key in ("before", "after"))
+        if before.get("etag") != after.get("etag"):
+            try:
+                shared_packages.validate_site_revision_drift(item, environment)
+            except (ValueError, KeyError, TypeError) as error:
+                raise Rejected("incomplete_or_drift") from error
+            continue
         for side in (before, after):
             side["origin"] = normalized_origins(side["origin"])
         require(before == after, "incomplete_or_drift")

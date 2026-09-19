@@ -16,6 +16,7 @@ from scripts import release_blue_green as release
     "reason",
     [
         "phase_boundary",
+        "incomplete_or_drift",
         "public_chat_code",
         "public_chat_identity",
         "secret-token=do-not-print\nprovider",

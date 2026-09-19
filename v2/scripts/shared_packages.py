@@ -196,6 +196,57 @@ def validate_chat(item: dict[str, Any], environment: str) -> None:
         )
 
 
+def validate_chat_drift(item: dict[str, Any], environment: str) -> None:
+    """CloudFront finishes publishing after Terraform records IN_PROGRESS."""
+    change = item["change"]
+    before, after = change["before"], change["after"]
+    require(isinstance(before, dict) and isinstance(after, dict), "public_chat_code")
+    before, after = cast(dict[str, Any], before), cast(dict[str, Any], after)
+    require(
+        change["actions"] == ["update"]
+        and before.get("status") == "IN_PROGRESS"
+        and after.get("status") == "DEPLOYED",
+        "public_chat_code",
+    )
+    require(dict(before, status="DEPLOYED") == after, "public_chat_code")
+    validate_chat(
+        item | {"change": change | {"actions": ["no-op"], "before": after}}, environment
+    )
+
+
+def validate_site_revision_drift(item: dict[str, Any], environment: str) -> None:
+    """A refreshed revision is safe only when the fixed primary is unchanged."""
+    require(environment in ACCOUNTS, "incomplete_or_drift")
+    distribution = {"development": "E33DVF3KT7BTAC", "production": "E16XVTXNFUS8T4"}[
+        environment
+    ]
+    change = item["change"]
+    before, after = change["before"], change["after"]
+    require(isinstance(before, dict) and isinstance(after, dict), "incomplete_or_drift")
+    before, after = cast(dict[str, Any], before), cast(dict[str, Any], after)
+    require(
+        item.get("address") == "aws_cloudfront_distribution.site"
+        and item.get("mode") == "managed"
+        and item.get("provider_name") == "registry.terraform.io/hashicorp/aws"
+        and not any(key in item for key in ("previous_address", "deposed"))
+        and not change.get("importing")
+        and not change.get("replace_paths")
+        and change["actions"] == ["update"]
+        and not unknown(change.get("after_unknown", {})),
+        "incomplete_or_drift",
+    )
+    for side in (before, after):
+        require(
+            side.get("id") == distribution
+            and side.get("arn")
+            == f"arn:aws:cloudfront::{ACCOUNTS[environment]}:distribution/{distribution}"
+            and isinstance(side.get("etag"), str)
+            and bool(side["etag"]),
+            "incomplete_or_drift",
+        )
+    require(dict(before, etag=after["etag"]) == after, "incomplete_or_drift")
+
+
 def evidence(
     environment: str, account: str, release: str, hashes: dict[str, str]
 ) -> dict[str, Any]:

@@ -120,8 +120,17 @@ def validate(
     drift = plan.get("resource_drift", [])
     if not isinstance(changes, list) or not isinstance(drift, list):
         raise PlanError("shape")
-    if drift:
-        raise PlanError("drift")
+    for entry in cast(list[object], drift):
+        if not isinstance(entry, dict):
+            raise PlanError("drift")
+        item = cast(dict[str, Any], entry)
+        try:
+            if item.get("address") == "aws_cloudfront_distribution.site":
+                shared_packages.validate_site_revision_drift(item, "production")
+            else:
+                shared_packages.validate_chat_drift(item, "production")
+        except (ValueError, KeyError, TypeError) as error:
+            raise PlanError("drift") from error
     outputs = plan.get("output_changes", {})
     if not isinstance(outputs, dict):
         raise PlanError("outputs")
