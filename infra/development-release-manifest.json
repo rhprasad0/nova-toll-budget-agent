@@ -60,7 +60,9 @@
     "v2/agent/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs": "ba5bae6a93301ad92b8466fce6b80f8299c5825c41ae76496293bde34db96713",
     "v2/agent/assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs": "a55efc5d80ad1d6a286c1d0e82d4d59c9d50b4e7a7da1d17c44e7791b2325930",
     "v2/agent/assets/maplibre-gl-6.0.0/maplibre-gl.css": "9467ecb10416776e4ec880d662c20bbc1d1ea4e439ac3aeda45901bdf124b609",
+    "v2/agent/assets/maplibre-gl-6.0.0/maplibre-gl.d.mts": "36d9550c00e8d26107c679740b4843f2fcf563c39889b72fbf81f8af94887d9d",
     "v2/agent/assets/maplibre-gl-6.0.0/maplibre-gl.mjs": "47e69d0fe9a998689bc76c81424baccddf114a1c190320766b698f91b3e9bf44",
+    "v2/agent/assets/markdown-it.esm.min.d.mts": "48d8b18bea52d233b29c2297714d80e98cb29f3f60d454730d9aaf70458be96b",
     "v2/agent/assets/markdown-it.esm.min.mjs": "eb0a6cb2beb08326ea4d3e0e3b25ac72c1e6f119a619d9bbe061e72000ffa118",
     "v2/agent/assets/tollchat-annual-commute-example.png": "c648fb2b4be4a8f4741d807a0b6e946aff6bcfbc20529bc288900e39beb6bb6a",
     "v2/agent/assets/tollchat-logo.png": "da0167c64714b0e37c234d18695aecf6f81226627ca21e105e1fcc43c397e1a6",
@@ -187,7 +189,7 @@
   },
   "packages": {
     "agentcore.zip": "1226170f755b62f7eeae7286d8f7b661107b2fdd183a000ac0e3277c07c2853e",
-    "chat-proxy.zip": "c6161a58c2692db229613f6ccd793f2646a57fc743773a0b86a5f8a44fa72d15",
+    "chat-proxy.zip": "8244f780278952ffb77c78cb8d038d308b277fe21e36c9508a500ea4d5ce9b62",
     "loader.zip": "089969a77cd61816f1471656ad6dfda793b595c3f9244a1027c2e11ad71054fb",
     "publisher.zip": "dd27878fdd0020520590046c5217a11d6a5c264075159c3fd2be6b8f24410218",
     "timed-checks.zip": "9637d59e2543c39f230f4a6c075c8439f2c9bb3fee46e6ce49f1a3eec123d062"
