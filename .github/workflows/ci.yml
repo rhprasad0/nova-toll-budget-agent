@@ -52,8 +52,8 @@ jobs:
       - run: uv run coverage run -m pytest
       - run: uv run coverage report
       - run: node --test tests/*.mjs
-      - run: npm ci --prefix lambdas/chat_proxy
-      - run: npm test --prefix lambdas/chat_proxy
+      - if: github.event_name != 'pull_request'
+        run: npm ci --prefix lambdas/chat_proxy
       - run: uv run python oracle/build_oracle_data.py --check
       # Main delivery owns the immutable release bundle; PRs retain package checks.
       - if: github.event_name == 'pull_request'
@@ -64,6 +64,7 @@ jobs:
         run: ./scripts/build_publisher_zip.sh
       - if: github.event_name == 'pull_request'
         run: ./scripts/build_agentcore_zips.sh
+      - run: npm test --prefix lambdas/chat_proxy
       - if: github.event_name == 'pull_request'
         run: ./scripts/build_timed_checks_zip.sh
 

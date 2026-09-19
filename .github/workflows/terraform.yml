@@ -34,4 +34,5 @@ jobs:
       - run: terraform validate
         working-directory: v2/infra
       - run: python3 -m unittest infra.test_delivery_plan_validator
+      - run: python3 -m unittest infra.test_release_manifest
       - run: python3 infra/test_delivery_identities.py
