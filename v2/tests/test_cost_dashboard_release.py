@@ -445,12 +445,14 @@ def test_provider_report_routes_keep_known_defaults(tmp_path: Path):
 
 @pytest.mark.parametrize("environment", ["development", "production"])
 @pytest.mark.parametrize("phase", ["prepare", "promote", "recover"])
-def test_first_billing_refresh_preserves_release_authority(environment, phase):
+def test_first_billing_refresh_preserves_release_authority(
+    environment: str, phase: str
+) -> None:
     rehearsal = importlib.import_module("test_blue_green")
     suffix = "-dev" if environment == "development" else ""
     account = gate.ACCOUNTS[environment]
     name = "tollchat-v2-cost-publisher" + suffix
-    before = {
+    before: dict[str, dict[str, Any]] = {
         "aws_cloudwatch_event_rule.costs": {
             "name": name,
             "event_bus_name": "default",
@@ -527,7 +529,7 @@ def test_first_billing_refresh_preserves_release_authority(environment, phase):
             if asset.endswith("html")
             else f'aws_s3_object.cost_assets["{asset}"]'
         )
-        value = {
+        asset_values: dict[str, Any] = {
             "bucket": f"tollchat-site-{account}{suffix}",
             "key": asset if asset.endswith("html") else "assets/" + asset,
             "cache_control": "no-cache",
@@ -541,22 +543,22 @@ def test_first_billing_refresh_preserves_release_authority(environment, phase):
             + "; charset=utf-8",
         }
         if asset.endswith("html"):
-            value["content"] = (
+            asset_values["content"] = (
                 (ROOT / "v2/agent" / asset)
                 .read_text()
                 .replace("${environment}", environment)
             )
         else:
-            value.update(
+            asset_values.update(
                 source="../agent/assets/" + asset,
                 source_hash=base64.b64encode(
                     bytes.fromhex(gate.ASSET_SHA256[asset])
                 ).decode(),
             )
-        before[address] = value
-    drifts = []
-    for address, value in before.items():
-        after = deepcopy(value)
+        before[address] = asset_values
+    drifts: list[dict[str, Any]] = []
+    for address, resource in before.items():
+        after = deepcopy(resource)
         for field in ("tags", "metadata"):
             if field in after:
                 after[field] = {}
@@ -568,7 +570,7 @@ def test_first_billing_refresh_preserves_release_authority(environment, phase):
             ]
         if "status" in after:
             after["status"] = "DEPLOYED"
-        drifts.append(rehearsal.change(address, value, after))
+        drifts.append(rehearsal.change(address, resource, after))
     state = rehearsal.previous()
     if environment == "production":
         state = json.loads(
@@ -598,7 +600,7 @@ def test_first_billing_refresh_preserves_release_authority(environment, phase):
             (("change", "after", "region"), "eu-west-1"),
         ]:
             bad = deepcopy(drift)
-            target = bad
+            target: Any = bad
             for key in path[:-1]:
                 target = target[key]
             target[path[-1]] = value
