@@ -5,10 +5,9 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from typing import Any, cast
 
+from agent_tools import current_price_domain as _domain
 from strands import tool  # pyright: ignore[reportUnknownVariableType]
 from strands.types.tools import ToolContext, ToolSpec
-
-from agent_tools import current_price_domain as _domain
 
 TOOL_SPEC = cast(ToolSpec, _domain.TOOL_SPEC)
 TOOL_CONTRACT = _domain.TOOL_CONTRACT
@@ -27,4 +26,4 @@ async def get_current_toll_price(
         yield event
 
 
-get_current_toll_price.tool_spec = TOOL_SPEC  # pyright: ignore[reportAttributeAccessIssue]
+get_current_toll_price.tool_spec = TOOL_SPEC

@@ -11,18 +11,21 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-SPEC = importlib.util.spec_from_file_location(
-    "run_development_migrations", SCRIPTS / "run_development_migrations.py"
-)
-assert SPEC and SPEC.loader
-runner = cast(Any, importlib.util.module_from_spec(SPEC))
-sys.modules[SPEC.name] = runner
-SPEC.loader.exec_module(runner)
+if TYPE_CHECKING:
+    from scripts import run_development_migrations as runner
+else:
+    SPEC = importlib.util.spec_from_file_location(
+        "run_development_migrations", SCRIPTS / "run_development_migrations.py"
+    )
+    assert SPEC and SPEC.loader
+    runner = importlib.util.module_from_spec(SPEC)
+    sys.modules[SPEC.name] = runner
+    SPEC.loader.exec_module(runner)
 
 
 def _migration(
@@ -32,7 +35,7 @@ def _migration(
     previous: str = "1.0.0",
     target: str = "1.0.1",
     number: int = 2,
-) -> Any:
+) -> runner.Migration:
     return runner.Migration(
         path=path,
         schema=schema,
@@ -44,7 +47,7 @@ def _migration(
     )
 
 
-def _empty_candidates(schemas: Any) -> tuple[Any, ...]:
+def _empty_candidates(schemas: object) -> tuple[Any, ...]:
     return ()
 
 
@@ -207,8 +210,8 @@ def test_bootstrap_uses_manifest_values_for_history_insert(
 ) -> None:
     calls: list[tuple[str, dict[str, str] | None]] = []
 
-    def fake_psql(database: str, **kwargs: Any) -> None:
-        calls.append((database, kwargs.get("variables")))
+    def fake_psql(database: str, **kwargs: object) -> None:
+        calls.append((database, cast(dict[str, str] | None, kwargs.get("variables"))))
 
     monkeypatch.setattr(runner.bootstrap, "psql", fake_psql)
     runner.bootstrap.bootstrap_development_objects("nova_toll_development")
@@ -248,7 +251,7 @@ def test_bootstrap_rejects_unrepresented_canonical_before_psql(
     monkeypatch.setattr(runner.bootstrap, "ROOT", tmp_path)
     monkeypatch.setattr(runner.bootstrap, "BASELINE_MANIFEST_PATH", manifest_path)
 
-    def fail_psql(*args: Any, **kwargs: Any) -> None:
+    def fail_psql(*args: object, **kwargs: object) -> None:
         pytest.fail("psql must not run on manifest mismatch")
 
     monkeypatch.setattr(runner.bootstrap, "psql", fail_psql)
@@ -298,7 +301,7 @@ def test_old_oracle_baseline_can_advance_through_031() -> None:
 
 
 def test_production_preflight_recognizes_each_immutable_oracle_baseline() -> None:
-    baselines = runner._production_baselines()  # pyright: ignore[reportPrivateUsage]
+    baselines = runner._production_baselines()
     migration: Any = _migration(
         path="v2/db/migrations/031_upgrade_oracle_1_14_0_to_1_14_1.sql",
         schema="oracle",
@@ -378,7 +381,7 @@ def test_registry_rejects_dirty_canonical_before_psql(
 
     monkeypatch.setattr(runner, "_committed_bytes", committed)
 
-    def fail_subprocess(*args: Any, **kwargs: Any) -> Any:
+    def fail_subprocess(*args: object, **kwargs: object) -> NoReturn:
         pytest.fail("psql must not run after a dirty canonical source")
 
     monkeypatch.setattr(runner.subprocess, "run", fail_subprocess)
@@ -618,7 +621,7 @@ def test_run_renders_captured_committed_bytes(
         lambda: ((), {"pricing": "1.3.0", "oracle": "1.15.0"}),
     )
 
-    def fake_candidates(_schemas: Any) -> tuple[Any, ...]:
+    def fake_candidates(_schemas: object) -> tuple[Any, ...]:
         return (migration,)
 
     monkeypatch.setattr(runner, "_migration_candidates", fake_candidates)
@@ -636,10 +639,10 @@ def test_run_renders_captured_committed_bytes(
 
     monkeypatch.setattr(runner.bootstrap, "render", fake_render)
 
-    def fake_psql(*args: Any, **kwargs: Any) -> SimpleNamespace:
+    def fake_psql(*args: object, **kwargs: object) -> SimpleNamespace:
         return SimpleNamespace(
             returncode=0,
-            stdout=kwargs["input"].removeprefix("\\echo "),
+            stdout=cast(str, kwargs["input"]).removeprefix("\\echo "),
             stderr="",
         )
 
@@ -647,8 +650,8 @@ def test_run_renders_captured_committed_bytes(
 
     # The fake session embeds a stable marker instead of the real SQL stream.
     def fake_session(
-        _migrations: Any,
-        _versions: Any,
+        _migrations: object,
+        _versions: object,
         rendered: dict[str, Path],
         _commit: str,
         run_id: str,
@@ -691,7 +694,7 @@ def test_run_rejects_worktree_swap_after_capture(
         runner, "_registry", lambda: ((), {"pricing": "1.3.0", "oracle": "1.15.0"})
     )
 
-    def fake_candidates(_schemas: Any) -> tuple[Any, ...]:
+    def fake_candidates(_schemas: object) -> tuple[Any, ...]:
         return (migration,)
 
     monkeypatch.setattr(runner, "_migration_candidates", fake_candidates)
@@ -708,7 +711,7 @@ def test_run_rejects_worktree_swap_after_capture(
 
     monkeypatch.setattr(runner.bootstrap, "render", fake_render)
 
-    def fail_psql(*args: Any, **kwargs: Any) -> Any:
+    def fail_psql(*args: object, **kwargs: object) -> NoReturn:
         pytest.fail("psql must not start after a source swap")
 
     monkeypatch.setattr(runner.subprocess, "run", fail_psql)

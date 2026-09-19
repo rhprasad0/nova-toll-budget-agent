@@ -6,6 +6,7 @@ import json
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from agent.toll_agent import build_agent, load_openai_api_key
 from strands.models.openai_responses import OpenAIResponsesModel
 from strands.tools.registry import ToolRegistry
 from strands_evals import ActorSimulator, Case
@@ -26,8 +27,6 @@ from strands_evals.types.trace import (
     Trace,
     TraceLevelInput,
 )
-
-from agent.toll_agent import build_agent, load_openai_api_key
 
 _ACTOR_PROMPT = """Simulate the user described below, speaking in first person.
 {actor_profile}

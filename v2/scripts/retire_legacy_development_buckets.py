@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# ruff: noqa: ANN401
 """Archive and conditionally purge the fixed legacy development S3 objects.
 
 The default phase is a read-only inventory.  Mutation phases intentionally
@@ -251,19 +250,19 @@ class ObjectRecord:
         return value
 
 
-def _text(value: Any, field: str) -> str:
+def _text(value: object, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise RetirementError(f"missing {field}")
     return value
 
 
-def _optional_text(value: Any, field: str) -> str | None:
+def _optional_text(value: object, field: str) -> str | None:
     if value is None:
         return None
     return _text(value, field)
 
 
-def _optional_timestamp(value: Any, field: str) -> str | None:
+def _optional_timestamp(value: object, field: str) -> str | None:
     if value is None:
         return None
     return _timestamp(value)
@@ -278,35 +277,35 @@ def _expires_value(value: str | None) -> datetime | None:
         raise RetirementError("object Expires metadata is malformed") from error
 
 
-def _mapping(value: Any, field: str) -> Mapping[str, Any]:
+def _mapping(value: object, field: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise RetirementError(f"malformed {field}")
     return cast(Mapping[str, Any], value)
 
 
-def _list(value: Any, field: str) -> list[Any]:
+def _list(value: object, field: str) -> list[Any]:
     if not isinstance(value, list):
         raise RetirementError(f"malformed {field}")
     return cast(list[Any], value)
 
 
-def _jsonable(value: Any) -> Any:
+def _jsonable(value: object) -> object:
     if isinstance(value, datetime):
         return value.astimezone(UTC).isoformat()
     if isinstance(value, Mapping):
-        mapping = cast(Mapping[Any, Any], value)
+        mapping = cast(Mapping[object, object], value)
         return {str(key): _jsonable(item) for key, item in mapping.items()}
     if isinstance(value, (list, tuple)):
-        values = cast(Iterable[Any], value)
+        values = cast(Iterable[object], value)
         return [_jsonable(item) for item in values]
     return value
 
 
-def _canonical(value: Any) -> str:
+def _canonical(value: object) -> str:
     return json.dumps(_jsonable(value), sort_keys=True, separators=(",", ":"))
 
 
-def _timestamp(value: Any) -> str:
+def _timestamp(value: object) -> str:
     if isinstance(value, datetime):
         return value.astimezone(UTC).isoformat()
     return _text(value, "LastModified")
@@ -336,15 +335,19 @@ def _version_params(version_id: str) -> dict[str, str]:
     return {} if version_id == "null" else {"VersionId": version_id}
 
 
-def _stream_digest(body: Any) -> str:
+def _stream_digest(body: object) -> str:
     digest = hashlib.sha256()
     if hasattr(body, "iter_chunks"):
-        chunks: Iterable[Any] = body.iter_chunks(chunk_size=1024 * 1024)
+        chunks: Iterable[object] = cast(
+            Callable[..., Iterable[object]], getattr(body, "iter_chunks", None)
+        )(chunk_size=1024 * 1024)
     elif hasattr(body, "read"):
 
-        def read_chunks() -> Iterable[Any]:
+        def read_chunks() -> Iterable[object]:
             while True:
-                chunk = body.read(1024 * 1024)
+                chunk = cast(Callable[[int], object], getattr(body, "read", None))(
+                    1024 * 1024
+                )
                 if not chunk:
                     break
                 yield chunk
@@ -402,7 +405,7 @@ class GuardedAWS:
         if identity.get("Account") != PRODUCTION_ACCOUNT:
             raise RetirementError("production account check failed")
 
-    def call(self, service: str, operation: str, **kwargs: Any) -> dict[str, Any]:
+    def call(self, service: str, operation: str, **kwargs: object) -> dict[str, Any]:
         if service != "s3":
             self._assert_account()
         if self.region != PRODUCTION_REGION:
@@ -421,14 +424,14 @@ class GuardedAWS:
         return result
 
 
-def _s3(aws: GuardedAWS, operation: str, **kwargs: Any) -> dict[str, Any]:
+def _s3(aws: GuardedAWS, operation: str, **kwargs: object) -> dict[str, Any]:
     if kwargs.get("ExpectedBucketOwner", EXPECTED_OWNER) != EXPECTED_OWNER:
         raise RetirementError("S3 expected owner is not the production account")
     kwargs["ExpectedBucketOwner"] = EXPECTED_OWNER
     return aws.call("s3", operation, **kwargs)
 
 
-def _required_int(value: Any, field: str) -> int:
+def _required_int(value: object, field: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise RetirementError(f"invalid {field}")
     return value
@@ -709,7 +712,7 @@ def _record_identity(record: ObjectRecord) -> tuple[Any, ...]:
     )
 
 
-def _record_from_dict(raw: Any) -> ObjectRecord:
+def _record_from_dict(raw: object) -> ObjectRecord:
     if not isinstance(raw, Mapping):
         raise RetirementError("malformed object record")
     raw = cast(Mapping[str, Any], raw)
@@ -1334,7 +1337,7 @@ def _head_absent(aws: GuardedAWS, bucket: str, key: str) -> bool:
         # is therefore ambiguous unless the wrapped cause is the known 404.
         cause = error.__cause__
         if isinstance(cause, ClientError):
-            raw_response: Any = cause.response  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            raw_response: Any = cause.response
             error_response = _mapping(raw_response, "S3 error response")
             error_details = _mapping(error_response.get("Error", {}), "S3 error")
             if error_details.get("Code") in ("404", "NoSuchKey", "NotFound"):
@@ -1454,7 +1457,7 @@ def _waf_configuration(aws: GuardedAWS) -> dict[str, Any]:
     config = _mapping(config, "WAF logging configuration")
     if config.get("ResourceArn") != arn:
         raise RetirementError("WAF logging configuration is unreadable")
-    return _jsonable(config)
+    return cast(dict[str, Any], _jsonable(config))
 
 
 def _lifecycle_configuration(aws: GuardedAWS) -> dict[str, Any]:
@@ -1463,7 +1466,7 @@ def _lifecycle_configuration(aws: GuardedAWS) -> dict[str, Any]:
         raise RetirementError("measurement lifecycle configuration is unreadable")
     response = dict(response)
     response.pop("ResponseMetadata", None)
-    return _jsonable(response)
+    return cast(dict[str, Any], _jsonable(response))
 
 
 def writer_state(aws: GuardedAWS) -> dict[str, Any]:
@@ -1614,7 +1617,7 @@ def _verify_frozen_writers(before: Mapping[str, Any], after: Mapping[str, Any]) 
         )
 
 
-def _aware_datetime(value: Any, field: str) -> datetime:
+def _aware_datetime(value: object, field: str) -> datetime:
     if not isinstance(value, str):
         raise RetirementError(f"{field} is missing")
     try:
@@ -1626,7 +1629,7 @@ def _aware_datetime(value: Any, field: str) -> datetime:
     return parsed
 
 
-def _sha256(value: Any, field: str) -> str:
+def _sha256(value: object, field: str) -> str:
     if (
         not isinstance(value, str)
         or len(value) != hashlib.sha256().digest_size * 2

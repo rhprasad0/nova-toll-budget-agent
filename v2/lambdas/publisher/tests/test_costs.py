@@ -2,21 +2,24 @@
 
 import io
 import json
+from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
 from botocore.exceptions import ClientError
-
 from lambdas.publisher import costs
 
 NOW = datetime(2026, 9, 18, 10, tzinfo=UTC)
 
 
-def aws_pages(period, values=("0.1", "0.2")):
+def aws_pages(
+    period: dict[str, str], values: Sequence[str] = ("0.1", "0.2")
+) -> list[dict[str, Any]]:
     return [
         {
             "ResultsByTime": [
@@ -51,7 +54,9 @@ def aws_pages(period, values=("0.1", "0.2")):
     ]
 
 
-def source(environment, now=NOW, values=("0.1", "0.2")):
+def source(
+    environment: str, now: datetime = NOW, values: Sequence[str] = ("0.1", "0.2")
+) -> dict[str, Any]:
     period = costs.requested(costs.periods(now.date()))
     return costs.collect_aws(
         Mock(get_cost_and_usage=Mock(side_effect=aws_pages(period, values))),
@@ -61,7 +66,7 @@ def source(environment, now=NOW, values=("0.1", "0.2")):
     )
 
 
-def fixture(environment="production", now=NOW):
+def fixture(environment: str = "production", now: datetime = NOW) -> dict[str, Any]:
     period = costs.requested(costs.periods(now.date()))
     sources = {
         "aws_development": source("development", now),
@@ -77,7 +82,7 @@ def fixture(environment="production", now=NOW):
     return costs.build_snapshot(environment, now, sources)
 
 
-def test_publication_after_midnight_preserves_requested_utc_period():
+def test_publication_after_midnight_preserves_requested_utc_period() -> None:
     started = NOW.replace(hour=23, minute=59)
     completed = started + timedelta(minutes=2)
     sources = fixture("development", started)["sources"]
@@ -89,7 +94,7 @@ def test_publication_after_midnight_preserves_requested_utc_period():
     assert snapshot["published_at"] == costs.utc_text(completed)
 
 
-def test_aws_pagination_account_filter_and_exact_credits():
+def test_aws_pagination_account_filter_and_exact_credits() -> None:
     period = costs.requested(costs.periods(NOW.date()))
     client = Mock(
         get_cost_and_usage=Mock(
@@ -115,7 +120,7 @@ def test_aws_pagination_account_filter_and_exact_credits():
     assert result["finalized_through"] is None and result["estimated"] is True
 
 
-def test_aws_missing_days_bad_currency_and_repeated_pages_fail():
+def test_aws_missing_days_bad_currency_and_repeated_pages_fail() -> None:
     period = costs.requested(costs.periods(NOW.date()))
     for kind in ("missing", "currency", "repeated"):
         pages = aws_pages(period)
@@ -137,7 +142,7 @@ def test_aws_missing_days_bad_currency_and_repeated_pages_fail():
             )
 
 
-def test_ungrouped_aws_charges_are_included():
+def test_ungrouped_aws_charges_are_included() -> None:
     period = {"start": "2026-09-17", "end_exclusive": "2026-09-18"}
     page = aws_pages(period)[0]
     page.pop("NextPageToken")
@@ -154,10 +159,12 @@ def test_ungrouped_aws_charges_are_included():
     assert result["aws_environments"] == [{"label": "unallocated", "usd": "-1.23"}]
 
 
-def test_openai_all_pages_all_charges_and_no_filters(monkeypatch):
+def test_openai_all_pages_all_charges_and_no_filters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     period = {"start": "2026-09-16", "end_exclusive": "2026-09-18"}
 
-    def bucket(day, results):
+    def bucket(day: str, results: list[dict[str, object]]) -> dict[str, object]:
         start = int(costs.timestamp(day + "T00:00:00Z").timestamp())
         return {"start_time": start, "end_time": start + 86400, "results": results}
 
@@ -214,7 +221,7 @@ def test_openai_all_pages_all_charges_and_no_filters(monkeypatch):
         date(2026, 5, 31),
     ],
 )
-def test_month_boundaries_and_empty_month(today):
+def test_month_boundaries_and_empty_month(today: date) -> None:
     now = datetime.combine(today, datetime.min.time(), UTC) + timedelta(hours=10)
     snapshot = fixture(now=now)
     assert len(snapshot["daily"]) == 30
@@ -228,41 +235,113 @@ def test_month_boundaries_and_empty_month(today):
         assert snapshot["aws_services"] == []
 
 
+def _callback_1(s: dict[str, Any]) -> object:
+    return s.update(scope="aws-production+aws-development+openai-organization")
+
+
+def _callback_2(s: dict[str, Any]) -> object:
+    return s.update(currency="EUR")
+
+
+def _callback_3(s: dict[str, Any]) -> object:
+    return s.update(schema_version=2)
+
+
+def _callback_4(s: dict[str, Any]) -> object:
+    return s.update(api_key="private")
+
+
+def _callback_5(s: dict[str, Any]) -> object:
+    return s["sources"]["aws_development"].update(scope="production-account")
+
+
+def _callback_6(s: dict[str, Any]) -> object:
+    return s["sources"]["aws_development"].update(currency="EUR")
+
+
+def _callback_7(s: dict[str, Any]) -> object:
+    return s["sources"]["aws_development"].update(account_id="private")
+
+
+def _callback_8(s: dict[str, Any]) -> object:
+    return s["sources"]["aws_development"]["daily"].pop()
+
+
+def _callback_9(s: dict[str, Any]) -> object:
+    return s["sources"]["aws_development"]["daily"][0].update(usd="NaN")
+
+
+def _callback_10(s: dict[str, Any]) -> object:
+    return s["sources"]["aws_development"]["aws_services"][0].update(usd="999")
+
+
+def _callback_11(s: dict[str, Any]) -> object:
+    return s["sources"]["aws_development"]["aws_services"][0].update(
+        label="private-resource-id"
+    )
+
+
+def _callback_12(s: dict[str, Any]) -> object:
+    return s["sources"]["aws_development"].update(finalized_through="2026-09-17")
+
+
+def _callback_13(s: dict[str, Any]) -> object:
+    return s["daily"][0].update(total="0")
+
+
+def _callback_14(s: dict[str, Any]) -> object:
+    return s.update(published_at="2026-09-19T00:00:00Z")
+
+
+def _callback_15(s: dict[str, Any]) -> object:
+    return s["requested"].update(end_exclusive="2026-09-17")
+
+
+def _callback_16(s: dict[str, Any]) -> object:
+    return s["attempt"].update(status="failed")
+
+
+def _strict_callback_1(s: dict[str, Any]) -> object:
+    return s.update(environment="production")
+
+
+def _strict_callback_2(s: dict[str, Any]) -> object:
+    return s["month_to_date"].update(aws="999")
+
+
 @pytest.mark.parametrize(
     "mutate",
     [
-        lambda s: s.update(environment="production"),
-        lambda s: s.update(scope="aws-production+aws-development+openai-organization"),
-        lambda s: s.update(currency="EUR"),
-        lambda s: s.update(schema_version=2),
-        lambda s: s.update(api_key="private"),
-        lambda s: s["sources"]["aws_development"].update(scope="production-account"),
-        lambda s: s["sources"]["aws_development"].update(currency="EUR"),
-        lambda s: s["sources"]["aws_development"].update(account_id="private"),
-        lambda s: s["sources"]["aws_development"]["daily"].pop(),
-        lambda s: s["sources"]["aws_development"]["daily"][0].update(usd="NaN"),
-        lambda s: s["sources"]["aws_development"]["aws_services"][0].update(usd="999"),
-        lambda s: s["sources"]["aws_development"]["aws_services"][0].update(
-            label="private-resource-id"
-        ),
-        lambda s: s["sources"]["aws_development"].update(
-            finalized_through="2026-09-17"
-        ),
-        lambda s: s["month_to_date"].update(aws="999"),
-        lambda s: s["daily"][0].update(total="0"),
-        lambda s: s.update(published_at="2026-09-19T00:00:00Z"),
-        lambda s: s["requested"].update(end_exclusive="2026-09-17"),
-        lambda s: s["attempt"].update(status="failed"),
+        _strict_callback_1,
+        _callback_1,
+        _callback_2,
+        _callback_3,
+        _callback_4,
+        _callback_5,
+        _callback_6,
+        _callback_7,
+        _callback_8,
+        _callback_9,
+        _callback_10,
+        _callback_11,
+        _callback_12,
+        _strict_callback_2,
+        _callback_13,
+        _callback_14,
+        _callback_15,
+        _callback_16,
     ],
 )
-def test_reject_invalid_development_aggregates(mutate):
+def test_reject_invalid_development_aggregates(
+    mutate: Callable[[dict[str, Any]], object],
+) -> None:
     value = fixture("development")
     mutate(value)
     with pytest.raises((ValueError, KeyError, TypeError)):
         costs.development_source(value, costs.requested(costs.periods(NOW.date())), NOW)
 
 
-def test_development_freshness_and_last_valid_retention():
+def test_development_freshness_and_last_valid_retention() -> None:
     dev = fixture("development")
     assert (
         costs.development_source(dev, dev["requested"], NOW)["scope"]
@@ -289,7 +368,7 @@ def test_development_freshness_and_last_valid_retention():
     assert partial["aws_services"]
 
 
-def test_redirect_origin_duplicate_fields_and_oversized_body_rejected():
+def test_redirect_origin_duplicate_fields_and_oversized_body_rejected() -> None:
     with pytest.raises(ValueError):
         costs.NoRedirect().redirect_request(None, None, None, None, None, None)
     for url in (
@@ -307,7 +386,9 @@ def test_redirect_origin_duplicate_fields_and_oversized_body_rejected():
         costs.decode(b" " * (costs.MAX_BODY + 1))
 
 
-def test_handler_preserves_data_and_sanitizes_provider_failure(monkeypatch):
+def test_handler_preserves_data_and_sanitizes_provider_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     previous = fixture(
         "development",
         datetime.now(UTC).replace(hour=10, microsecond=0) - timedelta(days=1),
@@ -321,9 +402,9 @@ def test_handler_preserves_data_and_sanitizes_provider_failure(monkeypatch):
     ce = Mock(get_cost_and_usage=Mock(side_effect=RuntimeError("secret private error")))
     monkeypatch.setenv("DEPLOYMENT_ENVIRONMENT", "development")
     monkeypatch.setenv("COST_BUCKET", "tollchat-site-903859731897-dev")
-    clients = []
+    clients: list[str] = []
 
-    def client(name, **_):
+    def client(name: str, **_: object) -> Mock:
         clients.append(name)
         assert name in {"s3", "ce", "ssm"}
         return {
@@ -364,7 +445,7 @@ def test_handler_preserves_data_and_sanitizes_provider_failure(monkeypatch):
     assert first["month_to_date"]["total"] is None
 
 
-def test_deterministic_public_fixtures():
+def test_deterministic_public_fixtures() -> None:
     directory = Path(__file__).resolve().parents[3] / "tests/fixtures"
     for environment in costs.ACCOUNTS:
         expected = json.loads((directory / f"costs-{environment}.json").read_text())
@@ -381,7 +462,7 @@ def test_deterministic_public_fixtures():
             assert secret not in public
 
 
-def test_legacy_development_and_production_do_not_double_count_openai():
+def test_legacy_development_and_production_do_not_double_count_openai() -> None:
     legacy = json.loads(
         (
             Path(__file__).resolve().parents[3]
@@ -408,8 +489,8 @@ def test_legacy_development_and_production_do_not_double_count_openai():
     "failure", [None, "ParameterNotFound", "AccessDeniedException", "provider"]
 )
 def test_development_handler_collects_openai_and_retains_last_valid(
-    monkeypatch, previous_kind, failure
-):
+    monkeypatch: pytest.MonkeyPatch, previous_kind: str, failure: str | None
+) -> None:
     now = datetime.now(UTC).replace(microsecond=0)
     period = costs.requested(costs.periods(now.date()))
     previous = fixture("development", now - timedelta(days=1))
@@ -444,7 +525,11 @@ def test_development_handler_collects_openai_and_retains_last_valid(
         "ssm": ssm,
         "ce": Mock(get_cost_and_usage=Mock(side_effect=aws_pages(period))),
     }
-    monkeypatch.setattr(costs.boto3, "client", lambda name, **_: clients[name])
+
+    def _strict_callback_3(name: str, **_: object) -> object:
+        return clients[name]
+
+    monkeypatch.setattr(costs.boto3, "client", _strict_callback_3)
     monkeypatch.setenv("DEPLOYMENT_ENVIRONMENT", "development")
     monkeypatch.setenv("COST_BUCKET", "tollchat-site-903859731897-dev")
     context = SimpleNamespace(

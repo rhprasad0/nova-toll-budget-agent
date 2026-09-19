@@ -4,7 +4,6 @@ from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 import pytest
-
 import timed_checks
 
 NEW_YORK = ZoneInfo("America/New_York")

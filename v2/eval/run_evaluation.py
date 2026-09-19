@@ -1,4 +1,3 @@
-# pyright: basic
 """Code-grade TollChat v2 pricing and affordability regressions."""
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 from zoneinfo import ZoneInfo
 
 import boto3
@@ -24,10 +23,22 @@ from strands_evals.evaluators import Evaluator
 from strands_evals.extractors import tools_use_extractor
 from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
 
+
+class DatabaseEndpoint(TypedDict):
+    Address: str
+    Port: int
+
+
+class DatabaseInstance(TypedDict):
+    Endpoint: DatabaseEndpoint
+
+
 _V2_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_V2_ROOT))
 
 from agent.toll_agent import build_agent  # noqa: E402
+
+type JSON = str | int | float | bool | list[JSON] | dict[str, JSON] | None
 
 _CASES_PATH = Path(__file__).with_name("test-cases.jsonl")
 _RESULTS_DIR = Path(__file__).with_name("results")
@@ -147,7 +158,7 @@ class EvaluationFailure(EvaluationFailed):
 
 def _report_field(value: object, field: str) -> object:
     if type(value) is dict:
-        return value.get(field)
+        return cast(dict[str, JSON], value).get(field)
     try:
         return getattr(value, field)
     except Exception:
@@ -278,10 +289,12 @@ def _check_annual_additional_gross_bindings(
             if not labels:
                 continue
             label = labels[-1].group(1).casefold()
-            scenario = scenarios.get(label)
+            scenario = cast(dict[str, JSON], scenarios).get(label)
             if not isinstance(scenario, dict):
                 continue
-            expected = scenario.get("additional_gross_income_to_offset_usd")
+            expected = cast(dict[str, JSON], scenario).get(
+                "additional_gross_income_to_offset_usd"
+            )
             if expected is None:
                 continue
             expected_value = Decimal(str(expected))
@@ -341,11 +354,15 @@ def _expected_calls_error(
 
 def _tool_payload(result: dict[str, Any]) -> dict[str, Any] | None:
     for item in result.get("content", []):
-        if isinstance(item, dict) and isinstance(item.get("json"), dict):
+        if isinstance(item, dict) and isinstance(
+            cast(dict[str, JSON], item).get("json"), dict
+        ):
             return cast(dict[str, Any], item["json"])
-        if isinstance(item, dict) and isinstance(item.get("text"), str):
+        if isinstance(item, dict) and isinstance(
+            cast(dict[str, JSON], item).get("text"), str
+        ):
             try:
-                value = json.loads(item["text"])
+                value = json.loads(cast(str, item["text"]))
             except json.JSONDecodeError:
                 continue
             if isinstance(value, dict):
@@ -354,7 +371,7 @@ def _tool_payload(result: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _result_endpoints(payload: dict[str, Any]) -> tuple[object, object]:
-    point_ids = payload.get("point_ids", [])
+    point_ids: JSON = payload.get("point_ids", [])
     return (
         payload.get("origin_point_id")
         or (point_ids[0] if isinstance(point_ids, list) and point_ids else None),
@@ -383,7 +400,7 @@ def _component_context_error(
 ) -> list[EvaluationOutput] | None:
     folded = response.casefold()
     components = [
-        component
+        cast(dict[str, JSON], component)
         for component in payload.get("components", [])
         if isinstance(component, dict)
     ]
@@ -415,15 +432,15 @@ def _component_context_error(
     for component in components:
         movement = component.get("recent_movement")
         if isinstance(movement, dict):
-            direction = str(movement.get("direction", ""))
+            direction = str(cast(dict[str, JSON], movement).get("direction", ""))
             required = [
                 direction,
                 _MOVEMENT_EMOJIS.get(direction, ""),
             ]
-            if movement.get("net_change_percent") is not None:
+            if cast(dict[str, JSON], movement).get("net_change_percent") is not None:
                 required.append(f"{str(movement['net_change_percent']).lstrip('+-')}%")
             if not _movement_value_is_reported(
-                response, movement.get("net_change_usd")
+                response, cast(dict[str, JSON], movement).get("net_change_usd")
             ) or any(value and value.casefold() not in folded for value in required):
                 return _result(
                     False,
@@ -471,7 +488,11 @@ def _calls(response: object) -> list[dict[str, Any]]:
     messages = _trace_messages(cast(list[dict[str, Any]], summary.get("traces", [])))
     calls = cast(
         list[dict[str, Any]],
-        tools_use_extractor.extract_agent_tools_used_from_messages(messages),
+        cast(
+            Callable[[Messages], list[dict[str, JSON]]],
+            # The installed Strands extractor omits its argument/list annotations.
+            tools_use_extractor.extract_agent_tools_used_from_messages,  # pyright: ignore[reportUnknownMemberType]
+        )(messages),
     )
     tool_ids = [
         block["toolUse"]["toolUseId"]
@@ -488,7 +509,7 @@ def _calls(response: object) -> list[dict[str, Any]]:
         if (result := block.get("toolResult"))
     }
     for call, tool_id in zip(calls, tool_ids, strict=True):
-        result = cast(dict[str, Any], results.get(tool_id, {}))
+        result = cast(dict[str, Any], results.get(tool_id) or {})
         call["tool_result"] = _tool_payload(result)
         call["is_error"] = result.get("status") == "error"
     return calls
@@ -509,13 +530,15 @@ def evaluate_westpark_turn(
         return _result(False, "current-price tool returned an error", "tool_error")
     allowed_unavailable = (
         metadata.get("allow_pricing_unavailable")
-        and payload.get("error") == "pricing_unavailable"
-        and payload.get("reason") == "incomplete_route_price"
+        and cast(dict[str, JSON], payload).get("error") == "pricing_unavailable"
+        and cast(dict[str, JSON], payload).get("reason") == "incomplete_route_price"
     )
     if "error" in payload and not allowed_unavailable:
         return _result(False, "current-price tool returned an error", "tool_error")
     expected = metadata["expected_call"]
-    actual_origin, actual_destination = _result_endpoints(payload)
+    actual_origin, actual_destination = _result_endpoints(
+        cast(dict[str, JSON], payload)
+    )
     if (
         actual_origin != expected["origin_point_id"]
         or actual_destination != expected["destination_point_id"]
@@ -529,11 +552,14 @@ def evaluate_westpark_turn(
                 "response invented a toll for an unpriced route",
                 "invented_financials",
             )
-        if payload.get("status") in metadata.get("allowed_route_statuses", []):
+        if cast(dict[str, JSON], payload).get("status") in metadata.get(
+            "allowed_route_statuses", []
+        ):
             folded = response.casefold()
             terms = (
                 ("unavailable", "closed")
-                if payload.get("status") == "currently_unavailable"
+                if cast(dict[str, JSON], payload).get("status")
+                == "currently_unavailable"
                 else ("stale", "unknown", "inconclusive")
             )
             if not any(term in folded for term in terms):
@@ -558,8 +584,11 @@ def evaluate_westpark_turn(
                     "ungrounded_unavailability",
                 )
             observation_times = {
-                _eastern_time(component["observed_at"])
-                for component in payload.get("unavailable_components", [])
+                _eastern_time(cast(str, component["observed_at"]))
+                for component in cast(
+                    list[dict[str, JSON]],
+                    cast(dict[str, JSON], payload).get("unavailable_components", []),
+                )
                 if component.get("observed_at")
             }
             if not observation_times or any(
@@ -583,9 +612,9 @@ def evaluate_westpark_turn(
     expected_price = f"${payload['total_usd']}"
     if expected_price not in response:
         return _result(False, "response omitted the current toll", "ungrounded_price")
-    if len(payload.get("components", [])) != metadata.get(
-        "expected_component_count", 2
-    ):
+    if len(
+        cast(list[JSON], cast(dict[str, JSON], payload).get("components", []))
+    ) != metadata.get("expected_component_count", 2):
         return _result(
             False, "priced route did not contain two components", "bad_route"
         )
@@ -595,8 +624,10 @@ def evaluate_westpark_turn(
     if style_error := _response_style_error(response, "response"):
         return style_error
     components = [
-        component
-        for component in payload.get("components", [])
+        cast(dict[str, JSON], component)
+        for component in cast(
+            list[JSON], cast(dict[str, JSON], payload).get("components", [])
+        )
         if isinstance(component, dict)
     ]
     folded = " ".join(response.casefold().split())
@@ -620,7 +651,9 @@ def evaluate_westpark_turn(
             "response surfaced non-material I-95/I-495 source status",
             "spurious_source_status",
         )
-    if context_error := _component_context_error(payload, response):
+    if context_error := _component_context_error(
+        cast(dict[str, JSON], payload), response
+    ):
         return context_error
     return _result(True, "exact route call and grounded response passed", "passed")
 
@@ -637,7 +670,7 @@ def _dca_pentagon_price_projection(
         "od_pair_id",
         "proxy_od_pair_id",
     )
-    components = payload.get("components")
+    components: JSON = payload.get("components")
     if (
         not isinstance(components, list)
         or len(components) != 2
@@ -645,7 +678,7 @@ def _dca_pentagon_price_projection(
     ):
         return None
     try:
-        total = Decimal(str(payload["total_usd"]))
+        total = Decimal(str(cast(dict[str, JSON], payload)["total_usd"]))
     except (InvalidOperation, ValueError):
         return None
     if not total.is_finite() or total < 0:
@@ -653,7 +686,7 @@ def _dca_pentagon_price_projection(
 
     projection: list[tuple[object, ...]] = []
     component_total = Decimal()
-    for component in components:
+    for component in cast(list[dict[str, JSON]], components):
         if any(
             field not in component for field in fields if field != "proxy_od_pair_id"
         ):
@@ -729,7 +762,7 @@ def evaluate_dca_pentagon_parity_turns(
         call = cast(dict[str, Any], turn["calls"][0])
         payload = call.get("tool_result")
         if isinstance(payload, dict) and "error" not in payload:
-            components = payload.get("components")
+            components = cast(dict[str, JSON], payload).get("components")
             if not isinstance(components, list):
                 return _result(
                     False,
@@ -737,8 +770,9 @@ def evaluate_dca_pentagon_parity_turns(
                     "malformed_projection",
                 )
             if (
-                payload.get("origin_point_id") != expected_call["origin_point_id"]
-                or payload.get("destination_point_id")
+                cast(dict[str, JSON], payload).get("origin_point_id")
+                != expected_call["origin_point_id"]
+                or cast(dict[str, JSON], payload).get("destination_point_id")
                 != expected_call["destination_point_id"]
             ):
                 return _result(
@@ -837,15 +871,18 @@ def evaluate_i66_schedule_turn(
     payload = call.get("tool_result")
     if call.get("is_error") or not isinstance(payload, dict) or "error" in payload:
         return _result(False, "I-66 current-price tool returned an error", "tool_error")
-    components = payload.get("components")
+    components = cast(dict[str, JSON], payload).get("components")
     if not isinstance(components, list) or len(components) != 1:
         return _result(False, "I-66 trip did not have one component", "bad_route")
     component = components[0]
-    if not isinstance(component, dict) or component.get("facility") != "i66":
+    if (
+        not isinstance(component, dict)
+        or cast(dict[str, JSON], component).get("facility") != "i66"
+    ):
         return _result(False, "tool result was not an I-66 component", "bad_route")
     try:
         evaluated = datetime.fromisoformat(str(component["component_evaluated_at"]))
-        total = Decimal(str(payload["total_usd"]))
+        total = Decimal(str(cast(dict[str, JSON], payload)["total_usd"]))
         price = Decimal(str(component["price_usd"]))
     except (KeyError, ValueError):
         return _result(False, "I-66 tool result was incomplete", "result_mismatch")
@@ -865,8 +902,8 @@ def evaluate_i66_schedule_turn(
     expected_source = "schedule_derived" if is_free else "observed"
     expected_method = "published_schedule" if is_free else "source_observation"
     if (
-        component.get("source_kind") != expected_source
-        or component.get("pricing_method") != expected_method
+        cast(dict[str, JSON], component).get("source_kind") != expected_source
+        or cast(dict[str, JSON], component).get("pricing_method") != expected_method
         or (is_free and (price != 0 or total != 0))
         or (not is_free and (price <= 0 or total <= 0))
     ):
@@ -896,7 +933,7 @@ def evaluate_i66_schedule_turn(
             False, "response omitted the active I-66 toll", "ungrounded_price"
         )
     if not is_free and (
-        not component.get("observed_at")
+        not cast(dict[str, JSON], component).get("observed_at")
         or _eastern_time(str(component["observed_at"])) not in response
     ):
         return _result(
@@ -904,7 +941,9 @@ def evaluate_i66_schedule_turn(
         )
     if style_error := _response_style_error(response, "I-66 response"):
         return style_error
-    if context_error := _component_context_error(payload, response):
+    if context_error := _component_context_error(
+        cast(dict[str, JSON], payload), response
+    ):
         return context_error
     return _result(True, "I-66 timed state and grounded response passed", "passed")
 
@@ -917,18 +956,24 @@ def evaluate_fallback_turns(
 
     window = metadata.get("active_window")
     initial_payload = turns[0]["calls"][0].get("tool_result")
-    if not isinstance(initial_payload, dict) or initial_payload.get("status") != (
-        "currently_unavailable"
-    ):
+    if not isinstance(initial_payload, dict) or cast(
+        dict[str, JSON], initial_payload
+    ).get("status") != ("currently_unavailable"):
         return _result(False, "initial result was not unavailable", "bad_route")
-    reason = initial_payload.get("reason", {})
-    details = reason.get("details", {}) if isinstance(reason, dict) else {}
+    reason = cast(dict[str, JSON], initial_payload).get("reason", {})
+    details = (
+        cast(dict[str, JSON], reason).get("details", {})
+        if isinstance(reason, dict)
+        else {}
+    )
     if (
-        reason.get("code") != metadata["expected_reasons"].get(window)
-        or details.get("availability") != metadata["expected_availability"].get(window)
-        or details.get("required_i95_directions")
+        cast(dict[str, JSON], reason).get("code")
+        != metadata["expected_reasons"].get(window)
+        or cast(dict[str, JSON], details).get("availability")
+        != metadata["expected_availability"].get(window)
+        or cast(dict[str, JSON], details).get("required_i95_directions")
         != metadata["expected_required_i95_directions"]
-        or initial_payload.get("general_purpose_gaps")
+        or cast(dict[str, JSON], initial_payload).get("general_purpose_gaps")
         != [
             {
                 "connection_id": "source:i95_shared:Southbound:182SO:205SD",
@@ -962,7 +1007,7 @@ def evaluate_fallback_turns(
     if not isinstance(accepted_payload, dict) or "total_usd" not in accepted_payload:
         return _result(False, "accepted fallback returned no price", "tool_unavailable")
     expected_accepted = metadata["expected_calls"][1]
-    if _result_endpoints(accepted_payload) != (
+    if _result_endpoints(cast(dict[str, JSON], accepted_payload)) != (
         expected_accepted["origin_point_id"],
         expected_accepted["destination_point_id"],
     ):
@@ -980,7 +1025,9 @@ def evaluate_fallback_turns(
         )
     if style_error := _response_style_error(accepted_response, "accepted response"):
         return style_error
-    if context_error := _component_context_error(accepted_payload, accepted_response):
+    if context_error := _component_context_error(
+        cast(dict[str, JSON], accepted_payload), accepted_response
+    ):
         return context_error
     return _result(True, "TP1SB offer and accepted fallback price passed", "passed")
 
@@ -995,29 +1042,37 @@ def evaluate_unavailable_turn(
     payload = turns[0]["calls"][0].get("tool_result")
     if (
         not isinstance(payload, dict)
-        or payload.get("status") != "currently_unavailable"
+        or cast(dict[str, JSON], payload).get("status") != "currently_unavailable"
     ):
         return _result(False, "tool result was not unavailable", "bad_route")
     expected = metadata["expected_call"]
-    if _result_endpoints(payload) != (
+    if _result_endpoints(cast(dict[str, JSON], payload)) != (
         expected["origin_point_id"],
         expected["destination_point_id"],
     ):
         return _result(
             False, "unavailable result endpoints did not match", "result_mismatch"
         )
-    reason = payload.get("reason", {})
-    details = reason.get("details", {}) if isinstance(reason, dict) else {}
+    reason = cast(dict[str, JSON], payload).get("reason", {})
+    details = (
+        cast(dict[str, JSON], reason).get("details", {})
+        if isinstance(reason, dict)
+        else {}
+    )
     if (
-        reason.get("code") != metadata["expected_reasons"].get(window)
-        or details.get("availability") != metadata["expected_availability"].get(window)
-        or details.get("required_i95_directions")
+        cast(dict[str, JSON], reason).get("code")
+        != metadata["expected_reasons"].get(window)
+        or cast(dict[str, JSON], details).get("availability")
+        != metadata["expected_availability"].get(window)
+        or cast(dict[str, JSON], details).get("required_i95_directions")
         != metadata["expected_required_i95_directions"]
     ):
         return _result(False, "unavailability reason did not match", "bad_route")
     if any(
-        gap.get("fallback_required") is True
-        for gap in payload.get("general_purpose_gaps", [])
+        cast(dict[str, JSON], gap).get("fallback_required") is True
+        for gap in cast(
+            list[JSON], cast(dict[str, JSON], payload).get("general_purpose_gaps", [])
+        )
         if isinstance(gap, dict)
     ):
         return _result(False, "unexpected fallback-required gap", "bad_route")
@@ -1082,16 +1137,19 @@ def evaluate_annual_turn(
         "annual_behavior"
     ) == "no_complete_paired_days" or (
         isinstance(payload, dict)
-        and payload.get("error") == "ballpark_unavailable"
-        and payload.get("reason") == "no_complete_paired_days"
+        and cast(dict[str, JSON], payload).get("error") == "ballpark_unavailable"
+        and cast(dict[str, JSON], payload).get("reason") == "no_complete_paired_days"
     )
     if no_complete_paired_days:
         if (
             call.get("is_error")
             or not isinstance(payload, dict)
-            or payload.get("error") != "ballpark_unavailable"
-            or payload.get("reason") != "no_complete_paired_days"
-            or payload.get("coverage", {}).get("complete_pair_count") != 0
+            or cast(dict[str, JSON], payload).get("error") != "ballpark_unavailable"
+            or cast(dict[str, JSON], payload).get("reason") != "no_complete_paired_days"
+            or cast(
+                dict[str, JSON], cast(dict[str, JSON], payload).get("coverage", {})
+            ).get("complete_pair_count")
+            != 0
         ):
             return _result(False, "annual tool returned no scenarios", "tool_error")
         if not response.strip():
@@ -1110,9 +1168,9 @@ def evaluate_annual_turn(
                 "response did not explain missing complete paired days",
                 "ungrounded_unavailability",
             )
-        income = payload.get("income", {})
-        vehicle_cost = payload.get("vehicle_cost", {})
-        assumptions = payload.get("assumptions", {})
+        income = cast(dict[str, JSON], payload).get("income", {})
+        vehicle_cost = cast(dict[str, JSON], payload).get("vehicle_cost", {})
+        assumptions = cast(dict[str, JSON], payload).get("assumptions", {})
         bindings: list[tuple[Decimal, tuple[tuple[str, ...], ...]]] = []
         if isinstance(income, dict):
             bindings.extend(
@@ -1122,7 +1180,7 @@ def evaluate_annual_turn(
                     ("estimated_tax_usd", ("estimated", "tax")),
                     ("estimated_after_tax_usd", ("after", "tax")),
                 )
-                if (value := income.get(key)) is not None
+                if (value := cast(dict[str, JSON], income).get(key)) is not None
             )
         if isinstance(vehicle_cost, dict):
             bindings.extend(
@@ -1144,11 +1202,16 @@ def evaluate_annual_turn(
                     ),
                     ("annual_usd", (("vehicle",), ("cost",), ("annual", "annually"))),
                 )
-                if (value := vehicle_cost.get(key)) is not None
+                if (value := cast(dict[str, JSON], vehicle_cost).get(key)) is not None
             )
         if (
             isinstance(assumptions, dict)
-            and (per_mile := assumptions.get("vehicle_cost_per_mile_usd")) is not None
+            and (
+                per_mile := cast(dict[str, JSON], assumptions).get(
+                    "vehicle_cost_per_mile_usd"
+                )
+            )
+            is not None
         ):
             bindings.append(
                 (Decimal(str(per_mile)), (("per",), ("mile",), ("vehicle",), ("cost",)))
@@ -1199,19 +1262,21 @@ def evaluate_annual_turn(
         call.get("is_error")
         or not isinstance(payload, dict)
         or "error" in payload
-        or not isinstance(payload.get("scenarios"), dict)
+        or not isinstance(cast(dict[str, JSON], payload).get("scenarios"), dict)
     ):
         return _result(False, "annual tool returned no scenarios", "tool_error")
 
     if style_error := _response_style_error(response, "annual response"):
         return style_error
     folded = response.casefold()
-    coverage = payload.get("coverage", {})
+    coverage = cast(dict[str, JSON], payload).get("coverage", {})
     coverage_reported = "coverage" in folded
     if isinstance(coverage, dict):
-        complete_pairs = coverage.get("complete_pair_count")
-        eligible_dates = coverage.get("eligible_date_count")
-        sample_status = str(payload.get("sample_status", "")).casefold()
+        complete_pairs = cast(dict[str, JSON], coverage).get("complete_pair_count")
+        eligible_dates = cast(dict[str, JSON], coverage).get("eligible_date_count")
+        sample_status = str(
+            cast(dict[str, JSON], payload).get("sample_status", "")
+        ).casefold()
         coverage_reported = coverage_reported or bool(
             isinstance(complete_pairs, int)
             and isinstance(eligible_dates, int)
@@ -1306,7 +1371,7 @@ def evaluate_annual_turn(
             "misbound_money",
         )
     if additional_gross_error := _check_annual_additional_gross_bindings(
-        payload, response
+        cast(dict[str, JSON], payload), response
     ):
         return additional_gross_error
     return _result(True, "annual tool call and affordability response passed", "passed")
@@ -1470,8 +1535,8 @@ def evaluate_annual_route_unavailable(
     if (
         call.get("is_error")
         or not isinstance(payload, dict)
-        or payload.get("error") != "ballpark_unavailable"
-        or payload.get("reason") != "route_unavailable"
+        or cast(dict[str, JSON], payload).get("error") != "ballpark_unavailable"
+        or cast(dict[str, JSON], payload).get("reason") != "route_unavailable"
     ):
         return _result(
             False, "annual tool did not return route unavailability", "tool_error"
@@ -1479,15 +1544,19 @@ def evaluate_annual_route_unavailable(
     expected_call = metadata["expected_call"]
     expected_status = metadata["expected_route_status"]
     for direction in ("outbound", "return"):
-        actual = payload.get(direction)
+        actual = cast(dict[str, JSON], payload).get(direction)
         expected = expected_status[direction]
         expected_input = expected_call[direction]
         if not isinstance(actual, dict) or (
-            actual.get("origin_point_id") != expected_input["origin_point_id"]
-            or actual.get("destination_point_id")
+            cast(dict[str, JSON], actual).get("origin_point_id")
+            != expected_input["origin_point_id"]
+            or cast(dict[str, JSON], actual).get("destination_point_id")
             != expected_input["destination_point_id"]
-            or actual.get("status") != expected["status"]
-            or (actual.get("reason") or {}).get("code") != expected["reason_code"]
+            or cast(dict[str, JSON], actual).get("status") != expected["status"]
+            or cast(
+                dict[str, JSON], cast(dict[str, JSON], actual).get("reason") or {}
+            ).get("code")
+            != expected["reason_code"]
         ):
             return _result(
                 False, "annual route status did not match", "result_mismatch"
@@ -1546,8 +1615,8 @@ def _check_annual_alternative_call(
     if (
         call.get("is_error")
         or not isinstance(payload, dict)
-        or payload.get("error") != "ballpark_unavailable"
-        or payload.get("reason") != "route_unavailable"
+        or cast(dict[str, JSON], payload).get("error") != "ballpark_unavailable"
+        or cast(dict[str, JSON], payload).get("reason") != "route_unavailable"
     ):
         return _result(
             False, "annual tool did not return route unavailability", "tool_error"
@@ -1555,26 +1624,37 @@ def _check_annual_alternative_call(
 
     expected_status = metadata["expected_route_status"]
     for direction in ("outbound", "return"):
-        actual = payload.get(direction)
+        actual = cast(dict[str, JSON], payload).get(direction)
         expected = expected_status[direction]
         expected_input = expected_call[direction]
         if not isinstance(actual, dict) or (
-            actual.get("origin_point_id") != expected_input["origin_point_id"]
-            or actual.get("destination_point_id")
+            cast(dict[str, JSON], actual).get("origin_point_id")
+            != expected_input["origin_point_id"]
+            or cast(dict[str, JSON], actual).get("destination_point_id")
             != expected_input["destination_point_id"]
-            or actual.get("status") != expected["status"]
-            or (actual.get("reason") or {}).get("code") != expected["reason_code"]
+            or cast(dict[str, JSON], actual).get("status") != expected["status"]
+            or cast(
+                dict[str, JSON], cast(dict[str, JSON], actual).get("reason") or {}
+            ).get("code")
+            != expected["reason_code"]
         ):
             return _result(
                 False, "annual route status did not match", "result_mismatch"
             )
 
-    reason = payload["outbound"].get("reason")
-    details = reason.get("details", {}) if isinstance(reason, dict) else {}
-    alternatives = details.get("alternatives")
+    reason = cast(dict[str, JSON], payload["outbound"]).get("reason")
+    details = (
+        cast(dict[str, JSON], reason).get("details", {})
+        if isinstance(reason, dict)
+        else {}
+    )
+    alternatives = cast(dict[str, JSON], details).get("alternatives")
     actual_alternatives = (
         [
-            (alternative.get("point_id"), alternative.get("label"))
+            (
+                cast(dict[str, JSON], alternative).get("point_id"),
+                cast(dict[str, JSON], alternative).get("label"),
+            )
             for alternative in alternatives
             if isinstance(alternative, dict)
         ]
@@ -1748,7 +1828,7 @@ def evaluate_annual_alternatives(
 
 def task_function(case: Case[str, str]) -> dict[str, Any]:
     agent = build_agent()
-    turns = []
+    turns: list[dict[str, JSON]] = []
     response: object = ""
     previous_call_count = 0
     metadata = case.metadata or {}
@@ -1759,7 +1839,10 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
         response = agent(prompt)
         all_calls = _calls(response)
         turns.append(
-            {"response": str(response), "calls": all_calls[previous_call_count:]}
+            {
+                "response": str(response),
+                "calls": cast(list[JSON], all_calls[previous_call_count:]),
+            }
         )
         previous_call_count = len(all_calls)
     return {"output": str(response), "trajectory": turns}
@@ -1781,7 +1864,7 @@ class TollChatEvaluator(Evaluator[str, str]):
         if metadata.get("suite") == "unavailable":
             return evaluate_unavailable_turn(turns, metadata)
         if metadata.get("suite") == "i66_schedule":
-            calls = turns[0].get("calls", []) if len(turns) == 1 else []
+            calls: object = turns[0].get("calls", []) if len(turns) == 1 else []
             return evaluate_i66_schedule_turn(
                 cast(list[dict[str, Any]], calls),
                 str(evaluation_case.actual_output or ""),
@@ -1812,7 +1895,7 @@ class TollChatEvaluator(Evaluator[str, str]):
             return evaluate_dca_pentagon_parity_turns(turns, metadata)
         if metadata.get("expected_clarification"):
             return evaluate_current_clarification_turns(turns, metadata)
-        calls = turns[0].get("calls", []) if len(turns) == 1 else []
+        calls: object = turns[0].get("calls", []) if len(turns) == 1 else []
         return evaluate_westpark_turn(
             cast(list[dict[str, Any]], calls),
             str(evaluation_case.actual_output or ""),
@@ -1826,11 +1909,13 @@ def _configure_database() -> None:
     if default_ca.exists():
         os.environ.setdefault("DB_CA_BUNDLE_PATH", str(default_ca))
     if "DB_HOST" not in os.environ or "DB_PORT" not in os.environ:
-        instance = boto3.client("rds", region_name="us-east-1").describe_db_instances(
+        # Optional boto3 service overloads lack stubs; the RDS response is typed.
+        instance = boto3.client("rds", region_name="us-east-1").describe_db_instances(  # pyright: ignore[reportUnknownMemberType]
             DBInstanceIdentifier="nova-toll-db"
         )["DBInstances"][0]
-        os.environ["DB_HOST"] = instance["Endpoint"]["Address"]
-        os.environ["DB_PORT"] = str(instance["Endpoint"]["Port"])
+        endpoint = cast(DatabaseInstance, instance)["Endpoint"]
+        os.environ["DB_HOST"] = endpoint["Address"]
+        os.environ["DB_PORT"] = str(endpoint["Port"])
 
 
 def main(
@@ -1879,7 +1964,7 @@ def main(
             # Strands emits one report row per judge; this is still one case.
             summaries = [_failure_summary(report, index) for index in failed_indexes]
             reason = " | ".join(
-                f"{report.cases[index]['evaluator']}: {summary['reason']}"
+                f"{cast(list[dict[str, object]], _report_field(report, 'cases'))[index]['evaluator']}: {summary['reason']}"
                 for index, summary in zip(failed_indexes, summaries, strict=True)
             )
             raise EvaluationFailure(
@@ -1895,7 +1980,10 @@ def main(
             tuple(
                 (cast(str, case["name"]), reason)
                 for case, passed, reason in zip(
-                    report.cases, report.test_passes, reasons, strict=True
+                    cast(list[dict[str, object]], _report_field(report, "cases")),
+                    report.test_passes,
+                    cast(list[str] | tuple[str, ...], reasons),
+                    strict=True,
                 )
                 if not passed
             )
@@ -2139,7 +2227,7 @@ def _self_check() -> None:
     )
     assert evaluate_westpark_turn([success], good_response, metadata)[0].test_pass
     parity = rows[0]
-    parity_calls = []
+    parity_calls: list[dict[str, JSON]] = []
     for expected_call in parity["expected_calls"]:
         call = json.loads(json.dumps(success))
         call["input"] = expected_call
@@ -2154,7 +2242,7 @@ def _self_check() -> None:
                 proxy_od_pair_id=None,
             )
         parity_calls.append(call)
-    parity_turns = [
+    parity_turns: list[dict[str, JSON]] = [
         {"response": good_response, "calls": [call]} for call in parity_calls
     ]
     assert evaluate_dca_pentagon_parity_turns(parity_turns, parity)[0].test_pass
@@ -2312,7 +2400,7 @@ def _self_check() -> None:
         evaluate_dca_pentagon_parity_turns(parity_fallback_endpoint, parity)[0].label
         == "result_mismatch"
     )
-    for invalid_components in (None, {}):
+    for invalid_components in cast(tuple[JSON, ...], (None, {})):
         parity_invalid_components = json.loads(json.dumps(parity_turns))
         parity_invalid_components[1]["calls"][0]["tool_result"]["components"] = (
             invalid_components
@@ -2389,7 +2477,7 @@ def _self_check() -> None:
     washington_current_call["tool_result"].update(
         origin_point_id="greenway:1:entry:EB", destination_point_id="i95:2249ND"
     )
-    washington_current_turns = [
+    washington_current_turns: list[dict[str, JSON]] = [
         {"response": "### 🛣️ Route choice\n\n**I-66 or I-395?**", "calls": []},
         {"response": good_response, "calls": [washington_current_call]},
     ]
@@ -2740,7 +2828,7 @@ def _self_check() -> None:
         == "result_mismatch"
     )
     annual = rows[4]
-    annual_call = {
+    annual_call: dict[str, JSON] = {
         "name": "get_annual_toll_ballpark",
         "input": annual["expected_call"],
         "tool_result": {
@@ -2834,7 +2922,7 @@ def _self_check() -> None:
         "vehicle_cost": {"daily_usd": "7.85", "annual_usd": "1885.12"},
         "assumptions": {"vehicle_cost_per_mile_usd": "0.685"},
     }
-    washington_annual_turns = [
+    washington_annual_turns: list[dict[str, JSON]] = [
         {"response": "### 🛣️ Route choice\n\n**I-66 or I-395?**", "calls": []},
         {
             "response": (
@@ -2990,8 +3078,8 @@ def _self_check() -> None:
         == "missing_affordability_context"
     )
     tysons = rows[5]
-    tysons_call = {**annual_call, "input": tysons["expected_call"]}
-    tysons_turns = [
+    tysons_call: dict[str, JSON] = {**annual_call, "input": tysons["expected_call"]}
+    tysons_turns: list[dict[str, JSON]] = [
         {
             "response": (
                 "**🛣️ Which Tysons exit: Westpark Drive, Jones Branch/Route 123, "
@@ -3007,7 +3095,7 @@ def _self_check() -> None:
     assert evaluate_annual_turn(premature_call, tysons)[0].label == "bad_clarification"
 
     missing = rows[6]
-    missing_turns = [
+    missing_turns: list[dict[str, JSON]] = [
         {
             "response": (
                 "### 💼 Schedule details\n\n**What outbound departure time, return "
@@ -3049,8 +3137,11 @@ def _self_check() -> None:
     )
 
     estimate_case = rows[9]
-    estimate_call = {**annual_call, "input": estimate_case["expected_call"]}
-    estimate_turns = [
+    estimate_call: dict[str, JSON] = {
+        **annual_call,
+        "input": estimate_case["expected_call"],
+    }
+    estimate_turns: list[dict[str, JSON]] = [
         {
             "response": (
                 "### 📅 Annual commute-day estimate\n\n"
@@ -3076,8 +3167,8 @@ def _self_check() -> None:
     )
 
     income = rows[7]
-    income_call = {**annual_call, "input": income["expected_call"]}
-    income_turns = [
+    income_call: dict[str, JSON] = {**annual_call, "input": income["expected_call"]}
+    income_turns: list[dict[str, JSON]] = [
         {
             "response": (
                 "### 💰 Gross estimate needed\n\nPlease choose **one annual gross-income "
@@ -3433,7 +3524,7 @@ def _self_check() -> None:
     divergent = next(
         row for row in rows if row["id"] == "annual-divergent-areas-confirmation"
     )
-    divergent_turns = [
+    divergent_turns: list[dict[str, JSON]] = [
         {
             "response": (
                 "Pentagon and Westpark are different work areas. Would you like "
@@ -3452,7 +3543,9 @@ def _self_check() -> None:
     ]
     assert evaluate_annual_confirmation(divergent_turns, divergent)[0].test_pass
     premature_confirmation = json.loads(json.dumps(divergent_turns))
-    premature_confirmation[0]["calls"] = [divergent_turns[1]["calls"][0]]
+    premature_confirmation[0]["calls"] = [
+        cast(list[JSON], divergent_turns[1]["calls"])[0]
+    ]
     assert (
         evaluate_annual_confirmation(premature_confirmation, divergent)[0].label
         == "bad_confirmation"

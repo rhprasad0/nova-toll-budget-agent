@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from scripts.validate_router_nat_plan import ACCOUNTS, CIDRS, ENDPOINTS, validate
 
 
@@ -115,7 +114,7 @@ def fixture(environment: str = "development") -> dict[str, Any]:
 
 
 @pytest.mark.parametrize("environment", ACCOUNTS)
-def test_router_plan_and_converged_plan(environment: str):
+def test_router_plan_and_converged_plan(environment: str) -> None:
     plan = fixture(environment)
     assert validate(plan, environment) == {"create": 2, "update": 5, "delete": 2}
     plan["resource_changes"] = []
@@ -137,7 +136,7 @@ def test_router_plan_and_converged_plan(environment: str):
         "gateway_route",
     ],
 )
-def test_router_plan_rejects_unsafe_changes(failure: str):
+def test_router_plan_rejects_unsafe_changes(failure: str) -> None:
     plan = fixture()
     router = plan["resource_changes"][0]
     resources = {
@@ -182,7 +181,7 @@ def test_router_plan_rejects_unsafe_changes(failure: str):
         validate(plan, "development")
 
 
-def test_router_terraform_preserves_application_subnets_and_enrollment():
+def test_router_terraform_preserves_application_subnets_and_enrollment() -> None:
     root = Path(__file__).resolve().parents[2]
     network = (root / "infra/agentcore.tf").read_text()
     router = (root / "infra/tailscale.tf").read_text()

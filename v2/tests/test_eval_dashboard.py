@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-
 from eval import dashboard
 from lambdas.timed_checks import handler
 

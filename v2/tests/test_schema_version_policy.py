@@ -1,5 +1,4 @@
 import pytest
-
 from scripts.check_schema_versions import (
     RegisteredSchema,
     owning_schemas,
@@ -12,7 +11,7 @@ ORACLE_MIGRATION = "v2/db/migrations/004_upgrade_oracle_1_0_0_to_1_0_1.sql"
 ORACLE_MIGRATION_2 = "v2/db/migrations/005_upgrade_oracle_1_0_1_to_1_0_2.sql"
 
 
-def test_deleted_contract_path_keeps_its_previous_owner():
+def test_deleted_contract_path_keeps_its_previous_owner() -> None:
     previous = (
         RegisteredSchema(
             name="pricing",
@@ -23,7 +22,7 @@ def test_deleted_contract_path_keeps_its_previous_owner():
     assert owning_schemas("v2/db/migrations/retired.sql", (), previous) == {"pricing"}
 
 
-def test_registered_schema_cannot_be_removed():
+def test_registered_schema_cannot_be_removed() -> None:
     previous = (RegisteredSchema("pricing", "v2/db/schema.sql", ("v2/db/*.sql",)),)
     with pytest.raises(ValueError, match="cannot be removed: \\['pricing'\\]"):
         validate_registry_continuity((), previous)
@@ -38,7 +37,7 @@ def test_registered_schema_cannot_be_removed():
 )
 def test_schema_bump_requires_a_matching_new_upgrade_migration(
     schema_name: str, canonical_sql: str, migration: str
-):
+) -> None:
     with pytest.raises(ValueError, match="lacks a new upgrade migration"):
         validate_schema_update(schema_name, "1.0.0", "1.0.1", [canonical_sql], [])
 
@@ -51,12 +50,12 @@ def test_schema_bump_requires_a_matching_new_upgrade_migration(
     )
 
 
-def test_released_upgrade_migrations_are_immutable():
+def test_released_upgrade_migrations_are_immutable() -> None:
     with pytest.raises(ValueError, match="immutable"):
         validate_schema_update("pricing", "1.0.1", "1.0.1", [PRICING_MIGRATION], [])
 
 
-def test_schema_bump_accepts_only_a_contiguous_upgrade_chain():
+def test_schema_bump_accepts_only_a_contiguous_upgrade_chain() -> None:
     canonical_sql = "v2/db/oracle/schema.sql"
     validate_schema_update(
         "oracle",
@@ -76,7 +75,7 @@ def test_schema_bump_accepts_only_a_contiguous_upgrade_chain():
         )
 
 
-def test_current_release_can_add_its_missing_upgrade_migration():
+def test_current_release_can_add_its_missing_upgrade_migration() -> None:
     validate_schema_update(
         "pricing",
         "1.0.1",

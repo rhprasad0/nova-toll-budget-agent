@@ -1,49 +1,59 @@
 """Opt-in end-to-end checks of model point resolution and tool selection."""
 
-# pyright: basic
-
 import os
 from copy import deepcopy
-from typing import Any
+from typing import TypedDict, cast
 
 import boto3
 import pytest
-from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
-
 from agent.toll_agent import build_agent, load_prompt_points
+from strands import Agent
+from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
+from strands.types.tools import ToolUse
 
 pytestmark = pytest.mark.live
 
 
 class _ToolRecorder(HookProvider):
-    def __init__(self):
-        self.calls: list[dict[str, Any]] = []
+    def __init__(self) -> None:
+        self.calls: list[ToolUse] = []
 
     def register_hooks(self, registry: HookRegistry, **_kwargs: object) -> None:
         registry.add_callback(BeforeToolCallEvent, self.record)
 
     def record(self, event: BeforeToolCallEvent) -> None:
-        self.calls.append(deepcopy(dict(event.tool_use)))
+        self.calls.append(deepcopy(event.tool_use))
+
+
+class Endpoint(TypedDict):
+    Address: str
+    Port: int
+
+
+class Instance(TypedDict):
+    Endpoint: Endpoint
 
 
 def _configure_rds() -> None:
-    instance = boto3.client("rds", region_name="us-east-1").describe_db_instances(
+    # Optional SDK service overloads are untyped; the requested RDS API is typed.
+    instance = boto3.client("rds", region_name="us-east-1").describe_db_instances(  # pyright: ignore[reportUnknownMemberType]
         DBInstanceIdentifier="nova-toll-db"
     )["DBInstances"][0]
+    endpoint = cast(Instance, instance)["Endpoint"]
     os.environ.update(
-        DB_HOST=instance["Endpoint"]["Address"],
-        DB_PORT=str(instance["Endpoint"]["Port"]),
+        DB_HOST=endpoint["Address"],
+        DB_PORT=str(endpoint["Port"]),
     )
 
 
-def _invoke(prompt: str):
+def _invoke(prompt: str) -> tuple[str, list[ToolUse], Agent]:
     _configure_rds()
     recorder = _ToolRecorder()
     agent = build_agent(hooks=[recorder])
     return str(agent(prompt)), recorder.calls, agent
 
 
-def test_live_prompt_cache_is_reused_by_fresh_agents():
+def test_live_prompt_cache_is_reused_by_fresh_agents() -> None:
     _configure_rds()
     prompt_points = load_prompt_points()
     prompt = "Briefly say whether you can estimate current and annual tolls."
@@ -76,7 +86,9 @@ def test_live_prompt_cache_is_reused_by_fresh_agents():
         ),
     ],
 )
-def test_live_current_price_resolution(prompt, origin, destination):
+def test_live_current_price_resolution(
+    prompt: str, origin: str, destination: str
+) -> None:
     answer, calls, _agent = _invoke(prompt)
     assert len(calls) == 1, (answer, calls)
     assert calls[0]["name"] == "get_current_toll_price"
@@ -90,7 +102,7 @@ def test_live_current_price_resolution(prompt, origin, destination):
     assert "$" in answer or "unavailable" in answer.lower()
 
 
-def test_live_annual_round_trip_uses_reversed_endpoints():
+def test_live_annual_round_trip_uses_reversed_endpoints() -> None:
     answer, calls, _agent = _invoke(
         "For Monday through Friday, estimate my annual round-trip commute from "
         "Leesburg to Route 28. I leave at 8 AM, return at 5:30 PM, and "
@@ -129,13 +141,13 @@ def test_live_annual_round_trip_uses_reversed_endpoints():
         "Price Leesburg to Route 28 for a three-axle truck paying cash.",
     ],
 )
-def test_live_out_of_contract_requests_do_not_call_tools(prompt):
+def test_live_out_of_contract_requests_do_not_call_tools(prompt: str) -> None:
     answer, calls, _agent = _invoke(prompt)
     assert calls == [], (answer, calls)
     assert "current" in answer.lower() or "two-axle" in answer.lower()
 
 
-def test_live_wrong_role_presents_and_uses_selected_alternative():
+def test_live_wrong_role_presents_and_uses_selected_alternative() -> None:
     answer, calls, agent = _invoke(
         "What is the current Greenway toll from Compass Creek to Leesburg Bypass?"
     )
@@ -163,13 +175,15 @@ def test_live_wrong_role_presents_and_uses_selected_alternative():
         ),
     ],
 )
-def test_live_clarifications_do_not_call_tools(prompt, expected):
+def test_live_clarifications_do_not_call_tools(
+    prompt: str, expected: tuple[str, ...]
+) -> None:
     answer, calls, _agent = _invoke(prompt)
     assert calls == [], (answer, calls)
     assert all(fragment.lower() in answer.lower() for fragment in expected), answer
 
 
-def test_live_i395_to_i95_uses_current_price_tool_once():
+def test_live_i395_to_i95_uses_current_price_tool_once() -> None:
     answer, calls, _agent = _invoke(
         "What is the current toll from the Pentagon to Dumfries on I-395/I-95?"
     )
@@ -179,7 +193,7 @@ def test_live_i395_to_i95_uses_current_price_tool_once():
     assert calls[0]["input"]["destination_point_id"] == "i95:217SD"
 
 
-def test_live_washington_i395_clarification_uses_i95_northbound_exit():
+def test_live_washington_i395_clarification_uses_i95_northbound_exit() -> None:
     answer, calls, agent = _invoke(
         "What is the current toll from Dumfries to Washington?"
     )
@@ -192,7 +206,7 @@ def test_live_washington_i395_clarification_uses_i95_northbound_exit():
     assert calls[-1]["input"]["destination_point_id"] == "i95:224ND"
 
 
-def test_live_leesburg_washington_i395_uses_connector_exit_once():
+def test_live_leesburg_washington_i395_uses_connector_exit_once() -> None:
     answer, calls, agent = _invoke(
         "What is the current toll from Leesburg to Washington?"
     )
@@ -211,7 +225,7 @@ def test_live_leesburg_washington_i395_uses_connector_exit_once():
     }
 
 
-def test_live_leesburg_washington_i395_annual_uses_connector_endpoints_once():
+def test_live_leesburg_washington_i395_annual_uses_connector_endpoints_once() -> None:
     answer, calls, agent = _invoke(
         "For Monday through Friday, estimate my annual round-trip commute from "
         "Leesburg to Washington. I leave at 8 AM, return at 5:30 PM, plan 240 "
@@ -240,7 +254,7 @@ def test_live_leesburg_washington_i395_annual_uses_connector_endpoints_once():
     }
 
 
-def test_live_washington_from_i495_south_uses_connector_exit():
+def test_live_washington_from_i495_south_uses_connector_exit() -> None:
     answer, calls, _agent = _invoke(
         "What is the current toll from 495 Express Lanes Start/Georg Wash. "
         "Mem. Pkwy. to Washington D.C. via I-395?"
@@ -250,7 +264,7 @@ def test_live_washington_from_i495_south_uses_connector_exit():
     assert calls[-1]["input"]["destination_point_id"] == "i95:2249ND"
 
 
-def test_live_washington_i395_southbound_uses_dc_entry():
+def test_live_washington_i395_southbound_uses_dc_entry() -> None:
     answer, calls, _agent = _invoke(
         "What is the current toll from Washington D.C. I-395 Southbound to Dumfries?"
     )
@@ -259,7 +273,7 @@ def test_live_washington_i395_southbound_uses_dc_entry():
     assert calls[0]["input"]["destination_point_id"] == "i95:217SD"
 
 
-def test_live_wrong_washington_coordinate_retries_returned_alternative_once():
+def test_live_wrong_washington_coordinate_retries_returned_alternative_once() -> None:
     answer, calls, _agent = _invoke(
         "Current toll from I-95 Near Cardinal Drive to 38.8707667,-77.0461277; "
         "the destination is Washington D.C. via I-395."
@@ -269,7 +283,7 @@ def test_live_wrong_washington_coordinate_retries_returned_alternative_once():
     assert calls[1]["input"]["destination_point_id"] == "i95:224ND"
 
 
-def test_live_missing_destination_precedes_wrong_role_validation():
+def test_live_missing_destination_precedes_wrong_role_validation() -> None:
     answer, calls, agent = _invoke("What is the current toll from Compass Creek?")
     assert calls == [], (answer, calls)
     assert "destination" in answer.lower()
@@ -280,7 +294,7 @@ def test_live_missing_destination_precedes_wrong_role_validation():
     assert "Battlefield" in second
 
 
-def test_live_missing_annual_schedule_precedes_wrong_role_validation():
+def test_live_missing_annual_schedule_precedes_wrong_role_validation() -> None:
     answer, calls, agent = _invoke(
         "Estimate my annual commute from Compass Creek to Leesburg Bypass."
     )

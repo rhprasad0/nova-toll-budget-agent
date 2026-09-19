@@ -1,7 +1,6 @@
 """Opt-in live checks for the annual toll ballpark tool."""
 
 import pytest
-
 from timed_checks import run_annual_checks
 
 pytestmark = pytest.mark.live

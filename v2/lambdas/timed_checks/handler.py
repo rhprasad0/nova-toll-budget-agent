@@ -12,7 +12,6 @@ from typing import Any, cast
 from urllib.parse import quote
 
 import boto3
-
 from eval import run_evaluation
 from timed_checks import (
     NEW_YORK,

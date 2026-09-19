@@ -1,4 +1,3 @@
-# pyright: basic
 """Prepare, submit, collect, and grade the frozen annual-ballpark Batch eval."""
 
 from __future__ import annotations
@@ -16,12 +15,22 @@ from collections.abc import Callable
 from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 import boto3
 import tiktoken
 from openai import OpenAI
 from strands.types.tools import ToolResult, ToolUse
+
+
+class DatabaseEndpoint(TypedDict):
+    Address: str
+    Port: int
+
+
+class DatabaseInstance(TypedDict):
+    Endpoint: DatabaseEndpoint
+
 
 _V2_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_V2_ROOT))
@@ -99,8 +108,8 @@ def _encoding() -> tiktoken.Encoding:
     return tiktoken.encoding_for_model(_MODEL)
 
 
-def _model() -> toll_agent._CachedResponsesModel:  # pyright: ignore[reportPrivateUsage]
-    return toll_agent._CachedResponsesModel(  # pyright: ignore[reportPrivateUsage]
+def _model() -> toll_agent._CachedResponsesModel:
+    return toll_agent._CachedResponsesModel(
         model_id=_MODEL,
         client_args={"api_key": "offline", "base_url": _OPENAI_BASE_URL},
         params={
@@ -311,14 +320,14 @@ def _allowed_coverage(case: dict[str, Any]) -> set[tuple[int, int]]:
 
     def visit(value: object) -> None:
         if isinstance(value, dict):
-            complete = value.get("complete_pair_count")
-            eligible = value.get("eligible_date_count")
+            complete = cast(dict[str, object], value).get("complete_pair_count")
+            eligible = cast(dict[str, object], value).get("eligible_date_count")
             if isinstance(complete, int) and isinstance(eligible, int):
                 pairs.add((complete, eligible))
-            for child in value.values():
+            for child in cast(dict[str, object], value).values():
                 visit(child)
         elif isinstance(value, list):
-            for child in value:
+            for child in cast(list[object], value):
                 visit(child)
 
     visit(case)
@@ -456,7 +465,9 @@ def reconcile_outputs(
             raise ValueError(f"duplicate custom_id in Batch output: {custom_id}")
         seen.add(custom_id)
         response = result.get("response")
-        response_data = response if isinstance(response, dict) else {}
+        response_data = (
+            cast(dict[str, object], response) if isinstance(response, dict) else {}
+        )
         if result.get("error") is not None or response_data.get("status_code") != 200:
             failures.append(
                 {
@@ -579,11 +590,13 @@ def _configure_database() -> None:
         else:
             raise FileNotFoundError("RDS CA bundle is missing; build the loader zip")
     if "DB_HOST" not in os.environ or "DB_PORT" not in os.environ:
-        instance = boto3.client("rds", region_name="us-east-1").describe_db_instances(
+        # Optional boto3 service overloads lack stubs; the RDS response is typed.
+        instance = boto3.client("rds", region_name="us-east-1").describe_db_instances(  # pyright: ignore[reportUnknownMemberType]
             DBInstanceIdentifier="nova-toll-db"
         )["DBInstances"][0]
-        os.environ["DB_HOST"] = instance["Endpoint"]["Address"]
-        os.environ["DB_PORT"] = str(instance["Endpoint"]["Port"])
+        endpoint = cast(DatabaseInstance, instance)["Endpoint"]
+        os.environ["DB_HOST"] = endpoint["Address"]
+        os.environ["DB_PORT"] = str(endpoint["Port"])
 
 
 async def _invoke_ballpark(request: dict[str, Any]) -> ToolResult:
@@ -778,10 +791,11 @@ def collect(
     if _sha256(fixture_text) != manifest.get("fixture_sha256"):
         raise ValueError("canonical fixture no longer matches its manifest")
     case = _rows(fixture_text)[0]
-    result = {"status": status, **grade_outputs(case, rows), "failures": failures}
-    result["counts"]["batch_failures"] = len(failures)
+    graded = grade_outputs(case, rows)
+    graded["counts"]["batch_failures"] = len(failures)
+    result = {"status": status, **graded, "failures": failures}
     _write_json(result_path, result)
-    _write_json(run_dir / "review.json", select_review(result["verdicts"]))
+    _write_json(run_dir / "review.json", select_review(graded["verdicts"]))
     return result
 
 

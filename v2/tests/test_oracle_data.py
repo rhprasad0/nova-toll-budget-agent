@@ -6,7 +6,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-
 from oracle import build_oracle_data as oracle_builder
 from oracle.build_oracle_data import (
     build_connections,

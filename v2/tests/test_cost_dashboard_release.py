@@ -14,13 +14,12 @@ from typing import Any
 from zipfile import ZipFile
 
 import pytest
-
 from scripts import cost_dashboard_release as gate
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_asset_pins_and_archive_contract():
+def test_asset_pins_and_archive_contract() -> None:
     for name, digest in gate.ASSET_SHA256.items():
         if "/" in name:
             environment, asset = name.split("/")
@@ -55,7 +54,7 @@ def test_asset_pins_and_archive_contract():
 
 
 @pytest.mark.parametrize("environment", ["development", "production"])
-def test_billing_policy_limits(environment: str):
+def test_billing_policy_limits(environment: str) -> None:
     statements = {row["Sid"]: row for row in gate.policy(environment)["Statement"]}
     assert statements["ReadAccountBilling"]["Action"] == ["ce:GetCostAndUsage"]
     assert statements["PublishSnapshot"]["Resource"].endswith("/costs.json")
@@ -80,7 +79,7 @@ def test_billing_policy_limits(environment: str):
     ] not in json.dumps(statements)
 
 
-def test_routes_only_add_the_four_billing_behaviors():
+def test_routes_only_add_the_four_billing_behaviors() -> None:
     model = {
         "path_pattern": "/eval-dashboard*",
         "target_origin_id": "site",
@@ -106,7 +105,7 @@ def test_routes_only_add_the_four_billing_behaviors():
         gate.routes(after, before)
 
 
-def test_billing_routes_keep_the_active_chat_release():
+def test_billing_routes_keep_the_active_chat_release() -> None:
     sys.path.insert(0, str(ROOT))
     legacy = importlib.import_module("infra.delivery_plan_validator")
     rehearsal = importlib.import_module("test_blue_green")
@@ -158,7 +157,7 @@ def test_billing_routes_keep_the_active_chat_release():
 
 
 @pytest.mark.parametrize("environment", ["development", "production"])
-def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str):
+def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str) -> None:
     provider_dir = ROOT / "v2/infra/.terraform/providers"
     if not shutil.which("terraform") or not provider_dir.is_dir():
         pytest.skip(
@@ -368,7 +367,7 @@ locals {{
             rehearsal.gate.validate_plan(prepared, state, "promote")
 
 
-def test_provider_report_routes_keep_known_defaults(tmp_path: Path):
+def test_provider_report_routes_keep_known_defaults(tmp_path: Path) -> None:
     provider_dir = ROOT / "v2/infra/.terraform/providers"
     if not shutil.which("terraform") or not provider_dir.is_dir():
         pytest.skip("Initialize the pinned Terraform provider for this check")

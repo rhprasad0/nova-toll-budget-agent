@@ -12,7 +12,7 @@ TOKEN_I66 = "super-secret-i66-token"
 
 
 @pytest.fixture(autouse=True)
-def reset_module_state(monkeypatch):
+def reset_module_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """handler.py caches clients/tokens as module globals; isolate tests."""
     monkeypatch.setattr(handler, "_clients", {})
     monkeypatch.setattr(handler, "_tokens", None)
@@ -23,19 +23,23 @@ def reset_module_state(monkeypatch):
 
 
 @pytest.fixture
-def stub_aws(monkeypatch):
+def stub_aws(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
     ssm = MagicMock()
-    ssm.get_parameter.side_effect = lambda Name, WithDecryption: {
-        "/nova-toll/i95-token": {"Parameter": {"Value": TOKEN_I95}},
-        "/nova-toll/i66-token": {"Parameter": {"Value": TOKEN_I66}},
-    }[Name]
+
+    def _callback_1(Name: str, WithDecryption: object) -> object:
+        return {
+            "/nova-toll/i95-token": {"Parameter": {"Value": TOKEN_I95}},
+            "/nova-toll/i66-token": {"Parameter": {"Value": TOKEN_I66}},
+        }[Name]
+
+    ssm.get_parameter.side_effect = _callback_1
     s3 = MagicMock()
     cloudwatch = MagicMock()
     handler._clients.update(ssm=ssm, s3=s3, cloudwatch=cloudwatch)
     return {"ssm": ssm, "s3": s3, "cloudwatch": cloudwatch}
 
 
-def test_s3_key_matches_spec_examples():
+def test_s3_key_matches_spec_examples() -> None:
     now = datetime(2026, 7, 21, 14, 40, 3, tzinfo=UTC)
     assert (
         handler._s3_key("i95", now, "csv", 10)
@@ -47,7 +51,7 @@ def test_s3_key_matches_spec_examples():
     )
 
 
-def test_s3_key_rounds_down_to_schedule_tick():
+def test_s3_key_rounds_down_to_schedule_tick() -> None:
     now = datetime(2026, 7, 21, 14, 47, 59, tzinfo=UTC)
     assert (
         handler._s3_key("i95", now, "csv", 10)
@@ -59,7 +63,7 @@ def test_s3_key_rounds_down_to_schedule_tick():
     )
 
 
-def test_s3_key_buckets_never_collide_within_a_feeds_own_tick():
+def test_s3_key_buckets_never_collide_within_a_feeds_own_tick() -> None:
     """Two polls of one feed inside one tick would overwrite each other, so the
     key's bucket width has to match the rule that drives it."""
     for feed, extension, tick in (("i95", "csv", 10), ("i66", "xml", 6)):
@@ -71,8 +75,10 @@ def test_s3_key_buckets_never_collide_within_a_feeds_own_tick():
         assert len(keys) == 60 // tick
 
 
-def test_fetch_feed_scrubs_token_from_exception_text(monkeypatch):
-    def fake_urlopen(url, timeout=None):
+def test_fetch_feed_scrubs_token_from_exception_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_urlopen(url: str, timeout: float | None = None) -> None:
         # Simulate a urllib exception that echoes the full request URL.
         raise urllib.error.URLError(f"connection refused for {url}")
 
@@ -85,20 +91,26 @@ def test_fetch_feed_scrubs_token_from_exception_text(monkeypatch):
     assert "***" in str(exc_info.value)
 
 
-def test_fetch_feed_enforces_5mb_cap(monkeypatch):
+def test_fetch_feed_enforces_5mb_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     oversized = io.BytesIO(b"x" * (handler.MAX_RESPONSE_BYTES + 1))
-    monkeypatch.setattr(
-        handler.urllib.request, "urlopen", lambda url, timeout=None: oversized
-    )
+
+    def _callback_2(url: str, timeout: object = None) -> object:
+        return oversized
+
+    monkeypatch.setattr(handler.urllib.request, "urlopen", _callback_2)
 
     with pytest.raises(RuntimeError, match="byte cap"):
         handler._fetch_feed("i95", "https://example.com/feed", TOKEN_I95)
 
 
-def test_one_feed_failing_does_not_block_the_other(monkeypatch, stub_aws, caplog):
+def test_one_feed_failing_does_not_block_the_other(
+    monkeypatch: pytest.MonkeyPatch,
+    stub_aws: dict[str, MagicMock],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.INFO)
 
-    def fake_urlopen(url, timeout=None):
+    def fake_urlopen(url: str, timeout: float | None = None) -> io.BytesIO:
         if "I95" in url:
             raise urllib.error.URLError(f"connection refused for {url}")
         return io.BytesIO(b"<opt/>")
@@ -123,12 +135,18 @@ def test_one_feed_failing_does_not_block_the_other(monkeypatch, stub_aws, caplog
     ]
 
 
-def test_event_selects_which_feeds_to_poll(monkeypatch, stub_aws):
+def test_event_selects_which_feeds_to_poll(
+    monkeypatch: pytest.MonkeyPatch, stub_aws: dict[str, MagicMock]
+) -> None:
     """The two feeds ride separate EventBridge rules, each naming its feed."""
+
+    def _callback_3(url: str, timeout: object = None) -> object:
+        return io.BytesIO(b"<opt/>")
+
     monkeypatch.setattr(
         handler.urllib.request,
         "urlopen",
-        lambda url, timeout=None: io.BytesIO(b"<opt/>"),
+        _callback_3,
     )
 
     result = handler.handler({"feeds": ["i66"], "drill_id": "0123456789abcdef"}, None)
@@ -139,12 +157,18 @@ def test_event_selects_which_feeds_to_poll(monkeypatch, stub_aws):
     assert result == {"keys": [key]}
 
 
-def test_empty_event_still_polls_every_feed(monkeypatch, stub_aws):
+def test_empty_event_still_polls_every_feed(
+    monkeypatch: pytest.MonkeyPatch, stub_aws: dict[str, MagicMock]
+) -> None:
     """A manual invoke and scripts/smoke.sh --fire both send {}."""
+
+    def _callback_4(url: str, timeout: object = None) -> object:
+        return io.BytesIO(b"<opt/>")
+
     monkeypatch.setattr(
         handler.urllib.request,
         "urlopen",
-        lambda url, timeout=None: io.BytesIO(b"<opt/>"),
+        _callback_4,
     )
 
     handler.handler({}, None)
@@ -153,27 +177,35 @@ def test_empty_event_still_polls_every_feed(monkeypatch, stub_aws):
     assert {"i95", "i66"} == {k.split("feed=")[1].split("/")[0] for k in keys}
 
 
-def test_unknown_feed_is_rejected(stub_aws):
+def test_unknown_feed_is_rejected(stub_aws: dict[str, MagicMock]) -> None:
     with pytest.raises(RuntimeError, match="unknown feed"):
         handler.handler({"feeds": ["i495"]}, None)
 
 
 @pytest.mark.parametrize("drill_id", ["", "ABCDEF0123456789", "../not-a-key"])
-def test_drill_id_is_strictly_validated(stub_aws, drill_id):
+def test_drill_id_is_strictly_validated(
+    stub_aws: dict[str, MagicMock], drill_id: str
+) -> None:
     with pytest.raises(RuntimeError, match="drill_id"):
         handler.handler({"feeds": ["i66"], "drill_id": drill_id}, None)
 
 
 @pytest.mark.parametrize("feeds", ["i95", [1]])
-def test_feed_selection_must_be_a_string_list(stub_aws, feeds):
+def test_feed_selection_must_be_a_string_list(
+    stub_aws: dict[str, MagicMock], feeds: str | list[int]
+) -> None:
     with pytest.raises(RuntimeError, match="list of strings"):
         handler.handler({"feeds": feeds}, None)
 
 
-def test_token_never_appears_in_logs_or_exception(monkeypatch, stub_aws, caplog):
+def test_token_never_appears_in_logs_or_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    stub_aws: dict[str, MagicMock],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.INFO)
 
-    def fake_urlopen(url, timeout=None):
+    def fake_urlopen(url: str, timeout: float | None = None) -> None:
         raise urllib.error.URLError(f"connection refused for {url}")
 
     monkeypatch.setattr(handler.urllib.request, "urlopen", fake_urlopen)

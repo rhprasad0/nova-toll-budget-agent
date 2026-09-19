@@ -10,7 +10,7 @@ import socket
 import time
 from email.message import Message
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.request import Request
 
 import pytest
@@ -395,9 +395,9 @@ def test_canary_requires_all_observed_evidence_and_grounded_money(
         _jar: http.cookiejar.CookieJar,
         _path: str,
         body: dict[str, Any] | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> tuple[int, str, bytes]:
-        prompt_calls.append((body, kwargs["canary"]))
+        prompt_calls.append((body, cast(bool, kwargs["canary"])))
         return (
             200,
             "application/x-ndjson",
@@ -544,7 +544,7 @@ def test_security_checks_block_guardrail_and_find_redacted_address_trace(
         _jar: http.cookiejar.CookieJar,
         _path: str,
         body: dict[str, Any] | None = None,
-        **_kwargs: Any,
+        **_kwargs: object,
     ) -> tuple[int, str, bytes]:
         assert body is not None
         prompt = str(body["message"])
@@ -591,7 +591,7 @@ def test_security_checks_fail_closed_when_archived_trace_exposes_address(
         _jar: http.cookiejar.CookieJar,
         _path: str,
         body: dict[str, Any] | None = None,
-        **_kwargs: Any,
+        **_kwargs: object,
     ) -> tuple[int, str, bytes]:
         assert body is not None
         blocked = body["message"] == check.GUARDRAIL_PROMPT

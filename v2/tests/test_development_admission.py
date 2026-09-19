@@ -217,7 +217,7 @@ def test_later_ci_first_is_bounded_and_eventually_admitted() -> None:
                 api.runs["ci.yml"] = []
         return FakeAPI.get(api, path, params)
 
-    api.get = delayed_get  # type: ignore[method-assign]
+    api.get = delayed_get
 
     def restore(_delay: float) -> None:
         api.runs = {**api.runs, "ci.yml": original}

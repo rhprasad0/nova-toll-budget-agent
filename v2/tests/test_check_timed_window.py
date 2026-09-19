@@ -7,21 +7,21 @@ NEW_YORK = ZoneInfo("America/New_York")
 REVERSAL_SCHEDULE = "47 1 * * 2"
 
 
-def test_fresh_scheduled_run():
+def test_fresh_scheduled_run() -> None:
     now = datetime(2026, 8, 18, 1, 55, tzinfo=NEW_YORK)
     assert scheduled_run_is_fresh(REVERSAL_SCHEDULE, now)
 
 
-def test_stale_scheduled_run():
+def test_stale_scheduled_run() -> None:
     now = datetime(2026, 8, 18, 2, 16, tzinfo=NEW_YORK)
     assert not scheduled_run_is_fresh(REVERSAL_SCHEDULE, now)
 
 
-def test_stale_scheduled_run_after_date_rollover():
+def test_stale_scheduled_run_after_date_rollover() -> None:
     now = datetime(2026, 8, 21, 14, 25, tzinfo=NEW_YORK)
     assert not scheduled_run_is_fresh("17 14 * * 4", now)
 
 
-def test_manual_dispatch():
+def test_manual_dispatch() -> None:
     now = datetime(2026, 8, 18, 2, 16, tzinfo=NEW_YORK)
     assert scheduled_run_is_fresh("", now)

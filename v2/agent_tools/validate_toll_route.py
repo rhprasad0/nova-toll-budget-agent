@@ -801,3 +801,14 @@ def validate_toll_route(tool_use: Mapping[str, Any], **_: Any) -> dict[str, Any]
         }
     except Exception as error:
         return _log_failure_and_build_error_result(tool_use_id, "unexpected", error)
+
+
+# Explicit exports for the domain contract tests.
+__all__ = (
+    "_ChargePricingKey",
+    "_DtrFacilityLeg",
+    "_GreenwayFacilityLeg",
+    "_I66FacilityLeg",
+    "_I95FacilityLeg",
+    "_PricingRouteResponse",
+)

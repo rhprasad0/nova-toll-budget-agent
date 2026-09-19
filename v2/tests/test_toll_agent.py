@@ -1,19 +1,23 @@
 """Prompt, database-loader, and Strands wiring tests without network calls."""
 
-# pyright: basic
-
 import copy
 import hashlib
 import inspect
 import json
 import re
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, Self, TypedDict, cast
 
 import pytest
+from agent import toll_agent
+from agent.toll_agent import DuplicateToolUseGuard, build_agent, build_system_prompt
+from agent_tools import get_annual_toll_ballpark as ballpark_tool
+from agent_tools import get_current_toll_price as current_tool
 from pydantic import ValidationError
+from scripts import check_agent_contract_versions as version_check
 from strands.hooks import (
     AfterToolCallEvent,
     BeforeInvocationEvent,
@@ -21,11 +25,11 @@ from strands.hooks import (
 )
 from strands.models.openai_responses import OpenAIResponsesModel
 
-from agent import toll_agent
-from agent.toll_agent import DuplicateToolUseGuard, build_agent, build_system_prompt
-from agent_tools import get_annual_toll_ballpark as ballpark_tool
-from agent_tools import get_current_toll_price as current_tool
-from scripts import check_agent_contract_versions as version_check
+
+class Release(TypedDict):
+    current: str
+    releases: dict[str, str]
+
 
 _CONTRACT_MANIFEST_PATH = (
     Path(__file__).resolve().parents[1] / "agent" / "contract-manifest.json"
@@ -33,8 +37,8 @@ _CONTRACT_MANIFEST_PATH = (
 _SEMVER = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)")
 
 
-def _point(**overrides):
-    value = {
+def _point(**overrides: object) -> dict[str, object]:
+    value: dict[str, object] = {
         "point_id": "greenway:1:entry:EB",
         "network_id": "greenway",
         "source_node_id": "1",
@@ -48,11 +52,11 @@ def _point(**overrides):
     return value
 
 
-def _contract_manifest():
+def _contract_manifest() -> dict[str, Release]:
     return json.loads(_CONTRACT_MANIFEST_PATH.read_text())
 
 
-def _digest(value):
+def _digest(value: object) -> str:
     canonical = json.dumps(
         value,
         ensure_ascii=False,
@@ -62,7 +66,7 @@ def _digest(value):
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
-def _contract_points():
+def _contract_points() -> list[dict[str, object]]:
     return [
         _point(),
         _point(
@@ -75,21 +79,21 @@ def _contract_points():
     ]
 
 
-def _renderer_contract():
+def _renderer_contract() -> dict[str, object]:
     points = _contract_points()
     values = toll_agent._render_system_prompt_values(
         points, current_date=date(2026, 8, 21)
     )
-    assert values["PROMPT_POINTS_JSON"].index(points[0]["point_id"]) < values[
-        "PROMPT_POINTS_JSON"
-    ].index(points[1]["point_id"])
+    assert values["PROMPT_POINTS_JSON"].index(
+        cast(str, points[0]["point_id"])
+    ) < values["PROMPT_POINTS_JSON"].index(cast(str, points[1]["point_id"]))
     return {
         "inputSchema": toll_agent._PROMPT_POINTS_ADAPTER.json_schema(mode="validation"),
         "renderedValues": values,
     }
 
 
-def test_prompt_point_validation_requires_unique_ordered_bounded_coordinates():
+def test_prompt_point_validation_requires_unique_ordered_bounded_coordinates() -> None:
     assert toll_agent.parse_prompt_points([_point()])[0].point_id.endswith("entry:EB")
 
     with pytest.raises(ValueError, match="strictly ordered"):
@@ -106,20 +110,22 @@ def test_prompt_point_validation_requires_unique_ordered_bounded_coordinates():
         )
 
 
-def test_prompt_point_loader_uses_one_bounded_query_and_closes(monkeypatch):
+def test_prompt_point_loader_uses_one_bounded_query_and_closes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     rows = [{"points": [_point()]}]
 
     class Cursor:
-        def execute(self, sql):
+        def execute(self, sql: str) -> None:
             executed.append(sql)
 
-        def fetchall(self):
+        def fetchall(self) -> list[dict[str, list[dict[str, object]]]]:
             return rows
 
-        def __enter__(self):
+        def __enter__(self) -> "Self":
             return self
 
-        def __exit__(self, *_):
+        def __exit__(self, *_: object) -> None:
             return None
 
     cursor = Cursor()
@@ -127,13 +133,13 @@ def test_prompt_point_loader_uses_one_bounded_query_and_closes(monkeypatch):
     class Connection:
         closed = False
 
-        def cursor(self):
+        def cursor(self) -> "Cursor":
             return cursor
 
-        def close(self):
+        def close(self) -> None:
             self.closed = True
 
-    executed = []
+    executed: list[str] = []
     connection = Connection()
     monkeypatch.setattr(
         toll_agent.route_validation, "connect_to_database", lambda: connection
@@ -144,24 +150,26 @@ def test_prompt_point_loader_uses_one_bounded_query_and_closes(monkeypatch):
     assert connection.closed
 
 
-def test_prompt_point_loader_fails_closed_and_still_closes(monkeypatch):
+def test_prompt_point_loader_fails_closed_and_still_closes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class Cursor:
-        def __enter__(self):
+        def __enter__(self) -> "Self":
             return self
 
-        def __exit__(self, *_):
+        def __exit__(self, *_: object) -> None:
             return None
 
-        def execute(self, _sql):
+        def execute(self, _sql: str) -> None:
             raise RuntimeError("database unavailable")
 
     class Connection:
         closed = False
 
-        def cursor(self):
+        def cursor(self) -> "Cursor":
             return Cursor()
 
-        def close(self):
+        def close(self) -> None:
             self.closed = True
 
     connection = Connection()
@@ -174,7 +182,7 @@ def test_prompt_point_loader_fails_closed_and_still_closes(monkeypatch):
     assert connection.closed
 
 
-def test_system_prompt_contains_rds_points_and_v2_behavior():
+def test_system_prompt_contains_rds_points_and_v2_behavior() -> None:
     prompt = build_system_prompt([_point()], current_date=date(2026, 8, 21))
     normalized = " ".join(prompt.split())
 
@@ -305,7 +313,7 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "i95_route" not in prompt
 
 
-def test_system_prompt_matches_its_versioned_contract():
+def test_system_prompt_matches_its_versioned_contract() -> None:
     manifest = _contract_manifest()
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
@@ -333,7 +341,7 @@ def test_system_prompt_matches_its_versioned_contract():
     )
 
 
-def test_system_prompt_manifest_accepts_one_monotonic_release():
+def test_system_prompt_manifest_accepts_one_monotonic_release() -> None:
     previous = _contract_manifest()
     current = copy.deepcopy(previous)
     current["system_prompt"]["current"] = "2.4.0"
@@ -343,34 +351,46 @@ def test_system_prompt_manifest_accepts_one_monotonic_release():
     version_check.validate_manifest_update({}, previous)
 
 
+def _callback_2(manifest: dict[str, Release]) -> object:
+    return manifest["system_prompt"].update({"current": "version-one"})
+
+
+def _callback_3(manifest: dict[str, Release]) -> object:
+    return manifest["system_prompt"]["releases"].update({"1.0.0": "not-a-digest"})
+
+
+def _callback_4(manifest: dict[str, Release]) -> object:
+    return manifest["system_prompt"]["releases"].update({"0.9.0": "b" * 64})
+
+
+def _strict_callback_2(manifest: dict[str, Release]) -> object:
+    return manifest["system_prompt"].update({"current": "0.9.0"})
+
+
 @pytest.mark.parametrize(
     ("mutate", "message"),
     [
         (
-            lambda manifest: manifest["system_prompt"].update(
-                {"current": "version-one"}
-            ),
+            _callback_2,
             "invalid semantic version",
         ),
         (
-            lambda manifest: manifest["system_prompt"]["releases"].update(
-                {"1.0.0": "not-a-digest"}
-            ),
+            _callback_3,
             "invalid SHA-256",
         ),
         (
-            lambda manifest: manifest["system_prompt"]["releases"].update(
-                {"0.9.0": "b" * 64}
-            ),
+            _callback_4,
             "without advancing current",
         ),
         (
-            lambda manifest: manifest["system_prompt"].update({"current": "0.9.0"}),
+            _strict_callback_2,
             "current release 0.9.0 is missing",
         ),
     ],
 )
-def test_system_prompt_manifest_rejects_invalid_contract(mutate, message):
+def test_system_prompt_manifest_rejects_invalid_contract(
+    mutate: Callable[[dict[str, Release]], object], message: str
+) -> None:
     previous = _contract_manifest()
     current = copy.deepcopy(previous)
     mutate(current)
@@ -378,7 +398,7 @@ def test_system_prompt_manifest_rejects_invalid_contract(mutate, message):
         version_check.validate_manifest_update(previous, current)
 
 
-def test_system_prompt_manifest_rejects_rewrites_removals_and_extra_releases():
+def test_system_prompt_manifest_rejects_rewrites_removals_and_extra_releases() -> None:
     previous = _contract_manifest()
 
     rewritten = copy.deepcopy(previous)
@@ -396,7 +416,11 @@ def test_system_prompt_manifest_rejects_rewrites_removals_and_extra_releases():
         version_check.validate_manifest_update(previous, advanced)
 
 
-def _before_tool(invocation_state, call_id="one", arguments=None):
+def _before_tool(
+    invocation_state: dict[str, object],
+    call_id: str = "one",
+    arguments: dict[str, str] | None = None,
+) -> BeforeToolCallEvent:
     return BeforeToolCallEvent(
         agent=cast(Any, object()),
         selected_tool=None,
@@ -409,7 +433,9 @@ def _before_tool(invocation_state, call_id="one", arguments=None):
     )
 
 
-def _after_tool(before, status="success"):
+def _after_tool(
+    before: BeforeToolCallEvent, status: str = "success"
+) -> AfterToolCallEvent:
     return AfterToolCallEvent(
         agent=before.agent,
         selected_tool=None,
@@ -426,9 +452,9 @@ def _after_tool(before, status="success"):
     )
 
 
-def test_duplicate_tool_guard_suppresses_only_successful_exact_repeats():
+def test_duplicate_tool_guard_suppresses_only_successful_exact_repeats() -> None:
     guard = DuplicateToolUseGuard()
-    state = {}
+    state: dict[str, object] = {}
     guard.before_invocation(
         BeforeInvocationEvent(agent=cast(Any, object()), invocation_state=state)
     )
@@ -445,7 +471,9 @@ def test_duplicate_tool_guard_suppresses_only_successful_exact_repeats():
     assert changed.cancel_tool is False
 
 
-def test_agent_registers_exactly_the_two_existing_tools(monkeypatch):
+def test_agent_registers_exactly_the_two_existing_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     model = OpenAIResponsesModel(model_id="test", client_args={"api_key": "test"})
     monkeypatch.setattr(toll_agent, "_build_model", lambda: model)
     original_specs = [
@@ -473,21 +501,27 @@ def test_agent_registers_exactly_the_two_existing_tools(monkeypatch):
     }
 
 
-def test_agent_uses_luna_ssm_and_explicit_prompt_cache(monkeypatch):
-    calls = []
+def test_agent_uses_luna_ssm_and_explicit_prompt_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
 
     class Ssm:
-        def get_parameter(self, **kwargs):
+        def get_parameter(self, **kwargs: object) -> dict[str, dict[str, str]]:
             calls.append(kwargs)
             return {"Parameter": {"Value": "test-key"}}
+
+    def _strict_callback_1(service_name: object, region_name: object) -> object:
+        return Ssm()
 
     monkeypatch.setattr(
         toll_agent.boto3,
         "client",
-        lambda service_name, region_name: Ssm(),
+        _strict_callback_1,
     )
     model = toll_agent._build_model()
-    request = model._format_request(
+    # The pinned SDK exposes request serialization only through this protected hook.
+    request = model._format_request(  # pyright: ignore[reportPrivateUsage]
         messages=[
             {"role": "user", "content": [{"text": "price this"}]},
             {
@@ -535,7 +569,7 @@ def test_agent_uses_luna_ssm_and_explicit_prompt_cache(monkeypatch):
     assert "test-key" not in json.dumps(request)
 
 
-def test_agent_normalizes_positive_prompt_cache_metrics_only():
+def test_agent_normalizes_positive_prompt_cache_metrics_only() -> None:
     model = toll_agent._CachedResponsesModel(
         model_id="test", client_args={"api_key": "test"}
     )
@@ -552,23 +586,32 @@ def test_agent_normalizes_positive_prompt_cache_metrics_only():
         ),
     }
 
-    usage = cast(Any, model._format_chunk(event))["metadata"]["usage"]
+    # Exercise the pinned SDK chunk hook used by our cache metrics override.
+    usage = cast(Any, model._format_chunk(event))["metadata"]["usage"]  # pyright: ignore[reportPrivateUsage]
 
     assert usage["cacheReadInputTokens"] == 700
     assert usage["cacheWriteInputTokens"] == 300
 
-    event["data"].input_tokens_details = SimpleNamespace(
+    cast(SimpleNamespace, event["data"]).input_tokens_details = SimpleNamespace(
         cached_tokens=0,
         cache_write_tokens=0,
     )
-    usage = cast(Any, model._format_chunk(event))["metadata"]["usage"]
+    # Exercise the pinned SDK chunk hook used by our cache metrics override.
+    usage = cast(Any, model._format_chunk(event))["metadata"]["usage"]  # pyright: ignore[reportPrivateUsage]
 
     assert "cacheReadInputTokens" not in usage
     assert "cacheWriteInputTokens" not in usage
 
 
-def test_empty_ssm_parameter_is_rejected(monkeypatch):
-    client = SimpleNamespace(get_parameter=lambda **_: {"Parameter": {"Value": ""}})
-    monkeypatch.setattr(toll_agent.boto3, "client", lambda *_args, **_kwargs: client)
+def test_empty_ssm_parameter_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _strict_callback_3(**_: object) -> object:
+        return {"Parameter": {"Value": ""}}
+
+    client = SimpleNamespace(get_parameter=_strict_callback_3)
+
+    def _callback_1(*_args: object, **_kwargs: object) -> object:
+        return client
+
+    monkeypatch.setattr(toll_agent.boto3, "client", _callback_1)
     with pytest.raises(ValueError, match="is empty"):
         toll_agent.load_openai_api_key()

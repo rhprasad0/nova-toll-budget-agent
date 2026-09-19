@@ -22,7 +22,7 @@ from opentelemetry.trace import StatusCode
 from strands.types.agent import Limits
 
 from agent.toll_agent import (
-    _DUPLICATE_TOOL_MESSAGE,  # pyright: ignore[reportPrivateUsage]
+    _DUPLICATE_TOOL_MESSAGE,
     build_agent,
 )
 

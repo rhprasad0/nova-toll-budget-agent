@@ -1,7 +1,11 @@
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pricing_loader_handler as loader_handler
+if TYPE_CHECKING:
+    from lambdas.loader import handler as loader_handler
+else:
+    import pricing_loader_handler as loader_handler
 
 V2_ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_SQL = (V2_ROOT / "db" / "schema.sql").read_text()
@@ -23,7 +27,7 @@ def _table_bodies() -> dict[str, str]:
 
 
 def _upserts() -> dict[str, str]:
-    result = {}
+    result: dict[str, str] = {}
     for sql in (loader_handler.UPSERT_I95_SQL, loader_handler.UPSERT_I66_SQL):
         match = re.search(r"INSERT INTO pricing\.(\w+)", sql)
         assert match
@@ -31,7 +35,7 @@ def _upserts() -> dict[str, str]:
     return result
 
 
-def test_loader_columns_and_conflict_keys_match_pricing_schema():
+def test_loader_columns_and_conflict_keys_match_pricing_schema() -> None:
     tables = _table_bodies()
     upserts = _upserts()
     assert tables.keys() == EXPECTED_TABLES
@@ -48,7 +52,7 @@ def test_loader_columns_and_conflict_keys_match_pricing_schema():
         assert key and insert and conflict
         assert _columns(conflict.group(1)) == _columns(key.group(1))
 
-        schema_columns = {}
+        schema_columns: dict[str, bool] = {}
         for line in body.splitlines():
             line = line.split("--", maxsplit=1)[0].strip().rstrip(",")
             if not line or line.startswith("PRIMARY KEY"):

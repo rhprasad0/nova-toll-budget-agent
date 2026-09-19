@@ -11,7 +11,6 @@ from unittest.mock import Mock
 from urllib.parse import urljoin
 
 import pytest
-
 from scripts import blue_green as gate
 from scripts import release_blue_green as delivery
 
@@ -592,7 +591,7 @@ def test_complete_release_state_machine(
 
     monkeypatch.setattr(delivery, "current", current)
 
-    def terraform(_root: Path, *args: Any) -> str:
+    def terraform(_root: Path, *args: str) -> str:
         nonlocal serial
         if args[0] == "show":
             document = plan(gate.desired(initial, prepared["slots"]["green"]))

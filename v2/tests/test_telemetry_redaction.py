@@ -7,15 +7,27 @@ import os
 import subprocess
 import sys
 from collections.abc import Sequence
-from typing import Any, cast
+from pathlib import Path
+from typing import Unpack, cast
 from unittest.mock import Mock
 
 import pytest
+from agent.telemetry import (
+    OMITTED,
+    GuardrailRequest,
+    RedactingExporter,
+    Redactor,
+    protect_console,
+    wrap_exporters,
+)
 from amazon.opentelemetry.distro.aws_batch_unsampled_span_processor import (
     BatchUnsampledSpanProcessor,
 )
 from amazon.opentelemetry.distro.exporter.otlp.aws.logs._aws_cw_otlp_batch_log_record_processor import (
     AwsCloudWatchOtlpBatchLogRecordProcessor,
+)
+from amazon.opentelemetry.distro.exporter.otlp.aws.logs.otlp_aws_log_record_exporter import (
+    OTLPAwsLogRecordExporter,
 )
 from opentelemetry._logs import LogRecord
 from opentelemetry.exporter.otlp.proto.common._internal._log_encoder import encode_logs
@@ -33,25 +45,16 @@ from opentelemetry.sdk.trace.export import (
 )
 from opentelemetry.trace import SpanContext, Status, StatusCode, TraceFlags
 
-from agent.telemetry import (
-    OMITTED,
-    RedactingExporter,
-    Redactor,
-    protect_console,
-    wrap_exporters,
-)
-
 # Exercise the SDK's private replacement seam, which has no public equivalent.
-# pyright: reportPrivateUsage=false
 
 PII = "mary@example.com"
 
 
 class Guardrail:
-    def __init__(self):
-        self.calls: list[dict[str, Any]] = []
+    def __init__(self) -> None:
+        self.calls: list[GuardrailRequest] = []
 
-    def apply_guardrail(self, **kwargs: Any) -> dict[str, Any]:
+    def apply_guardrail(self, **kwargs: Unpack[GuardrailRequest]) -> dict[str, object]:
         from opentelemetry.instrumentation.utils import is_instrumentation_enabled
 
         assert not is_instrumentation_enabled()
@@ -66,36 +69,36 @@ class Guardrail:
 
 
 class Capture(SpanExporter):
-    def __init__(self):
+    def __init__(self) -> None:
         self.wire: list[bytes] = []
 
-    def export(self, spans: Sequence[ReadableSpan]):
+    def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
         self.wire.append(encode_spans(spans).SerializeToString())
         return SpanExportResult.SUCCESS
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         pass
 
-    def force_flush(self, timeout_millis: int = 30000):
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
         return True
 
 
 class LogCapture(LogRecordExporter):
-    def __init__(self):
+    def __init__(self) -> None:
         self.wire: list[bytes] = []
 
-    def export(self, batch: Sequence[ReadableLogRecord]):
+    def export(self, batch: Sequence[ReadableLogRecord]) -> LogRecordExportResult:
         self.wire.append(encode_logs(batch).SerializeToString())
         return LogRecordExportResult.SUCCESS
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         pass
 
-    def force_flush(self, timeout_millis: int = 30000):
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
         return True
 
 
-def span(sampled: bool = True):
+def span(sampled: bool = True) -> ReadableSpan:
     return ReadableSpan(
         name="invoke_agent",
         context=SpanContext(1, 2, False, TraceFlags(1 if sampled else 0)),
@@ -114,7 +117,7 @@ def span(sampled: bool = True):
     )
 
 
-def test_export_copies_redact_nested_content_without_mutating_agent_data():
+def test_export_copies_redact_nested_content_without_mutating_agent_data() -> None:
     original = span()
     capture, client = Capture(), Guardrail()
     result = RedactingExporter(capture, client, "guardrail", "1").export([original])
@@ -130,17 +133,17 @@ def test_export_copies_redact_nested_content_without_mutating_agent_data():
     assert all(call["outputScope"] == "INTERVENTIONS" for call in client.calls)
 
 
-def test_large_static_agent_metadata_is_compacted_before_redaction():
+def test_large_static_agent_metadata_is_compacted_before_redaction() -> None:
     original = span()
     system_prompt = "source-controlled system prompt " * 1_000
-    original._attributes = {
+    original._attributes = {  # pyright: ignore[reportPrivateUsage]
         **(original.attributes or {}),
         "gen_ai.agent.tools": json.dumps(
             ["get_current_toll_price", "get_annual_toll_ballpark"]
         ),
         "system_prompt": system_prompt,
     }
-    original._events = [
+    original._events = [  # pyright: ignore[reportPrivateUsage]
         Event("gen_ai.system.message", {"content": system_prompt}),
         Event("gen_ai.user.message", {"content": PII}),
     ]
@@ -169,9 +172,9 @@ def test_large_static_agent_metadata_is_compacted_before_redaction():
     assert original.events[0].attributes["content"] == system_prompt
 
 
-def test_malformed_tool_metadata_fails_closed():
+def test_malformed_tool_metadata_fails_closed() -> None:
     item = span()
-    item._attributes = {"gen_ai.agent.tools": f"not json {PII}"}
+    item._attributes = {"gen_ai.agent.tools": f"not json {PII}"}  # pyright: ignore[reportPrivateUsage]
 
     safe = Redactor(Guardrail(), "id", "1").span(item)
 
@@ -182,7 +185,7 @@ def test_malformed_tool_metadata_fails_closed():
 @pytest.mark.parametrize(
     "response",
     cast(
-        list[dict[str, Any]],
+        list[dict[str, object]],
         [
             {},
             {"action": "GUARDRAIL_INTERVENED"},
@@ -191,13 +194,13 @@ def test_malformed_tool_metadata_fails_closed():
         ],
     ),
 )
-def test_fail_closed_for_malformed_responses(response: dict[str, Any]):
+def test_fail_closed_for_malformed_responses(response: dict[str, object]) -> None:
     client = Mock()
     client.apply_guardrail.return_value = response
     assert Redactor(client, "id", "1").text(PII) == OMITTED
 
 
-def test_timeout_size_budget_and_cache_do_not_return_raw_content():
+def test_timeout_size_budget_and_cache_do_not_return_raw_content() -> None:
     client = Mock()
     client.apply_guardrail.side_effect = TimeoutError(PII)
     redactor = Redactor(client, "id", "1")
@@ -210,12 +213,14 @@ def test_timeout_size_budget_and_cache_do_not_return_raw_content():
     assert client.apply_guardrail.call_count == 1
 
 
-def test_real_sampled_unsampled_and_aws_log_processors_are_all_wrapped():
+def test_real_sampled_unsampled_and_aws_log_processors_are_all_wrapped() -> None:
     provider, logs = TracerProvider(), LoggerProvider()
     sampled, unsampled, log_capture = Capture(), Capture(), LogCapture()
     first = BatchSpanProcessor(sampled)
     second = BatchUnsampledSpanProcessor(unsampled)
-    third = AwsCloudWatchOtlpBatchLogRecordProcessor(cast(Any, log_capture))
+    third = AwsCloudWatchOtlpBatchLogRecordProcessor(
+        cast(OTLPAwsLogRecordExporter, log_capture)
+    )
     provider.add_span_processor(first)
     provider.add_span_processor(second)
     logs.add_log_record_processor(third)
@@ -227,7 +232,7 @@ def test_real_sampled_unsampled_and_aws_log_processors_are_all_wrapped():
         record = ReadableLogRecord(
             LogRecord(body={"messages": [PII]}, timestamp=1), Resource({})
         )
-        third._batch_processor.emit(record)
+        third._batch_processor.emit(record)  # pyright: ignore[reportPrivateUsage]
         third.force_flush()
         for capture in (sampled, unsampled, log_capture):
             assert capture.wire
@@ -237,7 +242,7 @@ def test_real_sampled_unsampled_and_aws_log_processors_are_all_wrapped():
         logs.shutdown()
 
 
-def test_unknown_processor_rejected_before_partial_installation():
+def test_unknown_processor_rejected_before_partial_installation() -> None:
     provider, logs = TracerProvider(), LoggerProvider()
     capture = Capture()
     batch = BatchSpanProcessor(capture)
@@ -252,7 +257,7 @@ def test_unknown_processor_rejected_before_partial_installation():
         logs.shutdown()
 
 
-def test_console_exception_and_message_are_never_written_raw():
+def test_console_exception_and_message_are_never_written_raw() -> None:
     original_factory = logging.getLogRecordFactory()
     stream = io.StringIO()
     logger = logging.getLogger("pii-console-test")
@@ -272,7 +277,7 @@ def test_console_exception_and_message_are_never_written_raw():
         logger.removeHandler(handler)
 
 
-def test_real_application_startup_installs_protected_exporters():
+def test_real_application_startup_installs_protected_exporters() -> None:
     # Providers are process globals, so exercise actual auto-instrumentation in isolation.
     code = """
 from unittest.mock import Mock, patch
@@ -318,6 +323,7 @@ print("protected startup passed")
     )
     result = subprocess.run(
         [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parents[1],
         env=environment,
         capture_output=True,
         text=True,

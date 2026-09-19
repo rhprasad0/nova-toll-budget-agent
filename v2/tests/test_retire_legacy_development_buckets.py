@@ -5,16 +5,20 @@ import hashlib
 import importlib.util
 import io
 import sys
+from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from scripts.retire_legacy_development_buckets import ObjectRecord
 
 import pytest
-from botocore.session import get_session  # pyright: ignore[reportUnknownVariableType]
-from botocore.validate import (  # pyright: ignore[reportUnknownVariableType]
+from botocore.session import get_session
+from botocore.validate import (
     ParamValidationError,
-    validate_parameters,  # pyright: ignore[reportUnknownVariableType]
+    validate_parameters,
 )
 
 V2_ROOT = Path(__file__).resolve().parents[1]
@@ -33,7 +37,7 @@ def _record(
     version_id: str = "null",
     marker: bool = False,
     http_metadata: bool = False,
-) -> Any:
+) -> ObjectRecord:
     return module.ObjectRecord(
         bucket=bucket,
         key=key,
@@ -238,7 +242,7 @@ def test_guarded_response_drops_only_transport_metadata() -> None:
 
 
 def test_rejects_suspended_bucket_versioning(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_s3(_aws: Any, operation: str, **_kwargs: object) -> dict[str, object]:
+    def fake_s3(_aws: object, operation: str, **_kwargs: object) -> dict[str, object]:
         if operation == "get_bucket_versioning":
             return {"Status": "Suspended"}
         raise AssertionError(operation)
@@ -255,7 +259,7 @@ def test_rejects_suspended_bucket_versioning(monkeypatch: pytest.MonkeyPatch) ->
 def test_rejects_malformed_inventory_pagination(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_s3(_aws: Any, operation: str, **_kwargs: object) -> dict[str, object]:
+    def fake_s3(_aws: object, operation: str, **_kwargs: object) -> dict[str, object]:
         if operation == "list_objects_v2":
             return {"Contents": [], "IsTruncated": "false"}
         raise AssertionError(operation)
@@ -272,7 +276,7 @@ def test_rejects_malformed_inventory_pagination(
 def test_rejects_malformed_shared_version_pagination(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_s3(_aws: Any, operation: str, **_kwargs: object) -> dict[str, object]:
+    def fake_s3(_aws: object, operation: str, **_kwargs: object) -> dict[str, object]:
         if operation == "list_object_versions":
             return {
                 "Versions": [],
@@ -295,7 +299,7 @@ def test_stream_digest_reads_chunks_without_retaining_the_body() -> None:
         def __init__(self) -> None:
             self.closed = False
 
-        def iter_chunks(self, *, chunk_size: int):
+        def iter_chunks(self, *, chunk_size: int) -> Iterator[bytes]:
             assert chunk_size == 1024 * 1024
             yield b"large-"
             yield b"object"
@@ -378,7 +382,7 @@ def test_archive_copy_preserves_source_identity_and_streamed_digest() -> None:
                     "ContentEncoding": record.content_encoding,
                     "CacheControl": record.cache_control,
                     "ContentDisposition": record.content_disposition,
-                    "Expires": datetime.fromisoformat(record.expires),
+                    "Expires": datetime.fromisoformat(cast(str, record.expires)),
                     "WebsiteRedirectLocation": record.website_redirect_location,
                     "ServerSideEncryption": "aws:kms",
                     "SSEKMSKeyId": "arn:aws:kms:us-east-1:920534282028:key/retained",
@@ -540,7 +544,7 @@ def test_purge_uses_exact_etag_and_stops_on_conditional_failure(
     def no_archive_verify(*_args: object, **_kwargs: object) -> None:
         return None
 
-    def frozen_capture(_aws: Any) -> dict[str, Any]:
+    def frozen_capture(_aws: object) -> dict[str, Any]:
         return local_snapshot
 
     monkeypatch.setattr(module, "_require_freeze_evidence", no_freeze)
@@ -589,7 +593,7 @@ def test_changed_metadata_or_tags_with_same_etag_fails_stability() -> None:
 )
 def test_unknown_bucket_key_or_version_fails_closed(bad_record: object) -> None:
     with pytest.raises(module.RetirementError):
-        module.validate_records([*_records(), bad_record])  # type: ignore[arg-type]
+        module.validate_records([*_records(), bad_record])
 
 
 def test_waf_change_preserves_full_document_and_rejects_unknown_fields() -> None:
@@ -807,13 +811,13 @@ def test_resume_frozen_is_read_only_and_requires_a_full_900_second_window(
     states = iter((current, copy.deepcopy(current)))
     snapshots = iter((snapshot, copy.deepcopy(snapshot)))
 
-    def fake_writer(_aws: Any) -> dict[str, Any]:
+    def fake_writer(_aws: object) -> dict[str, Any]:
         return next(states)
 
-    def fake_snapshot(_aws: Any) -> dict[str, Any]:
+    def fake_snapshot(_aws: object) -> dict[str, Any]:
         return next(snapshots)
 
-    def fake_athena(_aws: Any) -> None:
+    def fake_athena(_aws: object) -> None:
         events.append("athena")
 
     def fake_clock() -> float:
@@ -897,10 +901,10 @@ def test_resume_frozen_is_read_only_and_requires_a_full_900_second_window(
     ]
     snapshots = iter((post_purge,))
 
-    def archive_readback(*_args: Any) -> dict[str, Any]:
+    def archive_readback(*_args: object) -> dict[str, Any]:
         return {}
 
-    def archive_objects(*_args: Any) -> None:
+    def archive_objects(*_args: object) -> None:
         return None
 
     monkeypatch.setattr(module, "_load_archive_manifest", archive_readback)

@@ -1,4 +1,3 @@
-# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownLambdaType=false
 import hashlib
 import importlib.util
 import json
@@ -7,12 +6,13 @@ import subprocess
 import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, cast
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
 
-def _module(name: str):
+def _module(name: str) -> ModuleType:
     path = Path(__file__).parents[1] / "scripts" / name
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec and spec.loader
@@ -21,8 +21,12 @@ def _module(name: str):
     return module
 
 
-release = _module("check_production_release.py")
-gate = _module("validate_production_plan.py")
+if TYPE_CHECKING:
+    from scripts import check_production_release as release
+    from scripts import validate_production_plan as gate
+else:
+    release = _module("check_production_release.py")
+    gate = _module("validate_production_plan.py")
 
 
 @pytest.mark.parametrize(
@@ -165,15 +169,31 @@ def test_recovery_admission_is_read_only_and_requires_original_terminal_run(
         return deployment
 
     monkeypatch.setattr(release, "api", read_only)
-    monkeypatch.setattr(
-        release, "_listener_event", lambda _: ({"id": 11, "head_sha": candidate}, {})
-    )
-    monkeypatch.setattr(release, "_release", lambda _: (7, "v1.2.3", candidate))
-    monkeypatch.setattr(release, "_run", lambda _: consumer)
+
+    def _callback_1(_: object) -> tuple[dict[str, object], dict[str, object]]:
+        return ({"id": 11, "head_sha": candidate}, {})
+
+    monkeypatch.setattr(release, "_listener_event", _callback_1)
+
+    def _callback_2(_: object) -> object:
+        return (7, "v1.2.3", candidate)
+
+    monkeypatch.setattr(release, "_release", _callback_2)
+
+    def _callback_3(_: object) -> object:
+        return consumer
+
+    monkeypatch.setattr(release, "_run", _callback_3)
+
+    def _callback_4(
+        _: object,
+    ) -> tuple[dict[str, object], dict[str, int | str], dict[str, str]]:
+        return ({}, evidence, {"pricing": "1.4.0", "oracle": "1.15.0"})
+
     monkeypatch.setattr(
         release,
         "_development",
-        lambda _: ({}, evidence, {"pricing": "1.4.0", "oracle": "1.15.0"}),
+        _callback_4,
     )
     version = "null" if change == "version" else "exact-version"
     state = "bad" if change == "state" else "d" * 64
@@ -269,10 +289,14 @@ def test_claim_rejects_prior_release_or_tag(monkeypatch: pytest.MonkeyPatch) -> 
         "consumer_run": 2,
         "consumer_attempt": 1,
     }
+
+    def _callback_5(*_args: object, **_kwargs: object) -> object:
+        return [{"payload": {"release_id": 8, "tag": "v1.2.3"}}]
+
     monkeypatch.setattr(
         release,
         "api",
-        lambda *_args, **_kwargs: [{"payload": {"release_id": 8, "tag": "v1.2.3"}}],
+        _callback_5,
     )
     with pytest.raises(release.AdmissionError, match="replay"):
         release.claim(admission)
@@ -295,7 +319,11 @@ def test_claim_paginates_before_one_validated_create(
     def api(method: str, path: str, payload: object = None) -> object:
         calls.append(path)
         if method == "GET":
-            return [{}] * 100 if path.endswith("page=1") else []
+            return (
+                cast(list[dict[str, object]], [{}] * 100)
+                if path.endswith("page=1")
+                else []
+            )
         assert isinstance(payload, dict)
         assert payload == {
             "ref": "a" * 40,
@@ -318,7 +346,7 @@ def test_claim_paginates_before_one_validated_create(
             "sha": "a" * 40,
             "environment": release.PRODUCTION_ENVIRONMENT,
             "task": "production-release-plan",
-            "payload": payload["payload"],
+            "payload": cast(dict[str, object], payload)["payload"],
         }
 
     monkeypatch.setattr(release, "api", api)
@@ -336,7 +364,7 @@ def test_claim_paginates_before_one_validated_create(
 def test_listener_event_rejects_wrong_tag_ref_or_head_repository(
     monkeypatch: pytest.MonkeyPatch, field: str, value: object
 ) -> None:
-    run = {
+    run: dict[str, object] = {
         "repository": {"full_name": release.REPOSITORY},
         "path": release.LISTENER_WORKFLOW + "@main",
         "event": "release",
@@ -347,16 +375,28 @@ def test_listener_event_rejects_wrong_tag_ref_or_head_repository(
         "head_repository": {"full_name": release.REPOSITORY},
     }
     run[field] = value
-    monkeypatch.setattr(release, "_run", lambda _run: run)
-    monkeypatch.setattr(release, "_artifacts", lambda *_args: {"id": 1})
-    monkeypatch.setattr(
-        release,
-        "_single_json",
-        lambda *_args: {
+
+    def _callback_6(_run: object) -> object:
+        return run
+
+    monkeypatch.setattr(release, "_run", _callback_6)
+
+    def _callback_7(*_args: object) -> object:
+        return {"id": 1}
+
+    monkeypatch.setattr(release, "_artifacts", _callback_7)
+
+    def _callback_8(*_args: object) -> object:
+        return {
             "action": "published",
             "repository": {"full_name": release.REPOSITORY},
             "release": {"tag_name": "v1.2.3"},
-        },
+        }
+
+    monkeypatch.setattr(
+        release,
+        "_single_json",
+        _callback_8,
     )
     with pytest.raises(release.AdmissionError, match="provenance"):
         release._listener_event(1)
@@ -395,10 +435,13 @@ def test_artifacts_reject_missing_ambiguous_expired_and_wrong_metadata(
     elif kind == "wrong-metadata":
         artifact["workflow_run"] = {"id": 8}
 
+    def _callback_9(*_args: object, **_kwargs: object) -> object:
+        return {"artifacts": values}
+
     monkeypatch.setattr(
         release,
         "api",
-        lambda *_args, **_kwargs: {"artifacts": values},
+        _callback_9,
     )
     with pytest.raises(release.AdmissionError, match=message):
         release._artifacts(7, "evidence")
@@ -410,40 +453,56 @@ def test_admission_accepts_a_current_full_development_rerun(
     candidate = "a" * 40
     event = tmp_path / "event.json"
     event.write_text('{"workflow_run":{"id":11}}')
+
+    def _callback_10(_run: object) -> object:
+        return (
+            {"id": 11, "head_sha": candidate},
+            {"id": 7, "tag_name": "v1.2.3", "draft": False, "prerelease": False},
+        )
+
     monkeypatch.setattr(
         release,
         "_listener_event",
-        lambda _run: (
-            {"id": 11, "head_sha": candidate},
-            {"id": 7, "tag_name": "v1.2.3", "draft": False, "prerelease": False},
-        ),
+        _callback_10,
     )
-    monkeypatch.setattr(release, "_release", lambda _value: (7, "v1.2.3", candidate))
-    monkeypatch.setattr(
-        release,
-        "_run",
-        lambda _run: {
+
+    def _callback_11(_value: object) -> object:
+        return (7, "v1.2.3", candidate)
+
+    monkeypatch.setattr(release, "_release", _callback_11)
+
+    def _callback_12(_run: object) -> object:
+        return {
             "repository": {"full_name": release.REPOSITORY},
             "path": ".github/workflows/v2-production-plan.yml@main",
             "event": "workflow_run",
             "run_attempt": 1,
             "status": "in_progress",
             "conclusion": None,
-        },
+        }
+
+    monkeypatch.setattr(
+        release,
+        "_run",
+        _callback_12,
     )
     evidence = {
         "deployment_id": 9,
         "artifact_id": 10,
         "artifact_digest": "sha256:" + "b" * 64,
     }
-    monkeypatch.setattr(
-        release,
-        "_development",
-        lambda _candidate: (
+
+    def _callback_13(_candidate: object) -> object:
+        return (
             {"id": 12, "run_attempt": 2},
             evidence,
             {"pricing": "1.3.0", "oracle": "1.14.1"},
-        ),
+        )
+
+    monkeypatch.setattr(
+        release,
+        "_development",
+        _callback_13,
     )
     full_artifact = {
         "id": 13,
@@ -459,7 +518,11 @@ def test_admission_accepts_a_current_full_development_rerun(
         "workflow_run": {"id": 12, "head_sha": candidate},
         "digest": "sha256:" + "c" * 64,
     }
-    monkeypatch.setattr(release, "_artifacts", lambda *_args: full_artifact)
+
+    def _callback_14(*_args: object) -> object:
+        return full_artifact
+
+    monkeypatch.setattr(release, "_artifacts", _callback_14)
     admitted = release.admit(event, 11, 14, 1)
     assert admitted["candidate"] == candidate
     assert admitted["development_attempt"] == 2
@@ -640,12 +703,19 @@ def test_revalidate_rejects_changed_evidence_or_current_development_failure_with
     assert isinstance(candidate, str)
     calls: list[tuple[str, str]] = []
 
+    def _callback_15(_run: object) -> object:
+        return ({"id": 11, "head_sha": candidate}, {"id": 7})
+
     monkeypatch.setattr(
         release,
         "_listener_event",
-        lambda _run: ({"id": 11, "head_sha": candidate}, {"id": 7}),
+        _callback_15,
     )
-    monkeypatch.setattr(release, "_release", lambda _release: (7, "v1.2.3", candidate))
+
+    def _callback_16(_release: object) -> object:
+        return (7, "v1.2.3", candidate)
+
+    monkeypatch.setattr(release, "_release", _callback_16)
 
     def development(
         _candidate: str,
@@ -745,16 +815,22 @@ def test_revalidate_binds_current_consumer_and_durable_claim(
     if kind == "json-payload":
         claim["payload"] = json.dumps(required_claim)
 
+    def _callback_17(_run: object) -> object:
+        return ({"id": 11, "head_sha": candidate}, {"id": 7})
+
     monkeypatch.setattr(
         release,
         "_listener_event",
-        lambda _run: ({"id": 11, "head_sha": candidate}, {"id": 7}),
+        _callback_17,
     )
-    monkeypatch.setattr(release, "_release", lambda _release: (7, "v1.2.3", candidate))
-    monkeypatch.setattr(
-        release,
-        "_development",
-        lambda _candidate: (
+
+    def _callback_18(_release: object) -> object:
+        return (7, "v1.2.3", candidate)
+
+    monkeypatch.setattr(release, "_release", _callback_18)
+
+    def _callback_19(_candidate: object) -> object:
+        return (
             {"id": 12, "run_attempt": 2},
             {
                 "deployment_id": 9,
@@ -762,23 +838,36 @@ def test_revalidate_binds_current_consumer_and_durable_claim(
                 "artifact_digest": "sha256:" + "b" * 64,
             },
             {"pricing": "1.3.0", "oracle": "1.14.1"},
-        ),
+        )
+
+    monkeypatch.setattr(
+        release,
+        "_development",
+        _callback_19,
     )
+
+    def _callback_20(_run: object, _name: object) -> object:
+        return {"id": 13, "digest": "sha256:" + "c" * 64}
+
     monkeypatch.setattr(
         release,
         "_artifacts",
-        lambda _run, _name: {"id": 13, "digest": "sha256:" + "c" * 64},
+        _callback_20,
     )
-    monkeypatch.setattr(
-        release,
-        "api",
-        lambda _method, path, _payload=None: (
+
+    def _callback_21(_method: object, path: object, _payload: object = None) -> object:
+        return (
             consumer
             if path == "actions/runs/14"
             else claim
             if path == "deployments/15"
             else (_ for _ in ()).throw(AssertionError(path))
-        ),
+        )
+
+    monkeypatch.setattr(
+        release,
+        "api",
+        _callback_21,
     )
     if message is None:
         assert release.revalidate(admission) == admission

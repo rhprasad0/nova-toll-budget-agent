@@ -1,15 +1,16 @@
 """Exercise the real SDK simulator and judges without model or AWS calls."""
 
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from eval import run_evaluation, simulated
+from pydantic import BaseModel
 from strands import Agent
 from strands_evals import ActorSimulator, Case
 from strands_evals.types.evaluation import EvaluationData
 from strands_evals.types.simulation import ActorResponse
-
-from eval import run_evaluation, simulated
 
 
 @pytest.mark.parametrize("actor_finishes", [True, False])
@@ -40,7 +41,7 @@ def test_simulation_preserves_evidence_and_bounds_turns(
             return f"Observed toll from {origin}: $12.34."
 
     def model_answer(
-        agent: Agent, prompt: str, *, structured_output_model: Any
+        agent: Agent, prompt: str, *, structured_output_model: type[BaseModel]
     ) -> SimpleNamespace:
         assert agent.model.get_config().get("model_id") == "gpt-5.6-luna"
         assert not agent.tool_names  # No hidden Bedrock completion tool.
@@ -164,7 +165,7 @@ def test_simulator_rejects_blank_followup(monkeypatch: pytest.MonkeyPatch) -> No
     ],
 )
 def test_three_evaluators_report_one_case(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Any, verdicts: tuple[bool, bool, bool]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, verdicts: tuple[bool, bool, bool]
 ) -> None:
     from strands_evals import Experiment
     from strands_evals.evaluators import Evaluator
@@ -228,7 +229,7 @@ def test_three_evaluators_report_one_case(
     "payload,is_error", [(None, False), ({}, True), ("error", False)]
 )
 def test_tool_execution_failure_cannot_be_judged_as_unavailable(
-    monkeypatch: pytest.MonkeyPatch, payload: Any, is_error: bool
+    monkeypatch: pytest.MonkeyPatch, payload: object, is_error: bool
 ) -> None:
     monkeypatch.setattr(simulated, "load_openai_api_key", lambda: "offline-test-key")
 
@@ -273,7 +274,7 @@ def test_scheduled_selection_requires_one_case_before_live_work(
 
 @pytest.mark.parametrize("verdict_count", [0, 1, 2])
 def test_missing_scheduled_verdicts_fail_closed(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Any, verdict_count: int
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, verdict_count: int
 ) -> None:
     monkeypatch.setattr(run_evaluation, "_configure_database", lambda: None)
     monkeypatch.setattr(

@@ -8,12 +8,11 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from eval import run_evaluation, simulated
+from lambdas.timed_checks import handler as runner
 from strands_evals import Case
 from strands_evals.evaluators import Evaluator
 from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
-
-from eval import run_evaluation, simulated
-from lambdas.timed_checks import handler as runner
 from timed_checks import SCHEDULE_WINDOW_PAIRS
 
 
@@ -49,7 +48,7 @@ def _record_field(record: logging.LogRecord, field: str) -> str:
     return cast(str, getattr(record, field))
 
 
-def _record_value(record: logging.LogRecord, field: str) -> Any:
+def _record_value(record: logging.LogRecord, field: str) -> object:
     return getattr(record, field)
 
 
@@ -838,11 +837,11 @@ def test_unscored_experiment_errors_use_generic_handler_path_without_sns(
 
     original_to_file = EvaluationReport.to_file
 
-    def to_file(report: Any, path: str) -> None:
+    def to_file(report: EvaluationReport, path: str) -> None:
         events.append("write")
         original_to_file(report, path)
 
-    def display(_report: Any, *, include_input: bool) -> None:
+    def display(_report: object, *, include_input: bool) -> None:
         assert include_input is False
         events.append("display")
 

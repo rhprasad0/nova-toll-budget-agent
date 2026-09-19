@@ -10,6 +10,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Any, Literal, Self, cast
 from zoneinfo import ZoneInfo
 
+from agent_tools import current_price_domain as current_pricing
+from agent_tools import validate_toll_route as route_validation
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -20,9 +22,6 @@ from pydantic import (
 )
 from strands import tool  # pyright: ignore[reportUnknownVariableType]
 from strands.types.tools import ToolContext, ToolResult, ToolSpec
-
-from agent_tools import current_price_domain as current_pricing
-from agent_tools import validate_toll_route as route_validation
 
 logger = logging.getLogger(__name__)
 _SAFE_ERROR = "Unable to calculate the annual toll ballpark. Reference: {tool_use_id}."
@@ -1107,3 +1106,21 @@ TOOL_CONTRACT = {
     "operationErrorSchema": _OPERATION_ERROR_SCHEMA,
     "operationErrorTemplate": _SAFE_ERROR,
 }
+
+
+# Explicit helper API exercised by the offline contract tests.
+__all__ = (
+    "_OUTPUT_ADAPTER",
+    "_PROGRESS_MESSAGES",
+    "_SAFE_ERROR",
+    "_BallparkRequest",
+    "_BallparkRouteDb",
+    "_NoCompleteResponse",
+    "_OperationError",
+    "_ProgressEvent",
+    "_SummaryRow",
+    "_build_ballpark_response",
+    "_build_summary_query_inputs",
+    "_progress_event",
+    "_resolve_unambiguous_eastern_datetime",
+)

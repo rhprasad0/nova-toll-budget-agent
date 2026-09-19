@@ -261,7 +261,10 @@ def test_wrong_identity_or_evidence_fails_closed(
     ),
 )
 def test_deployment_id_zero_negative_malformed_or_unequal_fails_closed(
-    context: tuple[Any, ...], monkeypatch: pytest.MonkeyPatch, source: str, value: Any
+    context: tuple[Any, ...],
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    value: object,
 ) -> None:
     needs, _, _, calls, _ = context
     if source == "record":
@@ -283,7 +286,7 @@ def test_deployment_id_zero_negative_malformed_or_unequal_fails_closed(
 
 @pytest.mark.parametrize("bad", ["private string", [], None])
 def test_nested_non_mapping_outputs_fail_closed(
-    context: tuple[Any, ...], monkeypatch: pytest.MonkeyPatch, bad: Any
+    context: tuple[Any, ...], monkeypatch: pytest.MonkeyPatch, bad: object
 ) -> None:
     needs, _, _, calls, _ = context
     needs["build"]["outputs"] = bad

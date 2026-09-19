@@ -9,7 +9,6 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 import boto3
-
 from agent_tools.validate_toll_route import (
     _connect_to_database,  # pyright: ignore[reportPrivateUsage]
 )
