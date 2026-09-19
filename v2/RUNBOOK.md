@@ -48,16 +48,16 @@ grounded amount, the required disclaimer, and completion within 60 seconds.
 Only its bounded, candidate-bound record reaches delivery evidence; raw stream
 and provider data stay private. Root's IAM-only reconciliation remains required
 before the first production release.
-Production schema changes remain limited to the separately authorized, reviewed
-procedures below. The one-time baseline adoption path is described next; future
-recurring migrations require the later protected delivery workflow.
-Application release
-artifacts do not apply schema changes; this procedure is separate.
+Production schema changes use the protected fixed-target migration component
+below. The one-time baseline adoption and manual Oracle migration 030
+procedures remain separate, explicitly approved operations. Application release
+artifacts alone do not authorize or execute schema changes.
 
 ### Protected production migration component (issue 304, slice 4)
 
 `.github/workflows/v2-production-migrations.yml` is a main-only reusable
-component for the later protected delivery sequence. It accepts only the
+component invoked by `.github/workflows/v2-production-plan.yml` during its
+`prepare-production` and `promote-production` phases. It accepts only the
 verified release admission, rechecks the durable claim and active caller,
 verifies the exact candidate bundle before OIDC or private-network access, and
 runs the fixed `nova-toll-db` / `nova_toll` production profile. The wrapper
@@ -65,8 +65,11 @@ requires private IPv4/Tailscale connectivity, pinned `verify-full` TLS, IAM
 database authentication, encrypted available RDS metadata, seven-day backup
 retention, and a timezone-aware `LatestRestorableTime` no more than 30 minutes
 old and never in the future. This is admission evidence, not a recovery
-rehearsal. Slice 4 does not invoke the component or authorize generic/manual
-production migrations; slice 5 binds it to the exact saved-plan apply.
+rehearsal. The configured delivery sequence binds this component to the exact
+saved-plan apply and permits only the registered migration set; it does not
+authorize generic or manual production migrations. These workflow definitions
+describe the configured path, not proof of activation or a successful deployed
+migration.
 
 The current production baseline is AWS account `920534282028` in `us-east-1`:
 
