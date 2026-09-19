@@ -1,7 +1,7 @@
 ### Timed-check Scheduler bootstrap and verification (#345)
 
 Each invocation runs one of the [six scheduled simulated cases](../eval/README.md#minimal-scheduled-suite),
-with tool-count, completeness, and correctness checks. The 27 weekly schedule
+with tool-count, completeness, and correctness checks. The 28 weekly schedule
 slots remain; direct route and annual preflight checks are no longer part of the
 timed path. Legacy regression cases are available only through explicit runs.
 
@@ -97,7 +97,7 @@ aws --region us-east-1 logs tail /aws/lambda/nova-toll-v2-timed-checks-dev \
   --since 24h --filter-pattern timed_checks_result
 ```
 
-Confirm **27 enabled schedules** and one successful terminal result for each of
+Confirm **28 enabled schedules** and one successful terminal result for each of
 the five window IDs before treating development as verified. Production remains
 plan-only until the protected production delivery pipeline supports this exact
 resource set.
