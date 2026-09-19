@@ -46,7 +46,10 @@ jobs:
           cache-dependency-path: v2/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm ci --ignore-scripts --prefix lambdas/chat_proxy
-      - run: ./scripts/install_check_tools.sh
+      - name: Install pinned shell, workflow and secret checkers
+        run: |
+          ./scripts/install_check_tools.sh "$RUNNER_TEMP/repository-check-tools"
+          echo "$RUNNER_TEMP/repository-check-tools" >> "$GITHUB_PATH"
       - name: Check all authored code
         run: python3 scripts/check_repository.py
       - run: uv run python eval/run_evaluation.py --check
