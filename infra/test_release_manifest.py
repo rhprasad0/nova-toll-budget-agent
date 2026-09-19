@@ -1,26 +1,27 @@
 import argparse
 import hashlib
-import io
 import json
 import subprocess
 import tempfile
 import unittest
-from contextlib import ExitStack, redirect_stdout
+from contextlib import ExitStack
 from pathlib import Path
+from typing import cast
 from unittest import mock
 
 from infra import release_manifest
+from infra.delivery_plan_validator import JSON
 
 SHA = "1" * 40
 RUN = "12345"
 
 
-def digest(path):
+def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 class ReleaseManifestTests(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         subprocess.run(["git", "init", "-q", self.root], check=True)
@@ -40,9 +41,9 @@ class ReleaseManifestTests(unittest.TestCase):
             encoding="ascii",
         )
         self.manifest = self.root / "manifest.json"
-        self.manifest_value = {
+        self.manifest_value: dict[str, JSON] = {
             "schema_version": 1,
-            "provider_identity": release_manifest.PROVIDER_IDENTITY,
+            "provider_identity": dict[str, JSON](release_manifest.PROVIDER_IDENTITY),
             "deployment_inputs": {"input.txt": digest(self.input)},
             "packages": {
                 name: digest(self.packages / name) for name in release_manifest.PACKAGES
@@ -52,13 +53,13 @@ class ReleaseManifestTests(unittest.TestCase):
         }
         self.write_manifest()
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def write_manifest(self):
+    def write_manifest(self) -> None:
         self.manifest.write_text(json.dumps(self.manifest_value), encoding="utf-8")
 
-    def enable_timed_mode(self):
+    def enable_timed_mode(self) -> None:
         for relative in sorted(release_manifest.TIMED_INPUTS):
             self.track(relative, b"timed-reviewed\n")
         (self.packages / "timed-checks.zip").write_bytes(b"timed-checks.zip")
@@ -79,40 +80,62 @@ class ReleaseManifestTests(unittest.TestCase):
         }
         self.write_manifest()
 
-    def track(self, relative, content=b"reviewed\n"):
+    def track(self, relative: str, content: bytes = b"reviewed\n") -> Path:
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
         subprocess.run(["git", "-C", self.root, "add", relative], check=True)
         return path
 
-    def test_billing_inventory_activates_only_with_the_feature_and_is_complete(self):
+    def test_billing_inventory_activates_only_with_the_feature_and_is_complete(
+        self,
+    ) -> None:
         with mock.patch.object(release_manifest, "EXACT_INPUTS", {"input.txt"}):
             helper = "v2/scripts/cost_dashboard_release.py"
             self.track(helper)
-            self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
+            self.assertEqual(release_manifest.tracked_inputs(self.root), ["input.txt"])
             self.track(release_manifest.COST_MARKER)
-            with self.assertRaisesRegex(release_manifest.Invalid, "^inventory_incomplete$"):
-                release_manifest._tracked_inputs(self.root)
+            with self.assertRaisesRegex(
+                release_manifest.Invalid, "^inventory_incomplete$"
+            ):
+                release_manifest.tracked_inputs(self.root)
             for name in release_manifest.COST_INPUTS - {helper}:
                 self.track(name)
             self.assertEqual(
-                release_manifest._tracked_inputs(self.root),
-                sorted({"input.txt", release_manifest.COST_MARKER, *release_manifest.COST_INPUTS}),
+                release_manifest.tracked_inputs(self.root),
+                sorted(
+                    {
+                        "input.txt",
+                        release_manifest.COST_MARKER,
+                        *release_manifest.COST_INPUTS,
+                    }
+                ),
             )
-            tracked = {"input.txt", release_manifest.COST_MARKER, *release_manifest.COST_INPUTS}
+            tracked = {
+                "input.txt",
+                release_manifest.COST_MARKER,
+                *release_manifest.COST_INPUTS,
+            }
             for missing in release_manifest.COST_INPUTS:
                 with (
                     self.subTest(missing=missing),
-                    mock.patch.object(release_manifest.subprocess, "run", return_value=mock.Mock(
-                        stdout=b"\0".join(name.encode() for name in sorted(tracked - {missing}))
-                    )),
-                    self.assertRaisesRegex(release_manifest.Invalid, "^inventory_incomplete$"),
+                    mock.patch.object(
+                        release_manifest.subprocess,
+                        "run",
+                        return_value=mock.Mock(
+                            stdout=b"\0".join(
+                                name.encode() for name in sorted(tracked - {missing})
+                            )
+                        ),
+                    ),
+                    self.assertRaisesRegex(
+                        release_manifest.Invalid, "^inventory_incomplete$"
+                    ),
                 ):
-                    release_manifest._tracked_inputs(self.root)
+                    release_manifest.tracked_inputs(self.root)
 
-    def bundle_context(self):
-        values = {
+    def bundle_context(self) -> ExitStack:
+        values: dict[str, object] = {
             "EXACT_INPUTS": {"input.txt"},
             "INPUT_PREFIXES": (),
             "BUNDLE_MARKER": "bundle.sh",
@@ -129,8 +152,8 @@ class ReleaseManifestTests(unittest.TestCase):
             stack.enter_context(mock.patch.object(release_manifest, name, value))
         return stack
 
-    def args(self, **changes):
-        values = {
+    def args(self, **changes: object) -> argparse.Namespace:
+        values: dict[str, object] = {
             "manifest": self.manifest,
             "package_dir": self.packages,
             "checksums": self.checksums,
@@ -144,20 +167,20 @@ class ReleaseManifestTests(unittest.TestCase):
         values.update(changes)
         return argparse.Namespace(**values)
 
-    def verify(self, **changes):
-        exact_inputs = changes.pop("_exact_inputs", {"input.txt"})
+    def verify(self, **changes: object) -> dict[str, JSON]:
+        exact_inputs: object = changes.pop("_exact_inputs", set[str](["input.txt"]))
         with (
             mock.patch.object(release_manifest, "EXACT_INPUTS", exact_inputs),
             mock.patch.object(release_manifest, "INPUT_PREFIXES", ()),
-            mock.patch.object(release_manifest, "FIXED_BACKENDS", {}),
+            mock.patch.object(release_manifest, "FIXED_BACKENDS", dict[str, str]()),
         ):
             return release_manifest.verify(self.args(**changes))
 
-    def assert_rejected(self, reason, **changes):
+    def assert_rejected(self, reason: str, **changes: object) -> None:
         with self.assertRaisesRegex(release_manifest.Invalid, f"^{reason}$"):
             self.verify(**changes)
 
-    def test_source_then_artifact_verification_accepts(self):
+    def test_source_then_artifact_verification_accepts(self) -> None:
         first = self.verify()
         evidence = self.root / "evidence.json"
         second = self.verify(repo_root=None, write_evidence=None, evidence=evidence)
@@ -165,7 +188,7 @@ class ReleaseManifestTests(unittest.TestCase):
         self.assertEqual(first["status"], "accepted")
         self.assertNotIn(SHA, json.dumps(first))
 
-    def test_rejects_internally_consistent_unreviewed_bundle_payload(self):
+    def test_rejects_internally_consistent_unreviewed_bundle_payload(self) -> None:
         first = self.verify()
         evidence = self.root / "evidence.json"
         bundle = self.root / "bundle"
@@ -188,7 +211,7 @@ class ReleaseManifestTests(unittest.TestCase):
             bundle_root=bundle,
         )
 
-    def test_accepts_reviewed_development_overlay_scaffold(self):
+    def test_accepts_reviewed_development_overlay_scaffold(self) -> None:
         reviewed = {
             "infra/account-contract.json": b"{}\n",
             "v2/infra/main.tf": b"terraform {}\n",
@@ -207,7 +230,7 @@ class ReleaseManifestTests(unittest.TestCase):
         for name in release_manifest.PACKAGES:
             (package_root / name).write_bytes((self.packages / name).read_bytes())
 
-        release_manifest._verify_bundle_payload(
+        release_manifest.verify_bundle_payload(
             bundle,
             {
                 relative: hashlib.sha256(content).hexdigest()
@@ -216,7 +239,7 @@ class ReleaseManifestTests(unittest.TestCase):
             {name: digest(self.packages / name) for name in release_manifest.PACKAGES},
         )
 
-    def test_rejects_stale_input_and_package_boundaries(self):
+    def test_rejects_stale_input_and_package_boundaries(self) -> None:
         self.input.write_text("changed\n", encoding="utf-8")
         self.assert_rejected("input_digest_mismatch")
         self.input.write_text("reviewed\n", encoding="utf-8")
@@ -243,12 +266,12 @@ class ReleaseManifestTests(unittest.TestCase):
         )
         self.assert_rejected("package_inventory_invalid")
 
-    def test_timed_marker_requires_full_inventory_and_five_packages(self):
+    def test_timed_marker_requires_full_inventory_and_five_packages(self) -> None:
         self.enable_timed_mode()
         self.assertEqual(self.verify()["status"], "accepted")
 
         missing = min(release_manifest.TIMED_INPUTS)
-        self.manifest_value["deployment_inputs"].pop(missing)
+        cast(dict[str, JSON], self.manifest_value["deployment_inputs"]).pop(missing)
         self.write_manifest()
         self.assert_rejected("inventory_incomplete")
 
@@ -256,16 +279,18 @@ class ReleaseManifestTests(unittest.TestCase):
         (self.packages / "timed-checks.zip").unlink()
         self.assert_rejected("package_inventory_invalid")
 
-    def test_legacy_mode_excludes_tracked_timed_inputs(self):
+    def test_legacy_mode_excludes_tracked_timed_inputs(self) -> None:
         for relative in sorted(release_manifest.TIMED_INPUTS):
             self.track(relative)
         with (
             mock.patch.object(release_manifest, "EXACT_INPUTS", {"input.txt"}),
             mock.patch.object(release_manifest, "INPUT_PREFIXES", ()),
         ):
-            self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
+            self.assertEqual(release_manifest.tracked_inputs(self.root), ["input.txt"])
 
-    def test_production_control_inventory_is_feature_detected_and_complete(self):
+    def test_production_control_inventory_is_feature_detected_and_complete(
+        self,
+    ) -> None:
         non_marker = next(
             path
             for path in sorted(release_manifest.PRODUCTION_CONTROL_INPUTS)
@@ -276,12 +301,12 @@ class ReleaseManifestTests(unittest.TestCase):
             mock.patch.object(release_manifest, "INPUT_PREFIXES", ()),
         ):
             self.track(non_marker)
-            self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
+            self.assertEqual(release_manifest.tracked_inputs(self.root), ["input.txt"])
             self.track(release_manifest.PRODUCTION_CONTROL_MARKER)
             with self.assertRaisesRegex(
                 release_manifest.Invalid, "^inventory_incomplete$"
             ):
-                release_manifest._tracked_inputs(self.root)
+                release_manifest.tracked_inputs(self.root)
             for relative in sorted(release_manifest.PRODUCTION_CONTROL_INPUTS):
                 if relative not in {
                     non_marker,
@@ -291,13 +316,13 @@ class ReleaseManifestTests(unittest.TestCase):
             expected = sorted(
                 {"input.txt", *release_manifest.PRODUCTION_CONTROL_INPUTS}
             )
-            self.assertEqual(release_manifest._tracked_inputs(self.root), expected)
-            release_manifest._verify_inputs(
+            self.assertEqual(release_manifest.tracked_inputs(self.root), expected)
+            release_manifest.verify_inputs(
                 self.root,
                 {relative: digest(self.root / relative) for relative in expected},
             )
 
-    def test_rejects_missing_symlinked_and_extra_inputs(self):
+    def test_rejects_missing_symlinked_and_extra_inputs(self) -> None:
         self.input.unlink()
         self.assert_rejected("input_unreadable")
         target = self.root / "target.txt"
@@ -314,7 +339,7 @@ class ReleaseManifestTests(unittest.TestCase):
             "inventory_mismatch", _exact_inputs={"input.txt", "extra.txt"}
         )
 
-    def test_rejects_inventory_and_manifest_shapes(self):
+    def test_rejects_inventory_and_manifest_shapes(self) -> None:
         self.manifest_value["deployment_inputs"] = {"../input.txt": digest(self.input)}
         self.write_manifest()
         self.assert_rejected("inventory_invalid")
@@ -329,7 +354,7 @@ class ReleaseManifestTests(unittest.TestCase):
         )
         self.assert_rejected("duplicate_json_key")
 
-    def test_rejects_runtime_and_evidence_mismatch(self):
+    def test_rejects_runtime_and_evidence_mismatch(self) -> None:
         self.assert_rejected("runtime_binding_invalid", candidate_sha="main")
         self.verify()
         evidence = self.root / "evidence.json"
@@ -347,7 +372,7 @@ class ReleaseManifestTests(unittest.TestCase):
             "evidence_mismatch", repo_root=None, write_evidence=None, evidence=evidence
         )
 
-    def test_rejects_symlinks_and_does_not_regenerate_manifest(self):
+    def test_rejects_symlinks_and_does_not_regenerate_manifest(self) -> None:
         target = self.root / "target.zip"
         target.write_bytes(b"agentcore.zip")
         (self.packages / "agentcore.zip").unlink()
@@ -361,7 +386,7 @@ class ReleaseManifestTests(unittest.TestCase):
         self.manifest.symlink_to(self.root / "missing.json")
         self.assert_rejected("manifest_unreadable")
 
-    def test_untracked_bundle_marker_preserves_old_inventory(self):
+    def test_untracked_bundle_marker_preserves_old_inventory(self) -> None:
         marker = self.root / "v2/scripts/build_release_bundle.sh"
         marker.parent.mkdir(parents=True)
         marker.write_text("untracked\n", encoding="utf-8")
@@ -369,9 +394,9 @@ class ReleaseManifestTests(unittest.TestCase):
             mock.patch.object(release_manifest, "EXACT_INPUTS", {"input.txt"}),
             mock.patch.object(release_manifest, "INPUT_PREFIXES", ()),
         ):
-            self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
+            self.assertEqual(release_manifest.tracked_inputs(self.root), ["input.txt"])
 
-    def test_future_bundle_helpers_are_allowlisted_and_digest_checked(self):
+    def test_future_bundle_helpers_are_allowlisted_and_digest_checked(self) -> None:
         helpers = {
             "v2/scripts/classify_deployment_error.py": b"classify\n",
             "v2/scripts/run_private_stage.sh": b"stage\n",
@@ -391,16 +416,16 @@ class ReleaseManifestTests(unittest.TestCase):
             ),
             mock.patch.object(release_manifest, "BUNDLE_INPUT_PREFIXES", ()),
         ):
-            self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
+            self.assertEqual(release_manifest.tracked_inputs(self.root), ["input.txt"])
             self.track("bundle.sh")
             self.track("bundle-helper.py")
             self.track("db/schema.sql")
             fixed = {"bundle.sh", "bundle-helper.py", "db/schema.sql"}
             self.assertEqual(
-                release_manifest._tracked_inputs(self.root),
+                release_manifest.tracked_inputs(self.root),
                 sorted({"input.txt", *fixed}),
             )
-            release_manifest._verify_inputs(
+            release_manifest.verify_inputs(
                 self.root,
                 {
                     relative: digest(self.root / relative)
@@ -411,7 +436,7 @@ class ReleaseManifestTests(unittest.TestCase):
             for relative, content in helpers.items():
                 self.track(relative, content)
             self.track("v2/scripts/unrelated_helper.py")
-            selected = release_manifest._tracked_inputs(self.root)
+            selected = release_manifest.tracked_inputs(self.root)
             expected = sorted(
                 {
                     "input.txt",
@@ -425,14 +450,14 @@ class ReleaseManifestTests(unittest.TestCase):
             self.assertNotIn("v2/scripts/unrelated_helper.py", selected)
 
             inputs = {relative: digest(self.root / relative) for relative in selected}
-            release_manifest._verify_inputs(self.root, inputs)
+            release_manifest.verify_inputs(self.root, inputs)
             for relative in helpers:
                 omitted = inputs.copy()
                 omitted.pop(relative)
                 with self.assertRaisesRegex(
                     release_manifest.Invalid, "^inventory_mismatch$"
                 ):
-                    release_manifest._verify_inputs(self.root, omitted)
+                    release_manifest.verify_inputs(self.root, omitted)
 
             for relative, content in helpers.items():
                 path = self.root / relative
@@ -440,14 +465,14 @@ class ReleaseManifestTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     release_manifest.Invalid, "^input_digest_mismatch$"
                 ):
-                    release_manifest._verify_inputs(self.root, inputs)
+                    release_manifest.verify_inputs(self.root, inputs)
                 path.write_bytes(content)
 
-    def test_bundle_selects_archived_robots_input(self):
+    def test_bundle_selects_archived_robots_input(self) -> None:
         self.assertIn("v2/agent/robots.txt", release_manifest.BUNDLE_FIXED_INPUTS)
-        self.assertTrue(release_manifest._selected("v2/agent/robots.txt", True))
+        self.assertTrue(release_manifest.selected("v2/agent/robots.txt", True))
 
-    def test_tracked_bundle_marker_selects_bounded_inventory(self):
+    def test_tracked_bundle_marker_selects_bounded_inventory(self) -> None:
         tracked = {"input.txt", "bundle.sh", "bundle-helper.py", "db/schema.sql"}
         for relative in tracked - {"input.txt"}:
             self.track(relative)
@@ -455,7 +480,7 @@ class ReleaseManifestTests(unittest.TestCase):
         self.track("future.py")
         self.track("unknown.txt")
         with self.bundle_context():
-            selected = release_manifest._tracked_inputs(self.root)
+            selected = release_manifest.tracked_inputs(self.root)
         self.assertEqual(
             selected,
             sorted(
@@ -471,15 +496,15 @@ class ReleaseManifestTests(unittest.TestCase):
         )
         self.assertNotIn("unknown.txt", selected)
 
-    def test_tracked_bundle_marker_requires_fixed_inputs(self):
+    def test_tracked_bundle_marker_requires_fixed_inputs(self) -> None:
         self.track("bundle.sh")
         with (
             self.bundle_context(),
             self.assertRaisesRegex(release_manifest.Invalid, "^inventory_incomplete$"),
         ):
-            release_manifest._tracked_inputs(self.root)
+            release_manifest.tracked_inputs(self.root)
 
-    def test_bundle_manifest_rejects_omission_and_changed_payload(self):
+    def test_bundle_manifest_rejects_omission_and_changed_payload(self) -> None:
         for relative in (
             "bundle.sh",
             "bundle-helper.py",
@@ -497,7 +522,7 @@ class ReleaseManifestTests(unittest.TestCase):
             }
         )
         inputs = {relative: digest(self.root / relative) for relative in input_paths}
-        self.manifest_value["deployment_inputs"] = inputs
+        self.manifest_value["deployment_inputs"] = dict[str, JSON](inputs)
         self.write_manifest()
         with self.bundle_context():
             self.assertEqual(self.verify()["status"], "accepted")
@@ -521,11 +546,13 @@ class ReleaseManifestTests(unittest.TestCase):
 
 
 class DashboardInventoryTests(unittest.TestCase):
-    def test_dashboard_is_bounded_and_optional(self):
-        self.assertTrue(release_manifest._selected("v2/eval/dashboard.py", timed_enabled=True))
-        self.assertFalse(release_manifest._selected("v2/eval/dashboard.py"))
-        self.assertTrue(release_manifest._selected("v2/agent/evals.html"))
-        self.assertFalse(release_manifest._selected("v2/agent/arbitrary.html"))
+    def test_dashboard_is_bounded_and_optional(self) -> None:
+        self.assertTrue(
+            release_manifest.selected("v2/eval/dashboard.py", timed_enabled=True)
+        )
+        self.assertFalse(release_manifest.selected("v2/eval/dashboard.py"))
+        self.assertTrue(release_manifest.selected("v2/agent/evals.html"))
+        self.assertFalse(release_manifest.selected("v2/agent/arbitrary.html"))
         self.assertNotIn("v2/eval/dashboard.py", release_manifest.TIMED_INPUTS)
 
 

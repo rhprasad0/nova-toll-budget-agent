@@ -13,14 +13,16 @@ import hashlib
 import json
 import re
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Mapping
-
+from typing import Any, NoReturn, TypeGuard, cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "v2"))
 from scripts import cost_dashboard_release as cost_release
+
+type JSON = bool | int | float | str | list[JSON] | dict[str, JSON] | None
 
 
 EXPECTED_IDENTITY = MappingProxyType(
@@ -41,16 +43,16 @@ TIMED_CHECKS_MARKER = "v2/scripts/build_timed_checks_zip.sh"
 PRODUCTION_CONTROL_MARKER = "v2/scripts/run_production_migrations.py"
 PRODUCTION_CONTROL_INPUTS = frozenset(
     {
-    ".github/workflows/v2-production-migrations.yml",
-    "v2/scripts/adopt_production_baseline.py",
-    "v2/scripts/check_production_release.py",
-    PRODUCTION_CONTROL_MARKER,
-    "v2/scripts/run_production_migrations_workflow.sh",
+        ".github/workflows/v2-production-migrations.yml",
+        "v2/scripts/adopt_production_baseline.py",
+        "v2/scripts/check_production_release.py",
+        PRODUCTION_CONTROL_MARKER,
+        "v2/scripts/run_production_migrations_workflow.sh",
     }
 )
 
 
-def _packages_for_inputs(inputs: Mapping[str, Any]) -> tuple[str, ...]:
+def packages_for_inputs(inputs: Mapping[str, Any]) -> tuple[str, ...]:
     return TIMED_PACKAGES if TIMED_CHECKS_MARKER in inputs else LEGACY_PACKAGES
 
 
@@ -71,7 +73,9 @@ class Mutation:
     provider_change_identity: tuple[tuple[str, str], ...] = ()
 
 
-def _permission(action: str, *resources: str, conditions: Mapping[str, str] | None = None) -> Permission:
+def _permission(
+    action: str, *resources: str, conditions: Mapping[str, str] | None = None
+) -> Permission:
     return Permission(action, resources, MappingProxyType(dict(conditions or {})))
 
 
@@ -83,7 +87,14 @@ def _mutation(
     create_identity: tuple[tuple[str, Any], ...] = (),
     provider_change_identity: tuple[tuple[str, str], ...] = (),
 ) -> Mutation:
-    return Mutation(fields, actions, operation_class, permissions, create_identity, provider_change_identity)
+    return Mutation(
+        fields,
+        actions,
+        operation_class,
+        permissions,
+        create_identity,
+        provider_change_identity,
+    )
 
 
 ACCOUNT = "903859731897"
@@ -101,22 +112,40 @@ LAMBDA = tuple(
 )
 LAMBDA_FUNCTION_NAMES = MappingProxyType(
     {
-    "loader": "toll-v2-pricing-loader-dev",
-    "publisher": "toll-v2-report-publisher-dev",
-    "tollchat_proxy": "tollchat-v2-chat-proxy-dev",
-    "timed_checks": "nova-toll-v2-timed-checks-dev",
+        "loader": "toll-v2-pricing-loader-dev",
+        "publisher": "toll-v2-report-publisher-dev",
+        "tollchat_proxy": "tollchat-v2-chat-proxy-dev",
+        "timed_checks": "nova-toll-v2-timed-checks-dev",
     }
 )
 TIMED_SCHEDULE_KEYS = (
-    "greenway-eb-fri-0723", "greenway-eb-mon-0723", "greenway-eb-thu-0723",
-    "greenway-eb-tue-0723", "greenway-eb-wed-0723", "greenway-wb-fri-1723",
-    "greenway-wb-mon-1723", "greenway-wb-thu-1723", "greenway-wb-tue-1723",
-    "greenway-wb-wed-1723", "i95-northbound-fri-0617", "i95-northbound-mon-0617",
-    "i95-northbound-sat-1817", "i95-northbound-thu-0617", "i95-northbound-tue-0617",
-    "i95-northbound-wed-0617", "i95-reversal-fri-0147", "i95-reversal-mon-1117",
-    "i95-reversal-sat-1517", "i95-reversal-thu-0147", "i95-reversal-tue-0147",
-    "i95-reversal-wed-0147", "i95-southbound-fri-1417", "i95-southbound-mon-1417",
-    "i95-southbound-sat-1017", "i95-southbound-thu-1417", "i95-southbound-tue-1417",
+    "greenway-eb-fri-0723",
+    "greenway-eb-mon-0723",
+    "greenway-eb-thu-0723",
+    "greenway-eb-tue-0723",
+    "greenway-eb-wed-0723",
+    "greenway-wb-fri-1723",
+    "greenway-wb-mon-1723",
+    "greenway-wb-thu-1723",
+    "greenway-wb-tue-1723",
+    "greenway-wb-wed-1723",
+    "i95-northbound-fri-0617",
+    "i95-northbound-mon-0617",
+    "i95-northbound-sat-1817",
+    "i95-northbound-thu-0617",
+    "i95-northbound-tue-0617",
+    "i95-northbound-wed-0617",
+    "i95-reversal-fri-0147",
+    "i95-reversal-mon-1117",
+    "i95-reversal-sat-1517",
+    "i95-reversal-thu-0147",
+    "i95-reversal-tue-0147",
+    "i95-reversal-wed-0147",
+    "i95-southbound-fri-1417",
+    "i95-southbound-mon-1417",
+    "i95-southbound-sat-1017",
+    "i95-southbound-thu-1417",
+    "i95-southbound-tue-1417",
     "i95-southbound-wed-1417",
 )
 LOG_GROUPS = tuple(
@@ -145,7 +174,9 @@ ALARM_NAMES = (
     "tollchat-v2-chat-proxy-failures-dev",
     "tollchat-v2-chat-proxy-latency-dev",
 )
-ALARMS = tuple(f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{name}" for name in ALARM_NAMES)
+ALARMS = tuple(
+    f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{name}" for name in ALARM_NAMES
+)
 SITE_OBJECT = f"arn:aws:s3:::{SITE_BUCKET_NAME}/*"
 ARTIFACT_OBJECTS = (
     "arn:aws:s3:::nova-toll-agentcore-903859731897/runtime/v2/*",
@@ -196,11 +227,23 @@ TRACE_NOTICE_DIGESTS = {
     "aws_s3_object.faq": "3c2e1281969095cbf1282bf8abbb268713dfdd96110db28bc5bbf3ea1823c105",
     "aws_s3_object.privacy": "3363dc45ae0e3bc97b8ec4d90c4fb3290050e45b5f4bf1989edd95bd52b7318d",
 }
-REDACTED_TRACE_NOTICE_DIGESTS = {'aws_s3_object.index': 'c4d4867169f6040c265f349697a6c9fa7c70506d66e41d93fea2ef5ae8d8b2e1', 'aws_s3_object.faq': 'ad2bfde99a68f8ed16fb1f8d67a9a7a4fbff031396639a1e84700230a590547a', 'aws_s3_object.privacy': '00b192c03648aaec4913aafc8e3ad30bff05d73497de7466a78fbcef1969e0f5'}
+REDACTED_TRACE_NOTICE_DIGESTS = {
+    "aws_s3_object.index": "c4d4867169f6040c265f349697a6c9fa7c70506d66e41d93fea2ef5ae8d8b2e1",
+    "aws_s3_object.faq": "ad2bfde99a68f8ed16fb1f8d67a9a7a4fbff031396639a1e84700230a590547a",
+    "aws_s3_object.privacy": "00b192c03648aaec4913aafc8e3ad30bff05d73497de7466a78fbcef1969e0f5",
+}
 # Reviewed dashboard links preserve the existing redacted telemetry notices.
-DASHBOARD_NOTICE_DIGESTS = {'aws_s3_object.faq': '09d9433615f842f51714135b3f2d5bd52cf764a4a6bb3bc45d4275871c5e37c7', 'aws_s3_object.index': 'ba691bafe85efe376cdcf65780805e939c9492587839deca0f60ced5580f1ea9'}
-REDACTED_NOTICE_VERSIONS = {address: {digest, DASHBOARD_NOTICE_DIGESTS.get(address, digest)} for address, digest in REDACTED_TRACE_NOTICE_DIGESTS.items()}
-REDACTED_NOTICE_VERSIONS["aws_s3_object.index"].add("5b708ba38dd2a4fd4a4f43355fbfeb1d4dd09708a6af0fca5cd5ef910837a2ba")
+DASHBOARD_NOTICE_DIGESTS = {
+    "aws_s3_object.faq": "09d9433615f842f51714135b3f2d5bd52cf764a4a6bb3bc45d4275871c5e37c7",
+    "aws_s3_object.index": "ba691bafe85efe376cdcf65780805e939c9492587839deca0f60ced5580f1ea9",
+}
+REDACTED_NOTICE_VERSIONS = {
+    address: {digest, DASHBOARD_NOTICE_DIGESTS.get(address, digest)}
+    for address, digest in REDACTED_TRACE_NOTICE_DIGESTS.items()
+}
+REDACTED_NOTICE_VERSIONS["aws_s3_object.index"].add(
+    "5b708ba38dd2a4fd4a4f43355fbfeb1d4dd09708a6af0fca5cd5ef910837a2ba"
+)
 
 TRACE_READ_ONLY_FIELDS = {
     "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]": (
@@ -256,7 +299,7 @@ TRACE_READ_ONLY_FIELDS = {
 }
 
 
-def _trace_reject(address: str, action: str, operation_class: str) -> None:
+def _trace_reject(address: str, action: str, operation_class: str) -> NoReturn:
     # This is intentionally an existing workflow allowlisted reason.  The
     # delivery workflow records the validator once and propagates this summary.
     _reject(
@@ -356,15 +399,38 @@ def _trace_firehose_value() -> dict[str, Any]:
 
 def _build_contract() -> dict[str, Mutation]:
     result: dict[str, Mutation] = {}
-    for name, resource in zip(("loader", "publisher", "tollchat_proxy", "timed_checks"), LAMBDA):
+    for name, resource in zip(
+        ("loader", "publisher", "tollchat_proxy", "timed_checks"), LAMBDA, strict=False
+    ):
         if name == "tollchat_proxy":
-            delivery_identity = (("function_name", LAMBDA_FUNCTION_NAMES[name]), ("filename", None), ("s3_bucket", ARTIFACT_BUCKET_NAME), ("s3_key", "lambda/v2/chat-proxy-dev.zip"))
+            delivery_identity = (
+                ("function_name", LAMBDA_FUNCTION_NAMES[name]),
+                ("filename", None),
+                ("s3_bucket", ARTIFACT_BUCKET_NAME),
+                ("s3_key", "lambda/v2/chat-proxy-dev.zip"),
+            )
         elif name == "timed_checks":
-            delivery_identity = (("function_name", LAMBDA_FUNCTION_NAMES[name]), ("filename", None), ("s3_bucket", ARTIFACT_BUCKET_NAME), ("s3_key", "lambda/v2/timed-checks-dev.zip"))
+            delivery_identity = (
+                ("function_name", LAMBDA_FUNCTION_NAMES[name]),
+                ("filename", None),
+                ("s3_bucket", ARTIFACT_BUCKET_NAME),
+                ("s3_key", "lambda/v2/timed-checks-dev.zip"),
+            )
         else:
-            delivery_identity = (("function_name", LAMBDA_FUNCTION_NAMES[name]), ("s3_bucket", None), ("s3_key", None), ("s3_object_version", None))
+            delivery_identity = (
+                ("function_name", LAMBDA_FUNCTION_NAMES[name]),
+                ("s3_bucket", None),
+                ("s3_key", None),
+                ("s3_object_version", None),
+            )
         result[f"aws_lambda_function.{name}"] = _mutation(
-            ("filename", "source_code_hash", "s3_bucket", "s3_key", "s3_object_version"),
+            (
+                "filename",
+                "source_code_hash",
+                "s3_bucket",
+                "s3_key",
+                "s3_object_version",
+            ),
             ("update",),
             "lambda-code",
             _permission("lambda:UpdateFunctionCode", resource),
@@ -448,10 +514,13 @@ def _build_contract() -> dict[str, Mutation]:
         ("target", "retry_policy", "dead_letter_config"),
         ("create", "update"),
         "event-targets",
-        _permission("events:PutTargets", f"arn:aws:events:{REGION}:{ACCOUNT}:rule/toll-v2-pricing-raw-objects-dev"),
+        _permission(
+            "events:PutTargets",
+            f"arn:aws:events:{REGION}:{ACCOUNT}:rule/toll-v2-pricing-raw-objects-dev",
+        ),
     )
     log_names = ("loader", "publisher", "tollchat_proxy", "usage_publisher")
-    for name, resource in zip(log_names, LOG_GROUPS[:4]):
+    for name, resource in zip(log_names, LOG_GROUPS[:4], strict=False):
         result[f"aws_cloudwatch_log_group.{name}"] = _mutation(
             ("retention_in_days",),
             ("update",),
@@ -484,8 +553,14 @@ def _build_contract() -> dict[str, Mutation]:
             ("tags",),
             ("update",),
             "alarm-tags",
-            _permission("cloudwatch:TagResource", f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{name}"),
-            _permission("cloudwatch:UntagResource", f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{name}"),
+            _permission(
+                "cloudwatch:TagResource",
+                f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{name}",
+            ),
+            _permission(
+                "cloudwatch:UntagResource",
+                f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{name}",
+            ),
         )
     result["aws_iam_role_policy.publisher"] = _mutation(
         ("policy",),
@@ -493,14 +568,21 @@ def _build_contract() -> dict[str, Mutation]:
         "publisher-inline-policy",
         _permission("iam:PutRolePolicy", PUBLISHER_ROLE_ARN),
         create_identity=(("name", PUBLISHER_ROLE_NAME), ("role", PUBLISHER_ROLE_NAME)),
-        provider_change_identity=(("account_id", ACCOUNT), ("name", PUBLISHER_ROLE_NAME), ("role", PUBLISHER_ROLE_NAME)),
+        provider_change_identity=(
+            ("account_id", ACCOUNT),
+            ("name", PUBLISHER_ROLE_NAME),
+            ("role", PUBLISHER_ROLE_NAME),
+        ),
     )
     result["aws_iam_role_policy.tollchat_runtime"] = _mutation(
         ("policy",),
         ("update",),
         "agentcore-trace-runtime-policy",
         _permission("iam:PutRolePolicy", TRACE_RUNTIME_ROLE),
-        create_identity=(("name", TRACE_RUNTIME_ROLE_NAME), ("role", TRACE_RUNTIME_ROLE_NAME)),
+        create_identity=(
+            ("name", TRACE_RUNTIME_ROLE_NAME),
+            ("role", TRACE_RUNTIME_ROLE_NAME),
+        ),
         provider_change_identity=(
             ("account_id", ACCOUNT),
             ("name", TRACE_RUNTIME_ROLE_NAME),
@@ -513,23 +595,43 @@ def _build_contract() -> dict[str, Mutation]:
         "report-freshness-alarm",
         _permission("cloudwatch:PutMetricAlarm", REPORT_FRESHNESS_ALARM_ARN),
         create_identity=(("alarm_name", REPORT_FRESHNESS_ALARM_NAME),),
-        provider_change_identity=(("account_id", ACCOUNT), ("alarm_name", REPORT_FRESHNESS_ALARM_NAME), ("region", REGION)),
+        provider_change_identity=(
+            ("account_id", ACCOUNT),
+            ("alarm_name", REPORT_FRESHNESS_ALARM_NAME),
+            ("region", REGION),
+        ),
     )
     result["aws_dynamodb_table.tollchat_sessions"] = _mutation(
         ("ttl.enabled",),
         ("update",),
         "sessions-ttl",
-        _permission("dynamodb:UpdateTimeToLive", f"arn:aws:dynamodb:{REGION}:{ACCOUNT}:table/tollchat-v2-anonymous-sessions-dev"),
+        _permission(
+            "dynamodb:UpdateTimeToLive",
+            f"arn:aws:dynamodb:{REGION}:{ACCOUNT}:table/tollchat-v2-anonymous-sessions-dev",
+        ),
     )
     result["aws_scheduler_schedule.publisher"] = _mutation(
-        ("schedule_expression", "schedule_expression_timezone", "flexible_time_window", "target"),
+        (
+            "schedule_expression",
+            "schedule_expression_timezone",
+            "flexible_time_window",
+            "target",
+        ),
         ("update",),
         "schedule-update",
-        _permission("scheduler:UpdateSchedule", f"arn:aws:scheduler:{REGION}:{ACCOUNT}:schedule/*/toll-v2-report-publisher-dev"),
+        _permission(
+            "scheduler:UpdateSchedule",
+            f"arn:aws:scheduler:{REGION}:{ACCOUNT}:schedule/*/toll-v2-report-publisher-dev",
+        ),
     )
     for key in TIMED_SCHEDULE_KEYS:
         result[f'aws_scheduler_schedule.timed_checks["{key}"]'] = _mutation(
-            ("schedule_expression", "schedule_expression_timezone", "flexible_time_window", "target"),
+            (
+                "schedule_expression",
+                "schedule_expression_timezone",
+                "flexible_time_window",
+                "target",
+            ),
             ("update",),
             "schedule-update",
             _permission(
@@ -546,7 +648,10 @@ def _build_contract() -> dict[str, Mutation]:
         ("description", "guardrail_arn"),
         ("create",),
         "guardrail-version",
-        _permission("bedrock:CreateGuardrailVersion", f"arn:aws:bedrock:{REGION}:{ACCOUNT}:guardrail/vdyqrh31xgca"),
+        _permission(
+            "bedrock:CreateGuardrailVersion",
+            f"arn:aws:bedrock:{REGION}:{ACCOUNT}:guardrail/vdyqrh31xgca",
+        ),
     )
     result["aws_bedrockagentcore_agent_runtime.tollchat"] = _mutation(
         (
@@ -555,7 +660,10 @@ def _build_contract() -> dict[str, Mutation]:
         ),
         ("update",),
         "agentcore-code",
-        _permission("bedrock-agentcore:UpdateAgentRuntime", f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl"),
+        _permission(
+            "bedrock-agentcore:UpdateAgentRuntime",
+            f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl",
+        ),
         _permission(
             "iam:PassRole",
             f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-agentcore-runtime-dev",
@@ -567,7 +675,10 @@ def _build_contract() -> dict[str, Mutation]:
         ("agent_runtime_version",),
         ("update",),
         "agentcore-endpoint",
-        _permission("bedrock-agentcore:UpdateAgentRuntimeEndpoint", f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview"),
+        _permission(
+            "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
+            f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview",
+        ),
     )
     result["aws_kinesis_firehose_delivery_stream.agentcore_traces[0]"] = _mutation(
         tuple(_trace_firehose_value()),
@@ -588,7 +699,7 @@ def _build_contract() -> dict[str, Mutation]:
         ),
         provider_change_identity=(("arn", TRACE_FIREHOSE),),
     )
-    for key, group in zip(("DEFAULT", "preview"), TRACE_LOG_GROUPS):
+    for key, group in zip(("DEFAULT", "preview"), TRACE_LOG_GROUPS, strict=False):
         result[f'aws_cloudwatch_log_subscription_filter.agentcore_traces["{key}"]'] = (
             _mutation(
                 (
@@ -667,27 +778,48 @@ def _build_contract() -> dict[str, Mutation]:
         ("triggers.redeployment",),
         ("create",),
         "api-deployment",
-        _permission("apigateway:POST", f"arn:aws:apigateway:{REGION}::/restapis/ocw8sg0wlb/deployments", f"arn:aws:apigateway:{REGION}::/restapis/ocw8sg0wlb/deployments/*"),
+        _permission(
+            "apigateway:POST",
+            f"arn:aws:apigateway:{REGION}::/restapis/ocw8sg0wlb/deployments",
+            f"arn:aws:apigateway:{REGION}::/restapis/ocw8sg0wlb/deployments/*",
+        ),
     )
     for name in ("public_chat_routes", "public_report_routes"):
         result[f"aws_cloudfront_function.{name}"] = _mutation(
             ("code",),
             ("update", "publish"),
             "cloudfront-code",
-            _permission("cloudfront:UpdateFunction", f"arn:aws:cloudfront::{ACCOUNT}:function/tollchat-v2-{name.replace('_', '-')}-dev"),
-            _permission("cloudfront:PublishFunction", f"arn:aws:cloudfront::{ACCOUNT}:function/tollchat-v2-{name.replace('_', '-')}-dev"),
+            _permission(
+                "cloudfront:UpdateFunction",
+                f"arn:aws:cloudfront::{ACCOUNT}:function/tollchat-v2-{name.replace('_', '-')}-dev",
+            ),
+            _permission(
+                "cloudfront:PublishFunction",
+                f"arn:aws:cloudfront::{ACCOUNT}:function/tollchat-v2-{name.replace('_', '-')}-dev",
+            ),
         )
-    for endpoint, group in zip(("DEFAULT", "preview"), TRACE_LOG_GROUPS):
+    for endpoint, group in zip(("DEFAULT", "preview"), TRACE_LOG_GROUPS, strict=False):
         group_name = group.split(":log-group:", 1)[1].removesuffix(":*")
-        result[f'aws_cloudwatch_log_data_protection_policy.agentcore["{endpoint}"]'] = _mutation(
-            ("log_group_name", "policy_document"), ("create", "update"), "telemetry-log-protection",
-            _permission("logs:PutDataProtectionPolicy", group),
-            create_identity=(("log_group_name", group_name),),
+        result[f'aws_cloudwatch_log_data_protection_policy.agentcore["{endpoint}"]'] = (
+            _mutation(
+                ("log_group_name", "policy_document"),
+                ("create", "update"),
+                "telemetry-log-protection",
+                _permission("logs:PutDataProtectionPolicy", group),
+                create_identity=(("log_group_name", group_name),),
+            )
         )
-        result[f'aws_cloudwatch_log_metric_filter.telemetry_redaction["{endpoint}"]'] = _mutation(
-            ("name", "log_group_name", "pattern", "metric_transformation"), ("create", "update"), "telemetry-failure-metric",
+        result[
+            f'aws_cloudwatch_log_metric_filter.telemetry_redaction["{endpoint}"]'
+        ] = _mutation(
+            ("name", "log_group_name", "pattern", "metric_transformation"),
+            ("create", "update"),
+            "telemetry-failure-metric",
             _permission("logs:PutMetricFilter", group),
-            create_identity=(("name", "tollchat-redaction-failures"), ("log_group_name", group_name)),
+            create_identity=(
+                ("name", "tollchat-redaction-failures"),
+                ("log_group_name", group_name),
+            ),
         )
     for key, name in (
         ("telemetry_redaction", "redaction-failures"),
@@ -697,8 +829,23 @@ def _build_contract() -> dict[str, Mutation]:
         alarm_name = f"tollchat-v2-{name}-dev"
         alarm_arn = f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{alarm_name}"
         result[f"aws_cloudwatch_metric_alarm.{key}"] = _mutation(
-            ("alarm_name", "alarm_description", "namespace", "metric_name", "dimensions", "statistic", "period", "evaluation_periods", "comparison_operator", "threshold", "treat_missing_data", "alarm_actions", "tags"),
-            ("create", "update"), "telemetry-alarm",
+            (
+                "alarm_name",
+                "alarm_description",
+                "namespace",
+                "metric_name",
+                "dimensions",
+                "statistic",
+                "period",
+                "evaluation_periods",
+                "comparison_operator",
+                "threshold",
+                "treat_missing_data",
+                "alarm_actions",
+                "tags",
+            ),
+            ("create", "update"),
+            "telemetry-alarm",
             _permission("cloudwatch:PutMetricAlarm", alarm_arn),
             _permission("cloudwatch:TagResource", alarm_arn),
             _permission("cloudwatch:UntagResource", alarm_arn),
@@ -711,29 +858,110 @@ def _build_contract() -> dict[str, Mutation]:
     cost_rule = f"arn:aws:events:{REGION}:{ACCOUNT}:rule/{cost_name}"
     cost_log = f"arn:aws:logs:{REGION}:{ACCOUNT}:log-group:/aws/lambda/{cost_name}"
     billing = {
-        "aws_iam_role.costs": (("name", "assume_role_policy", "path", "max_session_duration", "force_detach_policies"), ("iam:CreateRole", cost_role), ("iam:TagRole", cost_role)),
-        "aws_iam_role_policy.costs": (("name", "role", "policy"), ("iam:PutRolePolicy", cost_role)),
-        "aws_cloudwatch_log_group.costs": (("name", "retention_in_days"), ("logs:CreateLogGroup", cost_log), ("logs:PutRetentionPolicy", cost_log)),
-        "aws_lambda_function.costs": (("function_name", "role", "runtime", "handler", "architectures", "timeout", "memory_size", "reserved_concurrent_executions", "package_type", "publish", "environment", "filename", "source_code_hash"), ("lambda:CreateFunction", cost_function), ("lambda:PutFunctionConcurrency", cost_function)),
-        "aws_cloudwatch_event_rule.costs": (("name", "event_bus_name", "schedule_expression", "state"), ("events:PutRule", cost_rule)),
-        "aws_cloudwatch_event_target.costs": (("rule", "event_bus_name", "target_id", "arn", "input", "retry_policy"), ("events:PutTargets", cost_rule)),
-        "aws_lambda_permission.costs": (("statement_id", "action", "function_name", "principal", "source_arn", "source_account"), ("lambda:AddPermission", cost_function)),
-        "aws_s3_object.cost_dashboard": (("bucket", "key", "content", "content_type", "cache_control"), ("s3:PutObject", f"{SITE_BUCKET}/costs.html")),
-        **{f'aws_s3_object.cost_assets["{asset}"]': (("bucket", "key", "source", "source_hash", "content_type", "cache_control"), ("s3:PutObject", f"{SITE_BUCKET}/assets/{asset}")) for asset in ("costs.css", "costs.mjs")},
+        "aws_iam_role.costs": (
+            (
+                "name",
+                "assume_role_policy",
+                "path",
+                "max_session_duration",
+                "force_detach_policies",
+            ),
+            ("iam:CreateRole", cost_role),
+            ("iam:TagRole", cost_role),
+        ),
+        "aws_iam_role_policy.costs": (
+            ("name", "role", "policy"),
+            ("iam:PutRolePolicy", cost_role),
+        ),
+        "aws_cloudwatch_log_group.costs": (
+            ("name", "retention_in_days"),
+            ("logs:CreateLogGroup", cost_log),
+            ("logs:PutRetentionPolicy", cost_log),
+        ),
+        "aws_lambda_function.costs": (
+            (
+                "function_name",
+                "role",
+                "runtime",
+                "handler",
+                "architectures",
+                "timeout",
+                "memory_size",
+                "reserved_concurrent_executions",
+                "package_type",
+                "publish",
+                "environment",
+                "filename",
+                "source_code_hash",
+            ),
+            ("lambda:CreateFunction", cost_function),
+            ("lambda:PutFunctionConcurrency", cost_function),
+        ),
+        "aws_cloudwatch_event_rule.costs": (
+            ("name", "event_bus_name", "schedule_expression", "state"),
+            ("events:PutRule", cost_rule),
+        ),
+        "aws_cloudwatch_event_target.costs": (
+            ("rule", "event_bus_name", "target_id", "arn", "input", "retry_policy"),
+            ("events:PutTargets", cost_rule),
+        ),
+        "aws_lambda_permission.costs": (
+            (
+                "statement_id",
+                "action",
+                "function_name",
+                "principal",
+                "source_arn",
+                "source_account",
+            ),
+            ("lambda:AddPermission", cost_function),
+        ),
+        "aws_s3_object.cost_dashboard": (
+            ("bucket", "key", "content", "content_type", "cache_control"),
+            ("s3:PutObject", f"{SITE_BUCKET}/costs.html"),
+        ),
+        **{
+            f'aws_s3_object.cost_assets["{asset}"]': (
+                (
+                    "bucket",
+                    "key",
+                    "source",
+                    "source_hash",
+                    "content_type",
+                    "cache_control",
+                ),
+                ("s3:PutObject", f"{SITE_BUCKET}/assets/{asset}"),
+            )
+            for asset in ("costs.css", "costs.mjs")
+        },
     }
     for address, (fields, *permissions) in billing.items():
         required = [_permission(action, resource) for action, resource in permissions]
         if address == "aws_lambda_function.costs":
-            required += [_permission("iam:PassRole", cost_role, conditions={"iam:PassedToService": "lambda.amazonaws.com"}), _permission("lambda:TagResource", cost_function)]
+            required += [
+                _permission(
+                    "iam:PassRole",
+                    cost_role,
+                    conditions={"iam:PassedToService": "lambda.amazonaws.com"},
+                ),
+                _permission("lambda:TagResource", cost_function),
+            ]
         if address == "aws_cloudwatch_event_rule.costs":
             required.append(_permission("events:TagResource", cost_rule))
         if address == "aws_cloudwatch_log_group.costs":
             required.append(_permission("logs:TagResource", cost_log))
-        result[address] = _mutation(fields, ("create", "update"), "cost-publication", *required)
+        result[address] = _mutation(
+            fields, ("create", "update"), "cost-publication", *required
+        )
     for name in ("site", "staging"):
         result[f"aws_cloudfront_distribution.{name}"] = _mutation(
-            ("ordered_cache_behavior",), ("update",), "cost-routing",
-            _permission("cloudfront:UpdateDistribution", f"arn:aws:cloudfront::{ACCOUNT}:distribution/*"),
+            ("ordered_cache_behavior",),
+            ("update",),
+            "cost-routing",
+            _permission(
+                "cloudfront:UpdateDistribution",
+                f"arn:aws:cloudfront::{ACCOUNT}:distribution/*",
+            ),
         )
     return result
 
@@ -742,8 +970,8 @@ CONTRACT = MappingProxyType(_build_contract())
 SUPPORTED_ADDRESSES = frozenset(CONTRACT)
 TIMED_ADDRESSES = frozenset(
     {
-    "aws_s3_object.timed_checks",
-    "aws_lambda_function.timed_checks",
+        "aws_s3_object.timed_checks",
+        "aws_lambda_function.timed_checks",
         *(
             f'aws_scheduler_schedule.timed_checks["{key}"]'
             for key in TIMED_SCHEDULE_KEYS
@@ -812,7 +1040,9 @@ _MANIFEST_KEYS = frozenset(
 )
 _MUTATION_KEYS = frozenset({"address", "action", "operation_class", "changed_fields"})
 _PERMISSION_KEYS = frozenset({"address", "action", "resource", "conditions"})
-_ACTIONS = frozenset({"create", "update", "delete", "read", "no-op", "import", "refresh"})
+_ACTIONS = frozenset(
+    {"create", "update", "delete", "read", "no-op", "import", "refresh"}
+)
 _PRODUCTION_ACCOUNT = "920534282028"
 _PRODUCTION_MARKERS = re.compile(
     r"(?:^|[-_/:.])(?:production|prod)(?:$|[-_/:.])"
@@ -864,82 +1094,99 @@ _AUTHORIZATION_FIELDS = frozenset(
 )
 _DERIVED_UNKNOWN_EDGES = MappingProxyType(
     {
-    **{
-        (address, "destination_arn"): (
-            ("destination_arn",),
-            ("destination_arn",),
-            "aws_kinesis_firehose_delivery_stream.agentcore_traces[0].arn",
-            "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]",
-        )
-        for address in (
-            'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]',
-            'aws_cloudwatch_log_subscription_filter.agentcore_traces["preview"]',
-        )
-    },
-    (
-        "aws_bedrockagentcore_agent_runtime.tollchat",
-        "agent_runtime_artifact.code_configuration.code.s3.version_id",
-    ): (
+        **{
+            (address, "destination_arn"): (
+                ("destination_arn",),
+                ("destination_arn",),
+                "aws_kinesis_firehose_delivery_stream.agentcore_traces[0].arn",
+                "aws_kinesis_firehose_delivery_stream.agentcore_traces[0]",
+            )
+            for address in (
+                'aws_cloudwatch_log_subscription_filter.agentcore_traces["DEFAULT"]',
+                'aws_cloudwatch_log_subscription_filter.agentcore_traces["preview"]',
+            )
+        },
         (
+            "aws_bedrockagentcore_agent_runtime.tollchat",
             "agent_runtime_artifact.code_configuration.code.s3.version_id",
-            "agent_runtime_artifact[0].code_configuration[0].code[0].s3[0].version_id",
-        ),
+        ): (
+            (
+                "agent_runtime_artifact.code_configuration.code.s3.version_id",
+                "agent_runtime_artifact[0].code_configuration[0].code[0].s3[0].version_id",
+            ),
             (
                 "agent_runtime_artifact.code_configuration.code.s3.version_id",
                 "agent_runtime_artifact.0.code_configuration.0.code.0.s3.0.version_id",
             ),
-        "aws_s3_object.agentcore.version_id",
-        "aws_s3_object.agentcore",
-    ),
+            "aws_s3_object.agentcore.version_id",
+            "aws_s3_object.agentcore",
+        ),
         (
             "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
             "agent_runtime_version",
         ): (
-        ("agent_runtime_version",),
-        ("agent_runtime_version",),
-        "aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_version",
-        "aws_bedrockagentcore_agent_runtime.tollchat",
-    ),
-    ("aws_lambda_alias.tollchat_live", "function_version"): (
-        ("function_version",),
-        ("function_version",),
-        "aws_lambda_function.tollchat_proxy.version",
-        "aws_lambda_function.tollchat_proxy",
-    ),
-    ("aws_lambda_function.tollchat_proxy", "s3_object_version"): (
-        ("s3_object_version",),
-        ("s3_object_version",),
-        "aws_s3_object.tollchat_proxy.version_id",
-        "aws_s3_object.tollchat_proxy",
-    ),
-    ("aws_lambda_function.timed_checks", "s3_object_version"): (
-        ("s3_object_version",),
-        ("s3_object_version",),
-        "aws_s3_object.timed_checks.version_id",
-        "aws_s3_object.timed_checks",
-    ),
+            ("agent_runtime_version",),
+            ("agent_runtime_version",),
+            "aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_version",
+            "aws_bedrockagentcore_agent_runtime.tollchat",
+        ),
+        ("aws_lambda_alias.tollchat_live", "function_version"): (
+            ("function_version",),
+            ("function_version",),
+            "aws_lambda_function.tollchat_proxy.version",
+            "aws_lambda_function.tollchat_proxy",
+        ),
+        ("aws_lambda_function.tollchat_proxy", "s3_object_version"): (
+            ("s3_object_version",),
+            ("s3_object_version",),
+            "aws_s3_object.tollchat_proxy.version_id",
+            "aws_s3_object.tollchat_proxy",
+        ),
+        ("aws_lambda_function.timed_checks", "s3_object_version"): (
+            ("s3_object_version",),
+            ("s3_object_version",),
+            "aws_s3_object.timed_checks.version_id",
+            "aws_s3_object.timed_checks",
+        ),
     }
 )
 
 
-class _Invalid(Exception):
-    def __init__(self, reason: str, *, address: str | None = None, action: str | None = None, operation_class: str | None = None):
+class InvalidPlan(Exception):
+    def __init__(
+        self,
+        reason: str,
+        *,
+        address: str | None = None,
+        action: str | None = None,
+        operation_class: str | None = None,
+    ) -> None:
         self.reason = reason
         self.address = address
         self.action = action
         self.operation_class = operation_class
 
 
-def _reject(reason: str, *, address: str | None = None, action: str | None = None, operation_class: str | None = None) -> None:
-    raise _Invalid(reason, address=address, action=action, operation_class=operation_class)
+def _reject(
+    reason: str,
+    *,
+    address: str | None = None,
+    action: str | None = None,
+    operation_class: str | None = None,
+) -> NoReturn:
+    raise InvalidPlan(
+        reason, address=address, action=action, operation_class=operation_class
+    )
 
 
-def _is_string(value: Any) -> bool:
+def _is_string(value: object) -> TypeGuard[str]:
     return isinstance(value, str) and bool(value)
 
 
 def _timed_schedule_expected(address: str) -> dict[str, Any]:
-    key = address.removeprefix('aws_scheduler_schedule.timed_checks["').removesuffix('"]')
+    key = address.removeprefix('aws_scheduler_schedule.timed_checks["').removesuffix(
+        '"]'
+    )
     if key not in TIMED_SCHEDULE_KEYS:
         _reject("unsupported_address", address=address)
     prefix, day, clock = key.rsplit("-", 2)
@@ -971,7 +1218,7 @@ def _timed_schedule_expected(address: str) -> dict[str, Any]:
     }
 
 
-def _timed_schedule_plan_value(address: str) -> dict[str, Any]:
+def timed_schedule_plan_value(address: str) -> dict[str, Any]:
     expected = _timed_schedule_expected(address)
     return {
         "name": expected["name"],
@@ -981,16 +1228,16 @@ def _timed_schedule_plan_value(address: str) -> dict[str, Any]:
         "flexible_time_window": [{"mode": "OFF"}],
         "target": [
             {
-            "arn": f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:nova-toll-v2-timed-checks-dev",
-            "role_arn": f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-timed-checks-scheduler-dev",
-            "input": json.dumps(
+                "arn": f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:nova-toll-v2-timed-checks-dev",
+                "role_arn": f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-timed-checks-scheduler-dev",
+                "input": json.dumps(
                     {
                         "window_id": expected["window_id"],
                         "schedule": expected["schedule"],
                     },
-                sort_keys=True,
-                separators=(",", ":"),
-            ),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
                 "retry_policy": [
                     {"maximum_event_age_in_seconds": 600, "maximum_retry_attempts": 0}
                 ],
@@ -1004,56 +1251,142 @@ def _timed_schedule_plan_value(address: str) -> dict[str, Any]:
     }
 
 
-def _validate_timed_schedule(after: dict[str, Any], address: str, action: str, operation_class: str) -> None:
+def _validate_timed_schedule(
+    after: dict[str, JSON], address: str, action: str, operation_class: str
+) -> None:
     after = copy.deepcopy(after)
     expected = _timed_schedule_expected(address)
-    for field in ("name", "state", "schedule_expression", "schedule_expression_timezone"):
+    for field in (
+        "name",
+        "state",
+        "schedule_expression",
+        "schedule_expression_timezone",
+    ):
         if after.get(field) != expected[field]:
-            _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
+            _reject(
+                "invalid_schedule_value",
+                address=address,
+                action=action,
+                operation_class=operation_class,
+            )
     windows = after.get("flexible_time_window")
-    if not isinstance(windows, list) or len(windows) != 1 or not isinstance(windows[0], dict) or windows[0].get("mode") != "OFF":
-        _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
+    if (
+        not isinstance(windows, list)
+        or len(windows) != 1
+        or not isinstance(windows[0], dict)
+        or windows[0].get("mode") != "OFF"
+    ):
+        _reject(
+            "invalid_schedule_value",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
     if "maximum_window_in_minutes" in windows[0]:
         if windows[0]["maximum_window_in_minutes"] is not None:
-            _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
+            _reject(
+                "invalid_schedule_value",
+                address=address,
+                action=action,
+                operation_class=operation_class,
+            )
         del windows[0]["maximum_window_in_minutes"]
     if set(windows[0]) != {"mode"}:
-        _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
+        _reject(
+            "invalid_schedule_value",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
     targets = after.get("target")
-    if not isinstance(targets, list) or len(targets) != 1 or not isinstance(targets[0], dict):
-        _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
+    if (
+        not isinstance(targets, list)
+        or len(targets) != 1
+        or not isinstance(targets[0], dict)
+    ):
+        _reject(
+            "invalid_schedule_value",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
     target = targets[0]
     required = {
         "arn": f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:nova-toll-v2-timed-checks-dev",
         "role_arn": f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-timed-checks-scheduler-dev",
     }
     if any(target.get(field) != value for field, value in required.items()):
-        _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
-    for field in ("ecs_parameters", "eventbridge_parameters", "kinesis_parameters", "sagemaker_pipeline_parameters", "sqs_parameters"):
+        _reject(
+            "invalid_schedule_value",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
+    for field in (
+        "ecs_parameters",
+        "eventbridge_parameters",
+        "kinesis_parameters",
+        "sagemaker_pipeline_parameters",
+        "sqs_parameters",
+    ):
         if field in target:
             if type(target[field]) is not list or target[field]:
-                _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
+                _reject(
+                    "invalid_schedule_value",
+                    address=address,
+                    action=action,
+                    operation_class=operation_class,
+                )
             del target[field]
     target_fields = {"arn", "role_arn", "input", "retry_policy", "dead_letter_config"}
     if set(target) != target_fields:
-        _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
+        _reject(
+            "invalid_schedule_value",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
     try:
-        payload = json.loads(target.get("input", ""))
+        payload = json.loads(cast(str, target.get("input", "")))
     except (TypeError, json.JSONDecodeError):
-        _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
-    if payload != {"window_id": expected["window_id"], "schedule": expected["schedule"]}:
-        _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
-    if target.get("retry_policy") != [{"maximum_event_age_in_seconds": 600, "maximum_retry_attempts": 0}] or target.get("dead_letter_config") != [{"arn": f"arn:aws:sqs:{REGION}:{ACCOUNT}:nova-toll-v2-timed-checks-delivery-failure-dev"}]:
-        _reject("invalid_schedule_value", address=address, action=action, operation_class=operation_class)
+        _reject(
+            "invalid_schedule_value",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
+    if payload != {
+        "window_id": expected["window_id"],
+        "schedule": expected["schedule"],
+    }:
+        _reject(
+            "invalid_schedule_value",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
+    if target.get("retry_policy") != [
+        {"maximum_event_age_in_seconds": 600, "maximum_retry_attempts": 0}
+    ] or target.get("dead_letter_config") != [
+        {
+            "arn": f"arn:aws:sqs:{REGION}:{ACCOUNT}:nova-toll-v2-timed-checks-delivery-failure-dev"
+        }
+    ]:
+        _reject(
+            "invalid_schedule_value",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
 
 
-def _flatten(value: Any, prefix: str = "") -> dict[str, Any]:
+def _flatten(value: JSON, prefix: str = "") -> dict[str, Any]:
     if isinstance(value, dict):
         if not value and prefix:
             return {prefix: {}}
         result: dict[str, Any] = {}
         for key, child in value.items():
-            if not isinstance(key, str) or not key:
+            if not _is_string(key) or not key:
                 _reject("malformed_input")
             result.update(_flatten(child, f"{prefix}.{key}" if prefix else key))
         return result
@@ -1067,7 +1400,7 @@ def _flatten(value: Any, prefix: str = "") -> dict[str, Any]:
     return {prefix: value}
 
 
-def _without_paths(value: Any, ignored: tuple[str, ...], prefix: str = "") -> Any:
+def _without_paths(value: JSON, ignored: tuple[str, ...], prefix: str = "") -> JSON:
     if isinstance(value, dict):
         result: dict[str, Any] = {}
         for key, child in value.items():
@@ -1077,26 +1410,27 @@ def _without_paths(value: Any, ignored: tuple[str, ...], prefix: str = "") -> An
             result[key] = _without_paths(child, ignored, path)
         return result
     if isinstance(value, list):
-        result: list[Any] = []
+        items: list[JSON] = []
         for index, child in enumerate(value):
             path = f"{prefix}[{index}]"
             if path in ignored:
                 continue
-            result.append(_without_paths(child, ignored, path))
-        return result
+            items.append(_without_paths(child, ignored, path))
+        return items
     return value
 
 
 def _changed_fields(
-    before: Any,
-    after: Any,
+    before: JSON,
+    after: JSON,
     allowed: tuple[str, ...] = (),
     ignored: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     left = _flatten(before) if before is not None else {}
     right = _flatten(after) if after is not None else {}
     changed = (
-        key for key in set(left) | set(right)
+        key
+        for key in set(left) | set(right)
         if left.get(key) != right.get(key)
         and not any(_path_allowed(key, (path,)) for path in ignored)
     )
@@ -1109,7 +1443,9 @@ def _changed_fields(
 
 def _path_allowed(path: str, fields: tuple[str, ...]) -> bool:
     normalized = re.sub(r"\[\d+\]", "", path)
-    return any(normalized == field or normalized.startswith(field + ".") for field in fields)
+    return any(
+        normalized == field or normalized.startswith(field + ".") for field in fields
+    )
 
 
 def _path_root(path: str) -> str:
@@ -1130,8 +1466,19 @@ def _create_fields(
         parents = [field for field in spec.fields if _path_allowed(path, (field,))]
         if parents:
             result.add(max(parents, key=len))
-        elif _path_root(path) in _AUTHORIZATION_FIELDS and value not in (None, False, "", {}, []):
-            _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
+        elif _path_root(path) in _AUTHORIZATION_FIELDS and value not in (
+            None,
+            False,
+            "",
+            {},
+            [],
+        ):
+            _reject(
+                "unsupported_field_delta",
+                address=address,
+                action=action,
+                operation_class=spec.operation_class,
+            )
     return tuple(sorted(result))
 
 
@@ -1139,7 +1486,9 @@ def _metadata_authorized(path: str, spec: Mutation) -> bool:
     return (
         _path_allowed(path, spec.fields)
         or any(_path_allowed(path, (field,)) for field, _ in spec.create_identity)
-        or any(_path_allowed(path, (field,)) for field, _ in spec.provider_change_identity)
+        or any(
+            _path_allowed(path, (field,)) for field, _ in spec.provider_change_identity
+        )
         or _path_root(path) in _AUTHORIZATION_FIELDS
     )
 
@@ -1164,76 +1513,194 @@ def _validate_s3_identity(
         )
         for value in values
     ):
-        _reject("invalid_resource_identity", address=address, action=action, operation_class=spec.operation_class)
+        _reject(
+            "invalid_resource_identity",
+            address=address,
+            action=action,
+            operation_class=spec.operation_class,
+        )
 
 
-def _publisher_policy(value: Any, address: str, action: str, operation_class: str) -> dict[str, dict[str, Any]]:
+def _publisher_policy(
+    value: JSON, address: str, action: str, operation_class: str
+) -> dict[str, dict[str, Any]]:
     try:
-        policy = json.loads(value)
+        policy: JSON = json.loads(cast(str, value))
     except (TypeError, json.JSONDecodeError):
-        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
-    if not isinstance(policy, dict) or set(policy) != {"Version", "Statement"} or policy["Version"] != "2012-10-17" or not isinstance(policy["Statement"], list):
-        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+        _reject(
+            "unsupported_field_delta",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
+    if (
+        not isinstance(policy, dict)
+        or set(policy) != {"Version", "Statement"}
+        or policy["Version"] != "2012-10-17"
+        or not isinstance(policy["Statement"], list)
+    ):
+        _reject(
+            "unsupported_field_delta",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
     statements = policy["Statement"]
-    if any(not isinstance(statement, dict) or not isinstance(statement.get("Sid"), str) for statement in statements):
-        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
-    by_sid = {statement["Sid"]: copy.deepcopy(statement) for statement in statements}
+    if any(
+        not isinstance(statement, dict) or not isinstance(statement.get("Sid"), str)
+        for statement in statements
+    ):
+        _reject(
+            "unsupported_field_delta",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
+    by_sid = {
+        cast(str, statement["Sid"]): copy.deepcopy(statement)
+        for statement in cast(list[dict[str, JSON]], statements)
+    }
     if len(by_sid) != len(statements):
-        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+        _reject(
+            "unsupported_field_delta",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
     for statement in by_sid.values():
         for field in ("Action", "Resource"):
             value = statement.get(field)
             if isinstance(value, str):
                 value = [value]
-            if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-                _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
-            statement[field] = sorted(value)
+            if not isinstance(value, list) or any(
+                not isinstance(item, str) for item in value
+            ):
+                _reject(
+                    "unsupported_field_delta",
+                    address=address,
+                    action=action,
+                    operation_class=operation_class,
+                )
+            statement[field] = list[JSON](sorted(cast(list[str], value)))
         condition = statement.get("Condition")
         if isinstance(condition, dict):
-            for operator, values in condition.items():
+            for values in condition.values():
                 if not isinstance(values, dict):
-                    _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+                    _reject(
+                        "unsupported_field_delta",
+                        address=address,
+                        action=action,
+                        operation_class=operation_class,
+                    )
                 for variable, items in values.items():
                     if isinstance(items, str):
                         items = [items]
-                    if not isinstance(items, list) or any(not isinstance(item, str) for item in items):
-                        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
-                    values[variable] = sorted(items)
+                    if not isinstance(items, list) or any(
+                        not isinstance(item, str) for item in items
+                    ):
+                        _reject(
+                            "unsupported_field_delta",
+                            address=address,
+                            action=action,
+                            operation_class=operation_class,
+                        )
+                    values[variable] = list[JSON](sorted(cast(list[str], items)))
     return by_sid
 
 
-def _publisher_statement(sid: str, action_name: str, resources: tuple[str, ...], *, condition: tuple[str, tuple[str, ...]] | None = None) -> dict[str, Any]:
-    statement: dict[str, Any] = {"Sid": sid, "Effect": "Allow", "Action": [action_name], "Resource": sorted(resources)}
+def _publisher_statement(
+    sid: str,
+    action_name: str,
+    resources: tuple[str, ...],
+    *,
+    condition: tuple[str, tuple[str, ...]] | None = None,
+) -> dict[str, Any]:
+    statement: dict[str, Any] = {
+        "Sid": sid,
+        "Effect": "Allow",
+        "Action": [action_name],
+        "Resource": sorted(resources),
+    }
     if condition is not None:
         variable, values = condition
         statement["Condition"] = {"StringEquals": {variable: sorted(values)}}
     return statement
 
 
-def _validate_publisher_policy(before: Any, after: Any, address: str, action: str, operation_class: str) -> None:
+def _validate_publisher_policy(
+    before: JSON, after: JSON, address: str, action: str, operation_class: str
+) -> None:
     if not isinstance(before, dict) or not isinstance(after, dict):
-        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
-    old, new = (_publisher_policy(value.get("policy"), address, action, operation_class) for value in (before, after))
+        _reject(
+            "unsupported_field_delta",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
+    old, new = (
+        _publisher_policy(value.get("policy"), address, action, operation_class)
+        for value in (before, after)
+    )
     bucket = f"arn:aws:s3:::{SITE_BUCKET_NAME}"
     expected_old = {
-        "ReadPublicationManifest": _publisher_statement("ReadPublicationManifest", "s3:GetObject", (f"{bucket}/tolls/i95-i495/manifest.json",)),
-        "FindPublicationManifest": _publisher_statement("FindPublicationManifest", "s3:ListBucket", (bucket,), condition=("s3:prefix", ("tolls/i95-i495/manifest.json",))),
-        "WritePublicReports": _publisher_statement("WritePublicReports", "s3:PutObject", (f"{bucket}/tolls/i95-i495/*", f"{bucket}/sitemap.xml")),
+        "ReadPublicationManifest": _publisher_statement(
+            "ReadPublicationManifest",
+            "s3:GetObject",
+            (f"{bucket}/tolls/i95-i495/manifest.json",),
+        ),
+        "FindPublicationManifest": _publisher_statement(
+            "FindPublicationManifest",
+            "s3:ListBucket",
+            (bucket,),
+            condition=("s3:prefix", ("tolls/i95-i495/manifest.json",)),
+        ),
+        "WritePublicReports": _publisher_statement(
+            "WritePublicReports",
+            "s3:PutObject",
+            (f"{bucket}/tolls/i95-i495/*", f"{bucket}/sitemap.xml"),
+        ),
     }
     expected_new = {
-        "ListPublicReports": _publisher_statement("ListPublicReports", "s3:ListBucket", (bucket,), condition=("s3:prefix", ("tolls/i95-i495/", "tolls/i66/"))),
-        "WritePublicReports": _publisher_statement("WritePublicReports", "s3:PutObject", (f"{bucket}/tolls/i95-i495/*", f"{bucket}/tolls/i66/*", f"{bucket}/sitemap.xml")),
-        "DeleteStalePublicReports": _publisher_statement("DeleteStalePublicReports", "s3:DeleteObject", (f"{bucket}/tolls/i95-i495/*", f"{bucket}/tolls/i66/*")),
+        "ListPublicReports": _publisher_statement(
+            "ListPublicReports",
+            "s3:ListBucket",
+            (bucket,),
+            condition=("s3:prefix", ("tolls/i95-i495/", "tolls/i66/")),
+        ),
+        "WritePublicReports": _publisher_statement(
+            "WritePublicReports",
+            "s3:PutObject",
+            (
+                f"{bucket}/tolls/i95-i495/*",
+                f"{bucket}/tolls/i66/*",
+                f"{bucket}/sitemap.xml",
+            ),
+        ),
+        "DeleteStalePublicReports": _publisher_statement(
+            "DeleteStalePublicReports",
+            "s3:DeleteObject",
+            (f"{bucket}/tolls/i95-i495/*", f"{bucket}/tolls/i66/*"),
+        ),
     }
     retained_sids = {"ConnectRdsIam", "SendInvokeFailure", "UseSiteKey"}
-    if set(old) != retained_sids | set(expected_old) or set(new) != retained_sids | set(expected_new):
-        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+    if set(old) != retained_sids | set(expected_old) or set(new) != retained_sids | set(
+        expected_new
+    ):
+        _reject(
+            "unsupported_field_delta",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
     old_s3 = {sid: old.pop(sid, None) for sid in expected_old}
     new_s3 = {sid: new.pop(sid, None) for sid in expected_new}
     expected_retained = {
         "SendInvokeFailure": _publisher_statement(
-            "SendInvokeFailure", "sqs:SendMessage",
-            (f"arn:aws:sqs:{REGION}:{ACCOUNT}:toll-v2-report-publisher-invoke-failure-dev",),
+            "SendInvokeFailure",
+            "sqs:SendMessage",
+            (
+                f"arn:aws:sqs:{REGION}:{ACCOUNT}:toll-v2-report-publisher-invoke-failure-dev",
+            ),
         ),
     }
     rds = old.get("ConnectRdsIam")
@@ -1247,21 +1714,30 @@ def _validate_publisher_policy(before: Any, after: Any, address: str, action: st
         or set(rds) != {"Sid", "Effect", "Action", "Resource"}
         or rds.get("Effect") != "Allow"
         or rds.get("Action") != ["rds-db:connect"]
-        or rds.get("Resource") != sorted([
-            f"arn:aws:rds-db:{REGION}:{ACCOUNT}:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/report_publisher_development",
-            f"arn:aws:rds-db:{REGION}:{ACCOUNT}:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/pricing_reader_development",
-        ])
+        or rds.get("Resource")
+        != sorted(
+            [
+                f"arn:aws:rds-db:{REGION}:{ACCOUNT}:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/report_publisher_development",
+                f"arn:aws:rds-db:{REGION}:{ACCOUNT}:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/pricing_reader_development",
+            ]
+        )
         or not isinstance(site_key, dict)
         or set(site_key) != {"Sid", "Effect", "Action", "Resource"}
         or site_key.get("Effect") != "Allow"
-        or site_key.get("Action") != ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
+        or site_key.get("Action")
+        != ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
         or site_key.get("Resource") != [PUBLISHER_SITE_KEY_ARN]
     ):
-        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+        _reject(
+            "unsupported_field_delta",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
 
 
 def _validate_trace_runtime_policy(
-    before: Any, after: Any, address: str, action: str, operation_class: str
+    before: JSON, after: JSON, address: str, action: str, operation_class: str
 ) -> None:
     if not isinstance(before, dict) or not isinstance(after, dict):
         _trace_reject(address, action, operation_class)
@@ -1285,8 +1761,13 @@ def _validate_trace_runtime_policy(
         old_resources = old_apply.get("Resource", [])
         new_resources = new_apply.get("Resource", [])
         extra = set(new_resources) - set(old_resources)
-        if len(extra) == 1 and re.fullmatch(r"arn:aws:bedrock:us-east-1:903859731897:guardrail/[a-z0-9]+", next(iter(extra))):
-            new_apply["Resource"] = [item for item in new_resources if item not in extra]
+        if len(extra) == 1 and re.fullmatch(
+            r"arn:aws:bedrock:us-east-1:903859731897:guardrail/[a-z0-9]+",
+            next(iter(extra)),
+        ):
+            new_apply["Resource"] = [
+                item for item in new_resources if item not in extra
+            ]
             telemetry_added = True
     if old != new or not (
         (added, removed) in ((statement, None), (None, statement))
@@ -1295,7 +1776,9 @@ def _validate_trace_runtime_policy(
         _trace_reject(address, action, operation_class)
 
 
-def _validate_report_freshness_alarm(before: Any, after: Any, address: str, action: str, operation_class: str) -> None:
+def _validate_report_freshness_alarm(
+    before: JSON, after: JSON, address: str, action: str, operation_class: str
+) -> None:
     expected_before = {
         "alarm_description": "No complete I-95/I-495 report generation in the trailing seven-day sliding window.",
         "dimensions": {"facility": "i95_i495", "Environment": "development"},
@@ -1313,15 +1796,20 @@ def _validate_report_freshness_alarm(before: Any, after: Any, address: str, acti
                 (before, expected_before),
                 (after, expected_after),
             )
-        for field, expected in expected_values.items()
+            for field, expected in expected_values.items()
         )
     ):
-        _reject("unsupported_field_delta", address=address, action=action, operation_class=operation_class)
+        _reject(
+            "unsupported_field_delta",
+            address=address,
+            action=action,
+            operation_class=operation_class,
+        )
 
 
 def _validate_agentcore_trace_value(
-    before: Any,
-    after: Any,
+    before: JSON,
+    after: JSON,
     address: str,
     action: str,
     operation_class: str,
@@ -1331,7 +1819,7 @@ def _validate_agentcore_trace_value(
     if not isinstance(value, dict):
         _trace_reject(address, action, operation_class)
 
-    def configured(candidate: Any) -> Any:
+    def configured(candidate: JSON) -> JSON:
         if not isinstance(candidate, dict):
             _trace_reject(address, action, operation_class)
         if (
@@ -1345,7 +1833,9 @@ def _validate_agentcore_trace_value(
         )
 
     if operation_class == "agentcore-trace-subscription":
-        expected = _without_paths(dict(CONTRACT[address].create_identity), unknown_paths)
+        expected = _without_paths(
+            dict(CONTRACT[address].create_identity), unknown_paths
+        )
         values = (
             (before,)
             if action == "delete"
@@ -1420,27 +1910,28 @@ def _validate_agentcore_trace_value(
             _trace_reject(address, action, operation_class)
     elif operation_class == "agentcore-trace-retention":
 
-        def canonical(value: Any) -> tuple[str, ...] | None:
+        def canonical(value: JSON) -> tuple[str, ...] | None:
             if not isinstance(value, dict) or not isinstance(value.get("rule"), list):
                 return None
-            normalized = []
-            for source in value["rule"]:
+            normalized: list[dict[str, JSON]] = []
+            for source in cast(list[JSON], value["rule"]):
                 if not isinstance(source, dict):
                     return None
                 rule = copy.deepcopy(source)
-                for field, default in (
+                defaults_by_field: tuple[tuple[str, JSON], ...] = (
                     ("noncurrent_version_expiration", []),
                     ("noncurrent_version_transition", []),
                     ("prefix", ""),
                     ("transition", []),
-                ):
+                )
+                for field, default in defaults_by_field:
                     if field in rule:
                         if rule[field] != default:
                             return None
                         rule.pop(field)
                 if rule.get("abort_incomplete_multipart_upload") == []:
                     rule.pop("abort_incomplete_multipart_upload")
-                for block_name, defaults in (
+                block_defaults: tuple[tuple[str, dict[str, JSON]], ...] = (
                     (
                         "filter",
                         {
@@ -1454,7 +1945,8 @@ def _validate_agentcore_trace_value(
                         "expiration",
                         {"date": None, "expired_object_delete_marker": False},
                     ),
-                ):
+                )
+                for block_name, defaults in block_defaults:
                     blocks = rule.get(block_name)
                     if not isinstance(blocks, list):
                         return None
@@ -1488,7 +1980,10 @@ def _validate_agentcore_trace_value(
             "role_arn": f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-agentcore-runtime-dev",
         }
         if any(
-            any(candidate.get(key) != expected for key, expected in runtime_identity.items())
+            any(
+                candidate.get(key) != expected
+                for key, expected in runtime_identity.items()
+            )
             for candidate in (before, after)
         ):
             _trace_reject(address, action, operation_class)
@@ -1498,39 +1993,74 @@ def _validate_agentcore_trace_value(
         )
         if not isinstance(before_env, dict) or not isinstance(after_env, dict):
             _trace_reject(address, action, operation_class)
-        telemetry_keys = {"TOLLCHAT_TELEMETRY_GUARDRAIL_ID", "TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION"}
+        telemetry_keys = {
+            "TOLLCHAT_TELEMETRY_GUARDRAIL_ID",
+            "TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION",
+        }
         ignored_keys = telemetry_keys | {"UNIFIED_TRACES_DESTINATION_ENABLED"}
-        old = {key: value for key, value in before_env.items() if key not in ignored_keys}
-        new = {key: value for key, value in after_env.items() if key not in ignored_keys}
+        old = {
+            key: value for key, value in before_env.items() if key not in ignored_keys
+        }
+        new = {
+            key: value for key, value in after_env.items() if key not in ignored_keys
+        }
         if old != new:
             _trace_reject(address, action, operation_class)
         if telemetry_keys & set(after_env):
-            if (after_env.get("UNIFIED_TRACES_DESTINATION_ENABLED") != "true"
-                or not re.fullmatch(r"[a-z0-9]+", str(after_env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_ID", "")))
-                or not re.fullmatch(r"[1-9][0-9]*", str(after_env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION", "")))):
+            if (
+                after_env.get("UNIFIED_TRACES_DESTINATION_ENABLED") != "true"
+                or not re.fullmatch(
+                    r"[a-z0-9]+",
+                    str(after_env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_ID", "")),
+                )
+                or not re.fullmatch(
+                    r"[1-9][0-9]*",
+                    str(after_env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION", "")),
+                )
+            ):
                 _trace_reject(address, action, operation_class)
-        elif {before_env.get("UNIFIED_TRACES_DESTINATION_ENABLED"), after_env.get("UNIFIED_TRACES_DESTINATION_ENABLED")} != {None, "true"}:
+        elif {
+            cast(str | None, before_env.get("UNIFIED_TRACES_DESTINATION_ENABLED")),
+            cast(str | None, after_env.get("UNIFIED_TRACES_DESTINATION_ENABLED")),
+        } != {None, "true"}:
             _trace_reject(address, action, operation_class)
 
 
-def _validate_telemetry_value(value: Any, address: str, action: str, operation_class: str) -> None:
+def _validate_telemetry_value(
+    value: JSON, address: str, action: str, operation_class: str
+) -> None:
     if not isinstance(value, dict):
         _trace_reject(address, action, operation_class)
     if operation_class == "telemetry-log-protection":
         try:
-            policy = json.loads(value["policy_document"])
-            digest = hashlib.sha256(json.dumps(policy, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            policy = json.loads(cast(str, value["policy_document"]))
+            digest = hashlib.sha256(
+                json.dumps(policy, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
         except (KeyError, TypeError, ValueError):
             _trace_reject(address, action, operation_class)
         if digest != "37b6be001869b097a89a67ef6fb3828039be35f7464155eb713f4f72ca567aa5":
             _trace_reject(address, action, operation_class)
     elif operation_class == "telemetry-failure-metric":
         transformations = value.get("metric_transformation")
-        if (value.get("pattern") != "?telemetry_redaction_failed ?telemetry_redaction_omitted ?telemetry_export_failed"
-            or not isinstance(transformations, list) or len(transformations) != 1
-            or any(transformations[0].get(k) != v for k, v in {"name": "RedactionFailures", "namespace": "TollChat/Telemetry", "value": "1"}.items())
-            or transformations[0].get("dimensions") not in (None, {})
-            or transformations[0].get("default_value") is not None):
+        if (
+            value.get("pattern")
+            != "?telemetry_redaction_failed ?telemetry_redaction_omitted ?telemetry_export_failed"
+            or not isinstance(transformations, list)
+            or len(transformations) != 1
+            or any(
+                cast(dict[str, JSON], transformations[0]).get(k) != v
+                for k, v in {
+                    "name": "RedactionFailures",
+                    "namespace": "TollChat/Telemetry",
+                    "value": "1",
+                }.items()
+            )
+            or cast(dict[str, JSON], transformations[0]).get("dimensions")
+            not in (None, {})
+            or cast(dict[str, JSON], transformations[0]).get("default_value")
+            is not None
+        ):
             _trace_reject(address, action, operation_class)
     elif operation_class == "telemetry-alarm":
         value = dict(value)
@@ -1539,27 +2069,40 @@ def _validate_telemetry_value(value: Any, address: str, action: str, operation_c
             value["alarm_actions"] = []
         if value.get("dimensions") is None:
             value["dimensions"] = {}
-        pii = 'telemetry_pii[' in address
+        pii = "telemetry_pii[" in address
         endpoint = "DEFAULT" if '"DEFAULT"' in address else "preview"
-        expected = {
+        expected: dict[str, JSON] = {
             "namespace": "AWS/Logs" if pii else "TollChat/Telemetry",
             "metric_name": "LogEventsWithFindings" if pii else "RedactionFailures",
-            "dimensions": {"LogGroupName": f"/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-{endpoint}"} if pii else {},
-            "statistic": "Sum", "period": 300, "evaluation_periods": 1,
-            "comparison_operator": "GreaterThanThreshold", "threshold": 0,
-            "treat_missing_data": "notBreaching", "alarm_actions": [],
+            "dimensions": {
+                "LogGroupName": f"/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-{endpoint}"
+            }
+            if pii
+            else {},
+            "statistic": "Sum",
+            "period": 300,
+            "evaluation_periods": 1,
+            "comparison_operator": "GreaterThanThreshold",
+            "threshold": 0,
+            "treat_missing_data": "notBreaching",
+            "alarm_actions": [],
         }
-        if any(value.get(k) != v for k, v in expected.items()) or value.get("ok_actions") not in (None, []) or value.get("insufficient_data_actions") not in (None, []) or value.get("metric_query") not in (None, []):
+        if (
+            any(value.get(k) != v for k, v in expected.items())
+            or value.get("ok_actions") not in (None, [])
+            or value.get("insufficient_data_actions") not in (None, [])
+            or value.get("metric_query") not in (None, [])
+        ):
             _trace_reject(address, action, operation_class)
 
 
-def _unknown_paths(value: Any, prefix: str = "") -> tuple[str, ...]:
+def _unknown_paths(value: JSON, prefix: str = "") -> tuple[str, ...]:
     if isinstance(value, bool):
         return (prefix,) if value else ()
     if isinstance(value, dict):
         paths: list[str] = []
         for key, child in value.items():
-            if not isinstance(key, str):
+            if not _is_string(key):
                 _reject("malformed_input")
             paths.extend(_unknown_paths(child, f"{prefix}.{key}" if prefix else key))
         return tuple(paths)
@@ -1572,7 +2115,7 @@ def _unknown_paths(value: Any, prefix: str = "") -> tuple[str, ...]:
     return ()
 
 
-def _expression_nodes(value: Any, parts: tuple[str, ...]) -> tuple[Any, ...]:
+def _expression_nodes(value: JSON, parts: tuple[str, ...]) -> tuple[JSON, ...]:
     if not parts:
         return (value,)
     if isinstance(value, list):
@@ -1581,7 +2124,7 @@ def _expression_nodes(value: Any, parts: tuple[str, ...]) -> tuple[Any, ...]:
         return _expression_nodes(value[0], parts)
     if not isinstance(value, dict):
         return (value,)
-    nodes: list[Any] = []
+    nodes: list[JSON] = []
     full_path = ".".join(parts)
     if full_path in value:
         nodes.extend(_expression_nodes(value[full_path], ()))
@@ -1596,7 +2139,7 @@ def _expression_nodes(value: Any, parts: tuple[str, ...]) -> tuple[Any, ...]:
 
 
 def _has_configuration_reference(
-    plan: Mapping[str, Any],
+    plan: Mapping[str, JSON],
     address: str,
     paths: tuple[str, ...],
     reference: str,
@@ -1619,7 +2162,7 @@ def _has_configuration_reference(
     if len(matching) != 1 or not isinstance(matching[0].get("expressions"), dict):
         return False
     expressions = matching[0]["expressions"]
-    nodes: list[Any] = []
+    nodes: list[JSON] = []
     for path in paths:
         nodes.extend(_expression_nodes(expressions, tuple(path.split("."))))
     if len(nodes) != 1 or not isinstance(nodes[0], dict):
@@ -1636,27 +2179,41 @@ def _has_configuration_reference(
     )
 
 
-def _omitted_dashboard_acl(plan: Mapping[str, Any], address: str, action: str, path: str) -> bool:
+def _omitted_dashboard_acl(
+    plan: Mapping[str, JSON], address: str, action: str, path: str
+) -> bool:
     # AWS 6.60 computes ACL metadata on creation even when no ACL is configured.
-    if action != "create" or path != "acl" or address not in {
-        "aws_s3_object.evals",
-        'aws_s3_object.site_assets["evals.css"]',
-        'aws_s3_object.site_assets["evals.mjs"]',
-    }:
+    if (
+        action != "create"
+        or path != "acl"
+        or address
+        not in {
+            "aws_s3_object.evals",
+            'aws_s3_object.site_assets["evals.css"]',
+            'aws_s3_object.site_assets["evals.mjs"]',
+        }
+    ):
         return False
     configuration = plan.get("configuration")
     root = configuration.get("root_module") if isinstance(configuration, dict) else None
     resources = root.get("resources") if isinstance(root, dict) else None
     if not isinstance(resources, list):
         return False
-    matching = [resource for resource in resources if isinstance(resource, dict)
-                and resource.get("address") in {address, address.split("[", 1)[0]}]
-    return (len(matching) == 1 and isinstance(matching[0].get("expressions"), dict)
-            and "acl" not in matching[0]["expressions"])
+    matching = [
+        resource
+        for resource in resources
+        if isinstance(resource, dict)
+        and resource.get("address") in {address, address.split("[", 1)[0]}
+    ]
+    return (
+        len(matching) == 1
+        and isinstance(matching[0].get("expressions"), dict)
+        and "acl" not in cast(dict[str, JSON], matching[0]["expressions"])
+    )
 
 
 def _validate_derived_unknowns(
-    plan: Mapping[str, Any],
+    plan: Mapping[str, JSON],
     pending: list[tuple[str, str, str | None, tuple[str, ...]]],
     records: list[dict[str, Any]],
 ) -> None:
@@ -1685,27 +2242,46 @@ def _validate_derived_unknowns(
                 None,
             )
             if edge is None:
-                _reject("unknown_authorization_value", address=address, action=action, operation_class=operation_class)
+                _reject(
+                    "unknown_authorization_value",
+                    address=address,
+                    action=action,
+                    operation_class=operation_class,
+                )
             _, expression_paths, reference, producer = edge
-            if producer not in producers or not _has_configuration_reference(plan, address, expression_paths, reference, producer):
-                _reject("unknown_authorization_value", address=address, action=action, operation_class=operation_class)
+            if producer not in producers or not _has_configuration_reference(
+                plan, address, expression_paths, reference, producer
+            ):
+                _reject(
+                    "unknown_authorization_value",
+                    address=address,
+                    action=action,
+                    operation_class=operation_class,
+                )
 
 
-def _walk_strings(value: Any) -> tuple[str, ...]:
+def _walk_strings(value: JSON) -> tuple[str, ...]:
     if isinstance(value, str):
         return (value,)
     if isinstance(value, dict):
-        return tuple(item for key, child in value.items() for item in _walk_strings(key) + _walk_strings(child))
+        return tuple(
+            item
+            for key, child in value.items()
+            for item in _walk_strings(key) + _walk_strings(child)
+        )
     if isinstance(value, list):
         return tuple(item for child in value for item in _walk_strings(child))
     return ()
 
 
-def _has_production_value(value: Any) -> bool:
-    return any(_PRODUCTION_ACCOUNT in item or _PRODUCTION_MARKERS.search(item) for item in _walk_strings(value))
+def _has_production_value(value: JSON) -> bool:
+    return any(
+        _PRODUCTION_ACCOUNT in item or _PRODUCTION_MARKERS.search(item)
+        for item in _walk_strings(value)
+    )
 
 
-def _manifest_has_production_value(manifest: Any) -> bool:
+def _manifest_has_production_value(manifest: JSON) -> bool:
     if not isinstance(manifest, dict):
         return _has_production_value(manifest)
     for key, value in manifest.items():
@@ -1714,17 +2290,21 @@ def _manifest_has_production_value(manifest: Any) -> bool:
                 return True
             continue
         for source, digest in value.items():
-            if source not in PRODUCTION_CONTROL_INPUTS and _has_production_value(source):
+            if source not in PRODUCTION_CONTROL_INPUTS and _has_production_value(
+                source
+            ):
                 return True
             if _has_production_value(digest):
                 return True
     return False
 
 
-def _validate_identity(identity: Any) -> None:
+def _validate_identity(identity: JSON) -> None:
     if not isinstance(identity, dict):
         _reject("provider_identity_missing")
-    if set(identity) != set(EXPECTED_IDENTITY) or any(not _is_string(value) for value in identity.values()):
+    if set(identity) != set(EXPECTED_IDENTITY) or any(
+        not _is_string(value) for value in identity.values()
+    ):
         _reject("provider_identity_mismatch")
     if any(identity[key] != EXPECTED_IDENTITY[key] for key in EXPECTED_IDENTITY):
         _reject("provider_identity_mismatch")
@@ -1752,7 +2332,9 @@ def _address_identity(address: str) -> tuple[str, str, Any | None]:
     return resource_type, name, index
 
 
-def _validate_resource_shape(resource: Any) -> tuple[str, str, dict[str, Any], dict[str, tuple[str, ...]]]:
+def _validate_resource_shape(
+    resource: JSON,
+) -> tuple[str, str, dict[str, Any], dict[str, tuple[str, ...]]]:
     if not isinstance(resource, dict) or not set(resource).issubset(_RESOURCE_KEYS):
         _reject("malformed_input")
     address = resource.get("address")
@@ -1765,12 +2347,18 @@ def _validate_resource_shape(resource: Any) -> tuple[str, str, dict[str, Any], d
         _reject("malformed_input", address=address, operation_class="resource-identity")
     if resource_index is None:
         if "index" in resource:
-            _reject("malformed_input", address=address, operation_class="index-envelope")
+            _reject(
+                "malformed_input", address=address, operation_class="index-envelope"
+            )
     elif resource.get("index") != resource_index:
         _reject("malformed_input", address=address, operation_class="index-envelope")
     for key in ("type", "name", "provider_name", "action_reason"):
         if key in resource and not isinstance(resource[key], str):
-            _reject("malformed_input", address=address, operation_class="resource-field-envelope")
+            _reject(
+                "malformed_input",
+                address=address,
+                operation_class="resource-field-envelope",
+            )
     if "index" in resource and not isinstance(resource["index"], (str, int)):
         _reject("malformed_input", address=address, operation_class="index-envelope")
     if "schema_version" in resource and not isinstance(resource["schema_version"], int):
@@ -1779,13 +2367,21 @@ def _validate_resource_shape(resource: Any) -> tuple[str, str, dict[str, Any], d
         not isinstance(resource["depends_on"], list)
         or any(not _is_string(item) for item in resource["depends_on"])
     ):
-        _reject("malformed_input", address=address, operation_class="dependency-envelope")
-    if not set(change).issubset(_CHANGE_KEYS) or not isinstance(change.get("actions"), list):
+        _reject(
+            "malformed_input", address=address, operation_class="dependency-envelope"
+        )
+    if not set(change).issubset(_CHANGE_KEYS) or not isinstance(
+        change.get("actions"), list
+    ):
         _reject("malformed_input", address=address, operation_class="change-envelope")
     if "action_reason" in change and not isinstance(change["action_reason"], str):
-        _reject("malformed_input", address=address, operation_class="action-reason-envelope")
-    actions = change["actions"]
-    if not actions or any(not _is_string(action) or action not in _ACTIONS for action in actions):
+        _reject(
+            "malformed_input", address=address, operation_class="action-reason-envelope"
+        )
+    actions = cast(list[str], change["actions"])
+    if not actions or any(
+        not _is_string(action) or action not in _ACTIONS for action in actions
+    ):
         _reject("malformed_input", address=address, operation_class="action-envelope")
     for key in ("before_identity", "after_identity"):
         if (
@@ -1793,11 +2389,23 @@ def _validate_resource_shape(resource: Any) -> tuple[str, str, dict[str, Any], d
             and not isinstance(change[key], (dict, type(None)))
             and change[key] is not False
         ):
-            _reject("malformed_input", address=address, operation_class="identity-envelope")
-    if len(actions) == 1 and actions[0] == "update":
-        if change.get("before_identity") != change.get("after_identity"):
-            _reject("malformed_input", address=address, action=actions[0], operation_class="identity-transition")
-    if not isinstance(change.get("before"), (dict, type(None))) or not isinstance(change.get("after"), (dict, type(None))):
+            _reject(
+                "malformed_input", address=address, operation_class="identity-envelope"
+            )
+    if (
+        len(actions) == 1
+        and actions[0] == "update"
+        and change.get("before_identity") != change.get("after_identity")
+    ):
+        _reject(
+            "malformed_input",
+            address=address,
+            action=actions[0],
+            operation_class="identity-transition",
+        )
+    if not isinstance(change.get("before"), (dict, type(None))) or not isinstance(
+        change.get("after"), (dict, type(None))
+    ):
         _reject("malformed_input", address=address, operation_class="value-envelope")
     if "replace_paths" in change and not isinstance(change["replace_paths"], list):
         _reject("malformed_input", address=address, operation_class="replace-envelope")
@@ -1805,21 +2413,31 @@ def _validate_resource_shape(resource: Any) -> tuple[str, str, dict[str, Any], d
     for key in ("after_unknown", "before_sensitive", "after_sensitive"):
         if key in change:
             if not isinstance(change[key], dict) and change[key] is not False:
-                _reject("malformed_input", address=address, operation_class=f"{key}-envelope")
+                _reject(
+                    "malformed_input",
+                    address=address,
+                    operation_class=f"{key}-envelope",
+                )
             try:
                 metadata_paths[key] = _unknown_paths(change[key])
-            except _Invalid:
-                _reject("malformed_input", address=address, operation_class=f"{key}-tree")
+            except InvalidPlan:
+                _reject(
+                    "malformed_input", address=address, operation_class=f"{key}-tree"
+                )
     return address, mode, change, metadata_paths
 
 
-def _validate_resource_drift(value: Any) -> None:
+def _validate_resource_drift(value: JSON) -> None:
     if not isinstance(value, list):
         _reject("malformed_input")
     seen: set[str] = set()
-    for resource in value:
-        address, mode, _, _ = _validate_resource_shape(resource)
-        if resource.get("provider_name") != EXPECTED_PROVIDER_NAME or mode not in {"managed", "data"}:
+    for resource_value in value:
+        address, mode, _, _ = _validate_resource_shape(resource_value)
+        resource = cast(dict[str, JSON], resource_value)
+        if resource.get("provider_name") != EXPECTED_PROVIDER_NAME or mode not in {
+            "managed",
+            "data",
+        }:
             _reject("malformed_input")
         if (mode == "data") != address.startswith("data."):
             _reject("malformed_input")
@@ -1832,7 +2450,7 @@ def _resource_ok(value: str, patterns: tuple[str, ...]) -> bool:
     return any(fnmatch.fnmatchcase(value, pattern) for pattern in patterns)
 
 
-def _validate_relevant_attributes(value: Any) -> None:
+def _validate_relevant_attributes(value: JSON) -> None:
     if not isinstance(value, list):
         _reject("malformed_input")
     for item in value:
@@ -1846,26 +2464,45 @@ def _validate_relevant_attributes(value: Any) -> None:
             _reject("malformed_input")
 
 
-def _validate_permission(record: Any, spec: Mutation, address: str) -> tuple[str, str, Mapping[str, str]]:
-    if not isinstance(record, dict) or set(record) != _PERMISSION_KEYS:
+def _validate_permission(
+    record: JSON, spec: Mutation, address: str
+) -> tuple[str, str, Mapping[str, str]]:
+    if not isinstance(record, dict) or set(record) != set(_PERMISSION_KEYS):
         _reject("unknown_manifest_declaration", address=address)
-    action, resource, conditions = record.get("action"), record.get("resource"), record.get("conditions")
-    if not (_is_string(action) and _is_string(resource) and isinstance(conditions, dict)):
-        _reject("malformed_input", address=address, action=action if isinstance(action, str) else None)
-    if any(not isinstance(key, str) or not isinstance(value, str) or not key or not value for key, value in conditions.items()):
+    action, resource, conditions = (
+        record.get("action"),
+        record.get("resource"),
+        record.get("conditions"),
+    )
+    if not (
+        _is_string(action) and _is_string(resource) and isinstance(conditions, dict)
+    ):
+        _reject(
+            "malformed_input",
+            address=address,
+            action=action if isinstance(action, str) else None,
+        )
+    if any(
+        not _is_string(key) or not isinstance(value, str) or not key or not value
+        for key, value in conditions.items()
+    ):
         _reject("malformed_input", address=address, action=action)
-    return action, resource, dict(conditions)
+    return action, resource, cast(dict[str, str], dict(conditions))
 
 
-def _canonical(value: Any) -> str:
+def _canonical(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
-def _fingerprint(value: Any) -> str:
+def _fingerprint(value: object) -> str:
     return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
 
 
-def _mutation_result(plan_record: Mapping[str, Any], manifest_record: Mapping[str, Any], permissions: list[Mapping[str, Any]]) -> dict[str, Any]:
+def _mutation_result(
+    plan_record: Mapping[str, Any],
+    manifest_record: Mapping[str, Any],
+    permissions: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
     ignored_unknown = plan_record.get("ignored_unknown", ())
     return {
         "address": plan_record["address"],
@@ -1879,8 +2516,12 @@ def _mutation_result(plan_record: Mapping[str, Any], manifest_record: Mapping[st
     }
 
 
-def _parse_plan(plan: Any) -> list[dict[str, Any]]:
-    if not isinstance(plan, dict) or not set(plan).issubset(_PLAN_KEYS) or not isinstance(plan.get("resource_changes"), list):
+def _parse_plan(plan: JSON) -> list[dict[str, Any]]:
+    if (
+        not isinstance(plan, dict)
+        or not set(plan).issubset(_PLAN_KEYS)
+        or not isinstance(plan.get("resource_changes"), list)
+    ):
         _reject("malformed_input")
     if plan.get("terraform_version") != EXPECTED_IDENTITY["terraform_version"]:
         _reject("provider_identity_mismatch")
@@ -1888,10 +2529,16 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         if key in plan and not isinstance(plan[key], str):
             _reject("malformed_input")
     expected_flags = {"applyable": True, "complete": True, "errored": False}
-    for key, expected in expected_flags.items():
+    for key in expected_flags:
         if key in plan and not isinstance(plan[key], bool):
             _reject("malformed_input")
-    for key in ("planned_values", "prior_state", "configuration", "output_changes", "variables"):
+    for key in (
+        "planned_values",
+        "prior_state",
+        "configuration",
+        "output_changes",
+        "variables",
+    ):
         if key in plan and not isinstance(plan[key], dict):
             _reject("malformed_input")
     if "checks" in plan and not isinstance(plan["checks"], (dict, list)):
@@ -1903,7 +2550,8 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     pending_unknowns: list[tuple[str, str, str | None, tuple[str, ...]]] = []
     seen: set[str] = set()
-    for resource in plan["resource_changes"]:
+    for resource_value in cast(list[JSON], plan["resource_changes"]):
+        resource = cast(dict[str, JSON], resource_value)
         address, mode, change, metadata_paths = _validate_resource_shape(resource)
         spec = CONTRACT.get(address)
         if spec is not None and spec.provider_change_identity:
@@ -1948,7 +2596,10 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             }
             if not runtime_identity_omitted:
                 expected_change_keys.update(identity_sides)
-            if set(resource) != expected_resource_keys or set(change) != expected_change_keys:
+            if (
+                set(resource) != expected_resource_keys
+                or set(change) != expected_change_keys
+            ):
                 _reject("malformed_input", address=address)
             expected_identity = (
                 {"arn": None if action_for_identity == "create" else TRACE_FIREHOSE}
@@ -1980,10 +2631,10 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 _reject("invalid_resource_identity", address=address)
         pending_unknowns.append(
             (
-            address,
-            change["actions"][0],
-            spec.operation_class if spec is not None else None,
-            metadata_paths.get("after_unknown", ()),
+                address,
+                change["actions"][0],
+                spec.operation_class if spec is not None else None,
+                metadata_paths.get("after_unknown", ()),
             )
         )
         if resource.get("provider_name") != EXPECTED_PROVIDER_NAME:
@@ -1995,17 +2646,18 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             _reject("moved_resource", address=address)
         if "deposed" in resource:
             _reject("deposed_resource", address=address)
-        actions = change["actions"]
-        if not actions or any(not _is_string(action) or action not in _ACTIONS for action in actions):
+        actions = cast(list[str], change["actions"])
+        if not actions or any(
+            not _is_string(action) or action not in _ACTIONS for action in actions
+        ):
             _reject("unsupported_action", address=address)
         if "import" in actions or "refresh" in actions:
             _reject("import_or_refresh", address=address, action=actions[0])
         if len(actions) != 1:
             _reject("replacement", address=address, action="+".join(actions))
         action = actions[0]
-        if "replace_paths" in change:
-            if change["replace_paths"]:
-                _reject("replacement", address=address, action=action)
+        if change.get("replace_paths"):
+            _reject("replacement", address=address, action=action)
         for key in ("after_unknown", "before_sensitive", "after_sensitive"):
             if action in {"create", "update"} and key not in change:
                 _reject("malformed_input", address=address, action=action)
@@ -2015,9 +2667,11 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             _reject("delete_not_permitted", address=address, action=action)
         production_candidate = copy.deepcopy(resource)
         if spec is not None and address in TRACE_NOTICE_DIGESTS:
+            candidate_change = cast(dict[str, JSON], production_candidate["change"])
             for side in ("before", "after"):
-                if isinstance(production_candidate["change"].get(side), dict):
-                    production_candidate["change"][side].pop("content", None)
+                candidate_side = candidate_change.get(side)
+                if isinstance(candidate_side, dict):
+                    candidate_side.pop("content", None)
         if _has_production_value(production_candidate):
             _reject("production_target", address=address, action=action)
         if mode == "data":
@@ -2029,9 +2683,20 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
         if action == "read":
             _reject("data_mode_misuse", address=address, action=action)
         if action == "no-op":
-            if _changed_fields(change.get("before"), change.get("after"), ignored=metadata_paths.get("after_unknown", ())):
+            if _changed_fields(
+                change.get("before"),
+                change.get("after"),
+                ignored=metadata_paths.get("after_unknown", ()),
+            ):
                 _reject("unsupported_field_delta", address=address, action=action)
-            if address in TRACE_NOTICE_DIGESTS or address == "aws_bedrockagentcore_agent_runtime.tollchat" or (spec is not None and spec.operation_class == "telemetry-log-protection"):
+            if (
+                address in TRACE_NOTICE_DIGESTS
+                or address == "aws_bedrockagentcore_agent_runtime.tollchat"
+                or (
+                    spec is not None
+                    and spec.operation_class == "telemetry-log-protection"
+                )
+            ):
                 if spec is None:
                     _reject("unsupported_address", address=address, action=action)
                 _validate_s3_identity(
@@ -2068,13 +2733,23 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             "report-freshness-alarm",
         }:
             if metadata_paths.get("after_unknown", ()):
-                _reject("unknown_authorization_value", address=address, action=action, operation_class=spec.operation_class)
+                _reject(
+                    "unknown_authorization_value",
+                    address=address,
+                    action=action,
+                    operation_class=spec.operation_class,
+                )
             if any(
                 _metadata_authorized(path, spec)
                 for key in ("before_sensitive", "after_sensitive")
                 for path in metadata_paths.get(key, ())
             ):
-                _reject("sensitive_authorization_value", address=address, action=action, operation_class=spec.operation_class)
+                _reject(
+                    "sensitive_authorization_value",
+                    address=address,
+                    action=action,
+                    operation_class=spec.operation_class,
+                )
         _validate_s3_identity(
             before,
             after,
@@ -2089,10 +2764,14 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 path for path in unknown_paths if not _path_allowed(path, spec.fields)
             )
             changed_set = set(
-                _create_fields(after, spec, address, action, ignored_unknown)
+                _create_fields(
+                    cast(dict[str, JSON], after), spec, address, action, ignored_unknown
+                )
             )
             for path in unknown_paths:
-                parents = [field for field in spec.fields if _path_allowed(path, (field,))]
+                parents = [
+                    field for field in spec.fields if _path_allowed(path, (field,))
+                ]
                 if parents:
                     changed_set.add(max(parents, key=len))
             changed = tuple(sorted(changed_set))
@@ -2105,16 +2784,32 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 _changed_fields(before, after, spec.fields, ignored_unknown)
             )
             for path in unknown_paths:
-                parents = [field for field in spec.fields if _path_allowed(path, (field,))]
+                parents = [
+                    field for field in spec.fields if _path_allowed(path, (field,))
+                ]
                 if parents:
                     changed_set.add(max(parents, key=len))
             changed = tuple(sorted(changed_set))
         if action not in spec.actions:
-            _reject("unsupported_action", address=address, action=action, operation_class=spec.operation_class)
+            _reject(
+                "unsupported_action",
+                address=address,
+                action=action,
+                operation_class=spec.operation_class,
+            )
         if address.startswith('aws_scheduler_schedule.timed_checks["'):
-            _validate_timed_schedule(after, address, action, spec.operation_class)
-        if not changed or any(not _path_allowed(field, spec.fields) for field in changed):
-            _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
+            _validate_timed_schedule(
+                cast(dict[str, JSON], after), address, action, spec.operation_class
+            )
+        if not changed or any(
+            not _path_allowed(field, spec.fields) for field in changed
+        ):
+            _reject(
+                "unsupported_field_delta",
+                address=address,
+                action=action,
+                operation_class=spec.operation_class,
+            )
         if spec.operation_class == "lambda-code":
             changed_set = set(changed)
             if changed_set == {"source_code_hash"} and address in {
@@ -2126,23 +2821,48 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
                 "source_code_hash" in changed_set
                 and bool(changed_set & {"s3_bucket", "s3_key", "s3_object_version"})
             ):
-                _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
+                _reject(
+                    "unsupported_field_delta",
+                    address=address,
+                    action=action,
+                    operation_class=spec.operation_class,
+                )
         if spec.operation_class == "cost-routing":
             try:
+                before = cast(dict[str, JSON], before)
+                after = cast(dict[str, JSON], after)
                 cost_release.routes(before, after)
-                if not isinstance(before.get("arn"), str) or not before["arn"].startswith(f"arn:aws:cloudfront::{ACCOUNT}:distribution/") or before["arn"] != after["arn"]:
+                if (
+                    not isinstance(before.get("arn"), str)
+                    or not cast(str, before["arn"]).startswith(
+                        f"arn:aws:cloudfront::{ACCOUNT}:distribution/"
+                    )
+                    or before["arn"] != after["arn"]
+                ):
                     raise ValueError("cost_routing_identity")
             except (ValueError, KeyError, TypeError):
-                _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
+                _reject(
+                    "unsupported_field_delta",
+                    address=address,
+                    action=action,
+                    operation_class=spec.operation_class,
+                )
         if spec.operation_class == "cost-publication":
             try:
                 cost_release.validate(resource, "development", plan)
             except (ValueError, KeyError, TypeError):
-                _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
+                _reject(
+                    "unsupported_field_delta",
+                    address=address,
+                    action=action,
+                    operation_class=spec.operation_class,
+                )
         if spec.operation_class.startswith("telemetry-"):
             _validate_telemetry_value(after, address, action, spec.operation_class)
         if spec.operation_class == "publisher-inline-policy":
-            _validate_publisher_policy(before, after, address, action, spec.operation_class)
+            _validate_publisher_policy(
+                before, after, address, action, spec.operation_class
+            )
         if spec.operation_class == "agentcore-trace-runtime-policy":
             _validate_trace_runtime_policy(
                 before, after, address, action, spec.operation_class
@@ -2176,114 +2896,184 @@ def _parse_plan(plan: Any) -> list[dict[str, Any]]:
             )
         records.append(
             {
-            "address": address,
-            "action": action,
-            "operation_class": spec.operation_class,
-            "changed_fields": changed,
-            "before": before,
-            "after": after,
-            "spec": spec,
-            "ignored_unknown": ignored_unknown,
+                "address": address,
+                "action": action,
+                "operation_class": spec.operation_class,
+                "changed_fields": changed,
+                "before": before,
+                "after": after,
+                "spec": spec,
+                "ignored_unknown": ignored_unknown,
             }
         )
     _validate_derived_unknowns(plan, pending_unknowns, records)
-    if any((address, path) in _DERIVED_UNKNOWN_EDGES for address, _, _, paths in pending_unknowns for path in paths):
+    if any(
+        (address, path) in _DERIVED_UNKNOWN_EDGES
+        for address, _, _, paths in pending_unknowns
+        for path in paths
+    ):
         records.sort(key=lambda record: record["address"])
     metadata_present = bool(plan["resource_changes"]) or any(
-        key in plan for key in ("applyable", "complete", "errored", "resource_drift", "relevant_attributes")
+        key in plan
+        for key in (
+            "applyable",
+            "complete",
+            "errored",
+            "resource_drift",
+            "relevant_attributes",
+        )
     )
     if metadata_present:
         if any(key not in plan for key in expected_flags):
             _reject("malformed_input")
         if plan["complete"] is not True or plan["errored"] is not False:
             _reject("malformed_input")
-        if any(not record.get("no_op_evidence") for record in records) and plan["applyable"] is not True:
+        if (
+            any(not record.get("no_op_evidence") for record in records)
+            and plan["applyable"] is not True
+        ):
             _reject("malformed_input")
     return records
 
 
-def _parse_manifest(manifest: Any) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
-    if not isinstance(manifest, dict) or set(manifest) != _MANIFEST_KEYS:
+def _parse_manifest(
+    manifest: JSON,
+) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
+    if not isinstance(manifest, dict) or set(manifest) != set(_MANIFEST_KEYS):
         _reject("unknown_manifest_declaration")
-    if manifest.get("schema_version") != 1 or not isinstance(manifest.get("mutations"), list) or not isinstance(manifest.get("permissions"), list):
+    if (
+        manifest.get("schema_version") != 1
+        or not isinstance(manifest.get("mutations"), list)
+        or not isinstance(manifest.get("permissions"), list)
+    ):
         _reject("malformed_input")
     _validate_identity(manifest.get("provider_identity"))
     inputs, packages = manifest.get("deployment_inputs"), manifest.get("packages")
     if not isinstance(inputs, dict) or not isinstance(packages, dict):
         _reject("malformed_input")
-    expected_packages = _packages_for_inputs(inputs)
+    expected_packages = packages_for_inputs(inputs)
     if (
         not inputs
         or list(inputs) != sorted(inputs)
         or any(
-            not _is_string(path) or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+            not _is_string(path)
+            or not isinstance(digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)
             for path, digest in inputs.items()
         )
         or list(packages) != list(expected_packages)
-        or any(not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest) for digest in packages.values())
+        or any(
+            not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+            for digest in packages.values()
+        )
     ):
         _reject("malformed_input")
     production_inputs = set(inputs) & PRODUCTION_CONTROL_INPUTS
-    if production_inputs and production_inputs != PRODUCTION_CONTROL_INPUTS:
+    if production_inputs and production_inputs != set(PRODUCTION_CONTROL_INPUTS):
         _reject("malformed_input")
     mutations: dict[str, dict[str, Any]] = {}
     permissions: dict[str, list[dict[str, Any]]] = {}
-    for record in manifest["mutations"]:
-        if not isinstance(record, dict) or set(record) != _MUTATION_KEYS:
+    for record in cast(list[JSON], manifest["mutations"]):
+        if not isinstance(record, dict) or set(record) != set(_MUTATION_KEYS):
             _reject("unknown_manifest_declaration")
         address = record.get("address")
-        if not (_is_string(address) and _is_string(record.get("action")) and _is_string(record.get("operation_class")) and isinstance(record.get("changed_fields"), list)):
+        if not (
+            _is_string(address)
+            and _is_string(record.get("action"))
+            and _is_string(record.get("operation_class"))
+            and isinstance(record.get("changed_fields"), list)
+        ):
             _reject("malformed_input")
         if address in TIMED_ADDRESSES and TIMED_CHECKS_MARKER not in inputs:
             _reject("timed_contract_requires_marker", address=address)
         if address in mutations:
             _reject("duplicate_manifest_mutation", address=address)
-        if any(not _is_string(field) for field in record["changed_fields"]):
+        if any(
+            not _is_string(field)
+            for field in cast(list[JSON], record["changed_fields"])
+        ):
             _reject("malformed_input", address=address)
         mutations[address] = record
-    for record in manifest["permissions"]:
-        address = record.get("address") if isinstance(record, dict) else None
+    for raw_record in cast(list[JSON], manifest["permissions"]):
+        record = cast(dict[str, JSON], raw_record)
+        address = record.get("address") if isinstance(raw_record, dict) else None
         if not _is_string(address):
             _reject("malformed_input")
         if address in TIMED_ADDRESSES and TIMED_CHECKS_MARKER not in inputs:
             _reject("timed_contract_requires_marker", address=address)
-        _validate_permission(record, CONTRACT.get(address, Mutation((), (), "", ())), address)
+        _validate_permission(
+            record, CONTRACT.get(address, Mutation((), (), "", ())), address
+        )
         permissions.setdefault(address, []).append(record)
     return mutations, permissions
 
 
-def _validate_trace_notices(records: list[dict[str, Any]]) -> None:
+def validate_trace_notices(records: list[dict[str, Any]]) -> None:
     subscription_create = any(
         record["operation_class"] == "agentcore-trace-subscription"
         and record["action"] == "create"
         for record in records
     )
     by_address = {record["address"]: record for record in records}
+
     def notice_digest(record: dict[str, Any], side: str = "after") -> str:
         value = record.get(side)
-        content = value.get("content") if isinstance(value, dict) else None
-        return hashlib.sha256(content.encode()).hexdigest() if isinstance(content, str) else ""
+        content = (
+            cast(dict[str, JSON], value).get("content")
+            if isinstance(value, dict)
+            else None
+        )
+        return (
+            hashlib.sha256(content.encode()).hexdigest()
+            if isinstance(content, str)
+            else ""
+        )
 
-    new_notices = [address for address, digest in REDACTED_TRACE_NOTICE_DIGESTS.items() if address in by_address and notice_digest(by_address[address]) in REDACTED_NOTICE_VERSIONS[address]]
+    new_notices = [
+        address
+        for address in REDACTED_TRACE_NOTICE_DIGESTS
+        if address in by_address
+        and notice_digest(by_address[address]) in REDACTED_NOTICE_VERSIONS[address]
+    ]
     if new_notices:
         if len(new_notices) != len(REDACTED_TRACE_NOTICE_DIGESTS):
             _reject("unsupported_field_delta", operation_class="site-object-upload")
         runtime = by_address.get("aws_bedrockagentcore_agent_runtime.tollchat")
         if runtime is None:
             _reject("unsupported_field_delta", operation_class="site-object-upload")
-        _validate_agentcore_trace_value(runtime["before"], runtime["after"], runtime["address"], runtime["action"], "agentcore-code")
+        _validate_agentcore_trace_value(
+            runtime["before"],
+            runtime["after"],
+            runtime["address"],
+            runtime["action"],
+            "agentcore-code",
+        )
         env = runtime["after"].get("environment_variables", {})
-        if not env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_ID") or not env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION"):
+        if not env.get("TOLLCHAT_TELEMETRY_GUARDRAIL_ID") or not env.get(
+            "TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION"
+        ):
             _reject("unsupported_field_delta", operation_class="site-object-upload")
-        publishing = any(notice_digest(by_address[address], "before") not in REDACTED_NOTICE_VERSIONS[address] for address in new_notices)
-        if publishing and (runtime["action"] != "update" or "agent_runtime_artifact.code_configuration.code.s3.version_id" not in runtime["changed_fields"]):
+        publishing = any(
+            notice_digest(by_address[address], "before")
+            not in REDACTED_NOTICE_VERSIONS[address]
+            for address in new_notices
+        )
+        if publishing and (
+            runtime["action"] != "update"
+            or "agent_runtime_artifact.code_configuration.code.s3.version_id"
+            not in runtime["changed_fields"]
+        ):
             _reject("unsupported_field_delta", operation_class="site-object-upload")
         for endpoint in ("DEFAULT", "preview"):
-            address = f'aws_cloudwatch_log_data_protection_policy.agentcore["{endpoint}"]'
+            address = (
+                f'aws_cloudwatch_log_data_protection_policy.agentcore["{endpoint}"]'
+            )
             policy = by_address.get(address)
             if policy is None:
                 _reject("unsupported_field_delta", address=address)
-            _validate_telemetry_value(policy["after"], address, policy["action"], "telemetry-log-protection")
+            _validate_telemetry_value(
+                policy["after"], address, policy["action"], "telemetry-log-protection"
+            )
     for address, digest in TRACE_NOTICE_DIGESTS.items():
         record = by_address.get(address)
         if record is None:
@@ -2301,11 +3091,12 @@ def _validate_trace_notices(records: list[dict[str, Any]]) -> None:
             if isinstance(record.get("after"), dict)
             else None
         )
-        before = record.get("before")
-        after = record.get("after")
+        before: JSON = record.get("before")
+        after: JSON = record.get("after")
         if (
             not isinstance(content, str)
-            or hashlib.sha256(content.encode()).hexdigest() not in {digest} | REDACTED_NOTICE_VERSIONS[address]
+            or hashlib.sha256(content.encode()).hexdigest()
+            not in {digest} | REDACTED_NOTICE_VERSIONS[address]
             or not isinstance(after, dict)
             or after.get("source") not in (None, "")
             or after.get("source_hash") not in (None, "")
@@ -2333,11 +3124,28 @@ def _validate_manifest_entry(
     if spec is None:
         _reject("unsupported_address", address=address)
     action = declaration["action"]
-    if action not in spec.actions or declaration["operation_class"] != spec.operation_class:
-        _reject("manifest_mutation_mismatch", address=address, action=action, operation_class=declaration["operation_class"])
+    if (
+        action not in spec.actions
+        or declaration["operation_class"] != spec.operation_class
+    ):
+        _reject(
+            "manifest_mutation_mismatch",
+            address=address,
+            action=action,
+            operation_class=declaration["operation_class"],
+        )
     fields = declaration["changed_fields"]
-    if not fields or len(set(fields)) != len(fields) or any(field not in spec.fields for field in fields):
-        _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
+    if (
+        not fields
+        or len(set(fields)) != len(fields)
+        or any(field not in spec.fields for field in fields)
+    ):
+        _reject(
+            "unsupported_field_delta",
+            address=address,
+            action=action,
+            operation_class=spec.operation_class,
+        )
     if spec.operation_class == "lambda-code":
         field_set = set(fields)
         if field_set == {"source_code_hash"} and address in {
@@ -2351,21 +3159,43 @@ def _validate_manifest_entry(
         ):
             s3_fields = {"s3_bucket", "s3_key", "s3_object_version"}
             if "source_code_hash" not in fields or not (field_set & s3_fields):
-                _reject("unsupported_field_delta", address=address, action=action, operation_class=spec.operation_class)
+                _reject(
+                    "unsupported_field_delta",
+                    address=address,
+                    action=action,
+                    operation_class=spec.operation_class,
+                )
     expected = spec.permissions
     if len(permissions) != len(expected):
-        _reject("missing_permission", address=address, action=action, operation_class=spec.operation_class)
+        _reject(
+            "missing_permission",
+            address=address,
+            action=action,
+            operation_class=spec.operation_class,
+        )
     used: set[int] = set()
     seen: set[tuple[str, str, tuple[tuple[str, str], ...]]] = set()
     for permission in permissions:
-        permission_action, resource, conditions = _validate_permission(permission, spec, address)
-        permission_key = (permission_action, resource, tuple(sorted(conditions.items())))
+        permission_action, resource, conditions = _validate_permission(
+            permission, spec, address
+        )
+        permission_key = (
+            permission_action,
+            resource,
+            tuple(sorted(conditions.items())),
+        )
         if permission_key in seen:
-            _reject("duplicate_permission", address=address, action=action, operation_class=spec.operation_class)
+            _reject(
+                "duplicate_permission",
+                address=address,
+                action=action,
+                operation_class=spec.operation_class,
+            )
         seen.add(permission_key)
         match = next(
             (
-                index for index, item in enumerate(expected)
+                index
+                for index, item in enumerate(expected)
                 if index not in used
                 and permission_action == item.action
                 and _resource_ok(resource, item.resources)
@@ -2374,24 +3204,46 @@ def _validate_manifest_entry(
             None,
         )
         if match is None:
-            _reject("invalid_permission", address=address, action=action, operation_class=spec.operation_class)
+            _reject(
+                "invalid_permission",
+                address=address,
+                action=action,
+                operation_class=spec.operation_class,
+            )
         used.add(match)
     if len(used) != len(expected):
-        _reject("missing_permission", address=address, action=action, operation_class=spec.operation_class)
+        _reject(
+            "missing_permission",
+            address=address,
+            action=action,
+            operation_class=spec.operation_class,
+        )
 
 
-def validate_plan(plan: Any, manifest: Any, identity: Any | None = None) -> dict[str, Any]:
+def validate_plan(
+    plan: object, manifest: object, identity: object = None
+) -> dict[str, Any]:
     """Validate a plan and release manifest, returning only sanitized data."""
+    plan = cast(JSON, plan)
+    manifest = cast(JSON, manifest)
+    identity = cast(JSON, identity)
     try:
-        if _manifest_has_production_value(manifest) or (identity is not None and _has_production_value(identity)):
+        if _manifest_has_production_value(manifest) or (
+            identity is not None and _has_production_value(identity)
+        ):
             _reject("production_target")
         _validate_identity(identity)
         records = _parse_plan(plan)
-        _validate_trace_notices(records)
+        validate_trace_notices(records)
         # Runtime/policy no-ops prove notice consistency, not deployment mutations.
-        records = [record for record in records if not record.get("no_op_evidence") or record["address"] in TRACE_NOTICE_DIGESTS]
+        records = [
+            record
+            for record in records
+            if not record.get("no_op_evidence")
+            or record["address"] in TRACE_NOTICE_DIGESTS
+        ]
         declared, declared_permissions = _parse_manifest(manifest)
-        if manifest.get("provider_identity") != identity:
+        if cast(dict[str, JSON], manifest).get("provider_identity") != identity:
             _reject("provider_identity_mismatch")
         actual_records = [
             record for record in records if not record.get("no_op_evidence")
@@ -2402,7 +3254,9 @@ def validate_plan(plan: Any, manifest: Any, identity: Any | None = None) -> dict
         if not actual_addresses.issubset(set(declared)):
             _reject("manifest_coverage_mismatch")
         for address, declaration in declared.items():
-            _validate_manifest_entry(address, declaration, declared_permissions.get(address, []))
+            _validate_manifest_entry(
+                address, declaration, declared_permissions.get(address, [])
+            )
         sanitized_records: list[dict[str, Any]] = []
         for record in actual_records:
             address = record["address"]
@@ -2410,19 +3264,34 @@ def validate_plan(plan: Any, manifest: Any, identity: Any | None = None) -> dict
             if (
                 declaration["action"] != record["action"]
                 or declaration["operation_class"] != record["operation_class"]
-                or tuple(sorted(declaration["changed_fields"])) != record["changed_fields"]
+                or tuple(sorted(declaration["changed_fields"]))
+                != record["changed_fields"]
             ):
-                _reject("manifest_mutation_mismatch", address=address, action=record["action"], operation_class=record["operation_class"])
+                _reject(
+                    "manifest_mutation_mismatch",
+                    address=address,
+                    action=record["action"],
+                    operation_class=record["operation_class"],
+                )
             actual_permissions = declared_permissions.get(address, [])
             normalized: list[dict[str, Any]] = []
             for permission in actual_permissions:
-                action, resource, conditions = _validate_permission(permission, record["spec"], address)
-                normalized.append({"address": address, "action": action, "resource": resource, "conditions": conditions})
+                action, resource, conditions = _validate_permission(
+                    permission, record["spec"], address
+                )
+                normalized.append(
+                    {
+                        "address": address,
+                        "action": action,
+                        "resource": resource,
+                        "conditions": conditions,
+                    }
+                )
             sanitized_records.append(_mutation_result(record, declaration, normalized))
         fingerprint = _fingerprint(
             {
-            "identity": dict(EXPECTED_IDENTITY),
-            "mutations": sanitized_records,
+                "identity": dict(EXPECTED_IDENTITY),
+                "mutations": sanitized_records,
             }
         )
         return {
@@ -2433,7 +3302,7 @@ def validate_plan(plan: Any, manifest: Any, identity: Any | None = None) -> dict
             "operation_classes": [record["operation_class"] for record in records],
             "fingerprint": fingerprint,
         }
-    except _Invalid as error:
+    except InvalidPlan as error:
         result: dict[str, Any] = {"status": "rejected", "reason_code": error.reason}
         if error.address is not None:
             result["address"] = error.address
@@ -2446,11 +3315,13 @@ def validate_plan(plan: Any, manifest: Any, identity: Any | None = None) -> dict
         return {"status": "rejected", "reason_code": "malformed_input"}
 
 
-def validate(plan: Any, manifest: Any, identity: Any | None = None) -> dict[str, Any]:
+def validate(
+    plan: JSON, manifest: JSON, identity: JSON | None = None
+) -> dict[str, Any]:
     return validate_plan(plan, manifest, identity)
 
 
-def _load_json(path: str) -> Any:
+def _load_json(path: str) -> JSON:
     with open(path, encoding="utf-8") as handle:
         return json.load(handle)
 
@@ -2462,7 +3333,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--identity", required=True)
     args = parser.parse_args(argv)
     try:
-        result = validate_plan(_load_json(args.plan), _load_json(args.manifest), _load_json(args.identity))
+        result = validate_plan(
+            _load_json(args.plan), _load_json(args.manifest), _load_json(args.identity)
+        )
     except Exception:
         result = {"status": "rejected", "reason_code": "malformed_input"}
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))

@@ -26,6 +26,10 @@ dev = [
 
 [tool.pyright]
 typeCheckingMode = "strict"
+include = [".", "../infra"]
+extraPaths = [".", "..", "scripts", "../infra"]
+venvPath = "."
+venv = ".venv"
 reportMissingTypeStubs = false
 exclude = ["**/__pycache__", ".venv", "infra/build", "lambdas/fetcher/tests", "lambdas/loader/tests", "lambdas/publisher/tests"]
 
