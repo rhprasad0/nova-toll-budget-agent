@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import os
 import re
 import shutil
@@ -120,6 +121,8 @@ def commands(selected: set[str], paths: list[str]) -> list[list[str]]:
         ruff = require_tool("v2/.venv/bin/ruff", setup)
         pyright = require_tool("v2/.venv/bin/pyright", setup)
         files = [path for path in paths if group(path) == "python"]
+        # Explicit --config makes Ruff resolve relative src against cwd, not TOML.
+        roots = "src = " + json.dumps([str(ROOT / "v2"), str(ROOT)])
         if files:
             result.extend(
                 [
@@ -128,6 +131,8 @@ def commands(selected: set[str], paths: list[str]) -> list[list[str]]:
                         "check",
                         "--config",
                         "v2/pyproject.toml",
+                        "--config",
+                        roots,
                         *["./" + path for path in files],
                     ],
                     [
@@ -136,6 +141,8 @@ def commands(selected: set[str], paths: list[str]) -> list[list[str]]:
                         "--check",
                         "--config",
                         "v2/pyproject.toml",
+                        "--config",
+                        roots,
                         *["./" + path for path in files],
                     ],
                     [

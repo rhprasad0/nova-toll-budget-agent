@@ -239,3 +239,23 @@ def test_narrow_python_suppression_is_left_to_checker(repository: Repository) ->
     )
     repository.git("add", "v2/example.py")
     assert repository.run().returncode == 0
+
+
+def test_full_runner_resolves_paths_from_another_directory(
+    repository: Repository,
+) -> None:
+    result = subprocess.run(
+        [sys.executable, str(repository.root / "v2/scripts/check_repository.py")],
+        cwd=repository.root / "v2",
+        env=repository.env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert {call[0] for call in repository.calls()} == set(CHECKERS) - {"gitleaks"}
+    ruff = next(call for call in repository.calls() if call[0] == "ruff")
+    assert (
+        "src = " + json.dumps([str(repository.root / "v2"), str(repository.root)])
+        in ruff
+    )
