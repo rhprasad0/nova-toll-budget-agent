@@ -17,6 +17,8 @@ if os.environ.get("UNIFIED_TRACES_DESTINATION_ENABLED") == "true":
 
 import boto3
 from bedrock_agentcore import BedrockAgentCoreApp
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode
 from strands.types.agent import Limits
 
 from agent.toll_agent import (
@@ -304,6 +306,7 @@ class TollChatRuntime:
                 yield _canary_event(canary_messages)
             yield {"type": "answer", "text": answer, "blocked": False}
         except Exception as error:  # Provider boundary returns one safe error contract.
+            trace.get_current_span().set_status(StatusCode.ERROR, "agent_unavailable")
             logger.error(
                 "TollChat runtime request failed type=%s", type(error).__name__
             )
