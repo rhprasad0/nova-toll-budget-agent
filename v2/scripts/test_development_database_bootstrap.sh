@@ -205,7 +205,7 @@ done
 if [[ -n "${POSTGRES_CONTAINER_ID:-}" ]]; then
   mismatch_container="$(docker run -d --rm -e POSTGRES_HOST_AUTH_METHOD=trust \
     -p 127.0.0.1::5432 postgis/postgis:17-3.5)"
-  for attempt in {1..30}; do
+  for _attempt in {1..30}; do
     if docker exec "$mismatch_container" pg_isready --username postgres >/dev/null; then
       break
     fi

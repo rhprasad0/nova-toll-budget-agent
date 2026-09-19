@@ -115,8 +115,9 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           export CLOUDFLARE_API_TOKEN
           terraform -chdir=v2/infra init -input=false -lockfile=readonly -backend-config=backend.production.hcl >"$private/init.log" 2>&1
-          export CANARY_ARTIFACT_ID="$(jq -er .bundle_id "$admission")"
-          export CANARY_ARTIFACT_DIGEST="$(jq -er .bundle_digest "$admission")"
+          CANARY_ARTIFACT_ID="$(jq -er .bundle_id "$admission")"
+          CANARY_ARTIFACT_DIGEST="$(jq -er .bundle_digest "$admission")"
+          export CANARY_ARTIFACT_ID CANARY_ARTIFACT_DIGEST
           status=0
           python3 "$GITHUB_WORKSPACE/trusted/v2/scripts/release_blue_green.py" recover \
             --environment production --terraform-root v2/infra --bundle-root release-overlay \

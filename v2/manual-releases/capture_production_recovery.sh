@@ -13,6 +13,8 @@
   export AWS_IGNORE_CONFIGURED_ENDPOINT_URLS=true
   CURRENT_STAGE=record-path
   FAILURE_REPORTED=0
+  # Invoked by the EXIT trap in this subshell; ShellCheck does not follow it.
+  # shellcheck disable=SC2329
   finish() {
     local status=$?
     trap - EXIT

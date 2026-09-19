@@ -128,6 +128,8 @@ jobs:
         set -euo pipefail
         umask 077
         set +x
+        # ShellCheck resolves the same helper before CI creates the trusted checkout.
+        # shellcheck source=v2/scripts/run_private_stage.sh
         source trusted/v2/scripts/run_private_stage.sh
         PRIVATE_STAGE_REPORTED=0
         PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -181,6 +183,8 @@ jobs:
         umask 077
         set +x
         bundle="$RUNNER_TEMP/production-release.zip"; overlay="$GITHUB_WORKSPACE/candidate/release-overlay"
+        # ShellCheck resolves the same helper before CI creates the trusted checkout.
+        # shellcheck source=v2/scripts/run_private_stage.sh
         source trusted/v2/scripts/run_private_stage.sh
         PRIVATE_STAGE_REPORTED=0
         PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -212,6 +216,8 @@ jobs:
         set -euo pipefail
         umask 077
         set +x
+        # ShellCheck resolves the same helper before CI creates the trusted checkout.
+        # shellcheck source=v2/scripts/run_private_stage.sh
         source trusted/v2/scripts/run_private_stage.sh
         PRIVATE_STAGE_REPORTED=0
         PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -255,6 +261,8 @@ jobs:
         set -euo pipefail
         umask 077
         set +x
+        # ShellCheck resolves the same helper before CI creates the trusted checkout.
+        # shellcheck source=v2/scripts/run_private_stage.sh
         source trusted/v2/scripts/run_private_stage.sh
         PRIVATE_STAGE_REPORTED=0
         PRIVATE_STAGE_SUMMARY_FAILED=0
@@ -282,6 +290,8 @@ jobs:
         run_private_stage foundation-init "$RUNNER_TEMP/production-foundation-init.out" "$error" terraform -chdir=candidate/infra init -input=false -backend-config=backend.production.hcl
         run_private_stage foundation-output "$foundation" "$error" terraform -chdir=candidate/infra output -json foundation
         run_private_stage foundation-output-validation "$RUNNER_TEMP/production-foundation-validation.out" "$error" jq -e 'type == "object" and (del(.telemetry_guardrail)|keys|sort) == ["agentcore_artifacts_bucket_name","agentcore_endpoint_security_group_id","agentcore_vpc_endpoint_dns_name","agentcore_vpc_endpoint_id","alerts_topic_arn","db_instance","eventbridge_endpoint_security_group_id","private_subnet_ids","raw_bucket_name","raw_kms_key_arn","rds_security_group_id","tollchat_api_vpc_endpoint_id","vpc_cidr_block","vpc_id"] and ([.vpc_id,.vpc_cidr_block,.rds_security_group_id,.agentcore_endpoint_security_group_id,.eventbridge_endpoint_security_group_id,.agentcore_vpc_endpoint_id,.agentcore_vpc_endpoint_dns_name,.tollchat_api_vpc_endpoint_id,.raw_bucket_name,.raw_kms_key_arn,.agentcore_artifacts_bucket_name,.alerts_topic_arn]|all(type == "string" and length > 0)) and ((has("telemetry_guardrail")|not) or (.telemetry_guardrail | (keys|sort) == ["arn","id","version"] and all(.[]; type == "string" and length > 0))) and (.private_subnet_ids|keys|sort == ["a","c"]) and (.db_instance|keys|sort == ["address","identifier","port","resource_id"])' "$foundation"
+        # The stage wrapper hides jq from ShellCheck; its filters must stay literal.
+        # shellcheck disable=SC2016
         run_private_stage foundation-vars "$vars" "$error" jq -n --slurpfile foundation "$foundation" '{foundation:$foundation[0]}'
         run_private_stage release-init "$RUNNER_TEMP/production-release-init.out" "$error" terraform -chdir=candidate/v2/infra init -input=false -backend-config=backend.production.hcl
         state_identity() {

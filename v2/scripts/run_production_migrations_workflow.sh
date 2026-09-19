@@ -43,6 +43,8 @@ run_private_stage migration-identity "$OUT" "$ERR" test "$GITHUB_REF" = refs/hea
 run_private_stage migration-identity "$OUT" "$ERR" test "$GITHUB_REPOSITORY" = rhprasad0/nova-toll-budget-agent
 run_private_stage migration-identity "$OUT" "$ERR" test -n "$CANDIDATE"
 run_private_stage migration-identity "$OUT" "$ERR" test -n "$ADMISSION"
+# The stage wrapper hides jq from ShellCheck; its filters must stay literal.
+# shellcheck disable=SC2016
 run_private_stage migration-identity "$OUT" "$ERR" jq -e --arg candidate "$CANDIDATE" '
   type == "object" and
   (keys | sort) == ["bundle_digest","bundle_id","candidate","claim_id","consumer_attempt","consumer_run","development_attempt","development_deployment","development_run","evidence_artifact","listener_attempt","listener_run","release_id","schema_versions","tag"] and
@@ -56,12 +58,16 @@ run_private_stage rds-ca "$OUT" "$ERR" test "$(sha256sum "$CA_BUNDLE" | awk '{pr
 
 run_private_stage migration-identity "$OUT" "$ERR" aws sts get-caller-identity --output json
 CALLER_JSON="$(<"$OUT")"
+# The stage wrapper hides jq from ShellCheck; its filters must stay literal.
+# shellcheck disable=SC2016
 run_private_stage migration-identity "$OUT" "$ERR" jq -e --arg account "$EXPECTED_ACCOUNT" --arg role "$EXPECTED_ROLE" '
   .Account == $account and (.Arn | type == "string" and test("^arn:aws:sts::" + $account + ":assumed-role/" + $role + "/[A-Za-z0-9+=,.@_-]+$"))
 ' <<<"$CALLER_JSON"
 
 run_private_stage migration-database "$OUT" "$ERR" aws rds describe-db-instances --db-instance-identifier "$DB_IDENTIFIER" --output json
 DB_JSON="$(<"$OUT")"
+# The stage wrapper hides jq from ShellCheck; its filters must stay literal.
+# shellcheck disable=SC2016
 run_private_stage migration-database "$OUT" "$ERR" jq -e --arg identifier "$DB_IDENTIFIER" --arg database "$DB_NAME" --arg resource "$DB_RESOURCE_ID" '
   (.DBInstances | type == "array" and length == 1) and (.DBInstances[0] as $db |
   ($db.DBInstanceIdentifier == $identifier and $db.DBName == $database and
@@ -100,6 +106,8 @@ TAILSCALE_JSON="$(<"$OUT")"
 run_private_stage migration-route "$OUT" "$ERR" jq -e '.BackendState == "Running"' <<<"$TAILSCALE_JSON"
 run_private_stage migration-route "$OUT" "$ERR" ip -json route get "$DB_IPV4"
 ROUTE_JSON="$(<"$OUT")"
+# The stage wrapper hides jq from ShellCheck; its filters must stay literal.
+# shellcheck disable=SC2016
 run_private_stage migration-route "$OUT" "$ERR" jq -e --arg host "$DB_IPV4" '
   type == "array" and length == 1 and .[0].dst == $host and .[0].dev == "tailscale0"
 ' <<<"$ROUTE_JSON"
@@ -126,6 +134,8 @@ unset DB_TOKEN
 run_private_stage migration-runner "$OUT" "$ERR" python3 v2/scripts/run_production_migrations.py
 RUNNER_JSON="$(<"$OUT")"
 unset PGPASSWORD
+# The stage wrapper hides jq from ShellCheck; its filters must stay literal.
+# shellcheck disable=SC2016
 run_private_stage migration-evidence "$OUT" "$ERR" jq -e --arg candidate "$CANDIDATE" --arg database "$DB_NAME" --arg user "$DB_USER" --argjson admission "$ADMISSION" '
   type == "object" and .commit == $candidate and .database == $database and .user == $user and .status == "ok" and
   (.after == $admission.schema_versions) and
@@ -136,6 +146,8 @@ run_private_stage migration-evidence "$OUT" "$ERR" jq -e --arg candidate "$CANDI
   ((.before == .after and (.applied | length) == 0) or
    (.before != .after and (.applied | length) > 0))
 ' <<<"$RUNNER_JSON"
+# The stage wrapper hides jq from ShellCheck; its filters must stay literal.
+# shellcheck disable=SC2016
 run_private_stage migration-evidence "$OUT" "$ERR" jq -cn --arg candidate "$CANDIDATE" --arg resource "$DB_RESOURCE_ID" --argjson admission "$ADMISSION" --argjson runner "$RUNNER_JSON" \
   '{candidate:$candidate,release_id:$admission.release_id,claim_id:$admission.claim_id,listener_run:$admission.listener_run,listener_attempt:$admission.listener_attempt,consumer_run:$admission.consumer_run,consumer_attempt:$admission.consumer_attempt,development_run:$admission.development_run,development_attempt:$admission.development_attempt,development_deployment:$admission.development_deployment,schema_versions:$admission.schema_versions,resource_id:$resource,before:$runner.before,after:$runner.after,applied:$runner.applied,runner_run_id:$runner.run_id,status:$runner.status}'
 run_private_stage migration-evidence "$CONTROL" "$ERR" cp -P -- "$OUT" "$RUNNER_TEMP/v2-production-migrations-evidence.json"
