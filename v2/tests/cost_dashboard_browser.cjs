@@ -1,3 +1,4 @@
+// Playwright executes these callback bodies in a browser, across the Node type boundary.
 // Credential-free browser check using deterministic billing fixtures.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
@@ -34,17 +35,29 @@ const { chromium } = require('playwright');
       const contentType = file.endsWith('.css') ? 'text/css' : file.endsWith('.mjs') ? 'text/javascript' : file.endsWith('.png') ? 'image/png' : 'text/html';
       return route.fulfill({ body, contentType });
     });
-    const go = async () => { await page.goto('https://cost.test/cost-dashboard'); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#total')).textContent !== '–'); };
+    const go = async () => { await page.goto('https://cost.test/cost-dashboard'); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#total')).textContent !== '–';
+    }); };
     await go();
-    await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#total')).textContent === '$11.56');
+    await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#total')).textContent === '$11.56';
+    });
     assert.equal(await page.locator('#aws').innerText(), '$4.76');
     assert.equal(await page.locator('#openai').innerText(), '$6.80');
     assert.deepEqual(await page.locator('.nav-links a').allTextContents(), ['Chat', 'Cost', 'Evaluation results']);
     assert.equal(await page.locator('.nav-links a[aria-current]').getAttribute('href'), '/cost-dashboard');
     await page.reload();
-    await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#total')).textContent === '$11.56');
+    await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#total')).textContent === '$11.56';
+    });
     await page.goto('https://cost.test/cost-dashboard/');
-    await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#total')).textContent === '$11.56');
+    await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#total')).textContent === '$11.56';
+    });
     await page.keyboard.press('Tab'); assert.equal(await page.locator(':focus').innerText(), 'Skip to costs');
     await page.locator('#daily-details summary').focus(); await page.keyboard.press('Enter');
     assert.equal(await page.locator('#daily-details[open]').count(), 1);
@@ -59,32 +72,62 @@ const { chromium } = require('playwright');
     };
     await checkChart();
     fail = true;
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#state-notice')).textContent.includes('Browser refresh failed'));
+    await page.evaluate(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return browser.dispatchEvent(new Event('focus'));
+    });
+    await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#state-notice')).textContent.includes('Browser refresh failed');
+    });
     assert.equal(await page.locator('#total').innerText(), '$11.56');
     fail = false;
     payload = structuredClone(fixtures.production); payload.environment = 'development';
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.evaluate(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return browser.dispatchEvent(new Event('focus'));
+    });
     await page.waitForTimeout(100);
     assert.equal(await page.locator('#total').innerText(), '$11.56');
-    await page.reload(); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#total')).textContent === 'Unavailable');
+    await page.reload(); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#total')).textContent === 'Unavailable';
+    });
     payload = fixtures.production;
-    await go(); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#total')).textContent === '$11.56');
+    await go(); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#total')).textContent === '$11.56';
+    });
     await page.clock.setFixedTime(new Date('2026-09-21T12:00:00Z'));
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#state-notice')).textContent.includes('over 48 hours'));
+    await page.evaluate(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return browser.dispatchEvent(new Event('focus'));
+    });
+    await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#state-notice')).textContent.includes('over 48 hours');
+    });
     await page.clock.setFixedTime(new Date('2026-09-18T12:00:00Z'));
     const output = path.resolve(root, '../test-results/cost-dashboard'); await fs.mkdir(output, { recursive: true });
-    await go(); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#total')).textContent === '$11.56');
+    await go(); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#total')).textContent === '$11.56';
+    });
     await page.screenshot({ path: path.join(output, 'desktop.png'), fullPage: true });
     for (const width of [320, 390, 820, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `Overflow at ${width}`);
+      assert.ok(await page.evaluate(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return browser.document.documentElement.scrollWidth <= browser.innerWidth;
+    }), `Overflow at ${width}`);
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: path.join(output, 'mobile.png'), fullPage: true });
     environment = 'development'; payload = fixtures.development;
-    await go(); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#aws')).textContent === '$5.10');
+    await go(); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#aws')).textContent === '$5.10';
+    });
     assert.equal(await page.locator('#total').innerText(), '$11.90');
     assert.equal(await page.locator('#openai').innerText(), '$6.80');
     assert.match(await page.locator('#deployment').innerText(), /DEVELOPMENT/);
@@ -93,10 +136,16 @@ const { chromium } = require('playwright');
     assert.match(await page.locator('#openai-note').innerText(), /Organization-wide/);
     await checkChart();
     await page.setViewportSize({ width: 320, height: 900 });
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    assert.ok(await page.evaluate(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return browser.document.documentElement.scrollWidth <= browser.innerWidth;
+    }));
     // Unversioned HTML and JS may update separately during preparation.
     legacyHtml = true;
-    await go(); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#total')).textContent === '$11.90');
+    await go(); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#total')).textContent === '$11.90';
+    });
     assert.match(await page.locator('.context-line > span').innerText(), /organization-wide OpenAI/);
     await checkChart();
     legacyHtml = false;
@@ -109,19 +158,28 @@ const { chromium } = require('playwright');
     payload.aws_services = src.aws_services; payload.aws_environments = src.aws_environments;
     payload.month_to_date.aws = '-0.000000017'; payload.month_to_date.total = '6.799999983';
     payload.daily.forEach(row => { row.aws = '-0.000000001'; row.total = '0.399999999'; });
-    await go(); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#aws')).textContent.includes('<$0.01'));
+    await go(); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#aws')).textContent.includes('<$0.01');
+    });
     assert.match(await page.locator('#aws').innerText(), /^−/); await checkChart();
     assert.equal(await page.locator('#allocation').isVisible(), false);
     // Legacy AWS-only data remains readable during the deployment transition.
     payload = fixtures['development-legacy'];
-    await go(); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#aws')).textContent === '$5.10');
+    await go(); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#aws')).textContent === '$5.10';
+    });
     assert.equal(await page.locator('#total').innerText(), 'Unavailable');
     assert.match(await page.locator('#state-notice').innerText(), /Awaiting the first OpenAI/);
     // A failed first OpenAI refresh migrates the legacy scope and retains AWS.
     payload = structuredClone(payload); payload.scope = 'aws-development+openai-organization';
     payload.sources.openai.status = 'unavailable';
     payload.attempt.status = 'failed'; payload.attempt.sources.openai = 'unavailable';
-    await go(); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#aws')).textContent === '$5.10');
+    await go(); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#aws')).textContent === '$5.10';
+    });
     assert.equal(await page.locator('#total').innerText(), 'Unavailable');
     assert.match(await page.locator('#state-notice').innerText(), /Daily refresh failed/);
     assert.doesNotMatch(await page.locator('#state-notice').innerText(), /by design|Awaiting/);
@@ -129,13 +187,19 @@ const { chromium } = require('playwright');
     // A failed publisher attempt retains the prior amounts and says so.
     environment = 'production'; payload = structuredClone(fixtures.production);
     payload.attempt = { at: '2026-09-18T11:00:00Z', status: 'failed', sources: { aws_production: 'available', aws_development: 'available', openai: 'unavailable' } };
-    await go(); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#total')).textContent === '$11.56');
+    await go(); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#total')).textContent === '$11.56';
+    });
     assert.match(await page.locator('#state-notice').innerText(), /Daily refresh failed/);
     // Without prior OpenAI data, show AWS and withhold the combined total.
     Object.assign(payload.sources.openai, { status: 'unavailable', retrieved_at: null, daily: [] });
     payload.month_to_date.openai = null; payload.month_to_date.total = null;
     payload.daily.forEach(row => { row.openai = null; row.total = null; });
-    await go(); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#aws')).textContent === '$4.76');
+    await go(); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#aws')).textContent === '$4.76';
+    });
     assert.equal(await page.locator('#total').innerText(), 'Unavailable');
     assert.equal(await page.locator('#openai').innerText(), 'Unavailable');
     await checkChart();
@@ -154,10 +218,16 @@ const { chromium } = require('playwright');
     payload.sources.aws_development.aws_services = payload.aws_services = [];
     payload.sources.aws_development.aws_environments = payload.aws_environments = [];
     payload.month_to_date = { aws: '0', openai: '0', total: '0' };
-    await go(); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#aws')).textContent === '$0.00');
+    await go(); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#aws')).textContent === '$0.00';
+    });
     assert.match(await page.locator('#period-label').innerText(), /No completed days/);
     await checkChart();
-    fail = true; await page.reload(); await page.waitForFunction(() => /** @type {HTMLElement & {textContent: string}} */ (document.querySelector('#aws')).textContent === 'Unavailable');
+    fail = true; await page.reload(); await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#aws')).textContent === 'Unavailable';
+    });
     assert.match(await page.locator('#state-notice').innerText(), /could not be loaded/);
     assert.deepEqual(errors, []); assert.deepEqual(external, []);
     console.log('PASS: routes, navigation, decimal reconciliation, chart/table agreement, credits, mobile, keyboard, stale, unavailable, environment rejection, and refresh retention.');

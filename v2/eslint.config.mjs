@@ -19,11 +19,6 @@ export default [
         .map((property) => ({ object: "globalThis", property, message: "This browser global is unavailable in Node." }))],
     },
   },
-  {
-    basePath: import.meta.dirname,
-    files: ["tests/cost_dashboard_browser.cjs", "tests/eval_dashboard_browser.cjs"],
-    // Playwright serializes these callbacks and executes them in the browser.
-    languageOptions: { globals: { document: "readonly", window: "readonly", innerWidth: "readonly" } },
-  },
+
   { basePath: import.meta.dirname, files: ["agent/public-api-gate.js", "agent/public-report-routes.js"], languageOptions: { sourceType: "script" }, rules: { "no-unused-vars": ["error", { varsIgnorePattern: "^handler$" }] } },
 ];
