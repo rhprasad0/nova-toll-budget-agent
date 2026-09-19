@@ -713,6 +713,7 @@ def test_complete_release_state_machine(
     if scenario in {"shared_preparation_failure", "shared_readback_failure"}:
         statuses = dict.fromkeys(shared_packages.FUNCTIONS, "unknown")
         verified = dict.fromkeys(shared_packages.FUNCTIONS, "verified")
+
         def readback(_expected: dict[str, Any], *, wait: bool = True) -> dict[str, str]:
             return (
                 verified
