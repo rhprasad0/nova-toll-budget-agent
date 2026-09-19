@@ -292,6 +292,7 @@ def shared_readiness(expected: dict[str, Any], *, wait: bool = True) -> dict[str
                 subprocess.SubprocessError,
             ):
                 statuses[component] = "unknown"
+                pending = True
         if not pending or attempt == 59 or time.monotonic() >= deadline:
             break
         time.sleep(10)
@@ -1144,10 +1145,15 @@ def main() -> int:
         result["deployment"] = "failed"
     if recovery_record is not None:
         result["recovery_record"] = recovery_record
-    if authorized and expected_packages is not None and args.phase != "prepare-plan":
-        # Readback failures never short-circuit the routing recovery above.
-        if result["deployment"] not in {"succeeded", "awaiting_approval"}:
-            shared_status = shared_readiness(expected_packages, wait=False)
+    # Readback failures never short-circuit the routing recovery above.
+    if (
+        authorized
+        and expected_packages is not None
+        and args.phase != "prepare-plan"
+        and result["deployment"] not in {"succeeded", "awaiting_approval"}
+    ):
+        shared_status = shared_readiness(expected_packages, wait=False)
+    if args.phase != "prepare-plan":
         result["shared_components"] = shared_status
     if authorized and args.phase != "prepare-plan":
         try:

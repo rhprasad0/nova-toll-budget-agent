@@ -489,7 +489,8 @@ def _check_production_planner() -> None:
         "check_production_release.py revalidate",
         "verify_release_bundle.py verify",
         "release_blue_green.py prepare-plan --environment production",
-        "blue_green.py prepare --plan",
+        "blue_green.py prepare --environment production --plan",
+        '--package-evidence "$RUNNER_TEMP/blue-green/package-evidence.json"',
         "run_private_stage",
     ):
         require(command, PRODUCTION_PLAN)

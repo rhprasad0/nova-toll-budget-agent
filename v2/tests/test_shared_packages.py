@@ -322,12 +322,40 @@ def test_readbacks_include_earlier_success_and_do_not_invoke_handlers(
         }
 
     monkeypatch.setattr(release_blue_green, "aws", aws)
-    assert release_blue_green.shared_readiness(expected) == {
+    assert release_blue_green.shared_readiness(expected, wait=False) == {
         "loader": "unknown",
         "publisher": "verified",
         "timed_checks": "failed",
         "costs": "verified",
     }
+
+
+def test_transient_shared_readback_error_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, expected = package_plan("development")
+    identities = shared_packages.identities(expected)
+    calls = 0
+    sleeps: list[int] = []
+
+    def aws(*args: str) -> dict[str, str]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise release_blue_green.checks.CheckFailure("transient")
+        item = next(value for value in identities.values() if value["arn"] == args[3])
+        return {
+            "FunctionName": item["name"],
+            "FunctionArn": item["arn"],
+            "CodeSha256": item["sha256"],
+            "State": "Active",
+            "LastUpdateStatus": "Successful",
+        }
+
+    monkeypatch.setattr(release_blue_green, "aws", aws)
+    monkeypatch.setattr(release_blue_green.time, "sleep", sleeps.append)
+    assert set(release_blue_green.shared_readiness(expected).values()) == {"verified"}
+    assert sleeps == [10]
 
 
 def test_sanitized_inventory_never_prints_unrecognized_values() -> None:
