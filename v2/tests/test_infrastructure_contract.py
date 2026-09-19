@@ -1565,6 +1565,35 @@ def test_development_foundation_gate_requires_the_complete_expected_set():
         assert not passes(changed)
 
 
+def test_ci_installs_proxy_dependencies_once_before_testing():
+    steps = yaml.safe_load(CI_WORKFLOW)["jobs"]["v2-loader"]["steps"]
+    install = next(
+        step
+        for step in steps
+        if step.get("run") == "npm ci --prefix lambdas/chat_proxy"
+    )
+    build = next(
+        step for step in steps if step.get("run") == "./scripts/build_agentcore_zips.sh"
+    )
+    test = next(
+        step
+        for step in steps
+        if step.get("run") == "npm test --prefix lambdas/chat_proxy"
+    )
+    assert install["if"] == "github.event_name != 'pull_request'"
+    assert build["if"] == "github.event_name == 'pull_request'"
+    assert "if" not in test
+    assert steps.index(install) < steps.index(test)
+    assert steps.index(build) < steps.index(test)
+    assert (
+        'npm ci --omit=dev --prefix "$V2_ROOT/lambdas/chat_proxy"'
+        in (V2_ROOT / "scripts/build_agentcore_zips.sh").read_text()
+    )
+    assert not json.loads(
+        (V2_ROOT / "lambdas/chat_proxy/package.json").read_text()
+    ).get("devDependencies")
+
+
 def test_v2_pr_validation_has_no_aws_access_or_mutation_commands():
     workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
     for forbidden in (
