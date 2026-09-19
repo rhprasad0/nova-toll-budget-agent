@@ -1,3 +1,4 @@
+// Playwright executes these callback bodies in a browser, across the Node type boundary.
 // Run with Playwright available on NODE_PATH.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -8,6 +9,7 @@ const { chromium } = require("playwright");
   try {
     const page = await browser.newPage();
     await page.clock.install({ time: new Date("2026-09-15T21:24:00Z") });
+    /** @type {string[]} */
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     const scenarios = Array.from({ length: 6 }, (_, i) => ({
@@ -96,19 +98,21 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator(".run").count(), 1);
     status = 503;
     await page.clock.runFor(60000);
-    await page.waitForFunction(() =>
-      document
-        .querySelector("#freshness")
-        .textContent.includes("Refresh failed"),
+    await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector("#freshness"))
+        .textContent.includes("Refresh failed");
+    },
     );
     assert.match(await page.locator("#metrics").innerText(), /1 of 1/);
     status = 200;
     data = { ...snapshot, environment: "production" };
     await page.reload();
-    await page.waitForFunction(() =>
-      document
-        .querySelector("#freshness")
-        .textContent.includes("not available"),
+    await page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector("#freshness"))
+        .textContent.includes("not available");
+    },
     );
     assert.equal(await page.locator(".scenario").count(), 0);
     data = { ...snapshot, runs: [], schedule: [] };
@@ -123,7 +127,10 @@ const { chromium } = require("playwright");
       await page.setViewportSize({ width, height: 900 });
       assert.ok(
         await page.evaluate(
-          () => document.documentElement.scrollWidth <= innerWidth,
+          () => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return browser.document.documentElement.scrollWidth <= browser.innerWidth;
+    },
         ),
         `Overflow at ${width}`,
       );

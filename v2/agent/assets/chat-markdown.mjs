@@ -13,6 +13,7 @@ markdown.validateLink = (url) => {
 markdown.renderer.rules.image = (tokens, index) =>
   markdown.utils.escapeHtml(tokens[index].content);
 
+/** @param {import("./markdown-it.esm.min.mjs").Token[]} tokens @param {number} index */
 const linkHasVisibleText = (tokens, index) => {
   for (let next = index + 1; next < tokens.length && tokens[next].type !== "link_close"; next++) {
     if (tokens[next].content.replace(/[\s\p{Cf}]/gu, "")) return true;
@@ -26,7 +27,8 @@ markdown.renderer.rules.link_open = (tokens, index, options, environment, render
   token.attrSet("rel", "noopener noreferrer");
   const openingTag = renderer.renderToken(tokens, index, options, environment);
   if (linkHasVisibleText(tokens, index)) return openingTag;
-  return openingTag + markdown.utils.escapeHtml(token.attrGet("href"));
+  return openingTag + markdown.utils.escapeHtml(/** @type {string} */ (token.attrGet("href")));
 };
 
+/** @param {string} text */
 export const renderAssistantMarkdown = (text) => markdown.render(text);

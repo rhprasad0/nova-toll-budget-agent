@@ -1,3 +1,9 @@
+/** @typedef {{Item: Record<string, import("@aws-sdk/client-dynamodb").AttributeValue>}} PutInput */
+/** @typedef {{Key: Record<string, import("@aws-sdk/client-dynamodb").AttributeValue>, UpdateExpression: string, ExpressionAttributeValues: Record<string, import("@aws-sdk/client-dynamodb").AttributeValue>}} UpdateInput */
+/** @typedef {import("./handler.mjs").Dependencies} Dependencies */
+/** @typedef {import("./handler.mjs").RequestEvent & {headers: Record<string, string>}} RequestEvent */
+/** @typedef {import("@aws-sdk/client-bedrock-agentcore").InvokeAgentRuntimeCommandInput | import("@aws-sdk/client-bedrock-agentcore").StopRuntimeSessionCommandInput} RuntimeInput */
+/** @typedef {import("@aws-sdk/client-dynamodb").PutItemCommandInput | import("@aws-sdk/client-dynamodb").UpdateItemCommandInput} SessionInput */
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -6,6 +12,7 @@ import { route } from "./handler.mjs";
 const domain = "abc-vpce.execute-api.us-east-1.amazonaws.com";
 const sessionId = "9fd83bc2-6d8b-4d85-b270-f49aa73e41b4";
 const token = "a".repeat(43);
+/** @param {string} path @param {object} body @param {string} origin @returns {RequestEvent} */
 const event = (path, body, origin = `https://${domain}`) => ({
   httpMethod: "POST",
   path,
@@ -19,6 +26,7 @@ const event = (path, body, origin = `https://${domain}`) => ({
     cookie: `__Host-tollchat-session=${token}`,
   },
 });
+/** @param {object} body @param {string[]} cookies @returns {RequestEvent} */
 const publicEvent = (body, cookies = []) => ({
   version: "2.0",
   rawPath: "/api/chat",
@@ -35,6 +43,7 @@ const publicEvent = (body, cookies = []) => ({
     "sec-fetch-site": "same-origin",
   },
 });
+/** @param {Dependencies["client"]} client @param {Dependencies["sessionClient"]} sessionClient @returns {Dependencies} */
 const dependencies = (client, sessionClient = { async send() {
   return { Attributes: { runtime_session_id: { S: sessionId } } };
 } }) => ({
@@ -48,9 +57,11 @@ const dependencies = (client, sessionClient = { async send() {
   runtimeEndpoint: "blue",
   releaseId: "release-blue",
 });
+/** @param {...string} values */
 const chunks = async function* (...values) {
   for (const value of values) yield new TextEncoder().encode(value);
 };
+/** @param {string | AsyncIterable<string>} body */
 const bodyText = async (body) => {
   if (typeof body === "string") return body;
   let value = "";
@@ -59,7 +70,9 @@ const bodyText = async (body) => {
 };
 
 test("private same-origin chat streams only approved v2 events", async () => {
+  /** @type {RuntimeInput[]} */
   const calls = [];
+  /** @type {Dependencies["client"]} */
   const client = { async send(command) {
     calls.push(command.input);
     return {
@@ -77,13 +90,15 @@ test("private same-origin chat streams only approved v2 events", async () => {
     '{"type":"answer","text":"$4.25","blocked":false}',
     "",
   ].join("\n"));
-  assert.equal(new TextDecoder().decode(calls[0].payload), '{"prompt":"Price it"}');
+  assert.equal(new TextDecoder().decode(/** @type {{payload: Uint8Array}} */ (calls[0]).payload), '{"prompt":"Price it"}');
 });
 
 test("the exact marker carries one bounded canary event and rejects it otherwise", async () => {
   const prompt = "What is the current toll from the Leesburg Bypass entrance to Route 28 for a two-axle vehicle with E-ZPass?";
   const canary = '{"type":"canary","schema_version":1,"call_count":1,"tool_name_match":true,"route_profile_match":true,"correlation_match":true,"result_success":true,"total_usd":"4.25","success":true}';
+  /** @type {RuntimeInput[]} */
   const calls = [];
+  /** @type {Dependencies["client"]} */
   const client = { async send(command) {
     calls.push(command.input);
     return { contentType: "text/event-stream", response: chunks(`data: ${canary}\n\n`, 'data: {"type":"answer","text":"$4.25","blocked":false}\n\n') };
@@ -92,7 +107,7 @@ test("the exact marker carries one bounded canary event and rejects it otherwise
   request.headers["x-tollchat-canary"] = "greenway-canary-v1";
   const response = await route(request, dependencies(client));
   assert.match(await bodyText(response.body), /"type":"canary"/);
-  assert.equal(new TextDecoder().decode(calls[0].payload), JSON.stringify({ prompt, canary_marker: "greenway-canary-v1" }));
+  assert.equal(new TextDecoder().decode(/** @type {{payload: Uint8Array}} */ (calls[0]).payload), JSON.stringify({ prompt, canary_marker: "greenway-canary-v1" }));
 
   const unmarked = await route(event("/api/chat", { message: prompt }), dependencies(client));
   assert.equal(await bodyText(unmarked.body), '{"type":"error","code":"agent_unavailable","message":"TollChat is temporarily unavailable. Please try again."}\n');
@@ -116,7 +131,9 @@ test("public CloudFront origin can invoke the Function URL", async () => {
 });
 
 test("public first chat creates a leased session without usage fields", async () => {
+  /** @type {{name: string, input: SessionInput}[]} */
   const writes = [];
+  /** @type {Dependencies["sessionClient"]} */
   const sessionClient = { async send(command) {
     writes.push({ name: command.constructor.name, input: command.input });
     return {};
@@ -133,14 +150,16 @@ test("public first chat creates a leased session without usage fields", async ()
   await bodyText(response.body);
 
   assert.deepEqual(writes.map(({ name }) => name), ["PutItemCommand", "UpdateItemCommand"]);
-  assert.equal(writes[0].input.Item.release_id.S, "release-blue");
-  assert.equal("usage_excluded" in writes[0].input.Item, false);
-  assert.equal("counted_response_ids" in writes[0].input.Item, false);
+  assert.equal(/** @type {PutInput} */ (writes[0].input).Item.release_id.S, "release-blue");
+  assert.equal("usage_excluded" in /** @type {PutInput} */ (writes[0].input).Item, false);
+  assert.equal("counted_response_ids" in /** @type {PutInput} */ (writes[0].input).Item, false);
   assert.doesNotMatch(JSON.stringify(writes[0].input), /usage#all/);
 });
 
 test("browser usage cookies do not change the session write", async () => {
+  /** @type {{name: string, input: SessionInput}[]} */
   const writes = [];
+  /** @type {Dependencies["sessionClient"]} */
   const sessionClient = { async send(command) {
     writes.push({ name: command.constructor.name, input: command.input });
     return {};
@@ -160,13 +179,15 @@ test("browser usage cookies do not change the session write", async () => {
   await bodyText(response.body);
 
   assert.deepEqual(writes.map(({ name }) => name), ["PutItemCommand", "UpdateItemCommand"]);
-  assert.equal("usage_excluded" in writes[0].input.Item, false);
-  assert.equal("counted_response_ids" in writes[0].input.Item, false);
+  assert.equal("usage_excluded" in /** @type {PutInput} */ (writes[0].input).Item, false);
+  assert.equal("counted_response_ids" in /** @type {PutInput} */ (writes[0].input).Item, false);
   assert.equal(writes.some(({ name }) => name === "TransactWriteItemsCommand"), false);
 });
 
 test("legacy usage fields do not block a hashed session lease or release", async () => {
+  /** @type {{name: string, input: SessionInput}[]} */
   const writes = [];
+  /** @type {Dependencies["sessionClient"]} */
   const sessionClient = { async send(command) {
     writes.push({ name: command.constructor.name, input: command.input });
     if (command.constructor.name === "UpdateItemCommand" && command.input.ReturnValues === "ALL_NEW") {
@@ -196,15 +217,17 @@ test("legacy usage fields do not block a hashed session lease or release", async
 
   assert.deepEqual(writes.map(({ name }) => name), ["UpdateItemCommand", "UpdateItemCommand"]);
   assert.equal(
-    writes[0].input.Key.credential_hash.S,
+    /** @type {UpdateInput} */ (writes[0].input).Key.credential_hash.S,
     "66d34fba71f8f450f7e45598853e53bfc23bbd129027cbb131a2f4ffd7878cd0",
   );
-  assert.match(writes[0].input.UpdateExpression, /lease_id/);
-  assert.match(writes[1].input.UpdateExpression, /REMOVE lease_id/);
+  assert.match(/** @type {UpdateInput} */ (writes[0].input).UpdateExpression, /lease_id/);
+  assert.match(/** @type {UpdateInput} */ (writes[1].input).UpdateExpression, /REMOVE lease_id/);
 });
 
 test("a malformed trailing frame becomes a safe stream error and releases its lease", async () => {
+  /** @type {{name: string, input: SessionInput}[]} */
   const writes = [];
+  /** @type {Dependencies["sessionClient"]} */
   const sessionClient = { async send(command) {
     writes.push({ name: command.constructor.name, input: command.input });
     return {};
@@ -225,10 +248,10 @@ test("a malformed trailing frame becomes a safe stream error and releases its le
   assert.match(output, /agent_unavailable/);
   const leaseWrites = writes.filter(({ name }) => name === "UpdateItemCommand");
   assert.equal(leaseWrites.length, 1);
-  assert.equal(leaseWrites[0].input.UpdateExpression, "REMOVE lease_id, lease_until");
+  assert.equal(/** @type {UpdateInput} */ (leaseWrites[0].input).UpdateExpression, "REMOVE lease_id, lease_until");
   assert.equal(
-    leaseWrites[0].input.ExpressionAttributeValues[":lease_id"].S,
-    writes[0].input.Item.lease_id.S,
+    /** @type {UpdateInput} */ (leaseWrites[0].input).ExpressionAttributeValues[":lease_id"].S,
+    /** @type {PutInput} */ (writes[0].input).Item.lease_id.S,
   );
   assert.equal(writes.some(({ name }) => name === "TransactWriteItemsCommand"), false);
 });
@@ -259,13 +282,15 @@ test("session state rejection never invokes the runtime", async () => {
   ];
 
   for (const sessionCase of cases) {
+    /** @type {SessionInput[]} */
     const sessionCalls = [];
     let runtimeCalls = 0;
+    /** @type {Dependencies["sessionClient"]} */
     const sessionClient = { async send(command) {
       sessionCalls.push(command.input);
-      const error = new Error("conditional failure");
+      const error = /** @type {Error & {Item?: Record<string, import("@aws-sdk/client-dynamodb").AttributeValue>}} */ (new Error("conditional failure"));
       error.name = "ConditionalCheckFailedException";
-      error.Item = sessionCase.item;
+      error.Item = /** @type {Record<string, import("@aws-sdk/client-dynamodb").AttributeValue>} */ (sessionCase.item);
       throw error;
     } };
     const client = { async send() {
@@ -307,16 +332,20 @@ test("invalid cookies reject before session or runtime access", async () => {
 });
 
 test("reset revokes the session and stops its runtime", async () => {
+  /** @type {SessionInput[]} */
   const sessionCalls = [];
+  /** @type {RuntimeInput[]} */
   const runtimeCalls = [];
+  /** @type {Dependencies["sessionClient"]} */
   const sessionClient = { async send(command) {
-    sessionCalls.push(command);
+    sessionCalls.push(command.input);
     return {
       Attributes: { runtime_session_id: { S: sessionId } },
     };
   } };
+  /** @type {Dependencies["client"]} */
   const client = { async send(command) {
-    runtimeCalls.push(command);
+    runtimeCalls.push(command.input);
     return {};
   } };
 
@@ -328,13 +357,15 @@ test("reset revokes the session and stops its runtime", async () => {
   assert.equal(response.statusCode, 200);
   assert.match(response.headers["Set-Cookie"], /Max-Age=0/);
   assert.equal(sessionCalls.length, 1);
-  assert.equal(sessionCalls[0].input.UpdateExpression, "SET revoked_at = :now");
+  assert.equal(/** @type {UpdateInput} */ (sessionCalls[0]).UpdateExpression, "SET revoked_at = :now");
   assert.equal(runtimeCalls.length, 1);
-  assert.equal(runtimeCalls[0].input.runtimeSessionId, sessionId);
+  assert.equal(runtimeCalls[0].runtimeSessionId, sessionId);
 });
 
 test("an upstream invocation error releases the matching lease", async () => {
+  /** @type {{name: string, input: SessionInput}[]} */
   const writes = [];
+  /** @type {Dependencies["sessionClient"]} */
   const sessionClient = { async send(command) {
     writes.push({ name: command.constructor.name, input: command.input });
     return {};
@@ -346,13 +377,15 @@ test("an upstream invocation error releases the matching lease", async () => {
   const response = await route(publicEvent({ message: "Price it" }), dependencies(client, sessionClient));
 
   assert.equal(response.statusCode, 502);
-  const release = writes.find(({ input }) => input.UpdateExpression === "REMOVE lease_id, lease_until");
+  const release = writes.find(({ input }) => /** @type {UpdateInput} */ (input).UpdateExpression === "REMOVE lease_id, lease_until");
   assert.ok(release);
-  assert.equal(release.input.ExpressionAttributeValues[":lease_id"].S, writes[0].input.Item.lease_id.S);
+  assert.equal(/** @type {UpdateInput} */ (release.input).ExpressionAttributeValues[":lease_id"].S, /** @type {PutInput} */ (writes[0].input).Item.lease_id.S);
 });
 
 test("private preview still uses the normal session write", async () => {
+  /** @type {{name: string, input: SessionInput}[]} */
   const writes = [];
+  /** @type {Dependencies["sessionClient"]} */
   const sessionClient = { async send(command) {
     writes.push({ name: command.constructor.name, input: command.input });
     return {};
@@ -370,7 +403,7 @@ test("private preview still uses the normal session write", async () => {
   await bodyText(response.body);
 
   assert.equal(writes[0].name, "PutItemCommand");
-  assert.equal("usage_excluded" in writes[0].input.Item, false);
+  assert.equal("usage_excluded" in /** @type {PutInput} */ (writes[0].input).Item, false);
   assert.equal(writes.some(({ name }) => name === "TransactWriteItemsCommand"), false);
 });
 
@@ -396,7 +429,7 @@ test("proxy accepts only the configured development origin", async () => {
   const previous = process.env.PUBLIC_ORIGINS;
   process.env.PUBLIC_ORIGINS = "https://dev.tollchat.ai";
   try {
-    const fresh = await import(`./handler.mjs?development-origin=${Date.now()}`);
+    const fresh = /** @type {typeof import("./handler.mjs")} */ (await import(`./handler.mjs?development-origin=${Date.now()}`));
     const client = { async send() {
       return { contentType: "text/event-stream", response: chunks('data: {"type":"final","text":"ok"}\n\n') };
     } };
@@ -414,20 +447,20 @@ test("proxy accepts only the configured development origin", async () => {
 test("config is available without a frontend", async () => {
   const response = await route(
     { httpMethod: "GET", path: "/api/config", requestContext: { domainName: domain }, headers: {} },
-    dependencies({}),
+    dependencies({ async send() { throw new Error("unexpected runtime call"); } }),
   );
-  assert.deepEqual(JSON.parse(response.body), { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5, release_id: "release-blue" });
+  assert.deepEqual(JSON.parse(/** @type {string} */ (response.body)), { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5, release_id: "release-blue" });
 });
 
 test("foreign and legacy sessions expire before chat or reset, including leased sessions", async () => {
   for (const release of [undefined, "release-green"]) {
     for (const path of ["/api/chat", "/api/reset"]) {
       let invoked = false;
-      const deps = dependencies({ async send() { invoked = true; } }, {
+      const deps = dependencies({ async send() { invoked = true; return {}; } }, {
         async send(command) {
-          assert.match(command.input.ConditionExpression, /release_id = :release_id/);
-          assert.equal(command.input.ExpressionAttributeValues[":release_id"].S, "release-blue");
-          const error = new Error("condition failed");
+          assert.match(/** @type {string} */ (command.input.ConditionExpression), /release_id = :release_id/);
+          assert.equal(/** @type {UpdateInput} */ (command.input).ExpressionAttributeValues[":release_id"].S, "release-blue");
+          const error = /** @type {Error & {Item?: Record<string, import("@aws-sdk/client-dynamodb").AttributeValue>}} */ (new Error("condition failed"));
           error.name = "ConditionalCheckFailedException";
           error.Item = {
             ...(release ? { release_id: { S: release } } : {}),
@@ -440,7 +473,7 @@ test("foreign and legacy sessions expire before chat or reset, including leased 
       });
       const response = await route(event(path, path === "/api/chat" ? { message: "Price it" } : {}), deps);
       assert.equal(response.statusCode, 401);
-      assert.equal(JSON.parse(response.body).error.message, "The application was updated. Start a new conversation.");
+      assert.equal(JSON.parse(/** @type {string} */ (response.body)).error.message, "The application was updated. Start a new conversation.");
       assert.match(response.headers["Set-Cookie"], /Max-Age=0/);
       assert.equal(invoked, false);
     }
@@ -449,6 +482,7 @@ test("foreign and legacy sessions expire before chat or reset, including leased 
 
 test("both operations invoke only the configured named endpoint", async () => {
   for (const path of ["/api/chat", "/api/reset"]) {
+    /** @type {RuntimeInput[]} */
     const calls = [];
     const deps = dependencies({ async send(command) {
       calls.push(command.input);
@@ -465,7 +499,7 @@ test("both operations invoke only the configured named endpoint", async () => {
 
 test("missing release identity or unpinned endpoint fails closed", async () => {
   for (const overrides of [{ releaseId: undefined }, { runtimeEndpoint: undefined }, { runtimeEndpoint: "DEFAULT" }]) {
-    const response = await route(event("/api/chat", { message: "Price it" }), { ...dependencies({}), ...overrides });
+    const response = await route(event("/api/chat", { message: "Price it" }), { ...dependencies({ async send() { throw new Error("unexpected runtime call"); } }), ...overrides });
     assert.equal(response.statusCode, 503);
   }
 });

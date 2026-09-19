@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": [],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "resolveJsonModule": true
+  },
+  "include": [
+    "agent/**/*.js",
+    "agent/**/*.mjs",
+    "agent/**/*.cjs",
+    "agent/**/*.ts",
+    "agent/**/*.mts",
+    "agent/**/*.cts"
+  ],
+  "exclude": [
+    "node_modules",
+    "agent/assets/markdown-it.esm.min.mjs",
+    "agent/public-api-gate.js",
+    "agent/public-report-routes.js",
+    "agent/assets/maplibre-gl-6.0.0/maplibre-gl.mjs",
+    "agent/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs",
+    "agent/assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs"
+  ]
+}

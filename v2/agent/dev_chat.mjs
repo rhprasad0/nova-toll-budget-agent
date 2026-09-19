@@ -1,3 +1,5 @@
+/** @typedef {{activities: {append(...nodes: (Node | string)[]): void}, answer: {innerHTML: string, textContent: string | null, classList: {add(...tokens: string[]): void}}, article: {scrollIntoView(options?: ScrollIntoViewOptions): void}, details: {open: boolean}, raw: {textContent: string | null}, rawChars: number, rawEvents: string[], rawTruncated: boolean, items: Map<number, HTMLLIElement>, renderFrame: number | null, text: string}} TurnView */
+/** @typedef {{type: string, sequence: number, event?: object, text_delta?: string, tool_updates?: {index: number, label: string, status: string}[], final?: {text: string, metrics: object}, message?: string}} StreamEvent */
 import { renderAssistantMarkdown } from "./assets/chat-markdown.mjs";
 
 const TOOL_STATUSES = new Set(["running", "completed", "failed"]);
@@ -10,7 +12,9 @@ export const STARTER_PROMPTS = Object.freeze([
     + "year, on a $130,000 gross annual salary?",
 ]);
 
-export const validStreamEvent = (event) => {
+/** @param {unknown} input @returns {input is StreamEvent} */
+export const validStreamEvent = (input) => {
+  const event = /** @type {StreamEvent} */ (input);
   if (!event || typeof event !== "object" || !Number.isInteger(event.sequence) || event.sequence < 0) {
     return false;
   }
@@ -26,6 +30,7 @@ export const validStreamEvent = (event) => {
     && event.final.metrics && typeof event.final.metrics === "object");
 };
 
+/** @param {ReadableStream<Uint8Array>} stream @param {(event: StreamEvent) => void} onEvent */
 export async function consumeNdjson(stream, onEvent) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -40,6 +45,7 @@ export async function consumeNdjson(stream, onEvent) {
       const line = buffer.slice(0, newline);
       buffer = buffer.slice(newline + 1);
       if (!line) continue;
+      /** @type {unknown} */
       const event = JSON.parse(line);
       if (!validStreamEvent(event)) throw new Error("invalid stream event");
       if (event.sequence !== sequence++) throw new Error("out-of-order stream event");
@@ -53,12 +59,14 @@ export async function consumeNdjson(stream, onEvent) {
   if (!terminal) throw new Error("missing terminal event");
 }
 
+/** @param {string} path @param {object} body */
 const request = (path, body) => fetch(path, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
 });
 
+/** @param {HTMLElement} transcript @returns {TurnView} */
 const newTurn = (transcript) => {
   const article = document.createElement("article");
   article.className = "assistant-turn";
@@ -75,6 +83,7 @@ const newTurn = (transcript) => {
   details.append(summary, raw);
   article.append(activities, answer, details);
   transcript.append(article);
+  /** @type {TurnView} */
   const view = {
     article,
     activities,
@@ -96,6 +105,7 @@ const newTurn = (transcript) => {
   return view;
 };
 
+/** @param {TurnView} view @param {StreamEvent} event */
 const appendRawEvent = (view, event) => {
   const line = `${JSON.stringify(event, null, 2)}\n`;
   view.rawEvents.push(line);
@@ -124,23 +134,27 @@ const appendRawEvent = (view, event) => {
   }
 };
 
+/** @param {TurnView} view */
 const flushMarkdown = (view) => {
   view.renderFrame = null;
   view.answer.innerHTML = renderAssistantMarkdown(view.text);
   view.article.scrollIntoView({ block: "end" });
 };
 
+/** @param {TurnView} view */
 const cancelMarkdown = (view) => {
   if (view.renderFrame !== null) cancelAnimationFrame(view.renderFrame);
   view.renderFrame = null;
 };
 
+/** @param {TurnView} view */
 const queueMarkdown = (view) => {
   if (view.renderFrame === null) {
     view.renderFrame = requestAnimationFrame(() => flushMarkdown(view));
   }
 };
 
+/** @param {TurnView} view @param {StreamEvent} event */
 export const applyEvent = (view, event) => {
   appendRawEvent(view, event);
   for (const tool of event.tool_updates || []) {
@@ -163,7 +177,7 @@ export const applyEvent = (view, event) => {
         item.children[1].textContent = "Failed";
       }
     }
-    view.answer.textContent = event.message;
+    view.answer.textContent = /** @type {string} */ (event.message);
     view.answer.classList.add("error");
     view.article.scrollIntoView({ block: "end" });
     return;
@@ -183,14 +197,15 @@ export const applyEvent = (view, event) => {
 };
 
 const start = () => {
-  const transcript = document.querySelector("#transcript");
-  const form = document.querySelector("#chat");
-  const input = document.querySelector("#message");
-  const submit = form.querySelector("button");
-  const reset = document.querySelector("#reset");
-  const starterWrap = document.querySelector("#starter-wrap");
-  const starterButtons = [...document.querySelectorAll("[data-prompt-index]")];
+  const transcript = /** @type {HTMLElement} */ (document.querySelector("#transcript"));
+  const form = /** @type {HTMLFormElement} */ (document.querySelector("#chat"));
+  const input = /** @type {HTMLTextAreaElement} */ (document.querySelector("#message"));
+  const submit = /** @type {HTMLButtonElement} */ (form.querySelector("button"));
+  const reset = /** @type {HTMLButtonElement} */ (document.querySelector("#reset"));
+  const starterWrap = /** @type {HTMLElement} */ (document.querySelector("#starter-wrap"));
+  const starterButtons = [.../** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll("[data-prompt-index]"))];
   const sessionId = sessionStorage.tollchatV2SessionId ||= crypto.randomUUID();
+  /** @param {boolean} busy */
   const setBusy = (busy) => {
     input.disabled = busy;
     submit.disabled = busy;
@@ -203,8 +218,8 @@ const start = () => {
     .then(({ mountCommuteMap }) => mountCommuteMap())
     .catch((error) => {
       console.error("TollChat map failed", error);
-      document.querySelector("#map-loading").hidden = true;
-      document.querySelector("#map-error").hidden = false;
+      /** @type {HTMLElement} */ (document.querySelector("#map-loading")).hidden = true;
+      /** @type {HTMLElement} */ (document.querySelector("#map-error")).hidden = false;
     });
 
   for (const button of starterButtons) {
@@ -243,7 +258,7 @@ const start = () => {
       applyEvent(view, {
         type: "error",
         sequence: 0,
-        message: error.message || "TollChat couldn't send your question. Please try again.",
+        message: /** @type {Error} */ (error).message || "TollChat couldn't send your question. Please try again.",
       });
     } finally {
       setBusy(false);
@@ -260,7 +275,7 @@ const start = () => {
       starterWrap.hidden = false;
     } catch (error) {
       const view = newTurn(transcript);
-      applyEvent(view, { type: "error", sequence: 0, message: error.message });
+      applyEvent(view, { type: "error", sequence: 0, message: /** @type {Error} */ (error).message });
     } finally {
       setBusy(false);
       input.focus();

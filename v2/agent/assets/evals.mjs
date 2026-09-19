@@ -1,12 +1,19 @@
-const $ = (selector) => document.querySelector(selector);
+/** @typedef {{window_id: string, scheduled_at: string, scenario_id: string}} Scheduled */
+/** @typedef {{turns?: {user: string, assistant: string, tools: unknown[]}[], checks?: {name: string, passed: boolean, reason: string}[], model?: string}} Evidence */
+/** @typedef {Scheduled & {status: string, evidence?: Evidence}} Run */
+/** @typedef {{schema_version: number, environment: string, generated_at: string, scenarios: {id: string, tag: string, title: string, description: string, route: string}[], runs: Run[], schedule: Scheduled[]}} Snapshot */
+/** @param {string} selector */
+const $ = (selector) => /** @type {HTMLElement} */ (document.querySelector(selector));
+/** @param {unknown} value */
 const escapeHtml = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
     (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        c
+        /** @type {"&" | "<" | ">" | '"' | "'"} */ (c)
       ],
   );
+/** @type {Record<string, string>} */
 const labels = {
   passed: "Passed",
   failed: "Failed",
@@ -16,11 +23,13 @@ const labels = {
   stale: "Arrived too late",
   waiting: "Awaiting first run",
 };
+/** @type {Record<string, string>} */
 const checkLabels = {
   ToolCallCount: "One pricing lookup per turn",
   Completeness: "Answered the request",
   Correctness: "Supported by evidence",
 };
+/** @param {string} value */
 const date = (value) =>
   new Date(value).toLocaleString("en-US", {
     timeZone: "America/New_York",
@@ -30,21 +39,27 @@ const date = (value) =>
     minute: "2-digit",
     timeZoneName: "short",
   });
+/** @param {string} status */
 const badge = (status) =>
   `<span class="badge ${status}"><i class="dot" aria-hidden="true"></i>${labels[status]}</span>`;
-const expectedEnvironment = $('meta[name="eval-environment"]').content;
+const expectedEnvironment = /** @type {HTMLMetaElement} */ ($('meta[name="eval-environment"]')).content;
+/** @param {Scheduled} r */
 const key = (r) => `${r.window_id}/${r.scheduled_at}`;
+/** @param {Scheduled} r */
 const instantKey = (r) => `${r.window_id}/${Date.parse(r.scheduled_at)}`;
+/** @type {Snapshot} */
 let snapshot;
 let failedRefresh = false;
 let refreshing = false;
 
+/** @param {Run} r */
 function outcome(r) {
   return r.status === "running" &&
     Date.now() > Date.parse(r.scheduled_at) + 25 * 60000
     ? "overdue"
     : r.status;
 }
+/** @param {Run} r */
 function evidence(r) {
   const e = r.evidence || {};
   const turns = (e.turns || [])
@@ -65,7 +80,7 @@ function evidence(r) {
 function render() {
   if (!snapshot) return;
   const opened = new Set(
-    [...document.querySelectorAll("details[open][data-key]")].map(
+    [.../** @type {NodeListOf<HTMLDetailsElement>} */ (document.querySelectorAll("details[open][data-key]"))].map(
       (el) => el.dataset.key,
     ),
   );
@@ -155,7 +170,7 @@ function render() {
       return `<article class="scenario"><div class="scenario-body"><div class="card-top"><span class="route-tag">${escapeHtml(s.tag)}</span>${badge(missing ? "overdue" : r ? outcome(r) : "waiting")}</div><h3>${escapeHtml(s.title)}</h3><p class="description">${escapeHtml(s.description)}</p><div class="route"><strong>${escapeHtml(s.route)}</strong>${due ? `Next: ${date(due.scheduled_at)}` : "Waiting for schedule update"}</div><div class="latest"><span>${missing ? "Prior recorded run" : "Latest run"}</span><span>${r ? date(r.scheduled_at) : "None recorded"}</span></div></div>${r ? `<details data-key="scenario-${escapeHtml(s.id)}"><summary>Inspect result<span class="sr-only"> for ${escapeHtml(s.title)}</span></summary>${evidence(r)}</details>` : '<p class="awaiting">No recorded result. This scenario has no score.</p>'}</article>`;
     })
     .join("");
-  const filter = $("#outcome").value;
+  const filter = /** @type {HTMLSelectElement} */ ($("#outcome")).value;
   const visible = [
     ...runs,
     ...missed.map((r) => ({ ...r, status: "overdue", evidence: {} })),
@@ -172,17 +187,19 @@ function render() {
     visible
       .map((r) => {
         const s = snapshot.scenarios.find((s) => s.id === r.scenario_id);
-        return `<details class="run" data-key="${escapeHtml(key(r))}"><summary><time datetime="${escapeHtml(r.scheduled_at)}">${date(r.scheduled_at)}</time><span class="run-title">${escapeHtml(s.title)}</span>${badge(outcome(r))}</summary>${evidence(r)}</details>`;
+        return `<details class="run" data-key="${escapeHtml(key(r))}"><summary><time datetime="${escapeHtml(r.scheduled_at)}">${date(r.scheduled_at)}</time><span class="run-title">${escapeHtml(/** @type {Snapshot["scenarios"][number]} */ (s).title)}</span>${badge(outcome(r))}</summary>${evidence(r)}</details>`;
       })
       .join("") || '<p class="empty">No runs in this view yet.</p>';
   $("#shown").textContent =
     `${visible.length} shown · ${graded} graded · ${missed.length} expected runs missing`;
-  document.querySelectorAll("details[data-key]").forEach((el) => {
+  /** @type {NodeListOf<HTMLDetailsElement>} */ (document.querySelectorAll("details[data-key]")).forEach((el) => {
     el.open = opened.has(el.dataset.key);
   });
 }
 
-function validate(data) {
+/** @param {unknown} input @returns {Snapshot} */
+function validate(input) {
+  const data = /** @type {Snapshot} */ (input);
   if (
     data.schema_version !== 1 ||
     data.environment !== expectedEnvironment ||

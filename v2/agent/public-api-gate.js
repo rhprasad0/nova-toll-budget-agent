@@ -1,3 +1,4 @@
+/** @param {{ request: { method: string, uri: string, headers?: Record<string, {value: string}> } }} event */
 function handler(event) {
   var request = event.request;
   var allowed =
