@@ -1052,6 +1052,25 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                         validate_plan(plan, manifest)["reason_code"], reason
                     )
 
+    def test_current_chat_route_release_changes_only_code(self) -> None:
+        manifest = cast(
+            Manifest,
+            json.loads(
+                (
+                    Path(__file__).resolve().parent
+                    / "development-release-manifest.json"
+                ).read_text()
+            ),
+        )
+        address = "aws_cloudfront_function.public_chat_routes"
+        plan = _plan([_mutation_change(address, ("code",))])
+        self.assertEqual(validate_plan(plan, manifest)["status"], "accepted")
+        after = plan["resource_changes"][0]["change"]["after"]
+        after["runtime"] = "cloudfront-js-2.0"
+        self.assertEqual(
+            validate_plan(plan, manifest)["reason_code"], "unsupported_field_delta"
+        )
+
     def test_current_loader_release_changes_only_package_hash(self) -> None:
         manifest = cast(
             Manifest,
@@ -3504,6 +3523,10 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 expected_mutations[address] = (spec.operation_class, fields)
         expected_mutations.update(
             {
+                "aws_cloudfront_function.public_chat_routes": (
+                    "cloudfront-code",
+                    ("code",),
+                ),
                 "aws_cloudfront_function.public_report_routes": (
                     "cloudfront-code",
                     ("code",),

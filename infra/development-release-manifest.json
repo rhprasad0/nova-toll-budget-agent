@@ -9,7 +9,7 @@
   },
   "deployment_inputs": {
     ".github/workflows/v2-development-delivery-privileged.yml": "359b5affbbfd5cc2d376f524e2ce2aa9901d666136a8db722df97365b70ee3b9",
-    ".github/workflows/v2-development-delivery.yml": "080f458903e9b4d6300140dd20eeba6358fda82441df7e54c819213176589020",
+    ".github/workflows/v2-development-delivery.yml": "d1b0bb2e617f4cd6a1f11b7ed1cd3a38f7646e3f11fe077303afb81071649b49",
     ".github/workflows/v2-development-migrations.yml": "9f077e65b48623e6b3022bb9d0316926a51bd1fd8e44433b5098a9bbbc53531e",
     ".github/workflows/v2-development-plan.yml": "53bbeb668dd707fba830a159c46f618606d2e5ee8e3cfc8a412b9ee5f784ea15",
     ".github/workflows/v2-production-migrations.yml": "b0c0a50b3ea00ab8bd2e0d82cd676bdc530b5c51b93d39cca5026d2f6bb5f63f",
@@ -516,6 +516,14 @@
       ]
     },
     {
+      "address": "aws_cloudfront_function.public_chat_routes",
+      "action": "update",
+      "operation_class": "cloudfront-code",
+      "changed_fields": [
+        "code"
+      ]
+    },
+    {
       "address": "aws_cloudfront_function.public_report_routes",
       "action": "update",
       "operation_class": "cloudfront-code",
@@ -1004,6 +1012,18 @@
       "address": "aws_cloudwatch_metric_alarm.telemetry_pii[\"preview\"]",
       "action": "cloudwatch:UntagResource",
       "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-pii-findings-preview-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudfront_function.public_chat_routes",
+      "action": "cloudfront:UpdateFunction",
+      "resource": "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-chat-routes-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudfront_function.public_chat_routes",
+      "action": "cloudfront:PublishFunction",
+      "resource": "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-chat-routes-dev",
       "conditions": {}
     },
     {

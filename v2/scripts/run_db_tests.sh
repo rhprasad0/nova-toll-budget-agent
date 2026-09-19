@@ -9,7 +9,19 @@ retirement_divergent_db="nova_toll_v2_retirement_divergent_test"
 retirement_dependent_db="nova_toll_v2_retirement_dependent_test"
 retirement_role_db="nova_toll_v2_retirement_role_test"
 migration_db="nova_toll_v2_migration_test"
-base_ref="${1:-}"
+if [[ "$#" -ne 1 && "$#" -ne 3 ]]; then
+  echo "usage: $0 BASE_GIT_REF [--profile fast|full]" >&2
+  exit 2
+fi
+base_ref="$1"
+profile=full
+if [[ "$#" -eq 3 ]]; then
+  if [[ "$2" != --profile || ( "$3" != fast && "$3" != full ) ]]; then
+    echo 'expected --profile fast|full' >&2
+    exit 2
+  fi
+  profile="$3"
+fi
 retained_contract_ref="$base_ref"
 cleanup_allowed=false
 if [[ -z "$base_ref" ]]; then
@@ -887,18 +899,18 @@ SQL
 retained_contracts="$migration_source_dir/retained-contracts"
 mkdir "$retained_contracts"
 git archive "$retained_contract_ref" v2/tests | tar -x --directory "$retained_contracts"
-for contracts in "$retained_contracts/v2/tests" v2/tests; do
-  for contract in pricing_analysis pricing_ballpark monotonic_upsert oracle_restore \
-    oracle_route oracle_prompt_points oracle_pricing_route oracle_i66_pricing \
-    oracle_i95_pricing oracle_ballpark oracle_report oracle_security; do
-    case "$contract" in
-      oracle_prompt_points|oracle_report|oracle_security)
-        psql --dbname "$bootstrap_db" --command BEGIN \
-          --file "$contracts/${contract}_contract.sql" --command ROLLBACK ;;
-      *) psql --dbname "$bootstrap_db" --file "$contracts/${contract}_contract.sql" ;;
-    esac
-  done
-done
+python3 - "$retained_contracts/v2/tests" "$profile" <<'PYTHON'
+import subprocess
+import sys
+from pathlib import Path
+
+from v2.scripts.database_contracts import run_contracts
+
+try:
+    run_contracts(Path(sys.argv[1]), sys.argv[2])
+except subprocess.CalledProcessError as error:
+    raise SystemExit(error.returncode)
+PYTHON
 
 psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
 UPDATE oracle.schema_version SET version = '0.9.0' WHERE singleton;

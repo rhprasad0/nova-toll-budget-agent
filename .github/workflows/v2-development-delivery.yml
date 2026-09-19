@@ -103,6 +103,18 @@ jobs:
     permissions:
       contents: read
       actions: read
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     outputs:
       artifact_id: ${{ steps.release-identity.outputs.artifact_id }}
       artifact_digest: ${{ steps.release-identity.outputs.artifact_digest }}
@@ -169,6 +181,7 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -177,6 +190,15 @@ jobs:
           version: "0.12.5"
           checksum: "68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2"
           python-version: "3.13"
+
+      - name: Validate full disposable database contract
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          SCHEMA_BASE_REF: ${{ github.event.before }}
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF" --profile full
 
       - name: Build reviewed deployment packages
         working-directory: v2

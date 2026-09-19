@@ -1,5 +1,11 @@
 \set ON_ERROR_STOP on
 
+-- Direct invocation retains the exhaustive contract by default.
+\if :{?full_contract}
+\else
+\set full_contract true
+\endif
+
 BEGIN;
 
 CREATE FUNCTION pg_temp.set_i95_state(
@@ -608,6 +614,7 @@ BEGIN
 END
 $$;
 
+\if :full_contract
 DO $$
 DECLARE
     parity_failures integer;
@@ -631,5 +638,7 @@ BEGIN
     END IF;
 END
 $$;
+
+\endif
 
 ROLLBACK;
