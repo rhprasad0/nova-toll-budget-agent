@@ -1,0 +1,300 @@
+"""Billing release gates against provider-generated, credential-free plans."""
+
+import base64
+import hashlib
+import importlib
+import json
+import re
+import shutil
+import subprocess
+import sys
+from copy import deepcopy
+from pathlib import Path
+from typing import Any
+from zipfile import ZipFile
+
+import pytest
+
+from scripts import cost_dashboard_release as gate
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_asset_pins_and_archive_contract():
+    for name, digest in gate.ASSET_SHA256.items():
+        if "/" in name:
+            environment, asset = name.split("/")
+            content = (
+                (ROOT / "v2/agent" / asset)
+                .read_text()
+                .replace("${environment}", environment)
+                .encode()
+            )
+        else:
+            content = (
+                ROOT / "v2/agent" / ("" if name.endswith(".js") else "assets") / name
+            ).read_bytes()
+        assert hashlib.sha256(content).hexdigest() == digest
+    builder = (ROOT / "v2/scripts/build_publisher_zip.sh").read_text()
+    assert '"$V2_ROOT/lambdas/publisher/costs.py"' in builder
+    assert not (ROOT / "v2/prototypes").exists()
+    archive = ROOT / "v2/infra/build/publisher.zip"
+    if archive.exists():
+        with ZipFile(archive) as bundle:
+            assert (
+                bundle.read("costs.py")
+                == (ROOT / "v2/lambdas/publisher/costs.py").read_bytes()
+            )
+            assert (
+                bundle.read("handler.py")
+                == (ROOT / "v2/lambdas/publisher/handler.py").read_bytes()
+            )
+            assert not any(
+                name.endswith(("costs.json", ".env")) for name in bundle.namelist()
+            )
+
+
+@pytest.mark.parametrize("environment", ["development", "production"])
+def test_billing_policy_limits(environment: str):
+    statements = {row["Sid"]: row for row in gate.policy(environment)["Statement"]}
+    assert statements["ReadAccountBilling"]["Action"] == ["ce:GetCostAndUsage"]
+    assert statements["PublishSnapshot"]["Resource"].endswith("/costs.json")
+    assert statements["FindSnapshot"]["Condition"] == {
+        "StringEquals": {"s3:prefix": "costs.json"}
+    }
+    assert ("ReadBillingKey" in statements) == (environment == "production")
+    for statement in statements.values():
+        assert not any(
+            action.startswith(("rds", "bedrock", "sts:"))
+            for action in statement["Action"]
+        )
+    assert gate.ACCOUNTS[
+        "production" if environment == "development" else "development"
+    ] not in json.dumps(statements)
+
+
+def test_routes_only_add_the_four_billing_behaviors():
+    model = {
+        "path_pattern": "/eval-dashboard*",
+        "target_origin_id": "site",
+        "allowed_methods": ["GET", "HEAD"],
+    }
+    before = {"ordered_cache_behavior": [model]}
+    after = {
+        "ordered_cache_behavior": [
+            model,
+            *(dict(model, path_pattern=route) for route in sorted(gate.COST_ROUTES)),
+        ]
+    }
+    gate.routes(before, after)
+    for field, value in (
+        ("target_origin_id", "public-chat"),
+        ("allowed_methods", ["GET", "POST"]),
+    ):
+        bad = deepcopy(after)
+        bad["ordered_cache_behavior"][1][field] = value
+        with pytest.raises(ValueError):
+            gate.routes(before, bad)
+    with pytest.raises(ValueError):
+        gate.routes(after, before)
+
+
+def test_billing_routes_keep_the_active_chat_release():
+    sys.path.insert(0, str(ROOT))
+    legacy = importlib.import_module("infra.delivery_plan_validator")
+    rehearsal = importlib.import_module("test_blue_green")
+    state = rehearsal.previous()
+    before: dict[str, Any] = {
+        "arn": "arn:aws:cloudfront::903859731897:distribution/E33DVF3KT7BTAC",
+        "origin": [
+            {"origin_id": "site"},
+            {"origin_id": "documents", "origin_path": "/releases/release1"},
+            {
+                "origin_id": "public-chat",
+                "domain_name": "blue.lambda-url.us-east-1.on.aws",
+            },
+        ],
+        "ordered_cache_behavior": [
+            {"path_pattern": "/eval-dashboard*", "target_origin_id": "site"}
+        ],
+    }
+    after = deepcopy(before)
+    after["ordered_cache_behavior"] += [
+        dict(before["ordered_cache_behavior"][0], path_pattern=route)
+        for route in sorted(gate.COST_ROUTES)
+    ]
+    item = rehearsal.change("aws_cloudfront_distribution.site", before, after)
+    item.update(type="aws_cloudfront_distribution", name="site")
+    item["change"].update(before_sensitive={}, after_sensitive={})
+    prepared = rehearsal.plan(
+        rehearsal.gate.desired(state, rehearsal.slot("green", "release2")), [item]
+    )
+    rehearsal.gate.validate_plan(prepared, state, "prepare")
+    manifest = json.loads(
+        (ROOT / "infra/development-release-manifest.json").read_text()
+    )
+    result = legacy.validate_plan(
+        {
+            "terraform_version": "1.15.8",
+            "applyable": True,
+            "complete": True,
+            "errored": False,
+            "resource_changes": [item],
+        },
+        manifest,
+        manifest["provider_identity"],
+    )
+    assert result["status"] == "accepted", result
+    after["origin"][2]["domain_name"] = "green.lambda-url.us-east-1.on.aws"
+    with pytest.raises(rehearsal.gate.Rejected):
+        rehearsal.gate.validate_plan(prepared, state, "prepare")
+
+
+@pytest.mark.parametrize("environment", ["development", "production"])
+def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str):
+    provider_dir = ROOT / "v2/infra/.terraform/providers"
+    if not shutil.which("terraform") or not provider_dir.is_dir():
+        pytest.skip(
+            "Run terraform -chdir=v2/infra init -backend=false for the provider-plan check"
+        )
+    account = gate.ACCOUNTS[environment]
+    suffix = "-dev" if environment == "development" else ""
+    source = (ROOT / "v2/infra/costs.tf").read_text()
+    replacements = {
+        "data.aws_caller_identity.current.account_id": json.dumps(account),
+        "data.aws_region.current.region": '"us-east-1"',
+        "aws_s3_bucket.site.id": json.dumps(f"tollchat-site-{account}{suffix}"),
+        "aws_s3_bucket.site.arn": json.dumps(
+            f"arn:aws:s3:::tollchat-site-{account}{suffix}"
+        ),
+        "aws_kms_key.site.arn": json.dumps(
+            f"arn:aws:kms:us-east-1:{account}:key/{gate.SITE_KEYS[environment]}"
+        ),
+        "${path.module}/../agent/": str(ROOT / "v2/agent") + "/",
+    }
+    for old, new in replacements.items():
+        source = source.replace(old, new)
+    source = re.sub(
+        r"\s*depends_on\s*= \[aws_s3_bucket_server_side_encryption_configuration.site\]",
+        "",
+        source,
+    )
+    (tmp_path / "costs.tf").write_text(source)
+    (tmp_path / "main.tf").write_text(
+        """terraform {
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "6.60.0" }
+  }
+}
+"""
+        + f'''variable "environment" {{ default = "{environment}" }}
+variable "publisher_package_path" {{ default = "build/publisher.zip" }}
+locals {{
+  suffix = "{suffix}"
+  is_production = {str(environment == "production").lower()}
+  log_retention_days = {30 if environment == "production" else 7}
+  publisher_zip_path = "build/publisher.zip"
+  publisher_zip_hash = "{base64.b64encode(bytes(32)).decode()}"
+}}
+'''
+    )
+    (tmp_path / "costs.tftest.hcl").write_text(
+        'mock_provider "aws" {}\nrun "costs" { command = plan }\n'
+    )
+    (tmp_path / ".terraform").mkdir()
+    (tmp_path / ".terraform/providers").symlink_to(
+        provider_dir, target_is_directory=True
+    )
+    shutil.copyfile(
+        ROOT / "v2/infra/.terraform.lock.hcl", tmp_path / ".terraform.lock.hcl"
+    )
+    result = subprocess.run(
+        ["terraform", f"-chdir={tmp_path}", "test", "-json", "-verbose"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    events = [json.loads(line) for line in result.stdout.splitlines()]
+    assert result.returncode == 0, [
+        item.get("diagnostic") for item in events if item.get("diagnostic")
+    ]
+    plan: dict[str, Any] = next(
+        item["test_plan"] for item in events if item["type"] == "test_plan"
+    )
+    # terraform test omits configuration in its verbose JSON. Supply the actual
+    # expression inventory from this same tested source for omitted ACL proofs.
+    resources: list[dict[str, Any]] = []
+    for block in re.split(r'\n(?=resource ")', source):
+        match = re.match(r'resource "([^"]+)" "([^"]+)"', block)
+        if match:
+            resources.append(
+                {
+                    "address": ".".join(match.groups()),
+                    "expressions": {
+                        key: {} for key in re.findall(r"(?m)^\s*(\w+)\s*=", block)
+                    },
+                }
+            )
+    plan["configuration"] = {"root_module": {"resources": resources}}
+    for item in plan["resource_changes"]:
+        gate.validate(item, environment, plan)
+        for key, value in (
+            ("role", "arn:aws:iam::000000000000:role/other"),
+            ("policy", "{}"),
+            ("source_account", "000000000000"),
+            ("handler", "handler.handler"),
+            ("bucket", "other-bucket"),
+            ("kms_key_id", "foreign-key"),
+            ("schedule_expression", "rate(1 minute)"),
+        ):
+            if key in item["change"]["after"]:
+                bad = deepcopy(item)
+                bad["change"]["after"][key] = value
+                with pytest.raises(ValueError):
+                    gate.validate(bad, environment, plan)
+        bad = deepcopy(item)
+        bad["change"]["actions"] = ["delete"]
+        with pytest.raises(ValueError):
+            gate.validate(bad, environment, plan)
+    iam = next(
+        item
+        for item in plan["resource_changes"]
+        if item["address"] == "aws_iam_role.costs"
+    )
+    bad = deepcopy(plan)
+    next(
+        resource
+        for resource in bad["configuration"]["root_module"]["resources"]
+        if resource["address"] == iam["address"]
+    )["expressions"]["managed_policy_arns"] = {"references": ["untrusted.arn"]}
+    with pytest.raises(ValueError):
+        gate.validate(iam, environment, bad)
+    if environment == "development":
+        sys.path.insert(0, str(ROOT))
+        legacy = importlib.import_module("infra.delivery_plan_validator")
+        plan = {
+            "terraform_version": "1.15.8",
+            "applyable": True,
+            "complete": True,
+            "errored": False,
+            "resource_changes": plan["resource_changes"],
+            "configuration": plan["configuration"],
+        }
+        records = legacy._parse_plan(plan)
+        assert len(records) == 10
+        manifest = json.loads(
+            (ROOT / "infra/development-release-manifest.json").read_text()
+        )
+        result = legacy.validate_plan(plan, manifest, manifest["provider_identity"])
+        assert result["status"] == "accepted", result
+        # Exercise the same real resources through the retained-slot gate.
+        rehearsal = importlib.import_module("test_blue_green")
+        state = rehearsal.previous()
+        prepared = rehearsal.plan(
+            rehearsal.gate.desired(state, rehearsal.slot("green", "release2")),
+            plan["resource_changes"],
+        )
+        prepared["configuration"] = plan["configuration"]
+        rehearsal.gate.validate_plan(prepared, state, "prepare")
+        with pytest.raises(rehearsal.gate.Rejected):
+            rehearsal.gate.validate_plan(prepared, state, "promote")

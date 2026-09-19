@@ -1436,7 +1436,8 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             if spec.operation_class.startswith("agentcore-trace-"):
                 continue
             if spec.operation_class in {"cost-publication", "cost-routing"}:
-                # Finite billing gates have dedicated adversarial fixtures.
+                # Billing uses provider-generated plans and authority mutations in
+                # v2/tests/test_cost_dashboard_release.py, not placeholder values.
                 continue
             action = spec.actions[0]
             timed = address.startswith('aws_scheduler_schedule.timed_checks["') or address in {
@@ -2487,9 +2488,12 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 expected_mutations[address] = (spec.operation_class, fields)
         expected_mutations.update({
             "aws_cloudfront_function.public_report_routes": ("cloudfront-code", ("code",)),
-            "aws_s3_object.evals": ("site-object-upload", ("cache_control", "content", "content_type", "source", "source_hash")),
+            "aws_s3_object.evals": ("site-object-upload", ("content",)),
             **{f'aws_s3_object.site_assets["{name}"]': ("site-asset-upload", ("cache_control", "content_type", "source", "source_hash")) for name in ("evals.css", "evals.mjs")},
         })
+        for address, spec in CONTRACT.items():
+            if spec.operation_class in {"cost-publication", "cost-routing"}:
+                expected_mutations[address] = (spec.operation_class, tuple(sorted(spec.fields)))
         actual_mutations = {
             record["address"]: (
                 record["operation_class"],
@@ -2594,6 +2598,11 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
 
     def test_dashboard_create_computed_acl_requires_omitted_configuration(self):
         manifest = json.loads((Path(__file__).parent / "development-release-manifest.json").read_text())
+        # The current release updates the existing page. Retain coverage of the
+        # original create boundary using its own declaration.
+        next(row for row in manifest["mutations"] if row["address"] == "aws_s3_object.evals").update(
+            action="create", changed_fields=list(CONTRACT["aws_s3_object.evals"].fields)
+        )
         for address in ("aws_s3_object.evals", 'aws_s3_object.site_assets["evals.css"]', 'aws_s3_object.site_assets["evals.mjs"]'):
             spec = CONTRACT[address]
             after = {**dict(spec.create_identity), **{field: None for field in spec.fields}}
