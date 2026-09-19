@@ -65,15 +65,15 @@ def fixture(environment="production", now=NOW):
     period = costs.requested(costs.periods(now.date()))
     sources = {
         "aws_development": source("development", now),
-        "openai": costs.blank_source("openai", period, environment == "development"),
+        "openai": costs.blank_source("openai", period),
     }
     if environment == "production":
         sources["aws_production"] = source("production", now, ("0.000000001", "-0.02"))
-        sources["openai"].update(
-            status="available",
-            retrieved_at=costs.utc_text(now - timedelta(minutes=10)),
-            daily=[{"date": day, "usd": "0.4"} for day in costs.dates(period)],
-        )
+    sources["openai"].update(
+        status="available",
+        retrieved_at=costs.utc_text(now - timedelta(minutes=10)),
+        daily=[{"date": day, "usd": "0.4"} for day in costs.dates(period)],
+    )
     return costs.build_snapshot(environment, now, sources)
 
 
@@ -325,8 +325,12 @@ def test_handler_preserves_data_and_sanitizes_provider_failure(monkeypatch):
 
     def client(name, **_):
         clients.append(name)
-        assert name in {"s3", "ce"}
-        return {"s3": s3, "ce": ce}[name]
+        assert name in {"s3", "ce", "ssm"}
+        return {
+            "s3": s3,
+            "ce": ce,
+            "ssm": Mock(get_parameter=Mock(side_effect=RuntimeError("secret"))),
+        }[name]
 
     monkeypatch.setattr(costs.boto3, "client", client)
     context = SimpleNamespace(
@@ -338,7 +342,7 @@ def test_handler_preserves_data_and_sanitizes_provider_failure(monkeypatch):
     assert result["published_at"] == previous["published_at"]
     assert result["daily"] == previous["daily"]
     assert "secret" not in json.dumps(result)
-    assert clients == ["s3", "ce"]
+    assert clients == ["s3", "ce", "ssm"]
     s3.get_object.side_effect = ClientError(
         {"Error": {"Code": "AccessDenied"}}, "GetObject"
     )
@@ -350,7 +354,7 @@ def test_handler_preserves_data_and_sanitizes_provider_failure(monkeypatch):
     s3.get_object.reset_mock()
     period = costs.requested(costs.periods(datetime.now(UTC).date()))
     ce.get_cost_and_usage.side_effect = aws_pages(period)
-    assert costs.handler({}, context) == {"status": "succeeded"}
+    assert costs.handler({}, context) == {"status": "failed"}
     s3.get_object.assert_not_called()
     s3.list_objects_v2.assert_called_with(
         Bucket="tollchat-site-903859731897-dev", Prefix="costs.json", MaxKeys=1
@@ -375,3 +379,106 @@ def test_deterministic_public_fixtures():
             *costs.ACCOUNTS.values(),
         ):
             assert secret not in public
+
+
+def test_legacy_development_and_production_do_not_double_count_openai():
+    legacy = json.loads(
+        (
+            Path(__file__).resolve().parents[3]
+            / "tests/fixtures/costs-development-legacy.json"
+        ).read_text()
+    )
+    dev = fixture("development")
+    for snapshot in (legacy, dev):
+        production = fixture()
+        production["sources"]["aws_development"] = costs.development_source(
+            snapshot, production["requested"], NOW
+        )
+        assert (
+            costs.build_snapshot("production", NOW, production["sources"]) == fixture()
+        )
+    for snapshot, scope in ((legacy, dev["scope"]), (dev, legacy["scope"])):
+        snapshot["scope"] = scope
+        with pytest.raises(ValueError):
+            costs.validate_snapshot(snapshot, "development", NOW)
+
+
+@pytest.mark.parametrize("previous_kind", ["none", "legacy", "current"])
+@pytest.mark.parametrize(
+    "failure", [None, "ParameterNotFound", "AccessDeniedException", "provider"]
+)
+def test_development_handler_collects_openai_and_retains_last_valid(
+    monkeypatch, previous_kind, failure
+):
+    now = datetime.now(UTC).replace(microsecond=0)
+    period = costs.requested(costs.periods(now.date()))
+    previous = fixture("development", now - timedelta(days=1))
+    if previous_kind == "legacy":
+        previous["scope"] = "aws-development"
+        previous["sources"]["openai"] = costs.blank_source(
+            "openai", previous["requested"], True
+        )
+        previous["attempt"]["sources"]["openai"] = "not_configured"
+        previous.update(costs.summarize(previous["sources"], previous["periods"]))
+    s3 = Mock(
+        list_objects_v2=Mock(
+            return_value={}
+            if previous_kind == "none"
+            else {"Contents": [{"Key": "costs.json"}]}
+        ),
+        get_object=Mock(
+            return_value={"Body": io.BytesIO(json.dumps(previous).encode())}
+        ),
+    )
+    ssm = Mock(get_parameter=Mock(return_value={"Parameter": {"Value": "test-secret"}}))
+    if failure in {"ParameterNotFound", "AccessDeniedException"}:
+        ssm.get_parameter.side_effect = ClientError(
+            {"Error": {"Code": failure, "Message": "test-secret"}}, "GetParameter"
+        )
+    collector = Mock(return_value=fixture("development", now)["sources"]["openai"])
+    if failure == "provider":
+        collector.side_effect = RuntimeError("test-secret private-provider-error")
+    monkeypatch.setattr(costs, "collect_openai", collector)
+    clients = {
+        "s3": s3,
+        "ssm": ssm,
+        "ce": Mock(get_cost_and_usage=Mock(side_effect=aws_pages(period))),
+    }
+    monkeypatch.setattr(costs.boto3, "client", lambda name, **_: clients[name])
+    monkeypatch.setenv("DEPLOYMENT_ENVIRONMENT", "development")
+    monkeypatch.setenv("COST_BUCKET", "tollchat-site-903859731897-dev")
+    context = SimpleNamespace(
+        invoked_function_arn="arn:aws:lambda:us-east-1:903859731897:function:test",
+        get_remaining_time_in_millis=lambda: 90000,
+    )
+    assert costs.handler({}, context) == {
+        "status": "failed" if failure else "succeeded"
+    }
+    ssm.get_parameter.assert_called_once_with(
+        WithDecryption=True, Name=costs.BILLING_KEY
+    )
+    if failure not in {"ParameterNotFound", "AccessDeniedException"}:
+        assert collector.call_args.args[:2] == ("test-secret", period)
+        assert now <= costs.timestamp(collector.call_args.args[2]) <= datetime.now(UTC)
+    result = json.loads(s3.put_object.call_args.kwargs["Body"])
+    costs.validate_snapshot(result, "development", datetime.now(UTC))
+    assert result["scope"] == "aws-development+openai-organization"
+    assert "test-secret" not in json.dumps(result)
+    assert "private-provider-error" not in json.dumps(result)
+    if failure and previous_kind != "none":
+        assert result["daily"] == previous["daily"]
+        assert result["month_to_date"] == previous["month_to_date"]
+        assert result["published_at"] == previous["published_at"]
+        assert (
+            result["sources"]["aws_development"]
+            == previous["sources"]["aws_development"]
+        )
+    elif failure:
+        assert result["sources"]["aws_development"]["status"] == "available"
+        assert result["month_to_date"]["total"] is None
+    else:
+        assert result["sources"]["openai"]["status"] == "available"
+        assert costs.amount(result["month_to_date"]["total"]) == costs.amount(
+            result["month_to_date"]["aws"]
+        ) + costs.amount(result["month_to_date"]["openai"])
+        assert result["requested"] == period

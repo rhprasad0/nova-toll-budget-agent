@@ -4,13 +4,19 @@
 publisher shares the report publisher's archive, but has its own Lambda and
 execution role. It has no database or model permissions.
 
-Development runs at 08:00 UTC and publishes only its own AWS account's billing.
+Development runs at 08:00 UTC and combines its own AWS account's billing with
+OpenAI organization-wide costs. OpenAI includes all environments, not just development.
 Production runs at 09:00 UTC and combines its own AWS account, the validated
 `https://dev.tollchat.ai/costs.json` aggregate, and OpenAI organization costs.
-Production alone reads the existing SSM SecureString
-`/nova-toll/openai_billing_api_key`; it needs an OpenAI administrative key with
-organization cost-read access. Application credentials are separate. Provisioning
-that parameter and enabling Cost Explorer are outside this release.
+Each account's cost publisher reads its account-local SSM SecureString
+`/nova-toll/openai_billing_api_key` in `us-east-1`; it needs an OpenAI organization
+admin key with cost-read access. For development, provision this in account
+**903859731897**, using **SecureString** and **alias/aws/ssm**. Keep its value out
+of chat, local files, Terraform, and application credentials. Only the cost role
+receives parameter read and scoped decryption permission; delivery and planning
+roles cannot read the key. Production consumes only the AWS component of
+development's snapshot and collects OpenAI directly once. Do not enable
+Cost Explorer as part of this release.
 
 The requested interval is the union of month-to-date and the last 30 completed
 UTC days, ending before today. AWS uses account-filtered `UnblendedCost`; OpenAI
@@ -25,11 +31,14 @@ These are provisional billing observations. Requested coverage, source retrieval
 and publication timestamps are separate; neither provider supplies a finalized
 through date here. An empty provider bucket is zero; an omitted day or non-USD
 amount makes that source unavailable. Production shows a combined total only
-when all three sources reconcile for the same periods and USD. Development's
-OpenAI and combined total are unavailable by design.
+when all three sources reconcile for the same periods and USD. Development
+requires its AWS and OpenAI sources to reconcile for matching periods and USD.
 
 A failed attempt preserves the previous valid snapshot and its publication time,
-and changes only its sanitized attempt status. With no prior snapshot, available
+and changes only its sanitized attempt status. Legacy development snapshots with
+scope `aws-development` remain readable. When retained after a failed refresh,
+they migrate to `aws-development+openai-organization` with OpenAI unavailable;
+AWS values and the original publication time are preserved. With no prior snapshot, available
 source subtotals remain visible. A publication older than 48 hours is marked
 stale. Browser refresh errors retain the displayed valid data. No credentials,
 account/resource/project IDs, raw provider errors, or chat content are published.
@@ -47,9 +56,14 @@ There is no database migration or application-agent change in this release.
    its daily run (or invoke the fixed cost Lambda during the authorized rollout).
    Verify `/cost-dashboard`, a direct route refresh, and `/costs.json`. Validate
    the real snapshot with `publisher/costs.py:validate_snapshot`, checking
-   `development`, `aws-development`, a successful attempt, current requested
-   dates, and the AWS service/environment reconciliations. Compare its AWS daily
-   amounts against the same account-filtered Cost Explorer request.
+   `development`, `aws-development+openai-organization`, a successful attempt,
+   a new publication, current requested dates, and AWS service/environment
+   reconciliations. Require the Lambda response payload status to succeed, not
+   just the invocation. Compare AWS daily amounts against the same account-filtered
+   Cost Explorer request and OpenAI against the unfiltered organization Costs API
+   for the same dates. Reconcile exact daily and month-to-date decimals and check
+   browser labels, totals, and chart/table agreement. Separately confirm the next
+   scheduled 08:00 UTC refresh; a manual invocation does not prove scheduling.
 3. After development's aggregate is valid, check production prerequisites
    **before preparing the production release**: account-local foundation
    permissions, the fixed SecureString's metadata and effective cost-role

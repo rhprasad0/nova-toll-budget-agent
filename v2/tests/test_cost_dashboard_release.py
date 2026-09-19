@@ -62,7 +62,14 @@ def test_billing_policy_limits(environment: str):
     assert statements["FindSnapshot"]["Condition"] == {
         "StringEquals": {"s3:prefix": "costs.json"}
     }
-    assert ("ReadBillingKey" in statements) == (environment == "production")
+    assert statements["ReadBillingKey"]["Resource"] == (
+        f"arn:aws:ssm:us-east-1:{gate.ACCOUNTS[environment]}"
+        ":parameter/nova-toll/openai_billing_api_key"
+    )
+    assert statements["DecryptBillingKey"]["Condition"]["StringEquals"] == {
+        "kms:ViaService": "ssm.us-east-1.amazonaws.com",
+        "kms:EncryptionContext:PARAMETER_ARN": statements["ReadBillingKey"]["Resource"],
+    }
     for statement in statements.values():
         assert not any(
             action.startswith(("rds", "bedrock", "sts:"))
@@ -302,7 +309,51 @@ locals {{
         manifest = json.loads(
             (ROOT / "infra/development-release-manifest.json").read_text()
         )
-        result = legacy.validate_plan(plan, manifest, manifest["provider_identity"])
+        # Retain fresh-account coverage; the committed manifest now lists updates.
+        creation_manifest = deepcopy(manifest)
+        by_address = {record["address"]: record for record in records}
+        for declaration in creation_manifest["mutations"]:
+            if declaration["address"] in by_address:
+                record = by_address[declaration["address"]]
+                declaration.update(
+                    action=record["action"],
+                    changed_fields=list(record["changed_fields"]),
+                )
+        result = legacy.validate_plan(
+            plan, creation_manifest, manifest["provider_identity"]
+        )
+        assert result["status"] == "accepted", result
+        # Installed resources must match the committed update declarations.
+        old_policy = gate.policy(environment)
+        old_policy["Statement"] = [
+            row
+            for row in old_policy["Statement"]
+            if row["Sid"] not in {"ReadBillingKey", "DecryptBillingKey"}
+        ]
+        old_values = {
+            "aws_lambda_function.costs": {
+                "source_code_hash": base64.b64encode(b"a" * 32).decode()
+            },
+            "aws_iam_role_policy.costs": {"policy": json.dumps(old_policy)},
+            "aws_s3_object.cost_dashboard": {"content": "previous reviewed HTML"},
+            'aws_s3_object.cost_assets["costs.mjs"]': {
+                "source_hash": base64.b64encode(b"a" * 32).decode()
+            },
+        }
+        updates: list[dict[str, Any]] = []
+        for item in plan["resource_changes"]:
+            if item["address"] not in old_values:
+                continue
+            update = deepcopy(item)
+            update["change"]["actions"] = ["update"]
+            update["change"]["before"] = deepcopy(update["change"]["after"])
+            update["change"]["before"].update(old_values[item["address"]])
+            updates.append(update)
+        assert len(updates) == 4
+        updated_plan = {**plan, "resource_changes": updates}
+        result = legacy.validate_plan(
+            updated_plan, manifest, manifest["provider_identity"]
+        )
         assert result["status"] == "accepted", result
         # Exercise the same real resources through the retained-slot gate.
         rehearsal = importlib.import_module("test_blue_green")
@@ -623,6 +674,40 @@ def test_first_billing_refresh_preserves_release_authority(
                 ):
                     rehearsal.gate.validate_plan(document, state, phase)
     role = next(drift for drift in drifts if drift["address"] == "aws_iam_role.costs")
+    if environment == "development":
+        legacy_policy = gate.policy(environment)
+        legacy_policy["Statement"] = [
+            row
+            for row in legacy_policy["Statement"]
+            if row["Sid"] not in {"ReadBillingKey", "DecryptBillingKey"}
+        ]
+        legacy = [{"name": name, "policy": json.dumps(legacy_policy)}]
+        for old, new in (
+            ([], legacy),
+            (legacy, role["change"]["after"]["inline_policy"]),
+        ):
+            transition = deepcopy(role)
+            transition["change"]["before"]["inline_policy"] = old
+            transition["change"]["after"]["inline_policy"] = new
+            document["resource_drift"] = [transition]
+            rehearsal.gate.validate_plan(document, state, phase)
+        for side in ("before", "after"):
+            invalid = deepcopy(transition)
+            invalid["change"][side]["inline_policy"][0]["policy"] = "{}"
+            document["resource_drift"] = [invalid]
+            with pytest.raises(rehearsal.gate.Rejected, match="incomplete_or_drift"):
+                rehearsal.gate.validate_plan(document, state, phase)
+        reversed_transition = deepcopy(transition)
+        (
+            reversed_transition["change"]["before"],
+            reversed_transition["change"]["after"],
+        ) = (
+            reversed_transition["change"]["after"],
+            reversed_transition["change"]["before"],
+        )
+        document["resource_drift"] = [reversed_transition]
+        with pytest.raises(rehearsal.gate.Rejected, match="incomplete_or_drift"):
+            rehearsal.gate.validate_plan(document, state, phase)
     for policies in (
         role["change"]["after"]["inline_policy"] * 2,
         [

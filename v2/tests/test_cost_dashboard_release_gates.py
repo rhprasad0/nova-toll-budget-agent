@@ -43,7 +43,14 @@ def test_future_billing_role_has_only_its_fixed_permissions(environment: str) ->
         with pytest.raises(ValueError):
             gate.validate(bad, environment)
     statements = {row["Sid"]: row for row in policy["Statement"]}
-    assert ("ReadBillingKey" in statements) == (environment == "production")
+    assert statements["ReadBillingKey"]["Resource"] == (
+        f"arn:aws:ssm:us-east-1:{gate.ACCOUNTS[environment]}"
+        ":parameter/nova-toll/openai_billing_api_key"
+    )
+    assert statements["DecryptBillingKey"]["Condition"]["StringEquals"] == {
+        "kms:ViaService": "ssm.us-east-1.amazonaws.com",
+        "kms:EncryptionContext:PARAMETER_ARN": statements["ReadBillingKey"]["Resource"],
+    }
     assert statements["PublishSnapshot"]["Resource"].endswith("/costs.json")
 
 

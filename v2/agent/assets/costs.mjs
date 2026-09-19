@@ -45,7 +45,7 @@ export function validate(snapshot, environment = expectedEnvironment) {
   keys(snapshot, 'schema_version kind environment scope currency periods requested published_at attempt sources month_to_date daily aws_services aws_environments');
   require(['development', 'production'].includes(environment) && snapshot.environment === environment);
   require(snapshot.schema_version === 1 && snapshot.kind === 'billing-costs' && snapshot.currency === 'USD');
-  require(snapshot.scope === (environment === 'production' ? 'aws-production+aws-development+openai-organization' : 'aws-development'));
+  require((environment === 'production' ? ['aws-production+aws-development+openai-organization'] : ['aws-development', 'aws-development+openai-organization']).includes(snapshot.scope));
   const published = instant(snapshot.published_at);
   require(published <= Date.now());
   keys(snapshot.periods, 'month_to_date last_30_days');
@@ -66,7 +66,7 @@ export function validate(snapshot, environment = expectedEnvironment) {
   for (const id of ids) {
     const source = snapshot.sources[id];
     keys(source, 'status scope currency requested retrieved_at finalized_through estimated daily aws_services aws_environments');
-    const disabled = environment === 'development' && id === 'openai';
+    const disabled = snapshot.scope === 'aws-development' && id === 'openai';
     const allowed = disabled ? ['not_configured'] : ['available', 'unavailable'];
     require(allowed.includes(source.status) && allowed.includes(snapshot.attempt.sources[id]));
     require(source.scope === scopes[id] && source.currency === 'USD' && source.finalized_through === null);
@@ -163,7 +163,7 @@ function notice() {
   if (failedRefresh) messages.push(snapshot ? 'Browser refresh failed. Showing the last valid snapshot.' : 'The billing snapshot could not be loaded. No complete total is available.');
   if (snapshot?.attempt.status === 'failed') messages.push(`Daily refresh failed at ${when(snapshot.attempt.at)}. Last valid amounts are retained where available.`);
   if (snapshot && Date.now() - Date.parse(snapshot.published_at) > 48 * 3600000) messages.push('Stale: publication is over 48 hours old.');
-  if (snapshot?.month_to_date.total === null) messages.push(expectedEnvironment === 'development' ? 'Development reports its AWS account only. OpenAI is unavailable by design.' : 'A required billing source is unavailable. Available source subtotals are shown; the combined total is withheld.');
+  if (snapshot?.month_to_date.total === null) messages.push(snapshot.scope === 'aws-development' ? 'This earlier snapshot contains development AWS only. Awaiting the first OpenAI billing publication.' : 'A required billing source is unavailable. Available source subtotals are shown; the combined total is withheld.');
   $('state-notice').hidden = !messages.length; set('state-notice', messages.join(' '));
 }
 function render() {
@@ -171,9 +171,10 @@ function render() {
   for (const provider of ['total', 'aws', 'openai']) {
     set(provider, money(mtd[provider])); $(provider).classList.toggle('unavailable', mtd[provider] === null);
   }
-  set('total-note', mtd.total === null ? 'Combined total unavailable' : 'AWS + OpenAI API · Same reporting period');
+  set('total-note', mtd.total === null ? 'Combined total unavailable' : expectedEnvironment === 'development' ? 'Development AWS + OpenAI organization' : 'AWS + OpenAI API · Same reporting period');
   set('aws-note', expectedEnvironment === 'development' ? 'Development account only · Unblended cost' : 'Two accounts · Unblended cost');
-  set('openai-note', expectedEnvironment === 'development' ? 'Unavailable by design' : 'Organization-wide · Provider-reported');
+  set('openai-note', 'Organization-wide · Provider-reported');
+  ($('coverage-label') ?? document.querySelector('.context-line > span')).textContent = expectedEnvironment === 'development' ? 'Development AWS account plus organization-wide OpenAI costs. OpenAI includes all environments.' : 'Includes production, development, shared infrastructure, and unallocated spend.';
   set('period-label', range(snapshot.periods.month_to_date));
   set('trend-period', '30 completed days · ' + range(snapshot.periods.last_30_days));
   set('publication-label', 'Published ' + when(snapshot.published_at));
