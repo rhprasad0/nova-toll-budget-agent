@@ -508,6 +508,7 @@ def test_production_cli_requires_matching_evidence(tmp_path: Path, empty: bool) 
         str(ROOT / "v2/infra"),
     ]
     assert subprocess.run(command, capture_output=True).returncode == 1
+
     command += ["--package-evidence", str(tmp_path / "evidence")]
     assert subprocess.run(command, capture_output=True).returncode == 0
     if empty:
@@ -516,3 +517,117 @@ def test_production_cli_requires_matching_evidence(tmp_path: Path, empty: bool) 
         expected["packages"]["loader.zip"]["sha256"] = "1" * 64
     (tmp_path / "evidence").write_text(json.dumps(expected))
     assert subprocess.run(command, capture_output=True).returncode == 1
+
+
+@pytest.mark.parametrize("environment", shared_packages.ACCOUNTS)
+@pytest.mark.parametrize("phase", ["prepare", "promote", "recover"])
+def test_completed_chat_publication_drift_is_exact(
+    environment: str, phase: str
+) -> None:
+    document, retained, expected = package_plan(environment, phase, "complete")
+    name = "tollchat-v2-public-chat-routes" + (
+        "-dev" if environment == "development" else ""
+    )
+    after = {
+        "name": name,
+        "arn": f"arn:aws:cloudfront::{expected['account']}:function/{name}",
+        "runtime": "cloudfront-js-2.0",
+        "publish": True,
+        "code": (ROOT / "v2/agent/public-api-gate.js").read_text(),
+        "status": "DEPLOYED",
+    }
+    row = change(shared_packages.CHAT_ROUTES, dict(after, status="IN_PROGRESS"), after)
+    row.update(type="aws_cloudfront_function", name="public_chat_routes")
+    row["change"].update(before_sensitive={}, after_sensitive={})
+    document["resource_drift"] = [row]
+    noop = deepcopy(row)
+    noop["change"].update(actions=["no-op"], before=deepcopy(after))
+    document["resource_changes"].append(noop)
+    blue_green.validate_plan(document, retained, phase, package_evidence=expected)
+    if environment == "development":
+        assert development_validate(document, expected)["status"] == "accepted"
+    else:
+        production_validate(
+            dict(document, output_changes={}), ROOT / "v2/infra", expected
+        )
+
+    for side, field, value in [
+        ("before", "status", "UNPUBLISHED"),
+        ("after", "status", "IN_PROGRESS"),
+        ("before", "code", "unreviewed"),
+        ("after", "code", "unreviewed"),
+        ("before", "arn", "wrong"),
+        ("after", "arn", "wrong"),
+        ("after", "runtime", "cloudfront-js-1.0"),
+        ("after", "publish", False),
+        ("after", "etag", "changed"),
+        ("after_unknown", "status", True),
+    ]:
+        invalid = deepcopy(document)
+        invalid["resource_drift"][0]["change"][side][field] = value
+        with pytest.raises(ValueError):
+            blue_green.validate_plan(
+                invalid, retained, phase, package_evidence=expected
+            )
+        if environment == "development":
+            assert development_validate(invalid, expected)["status"] == "rejected"
+        else:
+            with pytest.raises(ValueError):
+                production_validate(
+                    dict(invalid, output_changes={}), ROOT / "v2/infra", expected
+                )
+
+
+@pytest.mark.parametrize("environment", shared_packages.ACCOUNTS)
+@pytest.mark.parametrize("phase", ["prepare", "promote", "recover"])
+def test_primary_revision_drift_preserves_exact_configuration(
+    environment: str, phase: str
+) -> None:
+    document, retained, expected = package_plan(environment, phase, "complete")
+    distribution = {"development": "E33DVF3KT7BTAC", "production": "E16XVTXNFUS8T4"}[
+        environment
+    ]
+    before: dict[str, Any] = {
+        "id": distribution,
+        "arn": f"arn:aws:cloudfront::{expected['account']}:distribution/{distribution}",
+        "etag": "previous",
+        "enabled": True,
+        "origin": [],
+    }
+    row = change(
+        "aws_cloudfront_distribution.site", before, dict(before, etag="current")
+    )
+    row.update(type="aws_cloudfront_distribution", name="site")
+    row["change"].update(before_sensitive={}, after_sensitive={})
+    document["resource_drift"] = [row]
+    blue_green.validate_plan(document, retained, phase, package_evidence=expected)
+    if environment == "development":
+        assert development_validate(document, expected)["status"] == "accepted"
+    else:
+        production_validate(
+            dict(document, output_changes={}), ROOT / "v2/infra", expected
+        )
+    for side, field, value in [
+        ("before", "id", "other"),
+        ("after", "id", "other"),
+        ("before", "arn", "wrong"),
+        ("after", "arn", "wrong"),
+        ("before", "etag", None),
+        ("after", "etag", ""),
+        ("after", "enabled", False),
+        ("after", "origin", [{"domain_name": "other"}]),
+        ("after_unknown", "etag", True),
+    ]:
+        invalid = deepcopy(document)
+        invalid["resource_drift"][0]["change"][side][field] = value
+        with pytest.raises(ValueError):
+            blue_green.validate_plan(
+                invalid, retained, phase, package_evidence=expected
+            )
+        if environment == "development":
+            assert development_validate(invalid, expected)["status"] == "rejected"
+        else:
+            with pytest.raises(ValueError):
+                production_validate(
+                    dict(invalid, output_changes={}), ROOT / "v2/infra", expected
+                )

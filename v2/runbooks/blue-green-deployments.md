@@ -56,8 +56,11 @@ timed-checks and cost Lambdas, plus the existing reviewed billing changes and
 the pinned annotation-only CloudFront transition in either environment.
 Other active-slot, primary-routing, IAM, network, scheduled-job and shared
 configuration changes require a separate infrastructure review.
-Promotion/recovery reject artifacts or unrelated changes. Plans reject drift,
-unexpected moves and uncertain routing targets. A retry may reuse the identical
+Promotion/recovery reject artifacts or unrelated changes. Drift exceptions include
+the reviewed chat function finishing publication (`IN_PROGRESS` to `DEPLOYED`)
+and a revision-only refresh of the fixed primary distribution, with all configuration
+unchanged. Other drift, unexpected moves and uncertain routing targets are rejected.
+A retry may reuse the identical
 inactive descriptor but cannot change artifacts under its release ID.
 
 **Shared code stays installed when application routing rolls back.** Preparation
