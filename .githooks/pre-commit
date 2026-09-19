@@ -1,41 +1,9 @@
 #!/usr/bin/env bash
-# Mirrors .github/workflows/ci.yml's check job before allowing a commit.
-# One-time setup per clone: git config core.hooksPath .githooks
-#
-# This is the only secrets gate that applies regardless of what's
-# committing (terminal, an editor, any AI agent) -- .claude/hooks/gitleaks-guard.sh
-# only fires for Claude Code's own Bash tool calls. CI (.github/workflows/gitleaks.yml)
-# is still the only gate nothing can bypass, since core.hooksPath is local,
-# uncommitted git config -- a fresh clone has no hook until this is set.
+# Setup and tool versions: v2/README.md. CI remains authoritative.
 set -euo pipefail
-
-if command -v gitleaks >/dev/null 2>&1; then
-    if ! gitleaks protect --staged --redact -v; then
-        echo "BLOCKED: gitleaks found secrets in staged changes. Fix or unstage, then retry." >&2
-        exit 1
-    fi
-else
-    echo "gitleaks not installed locally; skipping (CI will still catch it)" >&2
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "Missing required python3. Follow the development setup in v2/README.md." >&2
+    exit 1
 fi
-
-project=v2
-mapfile -d '' -t files < <(git diff --cached --name-only --diff-filter=ACM -z -- "$project/*.py" "$project/**/*.py")
-files=("${files[@]#"$project/"}")
-[ "${#files[@]}" -eq 0 ] && exit 0
-
-    if ! (cd "$project" && uv run ruff check "${files[@]}" && uv run ruff format --check "${files[@]}"); then
-        echo "Lint failed. Run 'uv run ruff format' and 'uv run ruff check --fix' in $project, then re-stage." >&2
-        exit 1
-    fi
-
-    # pyright/pytest run whole-project because cross-file errors may not appear
-    # when checks are scoped to the staged files.
-    if ! (cd "$project" && uv run pyright); then
-        echo "Type check failed in $project." >&2
-        exit 1
-    fi
-
-    if ! (cd "$project" && uv run pytest); then
-        echo "Tests failed in $project." >&2
-        exit 1
-    fi
+repository=$(git rev-parse --show-toplevel)
+exec python3 "$repository/v2/scripts/check_repository.py" --staged
