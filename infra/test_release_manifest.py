@@ -86,6 +86,31 @@ class ReleaseManifestTests(unittest.TestCase):
         subprocess.run(["git", "-C", self.root, "add", relative], check=True)
         return path
 
+    def test_billing_inventory_activates_only_with_the_feature_and_is_complete(self):
+        with mock.patch.object(release_manifest, "EXACT_INPUTS", {"input.txt"}):
+            helper = "v2/scripts/cost_dashboard_release.py"
+            self.track(helper)
+            self.assertEqual(release_manifest._tracked_inputs(self.root), ["input.txt"])
+            self.track(release_manifest.COST_MARKER)
+            with self.assertRaisesRegex(release_manifest.Invalid, "^inventory_incomplete$"):
+                release_manifest._tracked_inputs(self.root)
+            for name in release_manifest.COST_INPUTS - {helper}:
+                self.track(name)
+            self.assertEqual(
+                release_manifest._tracked_inputs(self.root),
+                sorted({"input.txt", release_manifest.COST_MARKER, *release_manifest.COST_INPUTS}),
+            )
+            tracked = {"input.txt", release_manifest.COST_MARKER, *release_manifest.COST_INPUTS}
+            for missing in release_manifest.COST_INPUTS:
+                with (
+                    self.subTest(missing=missing),
+                    mock.patch.object(release_manifest.subprocess, "run", return_value=mock.Mock(
+                        stdout=b"\0".join(name.encode() for name in sorted(tracked - {missing}))
+                    )),
+                    self.assertRaisesRegex(release_manifest.Invalid, "^inventory_incomplete$"),
+                ):
+                    release_manifest._tracked_inputs(self.root)
+
     def bundle_context(self):
         values = {
             "EXACT_INPUTS": {"input.txt"},

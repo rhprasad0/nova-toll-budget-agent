@@ -1435,6 +1435,9 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         for address, spec in CONTRACT.items():
             if spec.operation_class.startswith("agentcore-trace-"):
                 continue
+            if spec.operation_class in {"cost-publication", "cost-routing"}:
+                # Finite billing gates have dedicated adversarial fixtures.
+                continue
             action = spec.actions[0]
             timed = address.startswith('aws_scheduler_schedule.timed_checks["') or address in {
                 "aws_lambda_function.timed_checks",
