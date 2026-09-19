@@ -5,14 +5,18 @@ import logging
 import os
 import subprocess
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from typing import cast
 
 import pytest
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.trace import StatusCode
 from pytest import LogCaptureFixture
+from strands import Agent, ModelRetryStrategy
+from strands.models import Model
 from strands.types.agent import Limits
+from strands.types.exceptions import ModelThrottledException
+from strands.types.streaming import StreamEvent
 
 from agent.agentcore_entrypoint import (
     BLOCKED_MESSAGE,
@@ -122,11 +126,203 @@ class FakeAgent:
         }
 
 
+class StreamingAgent(FakeAgent):
+    def __init__(
+        self, events: list[dict[str, object]], answer: str = "Final answer."
+    ) -> None:
+        super().__init__(answer)
+        self.events = events
+        self.completed = False
+        self.closed = False
+
+    async def stream_async(
+        self, prompt: str, *, limits: Limits | None = None
+    ) -> AsyncIterator[dict[str, object]]:
+        self.prompts.append(prompt)
+        self.limits.append(limits)
+        try:
+            for event in self.events:
+                yield event
+            self.completed = True
+            yield {"result": self.answer}
+        finally:
+            self.closed = True
+
+
 def collect(runtime: TollChatRuntime, payload: object) -> list[dict[str, object]]:
     async def run() -> list[dict[str, object]]:
         return [event async for event in runtime.stream(payload)]
 
     return asyncio.run(run())
+
+
+def test_checked_text_arrives_before_generation_completes() -> None:
+    agent = StreamingAgent([{"data": "The toll is $4.25. More to come"}])
+    guardrail = FakeGuardrail()
+    runtime = TollChatRuntime(lambda: agent, guardrail)
+
+    async def run() -> None:
+        stream = runtime.stream({"prompt": "price it"})
+        assert await anext(stream) == {"type": "text", "text": "The toll is $4.25."}
+        assert not agent.completed
+        assert guardrail.calls[-1] == ("OUTPUT", "The toll is $4.25.", None)
+        remaining = [event async for event in stream]
+        assert remaining[-1]["text"] == f"Final answer.\n\n{DISCLAIMER}"
+
+    asyncio.run(run())
+    assert agent.closed
+
+
+@pytest.mark.parametrize("abandoned", ["Abandoned attempt. ", "Unfinished"])
+def test_sdk_retry_replaces_abandoned_attempt_text(abandoned: str) -> None:
+    class RetryingModel(Model):
+        calls = 0
+
+        def update_config(self, **model_config: object) -> None:
+            pass
+
+        def get_config(self) -> dict[str, object]:
+            return {}
+
+        async def structured_output(
+            self, *args: object, **kwargs: object
+        ) -> AsyncGenerator[dict[str, object]]:
+            raise NotImplementedError
+            yield {}  # pragma: no cover
+
+        async def stream(
+            self, *args: object, **kwargs: object
+        ) -> AsyncIterator[StreamEvent]:
+            self.calls += 1
+            yield {"messageStart": {"role": "assistant"}}
+            yield {"contentBlockStart": {"start": {}}}
+            text = abandoned if self.calls == 1 else "Correct answer."
+            yield {"contentBlockDelta": {"delta": {"text": text}}}
+            if self.calls == 1:
+                raise ModelThrottledException("rate limit")
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "end_turn"}}
+
+    model = RetryingModel()
+    agent = Agent(
+        model=model,
+        callback_handler=None,
+        retry_strategy=ModelRetryStrategy(initial_delay=0),
+    )
+    guardrail = FakeGuardrail()
+    events = collect(TollChatRuntime(lambda: agent, guardrail), {"prompt": "price it"})
+    assert model.calls == 2
+    snapshots = [event["text"] for event in events if event["type"] == "text"]
+    assert snapshots == ([abandoned.strip()] if abandoned.endswith(" ") else []) + [
+        "Correct answer."
+    ]
+    assert guardrail.calls[-2:] == [
+        ("OUTPUT", "Correct answer.", None),
+        ("OUTPUT", "Correct answer.", None),
+    ]
+    assert events[-1]["text"] == f"Correct answer.\n\n{DISCLAIMER}"
+
+
+@pytest.mark.parametrize(
+    ("text", "snapshots"),
+    [
+        ("Short answer", ["Short answer"]),
+        ("Price: $4.25. More", ["Price: $4.25.", "Price: $4.25. More"]),
+        (
+            "First. " + "word " * 40 + "Done. Tail",
+            [
+                "First.",
+                "First. " + "word " * 40 + "Done.",
+                "First. " + "word " * 40 + "Done. Tail",
+            ],
+        ),
+        ("word " * 90, ["word " * 81, "word " * 90]),
+        ("x" * 450 + " end", ["x" * 450 + " ", "x" * 450 + " end"]),
+    ],
+)
+def test_stream_batches_at_complete_boundaries(text: str, snapshots: list[str]) -> None:
+    deltas: list[dict[str, object]] = [{"data": char} for char in text]
+    deltas.append({"message": {"role": "assistant", "content": [{"text": text}]}})
+    agent = StreamingAgent(deltas, text)
+    guardrail = FakeGuardrail()
+    events = collect(TollChatRuntime(lambda: agent, guardrail), {"prompt": "price it"})
+    assert [event["text"] for event in events if event["type"] == "text"] == snapshots
+    assert [call[1] for call in guardrail.calls if call[0] == "OUTPUT"] == [
+        *snapshots,
+        text.strip(),
+    ]
+    assert events[-1]["text"] == f"{text.rstrip()}\n\n{DISCLAIMER}"
+
+
+def test_stream_keeps_assistant_messages_separate_and_excludes_private_events() -> None:
+    agent = StreamingAgent(
+        [
+            {"reasoningText": "private reasoning"},
+            {"current_tool_use": {"input": "private arguments"}},
+            {"data": "Checking now."},
+            {"message": {"role": "assistant", "content": [{"text": "Checking now."}]}},
+            {"message": {"role": "user", "content": [{"text": "private tool result"}]}},
+            {"data": "The toll is $4.25."},
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": [{"text": "The toll is $4.25."}],
+                }
+            },
+        ]
+    )
+    events = collect(
+        TollChatRuntime(lambda: agent, FakeGuardrail()), {"prompt": "price it"}
+    )
+    assert [event["text"] for event in events if event["type"] == "text"] == [
+        "Checking now.",
+        "The toll is $4.25.",
+    ]
+    assert "private" not in str(events)
+    assert events[-1]["text"] == f"Final answer.\n\n{DISCLAIMER}"
+
+
+@pytest.mark.parametrize("failure", ["block", "exception", "invalid_response"])
+def test_stream_stops_and_closes_before_releasing_rejected_text(failure: str) -> None:
+    credential = "sk-" + "x" * 450
+    agent = StreamingAgent(
+        [
+            {"data": "Safe sentence. "},
+            {"data": credential[:200]},
+            {"data": credential[200:]},
+            {"data": " more"},
+        ]
+    )
+
+    class Guardrail(FakeGuardrail):
+        def apply_guardrail(self, **request: object) -> dict[str, object]:
+            result = super().apply_guardrail(**request)
+            if credential in self.calls[-1][1]:
+                if failure == "exception":
+                    raise RuntimeError("private provider failure")
+                return {"action": "GUARDRAIL_INTERVENED"} if failure == "block" else {}
+            return result
+
+    guardrail = Guardrail()
+    events = collect(TollChatRuntime(lambda: agent, guardrail), {"prompt": "price it"})
+    assert events[0] == {"type": "text", "text": "Safe sentence."}
+    assert len(events) == 2
+    assert events[-1]["type"] == ("answer" if failure == "block" else "error")
+    assert credential in guardrail.calls[-1][1]
+    assert "sk-" not in str(events)
+    assert agent.closed and not agent.completed
+
+
+def test_final_guardrail_can_block_after_approved_text() -> None:
+    agent = StreamingAgent([{"data": "Safe sentence. "}], "Blocked final answer")
+    events = collect(
+        TollChatRuntime(lambda: agent, FakeGuardrail("Blocked final answer")),
+        {"prompt": "price it"},
+    )
+    assert events == [
+        {"type": "text", "text": "Safe sentence."},
+        {"type": "answer", "text": BLOCKED_MESSAGE, "blocked": True},
+    ]
 
 
 def test_runtime_validates_streams_and_applies_both_guardrails() -> None:

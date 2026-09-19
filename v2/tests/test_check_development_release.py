@@ -374,9 +374,30 @@ def test_answer_failures_have_fixed_reasons(
 
 
 def _canary_body(answer: str, evidence: dict[str, Any] | None = None) -> bytes:
-    values = [] if evidence is None else [evidence]
+    values: list[dict[str, Any]] = [{"type": "text", "text": "Checking the toll."}]
+    if evidence is not None:
+        values.append(evidence)
     values.append({"type": "answer", "text": answer, "blocked": False})
     return b"\n".join(json.dumps(value).encode() for value in values)
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        {"type": "text", "text": ""},
+        {"type": "text", "text": 42},
+        {"type": "text", "text": "Checked", "reasoning": "private"},
+    ],
+)
+def test_canary_rejects_invalid_text_events(
+    monkeypatch: pytest.MonkeyPatch, event: dict[str, object]
+) -> None:
+    def request(*_args: object, **_kwargs: object) -> tuple[int, str, bytes]:
+        return 200, "application/x-ndjson", json.dumps(event).encode()
+
+    monkeypatch.setattr(check, "request", request)
+    with pytest.raises(check.CheckFailure, match="canary_event"):
+        check.canary({"version": "8", "alias_version": "12"})
 
 
 def test_canary_requires_all_observed_evidence_and_grounded_money(
