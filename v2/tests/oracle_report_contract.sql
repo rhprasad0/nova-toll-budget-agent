@@ -206,6 +206,8 @@ CREATE TEMP TABLE report_routes_run2 AS
 SELECT * FROM oracle.get_agent_report_routes();
 RESET ROLE;
 
+-- Keep the independent raw-candidate oracle, but evaluate each resolved path
+-- and its pricing legs once before applying the eligibility filters.
 CREATE TEMP TABLE raw_report_candidates AS
 WITH report_points AS (
     SELECT
@@ -220,42 +222,40 @@ WITH report_points AS (
     ) AS logical(facility, networks)
     JOIN oracle.toll_route_point AS point
       ON point.network_id = ANY(logical.networks)
+), resolved_candidates AS MATERIALIZED (
+    SELECT
+        origin.facility,
+        origin.point_id AS origin_point_id,
+        destination.point_id AS destination_point_id,
+        origin.place_name AS origin_area,
+        destination.place_name AS destination_area,
+        CASE origin.direction
+            WHEN 'NB' THEN 'northbound'
+            WHEN 'SB' THEN 'southbound'
+            WHEN 'EB' THEN 'eastbound'
+            WHEN 'WB' THEN 'westbound'
+        END AS direction,
+        resolved.point_ids,
+        resolved.connection_ids
+    FROM report_points AS origin
+    JOIN report_points AS destination
+      ON destination.facility = origin.facility
+     AND destination.point_type = 'exit'
+    CROSS JOIN LATERAL oracle.resolve_toll_route_internal(
+        origin.point_id, destination.point_id, false
+    ) AS resolved
+    WHERE origin.point_type = 'entry'
+      AND resolved.status = 'valid'
+), priced_candidates AS MATERIALIZED (
+    SELECT resolved_candidates.*,
+           oracle.route_pricing_legs(point_ids, connection_ids) AS pricing_legs
+    FROM resolved_candidates
 )
-SELECT
-    origin.facility,
-    origin.point_id AS origin_point_id,
-    destination.point_id AS destination_point_id,
-    origin.place_name AS origin_area,
-    destination.place_name AS destination_area,
-    CASE origin.direction
-        WHEN 'NB' THEN 'northbound'
-        WHEN 'SB' THEN 'southbound'
-        WHEN 'EB' THEN 'eastbound'
-        WHEN 'WB' THEN 'westbound'
-    END AS direction,
-    resolved.point_ids,
-    resolved.connection_ids,
-    oracle.route_pricing_legs(
-        resolved.point_ids, resolved.connection_ids
-    ) AS pricing_legs
-FROM report_points AS origin
-JOIN report_points AS destination
-  ON destination.facility = origin.facility
- AND destination.point_type = 'exit'
-CROSS JOIN LATERAL oracle.resolve_toll_route_internal(
-    origin.point_id, destination.point_id, false
-) AS resolved
-WHERE origin.point_type = 'entry'
-  AND resolved.status = 'valid'
-  AND jsonb_array_length(oracle.route_pricing_legs(
-      resolved.point_ids, resolved.connection_ids
-  )) > 0
+SELECT * FROM priced_candidates
+WHERE jsonb_array_length(pricing_legs) > 0
   AND NOT EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements(oracle.route_pricing_legs(
-          resolved.point_ids, resolved.connection_ids
-      )) AS leg(value)
-      WHERE leg.value->>'facility' <> origin.facility
+      SELECT 1 FROM jsonb_array_elements(pricing_legs) AS leg(value)
+      WHERE leg.value->>'facility' <> priced_candidates.facility
   );
 
 CREATE TEMP TABLE raw_report_signatures AS
