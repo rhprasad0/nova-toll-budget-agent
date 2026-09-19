@@ -344,6 +344,14 @@ def validate_plan(
         plan.get("errored") is False and plan.get("complete") is True,
         "incomplete_or_drift",
     )
+    environment = next(
+        (
+            env
+            for env, account in cost_release.ACCOUNTS.items()
+            if f":{account}:" in previous["slots"][previous["active"]]["proxy_arn"]
+        ),
+        "",
+    )
     for item in plan.get("resource_drift", []):
         change = item["change"]
         require(
@@ -352,6 +360,7 @@ def validate_plan(
                 "aws_cloudfront_distribution.site",
                 "aws_cloudfront_distribution.staging",
             }
+            | cost_release.RESOURCES
             and item.get("mode") == "managed"
             and item.get("provider_name") == "registry.terraform.io/hashicorp/aws"
             and not any(key in item for key in ("previous_address", "deposed"))
@@ -360,6 +369,12 @@ def validate_plan(
             and not has_unknown(change.get("after_unknown", {})),
             "incomplete_or_drift",
         )
+        if item["address"] in cost_release.RESOURCES:
+            try:
+                cost_release.validate_drift(item, environment)
+            except (ValueError, KeyError, TypeError) as error:
+                raise Rejected("incomplete_or_drift") from error
+            continue
         before, after = (deepcopy(change[key]) for key in ("before", "after"))
         for side in (before, after):
             side["origin"] = normalized_origins(side["origin"])
@@ -527,15 +542,6 @@ def validate_plan(
         after: dict[str, Any] = change.get("after") or {}
         allow: set[str] = set()
         if phase == "prepare":
-            environment = next(
-                (
-                    env
-                    for env, account in cost_release.ACCOUNTS.items()
-                    if f":{account}:"
-                    in previous["slots"][previous["active"]]["proxy_arn"]
-                ),
-                "",
-            )
             if address in cost_release.RESOURCES:
                 try:
                     cost_release.validate(item, environment, plan)
