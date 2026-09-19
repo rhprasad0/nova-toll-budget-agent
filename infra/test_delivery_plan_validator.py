@@ -2494,6 +2494,13 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         for address, spec in CONTRACT.items():
             if spec.operation_class in {"cost-publication", "cost-routing"}:
                 expected_mutations[address] = (spec.operation_class, tuple(sorted(spec.fields)))
+        for address, field in {
+            "aws_lambda_function.costs": "source_code_hash",
+            "aws_iam_role_policy.costs": "policy",
+            "aws_s3_object.cost_dashboard": "content",
+            'aws_s3_object.cost_assets["costs.mjs"]': "source_hash",
+        }.items():
+            expected_mutations[address] = ("cost-publication", (field,))
         actual_mutations = {
             record["address"]: (
                 record["operation_class"],

@@ -340,7 +340,7 @@ locals {{
                 "source_hash": base64.b64encode(b"a" * 32).decode()
             },
         }
-        updates = []
+        updates: list[dict[str, Any]] = []
         for item in plan["resource_changes"]:
             if item["address"] not in old_values:
                 continue
