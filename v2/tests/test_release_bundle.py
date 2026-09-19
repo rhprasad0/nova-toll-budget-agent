@@ -434,7 +434,7 @@ def test_transport_valid_bundle_is_rejected_by_reviewed_payload_binding(
     with pytest.raises(
         release_manifest.Invalid, match=r"^bundle_payload_digest_mismatch$"
     ):
-        release_manifest._verify_bundle_payload(
+        release_manifest.verify_bundle_payload(
             output, reviewed_inputs, reviewed_packages
         )
 

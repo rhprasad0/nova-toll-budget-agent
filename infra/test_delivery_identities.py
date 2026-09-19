@@ -1,22 +1,39 @@
 """Contract checks for production delivery identities and planning."""
 
 import base64
-from fnmatch import fnmatchcase
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import tempfile
+from fnmatch import fnmatchcase
+from pathlib import Path
 from textwrap import dedent
+from typing import NotRequired, TypedDict, cast
+
+
+class PolicyStatement(TypedDict):
+    Sid: NotRequired[str]
+    Effect: NotRequired[str]
+    Action: str | list[str]
+    Resource: str | list[str]
+    Condition: NotRequired[dict[str, dict[str, str | list[str]]]]
+    Principal: NotRequired[dict[str, str]]
+
+
+class PolicyDocument(TypedDict):
+    Version: str
+    Statement: list[PolicyStatement]
 
 
 ROOT = Path(__file__).resolve().parents[1]
 IAM = (ROOT / "infra" / "iam.tf").read_text()
 S3 = (ROOT / "infra" / "s3.tf").read_text()
 WORKFLOW = (ROOT / ".github" / "workflows" / "terraform.yml").read_text()
-PRODUCTION_PLAN = (ROOT / ".github" / "workflows" / "v2-production-plan.yml").read_text()
+PRODUCTION_PLAN = (
+    ROOT / ".github" / "workflows" / "v2-production-plan.yml"
+).read_text()
 
 EXPECTED_PRODUCTION_USAGE_PUBLISHER_READS = {
     "ReadRetiredUsagePublisherIam": {
@@ -107,26 +124,44 @@ def terraform_block(source: str, header: str, occurrence: int = 0) -> str:
     raise AssertionError(f"unclosed Terraform block {header!r}")
 
 
-def rendered_production_policies(iam: str = IAM) -> tuple[
-    dict[str, dict[str, object]],
-    list[dict[str, object]],
-    list[dict[str, object]],
-    dict[str, dict[str, object]],
+def rendered_production_policies(
+    iam: str = IAM,
+) -> tuple[
+    dict[str, PolicyDocument],
+    list[PolicyStatement],
+    list[PolicyStatement],
+    dict[str, PolicyDocument],
 ]:
     """Render the production policy locals in an isolated, backend-free root."""
     first_locals = terraform_block(iam, "locals", 0)
     production_locals = terraform_block(iam, "locals", 3)
-    telemetry_locals = terraform_block((ROOT / "infra/telemetry.tf").read_text(), "locals", 0)
-    policy_data = terraform_block(iam, 'data "aws_iam_policy_document" "development_delivery"')
+    telemetry_locals = terraform_block(
+        (ROOT / "infra/telemetry.tf").read_text(), "locals", 0
+    )
+    policy_data = terraform_block(
+        iam, 'data "aws_iam_policy_document" "development_delivery"'
+    )
     test_bucket_arn = "arn:aws:s3:::nova-toll-tfstate-920534282028"
-    test_kms_arn = "arn:aws:kms:us-east-1:920534282028:key/00000000-0000-0000-0000-000000000000"
-    test_alerts_kms_arn = "arn:aws:kms:us-east-1:920534282028:key/11111111-1111-1111-1111-111111111111"
-    policy_data = policy_data.replace("aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn").replace(
-        "aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn"
-    ).replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
-    production_locals = production_locals.replace("aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn").replace(
-        "aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn"
-    ).replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
+    test_kms_arn = (
+        "arn:aws:kms:us-east-1:920534282028:key/00000000-0000-0000-0000-000000000000"
+    )
+    test_alerts_kms_arn = (
+        "arn:aws:kms:us-east-1:920534282028:key/11111111-1111-1111-1111-111111111111"
+    )
+    policy_data = (
+        policy_data.replace(
+            "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
+        )
+        .replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
+        .replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
+    )
+    production_locals = (
+        production_locals.replace(
+            "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
+        )
+        .replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
+        .replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
+    )
     configuration = dedent(
         f"""
         terraform {{
@@ -180,7 +215,11 @@ def rendered_production_policies(iam: str = IAM) -> tuple[
     with tempfile.TemporaryDirectory(prefix="nova-toll-planner-render-") as directory:
         root = Path(directory)
         (root / "main.tf").write_text(configuration, encoding="utf-8")
-        environment = {key: value for key, value in os.environ.items() if not key.startswith("AWS_")}
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("AWS_")
+        }
         environment["TF_DATA_DIR"] = str(root / ".terraform-data")
         provider_mirror = ROOT / "infra" / ".terraform" / "providers"
         if provider_mirror.is_dir():
@@ -212,7 +251,14 @@ def rendered_production_policies(iam: str = IAM) -> tuple[
         assert init.returncode == 0, init.stdout + init.stderr
         plan_path = root / "planner.tfplan"
         plan = subprocess.run(
-            ["terraform", "plan", "-refresh=false", "-input=false", "-no-color", f"-out={plan_path}"],
+            [
+                "terraform",
+                "plan",
+                "-refresh=false",
+                "-input=false",
+                "-no-color",
+                f"-out={plan_path}",
+            ],
             cwd=root,
             env=environment,
             capture_output=True,
@@ -232,8 +278,12 @@ def rendered_production_policies(iam: str = IAM) -> tuple[
         outputs = json.loads(rendered.stdout)["planned_values"]["outputs"]
         documents = outputs["production_delivery_planner_policy_documents"]["value"]
         statements = outputs["production_delivery_planner_statements"]["value"]
-        application_statements = outputs["production_delivery_application_policy_statements"]["value"]
-        deploy_documents = outputs["production_delivery_deploy_policy_documents"]["value"]
+        application_statements = outputs[
+            "production_delivery_application_policy_statements"
+        ]["value"]
+        deploy_documents = outputs["production_delivery_deploy_policy_documents"][
+            "value"
+        ]
         return (
             {key: json.loads(value) for key, value in documents.items()},
             statements,
@@ -244,18 +294,29 @@ def rendered_production_policies(iam: str = IAM) -> tuple[
 
 def production_policies_digest(policies: tuple[object, ...]) -> str:
     # Keep the frozen baseline for existing partitions; telemetry is checked below.
-    policies = tuple({key: value for key, value in item.items() if key != "telemetry"} if isinstance(item, dict) else item for item in policies)
+    policies = tuple(
+        {
+            key: value
+            for key, value in cast(dict[str, object], item).items()
+            if key != "telemetry"
+        }
+        if isinstance(item, dict)
+        else item
+        for item in policies
+    )
     return hashlib.sha256(
         json.dumps(policies, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
 
 
-def rendered_production_migration_identity() -> tuple[dict[str, object], dict[str, object]]:
+def rendered_production_migration_identity() -> tuple[PolicyDocument, PolicyDocument]:
     """Render the fixed migration trust and permissions in an offline root."""
     assume = terraform_block(
         IAM, 'data "aws_iam_policy_document" "production_migrations_assume"'
     )
-    policy = terraform_block(IAM, 'data "aws_iam_policy_document" "production_migrations"')
+    policy = terraform_block(
+        IAM, 'data "aws_iam_policy_document" "production_migrations"'
+    )
     replacements = {
         'var.environment == "production" ? 1 : 0': "1",
         "aws_iam_openid_connect_provider.github.arn": "local.github_oidc_arn",
@@ -311,7 +372,9 @@ def rendered_production_migration_identity() -> tuple[dict[str, object], dict[st
         root = Path(directory)
         (root / "main.tf").write_text(configuration, encoding="utf-8")
         environment = {
-            key: value for key, value in os.environ.items() if not key.startswith("AWS_")
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("AWS_")
         }
         environment["TF_DATA_DIR"] = str(root / ".terraform-data")
         provider_mirror = ROOT / "infra" / ".terraform" / "providers"
@@ -472,7 +535,7 @@ def _check_production_planner() -> None:
         PRODUCTION_PLAN,
     )
     require(
-        '--terraform-root candidate/v2/infra',
+        "--terraform-root candidate/v2/infra",
         PRODUCTION_PLAN,
     )
     require('terraform -chdir=candidate/v2/infra show -json "$plan"', PRODUCTION_PLAN)
@@ -529,6 +592,7 @@ def _check_production_planner() -> None:
     ):
         require(field, PRODUCTION_PLAN)
 
+
 def _valid_deploy_metadata() -> dict[str, str]:
     local_sha256 = "0123456789abcdef" * 4
     return {
@@ -551,7 +615,7 @@ def _valid_deploy_metadata() -> dict[str, str]:
     }
 
 
-def _synthetic_session_policy(metadata: dict[str, str]) -> dict[str, object]:
+def _synthetic_session_policy(metadata: dict[str, str]) -> PolicyDocument:
     bucket_arn = f"arn:aws:s3:::{metadata['bucket']}"
     state_arn = f"{bucket_arn}/nova-toll/v2/terraform.tfstate"
     lock_arn = f"{bucket_arn}/nova-toll/v2/terraform.tfstate.tflock"
@@ -564,15 +628,35 @@ def _synthetic_session_policy(metadata: dict[str, str]) -> dict[str, object]:
                 "Effect": "Allow",
                 "Action": "s3:ListBucket",
                 "Resource": bucket_arn,
-                "Condition": {"StringEquals": {"s3:prefix": ["nova-toll/v2/terraform.tfstate", "nova-toll/v2/terraform.tfstate.tflock"]}},
+                "Condition": {
+                    "StringEquals": {
+                        "s3:prefix": [
+                            "nova-toll/v2/terraform.tfstate",
+                            "nova-toll/v2/terraform.tfstate.tflock",
+                        ]
+                    }
+                },
             },
-            {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"], "Resource": state_arn},
-            {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], "Resource": lock_arn},
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:PutObject"],
+                "Resource": state_arn,
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+                "Resource": lock_arn,
+            },
             {
                 "Effect": "Allow",
                 "Action": ["kms:Decrypt", "kms:GenerateDataKey"],
                 "Resource": kms_key_arn,
-                "Condition": {"StringEquals": {"kms:ViaService": "s3.us-east-1.amazonaws.com", "kms:EncryptionContext:aws:s3:arn": [state_arn, lock_arn]}},
+                "Condition": {
+                    "StringEquals": {
+                        "kms:ViaService": "s3.us-east-1.amazonaws.com",
+                        "kms:EncryptionContext:aws:s3:arn": [state_arn, lock_arn],
+                    }
+                },
             },
             {
                 "Effect": "Allow",
@@ -584,27 +668,48 @@ def _synthetic_session_policy(metadata: dict[str, str]) -> dict[str, object]:
                 "Effect": "Allow",
                 "Action": "kms:Decrypt",
                 "Resource": kms_key_arn,
-                "Condition": {"StringEquals": {"kms:ViaService": "s3.us-east-1.amazonaws.com", "kms:EncryptionContext:aws:s3:arn": plan_arn}},
+                "Condition": {
+                    "StringEquals": {
+                        "kms:ViaService": "s3.us-east-1.amazonaws.com",
+                        "kms:EncryptionContext:aws:s3:arn": plan_arn,
+                    }
+                },
             },
         ],
     }
 
 
 def _allows(
-    statements: list[dict[str, object]], action: str, resource: str, context: dict[str, str]
+    statements: list[PolicyStatement],
+    action: str,
+    resource: str,
+    context: dict[str, str],
 ) -> bool:
     for statement in statements:
-        actions = statement["Action"] if isinstance(statement["Action"], list) else [statement["Action"]]
-        resources = statement["Resource"] if isinstance(statement["Resource"], list) else [statement["Resource"]]
-        if action not in actions or not any(fnmatchcase(resource, pattern) for pattern in resources):
+        actions = (
+            statement["Action"]
+            if isinstance(statement["Action"], list)
+            else [statement["Action"]]
+        )
+        resources = (
+            statement["Resource"]
+            if isinstance(statement["Resource"], list)
+            else [statement["Resource"]]
+        )
+        if action not in actions or not any(
+            fnmatchcase(resource, pattern) for pattern in resources
+        ):
             continue
         for operator, entries in statement.get("Condition", {}).items():
             for key, expected in entries.items():
                 actual = context.get(key)
                 values = expected if isinstance(expected, list) else [expected]
                 matched = actual is not None and (
-                    operator == "StringEquals" and actual in values
-                    or operator == "StringLike" and any(fnmatchcase(actual, value) for value in values)
+                    (operator == "StringEquals" and actual in values)
+                    or (
+                        operator == "StringLike"
+                        and any(fnmatchcase(actual, value) for value in values)
+                    )
                 )
                 if not matched:
                     break
@@ -615,8 +720,11 @@ def _allows(
             return True
     return False
 
+
 def main() -> None:
-    production = IAM[IAM.index("# --- GitHub Actions production planner/deploy identities") :]
+    production = IAM[
+        IAM.index("# --- GitHub Actions production planner/deploy identities") :
+    ]
 
     assert IAM.count('resource "aws_iam_role" "production_planner"') == 1
     assert IAM.count('resource "aws_iam_role" "production_deploy"') == 1
@@ -630,7 +738,7 @@ def main() -> None:
     ):
         require(subject, production)
     assert production.count('actions = ["sts:AssumeRoleWithWebIdentity"]') == 3
-    assert 'sts:TagSession' not in production
+    assert "sts:TagSession" not in production
     assert 'test     = "StringLike"' not in production
 
     migration_assume = terraform_block(
@@ -645,20 +753,22 @@ def main() -> None:
     migration_attachment = terraform_block(
         IAM, 'resource "aws_iam_role_policy" "production_migrations"'
     )
-    require('name                 = "nova-toll-v2-production-migrations"', migration_role)
+    require(
+        'name                 = "nova-toll-v2-production-migrations"', migration_role
+    )
     require('name   = "nova-toll-v2-production-migrations"', migration_attachment)
     require('count = var.environment == "production" ? 1 : 0', migration_assume)
     require('count = var.environment == "production" ? 1 : 0', migration_policy)
     require(
-        'repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:production',
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:production",
         migration_assume,
     )
     require(
-        'token.actions.githubusercontent.com:ref',
+        "token.actions.githubusercontent.com:ref",
         migration_assume,
     )
     require(
-        'rhprasad0/nova-toll-budget-agent/.github/workflows/v2-production-migrations.yml@refs/heads/main',
+        "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-production-migrations.yml@refs/heads/main",
         migration_assume,
     )
     require('sid       = "DescribeFixedProductionRds"', migration_policy)
@@ -666,19 +776,21 @@ def main() -> None:
     require('sid       = "ConnectAsProductionSchemaMigrator"', migration_policy)
     require('actions   = ["rds-db:connect"]', migration_policy)
     require(
-        'dbuser:${aws_db_instance.main.resource_id}/schema_migrator_production',
+        "dbuser:${aws_db_instance.main.resource_id}/schema_migrator_production",
         migration_policy,
     )
-    assert "Resource = [\"*\"]" not in migration_policy
+    assert 'Resource = ["*"]' not in migration_policy
     assert "migration_path" not in migration_policy
-    migration_trust_json, migration_policy_json = rendered_production_migration_identity()
+    migration_trust_json, migration_policy_json = (
+        rendered_production_migration_identity()
+    )
     trust_statement = migration_trust_json["Statement"]
     assert len(trust_statement) == 1
     assert trust_statement[0]["Action"] == "sts:AssumeRoleWithWebIdentity"
-    assert trust_statement[0]["Principal"] == {
+    assert trust_statement[0].get("Principal") == {
         "Federated": "arn:aws:iam::920534282028:oidc-provider/token.actions.githubusercontent.com"
     }
-    assert trust_statement[0]["Condition"] == {
+    assert trust_statement[0].get("Condition") == {
         "StringEquals": {
             "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
             "token.actions.githubusercontent.com:ref": "refs/heads/main",
@@ -695,14 +807,17 @@ def main() -> None:
     policy_statements = migration_policy_json["Statement"]
     assert len(policy_statements) == 2
 
-    def as_tuple(value: object) -> tuple[object, ...]:
+    def as_tuple(value: str | list[str]) -> tuple[str, ...]:
         if isinstance(value, str):
             return (value,)
-        assert isinstance(value, list)
         return tuple(value)
 
     assert {
-        (statement["Sid"], as_tuple(statement["Action"]), as_tuple(statement["Resource"]))
+        (
+            statement.get("Sid"),
+            as_tuple(statement["Action"]),
+            as_tuple(statement["Resource"]),
+        )
         for statement in policy_statements
     } == {
         (
@@ -769,7 +884,7 @@ def main() -> None:
     assert development_delivery.count('sid       = "PassTimedChecksSchedulerRole"') == 1
     require('actions   = ["iam:PassRole"]', development_delivery)
     require(
-        'arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-timed-checks-scheduler-dev',
+        "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-timed-checks-scheduler-dev",
         development_delivery,
     )
     require('variable = "iam:PassedToService"', development_delivery)
@@ -777,13 +892,13 @@ def main() -> None:
     require('sid       = "UpdateReportPublisherInlinePolicy"', development_delivery)
     require('actions   = ["iam:PutRolePolicy"]', development_delivery)
     require(
-        'arn:aws:iam::${local.development_delivery_account_id}:role/toll-v2-report-publisher-dev',
+        "arn:aws:iam::${local.development_delivery_account_id}:role/toll-v2-report-publisher-dev",
         development_delivery,
     )
     require('sid       = "UpdateReportGenerationFreshnessAlarm"', development_delivery)
     require('actions   = ["cloudwatch:PutMetricAlarm"]', development_delivery)
     require(
-        'arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:toll-v2-report-generation-freshness-dev',
+        "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:toll-v2-report-generation-freshness-dev",
         development_delivery,
     )
     require(
@@ -795,11 +910,13 @@ def main() -> None:
         development_shards,
     )
 
-    planner = production[: production.index("  production_delivery_deploy_state_statements")]
+    planner = production[
+        : production.index("  production_delivery_deploy_state_statements")
+    ]
     application_slice = production[
-        production.index("  production_delivery_application_policy_statements") : production.index(
-            "  production_delivery_read_prefixes"
-        )
+        production.index(
+            "  production_delivery_application_policy_statements"
+        ) : production.index("  production_delivery_read_prefixes")
     ]
     require(
         "jsondecode(local.production_delivery_application_policy_json).Statement,\n      6,",
@@ -808,7 +925,10 @@ def main() -> None:
     )
     require('"ReadAlertsKeyForTimedChecks",', application_slice)
     assert '"s3:GetObjectVersion"' not in planner
-    assert '"s3:DeleteObject"]\n      Resource = ["${aws_s3_bucket.tfstate.arn}/plans/' not in planner
+    assert (
+        '"s3:DeleteObject"]\n      Resource = ["${aws_s3_bucket.tfstate.arn}/plans/'
+        not in planner
+    )
     require("ReadCloudflareProviderToken", planner)
     require("DecryptCloudflareProviderToken", planner)
 
@@ -820,10 +940,13 @@ def main() -> None:
         deploy_documents,
     ) = rendered_production_policies()
     assert production_policies_digest(
-        (planner_documents, planner_statements, application_statements, deploy_documents)
-    ) == (
-        "f905c5e50a33561531e97913f91dd3d7637c6b803fa28e14f9abe30451002a9b"
-    )
+        (
+            planner_documents,
+            planner_statements,
+            application_statements,
+            deploy_documents,
+        )
+    ) == ("f905c5e50a33561531e97913f91dd3d7637c6b803fa28e14f9abe30451002a9b")
     production_locals = terraform_block(IAM, "locals", 3)
     for sid in (
         "ReadAgentCoreTraceSubscription",
@@ -842,9 +965,9 @@ def main() -> None:
             production_locals.replace(f'    "{sid}",\n', ""),
             1,
         )
-        assert production_policies_digest(rendered_production_policies(leaked_trace_sid)) != (
-            "f905c5e50a33561531e97913f91dd3d7637c6b803fa28e14f9abe30451002a9b"
-        )
+        assert production_policies_digest(
+            rendered_production_policies(leaked_trace_sid)
+        ) != ("f905c5e50a33561531e97913f91dd3d7637c6b803fa28e14f9abe30451002a9b")
     assert len(planner_documents) == 10
     assert len(planner_documents) <= 10
     assert set(planner_documents) == {
@@ -875,10 +998,12 @@ def main() -> None:
         for key in planner_keys
         for statement in planner_documents[key]["Statement"]
     ]
-    assert {json.dumps(statement, sort_keys=True) for statement in split_statements} == {
-        json.dumps(statement, sort_keys=True) for statement in planner_statements
-    }
-    assert len({json.dumps(statement, sort_keys=True) for statement in split_statements}) == len(split_statements)
+    assert {
+        json.dumps(statement, sort_keys=True) for statement in split_statements
+    } == {json.dumps(statement, sort_keys=True) for statement in planner_statements}
+    assert len(
+        {json.dumps(statement, sort_keys=True) for statement in split_statements}
+    ) == len(split_statements)
     for key, policy in planner_documents.items():
         rendered = json.dumps(policy, separators=(",", ":"), ensure_ascii=False)
         size = len(rendered.encode("utf-8"))
@@ -890,7 +1015,9 @@ def main() -> None:
         for key in planner_discovery_keys
         for statement in planner_documents[key]["Statement"]
     ]
-    assert len({statement["Sid"] for statement in rendered_planner_discovery}) == len(rendered_planner_discovery)
+    assert len(
+        {statement.get("Sid") for statement in rendered_planner_discovery}
+    ) == len(rendered_planner_discovery)
     planner_json = json.dumps(planner_documents, sort_keys=True)
     assert "iam:PassRole" not in planner_json
     expected_dynamodb_default_key_read = {
@@ -913,41 +1040,66 @@ def main() -> None:
         assert [
             statement
             for statement in documents["data"]["Statement"]
-            if statement["Sid"] == "ReadProductionDynamoDBDefaultKey"
+            if statement.get("Sid") == "ReadProductionDynamoDBDefaultKey"
         ] == [expected_dynamodb_default_key_read]
         # Cutover and recovery refresh the full application plan under the deploy role.
         assert [
             statement
             for statement in documents["data"]["Statement"]
-            if statement["Sid"] == "ReadProductionAlertsKeyForTimedChecks"
+            if statement.get("Sid") == "ReadProductionAlertsKeyForTimedChecks"
         ] == [expected_alerts_key_read]
     assert not any(
-        statement["Sid"] == "ReadAlertsKeyForTimedChecks"
+        statement.get("Sid") == "ReadAlertsKeyForTimedChecks"
         for statement in application_statements
     )
     for statement in split_statements:
         if "s3:GetObjectVersion" in statement.get("Action", []):
             assert all("/plans/" not in resource for resource in statement["Resource"])
-    assert set(deploy_documents) == {"state", "release", "compute", "observability", "storage", "data", "runtime", "schedules", "edge", "telemetry"}
+    assert set(deploy_documents) == {
+        "state",
+        "release",
+        "compute",
+        "observability",
+        "storage",
+        "data",
+        "runtime",
+        "schedules",
+        "edge",
+        "telemetry",
+    }
     assert len(deploy_documents) <= 10
     telemetry_reads = planner_documents["telemetry"]["Statement"]
-    assert all(statement["Sid"].startswith("Read") for statement in telemetry_reads)
+    assert all(
+        str(statement.get("Sid", "")).startswith("Read")
+        for statement in telemetry_reads
+    )
     assert not any(
-        statement["Sid"] == "ReadAgentCoreTraceArchive"
+        statement.get("Sid") == "ReadAgentCoreTraceArchive"
         for statement in telemetry_reads
     )
     telemetry_deploy = deploy_documents["telemetry"]["Statement"]
-    assert {s["Sid"] for s in telemetry_deploy} == {
-        "ReadTelemetryLogProtection", "ReadTelemetryAlarms", "ManageTelemetryLogProtection", "ManageTelemetryAlarms",
-        "ReadAgentCoreTraceSubscription", "ReadAgentCoreTraceRoles", "ReadAgentCoreTraceFirehose",
-        "ManageAgentCoreTraceSubscriptions", "ManageAgentCoreTraceFirehose", "ManageAgentCoreTraceRuntimePolicy", "PassAgentCoreTraceLogsRole",
-        "PassAgentCoreTraceFirehoseRole", "ManageAgentCoreTraceRetention", "ManageAgentCoreTraceCatalog", "ManageAgentCoreTraceNamedQuery",
+    assert {s.get("Sid") for s in telemetry_deploy} == {
+        "ReadTelemetryLogProtection",
+        "ReadTelemetryAlarms",
+        "ManageTelemetryLogProtection",
+        "ManageTelemetryAlarms",
+        "ReadAgentCoreTraceSubscription",
+        "ReadAgentCoreTraceRoles",
+        "ReadAgentCoreTraceFirehose",
+        "ManageAgentCoreTraceSubscriptions",
+        "ManageAgentCoreTraceFirehose",
+        "ManageAgentCoreTraceRuntimePolicy",
+        "PassAgentCoreTraceLogsRole",
+        "PassAgentCoreTraceFirehoseRole",
+        "ManageAgentCoreTraceRetention",
+        "ManageAgentCoreTraceCatalog",
+        "ManageAgentCoreTraceNamedQuery",
         "ReadAgentCoreTraceArchive",
     }
     archive_read = next(
         statement
         for statement in telemetry_deploy
-        if statement["Sid"] == "ReadAgentCoreTraceArchive"
+        if statement.get("Sid") == "ReadAgentCoreTraceArchive"
     )
     assert archive_read["Action"] == ["s3:GetObject"]
     assert archive_read["Resource"] == [
@@ -955,7 +1107,7 @@ def main() -> None:
     ]
     assert "logs:Unmask" not in json.dumps(telemetry_deploy)
     schedule_statements = deploy_documents["schedules"]["Statement"]
-    assert [statement["Sid"] for statement in schedule_statements] == [
+    assert [statement.get("Sid") for statement in schedule_statements] == [
         "ManageApplicationSchedules",
         "PassTimedChecksSchedulerRole",
     ]
@@ -965,15 +1117,23 @@ def main() -> None:
         "arn:aws:iam::920534282028:role/nova-toll-v2-timed-checks-scheduler",
         ["arn:aws:iam::920534282028:role/nova-toll-v2-timed-checks-scheduler"],
     )
-    assert passrole["Condition"] == {
+    assert passrole.get("Condition") == {
         "StringEquals": {"iam:PassedToService": "scheduler.amazonaws.com"}
     }
-    deploy_application_keys = ("compute", "observability", "storage", "data", "runtime", "schedules", "edge")
+    deploy_application_keys = (
+        "compute",
+        "observability",
+        "storage",
+        "data",
+        "runtime",
+        "schedules",
+        "edge",
+    )
     rendered_deploy_application = [
         statement
         for key in deploy_application_keys
         for statement in deploy_documents[key]["Statement"]
-        if statement["Sid"]
+        if statement.get("Sid")
         not in {
             "ReadProductionAgentCoreDefaultEndpoint",
             "PassProductionAgentCoreRuntimeRole",
@@ -982,7 +1142,9 @@ def main() -> None:
         }
     ]
     assert rendered_deploy_application == application_statements
-    assert len({statement["Sid"] for statement in rendered_deploy_application}) == len(rendered_deploy_application)
+    assert len(
+        {statement.get("Sid") for statement in rendered_deploy_application}
+    ) == len(rendered_deploy_application)
     for key, policy in deploy_documents.items():
         rendered = json.dumps(policy, separators=(",", ":"), ensure_ascii=False)
         size = len(rendered.encode("utf-8"))
@@ -999,8 +1161,8 @@ def main() -> None:
     }
     for statements in (rendered_planner_discovery, application_statements):
         actual_reads = {
-            statement["Sid"]: {
-                "Effect": statement["Effect"],
+            statement.get("Sid"): {
+                "Effect": statement.get("Effect"),
                 "Action": sorted(statement["Action"]),
                 "Resource": sorted(
                     statement["Resource"]
@@ -1009,17 +1171,15 @@ def main() -> None:
                 ),
             }
             for statement in statements
-            if statement["Sid"] in EXPECTED_PRODUCTION_USAGE_PUBLISHER_READS
+            if statement.get("Sid") in EXPECTED_PRODUCTION_USAGE_PUBLISHER_READS
         }
         assert all(
             set(statement) == {"Action", "Effect", "Resource", "Sid"}
             for statement in statements
-            if statement["Sid"] in EXPECTED_PRODUCTION_USAGE_PUBLISHER_READS
+            if statement.get("Sid") in EXPECTED_PRODUCTION_USAGE_PUBLISHER_READS
         )
         assert actual_reads == expected_reads
-    effective_policy_json = json.dumps(
-        planner_documents, sort_keys=True
-    )
+    effective_policy_json = json.dumps(planner_documents, sort_keys=True)
     effective_policy_json += production_deploy_json
     assert "903859731897" not in effective_policy_json
     assert "tollchat-v2-usage-publisher-dev" not in effective_policy_json
@@ -1075,75 +1235,173 @@ def main() -> None:
                 assert not retired_actions.intersection(statement.get("Action", []))
     state_statements = deploy_documents["state"]["Statement"]
     release_statements = deploy_documents["release"]["Statement"]
-    assert [statement["Sid"] for statement in state_statements] == ["ListProductionApplicationState", "ManageProductionApplicationState", "ManageProductionApplicationLock", "DecryptProductionApplicationStateAndLock", "GenerateProductionApplicationStateDataKeys", "ReadCloudflareProviderTokenForApply", "DecryptCloudflareProviderTokenForApply"]
-    assert [statement["Sid"] for statement in release_statements] == ["ReadVersionedReleasePlan", "DecryptVersionedReleasePlan"]
+    assert [statement.get("Sid") for statement in state_statements] == [
+        "ListProductionApplicationState",
+        "ManageProductionApplicationState",
+        "ManageProductionApplicationLock",
+        "DecryptProductionApplicationStateAndLock",
+        "GenerateProductionApplicationStateDataKeys",
+        "ReadCloudflareProviderTokenForApply",
+        "DecryptCloudflareProviderTokenForApply",
+    ]
+    assert [statement.get("Sid") for statement in release_statements] == [
+        "ReadVersionedReleasePlan",
+        "DecryptVersionedReleasePlan",
+    ]
     assert "/plans/" not in json.dumps(state_statements)
-    assert state_statements[1]["Action"] == ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]
-    assert [statement["Action"] for statement in release_statements] == [["s3:GetObjectVersion"], ["kms:Decrypt"]]
+    assert state_statements[1]["Action"] == [
+        "s3:GetObject",
+        "s3:GetObjectVersion",
+        "s3:PutObject",
+    ]
+    assert [statement["Action"] for statement in release_statements] == [
+        ["s3:GetObjectVersion"],
+        ["kms:Decrypt"],
+    ]
     assert all("plans/*" in json.dumps(statement) for statement in release_statements)
 
     metadata = _valid_deploy_metadata()
     inline_plan = _synthetic_session_policy(metadata)["Statement"][4:]
-    release_kms = dict(release_statements[1], Resource=[metadata["kms_key_arn"]])
-    role_union = state_statements + [release_statements[0], release_kms]
+    release_kms: PolicyStatement = {
+        **release_statements[1],
+        "Resource": [metadata["kms_key_arn"]],
+    }
+    role_union: list[PolicyStatement] = [
+        *state_statements,
+        release_statements[0],
+        release_kms,
+    ]
     session_union = state_statements + inline_plan
     bucket = f"arn:aws:s3:::{metadata['bucket']}"
     state = f"{bucket}/nova-toll/v2/terraform.tfstate"
     lock = f"{state}.tflock"
     plan = f"{bucket}/{metadata['key']}"
-    plan_kms = {"kms:ViaService": "s3.us-east-1.amazonaws.com", "kms:EncryptionContext:aws:s3:arn": plan}
+    plan_kms = {
+        "kms:ViaService": "s3.us-east-1.amazonaws.com",
+        "kms:EncryptionContext:aws:s3:arn": plan,
+    }
 
     def effective(action: str, resource: str, context: dict[str, str]) -> bool:
-        return _allows(role_union, action, resource, context) and _allows(session_union, action, resource, context)
+        return _allows(role_union, action, resource, context) and _allows(
+            session_union, action, resource, context
+        )
 
-    assert _allows(release_statements, "s3:GetObjectVersion", f"{bucket}/plans/other", {})
-    assert not _allows(session_union, "s3:GetObjectVersion", f"{bucket}/plans/other", {})
-    cases = [
-        ("s3:ListBucket", bucket, {"s3:prefix": "nova-toll/v2/terraform.tfstate"}, True),
+    assert _allows(
+        release_statements, "s3:GetObjectVersion", f"{bucket}/plans/other", {}
+    )
+    assert not _allows(
+        session_union, "s3:GetObjectVersion", f"{bucket}/plans/other", {}
+    )
+    cases: list[tuple[str, str, dict[str, str], bool]] = [
+        (
+            "s3:ListBucket",
+            bucket,
+            {"s3:prefix": "nova-toll/v2/terraform.tfstate"},
+            True,
+        ),
         ("s3:GetObject", state, {}, True),
         ("s3:GetObjectVersion", state, {}, True),
         ("s3:PutObject", state, {}, True),
         ("s3:GetObject", lock, {}, True),
         ("s3:PutObject", lock, {}, True),
         ("s3:DeleteObject", lock, {}, True),
-        ("kms:Decrypt", state_statements[3]["Resource"][0], {"kms:ViaService": "s3.us-east-1.amazonaws.com", "kms:EncryptionContext:aws:s3:arn": state}, True),
-        ("kms:GenerateDataKey", state_statements[3]["Resource"][0], {"kms:ViaService": "s3.us-east-1.amazonaws.com", "kms:EncryptionContext:aws:s3:arn": lock}, True),
+        (
+            "kms:Decrypt",
+            state_statements[3]["Resource"][0],
+            {
+                "kms:ViaService": "s3.us-east-1.amazonaws.com",
+                "kms:EncryptionContext:aws:s3:arn": state,
+            },
+            True,
+        ),
+        (
+            "kms:GenerateDataKey",
+            state_statements[3]["Resource"][0],
+            {
+                "kms:ViaService": "s3.us-east-1.amazonaws.com",
+                "kms:EncryptionContext:aws:s3:arn": lock,
+            },
+            True,
+        ),
         ("s3:GetObjectVersion", plan, {"s3:VersionId": metadata["version_id"]}, True),
-        ("s3:GetObjectVersion", f"{bucket}/plans/other", {"s3:VersionId": metadata["version_id"]}, False),
+        (
+            "s3:GetObjectVersion",
+            f"{bucket}/plans/other",
+            {"s3:VersionId": metadata["version_id"]},
+            False,
+        ),
         ("s3:GetObjectVersion", plan, {"s3:VersionId": "wrong-version"}, False),
         ("s3:GetObjectVersion", plan, {}, False),
         ("kms:Decrypt", metadata["kms_key_arn"], plan_kms, True),
         ("kms:Decrypt", f"{metadata['kms_key_arn']}-alternate", plan_kms, False),
-        ("kms:Decrypt", metadata["kms_key_arn"], {**plan_kms, "kms:ViaService": "ec2.us-east-1.amazonaws.com"}, False),
-        ("kms:Decrypt", metadata["kms_key_arn"], {"kms:EncryptionContext:aws:s3:arn": plan}, False),
-        ("kms:Decrypt", metadata["kms_key_arn"], {"kms:ViaService": "s3.us-east-1.amazonaws.com"}, False),
-        ("kms:Decrypt", metadata["kms_key_arn"], {**plan_kms, "kms:EncryptionContext:aws:s3:arn": f"{bucket}/plans/other"}, False),
+        (
+            "kms:Decrypt",
+            metadata["kms_key_arn"],
+            {**plan_kms, "kms:ViaService": "ec2.us-east-1.amazonaws.com"},
+            False,
+        ),
+        (
+            "kms:Decrypt",
+            metadata["kms_key_arn"],
+            {"kms:EncryptionContext:aws:s3:arn": plan},
+            False,
+        ),
+        (
+            "kms:Decrypt",
+            metadata["kms_key_arn"],
+            {"kms:ViaService": "s3.us-east-1.amazonaws.com"},
+            False,
+        ),
+        (
+            "kms:Decrypt",
+            metadata["kms_key_arn"],
+            {**plan_kms, "kms:EncryptionContext:aws:s3:arn": f"{bucket}/plans/other"},
+            False,
+        ),
     ]
     for action, resource, context, expected in cases:
         assert effective(action, resource, context) is expected
 
-    deploy_document = production[production.index('data "aws_iam_policy_document" "production_deploy"') :]
+    deploy_document = production[
+        production.index('data "aws_iam_policy_document" "production_deploy"') :
+    ]
     require("PassProductionAgentCoreRuntimeRole", production)
     require("ReadVersionedReleasePlan", production)
     require(
         "Statement = concat(local.production_delivery_deploy_state_statements, local.production_delivery_deploy_release_statements,",
         deploy_document,
     )
-    deploy_resource = terraform_block(IAM, 'resource "aws_iam_policy" "production_deploy"')
-    deploy_attachment = terraform_block(IAM, 'resource "aws_iam_role_policy_attachment" "production_deploy"')
+    deploy_resource = terraform_block(
+        IAM, 'resource "aws_iam_policy" "production_deploy"'
+    )
+    deploy_attachment = terraform_block(
+        IAM, 'resource "aws_iam_role_policy_attachment" "production_deploy"'
+    )
     require("local.production_delivery_deploy_policy_documents", deploy_resource)
     require("local.production_delivery_deploy_policy_documents", deploy_attachment)
-    assert 'Action   = ["s3:GetObject"]\n      Resource = ["${aws_s3_bucket.tfstate.arn}/plans/' not in deploy_document
+    assert (
+        'Action   = ["s3:GetObject"]\n      Resource = ["${aws_s3_bucket.tfstate.arn}/plans/'
+        not in deploy_document
+    )
     planner_resource = terraform_block(
         IAM, 'resource "aws_iam_policy" "production_planner"'
     )
-    assert 'for_each = var.environment == "production" ? local.production_delivery_planner_policy_documents : {}' in planner_resource
+    assert (
+        'for_each = var.environment == "production" ? local.production_delivery_planner_policy_documents : {}'
+        in planner_resource
+    )
     assert 'name     = "nova-toll-production-planner-${each.key}"' in planner_resource
     planner_attachment = terraform_block(
         IAM, 'resource "aws_iam_role_policy_attachment" "production_planner"'
     )
-    assert 'for_each   = var.environment == "production" ? local.production_delivery_planner_policy_documents : {}' in planner_attachment
-    assert 'policy_arn = aws_iam_policy.production_planner[each.key].arn' in planner_attachment
+    assert (
+        'for_each   = var.environment == "production" ? local.production_delivery_planner_policy_documents : {}'
+        in planner_attachment
+    )
+    assert (
+        "policy_arn = aws_iam_policy.production_planner[each.key].arn"
+        in planner_attachment
+    )
 
     require('id     = "expire-release-plans"', S3)
     require('prefix = "plans/"', S3)
@@ -1177,13 +1435,22 @@ if __name__ == "__main__":
     main()
 
 
-def test_production_release_planner_can_verify_encrypted_immutable_retries():
+def test_production_release_planner_can_verify_encrypted_immutable_retries() -> None:
     source = (ROOT / "infra/blue-green.tf").read_text()
-    planner = terraform_block(source, 'resource "aws_iam_role_policy" "production_blue_green_plan"')
+    planner = terraform_block(
+        source, 'resource "aws_iam_role_policy" "production_blue_green_plan"'
+    )
     assert 'Action   = ["kms:Decrypt", "kms:GenerateDataKey"]' in planner
-    assert 'Resource = local.production_delivery_site_key_arn' in planner
-    assert '"kms:ViaService"                   = "s3.us-east-1.amazonaws.com"' in planner
-    assert '"kms:EncryptionContext:aws:s3:arn" = "arn:aws:s3:::tollchat-site-920534282028"' in planner
-    delivery = terraform_block(source, 'resource "aws_iam_role_policy" "production_blue_green"')
+    assert "Resource = local.production_delivery_site_key_arn" in planner
+    assert (
+        '"kms:ViaService"                   = "s3.us-east-1.amazonaws.com"' in planner
+    )
+    assert (
+        '"kms:EncryptionContext:aws:s3:arn" = "arn:aws:s3:::tollchat-site-920534282028"'
+        in planner
+    )
+    delivery = terraform_block(
+        source, 'resource "aws_iam_role_policy" "production_blue_green"'
+    )
     assert '"lambda:GetFunctionCodeSigningConfig"' in delivery
-    assert 'alarm:tollchat-v2-chat-proxy-${metric}-green' in delivery
+    assert "alarm:tollchat-v2-chat-proxy-${metric}-green" in delivery

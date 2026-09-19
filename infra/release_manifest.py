@@ -11,26 +11,28 @@ import stat
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
-from typing import Any, NoReturn
+from typing import NoReturn, cast
 
 try:
     from .delivery_plan_validator import (
+        JSON,
         LEGACY_PACKAGES,
         PRODUCTION_CONTROL_INPUTS,
         PRODUCTION_CONTROL_MARKER,
         TIMED_CHECKS_MARKER,
         TIMED_PACKAGES,
-        _packages_for_inputs,
+        packages_for_inputs,
         validate_plan,
     )
 except ImportError:  # Direct script execution.
     from delivery_plan_validator import (
+        JSON,
         LEGACY_PACKAGES,
         PRODUCTION_CONTROL_INPUTS,
         PRODUCTION_CONTROL_MARKER,
         TIMED_CHECKS_MARKER,
         TIMED_PACKAGES,
-        _packages_for_inputs,
+        packages_for_inputs,
         validate_plan,
     )
 
@@ -177,8 +179,8 @@ def _reject(reason: str) -> NoReturn:
     raise Invalid(reason)
 
 
-def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
+def _pairs(pairs: list[tuple[str, JSON]]) -> dict[str, JSON]:
+    result: dict[str, JSON] = {}
     for key, value in pairs:
         if key in result:
             _reject("duplicate_json_key")
@@ -186,7 +188,7 @@ def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _load(path: Path, reason: str) -> Any:
+def _load(path: Path, reason: str) -> JSON:
     try:
         mode = path.lstat().st_mode
         if not stat.S_ISREG(mode) or path.is_symlink():
@@ -199,7 +201,7 @@ def _load(path: Path, reason: str) -> Any:
         _reject(reason)
 
 
-def _canonical(value: Any) -> bytes:
+def _canonical(value: object) -> bytes:
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     ).encode()
@@ -235,7 +237,7 @@ def _valid_relative(path: str) -> bool:
     )
 
 
-def _selected(
+def selected(
     path: str,
     bundle_enabled: bool = False,
     timed_enabled: bool = False,
@@ -264,7 +266,7 @@ def _selected(
     )
 
 
-def _tracked_inputs(repo_root: Path, timed_enabled: bool = False) -> list[str]:
+def tracked_inputs(repo_root: Path, timed_enabled: bool = False) -> list[str]:
     try:
         output = subprocess.run(
             ["git", "-C", os.fspath(repo_root), "ls-files", "-z"],
@@ -275,7 +277,7 @@ def _tracked_inputs(repo_root: Path, timed_enabled: bool = False) -> list[str]:
     except (OSError, UnicodeError, subprocess.CalledProcessError):
         _reject("inventory_unavailable")
     tracked_set = set(tracked)
-    if timed_enabled and not TIMED_INPUTS <= tracked_set:
+    if timed_enabled and not tracked_set >= TIMED_INPUTS:
         _reject("inventory_incomplete")
     bundle_enabled = BUNDLE_MARKER in tracked
     production_controls_enabled = PRODUCTION_CONTROL_MARKER in tracked
@@ -286,7 +288,7 @@ def _tracked_inputs(repo_root: Path, timed_enabled: bool = False) -> list[str]:
     paths = sorted(
         path
         for path in tracked
-        if _selected(path, bundle_enabled, timed_enabled, production_controls_enabled)
+        if selected(path, bundle_enabled, timed_enabled, production_controls_enabled)
         or (COST_MARKER in tracked_set and path in COST_INPUTS)
     )
     if not paths or set(EXACT_INPUTS) - set(paths):
@@ -296,7 +298,7 @@ def _tracked_inputs(repo_root: Path, timed_enabled: bool = False) -> list[str]:
     return paths
 
 
-def _validate_manifest(value: Any) -> tuple[dict[str, str], dict[str, str]]:
+def _validate_manifest(value: JSON) -> tuple[dict[str, str], dict[str, str]]:
     if (
         not isinstance(value, dict)
         or set(value) != MANIFEST_KEYS
@@ -314,11 +316,11 @@ def _validate_manifest(value: Any) -> tuple[dict[str, str], dict[str, str]]:
         _reject("inventory_invalid")
     timed_enabled = TIMED_CHECKS_MARKER in inputs
     timed_inputs = set(inputs) & TIMED_INPUTS
-    if timed_enabled and not TIMED_INPUTS <= set(inputs):
+    if timed_enabled and not set(inputs) >= TIMED_INPUTS:
         _reject("inventory_incomplete")
     if not timed_enabled and timed_inputs:
         _reject("inventory_invalid")
-    expected_packages = _packages_for_inputs(inputs)
+    expected_packages = packages_for_inputs(inputs)
     if set(packages) != set(expected_packages) or list(packages) != list(
         expected_packages
     ):
@@ -343,20 +345,20 @@ def _validate_manifest(value: Any) -> tuple[dict[str, str], dict[str, str]]:
             "resource_changes": [],
         },
         value,
-        PROVIDER_IDENTITY,
+        dict[str, JSON](PROVIDER_IDENTITY),
     )
     if contract_result.get("status") != "accepted":
         _reject("mutation_contract_invalid")
-    return inputs, packages
+    return cast(dict[str, str], inputs), cast(dict[str, str], packages)
 
 
-def _verify_inputs(repo_root: Path, expected: dict[str, str]) -> None:
+def verify_inputs(repo_root: Path, expected: dict[str, str]) -> None:
     timed_enabled = TIMED_CHECKS_MARKER in expected
-    if timed_enabled and not TIMED_INPUTS <= set(expected):
+    if timed_enabled and not set(expected) >= TIMED_INPUTS:
         _reject("inventory_incomplete")
     if not timed_enabled and set(expected) & TIMED_INPUTS:
         _reject("inventory_invalid")
-    actual_paths = _tracked_inputs(repo_root, timed_enabled)
+    actual_paths = tracked_inputs(repo_root, timed_enabled)
     if actual_paths != list(expected):
         _reject("inventory_mismatch")
     for relative, digest in expected.items():
@@ -407,7 +409,7 @@ def _verify_packages(
             _reject("package_digest_mismatch")
 
 
-def _verify_bundle_payload(
+def verify_bundle_payload(
     bundle_root: Path,
     inputs: dict[str, str],
     packages: dict[str, str],
@@ -440,12 +442,12 @@ def _verify_bundle_payload(
 
 
 def _evidence(
-    manifest: Any,
+    manifest: JSON,
     inputs: dict[str, str],
     packages: dict[str, str],
     candidate_sha: str,
     run_id: str,
-) -> dict[str, Any]:
+) -> dict[str, JSON]:
     return {
         "schema_version": 1,
         "candidate_sha": candidate_sha,
@@ -456,19 +458,19 @@ def _evidence(
     }
 
 
-def verify(args: argparse.Namespace) -> dict[str, Any]:
+def verify(args: argparse.Namespace) -> dict[str, JSON]:
     if not SHA40.fullmatch(args.candidate_sha) or not args.run_id.isdigit():
         _reject("runtime_binding_invalid")
     manifest = _load(args.manifest, "manifest_unreadable")
     inputs, packages = _validate_manifest(manifest)
     _verify_packages(args.package_dir, args.checksums, packages)
     if args.bundle_root is not None:
-        _verify_bundle_payload(args.bundle_root, inputs, packages)
+        verify_bundle_payload(args.bundle_root, inputs, packages)
     expected_evidence = _evidence(
         manifest, inputs, packages, args.candidate_sha, args.run_id
     )
     if args.repo_root is not None:
-        _verify_inputs(args.repo_root, inputs)
+        verify_inputs(args.repo_root, inputs)
         if args.evidence is not None:
             _reject("evidence_mode_invalid")
         try:
@@ -515,7 +517,7 @@ def main(argv: list[str] | None = None) -> int:
         result = verify(args)
     except Invalid as error:
         result = {"status": "rejected", "reason_code": str(error)}
-    except Exception:  # noqa: BLE001 - untrusted bundle input fails closed.
+    except Exception:
         result = {"status": "rejected", "reason_code": "malformed_input"}
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0 if result["status"] == "accepted" else 1
