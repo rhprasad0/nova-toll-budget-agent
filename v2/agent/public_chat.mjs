@@ -1,6 +1,6 @@
-/** @typedef {{type: "tool", index: number, label: string, status: string} | {type: "answer", text: string, blocked: boolean} | {type: "error", code: string, message: string}} PublicEvent */
+/** @typedef {{type: "tool", index: number, label: string, status: string} | {type: "text", text: string} | {type: "answer", text: string, blocked: boolean} | {type: "error", code: string, message: string}} PublicEvent */
 /** @typedef {HTMLElement} PublicElement */
-/** @typedef {{activities: {append(...nodes: PublicElement[]): void}, answer: {innerHTML: string, textContent: string | null, className: string}, article?: {scrollIntoView(options?: ScrollIntoViewOptions): void}, items: Map<number, PublicElement>, createElement(tag: string): PublicElement}} TurnView */
+/** @typedef {{activities: {append(...nodes: PublicElement[]): void}, answer: {innerHTML: string, textContent: string | null, className: string}, article?: Pick<HTMLElement, "scrollIntoView" | "getBoundingClientRect">, items: Map<number, PublicElement>, createElement(tag: string): PublicElement}} TurnView */
 /** @typedef {Error & {code?: string}} ResponseError */
 import { renderAssistantMarkdown } from "./assets/chat-markdown.mjs";
 
@@ -39,6 +39,8 @@ const validEvent = (input) => {
   if (!event || typeof event !== "object") return false;
   if (event.type === "tool") return Number.isInteger(event.index)
     && event.index >= 0 && typeof event.label === "string" && TOOL_STATUSES.has(event.status);
+  if (event.type === "text") return Object.keys(event).length === 2
+    && typeof event.text === "string" && event.text.length > 0;
   if (event.type === "answer") return typeof event.text === "string"
     && typeof event.blocked === "boolean";
   return event.type === "error" && typeof event.code === "string"
@@ -74,6 +76,8 @@ export async function consumeNdjson(stream, onEvent) {
 
 /** @param {TurnView} view @param {PublicEvent} event */
 export const applyEvent = (view, event) => {
+  const article = view.article;
+  const follow = article && article.getBoundingClientRect().bottom <= window.innerHeight + 24;
   if (event.type === "tool") {
     let item = view.items.get(event.index);
     if (!item) {
@@ -85,9 +89,7 @@ export const applyEvent = (view, event) => {
     item.dataset.status = event.status;
     item.children[0].textContent = event.label;
     item.children[1].textContent = event.status[0].toUpperCase() + event.status.slice(1);
-    return;
-  }
-  if (event.type === "error") {
+  } else if (event.type === "error") {
     for (const item of view.items.values()) {
       if (item.dataset.status === "running") {
         item.dataset.status = "failed";
@@ -97,10 +99,13 @@ export const applyEvent = (view, event) => {
     view.answer.textContent = event.message;
     view.answer.className = "answer error";
   } else {
-    view.answer.className = event.blocked ? "answer error" : "answer";
+    view.answer.className = event.type === "answer" && event.blocked ? "answer error" : "answer";
     view.answer.innerHTML = renderAssistantMarkdown(event.text);
   }
-  view.article?.scrollIntoView({ block: "end" });
+  // Follow growth without pulling visible text upward or interrupting a reader.
+  if (follow && article.getBoundingClientRect().bottom > window.innerHeight) {
+    article.scrollIntoView({ block: "end", behavior: "instant" });
+  }
 };
 
 /** @param {(onEvent: (event: PublicEvent) => void) => Promise<void>} request @param {(event: PublicEvent) => void} onEvent @param {(busy: boolean) => void} setBusy @param {(error: ResponseError) => void} onSessionExpired */
@@ -130,8 +135,10 @@ const newTurn = (transcript) => {
   const answer = document.createElement("div");
   answer.className = "answer";
   answer.setAttribute("aria-live", "polite");
+  answer.textContent = "Working…";
   article.append(activities, answer);
   transcript.append(article);
+  article.scrollIntoView({ block: "nearest", behavior: "instant" });
   return {
     article,
     activities,
@@ -230,9 +237,9 @@ const start = () => {
     user.className = "user-turn";
     user.textContent = message;
     transcript.append(user);
+    starterWrap.hidden = true;
     const view = newTurn(transcript);
     input.value = "";
-    starterWrap.hidden = true;
     runRequest(async (onEvent) => {
       const response = await post("/api/chat", { message });
       if (!response.ok || !response.body) throw await responseError(response);
