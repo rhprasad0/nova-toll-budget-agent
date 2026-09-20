@@ -1,0 +1,24 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "greenway:1:entry:EB",
+    "destination_point_id": "greenway:28:exit:EB",
+    "pricing_profile": {
+      "vehicle_class": "three_axle",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "greenway:1:entry:EB",
+    "destination_point_id": "greenway:28:exit:EB",
+    "error": "pricing_unavailable",
+    "reason": "unsupported_pricing_profile"
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "current_price_domain.py:_PricingUnavailableResponse",
+    "note": "Authored offline from the current contract; not a captured production response."
+  }
+}

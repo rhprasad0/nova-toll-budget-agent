@@ -1,0 +1,7 @@
+{
+  "status": "pending",
+  "corpus_sha256": null,
+  "reviewer": null,
+  "evidence": null,
+  "notes": "Ryan approved version 1.0.0 (bba831745c99298fba9ff2739315797434dad291dab37eb7b95c7e6f570d92e5) in the case-review conversation: \"These look good. Anything else for us to address in #361?\" Version 1.0.1 corrections to cases 20 and 24 and Markdown currency parsing await review. No live model runs or judge calibration have occurred."
+}

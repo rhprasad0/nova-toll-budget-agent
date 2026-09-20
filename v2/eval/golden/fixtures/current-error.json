@@ -1,0 +1,27 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "greenway:1:entry:EB",
+    "destination_point_id": "greenway:28:exit:EB",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "toolUseId": "golden-error",
+    "status": "error",
+    "content": [
+      {
+        "text": "Unable to get the current toll price. Reference: golden-error."
+      }
+    ]
+  },
+  "is_error": true,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "current_price_domain.py:_OperationError",
+    "note": "Authored offline from the current contract; not a captured production response."
+  }
+}
