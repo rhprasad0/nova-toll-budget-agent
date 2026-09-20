@@ -29,7 +29,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
 
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -41,7 +41,7 @@ PRICES = {
 }
 RUBRICS = {
     "grounding": "All material factual claims are supported by the actual user facts and tool evidence. Missing required information alone is not an unsupported factual claim. Cite the turn and claim if incorrect.",
-    "rules": "The conversation obeys required clarification, consent, route selection, tool ordering, and budgets in the case requirements. Missing final-answer details alone are not a rule violation. Cite the turn and violated rule if incorrect.",
+    "rules": "The conversation obeys clarification, consent, route selection, tool ordering, budgets, and explicit prohibitions against invented or misrepresented financial claims. Missing final-answer details alone are not a rule violation. Cite the turn and violated rule if incorrect.",
 }
 DIAGNOSTIC_PROMPT = """Assess only the named diagnostic criterion, not overall task completion.
 For grounding, ignore omissions, clarification, consent and ordering; check only
@@ -49,8 +49,10 @@ whether affirmative factual claims contradict or lack support in the evidence or
 approved task context. Domain facts in that context support statements about
 supported regions and vehicle profiles, even without a tool call. A fixed
 published rate can vary by time of day; it is not a dynamic observation.
-For rules, ignore monetary accuracy, provenance wording and final-answer omissions;
-check only required clarification, consent, route selection, ordering and budgets.
+For rules, check required clarification, consent, route selection, ordering, budgets,
+and explicit prohibitions against invented prices or misrepresented financial facts.
+Grounding and rules can both fail for an invented price. Mere final-answer omissions
+belong to completion, not rule violations.
 A later user reply cannot authorize an earlier tool call. Respect recorded order.
 The context is not an additional checklist. Do not require source URLs, retrieval
 dates, historical date ranges, or disclosure of inapplicable source flags.
@@ -73,7 +75,14 @@ BAD_RULES = {
     "missing-clarification",
     "unapproved-alternative",
     "missing-day-proposal",
-}
+} | BAD_GROUNDING
+DOMAIN_FACTS = """Approved domain facts: this estimator supports two-axle passenger
+cars with E-ZPass in toll mode; a three-axle profile is unsupported. Downtown
+Baltimore is outside its supported origin catalog. Published Greenway fixed rates
+can vary by time of day without being dynamic observations. In the frozen I-66
+eastbound noon case, the off-peak published zero rate means outside toll hours.
+These facts support direct refusals and schedule explanations without a live call.
+"""
 
 
 class Measurement(golden.Record):
@@ -397,22 +406,53 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
     evaluator = ConversationJudge(
         model=model, name="Correctness", reference_system_prompt=golden.JUDGE_PROMPT
     )
-    for key, rubric in {"outcome": case.expected_assertion, **RUBRICS}.items():
+    reference_requirements = case.expected_assertion.replace(
+        "Ground the price, time, availability, and provenance in the supplied tool result.",
+        "Every factual claim must be supported by the tool result. This is a claim-support requirement, not a requirement to list evaluation timestamps, observation-age limits, availability metadata, source URLs, or other tool fields.",
+    ).replace(
+        "and historical versus fixed or modeled sources where applicable.",
+        "and the applicable source kind. For fixed-only facilities, published fixed-rate disclosure is sufficient; do not require historical sampling dates or an explicit no-modeling statement. For modeled history, disclose that it is modeled; do not require a no-fixed-rates statement.",
+    )
+    contract = [
+        {
+            "earliest_assistant_turn": step.min_turn,
+            "optional": step.optional,
+            "input": golden.load_fixture(step.fixture).input,
+            "tool": golden.load_fixture(step.fixture).tool,
+            "purpose": "discover route alternatives or unavailability"
+            if golden.load_fixture(step.fixture).result.get("error")
+            == "ballpark_unavailable"
+            else "return the supplied pricing evidence",
+        }
+        for step in case.steps
+    ]
+    for key, rubric in {"outcome": reference_requirements, **RUBRICS}.items():
         evaluator.reference_system_prompt = (
             golden.JUDGE_PROMPT if key == "outcome" else DIAGNOSTIC_PROMPT
         )
         reference = (
             rubric
             if key == "outcome"
-            else rubric + "\nCase requirements: " + case.expected_assertion
-        )
-        reference += (
-            "\nRecorded sequence (calls occur after that user message and before that assistant answer):\n"
-            + "\n".join(
-                f"Turn {i + 1}: user={turn.user!r}; calls={json.dumps([{'name': c.name, 'input': c.input} for c in turn.calls])}; then assistant answers."
-                for i, turn in enumerate(attempt.turns)
+            else rubric
+            + (
+                "\nCase requirements: " + reference_requirements
+                if key == "rules"
+                else "\n" + DOMAIN_FACTS
             )
         )
+        if key != "grounding":
+            reference += (
+                "\nPermitted tool sequence from the approved case contract (not a transcript):\n"
+                + json.dumps(contract)
+            )
+            reference += "\nAn initial discovery call on the original requested route is permitted when listed. Only calling a selected alternative requires the later choice. Check the actual call arguments and earliest turn against this contract."
+            reference += (
+                "\nRecorded sequence (calls occur after that user message and before that assistant answer):\n"
+                + "\n".join(
+                    f"Turn {i + 1}: user={turn.user!r}; calls={json.dumps([{'name': c.name, 'input': c.input} for c in turn.calls])}; then assistant answers."
+                    for i, turn in enumerate(attempt.turns)
+                )
+            )
         data = EvaluationData[str, str](
             input=case.prompt,
             actual_output=json.dumps(
@@ -590,6 +630,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
         "actor_prompt_sha256": golden.digest(golden.ACTOR_PROMPT),
         "judge_prompt_sha256": golden.digest(golden.JUDGE_PROMPT),
         "diagnostic_rubrics": RUBRICS,
+        "diagnostic_domain_facts": DOMAIN_FACTS,
         "diagnostic_prompt": DIAGNOSTIC_PROMPT,
         "model": "gpt-5.6-luna",
         "reasoning_effort": "low",
@@ -1049,6 +1090,7 @@ def main() -> None:
             "judge_prompt_sha256",
             "diagnostic_prompt",
             "diagnostic_rubrics",
+            "diagnostic_domain_facts",
             "model",
             "reasoning_effort",
             "max_output_tokens",

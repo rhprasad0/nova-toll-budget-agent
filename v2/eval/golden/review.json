@@ -3,5 +3,5 @@
   "corpus_sha256": null,
   "reviewer": null,
   "evidence": null,
-  "notes": "Ryan approved the unchanged cases and labels in versions 1.0.0 and 1.0.1. In the #360 implementation conversation Ryan requested: \"Keep approved labels; correct and recalibrate the judge (Recommended)\". Version 1.0.3 changes judge instructions and hashes the paid harness; recalibration and final evidence review are pending. Initial 1.0.1 approval bound corpus 2a5c54e9e9ee8aac9d4262a710db8a9282068d55a705022f388c25721a226d83."
+  "notes": "Ryan approved the unchanged cases and labels in versions 1.0.0 and 1.0.1. In the #360 implementation conversation Ryan requested: \"Keep approved labels; correct and recalibrate the judge (Recommended)\". Version 1.0.4 changes judge instructions and hashes the paid harness; recalibration and final evidence review are pending. Initial 1.0.1 approval bound corpus 2a5c54e9e9ee8aac9d4262a710db8a9282068d55a705022f388c25721a226d83."
 }

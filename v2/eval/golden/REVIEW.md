@@ -1,8 +1,8 @@
-# Golden case review, version 1.0.3
+# Golden case review, version 1.0.4
 
-**Cases and labels approved; version 1.0.3 judge calibration awaits review.** Approval includes the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. The 38 example conversations were authored without live model or pricing calls. All tool fixtures are synthetic. Paid calibration of those examples is recorded separately under `eval/evidence/golden-360/`.
+**Cases and labels approved; version 1.0.4 judge calibration awaits review.** Approval includes the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. The 38 example conversations were authored without live model or pricing calls. All tool fixtures are synthetic. Paid calibration of those examples is recorded separately under `eval/evidence/golden-360/`.
 
-Corpus SHA-256: `8be9c9f2c0a8a1e6757a73f6b0616c07c999b24f1cc63d32603927b5a8526b84`
+Corpus SHA-256: `01a2b22ad0f83da9295c391b58bdda14040b4a8bfc046a2981d434bb4e7d25d1`
 
 The questions and actor briefs use the humanizer skill. Review their meaning as well as their wording. In particular, check that the actor only knows ordinary user facts and that a rubric accepts a useful equivalent answer.
 

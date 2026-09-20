@@ -9,7 +9,7 @@ from unittest.mock import Mock
 
 import pytest
 from strands.models import Model
-from strands_evals.types.evaluation import EvaluationData
+from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
 
 from eval import golden
 from eval import golden_run as run
@@ -343,3 +343,47 @@ def test_repeating_agent_is_scored_failure_not_infrastructure(
     assert "tool_budget" in result.checks
     assert len(result.requested_tools) == 2
     assert count == 2 and not result.passed
+
+
+def test_judge_receives_permitted_discovery_and_selection_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from strands.models.openai_responses import OpenAIResponsesModel
+
+    seen: list[str] = []
+
+    def evaluate(
+        self: run.ConversationJudge, data: EvaluationData[str, str]
+    ) -> list[EvaluationOutput]:
+        assert data.expected_assertion is not None
+        seen.append(data.expected_assertion)
+        return [EvaluationOutput(score=1.0, test_pass=True, reason="offline evidence")]
+
+    monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
+    monkeypatch.setattr(
+        run,
+        "build_eval_model",
+        lambda: OpenAIResponsesModel(
+            model_id="offline", client_args={"api_key": "offline"}
+        ),
+    )
+    journal = run.Journal(tmp_path / "contract", 25)
+    case = golden.load_cases()[21]
+    example = next(
+        e
+        for e in run.development_examples()
+        if e.case_id == case.id and e.label == "good"
+    )
+    row = run.Attempt(id="contract", case_id=case.id, trial=1, turns=example.turns)
+    run.judge(case, row, journal)
+    assert "Permitted tool sequence" not in seen[1]
+    for reference in (seen[0], seen[2]):
+        assert '"earliest_assistant_turn": 1' in reference
+        assert '"earliest_assistant_turn": 2' in reference
+        assert '"origin_point_id": "i95:205SD"' in reference
+        assert '"origin_point_id": "i95:212NO"' in reference
+    seen.clear()
+    case = golden.load_cases()[3]
+    run.judge(case, row, journal)
+    assert "claim-support requirement" in seen[0]
+    assert "Ground the price, time, availability" not in seen[0]
