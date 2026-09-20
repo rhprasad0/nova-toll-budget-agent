@@ -1,0 +1,1 @@
+{"event": "attempt_finished", "id": "greenway-current-1", "case_id": "greenway-current", "trial": 1, "status": "infrastructure", "turns": [], "attempted_tools": [], "requested_tools": [], "checks": [], "verdicts": {}, "measurements": [], "actor_replies": [], "failure_class": "infrastructure", "error": "InjectedOfflineInfrastructureFailure", "seconds": 0}
