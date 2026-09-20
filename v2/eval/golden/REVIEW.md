@@ -1,6 +1,6 @@
 # Golden case review, version 1.0.3
 
-**Cases and labels approved; version 1.0.3 judge calibration awaits review.** Approval includes the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. No live models or pricing services were called. All tool fixtures are synthetic. The 38 example conversations are authored proposals, not measured results.
+**Cases and labels approved; version 1.0.3 judge calibration awaits review.** Approval includes the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. The 38 example conversations were authored without live model or pricing calls. All tool fixtures are synthetic. Paid calibration of those examples is recorded separately under `eval/evidence/golden-360/`.
 
 Corpus SHA-256: `8be9c9f2c0a8a1e6757a73f6b0616c07c999b24f1cc63d32603927b5a8526b84`
 
@@ -1094,4 +1094,4 @@ These are candidates for human labels and later judge calibration, not claims th
 - Coverage review: initial 24 cases, with current I-95 direction and guardrail scenarios deliberately excluded.
 - Next review: before any corpus revision or when a new observed failure is considered.
 
-The reviewer, evidence reference, and this exact corpus digest are recorded in [review.json](review.json). Do not mark the corpus approved merely because offline checks pass.
+Record approval of the revised grader and exact corpus digest in [review.json](review.json) after calibration review. Do not mark the corpus approved merely because offline checks pass.

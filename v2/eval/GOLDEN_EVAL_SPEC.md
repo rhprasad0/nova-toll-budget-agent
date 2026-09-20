@@ -197,8 +197,9 @@ and results.
 Ryan reviews case facts, fixture assumptions, criticality, held-out handling,
 and example labels. Record approval in `review.json` with status `approved`, the
 exact corpus SHA-256, reviewer, and an evidence link or transcript reference.
-The current version has that approval recorded. Future revisions require renewed
-review; approving an implementation plan does not approve unseen cases.
+The cases and labels retain their earlier approval. The current grader revision
+awaits calibration review; approving an implementation plan does not approve
+unseen cases.
 
 Version 1.0.3 retains all case data and labels. It corrects judge over-interpretation
 of disclosure requirements and tool-call chronology after the first paid calibration,
