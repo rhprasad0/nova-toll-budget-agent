@@ -55,7 +55,7 @@ There is no database migration or application-agent change in this release.
 2. Deliver development through the existing saved-plan release gates. Wait for
    its daily run (or invoke the fixed cost Lambda during the authorized rollout).
    Verify `/cost-dashboard`, a direct route refresh, and `/costs.json`. Validate
-   the real snapshot with `publisher/costs.py:validate_snapshot`, checking
+   the real snapshot with `v2/lambdas/publisher/costs.py:validate_snapshot`, checking
    `development`, `aws-development+openai-organization`, a successful attempt,
    a new publication, current requested dates, and AWS service/environment
    reconciliations. Require the Lambda response payload status to succeed, not

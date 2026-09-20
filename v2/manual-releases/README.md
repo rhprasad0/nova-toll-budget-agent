@@ -55,7 +55,51 @@ migration workflow.
 Stop if any check fails. Correct the source through a reviewed PR, complete
 its development delivery, then choose the new verified commit for release.
 
-## 3. Capture the current production routing
+## 3. Publish and review preparation
+
+Confirm the separately reviewed production blue-green bootstrap is complete and
+`PRODUCTION_BLUE_GREEN_BOOTSTRAPPED` is enabled. Publish a stable GitHub Release
+with the chosen tag pointing to the exact verified commit, not a draft or prerelease.
+
+Wait for `v2-production-plan` to verify the candidate and save its preparation
+plan. Require a zero-change foundation plan and review every application action.
+Stop on unexplained actions or replacements. The saved plan is valid for 24 hours.
+Approve the protected `production` job only after reviewing it. Automation
+revalidates the release, runs fixed compatible migrations, applies that exact
+plan to the inactive slot, and validates the candidate. Ordinary traffic stays
+on the active slot.
+
+## 4. Approve cutover and observe
+
+Inspect the preparation evidence and test the candidate using the
+[blue-green procedure](../runbooks/blue-green-deployments.md#production-cutover-approval).
+Approve the separate `production-cutover` gate only when the candidate is ready.
+The resumed protected job may also require `production` approval. It revalidates
+the prepared record and state, runs fresh checks, and gates a new routing-only
+plan before switching traffic; it does not rerun migrations or preparation.
+
+Confirm post-cutover observation and final release evidence report success.
+Delivery retains the previous slot and a private, versioned recovery record.
+The legacy local capture below is not required for blue-green releases.
+
+## 5. If delivery fails
+
+A candidate validation failure blocks promotion and leaves ordinary traffic
+unchanged. During post-cutover observation, two consecutive failures trigger
+one routing restoration attempt. Recovery success does not turn deployment
+failure into success.
+
+After the observation window, cancellation, or runner loss, follow the
+[protected recovery procedure](../runbooks/blue-green-deployments.md).
+Dispatch `v2-production-recovery.yml` from `main` with the original numeric
+`claim_id`, exact private recovery `record_version`, and reviewed
+`expected_state_sha256`; approve its protected `production` environment.
+Do not substitute the old fixed-alias restore or rerun the legacy capture.
+
+## Historical pre-bootstrap routing capture
+
+**Historical reference only:** this fixed-runtime capture cannot represent
+blue-green routing and grants no authority to restore current production.
 
 Requirements: Bash, AWS CLI, `jq`, Python 3, and an authenticated
 `nova-toll-prod` profile for account `920534282028`. The script uses `us-east-1`.
@@ -97,24 +141,3 @@ If capture fails, stop before publishing:
   in the expected stable state. Investigate before continuing.
 - `record-write`: the private record could not be safely written. Treat any
   file left by a failed capture as incomplete; investigate before retrying.
-
-## 4. Publish and review
-
-Publish a stable GitHub Release with the chosen tag pointing to the exact
-verified commit. It must not be a draft or prerelease.
-
-Wait for `v2-production-plan` to verify the candidate and save its production
-plan. Require a zero-change foundation plan and review every application action.
-Stop on unexplained actions or replacements. The saved plan is valid for 24 hours.
-
-Approve the protected `production` job only after reviewing that plan. Automation
-then revalidates the release, runs fixed migrations, applies the exact saved
-plan, and checks readiness and one canary. Confirm the final release evidence
-reports success.
-
-## 5. If delivery fails
-
-Stop delivery and inspect the failed stage. A failed canary requires a human
-decision; rollback is not automatic. Use the original recovery record and the
-[manual routing restore procedure](../RUNBOOK.md#production-canary-failure-human-stop-and-manual-routing-restore).
-This directory does not provide a direct deploy or automatic restore command.

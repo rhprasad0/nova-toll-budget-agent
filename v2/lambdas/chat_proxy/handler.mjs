@@ -237,6 +237,10 @@ const validEvent = (input, allowCanary = false) => {
     return exactKeys(value, ["type", "text", "blocked"])
       && typeof value.text === "string" && typeof value.blocked === "boolean";
   }
+  if (value.type === "text") {
+    return exactKeys(value, ["type", "text"])
+      && typeof value.text === "string" && value.text.length > 0;
+  }
   if (value.type === "canary") {
     return allowCanary
       && exactKeys(value, ["type", "schema_version", "call_count", "tool_name_match", "route_profile_match", "correlation_match", "result_success", "total_usd", "success", ...(value.release_id !== undefined ? ["release_id"] : [])])

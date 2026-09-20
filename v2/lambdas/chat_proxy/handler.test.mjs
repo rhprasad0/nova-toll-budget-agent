@@ -93,6 +93,45 @@ test("private same-origin chat streams only approved v2 events", async () => {
   assert.equal(new TextDecoder().decode(/** @type {{payload: Uint8Array}} */ (calls[0]).payload), '{"prompt":"Price it"}');
 });
 
+test("forwards checked text before the upstream finishes, preserving split UTF-8", async () => {
+  let upstreamFinished = false;
+  const client = { async send() {
+    return {
+      contentType: "text/event-stream",
+      response: (async function* () {
+        const frame = 'data: {"type":"text","text":"Price: €4"}\r\n\r\n';
+        for (const byte of new TextEncoder().encode(frame)) yield new Uint8Array([byte]);
+        upstreamFinished = true;
+        yield new TextEncoder().encode('data: {"type":"answer","text":"Done","blocked":false}\n\n');
+      })(),
+    };
+  } };
+  const response = await route(event("/api/chat", { message: "Price it" }), dependencies(client));
+  const iterator = /** @type {AsyncIterable<string>} */ (response.body)[Symbol.asyncIterator]();
+  assert.equal((await iterator.next()).value, '{"type":"text","text":"Price: €4"}\n');
+  assert.equal(upstreamFinished, false);
+  assert.match((await iterator.next()).value, /"type":"answer"/);
+  assert.equal((await iterator.next()).done, true);
+});
+
+test("text is nonterminal and unknown fields, empty text, and late text fail safely", async () => {
+  for (const frames of [
+    [{ type: "text", text: "Partial" }],
+    [{ type: "text", text: 42 }],
+    [{ type: "text", text: "" }],
+    [{ type: "text", text: "Partial", reasoning: "private" }],
+    [{ type: "answer", text: "Done", blocked: false }, { type: "text", text: "Late" }],
+  ]) {
+    const client = { async send() {
+      return { contentType: "text/event-stream", response: chunks(...frames.map((value) => `data: ${JSON.stringify(value)}\n\n`)) };
+    } };
+    const response = await route(event("/api/chat", { message: "Price it" }), dependencies(client));
+    const output = await bodyText(response.body);
+    assert.match(output, /agent_unavailable/);
+    assert.doesNotMatch(output, /private|Late/);
+  }
+});
+
 test("the exact marker carries one bounded canary event and rejects it otherwise", async () => {
   const prompt = "What is the current toll from the Leesburg Bypass entrance to Route 28 for a two-axle vehicle with E-ZPass?";
   const canary = '{"type":"canary","schema_version":1,"call_count":1,"tool_name_match":true,"route_profile_match":true,"correlation_match":true,"result_success":true,"total_usd":"4.25","success":true}';
@@ -236,6 +275,7 @@ test("a malformed trailing frame becomes a safe stream error and releases its le
     return {
       contentType: "text/event-stream",
       response: chunks(
+        'data: {"type":"text","text":"Partial"}\n\n',
         'data: {"type":"answer","text":"Done","blocked":false}\n\n',
         "not-an-sse-frame\n\n",
       ),
