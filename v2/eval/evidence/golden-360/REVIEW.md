@@ -1,5 +1,7 @@
 # Judge calibration review for #360
 
+[Open the standalone HTML review page](calibration-review.html). Download and open it in a browser; it works offline.
+
 Status: awaiting human review. All 24 cases and 38 authored example labels are unchanged. Calibration uses 34 development examples; the four held-out examples were excluded.
 
 ## Recorded attempts
