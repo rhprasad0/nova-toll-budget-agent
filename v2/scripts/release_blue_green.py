@@ -227,8 +227,7 @@ def prepare_descriptor(bundle: Path, previous: dict[str, Any]) -> dict[str, Any]
     return result
 
 
-def stage_packages(root: Path, bundle: Path) -> None:
-    expected = package_evidence(bundle)
+def stage_packages(root: Path, bundle: Path, expected: dict[str, Any]) -> None:
     for name in ("loader", "publisher", "timed-checks"):
         package = Path("build") / f"{name}.zip"
         source = bundle / "v2/infra" / package
@@ -243,9 +242,12 @@ def stage_packages(root: Path, bundle: Path) -> None:
     shared_packages.verify_bytes(root, expected)
 
 
-def package_evidence(bundle: Path) -> dict[str, Any]:
+def package_evidence(bundle: Path, release: str | None = None) -> dict[str, Any]:
     return shared_packages.from_bundle(
-        bundle, environment, account, os.environ.get("GITHUB_SHA", "")
+        bundle,
+        environment,
+        account,
+        os.environ.get("GITHUB_SHA", "") if release is None else release,
     )
 
 
@@ -307,8 +309,9 @@ def plan(
     phase: str,
     previous: dict[str, Any],
     inputs: dict[str, Any],
+    expected: dict[str, Any],
 ) -> Path:
-    stage_packages(root, bundle)
+    stage_packages(root, bundle, expected)
     variables = work / f"{phase}.tfvars.json"
     write(variables, inputs)
     saved = work / f"{phase}.tfplan"
@@ -332,7 +335,7 @@ def plan(
         previous,
         phase,
         saved,
-        package_evidence(bundle),
+        expected,
     )
     return saved
 
@@ -681,6 +684,7 @@ def recover(
     foundation: Path,
     work: Path,
     prepared: dict[str, Any],
+    expected: dict[str, Any],
     *,
     expected_identity: dict[str, Any] | None = None,
 ) -> bool:
@@ -701,6 +705,7 @@ def recover(
         "recover",
         promoted,
         gate.desired(promoted, promote=True),
+        expected,
     )
     gate.require(current(root)[1] == identity, "stale_recovery")
     terraform(root, "apply", "-input=false", str(saved))
@@ -869,16 +874,27 @@ def main() -> int:
             "delivery_role",
         )
         authorized = True
-        expected_packages = package_evidence(bundle)
+        if args.phase != "recover":
+            expected_packages = package_evidence(bundle)
         if args.phase == "prepare-production":
             production_bundle_identity()
         context_file = work / "context.json"
         if args.phase == "prepare-plan":
+            assert expected_packages is not None
             previous, identity = current(root)
             write(work / "previous.json", previous)
             candidate = prepare_descriptor(bundle, previous)
             inputs = gate.desired(previous, candidate)
-            saved = plan(root, bundle, foundation, work, "prepare", previous, inputs)
+            saved = plan(
+                root,
+                bundle,
+                foundation,
+                work,
+                "prepare",
+                previous,
+                inputs,
+                expected_packages,
+            )
             write(
                 context_file,
                 {
@@ -901,12 +917,37 @@ def main() -> int:
             context = load_recovery(
                 work, args.release_id, args.claim, args.record_version
             )
-            gate.require(
-                context["shared_packages"] == expected_packages,
-                "shared_package_evidence",
-            )
             if environment == "production":
                 verify_recovery_bundle(context, bundle, args.release_id)
+            expected_packages = package_evidence(bundle, args.release_id)
+            if "shared_packages" not in context and "shared_identities" not in context:
+                # Only the retained pre-evidence production record is supported.
+                gate.require(
+                    environment == "production"
+                    and args.release_id == shared_packages.LEGACY_RECOVERY_RELEASE
+                    and set(context)
+                    == {
+                        "claim",
+                        "previous",
+                        "identity",
+                        "inputs",
+                        "plan_sha256",
+                        "prepared",
+                        "environment",
+                        "prepared_identity",
+                        "foundation",
+                        "bundle",
+                    },
+                    "shared_package_evidence",
+                )
+            else:
+                gate.require(
+                    context.get("shared_packages") == expected_packages
+                    and context.get("shared_identities")
+                    == shared_packages.identities(expected_packages),
+                    "shared_package_evidence",
+                )
+            if environment == "production":
                 write(foundation, context["foundation"])
             _, identity = current(root)
             gate.require(
@@ -921,10 +962,12 @@ def main() -> int:
                 foundation,
                 work,
                 context["prepared"],
+                expected_packages,
                 expected_identity=identity,
             ):
                 result["recovery"] = "recovered"
         else:
+            assert expected_packages is not None
             if args.phase == "promote-production":
                 gate.require(
                     bool(args.release_id and args.record_version), "cutover_identity"
@@ -956,7 +999,7 @@ def main() -> int:
                 }
             else:
                 if args.saved_plan is not None:
-                    stage_packages(root, bundle)
+                    stage_packages(root, bundle, expected_packages)
                     document = json.loads(
                         terraform(root, "show", "-json", str(args.saved_plan.resolve()))
                     )
@@ -1091,6 +1134,7 @@ def main() -> int:
                     "promote",
                     prepared,
                     gate.desired(prepared, promote=True),
+                    expected_packages,
                 )
                 gate.verify_evidence(evidence, current(root)[0], args.claim)
                 if args.phase == "promote-production":
@@ -1117,12 +1161,16 @@ def main() -> int:
                     )
                 except Exception:
                     result = {"deployment": "failed", "recovery": "failed"}
-                    if recover(root, bundle, foundation, work, prepared):
+                    if recover(
+                        root, bundle, foundation, work, prepared, expected_packages
+                    ):
                         result["recovery"] = "recovered"
                 else:
                     result = observe(
                         lambda: bool(probe(promoted["slots"][promoted["active"]])),
-                        lambda: recover(root, bundle, foundation, work, prepared),
+                        lambda: recover(
+                            root, bundle, foundation, work, prepared, expected_packages
+                        ),
                     )
                     result["active"] = current(root)[0]["active"]
     except ValueError as error:
