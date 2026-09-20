@@ -27,7 +27,7 @@ the existing $25 authorization. Missing usage stops further paid calls and
 blocks subsequent runs until spending is reconciled. Provider retries are off.
 
 The original thresholds from policy 1.0.0 are unchanged in policy 1.0.1. Corpus
-1.0.9 and harness 1.2.0 add the packaged execution boundary; their new contract
+1.0.10 and harness 1.2.0 add the packaged execution boundary; their new contract
 needs calibration and exact digest approval. Historical evidence, labels,
 policy approvals, and the original baseline remain intact.
 

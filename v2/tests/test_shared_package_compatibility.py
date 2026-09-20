@@ -104,3 +104,12 @@ def test_compatibility_gate_binds_the_serving_baseline_and_built_packages(
     expected["packages"]["loader.zip"]["sha256"] = "f" * 64
     with pytest.raises(ValueError, match="shared_compatibility"):
         shared_packages.compatibility(tmp_path, expected, REVIEW["baseline"])
+
+
+def test_committed_shared_packages_match_compatibility_review() -> None:
+    manifest = json.loads(
+        (ROOT / "infra/development-release-manifest.json").read_text()
+    )
+    assert REVIEW["packages"] == {
+        name: manifest["packages"][name] for name in shared_packages.PACKAGES
+    }
