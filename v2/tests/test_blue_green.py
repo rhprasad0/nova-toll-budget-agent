@@ -57,7 +57,7 @@ def test_plan_package_paths_are_workspace_independent(
         packages.mkdir(parents=True)
         for name in ("loader", "publisher", "timed-checks"):
             (packages / f"{name}.zip").write_bytes(name.encode())
-        shared_fixture(bundle)
+        expected = shared_fixture(bundle)
         delivery.plan(
             root,
             bundle,
@@ -66,6 +66,7 @@ def test_plan_package_paths_are_workspace_independent(
             phase,
             {},
             {},
+            expected,
         )
         args = terraform.call_args_list[-2].args
         assert {arg for arg in args[1:] if arg.startswith("-var=")} == {
@@ -400,7 +401,9 @@ def test_stale_recovery_does_not_plan(
         delivery, "plan", Mock(side_effect=AssertionError("stale recovery planned"))
     )
     with pytest.raises(gate.Rejected, match="stale_recovery"):
-        delivery.recover(tmp_path, tmp_path, tmp_path, tmp_path, prepared)
+        delivery.recover(
+            tmp_path, tmp_path, tmp_path, tmp_path, prepared, shared_fixture(tmp_path)
+        )
 
 
 def test_old_and_candidate_pages_keep_their_immutable_assets() -> None:
@@ -697,7 +700,7 @@ def test_complete_release_state_machine(
         Mock(return_value=dict.fromkeys(shared_packages.FUNCTIONS, "verified")),
     )
     delivery.configure(target)
-    delivery.stage_packages(tmp_path, tmp_path)
+    delivery.stage_packages(tmp_path, tmp_path, expected_packages)
     if scenario == "compatibility_failure":
         monkeypatch.setattr(
             shared_packages,
@@ -784,6 +787,7 @@ def test_complete_release_state_machine(
         phase: str,
         before: dict[str, Any],
         inputs: dict[str, Any],
+        _expected: dict[str, Any],
     ) -> Path:
         gate.validate_plan(plan(inputs, prior=before), before, phase)
         result = work / (phase + ".tfplan")
@@ -997,7 +1001,9 @@ def test_recovery_rechecks_state_serial_after_plan(
         delivery, "terraform", Mock(side_effect=AssertionError("stale plan applied"))
     )
     with pytest.raises(gate.Rejected, match="stale_recovery"):
-        delivery.recover(tmp_path, tmp_path, tmp_path, tmp_path, prepared)
+        delivery.recover(
+            tmp_path, tmp_path, tmp_path, tmp_path, prepared, shared_fixture(tmp_path)
+        )
 
 
 @pytest.mark.parametrize(
@@ -1084,6 +1090,7 @@ def test_manual_recovery_rechecks_reviewed_identity_before_planning(
             tmp_path,
             tmp_path,
             prepared,
+            shared_fixture(tmp_path),
             expected_identity={"lineage": "same", "serial": 11},
         )
     planning.assert_not_called()
@@ -1108,7 +1115,9 @@ def test_recovery_verifies_restored_public_document(
 
     monkeypatch.setattr(delivery, "assets", assets)
     with pytest.raises(gate.Rejected, match="candidate_document"):
-        delivery.recover(tmp_path, tmp_path, tmp_path, tmp_path, prepared)
+        delivery.recover(
+            tmp_path, tmp_path, tmp_path, tmp_path, prepared, shared_fixture(tmp_path)
+        )
 
 
 def test_failed_manual_restore_is_reported_as_attempted(
@@ -1131,6 +1140,7 @@ def test_failed_manual_restore_is_reported_as_attempted(
                 "prepared": state,
                 "identity": identity,
                 "shared_packages": expected_packages,
+                "shared_identities": shared_packages.identities(expected_packages),
             }
         ),
     )

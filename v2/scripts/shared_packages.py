@@ -19,6 +19,7 @@ FUNCTIONS = {
 }
 OBJECT = "aws_s3_object.timed_checks"
 CHAT_ROUTES = "aws_cloudfront_function.public_chat_routes"
+LEGACY_RECOVERY_RELEASE = "4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe"
 CHAT_CODE = (
     "695db31f3ab2a4f5a3ff38959b02b0bba34fd577737e1a4eae1222cd649a2bf8",
     "1c93d8b91885a207b674a8abc7f9ec6bcd5747b6d6b373082d27fe681fd3e082",
@@ -133,7 +134,9 @@ def unknown(value: object) -> bool:
     return bool(value)
 
 
-def validate_chat(item: dict[str, Any], environment: str) -> None:
+def validate_chat(
+    item: dict[str, Any], environment: str, *, legacy_recovery: bool = False
+) -> None:
     require(environment in ACCOUNTS, "public_chat_identity")
     require(
         item.get("address") == CHAT_ROUTES
@@ -163,9 +166,13 @@ def validate_chat(item: dict[str, Any], environment: str) -> None:
             and side.get("publish") is True,
             "public_chat_identity",
         )
-    hashes = (
-        (CHAT_CODE[1], CHAT_CODE[1]) if change["actions"] == ["no-op"] else CHAT_CODE
+    require(
+        not legacy_recovery
+        or (environment == "production" and change["actions"] == ["no-op"]),
+        "public_chat_code",
     )
+    unchanged = CHAT_CODE[0] if legacy_recovery else CHAT_CODE[1]
+    hashes = (unchanged, unchanged) if change["actions"] == ["no-op"] else CHAT_CODE
     require(
         all(
             isinstance(side.get("code"), str)

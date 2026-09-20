@@ -315,8 +315,9 @@ does not lock a local shell: disable new delivery and confirm no run is active
 before taking this operator-held boundary.
 
 Use the original admitted release checkout/bundle and verified foundation
-variables in an isolated worktree. Verify the bundle with
-`verify_release_bundle.py verify --verify-checkout`; do not rebuild artifacts.
+variables in an isolated worktree. Set `TRUSTED_CHECKOUT` to a separate checkout
+of reviewed current `main` containing the recovery controller. Verify the bundle
+with `verify_release_bundle.py verify --verify-checkout`; do not rebuild artifacts.
 The private record is
 `releases/<candidate-id>/recovery/<run-id>:<attempt>.json` in the fixed artifact
 bucket. Read its exact S3 version from the delivery summary, or from the exact
@@ -333,7 +334,7 @@ terraform -chdir="$APPLICATION_ROOT" state pull |
 Using the fixed delivery role or the recorded development SSO administrator role:
 
 ```sh
-AWS_PROFILE=nova-toll-dev python3 v2/scripts/release_blue_green.py recover \
+AWS_PROFILE=nova-toll-dev python3 "$TRUSTED_CHECKOUT/v2/scripts/release_blue_green.py" recover \
   --environment development --terraform-root "$APPLICATION_ROOT" \
   --bundle-root "$VERIFIED_BUNDLE" --foundation-vars "$FOUNDATION_VARS" \
   --work-dir "$PRIVATE/recovery" --output "$PRIVATE/recovery-result.json" \
@@ -351,8 +352,14 @@ administrator session is required. Its record key is
 It verifies the completed original release run and development evidence, restores
 the exact admitted bundle and original candidate checkout, and reads foundation
 variables from the versioned record. Records without an exact bundle ID/digest
-binding are rejected. The serving application need not pass a health check before
-restoration; both ingress paths must pass afterward.
+binding are rejected. Package verification uses the admitted original release ID,
+including when the trusted workflow SHA is newer or a local shell has no
+`GITHUB_SHA`. The retained production baseline
+`4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe` alone may use its original record
+without shared-package fields: evidence comes from the verified original bundle,
+and its pinned old CloudFront chat code must remain an unchanged no-op. Partial
+or conflicting newer records are rejected. The serving application need not pass
+a health check before restoration; both ingress paths must pass afterward.
 
 The command checks claim, lineage, both descriptors and reviewed state identity,
 generates a fresh routing-only plan, rechecks serial before apply, and attempts

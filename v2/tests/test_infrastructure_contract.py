@@ -6511,7 +6511,7 @@ def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup(
         called.append(args[1])
         raise gate.Rejected("terraform_failed")
 
-    def staged(_root: Path, _bundle: Path) -> None:
+    def staged(_root: Path, _bundle: Path, _expected: dict[str, Any]) -> None:
         pass
 
     with pytest.MonkeyPatch.context() as patch:
@@ -6526,6 +6526,7 @@ def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup(
                 "prepare",
                 state,
                 gate.desired(state, slot("green", "release2")),
+                {},
             )
     assert called == ["plan"]
     assert not (tmp_path / "prepare.tfplan").exists()

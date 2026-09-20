@@ -631,3 +631,312 @@ def test_primary_revision_drift_preserves_exact_configuration(
                 production_validate(
                     dict(invalid, output_changes={}), ROOT / "v2/infra", expected
                 )
+
+
+@pytest.mark.parametrize(
+    "environment,legacy,workflow_sha",
+    [
+        ("production", False, "b" * 40),
+        ("production", True, "b" * 40),
+        ("development", False, None),
+    ],
+)
+@pytest.mark.parametrize(
+    "fault",
+    [
+        None,
+        "bytes",
+        "release",
+        "account",
+        "bundle",
+        "missing",
+        "partial",
+        "conflicting",
+        "code",
+        "configuration",
+        "shared_update",
+        "stale",
+        "lineage",
+    ],
+)
+def test_manual_recovery_uses_original_package_authority(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    environment: str,
+    legacy: bool,
+    workflow_sha: str | None,
+    fault: str | None,
+) -> None:
+    """Exercise admission-to-plan composition; fake only external services."""
+    import hashlib
+    from unittest.mock import Mock
+
+    release = shared_packages.LEGACY_RECOVERY_RELEASE if legacy else "a" * 40
+    bundle = tmp_path / "bundle"
+    expected = shared_fixture(bundle, environment)
+    manifest_path = bundle / "release-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["commit_sha"] = release
+    manifest_path.write_text(json.dumps(manifest))
+    expected["release"] = release
+    packages = bundle / "v2/infra/build"
+    digests = {}
+    for kind, name in (("runtime", "agentcore"), ("proxy", "chat-proxy")):
+        raw = name.encode()
+        (packages / f"{name}.zip").write_bytes(raw)
+        digest = hashlib.sha256(raw)
+        digests[f"{kind}_sha256"] = (
+            digest.hexdigest()
+            if kind == "runtime"
+            else base64.b64encode(digest.digest()).decode()
+        )
+    document, live, _ = package_plan(environment, "recover", partial="complete")
+    document = json.loads(json.dumps(document).replace("a" * 40, release))
+    live = json.loads(json.dumps(live).replace("a" * 40, release))
+    live["slots"]["green"].update(digests)
+    document["variables"]["release_slots"]["value"]["green"].update(digests)
+    document["output_changes"]["release_state"]["before"] = deepcopy(live)
+    prepared = dict(deepcopy(live), active="blue")
+    document["output_changes"]["release_state"]["after"] = deepcopy(prepared)
+    identities = shared_packages.identities(expected)
+    for row in document["resource_changes"]:
+        address = row["address"]
+        values = row["change"]["after"]
+        if address == shared_packages.OBJECT:
+            values["source_hash"] = identities["timed_checks"]["sha256"]
+        else:
+            values["source_code_hash"] = identities[address.rsplit(".", 1)[1]]["sha256"]
+        row["change"]["before"] = deepcopy(values)
+    code = (ROOT / "v2/agent/public-api-gate.js").read_text()
+    if legacy:
+        code = code[code.index("function handler") :]
+    name = "tollchat-v2-public-chat-routes" + (
+        "-dev" if environment == "development" else ""
+    )
+    chat = {
+        "name": name,
+        "arn": f"arn:aws:cloudfront::{expected['account']}:function/{name}",
+        "runtime": "cloudfront-js-2.0",
+        "publish": True,
+        "code": code + ("\n" if fault == "code" else ""),
+    }
+    document["resource_changes"].append(
+        change(shared_packages.CHAT_ROUTES, deepcopy(chat), chat, ["no-op"])
+    )
+    identity: dict[str, Any] = {"lineage": "retained-lineage", "serial": 10}
+    context: dict[str, Any] = {
+        "claim": "12" if environment == "production" else "12:1",
+        "previous": previous(environment),
+        "identity": dict(identity),
+        "inputs": blue_green.desired(prepared),
+        "plan_sha256": "c" * 64,
+        "prepared": prepared,
+        "environment": environment,
+    }
+    if environment == "production":
+        context.update(
+            prepared_identity=dict(identity),
+            foundation={"foundation": {}},
+            bundle={"id": "42", "digest": "sha256:" + "d" * 64},
+        )
+    if not legacy:
+        context.update(shared_packages=expected, shared_identities=identities)
+    if fault == "missing":
+        # Removing the fields must not turn a newer record into a legacy record.
+        if legacy:
+            del context["prepared_identity"]
+        else:
+            del context["shared_packages"], context["shared_identities"]
+    if fault == "partial":
+        context["shared_packages"] = expected
+        context.pop("shared_identities", None)
+    if fault == "conflicting":
+        context.update(shared_packages=expected, shared_identities={})
+    if fault == "bundle":
+        if environment == "production":
+            context["bundle"] = {"id": "43", "digest": "sha256:" + "d" * 64}
+        else:
+            manifest["commit_sha"] = "c" * 40
+            manifest_path.write_text(json.dumps(manifest))
+    if fault == "bytes":
+        (packages / "loader.zip").write_bytes(b"tampered")
+    if fault in {"configuration", "shared_update"}:
+        row = document["resource_changes"][0]
+        row["change"]["actions"] = ["update"]
+        field = "role" if fault == "configuration" else "source_code_hash"
+        row["change"]["after"][field] = "unrelated"
+    if fault == "lineage":
+        context["identity"]["lineage"] = "other"
+    if workflow_sha is None:
+        monkeypatch.delenv("GITHUB_SHA", raising=False)
+    else:
+        monkeypatch.setenv("GITHUB_SHA", workflow_sha)
+    monkeypatch.setenv("CANARY_ARTIFACT_ID", "42")
+    monkeypatch.setenv("CANARY_ARTIFACT_DIGEST", "sha256:" + "d" * 64)
+    commands: list[str] = []
+    observed: list[str] = []
+
+    def aws(*args: str) -> dict[str, Any]:
+        if args[:2] == ("sts", "get-caller-identity"):
+            account = "000000000000" if fault == "account" else expected["account"]
+            role = (
+                "nova-toll-production-deploy"
+                if environment == "production"
+                else "nova-toll-v2-development-delivery"
+            )
+            return {
+                "Account": account,
+                "Arn": f"arn:aws:sts::{account}:assumed-role/{role}/test",
+            }
+        if args[:2] == ("s3api", "get-object"):
+            assert (
+                args[args.index("--expected-bucket-owner") + 1] == expected["account"]
+            )
+            assert args[args.index("--version-id") + 1] == "record-v1"
+            release_blue_green.write(Path(args[-1]), context)
+            return {}
+        assert args[:2] == ("lambda", "get-function-configuration")
+        row = next(row for row in identities.values() if row["arn"] == args[-1])
+        return {
+            "FunctionName": row["name"],
+            "FunctionArn": row["arn"],
+            "CodeSha256": row["sha256"],
+            "State": "Active",
+            "LastUpdateStatus": "Successful",
+        }
+
+    def terraform(_root: Path, *args: str) -> str:
+        if args[:2] == ("state", "pull"):
+            return json.dumps(
+                {**identity, "outputs": {"release_state": {"value": live}}}
+            )
+        if args[0] == "plan":
+            commands.append("plan")
+            saved = next(
+                arg.removeprefix("-out=") for arg in args if arg.startswith("-out=")
+            )
+            Path(saved).write_bytes(b"fresh-routing-plan")
+            return ""
+        if args[:2] == ("show", "-json"):
+            return json.dumps(document)
+        assert args[0] == "apply"
+        commands.append("apply")
+        live.update(deepcopy(prepared))
+        identity["serial"] += 1
+        return ""
+
+    monkeypatch.setattr(release_blue_green, "aws", aws)
+    monkeypatch.setattr(release_blue_green, "terraform", terraform)
+    for name in ("wait_routing", "readiness", "probe", "private_probe", "assets"):
+
+        def observe(*_args: object, _name: str = name, **_kwargs: object) -> None:
+            observed.append(_name)
+
+        monkeypatch.setattr(release_blue_green, name, Mock(side_effect=observe))
+    root = tmp_path / "infra"
+    root.mkdir()
+    output = tmp_path / "result.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release_blue_green.py",
+            "recover",
+            "--environment",
+            environment,
+            "--terraform-root",
+            str(root),
+            "--bundle-root",
+            str(bundle),
+            "--foundation-vars",
+            str(tmp_path / "foundation.json"),
+            "--work-dir",
+            str(tmp_path / "work"),
+            "--output",
+            str(output),
+            "--claim",
+            context["claim"],
+            "--release-id",
+            "c" * 40 if fault == "release" else release,
+            "--record-version",
+            "record-v1",
+            "--expected-state-sha256",
+            "0" * 64 if fault == "stale" else blue_green.digest(identity),
+        ],
+    )
+    assert release_blue_green.main() == 1
+    result = json.loads(output.read_text())
+    assert result["deployment"] == "failed"
+    if fault is None:
+        assert result["recovery"] == "recovered"
+        assert commands == ["plan", "apply"]
+        assert observed == [
+            "wait_routing",
+            "readiness",
+            "probe",
+            "private_probe",
+            "assets",
+            "assets",
+        ]
+        assert result["active"] == "blue"
+        assert set(result["shared_components"].values()) == {"verified"}
+    else:
+        assert result["recovery"] != "recovered"
+        assert "apply" not in commands
+        assert not observed
+
+
+@pytest.mark.parametrize("environment", shared_packages.ACCOUNTS)
+@pytest.mark.parametrize("phase", ["prepare", "promote", "recover"])
+@pytest.mark.parametrize("baseline", [False, True])
+def test_legacy_chat_noop_is_only_for_baseline_production_recovery(
+    environment: str,
+    phase: str,
+    baseline: bool,
+) -> None:
+    document, retained, expected = package_plan(environment, phase, partial="complete")
+    if baseline:
+        release = shared_packages.LEGACY_RECOVERY_RELEASE
+        document = json.loads(json.dumps(document).replace("a" * 40, release))
+        retained = json.loads(json.dumps(retained).replace("a" * 40, release))
+        expected["release"] = release
+    name = "tollchat-v2-public-chat-routes" + (
+        "-dev" if environment == "development" else ""
+    )
+    code = (ROOT / "v2/agent/public-api-gate.js").read_text()
+    values = {
+        "name": name,
+        "arn": f"arn:aws:cloudfront::{expected['account']}:function/{name}",
+        "runtime": "cloudfront-js-2.0",
+        "publish": True,
+        "code": code[code.index("function handler") :],
+    }
+    document["resource_changes"].append(
+        change(shared_packages.CHAT_ROUTES, deepcopy(values), values, ["no-op"])
+    )
+    if environment == "production" and phase == "recover" and baseline:
+        blue_green.validate_plan(document, retained, phase, package_evidence=expected)
+    else:
+        with pytest.raises(ValueError, match="public_chat_code"):
+            blue_green.validate_plan(
+                document, retained, phase, package_evidence=expected
+            )
+
+
+@pytest.mark.parametrize("workflow_sha", [None, "b" * 40, "a" * 40])
+def test_forward_delivery_still_requires_workflow_sha(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    workflow_sha: str | None,
+) -> None:
+    expected = shared_fixture(tmp_path)
+    release_blue_green.configure("development")
+    if workflow_sha is None:
+        monkeypatch.delenv("GITHUB_SHA", raising=False)
+    else:
+        monkeypatch.setenv("GITHUB_SHA", workflow_sha)
+    if workflow_sha == "a" * 40:
+        assert release_blue_green.package_evidence(tmp_path) == expected
+    else:
+        with pytest.raises(ValueError, match="shared_package_evidence"):
+            release_blue_green.package_evidence(tmp_path)

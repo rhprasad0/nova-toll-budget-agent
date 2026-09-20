@@ -573,7 +573,17 @@ def validate_plan(
             and address == "aws_cloudfront_function.public_chat_routes"
         ):
             try:
-                shared_packages.validate_chat(item, environment)
+                shared_packages.validate_chat(
+                    item,
+                    environment,
+                    legacy_recovery=(
+                        phase == "recover"
+                        and environment == "production"
+                        and package_evidence is not None
+                        and package_evidence["release"]
+                        == shared_packages.LEGACY_RECOVERY_RELEASE
+                    ),
+                )
             except (ValueError, KeyError, TypeError) as error:
                 raise Rejected("public_chat_code") from error
         if actions == ["no-op"]:
