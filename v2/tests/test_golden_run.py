@@ -377,8 +377,8 @@ def test_real_sdk_transport_has_no_retries_and_bounded_timeout(
     native = (
         run.toll_agent._build_model() if role == "agent" else run.build_eval_model()
     )
-    requests = []
-    clients = []
+    requests: list[httpx.Request] = []
+    clients: list[openai.AsyncOpenAI] = []
     original = openai.AsyncOpenAI
 
     def respond(request: httpx.Request) -> httpx.Response:
