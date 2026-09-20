@@ -284,6 +284,7 @@ def promotion(decision: dict[str, Any]) -> dict[str, Any]:
         "migration": "success",
         "apply": "success",
         "readiness": "success",
+        "completed_at": (NOW - timedelta(minutes=1)).isoformat(),
         "canary": {
             "schema_version": 1,
             "runtime_version": "1",
@@ -319,6 +320,7 @@ def promotion_decision(root: Path, passing: dict[str, Any]) -> dict[str, Any]:
         "qualified": True,
         "errors": [],
         "run_created_at": report["manifest"]["created_at"],
+        "evaluated_at": (NOW - timedelta(minutes=2)).isoformat(),
         "identity": report["manifest"]["identity"],
         **reference,
         "baseline_report_sha256": None,
@@ -547,3 +549,40 @@ def test_html_is_offline_and_escapes_transcripts(
     assert text.count("<details>") == 8 and "<script" not in text
     assert "&lt;script&gt;" in text
     assert "Production baseline: unset" in text
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("approved_at", None),
+        ("approved_at", "invalid"),
+        ("approved_at", NOW.replace(tzinfo=None).isoformat()),
+        ("approved_at", (NOW - timedelta(minutes=3)).isoformat()),
+        ("approved_at", (NOW - timedelta(seconds=90)).isoformat()),
+        ("approved_at", (NOW + timedelta(seconds=1)).isoformat()),
+        ("completed_at", None),
+        ("completed_at", (NOW - timedelta(minutes=3)).isoformat()),
+    ],
+)
+def test_promotion_timestamp_failure_preserves_registry(
+    tmp_path: Path, passing: dict[str, Any], field: str, value: str | None
+) -> None:
+    initial = {"report_sha256": "initial"}
+    baseline.update_registry(tmp_path, initial)
+    decision = promotion_decision(tmp_path, passing)
+    proof = promotion(decision)
+    target = proof["approval"] if field == "approved_at" else proof
+    if value is None:
+        del target[field]
+    else:
+        target[field] = value
+    proof["approval"]["evidence_sha256"] = golden.digest(
+        {
+            "decision": decision,
+            "promotion": {k: v for k, v in proof.items() if k != "approval"},
+        }
+    )
+    before = (tmp_path / "registry.json").read_bytes()
+    with pytest.raises(ValueError, match="promotion timestamps"):
+        baseline.update_registry(tmp_path, initial, decision, proof, now=NOW)
+    assert (tmp_path / "registry.json").read_bytes() == before

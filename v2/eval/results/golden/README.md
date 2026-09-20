@@ -168,7 +168,9 @@ agent or suite is a new reviewed experiment, not a replacement attempt.
 `update_registry()` is the local post-promotion helper, deliberately absent from
 the CLI. It requires a qualified decision, a matching successful migration,
 apply/readiness and existing canary record, and a human approval bound to that
-decision and promotion evidence. It reuses the existing canary validator,
+decision and promotion evidence. The timezone-aware timestamps must satisfy
+`run_created_at <= evaluated_at <= completed_at <= approval.approved_at <= now`;
+`completed_at` records completion of deployment and its canary. It reuses the existing canary validator,
 checks the expected prior production reference, and writes the history and new
 reference atomically under a file lock. Its caller must first authenticate the
 deployment and approval provenance; #363 supplies that protected integration.

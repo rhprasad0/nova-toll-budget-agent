@@ -579,6 +579,18 @@ def update_registry(
                     }
                 ),
             )
+            try:
+                ordered = (
+                    timestamp(decision["run_created_at"])
+                    <= timestamp(decision["evaluated_at"])
+                    <= timestamp(promotion["completed_at"])
+                    <= timestamp(promotion["approval"]["approved_at"])
+                    <= current_time
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("invalid promotion timestamps") from exc
+            if not ordered:
+                raise ValueError("promotion timestamps are out of order")
             record = {"decision": decision, "promotion": promotion}
             state["approvals"].append(record)
             state["production"] = {
