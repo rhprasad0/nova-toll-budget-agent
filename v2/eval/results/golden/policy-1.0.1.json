@@ -1,0 +1,31 @@
+{
+  "policy": {
+    "version": "1.0.1",
+    "contract_sha256": "bb2dd4bdf1a3808cd2db5f51f8e601a5dd5c46cad3af6f9b9ec93dd11178d734",
+    "trials": 3,
+    "cases": 24,
+    "workers": 4,
+    "critical_passes": 3,
+    "noncritical_passes": 2,
+    "suite_success_min": 0.9,
+    "suite_pass_cubed_min": 0.75,
+    "lost_passes_max": 1,
+    "run_cost_max_usd": 5.0,
+    "agent_cost_per_success_max_usd": 0.05,
+    "latency_p50_max_seconds": 30.0,
+    "latency_p95_max_seconds": 60.0,
+    "candidate_max_age_hours": 24,
+    "production_max_age_hours": 720,
+    "sample_size": 8,
+    "replacement_runs_max": 1,
+    "max_output_tokens": 2048
+  },
+  "approval": {
+    "status": "pending",
+    "evidence_sha256": null,
+    "reviewer": null,
+    "approved_at": null,
+    "evidence": null,
+    "scope": "The numeric limits remain approved and unchanged. The new immutable-artifact evaluation contract needs calibration and exact digest approval."
+  }
+}

@@ -187,6 +187,14 @@ def test_fixed_private_api_preflight_stops_before_production_mutations(
 
 def _admission() -> dict[str, object]:
     return {
+        "golden": {
+            "run_id": 100,
+            "receipt_sha256": "e" * 64,
+            "policy_sha256": "f" * 64,
+            "baseline_sha256": "a" * 64,
+            "report_sha256": "b" * 64,
+            "created_at": "2026-09-20T20:00:00+00:00",
+        },
         "release_id": 7,
         "tag": "v1.2.3",
         "candidate": "b" * 40,
@@ -205,16 +213,22 @@ def _admission() -> dict[str, object]:
     }
 
 
-@pytest.mark.parametrize("invalid", [False, True])
+@pytest.mark.parametrize(
+    "invalid", ["", "candidate", "missing-golden", "malformed-golden"]
+)
 def test_actual_workflow_admission_binds_object_and_sanitizes_failure(
-    tmp_path: Path, invalid: bool
+    tmp_path: Path, invalid: str
 ) -> None:
     (tmp_path / "trusted").symlink_to(ROOT, target_is_directory=True)
     runner = tmp_path / "runner"
     runner.mkdir()
     admission = _admission()
-    if invalid:
+    if invalid == "candidate":
         admission["candidate"] = "not-a-sha"
+    elif invalid == "missing-golden":
+        del admission["golden"]
+    elif invalid == "malformed-golden":
+        admission["golden"] = {"receipt_sha256": "e" * 64}
     env = {
         "PATH": os.defpath,
         "ADMISSION": json.dumps(admission),
@@ -722,6 +736,8 @@ def test_third_party_actions_follow_explicit_deploy_credential_clears() -> None:
         ("role", "migration-identity"),
         ("arn-account", "migration-identity"),
         ("schema-version", "migration-identity"),
+        ("missing-golden", "migration-identity"),
+        ("malformed-golden", "migration-identity"),
         ("public", "migration-database"),
         ("resource", "migration-database"),
         ("region", "migration-database"),
@@ -781,29 +797,18 @@ def test_actual_production_wrapper_boundaries(
         "GITHUB_REPOSITORY": "rhprasad0/nova-toll-budget-agent",
         "GITHUB_SHA": "a" * 40,
         "PRODUCTION_MIGRATION_CANDIDATE": "b" * 40,
-        "PRODUCTION_MIGRATION_ADMISSION": json.dumps(
-            {
-                "release_id": 7,
-                "tag": "v1.2.3",
-                "candidate": "b" * 40,
-                "listener_run": 11,
-                "listener_attempt": 1,
-                "development_run": 12,
-                "development_attempt": 2,
-                "development_deployment": 9,
-                "evidence_artifact": {"id": 13, "digest": "sha256:" + "c" * 64},
-                "bundle_id": 10,
-                "bundle_digest": "sha256:" + "d" * 64,
-                "schema_versions": {"pricing": "1.4.0", "oracle": "1.15.0"},
-                "consumer_run": 14,
-                "consumer_attempt": 1,
-                "claim_id": 15,
-            }
-        ),
+        "PRODUCTION_MIGRATION_ADMISSION": json.dumps(_admission()),
     }
     if failure == "schema-version":
         admission = json.loads(env["PRODUCTION_MIGRATION_ADMISSION"])
         admission["schema_versions"]["oracle"] = "1.14.1"
+        env["PRODUCTION_MIGRATION_ADMISSION"] = json.dumps(admission)
+    if failure in {"missing-golden", "malformed-golden"}:
+        admission = json.loads(env["PRODUCTION_MIGRATION_ADMISSION"])
+        if failure == "missing-golden":
+            del admission["golden"]
+        else:
+            admission["golden"]["receipt_sha256"] = "invalid"
         env["PRODUCTION_MIGRATION_ADMISSION"] = json.dumps(admission)
     result = subprocess.run(
         ["bash", str(scripts / "run_production_migrations_workflow.sh")],
@@ -989,6 +994,7 @@ def test_actual_cutover_shell_resumes_without_reapplying_preparation(
 def _saved_contract() -> tuple[dict[str, Any], dict[str, Any]]:
     now = datetime.now(UTC).replace(microsecond=0)
     admission: dict[str, Any] = {
+        "golden": _admission()["golden"],
         "release_id": 7,
         "tag": "v1.2.3",
         "candidate": "b" * 40,

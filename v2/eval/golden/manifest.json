@@ -1,10 +1,10 @@
 {
-  "version": "1.0.8",
+  "version": "1.0.9",
   "trials_per_case": 3,
   "actor_model": "gpt-5.6-luna",
   "judge_model": "gpt-5.6-luna",
   "review_status_file": "review.json",
-  "corpus_sha256": "43d30aa428a25cc8288388b829e47722df6589dae1a11e6d47cf63bb8d496a42",
+  "corpus_sha256": "062638d1a7a9efa9493325ab43d189a54ee074ffbb4b65fe87fbd3fc3591cc55",
   "hashes": {
     "cases.jsonl": "1ced8cb0a47f0195a1227ee353d8f54859ed04a12fb6b45eee6d8023912b2ebb",
     "prompt-points.json": "5537b59fef725f716b2360356ca9f88df71b31b66c15eed7eaa537763c9f2fee",
@@ -26,10 +26,12 @@
     "fixtures/i66-stale_observation.json": "45748ac15ab641dcc98980bc1259a1d2ae1c0be1b8cde2f46b05eeff4786f65e",
     "fixtures/unsupported-profile.json": "aa58124cf2503e1425811a684b030a2d77acd91ded284e4c4ac1242dd9de9328",
     "v2/uv.lock": "9454dd5fb0d1d636f7c974aa33cdf26346705889ea0aab21f8acdaa1e76857fd",
-    "v2/eval/golden.py": "36550319c3c0654123d74dd22d0626a61c3ab9e05c23d79ddd7708c41573e10c",
+    "v2/eval/golden.py": "f26178097b7758bbdac0ceb91980033e3a6ca210f5b7ee8804c3d906a503d715",
     "v2/eval/simulated.py": "fe27f33fadb90a20c58459723df6c91fb212156169d010f747819a4ce65a4449",
     "v2/eval/run_evaluation.py": "2ee7103f14e879b2f5384f49dd7858e4f8b0e784cbe8f31338f9733e9a73d266",
-    "v2/eval/golden_run.py": "edd371bcf2453fd81a01c3cb1b290470bfbd632147021b862f47df38154cae30",
+    "v2/eval/golden_run.py": "a2c2388d282f251754b16b9650ce9bfbe75d052d0986beeb05dd9e5614847b26",
+    "v2/eval/artifact_agent.py": "df11e823db168a4c6f6c1c30d359a0a6f2db34e8d6d262c5d8a285c0eda8bb18",
+    "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
     "v2/agent_tools/current_price_domain.py": "e3bfc3f37d60e011493278fc72e132a74d2734a035bacbd76f781ae4016c0e3a",
     "v2/agent_tools/get_annual_toll_ballpark.py": "6576b279225160a4275945df56438ce1c4b84e4d1b0654ba2cb56bc088a6e777",
     "v2/agent_tools/validate_toll_route.py": "3346262a1ef2b24d4cc8d578177f6b7bbd0a1e601914044b45a566a96fe760be"

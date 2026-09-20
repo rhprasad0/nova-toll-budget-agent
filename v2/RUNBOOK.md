@@ -1099,3 +1099,11 @@ reviewed saved Terraform plan.
 
 Database and shared polling/storage infrastructure are not part of application
 rollback.
+
+## Golden evaluation gate
+
+Production planning requires the exact development artifact to pass the
+[protected golden evaluation workflow](eval/GOLDEN_RELEASE.md). The initial
+state is blocked pending infrastructure activation, new-contract calibration,
+and a qualified production reference. That guide covers review, baseline
+bootstrap/refresh, and publication recovery without redeployment.

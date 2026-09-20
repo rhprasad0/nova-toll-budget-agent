@@ -31,6 +31,8 @@ SOURCE_FILES = (
     "eval/simulated.py",
     "eval/run_evaluation.py",
     "eval/golden_run.py",
+    "eval/artifact_agent.py",
+    "eval/artifact_worker.py",
     "agent_tools/current_price_domain.py",
     "agent_tools/get_annual_toll_ballpark.py",
     "agent_tools/validate_toll_route.py",
@@ -458,7 +460,7 @@ def validate(root: Path = ROOT) -> None:
         raise ValueError("each case needs a labeled good example")
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != "1.0.8"
+        manifest["version"] != "1.0.9"
         or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-5.6-luna"
         or manifest["judge_model"] != "gpt-5.6-luna"

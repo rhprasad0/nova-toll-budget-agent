@@ -1,0 +1,49 @@
+name: v2-golden-baseline
+on:
+  workflow_run:
+    workflows: [v2-production-plan]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      production_run:
+        description: Successful production workflow run; publication recovery never redeploys
+        required: true
+        type: string
+      evaluation_run:
+        description: Approved evaluation run; 0 resolves the deployed candidate decision
+        default: '0'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: golden-baseline-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'rhprasad0/nova-toll-budget-agent' && github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    environment: golden-baseline
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        with:
+          role-to-assume: arn:aws:iam::903859731897:role/nova-toll-golden-publisher
+          aws-region: us-east-1
+          allowed-account-ids: '903859731897'
+      - name: Verify successful deployment and canary, then conditionally advance baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_RUN: ${{ github.event.workflow_run.id || inputs.production_run }}
+          EVALUATION_RUN: ${{ inputs.evaluation_run || '0' }}
+        run: |
+          set -euo pipefail
+          cd v2
+          python3 -m scripts.golden_release publish --production-run "$PRODUCTION_RUN" --evaluation-run "$EVALUATION_RUN" --directory "$RUNNER_TEMP/publication"

@@ -1,0 +1,158 @@
+name: v2-golden-evaluation
+on:
+  workflow_dispatch:
+    inputs:
+      purpose:
+        type: choice
+        options: [candidate, production-reference]
+        default: candidate
+        required: true
+      development_run:
+        description: Successful development delivery run ID; 0 for current production reference
+        type: string
+        default: '0'
+        required: true
+      superseded_run:
+        description: Failed original run ID; 0 for an original execution
+        type: string
+        default: '0'
+      replacement_reason:
+        description: Approval of golden-evaluation attests this reason against retained prior evidence
+        type: choice
+        options: [none, infrastructure, actor_validity]
+        default: none
+permissions:
+  contents: read
+concurrency:
+  group: golden-paid-evaluation
+  cancel-in-progress: false
+jobs:
+  resolve:
+    if: github.repository == 'rhprasad0/nova-toll-budget-agent' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+    outputs:
+      context: ${{ steps.resolve.outputs.context }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PURPOSE: ${{ inputs.purpose }}
+          DEVELOPMENT_RUN: ${{ inputs.development_run }}
+        run: |
+          set -euo pipefail
+          cd v2
+          python3 -m scripts.golden_release resolve --purpose "$PURPOSE" --development-run "$DEVELOPMENT_RUN" --directory "$RUNNER_TEMP/resolved"
+          printf 'context=%s\n' "$(jq -c . "$RUNNER_TEMP/resolved/context.json")" >>"$GITHUB_OUTPUT"
+  evaluate:
+    needs: resolve
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    environment: golden-evaluation
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: trusted
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ fromJSON(needs.resolve.outputs.context).candidate }}
+          path: candidate
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          python-version: '3.13'
+      - run: uv sync --frozen --directory trusted/v2
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        with:
+          role-to-assume: arn:aws:iam::903859731897:role/nova-toll-golden-evaluator
+          aws-region: us-east-1
+          allowed-account-ids: '903859731897'
+      - name: Verify readiness, exact artifact, and declare execution
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: ${{ needs.resolve.outputs.context }}
+          SUPERSEDED_RUN: ${{ inputs.superseded_run }}
+          REPLACEMENT_REASON: ${{ inputs.replacement_reason }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$CONTEXT" >"$RUNNER_TEMP/context.json"
+          cd trusted/v2
+          uv run python -m scripts.golden_release prepare --context "$RUNNER_TEMP/context.json" --candidate-root "$GITHUB_WORKSPACE/candidate" --directory "$RUNNER_TEMP/golden" --superseded-run "$SUPERSEDED_RUN" --replacement-reason "$REPLACEMENT_REASON"
+      - name: Execute 72 fresh frozen trials within the approved budget
+        run: |
+          cd trusted/v2
+          uv run python -m scripts.golden_release execute --directory "$RUNNER_TEMP/golden"
+      - name: Check machine requirements before requesting human review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd trusted/v2
+          uv run python -m scripts.golden_release machine --directory "$RUNNER_TEMP/golden"
+      - name: Retain sanitized evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: golden-evidence-${{ github.run_id }}-1
+          path: |
+            ${{ runner.temp }}/golden/packet/
+            ${{ runner.temp }}/golden/comparison/
+            ${{ runner.temp }}/golden/prepared.json
+            ${{ runner.temp }}/golden/evidence.json
+            ${{ runner.temp }}/golden/decision.json
+            ${{ runner.temp }}/golden/review.html
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Explain required review
+        if: success()
+        run: |
+          echo 'Review the golden-evidence artifact: exact identities, all critical failures, eight transcript samples, actor validity, held-out exposure, calibration, and cost/latency. Approving golden-review asserts there are no unresolved findings. Reject if actor validity is uncertain.' >>"$GITHUB_STEP_SUMMARY"
+  approve:
+    needs: evaluate
+    runs-on: ubuntu-latest
+    environment: golden-review
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          python-version: '3.13'
+      - run: uv sync --frozen --directory v2
+      - name: Download this run's review packet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name "golden-evidence-$GITHUB_RUN_ID-1" --dir "$RUNNER_TEMP/golden"
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        with:
+          role-to-assume: arn:aws:iam::903859731897:role/nova-toll-golden-reviewer
+          aws-region: us-east-1
+          allowed-account-ids: '903859731897'
+      - name: Bind actual human approval and requalify exact evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd v2
+          uv run python -m scripts.golden_release approve --directory "$RUNNER_TEMP/golden"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: golden-decision-${{ github.run_id }}-1
+          path: ${{ runner.temp }}/golden/receipt.json
+          if-no-files-found: error
+          retention-days: 90

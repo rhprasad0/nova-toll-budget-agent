@@ -15,6 +15,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  golden-artifact-smoke:
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: v2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22.22.1'
+      - run: uv sync --frozen
+      - run: ./scripts/build_agentcore_zips.sh
+      - name: Run packaged agent with a canned provider and frozen replay
+        run: uv run python -m tests.golden_artifact_smoke infra/build/agentcore
   v2-loader:
     runs-on: ubuntu-latest
     defaults:
