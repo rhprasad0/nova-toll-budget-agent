@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol, cast
 
@@ -50,6 +50,7 @@ _TOOL_LABELS = {
     "get_current_toll_price": "Checking current toll price",
     "get_annual_toll_ballpark": "Calculating annual toll-commute affordability",
 }
+_TEXT_BOUNDARY = re.compile(r"""[.!?]["')\]]*(?=\s)|\n\n""")
 logger = logging.getLogger(__name__)
 
 
@@ -69,6 +70,17 @@ def _error(code: str, message: str) -> dict[str, object]:
 
 def _blocked() -> dict[str, object]:
     return {"type": "answer", "text": BLOCKED_MESSAGE, "blocked": True}
+
+
+def _text_boundary(text: str, published: int) -> int:
+    """First sentence promptly, then ~200 chars; long sentences at ~400 chars."""
+    minimum = 1 if published == 0 else 200
+    for match in _TEXT_BOUNDARY.finditer(text, published):
+        if minimum <= match.end() - published <= 400:
+            return match.end()
+    # Wait for whitespace so even a credential split across model deltas stays whole.
+    whitespace = re.search(r"\s", text[published + 400 :])
+    return published + 400 + whitespace.end() if whitespace else published
 
 
 def _duplicate(result: Mapping[str, object]) -> bool:
@@ -244,7 +256,10 @@ class TollChatRuntime:
             outputScope="FULL",
             content=[{"text": text_content}],
         )
-        return response.get("action") == "GUARDRAIL_INTERVENED"
+        action = response.get("action")
+        if action not in {"NONE", "GUARDRAIL_INTERVENED"}:
+            raise RuntimeError("invalid guardrail response")
+        return action == "GUARDRAIL_INTERVENED"
 
     async def stream(self, payload: object) -> AsyncIterator[dict[str, object]]:
         if not isinstance(payload, dict):
@@ -283,15 +298,50 @@ class TollChatRuntime:
                 request.get("canary_marker") == CANARY_MARKER
                 and prompt == CANARY_PROMPT
             )
-            async for event in self._agent.stream_async(
-                prompt, limits=_INVOCATION_LIMITS
-            ):
-                if canary and "message" in event:
-                    canary_messages.append(event["message"])
-                for activity in _activity_events(event.get("message"), activities):
-                    yield activity
-                if "result" in event:
-                    result = event["result"]
+            text = ""
+            published = 0
+            events = self._agent.stream_async(prompt, limits=_INVOCATION_LIMITS)
+            try:
+                async for event in events:
+                    # A retry starts a fresh message without completing its predecessor.
+                    raw = event.get("event")
+                    if isinstance(raw, Mapping) and "messageStart" in raw:
+                        text, published = "", 0
+                    # Strands puts only public assistant text in data, not reasoning
+                    # or tool arguments. message marks a completed assistant turn.
+                    if isinstance(delta := event.get("data"), str):
+                        text += delta
+                    message = event.get("message")
+                    finished = (
+                        isinstance(message, Mapping)
+                        and cast(Mapping[str, object], message).get("role")
+                        == "assistant"
+                    )
+                    boundary = (
+                        len(text) if finished else _text_boundary(text, published)
+                    )
+                    while boundary > published:
+                        snapshot = text[:boundary]
+                        # ponytail: recheck prefixes for context within the 8192-token
+                        # limit; use overlapping windows if measured cost warrants it.
+                        if self._is_blocked(snapshot, "OUTPUT"):
+                            self._agent = None
+                            yield _blocked()
+                            return
+                        yield {"type": "text", "text": snapshot}
+                        published = boundary
+                        boundary = _text_boundary(text, published)
+                    if finished:
+                        text, published = "", 0
+                    if canary and "message" in event:
+                        canary_messages.append(event["message"])
+                    for activity in _activity_events(event.get("message"), activities):
+                        yield activity
+                    if "result" in event:
+                        result = event["result"]
+            finally:
+                if isinstance(events, AsyncGenerator):
+                    await events.aclose()
             if result is None:
                 raise RuntimeError("agent stream ended without a result")
             answer = str(result).strip()

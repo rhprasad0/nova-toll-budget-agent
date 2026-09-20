@@ -1814,10 +1814,11 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
         "before migration credentials and fixed migration",
         "re-assumes the deploy role",
         "before applying that same plan",
-        "exactly one bounded canary",
-        "direct, arbitrary, regenerated,\nstale, or caller-selected plan/apply",
+        "separate `production-cutover` approval",
+        "new routing-only plan",
+        "Two consecutive failures",
+        "direct, arbitrary, stale, or caller-selected plan/apply",
         "sanitized",
-        "single bounded candidate-bound record",
     ):
         assert text in guarded
     assert "terraform plan" not in guarded
@@ -1834,6 +1835,10 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
         assert text in handoff
     assert "planned-output" not in handoff
     assert "foundation-plan path" not in handoff
+
+    assert "Historical pre-bootstrap recovery capture" in RUNBOOK
+    assert "**Historical pre-bootstrap procedure only.**" in RUNBOOK
+    assert "v2-production-recovery.yml" in RUNBOOK
 
     capture = RUNBOOK.split(
         "Before approving or deploying a production release", maxsplit=1
@@ -2033,9 +2038,10 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
         "saved plan",
         "reviewer approval",
         "Guards fail closed",
-        "capture the\nfixed routing targets",
-        "human-operated manual\nrestore",
-        "never an automatic rollback",
+        "separate `production-cutover` approval",
+        "routing-only promotion plan",
+        "Two consecutive post-cutover observation failures",
+        "v2-production-recovery.yml",
         "sanitized",
     ):
         assert text in readme

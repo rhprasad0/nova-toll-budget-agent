@@ -25,6 +25,7 @@ Each row links a claim to its implementation and a way to inspect or verify it. 
 | --- | --- | --- | --- |
 | Separate development and production environments | [Development backend](infra/backend.development.hcl), [production backend](infra/backend.production.hcl), and [account contract](infra/account-contract.json) | [Infrastructure contract tests](v2/tests/test_infrastructure_contract.py) and [delivery documentation](v2/README.md#verify-the-build) | Separate account/state configuration; release evidence is specific to an artifact and run. |
 | Reviewed, reproducible delivery | [Development delivery](.github/workflows/v2-development-delivery.yml), [production release](.github/workflows/v2-production-release.yml), and [production plan/apply](.github/workflows/v2-production-plan.yml) | [Release checks](v2/tests/test_check_production_release.py), [plan workflow tests](v2/tests/test_production_plan_workflow.py), and [operator runbook](v2/RUNBOOK.md) | Production delivery checks the candidate and saved plan and requires protected review. PR checks use disposable database validation. |
+| Blue-green delivery protects release and conversation boundaries | [Release controller](v2/scripts/release_blue_green.py) and [chat proxy](v2/lambdas/chat_proxy/handler.mjs) | [Deployment tests](v2/tests/test_blue_green.py), [session isolation tests](v2/lambdas/chat_proxy/handler.test.mjs), and [browser restart tests](v2/tests/test_public_chat_ui.mjs) | Separate production cutover approval; retained release for recovery. Sessions restart across releases. See the [deployment runbook](v2/runbooks/blue-green-deployments.md). |
 | The model delegates route validation and money arithmetic to deterministic tools | [Current toll tool](v2/agent_tools/get_current_toll_price.py), [annual commute tool](v2/agent_tools/get_annual_toll_ballpark.py), and [routing contract](v2/db/oracle/CONTRACT.md) | [Tool contract tests](v2/tests/test_tool_contract.py) and [curated live results](v2/eval/results/README.md) | Tools own pricing; generated explanations still need grounding evaluation. |
 | Guardrails check inputs and completed answers | [Runtime checks](v2/agent/agentcore_entrypoint.py) and [versioned guardrail policy](v2/infra/agentcore.tf) | [Input/output blocking and safe-failure tests](v2/tests/test_agentcore_entrypoint.py) and [live release gates](v2/scripts/check_development_release.py) | Configured content, prompt-attack, and credential protections reduce abuse risk; they do not guarantee prevention. |
 | Detected PII is redacted from telemetry before export | [Telemetry exporter](v2/agent/telemetry.py) and [additional masking and alarms](v2/infra/trace_redaction.tf) | [Redaction and failure-path tests](v2/tests/test_telemetry_redaction.py), [observed trace example](#observed-trace-redaction), and [verification runbook](v2/runbooks/telemetry-pii-redaction.md) | Detection can miss information. Redaction failures omit affected content; the screenshot demonstrates one address-redaction example. |
@@ -70,6 +71,18 @@ I reverse-engineered VDOT feed identifiers against public calculators and operat
 
 That work exposed 330 pricing IDs in the I-95/I-495 route map but only 314 in retained VDOT history. The missing 16 affected 107 of 685 published routes. The [proxy mapping](v2/db/analysis.sql) uses source-overlap evidence to select available price proxies and labels those prices as modeled. The [holdout report](v2/eval/results/i95-missing-od-pricing.md) documents their measured error and limitations.
 
+## Blue-green deployments and conversation cutover
+
+**An agent release changes both the application and the context in which a conversation runs.** I built blue-green delivery to validate the next release while the active release continues serving traffic. Candidate checks verify the actual release identity, a grounded agent answer, guardrail behavior, and trace redaction. Production requires a separate human approval before cutover, followed by fresh validation before traffic switches.
+
+Promotion changes routing to the validated candidate and retains the previous release for recovery. During post-cutover observation, two consecutive probe failures trigger one rollback attempt. The [deployment runbook](v2/runbooks/blue-green-deployments.md) documents the validation gates and recovery procedure; public and private routing updates are not globally atomic.
+
+**Conversation state has an explicit release boundary.** Each session carries a release ID. If a request reaches a different release—or uses a legacy session without an ID—the chat proxy rejects it before invoking or resetting AgentCore, clears the session cookie, and tells the user to start a new conversation. In-flight requests may finish, but prompts are never automatically replayed. I chose a visible restart so an existing conversation is not silently continued under a different agent release.
+
+![TollChat deployment notice: The application was updated. Start a new conversation.](v2/docs/assets/tollchat-deployment-cutover.png)
+
+*The user-facing restart message when a session does not match the serving release.*
+
 ## Evaluation status
 
 **A representative golden evaluation set and repeatable before/after measurements of agent improvements are in progress.** The scheduled suite covers six current-toll scenarios with simulated users, a deterministic tool-call count check, and model-based completeness and correctness judges. The broader regression catalog checks parameters, clarification, route availability, money, and grounding. The reports below are scoped experiments, not a current whole-agent accuracy score or evidence of improvement between agent versions.
@@ -87,6 +100,7 @@ The next evaluation milestone is to establish the representative golden set, rec
 ## Reproduce and inspect
 
 - [Run the local agent](v2/README.md#local-agent-console) or try the [deployed application](https://tollchat.ai/).
+- Inspect [daily AWS and OpenAI billing](https://tollchat.ai/cost-dashboard) in the cost dashboard; per-answer cost is not yet measured.
 - [Build and validate](v2/README.md#verify-the-build), including disposable database checks.
 - [Run offline evaluation checks](v2/eval/README.md#offline-check) or follow the separately credentialed [live evaluation instructions](v2/eval/README.md#live-run).
 - Inspect [release operations](v2/RUNBOOK.md), [telemetry verification](v2/runbooks/telemetry-pii-redaction.md), and [shared foundation changes](v2/README.md#shared-foundation-changes).

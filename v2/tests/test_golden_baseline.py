@@ -121,7 +121,8 @@ def test_policy_and_retained_initial_are_pinned() -> None:
     assert policy.contract_sha256 == baseline.contract(
         baseline.read(EVIDENCE / "calibration-7/manifest.json")["identity"]
     )
-    assert policy.contract_sha256 == baseline.contract(
+    # The reviewed historical policy must not authorize revised case requirements.
+    assert policy.contract_sha256 != baseline.contract(
         {
             **baseline.read(EVIDENCE / "calibration-7/manifest.json")["identity"],
             "cases": [c.model_dump(mode="json") for c in golden.load_cases()],
