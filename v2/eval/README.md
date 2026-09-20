@@ -1,7 +1,7 @@
 # TollChat v2 evaluation
 
 The separate [24-case golden corpus](GOLDEN_EVAL_SPEC.md) has offline validation;
-Ryan approved the cases and labels in version 1.0.1; version 1.0.2 calibrates the judge. It has no baseline score yet and excludes
+Ryan approved the cases and labels in version 1.0.1; version 1.0.3 calibrates the judge. It has no baseline score yet and excludes
 current I-95/I-395 direction cases; the scheduled suite below stays separate.
 
 The scheduled Strands suite uses simulated users and model-based judges for six

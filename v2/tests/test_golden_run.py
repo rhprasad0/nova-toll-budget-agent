@@ -82,6 +82,13 @@ def test_development_only_and_full_trajectory() -> None:
     parsed = judge._get_last_turn(data)  # pyright: ignore[reportPrivateUsage]
     prompt = judge._format_reference_prompt(parsed, data)  # pyright: ignore[reportPrivateUsage]
     assert "Battlefield" in prompt and "Leesburg" in prompt and "5.80" in prompt
+    whole = run.ConversationJudge(model=Mock(spec=Model))
+    data.actual_output = json.dumps([t.model_dump() for t in example.turns])
+    prompt = whole._format_reference_prompt(parsed, data)  # pyright: ignore[reportPrivateUsage]
+    assert "COMPLETE ORDERED CONVERSATION" in prompt
+    assert example.turns[0].response in prompt
+    assert example.turns[1].response in prompt
+    assert "AGENT RESPONSE:" not in prompt
 
 
 def test_real_tool_adapter_replays_without_live_calls() -> None:
@@ -274,3 +281,65 @@ def test_real_agent_keeps_conversation_and_uses_only_replay(
     assert len(row.turns) == 2 and len(row.requested_tools) == 2
     assert seen == sorted(seen) and seen[-1] > seen[0]
     assert not golden.grade_assertions(case, row.turns)
+
+
+def test_repeating_agent_is_scored_failure_not_infrastructure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from strands.models.openai_responses import OpenAIResponsesModel
+
+    case = golden.load_cases()[0]
+    fixture = golden.load_fixture(case.steps[0].fixture)
+    model = OpenAIResponsesModel(model_id="offline", client_args={"api_key": "offline"})
+    count = 0
+
+    async def repeating(
+        *args: object, **kwargs: object
+    ) -> AsyncIterator[dict[str, Any]]:
+        nonlocal count
+        count += 1
+        yield {"messageStart": {"role": "assistant"}}
+        yield {
+            "contentBlockStart": {
+                "start": {"toolUse": {"toolUseId": str(count), "name": fixture.tool}}
+            }
+        }
+        yield {
+            "contentBlockDelta": {
+                "delta": {"toolUse": {"input": json.dumps(fixture.input)}}
+            }
+        }
+        yield {"contentBlockStop": {}}
+        yield {"messageStop": {"stopReason": "tool_use"}}
+        yield {
+            "metadata": {
+                "usage": {"inputTokens": 100, "outputTokens": 20, "totalTokens": 120},
+                "metrics": {"latencyMs": 1},
+            }
+        }
+
+    cast(Any, model).stream = repeating
+    monkeypatch.setattr(run.toll_agent, "_build_model", lambda: model)
+    monkeypatch.setattr(
+        run,
+        "build_eval_model",
+        lambda: OpenAIResponsesModel(
+            model_id="offline", client_args={"api_key": "offline"}
+        ),
+    )
+    monkeypatch.setattr(golden, "make_actor", Mock())
+
+    def reject(
+        case: golden.GoldenCase, attempt: run.Attempt, journal: run.Journal
+    ) -> None:
+        attempt.verdicts = {
+            key: run.Verdict(passed=False, evidence="Repeated tool call")
+            for key in ("outcome", "grounding", "rules")
+        }
+
+    monkeypatch.setattr(run, "judge", reject)
+    result = run.execute(case, 1, run.Journal(tmp_path / "loop", 25))
+    assert result.status == "scored" and result.failure_class == "budget"
+    assert "tool_budget" in result.checks
+    assert len(result.requested_tools) == 2
+    assert count == 2 and not result.passed

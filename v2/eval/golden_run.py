@@ -19,16 +19,17 @@ from pydantic import Field
 from strands import tool  # pyright: ignore[reportUnknownVariableType]
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
 from strands.models import Model
+from strands.types.exceptions import MaxTokensReachedException
 from strands.types.tools import ToolContext, ToolSpec
 from strands_evals.types.evaluation import EvaluationData
 from strands_evals.types.simulation import ActorResponse
-from strands_evals.types.trace import Session
+from strands_evals.types.trace import Session, TraceLevelInput
 
 from agent import toll_agent
 from eval import golden
-from eval.simulated import build_eval_model
+from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
 
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -128,6 +129,20 @@ class TaskFailure(Exception):
     """The application exceeded its task contract."""
 
 
+class ConversationJudge(GroundedCorrectnessEvaluator):
+    """The SDK default foregrounds the final answer; our task is the full dialogue."""
+
+    def _format_reference_prompt(
+        self, parsed_input: TraceLevelInput, evaluation_case: EvaluationData[str, str]
+    ) -> str:
+        return (
+            "REQUIREMENTS FOR THE WHOLE CONVERSATION:\n"
+            + (evaluation_case.expected_assertion or "")
+            + "\n\nCOMPLETE ORDERED CONVERSATION (each turn contains user, calls, then assistant response):\n"
+            + (evaluation_case.actual_output or "")
+        )
+
+
 class RequestGuard(HookProvider):
     def __init__(
         self, case: golden.GoldenCase, attempt: Attempt, journal: Journal | None = None
@@ -174,10 +189,12 @@ def cost(usage: dict[str, int]) -> float:
         usage.get("cacheReadInputTokens", 0),
         usage.get("cacheWriteInputTokens", 0),
     )
-    if min(total, output, read, write) < 0 or read + write > total or total > 272000:
-        raise ValueError("invalid or unexpected long-context usage")
+    if min(total, output, read, write) < 0 or read + write > total:
+        raise ValueError("invalid usage")
+    input_multiplier, output_multiplier = (2, 1.5) if total > 272000 else (1, 1)
     return (
-        (total - read - write) * 0.20 + read * 0.02 + write * 0.25 + output * 1.20
+        ((total - read - write) * 0.20 + read * 0.02 + write * 0.25) * input_multiplier
+        + output * 1.20 * output_multiplier
     ) / 1_000_000
 
 
@@ -223,9 +240,9 @@ class Journal:
                     raise TaskFailure("model_call_budget")
                 raise StopRun("simulator_or_judge_call_budget")
             input_bound = len(json.dumps([args, kwargs], default=str).encode()) + 8192
-            if input_bound > 272000:
+            if input_bound > 1_000_000:
                 raise StopRun("input_budget")
-            reserve = (input_bound * 0.25 + 2048 * 1.20) / 1_000_000
+            reserve = (input_bound * 0.50 + 2048 * 1.80) / 1_000_000
             if self.unknown_usage or self.spent + reserve > self.limit:
                 raise StopRun("spend_budget_or_unknown_usage")
             count += 1
@@ -377,7 +394,9 @@ def trajectory(case: golden.GoldenCase, turns: list[golden.Turn]) -> Session:
 
 def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
     model = journal.model(build_eval_model(), "judge", attempt, 12)
-    evaluator = golden.make_judge(model)
+    evaluator = ConversationJudge(
+        model=model, name="Correctness", reference_system_prompt=golden.JUDGE_PROMPT
+    )
     for key, rubric in {"outcome": case.expected_assertion, **RUBRICS}.items():
         evaluator.reference_system_prompt = (
             golden.JUDGE_PROMPT if key == "outcome" else DIAGNOSTIC_PROMPT
@@ -396,7 +415,9 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
         )
         data = EvaluationData[str, str](
             input=case.prompt,
-            actual_output=attempt.turns[-1].response,
+            actual_output=json.dumps(
+                [t.model_dump() for t in attempt.turns], ensure_ascii=False
+            ),
             expected_assertion=reference,
             actual_trajectory=trajectory(case, attempt.turns),
         )
@@ -477,9 +498,17 @@ def execute(case: golden.GoldenCase, number: int, journal: Journal) -> Attempt:
                 if result.stop_reason == "max_tokens":
                     attempt.checks.append("output_token_budget")
                     break
-            except TaskFailure as error:
-                attempt.checks.append(str(error))
-                break
+            except Exception as error:
+                cause = error
+                while isinstance(cause.__cause__, Exception):
+                    cause = cause.__cause__
+                if isinstance(cause, TaskFailure):
+                    attempt.checks.append(str(cause))
+                    break
+                if isinstance(cause, MaxTokensReachedException):
+                    attempt.checks.append("output_token_budget")
+                    break
+                raise
             journal.append(
                 {
                     "event": "turn",
@@ -527,11 +556,11 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
     if git("status", "--porcelain", "--untracked-files=normal"):
         raise ValueError("paid runs require a clean committed checkout")
     manifest = json.loads((golden.ROOT / "manifest.json").read_text())
-    files = git("ls-files", "-z").split("\0")
+    files = git("ls-files", "--full-name", "-z", "--", ":/").split("\0")
     source_hashes = {
-        p: golden.hashlib.sha256((golden.V2 / p).read_bytes()).hexdigest()
+        p: golden.hashlib.sha256((golden.V2.parent / p).read_bytes()).hexdigest()
         for p in files
-        if p and (golden.V2 / p).is_file()
+        if p and (golden.V2.parent / p).is_file()
     }
     points = json.loads((golden.ROOT / "prompt-points.json").read_text())
     return {
@@ -929,6 +958,25 @@ def render(directory: Path) -> dict[str, Any]:
             "release_decision": "not_provided",
             "human_review": review,
             "warning": "Zero observed violations do not establish zero underlying risk.",
+        }
+        report["attempts"] = [
+            {
+                **a.model_dump(),
+                "overall_success": a.passed,
+                "mandatory_checks_passed": not a.checks,
+                "evidence_reference": f"events.jsonl#attempt={a.id}",
+            }
+            for a in attempts
+        ]
+        report["category_counts"] = {
+            tag: {
+                "cases": sum(tag in c.coverage_tags for c in cases),
+                "attempted_trials": sum(
+                    a.case_id in {c.id for c in cases if tag in c.coverage_tags}
+                    for a in attempts
+                ),
+            }
+            for tag in sorted({tag for c in cases for tag in c.coverage_tags})
         }
         for name, subset in {
             "development": [c for c in cases if not c.held_out],

@@ -1,11 +1,11 @@
-# TollChat golden evaluation set, version 1.0.2
+# TollChat golden evaluation set, version 1.0.3
 
 This is a 24-case starting corpus for a repeatable baseline: 11 current-price
 conversations and 13 annual-affordability conversations. The
 [case review](golden/REVIEW.md) includes every question, actor brief, expected
 behavior, fixture reference, and proposed criticality.
 
-**Status: cases and labels approved; version 1.0.2 grader calibration is in progress under #360.** These are authored cases and examples, not
+**Status: cases and labels approved; version 1.0.3 grader calibration is in progress under #360.** These are authored cases and examples, not
 model results. There is no baseline score or calibrated judge yet. Approval is
 recorded separately in [review.json](golden/review.json).
 
@@ -141,7 +141,7 @@ is a distinct record owned by #362. This work neither qualifies a release nor
 defines numeric release thresholds. That policy remains human-reviewed work in
 #362/#363. Criticality does not excuse a failure in a noncritical case.
 
-The manifest pins version 1.0.2, three trials, model choices, and SHA-256 hashes
+The manifest pins version 1.0.3, three trials, model choices, and SHA-256 hashes
 of cases, fixtures, frozen context, examples, and grader sources. File hashes bind
 exact bytes; the aggregate hashes their sorted, compact UTF-8 JSON map. Approval
 is separate to avoid a self-referential hash and names the aggregate digest.
@@ -200,7 +200,11 @@ exact corpus SHA-256, reviewer, and an evidence link or transcript reference.
 The current version has that approval recorded. Future revisions require renewed
 review; approving an implementation plan does not approve unseen cases.
 
-Version 1.0.2 retains all case data and labels. It corrects judge over-interpretation
+Version 1.0.3 retains all case data and labels. It corrects judge over-interpretation
 of disclosure requirements and tool-call chronology after the first paid calibration,
 and includes the paid harness in the source hashes. Ryan authorized these judge
 corrections; final calibration evidence and sampled conversations require review.
+
+Version 1.0.2 is retained in the second calibration evidence. Version 1.0.3 also
+replaces the SDK final-answer framing with one complete ordered conversation.
+The case data and approved labels remain unchanged.
