@@ -1,5 +1,9 @@
 # TollChat v2 evaluation
 
+The separate [24-case golden corpus](GOLDEN_EVAL_SPEC.md) has offline validation;
+Ryan has approved version 1.0.1, including the reviewed corrections. It has no baseline score yet and excludes
+current I-95/I-395 direction cases; the scheduled suite below stays separate.
+
 The scheduled Strands suite uses simulated users and model-based judges for six
 current-toll scenarios. The broader code-graded regression catalog retains eight
 current-toll routing cases and twelve annual affordability cases. It

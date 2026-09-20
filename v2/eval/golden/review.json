@@ -1,0 +1,7 @@
+{
+  "status": "pending",
+  "corpus_sha256": null,
+  "reviewer": null,
+  "evidence": null,
+  "notes": "Version 1.0.1 approval is retained in git history. Version 1.0.2 clarifies the existing approved direct-refusal paths; example labels are unchanged. The new digest awaits contract review."
+}
