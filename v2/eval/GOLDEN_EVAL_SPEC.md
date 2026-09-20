@@ -1,11 +1,11 @@
-# TollChat golden evaluation set, version 1.0.2
+# TollChat golden evaluation set, version 1.0.8
 
 This is a 24-case starting corpus for a repeatable baseline: 11 current-price
 conversations and 13 annual-affordability conversations. The
 [case review](golden/REVIEW.md) includes every question, actor brief, expected
 behavior, fixture reference, and proposed criticality.
 
-**Status: version 1.0.1 was approved by Ryan; version 1.0.2 clarifies the approved no-call paths and awaits contract review.** These are authored cases and examples, not
+**Status: cases and labels approved; version 1.0.8 grader correction awaits renewed calibration under #360.** These are authored cases and examples, not
 model results. There is no baseline score or calibrated judge yet. Approval is
 recorded separately in [review.json](golden/review.json).
 
@@ -141,7 +141,7 @@ is a distinct record owned by #362. This work neither qualifies a release nor
 defines numeric release thresholds. That policy remains human-reviewed work in
 #362/#363. Criticality does not excuse a failure in a noncritical case.
 
-The manifest pins version 1.0.2, three trials, model choices, and SHA-256 hashes
+The manifest pins version 1.0.8, three trials, model choices, and SHA-256 hashes
 of cases, fixtures, frozen context, examples, and grader sources. File hashes bind
 exact bytes; the aggregate hashes their sorted, compact UTF-8 JSON map. Approval
 is separate to avoid a self-referential hash and names the aggregate digest.
@@ -158,6 +158,8 @@ in case 24. Version 1.0.0 was approved by Ryan in the case-review conversation
 `bba831745c99298fba9ff2739315797434dad291dab37eb7b95c7e6f570d92e5`.
 No baseline runs exist for either version. Ryan approved the revised cases in the PR #570 follow-up conversation; see
 [review.json](golden/review.json) for the exact corpus hash and approval evidence.
+
+Version 1.0.7 names the approved i95:212NO entry explicitly in case 21, corrects false rejection of explicit statements that missing tolls are not $0.00, and gives the judge the existing SOP facts on estimates and operator independence. The completed 72-trial demo remains pinned to 1.0.5; its raw verdicts are unchanged. No baseline has been promoted.
 
 Meaningful case, fixture, actor, or grader changes require a new corpus version
 and renewed review. Rerun baseline and candidate on the same new version before
@@ -197,9 +199,19 @@ and results.
 Ryan reviews case facts, fixture assumptions, criticality, held-out handling,
 and example labels. Record approval in `review.json` with status `approved`, the
 exact corpus SHA-256, reviewer, and an evidence link or transcript reference.
-The current version has that approval recorded. Future revisions require renewed
-review; approving an implementation plan does not approve unseen cases.
+The cases and labels retain their earlier approval. The current grader revision
+awaits calibration review; approving an implementation plan does not approve
+unseen cases.
 
-Version 1.0.2 removes the tool-result requirement from unsupported-origin refusals
-and makes it conditional on a tool call for unsupported vehicle profiles. The
-approved example labels and intended passing behavior are unchanged.
+Version 1.0.3 retains all case data and labels. It corrects judge over-interpretation
+of disclosure requirements and tool-call chronology after the first paid calibration,
+and includes the paid harness in the source hashes. Ryan authorized these judge
+corrections; final calibration evidence and sampled conversations require review.
+
+Version 1.0.2 is retained in the second calibration evidence. Version 1.0.3 also
+replaces the SDK final-answer framing with one complete ordered conversation.
+The case data and approved labels remain unchanged.
+
+Version 1.0.8 clarifies the grounding requirements for direct unsupported-route
+and unsupported-profile refusals. Approved labels are unchanged; calibration
+and review of the updated contract remain pending.

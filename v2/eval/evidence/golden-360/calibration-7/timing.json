@@ -1,0 +1,17 @@
+{
+  "method": "Manifest creation timestamp to initial report.json filesystem modification time, captured before subsequent rendering. These are observed run times, not a controlled benchmark; the reference changed between runs.",
+  "runs": [
+    {
+      "calibration": 6,
+      "workers": 1,
+      "elapsed_seconds": 530.973,
+      "evidence_sha256": "f8993024a0517dc81e2ca560d79a32ae0bf1520ddad32ebab084cce35d19c85a"
+    },
+    {
+      "calibration": 7,
+      "workers": 4,
+      "elapsed_seconds": 106.744,
+      "evidence_sha256": "e51fa842bbdc86aa98e8714d2760cf9f779c5c1d39cdf406538b57e6c501a836"
+    }
+  ]
+}

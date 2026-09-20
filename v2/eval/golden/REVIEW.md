@@ -1,8 +1,8 @@
-# Golden case review, version 1.0.1
+# Golden case review, version 1.0.7
 
-**Version 1.0.1 approved by Ryan.** Approval includes the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. No live models or pricing services were called. All tool fixtures are synthetic. The 38 example conversations are authored proposals, not measured results.
+**Cases and labels approved; version 1.0.7 judge calibration awaits review.** Approval includes the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. The 38 example conversations were authored without live model or pricing calls. All tool fixtures are synthetic. Paid calibration of those examples is recorded separately under `eval/evidence/golden-360/`.
 
-Corpus SHA-256: `2a5c54e9e9ee8aac9d4262a710db8a9282068d55a705022f388c25721a226d83`
+Corpus SHA-256: `f5826201361001fdea03a80f3097b0ca8e9bd50b0480ec483918d20cf3ab8ffc`
 
 The questions and actor briefs use the humanizer skill. Review their meaning as well as their wording. In particular, check that the actor only knows ordinary user facts and that a rubric accepts a useful equivalent answer.
 
@@ -855,9 +855,9 @@ The corresponding proposed passing conversation is in [examples.json](examples.j
 
 **Independent morning and evening ramps**
 
-> I go from Franconia-Springfield Parkway northbound to Pentagon/Eads in the morning, then Pentagon/Eads southbound to Backlick Road in the evening. What would that cost on $120,000 a year? Monday to Friday, 8 AM out, 5:30 PM back, 240 days.
+> I go from I-95 Near Franconia-Springfield Pkwy NB to Pentagon/Eads in the morning, then Pentagon/Eads southbound to Backlick Road in the evening. What would that cost on $120,000 a year? Monday to Friday, 8 AM out, 5:30 PM back, 240 days.
 
-Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Your gross salary is $120,000 a year. You commute Monday through Friday, leave at 8 AM, head home at 5:30 PM, and expect 240 office days a year. Your morning entry is Franconia-Springfield Parkway northbound; your evening exit is Backlick Road southbound.
+Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Your gross salary is $120,000 a year. You commute Monday through Friday, leave at 8 AM, head home at 5:30 PM, and expect 240 office days a year. Your morning entry is I-95 Near Franconia-Springfield Pkwy NB; your evening exit is Backlick Road southbound.
 
 Actor goal: Get an estimate for the two different commute legs.
 
@@ -1088,10 +1088,10 @@ These are candidates for human labels and later judge calibration, not claims th
 
 ## Review record
 
-- Case/fixture and label approval: approved by Ryan; exact hash and conversation evidence are in [review.json](review.json).
+- Cases/fixtures and labels: unchanged from the approved 1.0.1 set. New grader and harness evidence await review; see [review.json](review.json).
 - Judge calibration: not run; belongs to #360.
 - Baseline execution: not run; belongs to #360/#362.
 - Coverage review: initial 24 cases, with current I-95 direction and guardrail scenarios deliberately excluded.
 - Next review: before any corpus revision or when a new observed failure is considered.
 
-The reviewer, evidence reference, and this exact corpus digest are recorded in [review.json](review.json). Do not mark the corpus approved merely because offline checks pass.
+Record approval of the revised grader and exact corpus digest in [review.json](review.json) after calibration review. Do not mark the corpus approved merely because offline checks pass.
