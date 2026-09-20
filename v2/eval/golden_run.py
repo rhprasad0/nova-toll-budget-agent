@@ -29,7 +29,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
 
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -84,6 +84,13 @@ fixed is accurate. In the frozen I-66 eastbound noon case, the off-peak publishe
 zero rate means outside toll hours. The frozen I-66 eastbound 8 AM case is during
 toll hours, even when its current price observation is missing.
 These facts support direct refusals and schedule explanations without a live call.
+The application SOP states that TollChat is independent and not affiliated with,
+endorsed by, or acting for VDOT, Virginia 511, or any toll operator. It explicitly
+requires treating tool prices as estimates, not operator quotes. The word estimate
+is compatible with a published fixed rate or an observed price when its source
+and time are otherwise accurately described. Do not require an official operator
+quote or reject the word estimate alone. Distinguish actual source kinds: do not
+accept claiming a published schedule rate is live observed, or vice versa.
 """
 
 

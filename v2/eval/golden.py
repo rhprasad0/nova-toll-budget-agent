@@ -357,7 +357,15 @@ def grade_assertions(
                 allowed_money.update(amounts)
             except ValueError as error:
                 failures.append(str(error))
-        if money(turn.response) - allowed_money:
+        # Explicitly denying a zero toll is not a quoted zero price.
+        # Other wording still goes through the semantic grounding judge.
+        monetary_claims = re.sub(
+            r"\b(?:not|never)\s+(?:treat\s+[^$.\n!?]{1,120}\s+as\s+)?(?:\*\*)?\$0(?:\.0{1,2})?(?!\d|\.\d)",
+            "[negated zero toll]",
+            turn.response,
+            flags=re.IGNORECASE,
+        )
+        if money(monetary_claims) - allowed_money:
             failures.append("unsupported_money")
     if sum(len(t.calls) for t in turns) > case.max_tool_calls:
         failures.append("tool_budget")
@@ -450,7 +458,7 @@ def validate(root: Path = ROOT) -> None:
         raise ValueError("each case needs a labeled good example")
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != "1.0.5"
+        manifest["version"] != "1.0.6"
         or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-5.6-luna"
         or manifest["judge_model"] != "gpt-5.6-luna"

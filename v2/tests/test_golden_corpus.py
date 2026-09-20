@@ -252,3 +252,22 @@ def test_partial_history_includes_both_dtr_directions() -> None:
     assert [
         s["annual_toll_usd"] for s in scenarios.values() if isinstance(s, dict)
     ] == ["8544.00", "9504.00", "11424.00"]
+
+
+def test_negated_zero_is_not_an_invented_price() -> None:
+    case = golden.load_cases()[23]
+    example = next(
+        golden.Example.model_validate(item)
+        for item in json.loads((golden.ROOT / "examples.json").read_text())
+        if item["case_id"] == case.id and item["label"] == "good"
+    )
+    for wording in (
+        "The missing toll is not $0.00.",
+        "Do not treat the missing toll as $0.00.",
+        "The missing toll is **not $0.00**.",
+    ):
+        turns = deepcopy(example.turns)
+        turns[-1].response += " " + wording
+        assert "unsupported_money" not in golden.grade_assertions(case, turns)
+        turns[-1].response += " The toll is $0.00."
+        assert "unsupported_money" in golden.grade_assertions(case, turns)

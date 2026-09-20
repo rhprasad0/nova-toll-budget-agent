@@ -1,8 +1,8 @@
-# Golden case review, version 1.0.5
+# Golden case review, version 1.0.6
 
-**Cases and labels approved; version 1.0.5 judge calibration awaits review.** Approval includes the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. The 38 example conversations were authored without live model or pricing calls. All tool fixtures are synthetic. Paid calibration of those examples is recorded separately under `eval/evidence/golden-360/`.
+**Cases and labels approved; version 1.0.6 judge calibration awaits review.** Approval includes the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. The 38 example conversations were authored without live model or pricing calls. All tool fixtures are synthetic. Paid calibration of those examples is recorded separately under `eval/evidence/golden-360/`.
 
-Corpus SHA-256: `93eff91139b44aa57e19056cc9022443dc7124007301ab66abe8c4051161e37f`
+Corpus SHA-256: `bd2d6d06437e302d321296004fc671364115bfbf351f484726a6367e36ed898c`
 
 The questions and actor briefs use the humanizer skill. Review their meaning as well as their wording. In particular, check that the actor only knows ordinary user facts and that a rubric accepts a useful equivalent answer.
 
@@ -855,9 +855,9 @@ The corresponding proposed passing conversation is in [examples.json](examples.j
 
 **Independent morning and evening ramps**
 
-> I go from Franconia-Springfield Parkway northbound to Pentagon/Eads in the morning, then Pentagon/Eads southbound to Backlick Road in the evening. What would that cost on $120,000 a year? Monday to Friday, 8 AM out, 5:30 PM back, 240 days.
+> I go from I-95 Near Franconia-Springfield Pkwy NB to Pentagon/Eads in the morning, then Pentagon/Eads southbound to Backlick Road in the evening. What would that cost on $120,000 a year? Monday to Friday, 8 AM out, 5:30 PM back, 240 days.
 
-Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Your gross salary is $120,000 a year. You commute Monday through Friday, leave at 8 AM, head home at 5:30 PM, and expect 240 office days a year. Your morning entry is Franconia-Springfield Parkway northbound; your evening exit is Backlick Road southbound.
+Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Your gross salary is $120,000 a year. You commute Monday through Friday, leave at 8 AM, head home at 5:30 PM, and expect 240 office days a year. Your morning entry is I-95 Near Franconia-Springfield Pkwy NB; your evening exit is Backlick Road southbound.
 
 Actor goal: Get an estimate for the two different commute legs.
 
