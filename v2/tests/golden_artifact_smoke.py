@@ -100,7 +100,8 @@ def main(bundle: Path) -> None:
         assert args[1:3] == ["-I", "-S"]
         assert set(kwargs["env"]) == {"PATH", "LANG"}
         args[3] = str(Path(__file__).resolve())
-        return cast(subprocess.Popen[bytes], popen([*args, "--child"], **kwargs))
+        kwargs["stderr"] = None
+        return cast("subprocess.Popen[bytes]", popen([*args, "--child"], **kwargs))
 
     case = golden.load_cases()[0]
     attempt = run.Attempt(id="smoke", case_id=case.id, trial=1)

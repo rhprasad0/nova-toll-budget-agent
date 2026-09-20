@@ -224,6 +224,28 @@ def test_policy_and_calibration_start_blocked() -> None:
         workflow.calibration()
 
 
+def test_active_contract_and_numeric_policy_are_pinned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from eval import golden, golden_baseline
+
+    original = run.git
+
+    def git(*args: str) -> str:
+        return "" if args[0] == "status" else original(*args)
+
+    monkeypatch.setattr(run, "git", git)
+    identity = run.identity(golden.load_cases())
+    active = gate.read(gate.POLICY)["policy"]
+    assert active["contract_sha256"] == golden_baseline.contract(identity)
+    historical = gate.read(gate.POLICY.with_name("policy-1.0.0.json"))["policy"]
+    assert {
+        k: v for k, v in active.items() if k not in {"version", "contract_sha256"}
+    } == {
+        k: v for k, v in historical.items() if k not in {"version", "contract_sha256"}
+    }
+
+
 def test_archive_is_bounded_and_rejects_traversal(tmp_path: Path) -> None:
     for name in ("../escape", "/absolute", "bad\\file"):
         buffer = io.BytesIO()

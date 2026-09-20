@@ -262,6 +262,7 @@ def test_saved_plan_rejects_valid_looking_wrong_bindings() -> None:
     }
     assert release.validate_saved_plan(saved, admission, now=now) == saved
     for path, value in (
+        (("golden", "receipt_sha256"), "f" * 64),
         (("saved_plan", "key"), "plans/release-8-v1.2.3/16/release.tfplan"),
         (("evidence_artifact", "id"), 99),
         (("evidence_artifact", "digest"), "sha256:" + "d" * 64),
