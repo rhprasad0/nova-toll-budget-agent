@@ -2,6 +2,10 @@
 
 [Open the standalone HTML review page](calibration-review.html). Download and open it in a browser; it works offline.
 
+Latest: corpus 1.0.7 calibration 7 matches all 34 approved outcome labels, with 32/34 grounding and 34/34 rules agreement. [Latest HTML review](calibration-7/review.html), [report](calibration-7/report.md); two grounding-diagnostic disagreements remain for review. Four-worker elapsed time was 106.7 seconds, compared with 531.0 seconds for calibration 6. These runs used different reference revisions. [Timing evidence](calibration-7/timing.json).
+
+The sections below preserve the calibration-5 review and its human adjudication.
+
 Status: both outcome disagreements adjudicated by Ryan. All 24 cases and 38 authored example labels are unchanged. Calibration uses 34 development examples; the four held-out examples were excluded.
 
 ## Recorded attempts
