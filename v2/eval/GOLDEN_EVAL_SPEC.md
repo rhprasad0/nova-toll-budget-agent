@@ -5,7 +5,7 @@ conversations and 13 annual-affordability conversations. The
 [case review](golden/REVIEW.md) includes every question, actor brief, expected
 behavior, fixture reference, and proposed criticality.
 
-**Status: version 1.0.0 approved by Ryan; corrections in 1.0.1 await review.** These are authored cases and examples, not
+**Status: version 1.0.1 approved by Ryan; PR #570 awaits delivery.** These are authored cases and examples, not
 model results. There is no baseline score or calibrated judge yet. Approval is
 recorded separately in [review.json](golden/review.json).
 
@@ -156,7 +156,8 @@ Dulles Toll Road charges in case 20, and requires the available financial baseli
 in case 24. Version 1.0.0 was approved by Ryan in the case-review conversation
 ("These look good. Anything else for us to address in #361?") with corpus SHA-256
 `bba831745c99298fba9ff2739315797434dad291dab37eb7b95c7e6f570d92e5`.
-No baseline runs exist for either version. The revised review record is pending.
+No baseline runs exist for either version. Ryan approved the revised cases in the PR #570 follow-up conversation; see
+[review.json](golden/review.json) for the exact corpus hash and approval evidence.
 
 Meaningful case, fixture, actor, or grader changes require a new corpus version
 and renewed review. Rerun baseline and candidate on the same new version before
@@ -196,5 +197,5 @@ and results.
 Ryan reviews case facts, fixture assumptions, criticality, held-out handling,
 and example labels. Record approval in `review.json` with status `approved`, the
 exact corpus SHA-256, reviewer, and an evidence link or transcript reference.
-#361 remains pending human approval until then. Approving an implementation plan
-does not approve unseen cases.
+The current version has that approval recorded. Future revisions require renewed
+review; approving an implementation plan does not approve unseen cases.

@@ -1,6 +1,6 @@
 # Golden case review, version 1.0.1
 
-**Corrections pending human review.** The initial 1.0.0 corpus was approved by Ryan. Review the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. No live models or pricing services were called. All tool fixtures are synthetic. The 38 example conversations are authored proposals, not measured results.
+**Version 1.0.1 approved by Ryan.** Approval includes the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. No live models or pricing services were called. All tool fixtures are synthetic. The 38 example conversations are authored proposals, not measured results.
 
 Corpus SHA-256: `2a5c54e9e9ee8aac9d4262a710db8a9282068d55a705022f388c25721a226d83`
 
@@ -1088,10 +1088,10 @@ These are candidates for human labels and later judge calibration, not claims th
 
 ## Review record
 
-- Case/fixture and label approval: pending.
+- Case/fixture and label approval: approved by Ryan; exact hash and conversation evidence are in [review.json](review.json).
 - Judge calibration: not run; belongs to #360.
 - Baseline execution: not run; belongs to #360/#362.
 - Coverage review: initial 24 cases, with current I-95 direction and guardrail scenarios deliberately excluded.
 - Next review: before any corpus revision or when a new observed failure is considered.
 
-Record the reviewer, evidence reference, and this exact corpus digest in [review.json](review.json) after human approval. Do not mark the corpus approved merely because offline checks pass.
+The reviewer, evidence reference, and this exact corpus digest are recorded in [review.json](review.json). Do not mark the corpus approved merely because offline checks pass.
