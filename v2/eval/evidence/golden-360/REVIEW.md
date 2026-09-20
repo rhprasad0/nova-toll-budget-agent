@@ -2,7 +2,7 @@
 
 [Open the standalone HTML review page](calibration-review.html). Download and open it in a browser; it works offline.
 
-Status: awaiting human review. All 24 cases and 38 authored example labels are unchanged. Calibration uses 34 development examples; the four held-out examples were excluded.
+Status: both outcome disagreements adjudicated by Ryan. All 24 cases and 38 authored example labels are unchanged. Calibration uses 34 development examples; the four held-out examples were excluded.
 
 ## Recorded attempts
 
@@ -27,13 +27,13 @@ Outcome agreement is 32/34 (94.1%): all 12 bad examples were rejected and 20/22 
 
 The judge now evaluates the complete ordered conversation, accepts requirements satisfied in earlier turns, distinguishes discovery calls from later route choices, and uses approved domain facts. It does not require source URLs or disclosure of inapplicable source flags. The remaining false rejections show that the disclosure instruction is not perfectly reliable.
 
-## Proposed adjudications
+## Recorded human adjudications
 
 Ryan instructed us to retain approved labels and correct the judge. Both disputed examples remain CORRECT. The raw judge verdicts remain failed; no score is overwritten.
 
 ### annual-fixed-good
 
-Approved outcome: CORRECT. Recorded judge outcome: INCORRECT. Proposed adjudication: judge false rejection.
+Approved outcome: CORRECT. Recorded judge outcome: INCORRECT. Ryan’s adjudication: judge false rejection.
 
 Judge evidence:
 
@@ -49,7 +49,7 @@ These estimates use 240 commute days and gross annual income of $120000.00. The 
 
 ### annual-no-paired-days-good
 
-Approved outcome: CORRECT. Recorded judge outcome: INCORRECT. Proposed adjudication: judge false rejection.
+Approved outcome: CORRECT. Recorded judge outcome: INCORRECT. Ryan’s adjudication: judge false rejection.
 
 Judge evidence:
 
@@ -59,8 +59,8 @@ Approved answer:
 
 There are zero complete paired days out of 60 eligible dates, so there is not enough history for annual toll scenarios or a full affordability estimate. The missing toll evidence is not a zero toll. The available baseline uses $120,000 gross annual income and $80,000 after estimated tax under the one-third tax assumption. The tool estimates 20 tolled miles daily, or 4,800 annually over 240 commute days, using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 daily and $3,288 annually. These figures cover only tolled portions of the drive. Historical tolls and combined commute totals are unavailable.
 
-## Review decision needed
+## Review decision recorded
 
-Review the two adjudications and the diagnostic definitions before recording approval bound to this evidence digest. The proposed use is the already authorized 72-conversation demonstration, with both false rejections documented and no release or baseline approval. Do not silently override future verdicts based on these example IDs.
+Ryan reviewed the two cases and stated: "For those two cases, the judge should have passed those." The [review record](calibration-5/review.json) binds that adjudication to this evidence digest for the already authorized 72-conversation demonstration. The two diagnostic definitions remain proposals; this statement adjudicates the two outcome disagreements. Both false rejections remain documented, with no release or baseline approval. Do not silently override future verdicts based on these example IDs.
 
 The demonstration and sampled ActorSimulator conversation review remain outstanding. #360 stays open. Release gates and baseline promotion remain #362/#363.

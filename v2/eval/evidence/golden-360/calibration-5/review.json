@@ -1,0 +1,28 @@
+{
+  "status": "approved",
+  "evidence_sha256": "660f465f992d5de2a80fe805264bf6f973170f9a980825981329821fdfb08020",
+  "reviewer": "Ryan",
+  "evidence": "User adjudication in this implementation conversation: \"For those two cases, the judge should have passed those.\"",
+  "scope": "Human adjudication of the two outcome disagreements for the authorized demonstration; no release or baseline approval.",
+  "adjudications": [
+    {
+      "example_id": "annual-fixed-good",
+      "approved_outcome": "CORRECT",
+      "judge_outcome": "INCORRECT",
+      "finding": "judge_false_rejection",
+      "action": "Retain the approved label and the original raw judge verdict."
+    },
+    {
+      "example_id": "annual-no-paired-days-good",
+      "approved_outcome": "CORRECT",
+      "judge_outcome": "INCORRECT",
+      "finding": "judge_false_rejection",
+      "action": "Retain the approved label and the original raw judge verdict."
+    }
+  ],
+  "limitations": [
+    "Measured outcome agreement remains 32/34; human adjudication does not change judge accuracy.",
+    "Grounding and rules labels remain proposed diagnostics; this adjudication concerns the two outcome disagreements.",
+    "Review sampled ActorSimulator behavior after the demonstration."
+  ]
+}
