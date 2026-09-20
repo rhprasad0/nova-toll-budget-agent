@@ -105,3 +105,8 @@ The tests cover real Strands replay, multi-turn context, fresh fixture state,
 mandatory rejection checks, accounting across successes and failures, interrupted
 runs, missing usage, identity validation, and held-out exclusion. Synthetic test
 reports demonstrate that an infrastructure error cannot yield a passing decision.
+
+The [golden baseline policy and archive](results/golden/README.md) preserve the
+initial run, define the approved comparison limits, and provide a static HTML
+review page. Baseline qualification is offline; production authorization and
+workflow provenance enforcement belong to #363.

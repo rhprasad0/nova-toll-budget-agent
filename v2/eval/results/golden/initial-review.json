@@ -1,0 +1,47 @@
+{
+  "status": "pending",
+  "evidence_sha256": "7253b7dbaa7035eadb25006a47f131ffba328048cfbdd4ca1e54960263516581",
+  "report_sha256": "a738d94d970f00ff1b108733a9e85a37c512175fdae16e1860f5ab8e9082da4d",
+  "policy_sha256": "1bef88a29402788f8d2aa8e3d38e4692f67f8d8558841f9ff5ffa5a4e25446aa",
+  "reviewer": null,
+  "approved_at": null,
+  "evidence": "Assistant inspection only. Human review has not been recorded. This historical run predates policy approval and uses an incompatible evaluation contract.",
+  "actor_validity": "invalid",
+  "unresolved_findings": [
+    "Actor stopped before required correction or clarification in multiple trials.",
+    "Held-out confirmation was not delivered to the application.",
+    "Ambiguous catalog aliases affected exact-ID judgments.",
+    "This source-checkout run is not verified production-artifact execution."
+  ],
+  "critical_failures_reviewed": [],
+  "sample_ids": [],
+  "required_critical_failure_reviews": [
+    "annual-confirm-divergent",
+    "annual-fixed",
+    "annual-independent-ramps",
+    "annual-no-paired-days",
+    "annual-no-return-route",
+    "annual-partial-history",
+    "annual-select-alternative",
+    "greenway-current",
+    "greenway-origin-correction",
+    "i66-free-period",
+    "i66-missing-price",
+    "i66-no-comparison",
+    "i66-observed-price",
+    "i66-stale-price",
+    "unsupported-profile"
+  ],
+  "required_sample_ids": [
+    "annual-confirm-divergent-1",
+    "annual-confirm-days-1",
+    "annual-confirm-days-2",
+    "annual-confirm-days-3",
+    "annual-confirm-divergent-2",
+    "annual-confirm-divergent-3",
+    "annual-fixed-1",
+    "annual-fixed-2"
+  ],
+  "held_out_exposure": "See README.md and the original DEMO_REVIEW.md; the generated static page exposes its selected held-out transcript.",
+  "execution": null
+}
