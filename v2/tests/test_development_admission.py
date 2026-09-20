@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
+import yaml
 
 if TYPE_CHECKING:
     from scripts import check_development_admission as admission
@@ -306,13 +307,15 @@ def test_workflow_keeps_retained_artifact_guard_and_pr_only_packages() -> None:
     assert delivery.index("Reject retained exact release artifact") < delivery.index(
         "astral-sh/setup-uv@"
     )
+    steps = yaml.safe_load(ci)["jobs"]["v2-loader"]["steps"]
     for command in (
         "build_fetcher_zip.sh",
         "build_loader_zip.sh",
         "build_publisher_zip.sh",
         "build_agentcore_zips.sh",
     ):
-        assert ci.index(command) > ci.index("github.event_name == 'pull_request'")
+        build = next(step for step in steps if command in step.get("run", ""))
+        assert build["if"] == "github.event_name == 'pull_request'"
 
 
 def test_retained_artifact_guard_rejects_malformed_metadata() -> None:

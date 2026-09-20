@@ -86,7 +86,13 @@ jobs:
           bind_admission() {
             printf '%s' "$ADMISSION" | jq -e 'select(
               type == "object" and
-              (keys | sort) == ["bundle_digest","bundle_id","candidate","claim_id","consumer_attempt","consumer_run","development_attempt","development_deployment","development_run","evidence_artifact","listener_attempt","listener_run","release_id","schema_versions","tag"] and
+              (keys | sort) == ["bundle_digest","bundle_id","candidate","claim_id","consumer_attempt","consumer_run","development_attempt","development_deployment","development_run","evidence_artifact","golden","listener_attempt","listener_run","release_id","schema_versions","tag"] and
+              (.golden | type == "object" and
+                (keys | sort) == ["baseline_sha256","created_at","policy_sha256","receipt_sha256","report_sha256","run_id"] and
+                (.run_id | type == "number" and . > 0 and . == floor) and
+                (.created_at | type == "string" and length > 0) and
+                ([.baseline_sha256,.policy_sha256,.receipt_sha256,.report_sha256] |
+                  all(type == "string" and test("^[0-9a-f]{64}$")))) and
               (.candidate | test("^[0-9a-f]{40}$")) and
               (.claim_id | type == "number") and
               (.schema_versions | keys == ["oracle", "pricing"])
