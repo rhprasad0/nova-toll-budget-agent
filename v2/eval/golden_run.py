@@ -10,9 +10,11 @@ import subprocess
 import time
 import uuid
 from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock
 from typing import Any, Literal, cast
 
 from pydantic import Field
@@ -29,7 +31,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
 
-VERSION = "1.0.5"
+VERSION = "1.1.0"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -84,9 +86,11 @@ fixed is accurate. In the frozen I-66 eastbound noon case, the off-peak publishe
 zero rate means outside toll hours. The frozen I-66 eastbound 8 AM case is during
 toll hours, even when its current price observation is missing.
 These facts support direct refusals and schedule explanations without a live call.
-The application SOP states that TollChat is independent and not affiliated with,
-endorsed by, or acting for VDOT, Virginia 511, or any toll operator. It explicitly
-requires treating tool prices as estimates, not operator quotes. The word estimate
+These are supporting facts, not additional requirements or a disclosure checklist.
+TollChat is independent and not affiliated with, endorsed by, or acting for VDOT,
+Virginia 511, or any toll operator. Describing its prices as estimates rather than
+official operator quotes is accurate. Neither the word estimate nor a disclaimer
+of operator affiliation is required to pass these cases. The word estimate
 is compatible with a published fixed rate or an observed price when its source
 and time are otherwise accurately described. Do not require an official operator
 quote or reject the word estimate alone. Distinguish actual source kinds: do not
@@ -226,11 +230,14 @@ class Journal:
         self.directory = directory
         self.limit = limit
         self.spent = prior_spend
+        self.reserved = 0.0
         self.unknown_usage = False
+        self.stop_requested = False
+        self.lock = RLock()
         (directory / "events.jsonl").touch()
 
     def append(self, event: dict[str, Any]) -> None:
-        with (self.directory / "events.jsonl").open("a") as stream:
+        with self.lock, (self.directory / "events.jsonl").open("a") as stream:
             stream.write(json.dumps(event, ensure_ascii=False) + "\n")
             stream.flush()
 
@@ -261,17 +268,24 @@ class Journal:
             if input_bound > 1_000_000:
                 raise StopRun("input_budget")
             reserve = (input_bound * 0.50 + 2048 * 1.80) / 1_000_000
-            if self.unknown_usage or self.spent + reserve > self.limit:
-                raise StopRun("spend_budget_or_unknown_usage")
-            count += 1
-            self.append(
-                {
-                    "event": "model_started",
-                    "attempt": attempt.id,
-                    "role": role,
-                    "reserved_usd": reserve,
-                }
-            )
+            with self.lock:
+                if self.stop_requested:
+                    raise StopRun("run_stopped")
+                if (
+                    self.unknown_usage
+                    or self.spent + self.reserved + reserve > self.limit
+                ):
+                    raise StopRun("spend_budget_or_unknown_usage")
+                self.reserved += reserve
+                count += 1
+                self.append(
+                    {
+                        "event": "model_started",
+                        "attempt": attempt.id,
+                        "role": role,
+                        "reserved_usd": reserve,
+                    }
+                )
             started = time.monotonic()
             usage: dict[str, int] | None = None
             try:
@@ -285,10 +299,14 @@ class Journal:
                     and "inputTokens" in usage
                     and "outputTokens" in usage
                 )
-                if not complete:
-                    self.unknown_usage = True
-                charged = cost(usage) if complete and usage is not None else reserve
-                self.spent += charged
+                try:
+                    charged = cost(usage) if complete and usage is not None else reserve
+                except (ValueError, TypeError):
+                    complete, usage, charged = False, None, reserve
+                with self.lock:
+                    self.unknown_usage |= not complete
+                    self.reserved -= reserve
+                    self.spent += charged
                 usage = usage or {}
                 item = Measurement(
                     role=role,
@@ -411,7 +429,9 @@ def trajectory(case: golden.GoldenCase, turns: list[golden.Turn]) -> Session:
 
 
 def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
-    model = journal.model(build_eval_model(), "judge", attempt, 12)
+    # Serialize SSM-backed model construction; provider calls run outside the lock.
+    with journal.lock:
+        model = journal.model(build_eval_model(), "judge", attempt, 12)
     evaluator = ConversationJudge(
         model=model, name="Correctness", reference_system_prompt=golden.JUDGE_PROMPT
     )
@@ -506,13 +526,17 @@ def execute(case: golden.GoldenCase, number: int, journal: Journal) -> Attempt:
     started = time.monotonic()
     try:
         messages: list[str] = []
-        model = journal.model(
-            toll_agent._build_model(),
-            "agent",
-            attempt,
-            case.actor.max_turns + case.max_tool_calls + 2,
-            attempt.checks,
-        )
+        with journal.lock:
+            model = journal.model(
+                toll_agent._build_model(),
+                "agent",
+                attempt,
+                case.actor.max_turns + case.max_tool_calls + 2,
+                attempt.checks,
+            )
+            actor_model = journal.model(
+                build_eval_model(), "actor", attempt, case.actor.max_turns * 3
+            )
         agent = toll_agent.build_agent(
             model=model,
             tools=replay_tools(case, attempt, messages, journal),
@@ -520,12 +544,7 @@ def execute(case: golden.GoldenCase, number: int, journal: Journal) -> Attempt:
             current_date=case.frozen_time.date(),
             hooks=[RequestGuard(case, attempt, journal)],
         )
-        actor = golden.make_actor(
-            case,
-            journal.model(
-                build_eval_model(), "actor", attempt, case.actor.max_turns * 3
-            ),
-        )
+        actor = golden.make_actor(case, actor_model)
         message = case.prompt
         for index in range(case.actor.max_turns):
             messages.append(message)
@@ -676,10 +695,10 @@ def development_examples() -> list[golden.Example]:
     ]
 
 
-def calibrate(journal: Journal) -> list[dict[str, Any]]:
+def calibrate(journal: Journal, pool: ThreadPoolExecutor) -> list[dict[str, Any]]:
     cases = {c.id: c for c in golden.load_cases()}
-    rows: list[dict[str, Any]] = []
-    for example in development_examples():
+
+    def evaluate(example: golden.Example) -> dict[str, Any]:
         attempt = Attempt(
             id=f"{example.case_id}-{example.label}",
             case_id=example.case_id,
@@ -710,12 +729,11 @@ def calibrate(journal: Journal) -> list[dict[str, Any]]:
             ],
             **attempt.model_dump(),
         }
-        rows.append(row)
         journal.append({"event": "calibration", **row})
         print(f"calibration {attempt.id}: {row['disagreements']}", flush=True)
-        if journal.unknown_usage:
-            break
-    return rows
+        return row
+
+    return list(pool.map(evaluate, development_examples()))
 
 
 def percentile(values: list[float], p: float) -> float | None:
@@ -1077,6 +1095,7 @@ def main() -> None:
     parser.add_argument("--budget-usd", type=float, default=25)
     parser.add_argument("--prior-run", type=Path)
     parser.add_argument("--calibration", type=Path)
+    parser.add_argument("--workers", type=int, choices=range(1, 9), default=4)
     args = parser.parse_args()
     if args.mode == "render":
         render(args.output)
@@ -1144,22 +1163,31 @@ def main() -> None:
         "prior_spend_usd": spent,
         "budget_usd": journal.limit,
         "calibration": calibration_identity,
+        "workers": args.workers,
     }
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    pool = ThreadPoolExecutor(max_workers=args.workers)
     try:
         if args.mode == "calibrate":
-            calibrate(journal)
+            calibrate(journal, pool)
         else:
-            for case in cases:
-                for number in (1, 2, 3):
-                    attempt = execute(case, number, journal)
-                    print(
-                        f"{attempt.id}: {attempt.status}, {attempt.failure_class}",
-                        flush=True,
-                    )
-                    if journal.unknown_usage or journal.spent >= journal.limit:
-                        return
+            futures = [
+                pool.submit(execute, case, number, journal)
+                for case in cases
+                for number in (1, 2, 3)
+            ]
+            for future in as_completed(futures):
+                attempt = future.result()
+                print(
+                    f"{attempt.id}: {attempt.status}, {attempt.failure_class}",
+                    flush=True,
+                )
+    except BaseException:
+        with journal.lock:
+            journal.stop_requested = True
+        raise
     finally:
+        pool.shutdown(wait=True, cancel_futures=True)
         render(args.output)
 
 

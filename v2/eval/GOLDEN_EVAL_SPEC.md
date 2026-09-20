@@ -1,11 +1,11 @@
-# TollChat golden evaluation set, version 1.0.6
+# TollChat golden evaluation set, version 1.0.7
 
 This is a 24-case starting corpus for a repeatable baseline: 11 current-price
 conversations and 13 annual-affordability conversations. The
 [case review](golden/REVIEW.md) includes every question, actor brief, expected
 behavior, fixture reference, and proposed criticality.
 
-**Status: cases and labels approved; version 1.0.6 grader correction awaits renewed calibration under #360.** These are authored cases and examples, not
+**Status: cases and labels approved; version 1.0.7 grader correction awaits renewed calibration under #360.** These are authored cases and examples, not
 model results. There is no baseline score or calibrated judge yet. Approval is
 recorded separately in [review.json](golden/review.json).
 
@@ -141,7 +141,7 @@ is a distinct record owned by #362. This work neither qualifies a release nor
 defines numeric release thresholds. That policy remains human-reviewed work in
 #362/#363. Criticality does not excuse a failure in a noncritical case.
 
-The manifest pins version 1.0.6, three trials, model choices, and SHA-256 hashes
+The manifest pins version 1.0.7, three trials, model choices, and SHA-256 hashes
 of cases, fixtures, frozen context, examples, and grader sources. File hashes bind
 exact bytes; the aggregate hashes their sorted, compact UTF-8 JSON map. Approval
 is separate to avoid a self-referential hash and names the aggregate digest.
@@ -159,7 +159,7 @@ in case 24. Version 1.0.0 was approved by Ryan in the case-review conversation
 No baseline runs exist for either version. Ryan approved the revised cases in the PR #570 follow-up conversation; see
 [review.json](golden/review.json) for the exact corpus hash and approval evidence.
 
-Version 1.0.6 names the approved i95:212NO entry explicitly in case 21 corrects false rejection of explicit statements that missing tolls are not $0.00, and gives the judge the existing SOP facts on estimates and operator independence. The completed 72-trial demo remains pinned to 1.0.5; its raw verdicts are unchanged. No baseline has been promoted.
+Version 1.0.7 names the approved i95:212NO entry explicitly in case 21 corrects false rejection of explicit statements that missing tolls are not $0.00, and gives the judge the existing SOP facts on estimates and operator independence. The completed 72-trial demo remains pinned to 1.0.5; its raw verdicts are unchanged. No baseline has been promoted.
 
 Meaningful case, fixture, actor, or grader changes require a new corpus version
 and renewed review. Rerun baseline and candidate on the same new version before

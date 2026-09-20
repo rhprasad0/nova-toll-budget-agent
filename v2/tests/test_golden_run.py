@@ -3,7 +3,9 @@
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from threading import Barrier, Event
 from typing import Any, cast
 from unittest.mock import Mock
 
@@ -13,6 +15,147 @@ from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
 
 from eval import golden
 from eval import golden_run as run
+
+
+@pytest.mark.parametrize("mode", ["calibrate", "run"])
+def test_cli_runs_independent_work_in_parallel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    barrier = Barrier(3, timeout=5)
+    directory = tmp_path / mode
+    calibration = tmp_path / "approved-calibration"
+    pinned = dict.fromkeys(
+        (
+            "corpus",
+            "judge_prompt_sha256",
+            "diagnostic_prompt",
+            "diagnostic_rubrics",
+            "diagnostic_domain_facts",
+            "model",
+            "reasoning_effort",
+            "max_output_tokens",
+        ),
+        "offline",
+    )
+    monkeypatch.setattr(run, "identity", Mock(return_value=pinned))
+    monkeypatch.setattr(
+        run,
+        "render",
+        Mock(
+            return_value={
+                "complete": True,
+                "review": {"status": "approved"},
+                "manifest": {"identity": pinned, "run_id": "offline"},
+                "evidence_sha256": "0" * 64,
+            }
+        ),
+    )
+    examples = run.development_examples()[:3]
+    monkeypatch.setattr(run, "development_examples", lambda: examples)
+
+    def judge(case: golden.GoldenCase, row: run.Attempt, journal: run.Journal) -> None:
+        barrier.wait()
+        row.verdicts = {
+            key: run.Verdict(passed=True, evidence="offline")
+            for key in ("outcome", "grounding", "rules")
+        }
+        row.measurements.append(measurement())
+
+    def execute(
+        case: golden.GoldenCase, number: int, journal: run.Journal
+    ) -> run.Attempt:
+        row = attempt(case, number)
+        journal.append({"event": "attempt_started", **row.model_dump()})
+        barrier.wait()
+        journal.append({"event": "attempt_finished", **row.model_dump()})
+        return row
+
+    monkeypatch.setattr(run, "judge", judge)
+    monkeypatch.setattr(run, "execute", execute)
+    args = ["golden_run", mode, "--output", str(directory), "--workers", "3"]
+    if mode == "run":
+        args += [
+            "--calibration",
+            str(calibration),
+            "--cases",
+            golden.load_cases()[0].id,
+        ]
+    monkeypatch.setattr("sys.argv", args)
+    run.main()
+    assert json.loads((directory / "manifest.json").read_text())["workers"] == 3
+    events = [
+        json.loads(line)
+        for line in (directory / "events.jsonl").read_text().splitlines()
+    ]
+    rows = [
+        event
+        for event in events
+        if event["event"] in ("calibration", "attempt_finished")
+    ]
+    assert len(rows) == 3 and len({row["id"] for row in rows}) == 3
+    assert all(row["status"] == "scored" for row in rows)
+    assert len([event for event in events if event["event"] == "attempt_started"]) == 3
+
+
+def test_parallel_calls_reserve_shared_budget_before_provider_calls(
+    tmp_path: Path,
+) -> None:
+    journal = run.Journal(tmp_path / "budget", 0.02)
+    release = Event()
+
+    def invoke(number: int, invalid_usage: bool = False) -> bool:
+        native = Mock(spec=Model)
+        native.client_args = {}
+
+        async def stream(
+            *args: object, **kwargs: object
+        ) -> AsyncIterator[dict[str, Any]]:
+            assert release.wait(timeout=5)
+            yield {
+                "metadata": {
+                    "usage": {
+                        "inputTokens": -1 if invalid_usage else 100,
+                        "outputTokens": 20,
+                    }
+                }
+            }
+
+        native.stream = stream
+        row = run.Attempt(id=str(number), case_id="greenway-current", trial=1)
+        model = journal.model(native, "agent", row, 1)
+
+        async def consume() -> bool:
+            try:
+                async for _ in cast(Any, model).stream([]):
+                    pass
+                return True
+            except run.StopRun:
+                return False
+
+        return asyncio.run(consume())
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = [pool.submit(invoke, number) for number in (1, 2, 3)]
+        try:
+            # Two reservations fit, but a third must stop before any call finishes.
+            assert next(as_completed(futures, timeout=5)).result() is False
+            with journal.lock:
+                assert journal.spent == 0 and 0 < journal.reserved <= journal.limit
+        finally:
+            release.set()
+        assert sum(f.result() for f in futures) == 2
+    assert journal.reserved == pytest.approx(0)
+    assert journal.spent == pytest.approx(2 * 0.000044)
+    assert not journal.unknown_usage
+    events = [
+        json.loads(line)
+        for line in (journal.directory / "events.jsonl").read_text().splitlines()
+    ]
+    assert sum(e["event"] == "model_started" for e in events) == 2
+    assert sum(e["event"] == "model_finished" for e in events) == 2
+    assert invoke(4, invalid_usage=True)
+    assert journal.unknown_usage and journal.reserved == pytest.approx(0)
+    assert not invoke(5)
 
 
 def measurement() -> run.Measurement:
@@ -225,62 +368,87 @@ def test_real_agent_keeps_conversation_and_uses_only_replay(
 ) -> None:
     from strands.models.openai_responses import OpenAIResponsesModel
 
-    case = golden.load_cases()[1]
-    row = run.Attempt(id="multi", case_id=case.id, trial=1)
-    messages: list[str] = []
-    seen: list[int] = []
-    model = OpenAIResponsesModel(model_id="offline", client_args={"api_key": "offline"})
-
-    async def scripted(
-        history: list[Any], *args: object, **kwargs: object
-    ) -> AsyncIterator[dict[str, Any]]:
-        seen.append(len(history))
-        yield {"messageStart": {"role": "assistant"}}
-        if len(seen) % 2:
-            fixture = golden.load_fixture(case.steps[(len(seen) - 1) // 2].fixture)
-            yield {
-                "contentBlockStart": {
-                    "start": {
-                        "toolUse": {"toolUseId": str(len(seen)), "name": fixture.tool}
-                    }
-                }
-            }
-            yield {
-                "contentBlockDelta": {
-                    "delta": {"toolUse": {"input": json.dumps(fixture.input)}}
-                }
-            }
-            yield {"contentBlockStop": {}}
-            yield {"messageStop": {"stopReason": "tool_use"}}
-        else:
-            yield {"contentBlockDelta": {"delta": {"text": "$5.80 fixed toll."}}}
-            yield {"contentBlockStop": {}}
-            yield {"messageStop": {"stopReason": "end_turn"}}
-        yield {
-            "metadata": {
-                "usage": {"inputTokens": 100, "outputTokens": 20, "totalTokens": 120},
-                "metrics": {"latencyMs": 1},
-            }
-        }
-
-    cast(Any, model).stream = scripted
     monkeypatch.setattr(
         run.toll_agent, "load_prompt_points", lambda: pytest.fail("live prompt points")
     )
-    agent = run.toll_agent.build_agent(
-        model=model,
-        tools=run.replay_tools(case, row, messages),
-        current_date=case.frozen_time.date(),
-        prompt_points=json.loads((golden.ROOT / "prompt-points.json").read_text()),
-        hooks=[run.RequestGuard(case, row)],
-    )
-    for message in (case.prompt, "Sorry, I meant Battlefield Parkway. Still Route 28."):
-        messages.append(message)
-        row.turns.append(golden.Turn(user=message, response="pending", calls=[]))
-        row.turns[-1].response = str(agent(message))
-    assert len(row.turns) == 2 and len(row.requested_tools) == 2
-    assert seen == sorted(seen) and seen[-1] > seen[0]
-    assert not golden.grade_assertions(case, row.turns)
+    barrier = Barrier(2, timeout=5)
+
+    def conversation(number: int) -> tuple[run.Attempt, list[int]]:
+        case = golden.load_cases()[1]
+        row = run.Attempt(id=f"multi-{number}", case_id=case.id, trial=1)
+        messages: list[str] = []
+        seen: list[int] = []
+        model = OpenAIResponsesModel(
+            model_id="offline", client_args={"api_key": "offline"}
+        )
+
+        async def scripted(
+            history: list[Any], *args: object, **kwargs: object
+        ) -> AsyncIterator[dict[str, Any]]:
+            seen.append(len(history))
+            if len(seen) == 1:
+                barrier.wait()
+            yield {"messageStart": {"role": "assistant"}}
+            if len(seen) % 2:
+                fixture = golden.load_fixture(case.steps[(len(seen) - 1) // 2].fixture)
+                yield {
+                    "contentBlockStart": {
+                        "start": {
+                            "toolUse": {
+                                "toolUseId": str(len(seen)),
+                                "name": fixture.tool,
+                            }
+                        }
+                    }
+                }
+                yield {
+                    "contentBlockDelta": {
+                        "delta": {"toolUse": {"input": json.dumps(fixture.input)}}
+                    }
+                }
+                yield {"contentBlockStop": {}}
+                yield {"messageStop": {"stopReason": "tool_use"}}
+            else:
+                yield {"contentBlockDelta": {"delta": {"text": "$5.80 fixed toll."}}}
+                yield {"contentBlockStop": {}}
+                yield {"messageStop": {"stopReason": "end_turn"}}
+            yield {
+                "metadata": {
+                    "usage": {
+                        "inputTokens": 100,
+                        "outputTokens": 20,
+                        "totalTokens": 120,
+                    },
+                    "metrics": {"latencyMs": 1},
+                }
+            }
+
+        cast(Any, model).stream = scripted
+        agent = run.toll_agent.build_agent(
+            model=model,
+            tools=run.replay_tools(case, row, messages),
+            current_date=case.frozen_time.date(),
+            prompt_points=json.loads((golden.ROOT / "prompt-points.json").read_text()),
+            hooks=[run.RequestGuard(case, row)],
+        )
+        for message in (
+            case.prompt,
+            "Sorry, I meant Battlefield Parkway. Still Route 28.",
+        ):
+            messages.append(message)
+            row.turns.append(golden.Turn(user=message, response="pending", calls=[]))
+            row.turns[-1].response = str(agent(message))
+        return row, seen
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(conversation, (1, 2)))
+    assert results[0][0].id != results[1][0].id
+    for row, seen in results:
+        assert len(row.turns) == 2 and len(row.requested_tools) == 2
+        assert seen == sorted(seen) and seen[-1] > seen[0]
+        assert not golden.grade_assertions(golden.load_cases()[1], row.turns)
+    results[0][0].turns[0].calls[0].result["total_usd"] = "999.00"
+    assert results[1][0].turns[0].calls[0].result["total_usd"] == "5.80"
 
 
 def test_repeating_agent_is_scored_failure_not_infrastructure(

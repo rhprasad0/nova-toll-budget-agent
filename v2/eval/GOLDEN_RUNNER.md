@@ -28,6 +28,14 @@ conversation or review. Include adjudications and remaining limitations in that
 record. Approval never changes the measured judge outputs or their agreement rate.
 The run command checks that the corpus and judge configuration match calibration.
 
+Calibration examples and conversation trials run with four workers by default.
+Use `--workers 1` for sequential execution or choose 1 through 8 workers. Turns
+and the three judge criteria within each trial stay sequential. Each worker has
+its own agent, model clients, actor, and replay state. The manifest records the
+worker count. Shared budget reservations include in-flight calls, and journal
+writes are serialized. Interrupting a run cancels queued work, allows active calls
+to finish recording usage, and prevents further calls in those trials.
+
 Every selected case gets three fresh trial slots. With no `--cases` option, this
 means 72 conversations. For a partial diagnostic run, supply stable case IDs after
 `--cases`; its report identifies that it is not a complete corpus run. Preserve the
