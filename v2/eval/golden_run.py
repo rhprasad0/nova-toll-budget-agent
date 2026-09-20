@@ -31,7 +31,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -211,7 +211,11 @@ def cost(usage: dict[str, int]) -> float:
         usage.get("cacheReadInputTokens", 0),
         usage.get("cacheWriteInputTokens", 0),
     )
-    if min(total, output, read, write) < 0 or read + write > total:
+    if (
+        any(type(n) is not int for n in (total, output, read, write))
+        or min(total, output, read, write) < 0
+        or read + write > total
+    ):
         raise ValueError("invalid usage")
     input_multiplier, output_multiplier = (2, 1.5) if total > 272000 else (1, 1)
     return (
@@ -265,27 +269,8 @@ class Journal:
                     raise TaskFailure("model_call_budget")
                 raise StopRun("simulator_or_judge_call_budget")
             input_bound = len(json.dumps([args, kwargs], default=str).encode()) + 8192
-            if input_bound > 1_000_000:
-                raise StopRun("input_budget")
-            reserve = (input_bound * 0.50 + 2048 * 1.80) / 1_000_000
-            with self.lock:
-                if self.stop_requested:
-                    raise StopRun("run_stopped")
-                if (
-                    self.unknown_usage
-                    or self.spent + self.reserved + reserve > self.limit
-                ):
-                    raise StopRun("spend_budget_or_unknown_usage")
-                self.reserved += reserve
-                count += 1
-                self.append(
-                    {
-                        "event": "model_started",
-                        "attempt": attempt.id,
-                        "role": role,
-                        "reserved_usd": reserve,
-                    }
-                )
+            reserve = self.reserve(attempt, role, input_bound)
+            count += 1
             started = time.monotonic()
             usage: dict[str, int] | None = None
             try:
@@ -294,41 +279,84 @@ class Journal:
                         usage = event["metadata"]["usage"]
                     yield event
             finally:
-                complete = (
-                    usage is not None
-                    and "inputTokens" in usage
-                    and "outputTokens" in usage
-                )
-                try:
-                    charged = cost(usage) if complete and usage is not None else reserve
-                except (ValueError, TypeError):
-                    complete, usage, charged = False, None, reserve
-                with self.lock:
-                    self.unknown_usage |= not complete
-                    self.reserved -= reserve
-                    self.spent += charged
-                usage = usage or {}
-                item = Measurement(
-                    role=role,
-                    input_tokens=usage.get("inputTokens", 0),
-                    output_tokens=usage.get("outputTokens", 0),
-                    cached_tokens=usage.get("cacheReadInputTokens", 0),
-                    written_tokens=usage.get("cacheWriteInputTokens", 0),
-                    seconds=time.monotonic() - started,
-                    cost_usd=charged,
-                    complete=complete,
-                )
-                attempt.measurements.append(item)
-                self.append(
-                    {
-                        "event": "model_finished",
-                        "attempt": attempt.id,
-                        **item.model_dump(),
-                    }
-                )
+                self.finish(attempt, role, reserve, usage, time.monotonic() - started)
 
         native.stream = measured
         return model
+
+    def reserve(
+        self,
+        attempt: Attempt,
+        role: Literal["agent", "actor", "judge"],
+        input_bound: int,
+    ) -> float:
+        if type(input_bound) is not int or not 0 < input_bound <= 1_000_000:
+            raise StopRun("input_budget")
+        reserve = (input_bound * 0.50 + 2048 * 1.80) / 1_000_000
+        with self.lock:
+            if (
+                self.stop_requested
+                or self.unknown_usage
+                or self.spent + self.reserved + reserve > self.limit
+            ):
+                raise StopRun("spend_budget_or_unknown_usage")
+            self.reserved += reserve
+            self.append(
+                {
+                    "event": "model_started",
+                    "attempt": attempt.id,
+                    "role": role,
+                    "reserved_usd": reserve,
+                }
+            )
+        return reserve
+
+    def finish(
+        self,
+        attempt: Attempt,
+        role: Literal["agent", "actor", "judge"],
+        reserve: float,
+        usage: dict[str, int] | None,
+        seconds: float,
+    ) -> None:
+        complete = (
+            isinstance(usage, dict)
+            and "inputTokens" in usage
+            and "outputTokens" in usage
+            and type(seconds) in {int, float}
+            and math.isfinite(seconds)
+            and seconds >= 0
+        )
+        charged = reserve
+        try:
+            charged = cost(usage) if complete and usage is not None else reserve
+        except (ValueError, TypeError):
+            complete = False
+        if not complete:
+            usage, charged, seconds = None, reserve, 0
+        with self.lock:
+            self.unknown_usage |= not complete
+            self.reserved -= reserve
+            self.spent += charged
+        usage = usage or {}
+        item = Measurement(
+            role=role,
+            input_tokens=usage.get("inputTokens", 0),
+            output_tokens=usage.get("outputTokens", 0),
+            cached_tokens=usage.get("cacheReadInputTokens", 0),
+            written_tokens=usage.get("cacheWriteInputTokens", 0),
+            seconds=seconds,
+            cost_usd=charged,
+            complete=complete,
+        )
+        attempt.measurements.append(item)
+        self.append(
+            {
+                "event": "model_finished",
+                "attempt": attempt.id,
+                **item.model_dump(),
+            }
+        )
 
 
 def replay_tools(
@@ -520,29 +548,45 @@ def failure_class(attempt: Attempt) -> str | None:
     return None
 
 
-def execute(case: golden.GoldenCase, number: int, journal: Journal) -> Attempt:
+def execute(
+    case: golden.GoldenCase,
+    number: int,
+    journal: Journal,
+    agent_factory: Any = None,  # noqa: ANN401
+) -> Attempt:
     attempt = Attempt(id=f"{case.id}-{number}", case_id=case.id, trial=number)
     journal.append({"event": "attempt_started", **attempt.model_dump()})
     started = time.monotonic()
+    agent: Any = None
     try:
         messages: list[str] = []
         with journal.lock:
-            model = journal.model(
-                toll_agent._build_model(),
-                "agent",
-                attempt,
-                case.actor.max_turns + case.max_tool_calls + 2,
-                attempt.checks,
+            model = (
+                journal.model(
+                    toll_agent._build_model(),
+                    "agent",
+                    attempt,
+                    case.actor.max_turns + case.max_tool_calls + 2,
+                    attempt.checks,
+                )
+                if agent_factory is None
+                else None
             )
             actor_model = journal.model(
                 build_eval_model(), "actor", attempt, case.actor.max_turns * 3
             )
-        agent = toll_agent.build_agent(
-            model=model,
-            tools=replay_tools(case, attempt, messages, journal),
-            prompt_points=json.loads((golden.ROOT / "prompt-points.json").read_text()),
-            current_date=case.frozen_time.date(),
-            hooks=[RequestGuard(case, attempt, journal)],
+        agent = (
+            agent_factory(case, attempt, journal, messages)
+            if agent_factory
+            else toll_agent.build_agent(
+                model=model,
+                tools=replay_tools(case, attempt, messages, journal),
+                prompt_points=json.loads(
+                    (golden.ROOT / "prompt-points.json").read_text()
+                ),
+                current_date=case.frozen_time.date(),
+                hooks=[RequestGuard(case, attempt, journal)],
+            )
         )
         actor = golden.make_actor(case, actor_model)
         message = case.prompt
@@ -610,6 +654,9 @@ def execute(case: golden.GoldenCase, number: int, journal: Journal) -> Attempt:
         attempt.error = (
             str(error) if isinstance(error, StopRun) else type(error).__name__
         )
+    finally:
+        if agent_factory and agent is not None:
+            agent.close()
     attempt.seconds = time.monotonic() - started
     attempt.failure_class = failure_class(attempt)
     journal.append({"event": "attempt_finished", **attempt.model_dump()})

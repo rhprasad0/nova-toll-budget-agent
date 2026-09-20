@@ -31,7 +31,17 @@ permissions:
   contents: read
 
 jobs:
+  golden:
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+      id-token: write
+    uses: ./.github/workflows/v2-golden-read.yml
+    with:
+      admission: ${{ inputs.admission }}
   migrate:
+    needs: golden
     if: github.ref == 'refs/heads/main' && vars.PRODUCTION_BLUE_GREEN_BOOTSTRAPPED == 'true' && (inputs.phase == 'prepare-production' || inputs.phase == 'promote-production')
     runs-on: ubuntu-latest
     timeout-minutes: 75

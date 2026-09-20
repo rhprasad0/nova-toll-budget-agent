@@ -210,6 +210,7 @@ def test_saved_plan_rejects_valid_looking_wrong_bindings() -> None:
     now = datetime.now(UTC).replace(microsecond=0)
     admission: dict[str, Any] = {
         "release_id": 7,
+        "golden": {"receipt_sha256": "e" * 64},
         "tag": "v1.2.3",
         "candidate": "a" * 40,
         "listener_run": 11,
@@ -769,6 +770,12 @@ def test_revalidate_rejects_changed_evidence_or_current_development_failure_with
 def test_revalidate_binds_current_consumer_and_durable_claim(
     monkeypatch: pytest.MonkeyPatch, kind: str, message: str | None
 ) -> None:
+    from scripts import golden_gate
+
+    def golden_revalidate(value: dict[str, Any]) -> None:
+        assert value
+
+    monkeypatch.setattr(golden_gate, "revalidate", golden_revalidate)
     admission = _revalidation_admission()
     admission["claim_id"] = 15
     candidate = admission["candidate"]

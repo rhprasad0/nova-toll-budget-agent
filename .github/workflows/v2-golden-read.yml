@@ -1,0 +1,43 @@
+name: v2-golden-read
+on:
+  workflow_call:
+    inputs:
+      admission:
+        type: string
+        required: true
+    outputs:
+      admission:
+        value: ${{ jobs.check.outputs.admission }}
+permissions:
+  contents: read
+jobs:
+  check:
+    if: github.repository == 'rhprasad0/nova-toll-budget-agent' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: golden-read
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+      id-token: write
+    outputs:
+      admission: ${{ steps.check.outputs.admission }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        with:
+          role-to-assume: arn:aws:iam::903859731897:role/nova-toll-golden-reader
+          aws-region: us-east-1
+          allowed-account-ids: '903859731897'
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ADMISSION: ${{ inputs.admission }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$ADMISSION" >"$RUNNER_TEMP/admission.json"
+          python3 v2/scripts/golden_gate.py "$RUNNER_TEMP/admission.json" "$RUNNER_TEMP/qualified.json"
+          printf 'admission=%s\n' "$(jq -c . "$RUNNER_TEMP/qualified.json")" >>"$GITHUB_OUTPUT"

@@ -1,0 +1,6 @@
+{
+  "status": "pending",
+  "directory": null,
+  "evidence_sha256": null,
+  "notes": "Harness 1.2.0 adds isolated immutable-artifact execution. Recalibrate and approve the exact 1.0.8 corpus contract before protected execution. Earlier approved labels and historical evidence are retained."
+}

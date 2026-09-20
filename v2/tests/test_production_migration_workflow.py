@@ -989,6 +989,7 @@ def test_actual_cutover_shell_resumes_without_reapplying_preparation(
 def _saved_contract() -> tuple[dict[str, Any], dict[str, Any]]:
     now = datetime.now(UTC).replace(microsecond=0)
     admission: dict[str, Any] = {
+        "golden": {"receipt_sha256": "e" * 64},
         "release_id": 7,
         "tag": "v1.2.3",
         "candidate": "b" * 40,

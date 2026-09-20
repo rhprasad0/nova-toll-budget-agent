@@ -91,8 +91,10 @@ inspect its actor behavior only after the final run, never use it for tuning.
 Record actor-caused deviations and treat affected results as inconclusive during
 human interpretation. Do not silently relabel or replace the original attempts.
 
-No report approves a release or promotes a baseline. Those policies remain
-#362/#363. PR CI uses only offline tests; paid execution is a separate manual step.
+A local report cannot approve a release or promote a baseline. The mandatory
+[protected golden release workflow](GOLDEN_RELEASE.md) authenticates qualification
+and human approval. PR CI uses only offline tests and a canned packaged-agent
+smoke; paid execution requires a protected dispatch.
 
 ## Offline checks
 
@@ -108,5 +110,5 @@ reports demonstrate that an infrastructure error cannot yield a passing decision
 
 The [golden baseline policy and archive](results/golden/README.md) preserve the
 initial run, define the approved comparison limits, and provide a static HTML
-review page. Baseline qualification is offline; production authorization and
-workflow provenance enforcement belong to #363.
+review page. Baseline qualification is offline; the protected workflow supplies
+production authorization and provenance enforcement.
