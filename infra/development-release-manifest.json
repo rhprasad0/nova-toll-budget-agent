@@ -191,8 +191,8 @@
     "v2/uv.lock": "9454dd5fb0d1d636f7c974aa33cdf26346705889ea0aab21f8acdaa1e76857fd"
   },
   "packages": {
-    "agentcore.zip": "1226170f755b62f7eeae7286d8f7b661107b2fdd183a000ac0e3277c07c2853e",
-    "chat-proxy.zip": "8244f780278952ffb77c78cb8d038d308b277fe21e36c9508a500ea4d5ce9b62",
+    "agentcore.zip": "68d0d4cd633faabded5e5c9edaa1b0f4a58a43342f3b8303719a51371a95a953",
+    "chat-proxy.zip": "4a5f4a42a220217dd88318a2d2d44973d825ede4b78da7ef313c06beb93a9754",
     "loader.zip": "089969a77cd61816f1471656ad6dfda793b595c3f9244a1027c2e11ad71054fb",
     "publisher.zip": "dd27878fdd0020520590046c5217a11d6a5c264075159c3fd2be6b8f24410218",
     "timed-checks.zip": "ebcfed18299c51cbc93fc2474f37804a31e043f73f59e07d2fa1300bf3f2db36"
