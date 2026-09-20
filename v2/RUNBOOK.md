@@ -37,17 +37,22 @@ migration workflow, which may be dispatched from `refs/heads/main` for the
 fixed development target and accepts no arbitrary target or migration-path
 inputs. See the [protected development migration workflow](runbooks/development-foundation-replacement.md#protected-development-migration-workflow-305-slice-3)
 for its foundation, bootstrap, identity, and evidence gates. Production uses
-the reviewer-protected reusable delivery job from `main`. It stores one gated
-plan in the existing private versioned state bucket's `plans/` prefix, verifies
-its immutable version/checksum, state binding, and 24-hour age before deploy
-preflight, fixed migrations, re-assumed deploy apply, and fixed readiness.
-Terminal evidence is sanitized. The same protected readiness step runs the
-fixed Greenway public-session canary before development and production success:
+the reviewer-protected reusable delivery job from `main`. After the separately
+reviewed blue-green bootstrap, it stores a gated preparation plan in the private
+versioned state bucket's `plans/` prefix and verifies its immutable
+version/checksum, state binding, and 24-hour age before fixed migrations,
+re-assumed deploy apply, and candidate validation. Terminal evidence is sanitized.
+Candidate validation includes the fixed Greenway public-session canary:
 it requires one exact current-price call, a correlated successful result, a
 grounded amount, the required disclaimer, and completion within 60 seconds.
 Only its bounded, candidate-bound record reaches delivery evidence; raw stream
-and provider data stay private. Root's IAM-only reconciliation remains required
-before the first production release.
+and provider data stay private. Production then waits for separate
+`production-cutover` approval while the active slot serves ordinary traffic.
+Fresh validation gates a new routing-only plan before promotion. Post-cutover
+observation attempts one restoration after two consecutive probe failures.
+See the [blue-green delivery procedure](runbooks/blue-green-deployments.md).
+Configuration alone does not prove bootstrap or activation has completed.
+Root's IAM-only reconciliation remains required before the first production release.
 Production schema changes use the protected fixed-target migration component
 below. The one-time baseline adoption and manual Oracle migration 030
 procedures remain separate, explicitly approved operations. Application release
@@ -84,11 +89,12 @@ The current production baseline is AWS account `920534282028` in `us-east-1`:
   and `environment = production`. Production foundation resources use
   `environment = shared`; any `shared_with = development` tag is descriptive
   only and grants no development-account access.
-- Release artifacts overwrite `s3://nova-toll-agentcore-920534282028/runtime/v2/agentcore.zip`
-  and `s3://nova-toll-agentcore-920534282028/lambda/v2/chat-proxy.zip`; retained
-  S3 object versions are the rollback source.
-- Stable release targets are the `live` alias of `tollchat-v2-chat-proxy` and
-  the `preview` endpoint of AgentCore runtime `nova_toll_v2`.
+- Blue-green descriptors pin immutable, versioned artifacts under
+  `releases/<release-id>/` in `nova-toll-agentcore-920534282028`, plus each
+  retained slot's configuration and frontend asset prefix.
+- Blue and green retain published Lambda versions and pinned AgentCore endpoints.
+  Active-slot selection controls public/private routing; the previous slot
+  remains available for recovery.
 - Development is owned by AWS account `903859731897` (`nova-toll-development`)
   with its own foundation and application state backends. It consumes only a
   reviewed non-secret foundation handoff from that account; it has no AWS read
@@ -421,7 +427,19 @@ npm test --prefix lambdas/chat_proxy
 (cd infra/build && sha256sum --check AGENTCORE_SHA256SUMS)
 ```
 
-Before approving or deploying a production release, set `RELEASE_EVIDENCE` to
+For current blue-green releases, delivery creates the private, versioned recovery
+record used by the protected `v2-production-recovery.yml` workflow. Retain the
+original numeric `claim_id`, exact `record_version`, and reviewed
+`expected_state_sha256`. Follow the [blue-green recovery procedure](runbooks/blue-green-deployments.md).
+
+### Historical pre-bootstrap recovery capture
+
+The following capture instructions describe the former fixed-runtime path only.
+They are not a prerequisite or recovery procedure for blue-green releases and
+grant no new authority to mutate production.
+
+Before approving or deploying a production release under that historical path,
+set `RELEASE_EVIDENCE` to
 a unique per-release path. This immutable, non-overwriting recovery record
 contains only the prior versions of the fixed `tollchat-v2-chat-proxy` `live`
 alias and fixed `nova_toll_v2-W6989LEw44` `preview` endpoint; retain it with the
@@ -449,7 +467,7 @@ historical objects remain pending a separately approved retirement procedure.
 
 Use only the procedure that owns the intended operation:
 
-- [Blue-green development delivery and application recovery](runbooks/blue-green-deployments.md)
+- [Blue-green delivery and application recovery](runbooks/blue-green-deployments.md)
   requires its separately reviewed bootstrap before activation.
 - [Development application release and database validation (#331)](runbooks/development-release.md)
   is the operative development release path.
@@ -499,11 +517,24 @@ Reviewer approval of the protected `production` job occurs after that plan is
 saved and before the reusable job can access environment secrets or credentials.
 That job again revalidates admission/candidate and the exact saved plan/state
 before migration credentials and fixed migration, re-assumes the deploy role,
-then repeats exact plan/state validation before applying that same plan. Fixed
-readiness and exactly one bounded canary follow. A failed guard stops every
-later stage it protects; it never authorizes a direct, arbitrary, regenerated,
-stale, or caller-selected plan/apply. Terminal evidence remains sanitized and
-the canary record remains the single bounded candidate-bound record.
+then repeats exact plan/state validation before applying that same plan to the
+inactive slot. Candidate checks cover readiness, the bounded canary, guardrail
+rejection, trace redaction, sessions, assets, and actual release identity.
+
+The candidate remains running while ordinary traffic stays on the active slot.
+A separate `production-cutover` approval is required before promotion. After
+approval, the protected job revalidates the prepared record and unchanged state,
+runs fresh candidate checks, and gates a new routing-only plan. It does not
+rerun migrations or reapply preparation. The existing `production` environment
+may also require approval for the resumed job. Both phases require
+`PRODUCTION_BLUE_GREEN_BOOTSTRAPPED == 'true'`.
+
+After promotion, five probes run one minute apart. Two consecutive failures
+trigger one recovery attempt; deployment and recovery outcomes are reported
+separately. A failed guard stops every later stage it protects; it never
+authorizes a direct, arbitrary, stale, or caller-selected plan/apply. Terminal
+evidence remains sanitized. Follow the [blue-green runbook](runbooks/blue-green-deployments.md)
+for candidate testing, approval, observation, and protected recovery.
 
 The legacy development inventory is historical read-only cleanup context for
 #333. Development account ownership and account-local backends are current;
@@ -668,8 +699,18 @@ curl --fail-with-body --no-buffer "$URL/api/chat" \
 ```
 
 The config request must succeed and chat must stream approved tool-status
-events followed by an answer and disclaimer. Cross-origin requests to the
-private chat route must fail.
+and `text` events followed by an answer and disclaimer. Each `text` event is
+the guardrail-approved text so far for the current assistant message, replacing
+the previous provisional answer. Cross-origin requests to the private chat
+route must fail.
+
+After an authorized development release, verify streaming in the browser through
+CloudFront with both the current-price and annual-commute starter prompts. The
+Working indicator must appear on submission, text must appear before completion
+for a sufficiently long answer, and the final answer must include the disclaimer.
+Record submission-to-feedback, submission-to-first-approved-text, and total
+completion times in the release notes; short answers can finish in one batch.
+Confirm errors and blocked responses replace any provisional text.
 
 After the private check passes, verify the public edge and warm alias:
 
@@ -737,7 +778,24 @@ to delete the exact `tolls/i95-i495/` and `tolls/i66/` prefixes and `sitemap.xml
 targeted CloudFront invalidation. Do not perform that destructive rollback as
 part of an ordinary application rollback.
 
+### Blue-green validation failure and recovery
+
+A failed candidate validation blocks promotion and leaves ordinary traffic on
+the active slot. After cutover, two consecutive observation failures trigger one
+automatic saved-plan routing restoration attempt; a recovered release still
+reports deployment failure. After the observation window, cancellation, or runner
+loss, dispatch `v2-production-recovery.yml` from `main` with the original
+`claim_id`, exact `record_version`, and reviewed `expected_state_sha256`.
+Review and approve its protected `production` job. Follow the
+[blue-green recovery procedure](runbooks/blue-green-deployments.md).
+Recovery restores application routing, not databases or shared infrastructure.
+
 ### Production canary failure: human stop and manual routing restore
+
+**Historical pre-bootstrap procedure only.** The remainder of this section
+records the former fixed-runtime recovery contract. Do not use it for blue-green
+releases; use the protected recovery workflow above. It grants no new production
+mutation authority.
 
 A production canary failure is a human stop: hold normal delivery, do not
 report success, and do not roll back automatically. A separately deliberate
