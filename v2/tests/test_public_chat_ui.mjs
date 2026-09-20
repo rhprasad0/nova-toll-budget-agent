@@ -97,6 +97,47 @@ test("approved snapshots replace provisional Markdown and terminal responses rep
   assert.equal(view.answer.textContent, "Unavailable");
 });
 
+test("streaming follows growth without scrolling visible answers up or interrupting readers", () => {
+  const browserGlobals = /** @type {{window?: {innerHeight: number}}} */ (/** @type {unknown} */ (globalThis));
+  const originalWindow = browserGlobals.window;
+  browserGlobals.window = { innerHeight: 720 };
+  try {
+    /** @type {Array<[number, number, boolean]>} */
+    const cases = [
+      [250, 285, false], // First text is already visible above the composer.
+      [710, 850, true], // Follow text growing past the viewport.
+      [721, 850, true], // Allow small rounding/scroll-position differences.
+      [1000, 1140, false], // The reader scrolled up during generation.
+      [710, 250, false], // A blocked/error replacement shrinks the answer.
+    ];
+    for (const type of ["tool", "text", "answer", "error"]) {
+      for (const [before, after, follows] of cases) {
+        const positions = [before, after];
+        /** @type {ScrollIntoViewOptions[]} */
+        const scrolls = [];
+        const view = {
+          ...turn(),
+          article: {
+            getBoundingClientRect: () => /** @type {DOMRect} */ ({ bottom: positions.shift() }),
+            /** @param {ScrollIntoViewOptions} [options] */
+            scrollIntoView: (options = {}) => { scrolls.push(options); },
+          },
+        };
+        const event = /** @type {PublicEvent} */ (type === "tool"
+          ? { type, index: 0, label: "Checking route", status: "running" }
+          : type === "error"
+          ? { type, code: "agent_unavailable", message: "Unavailable" }
+          : { type, text: "The estimate.", ...(type === "answer" ? { blocked: true } : {}) });
+        applyEvent(view, event);
+        assert.deepEqual(scrolls, follows ? [{ block: "end", behavior: "instant" }] : []);
+      }
+    }
+  } finally {
+    if (originalWindow === undefined) delete browserGlobals.window;
+    else browserGlobals.window = originalWindow;
+  }
+});
+
 test("renders text while the stream is still open, including split UTF-8 frames", async () => {
   const view = turn();
   const text = '{"type":"text","text":"Price: **€4** <script>"}\n';
