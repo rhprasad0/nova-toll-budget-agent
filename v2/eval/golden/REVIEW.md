@@ -1,8 +1,8 @@
-# Golden case review, version 1.0.1
+# Golden case review, version 1.0.2
 
-**Version 1.0.1 approved by Ryan.** Approval includes the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. No live models or pricing services were called. All tool fixtures are synthetic. The 38 example conversations are authored proposals, not measured results.
+**Cases and labels approved; version 1.0.2 judge calibration awaits review.** Approval includes the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. No live models or pricing services were called. All tool fixtures are synthetic. The 38 example conversations are authored proposals, not measured results.
 
-Corpus SHA-256: `2a5c54e9e9ee8aac9d4262a710db8a9282068d55a705022f388c25721a226d83`
+Corpus SHA-256: `d50712e037c5c6cd01dc51ca3081f7c7ac469b41ba87ffbcc359a37044377ba7`
 
 The questions and actor briefs use the humanizer skill. Review their meaning as well as their wording. In particular, check that the actor only knows ordinary user facts and that a rubric accepts a useful equivalent answer.
 
@@ -1088,7 +1088,7 @@ These are candidates for human labels and later judge calibration, not claims th
 
 ## Review record
 
-- Case/fixture and label approval: approved by Ryan; exact hash and conversation evidence are in [review.json](review.json).
+- Cases/fixtures and labels: unchanged from the approved 1.0.1 set. New grader and harness evidence await review; see [review.json](review.json).
 - Judge calibration: not run; belongs to #360.
 - Baseline execution: not run; belongs to #360/#362.
 - Coverage review: initial 24 cases, with current I-95 direction and guardrail scenarios deliberately excluded.

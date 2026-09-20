@@ -34,6 +34,7 @@ def attempt(case: golden.GoldenCase, number: int) -> run.Attempt:
         case_id=case.id,
         trial=number,
         status="scored",
+        turns=[golden.Turn(user=case.prompt, response="A supported answer.", calls=[])],
         measurements=[measurement()],
         verdicts={
             k: run.Verdict(passed=True, evidence="turn 1 supported")
@@ -148,7 +149,9 @@ def test_usage_meter_and_budget_stop(tmp_path: Path) -> None:
     ) == pytest.approx(0.0000365)
 
 
-def test_incomplete_report_retains_interrupted_measurements(tmp_path: Path) -> None:
+def test_incomplete_report_retains_interrupted_measurements(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     case = golden.load_cases()[0]
     journal = run.Journal(tmp_path / "run", 25)
     row = run.Attempt(id="a", case_id=case.id, trial=1)
@@ -156,11 +159,17 @@ def test_incomplete_report_retains_interrupted_measurements(tmp_path: Path) -> N
     journal.append(
         {"event": "model_finished", "attempt": "a", **measurement().model_dump()}
     )
+    original_git = run.git
+
+    def clean_git(*args: str) -> str:
+        return "" if args[0] == "status" else original_git(*args)
+
+    monkeypatch.setattr(run, "git", clean_git)
     (journal.directory / "manifest.json").write_text(
         json.dumps(
             {
                 "mode": "run",
-                "identity": {"commit": "test", "cases": [case.model_dump(mode="json")]},
+                "identity": run.identity([case]),
             }
         )
     )
@@ -169,3 +178,99 @@ def test_incomplete_report_retains_interrupted_measurements(tmp_path: Path) -> N
     assert report["overall"]["cost_usd"]["agent"] == 0.01
     assert report["release_decision"] == "not_provided"
     assert report["attempts"][0]["error"] == "interrupted"
+    assert not report["full_corpus_complete"]
+    bad = report["manifest"]["identity"]
+    del bad["prompt_hashes"]
+    with pytest.raises(ValueError, match="missing run identity"):
+        run.validate_identity(bad)
+
+
+def test_missing_usage_stops_future_calls_without_storing_exception(
+    tmp_path: Path,
+) -> None:
+    native = Mock(spec=Model)
+    native.client_args = {}
+
+    async def broken(*args: object, **kwargs: object) -> AsyncIterator[dict[str, Any]]:
+        yield {"messageStart": {"role": "assistant"}}
+        raise RuntimeError("secret-token-must-not-be-recorded")
+
+    native.stream = broken
+    row = run.Attempt(id="broken", case_id="greenway-current", trial=1)
+    journal = run.Journal(tmp_path / "broken", 25)
+    model = journal.model(native, "agent", row, 4)
+
+    async def consume() -> None:
+        async for _ in cast(Any, model).stream([]):
+            pass
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(consume())
+    with pytest.raises(run.StopRun):
+        asyncio.run(consume())
+    assert journal.unknown_usage
+    assert not row.measurements[0].complete
+    assert "secret-token" not in (journal.directory / "events.jsonl").read_text()
+
+
+def test_real_agent_keeps_conversation_and_uses_only_replay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from strands.models.openai_responses import OpenAIResponsesModel
+
+    case = golden.load_cases()[1]
+    row = run.Attempt(id="multi", case_id=case.id, trial=1)
+    messages: list[str] = []
+    seen: list[int] = []
+    model = OpenAIResponsesModel(model_id="offline", client_args={"api_key": "offline"})
+
+    async def scripted(
+        history: list[Any], *args: object, **kwargs: object
+    ) -> AsyncIterator[dict[str, Any]]:
+        seen.append(len(history))
+        yield {"messageStart": {"role": "assistant"}}
+        if len(seen) % 2:
+            fixture = golden.load_fixture(case.steps[(len(seen) - 1) // 2].fixture)
+            yield {
+                "contentBlockStart": {
+                    "start": {
+                        "toolUse": {"toolUseId": str(len(seen)), "name": fixture.tool}
+                    }
+                }
+            }
+            yield {
+                "contentBlockDelta": {
+                    "delta": {"toolUse": {"input": json.dumps(fixture.input)}}
+                }
+            }
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "tool_use"}}
+        else:
+            yield {"contentBlockDelta": {"delta": {"text": "$5.80 fixed toll."}}}
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "end_turn"}}
+        yield {
+            "metadata": {
+                "usage": {"inputTokens": 100, "outputTokens": 20, "totalTokens": 120},
+                "metrics": {"latencyMs": 1},
+            }
+        }
+
+    cast(Any, model).stream = scripted
+    monkeypatch.setattr(
+        run.toll_agent, "load_prompt_points", lambda: pytest.fail("live prompt points")
+    )
+    agent = run.toll_agent.build_agent(
+        model=model,
+        tools=run.replay_tools(case, row, messages),
+        current_date=case.frozen_time.date(),
+        prompt_points=json.loads((golden.ROOT / "prompt-points.json").read_text()),
+        hooks=[run.RequestGuard(case, row)],
+    )
+    for message in (case.prompt, "Sorry, I meant Battlefield Parkway. Still Route 28."):
+        messages.append(message)
+        row.turns.append(golden.Turn(user=message, response="pending", calls=[]))
+        row.turns[-1].response = str(agent(message))
+    assert len(row.turns) == 2 and len(row.requested_tools) == 2
+    assert seen == sorted(seen) and seen[-1] > seen[0]
+    assert not golden.grade_assertions(case, row.turns)
