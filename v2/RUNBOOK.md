@@ -699,8 +699,18 @@ curl --fail-with-body --no-buffer "$URL/api/chat" \
 ```
 
 The config request must succeed and chat must stream approved tool-status
-events followed by an answer and disclaimer. Cross-origin requests to the
-private chat route must fail.
+and `text` events followed by an answer and disclaimer. Each `text` event is
+the guardrail-approved text so far for the current assistant message, replacing
+the previous provisional answer. Cross-origin requests to the private chat
+route must fail.
+
+After an authorized development release, verify streaming in the browser through
+CloudFront with both the current-price and annual-commute starter prompts. The
+Working indicator must appear on submission, text must appear before completion
+for a sufficiently long answer, and the final answer must include the disclaimer.
+Record submission-to-feedback, submission-to-first-approved-text, and total
+completion times in the release notes; short answers can finish in one batch.
+Confirm errors and blocked responses replace any provisional text.
 
 After the private check passes, verify the public edge and warm alias:
 

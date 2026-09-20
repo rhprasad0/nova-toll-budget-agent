@@ -219,6 +219,17 @@ The public interface at `tollchat.ai` uses a private S3 origin for the v2 site
 and an IAM-authenticated streaming Lambda URL behind CloudFront and WAF. The
 same proxy and AgentCore runtime remain available through the private preview.
 
+Chat streams guardrail-checked text snapshots as well as tool activity. The first
+complete sentence is checked promptly; subsequent batches target 200 characters,
+falling back to whole-word boundaries around 400 characters for long sentences.
+Each check includes the current assistant message's accumulated text for context.
+This follows AWS's [ApplyGuardrail streaming pattern](https://aws.amazon.com/blogs/machine-learning/use-the-applyguardrail-api-with-long-context-inputs-and-streaming-outputs-in-amazon-bedrock/),
+favoring earlier feedback over its cost-efficient 1,000-character batches. Small
+batches and repeated prefixes increase guardrail usage. The final answer still
+passes a full output check and supplies the disclaimer; a later block replaces
+the visible answer but cannot retract text already read. The local dev console
+continues to expose raw Strands events for debugging.
+
 The `get_current_toll_price` Strands tool accepts stable origin and destination
 point IDs plus the supported pricing profile. It validates the route through
 the oracle and prices I-66 from current observations during its published

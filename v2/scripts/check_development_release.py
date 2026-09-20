@@ -880,6 +880,13 @@ def canary(values: dict[str, Any]) -> dict[str, Any]:
                     "canary_disclaimer",
                 )
                 terminal = item
+            elif item.get("type") == "text":
+                require(
+                    set(item) == {"type", "text"}
+                    and isinstance(item.get("text"), str)
+                    and bool(item["text"]),
+                    "canary_event",
+                )
             elif item.get("type") == "tool":
                 continue
             else:
