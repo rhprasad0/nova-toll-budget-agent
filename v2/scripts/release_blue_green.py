@@ -24,10 +24,12 @@ if __package__:
     from . import blue_green as gate
     from . import check_development_release as checks
     from . import classify_deployment_error as diagnostics
+    from . import shared_packages
 else:
     import blue_green as gate
     import check_development_release as checks
     import classify_deployment_error as diagnostics
+    import shared_packages
 
 account = "903859731897"
 artifact_bucket = "nova-toll-agentcore-903859731897"
@@ -225,14 +227,78 @@ def prepare_descriptor(bundle: Path, previous: dict[str, Any]) -> dict[str, Any]
     return result
 
 
-def stage_packages(root: Path, bundle: Path) -> None:
+def stage_packages(root: Path, bundle: Path, expected: dict[str, Any]) -> None:
     for name in ("loader", "publisher", "timed-checks"):
         package = Path("build") / f"{name}.zip"
         source = bundle / "v2/infra" / package
         destination = root / package
+        gate.require(
+            not destination.is_symlink() and not destination.parent.is_symlink(),
+            "shared_package_path",
+        )
         if source.resolve() != destination.resolve():
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
+    shared_packages.verify_bytes(root, expected)
+
+
+def package_evidence(bundle: Path, release: str | None = None) -> dict[str, Any]:
+    return shared_packages.from_bundle(
+        bundle,
+        environment,
+        account,
+        os.environ.get("GITHUB_SHA", "") if release is None else release,
+    )
+
+
+def shared_readiness(expected: dict[str, Any], *, wait: bool = True) -> dict[str, str]:
+    """Bounded configuration readbacks; never invoke scheduled business handlers."""
+    identities = shared_packages.identities(expected)
+    statuses = dict.fromkeys(identities, "unknown")
+    deadline = time.monotonic() + 600
+    for attempt in range(60 if wait else 1):
+        pending = False
+        for component, identity in identities.items():
+            try:
+                actual = aws(
+                    "lambda",
+                    "get-function-configuration",
+                    "--function-name",
+                    identity["arn"],
+                )
+                if (
+                    actual.get("FunctionName") != identity["name"]
+                    or actual.get("FunctionArn") != identity["arn"]
+                    or actual.get("State") not in {"Pending", "Active"}
+                    or actual.get("LastUpdateStatus")
+                    not in {"InProgress", "Successful"}
+                ):
+                    statuses[component] = "failed"
+                elif (
+                    actual["State"] == "Pending"
+                    or actual["LastUpdateStatus"] == "InProgress"
+                ):
+                    statuses[component] = "unknown"
+                    pending = True
+                else:
+                    statuses[component] = (
+                        "verified"
+                        if actual.get("CodeSha256") == identity["sha256"]
+                        else "failed"
+                    )
+            except (
+                checks.CheckFailure,
+                KeyError,
+                ValueError,
+                OSError,
+                subprocess.SubprocessError,
+            ):
+                statuses[component] = "unknown"
+                pending = True
+        if not pending or attempt == 59 or time.monotonic() >= deadline:
+            break
+        time.sleep(10)
+    return statuses
 
 
 def plan(
@@ -243,8 +309,9 @@ def plan(
     phase: str,
     previous: dict[str, Any],
     inputs: dict[str, Any],
+    expected: dict[str, Any],
 ) -> Path:
-    stage_packages(root, bundle)
+    stage_packages(root, bundle, expected)
     variables = work / f"{phase}.tfvars.json"
     write(variables, inputs)
     saved = work / f"{phase}.tfplan"
@@ -264,7 +331,11 @@ def plan(
         args.append(f"-var={variable}_package_path=build/{name}.zip")
     terraform(root, *args)
     gate.validate_plan(
-        json.loads(terraform(root, "show", "-json", str(saved))), previous, phase, saved
+        json.loads(terraform(root, "show", "-json", str(saved))),
+        previous,
+        phase,
+        saved,
+        expected,
     )
     return saved
 
@@ -613,6 +684,7 @@ def recover(
     foundation: Path,
     work: Path,
     prepared: dict[str, Any],
+    expected: dict[str, Any],
     *,
     expected_identity: dict[str, Any] | None = None,
 ) -> bool:
@@ -633,6 +705,7 @@ def recover(
         "recover",
         promoted,
         gate.desired(promoted, promote=True),
+        expected,
     )
     gate.require(current(root)[1] == identity, "stale_recovery")
     terraform(root, "apply", "-input=false", str(saved))
@@ -763,6 +836,8 @@ def main() -> int:
         args.work_dir.resolve(),
     )
     result: dict[str, Any] = {"deployment": "failed", "recovery": "not_attempted"}
+    expected_packages: dict[str, Any] | None = None
+    shared_status = dict.fromkeys(shared_packages.FUNCTIONS, "unknown")
     recovery_record: dict[str, str] | None = None
     authorized = False
     try:
@@ -799,15 +874,27 @@ def main() -> int:
             "delivery_role",
         )
         authorized = True
+        if args.phase != "recover":
+            expected_packages = package_evidence(bundle)
         if args.phase == "prepare-production":
             production_bundle_identity()
         context_file = work / "context.json"
         if args.phase == "prepare-plan":
+            assert expected_packages is not None
             previous, identity = current(root)
             write(work / "previous.json", previous)
             candidate = prepare_descriptor(bundle, previous)
             inputs = gate.desired(previous, candidate)
-            saved = plan(root, bundle, foundation, work, "prepare", previous, inputs)
+            saved = plan(
+                root,
+                bundle,
+                foundation,
+                work,
+                "prepare",
+                previous,
+                inputs,
+                expected_packages,
+            )
             write(
                 context_file,
                 {
@@ -816,9 +903,12 @@ def main() -> int:
                     "identity": identity,
                     "inputs": inputs,
                     "plan_sha256": hashlib.sha256(saved.read_bytes()).hexdigest(),
+                    "shared_packages": expected_packages,
+                    "shared_identities": shared_packages.identities(expected_packages),
                 },
             )
             result = {"deployment": "prepared_plan", "recovery": "not_attempted"}
+            write(work / "package-evidence.json", expected_packages)
         elif args.phase == "recover":
             gate.require(
                 all((args.release_id, args.record_version, args.expected_state_sha256)),
@@ -829,6 +919,35 @@ def main() -> int:
             )
             if environment == "production":
                 verify_recovery_bundle(context, bundle, args.release_id)
+            expected_packages = package_evidence(bundle, args.release_id)
+            if "shared_packages" not in context and "shared_identities" not in context:
+                # Only the retained pre-evidence production record is supported.
+                gate.require(
+                    environment == "production"
+                    and args.release_id == shared_packages.LEGACY_RECOVERY_RELEASE
+                    and set(context)
+                    == {
+                        "claim",
+                        "previous",
+                        "identity",
+                        "inputs",
+                        "plan_sha256",
+                        "prepared",
+                        "environment",
+                        "prepared_identity",
+                        "foundation",
+                        "bundle",
+                    },
+                    "shared_package_evidence",
+                )
+            else:
+                gate.require(
+                    context.get("shared_packages") == expected_packages
+                    and context.get("shared_identities")
+                    == shared_packages.identities(expected_packages),
+                    "shared_package_evidence",
+                )
+            if environment == "production":
                 write(foundation, context["foundation"])
             _, identity = current(root)
             gate.require(
@@ -843,16 +962,22 @@ def main() -> int:
                 foundation,
                 work,
                 context["prepared"],
+                expected_packages,
                 expected_identity=identity,
             ):
                 result["recovery"] = "recovered"
         else:
+            assert expected_packages is not None
             if args.phase == "promote-production":
                 gate.require(
                     bool(args.release_id and args.record_version), "cutover_identity"
                 )
                 context = load_recovery(
                     work, args.release_id, args.claim, args.record_version
+                )
+                gate.require(
+                    context["shared_packages"] == expected_packages,
+                    "shared_package_evidence",
                 )
                 manifest = json.loads((bundle / "release-manifest.json").read_text())
                 gate.require(
@@ -874,7 +999,7 @@ def main() -> int:
                 }
             else:
                 if args.saved_plan is not None:
-                    stage_packages(root, bundle)
+                    stage_packages(root, bundle, expected_packages)
                     document = json.loads(
                         terraform(root, "show", "-json", str(args.saved_plan.resolve()))
                     )
@@ -890,7 +1015,13 @@ def main() -> int:
                                 ]
                             },
                         )
-                    gate.validate_plan(document, previous, "prepare", args.saved_plan)
+                    gate.validate_plan(
+                        document,
+                        previous,
+                        "prepare",
+                        args.saved_plan,
+                        expected_packages,
+                    )
                     actual, identity = current(root)
                     gate.require(actual == previous, "stale_prepare")
                     inputs = {
@@ -905,6 +1036,10 @@ def main() -> int:
                             "previous": previous,
                             "identity": identity,
                             "inputs": inputs,
+                            "shared_packages": expected_packages,
+                            "shared_identities": shared_packages.identities(
+                                expected_packages
+                            ),
                             "plan_sha256": hashlib.sha256(
                                 args.saved_plan.read_bytes()
                             ).hexdigest(),
@@ -912,6 +1047,10 @@ def main() -> int:
                     )
                 context = json.loads(context_file.read_text())
                 gate.require(context["claim"] == args.claim, "release_claim")
+                gate.require(
+                    context["shared_packages"] == expected_packages,
+                    "shared_package_evidence",
+                )
                 previous, identity = current(root)
                 gate.require(
                     previous == context["previous"] and identity == context["identity"],
@@ -923,6 +1062,23 @@ def main() -> int:
                     == context["plan_sha256"],
                     "saved_plan",
                 )
+                # Bytes, paths and the policy are checked again after migrations.
+                document = json.loads(terraform(root, "show", "-json", str(saved)))
+                gate.validate_plan(
+                    document, previous, "prepare", saved, expected_packages
+                )
+                context["shared_compatibility"] = shared_packages.compatibility(
+                    bundle,
+                    expected_packages,
+                    previous["slots"][previous["active"]]["release_id"],
+                    changing=any(
+                        item["address"] in shared_packages.RESOURCES
+                        and item["change"]["actions"] != ["no-op"]
+                        for item in document["resource_changes"]
+                    ),
+                )
+                write(context_file, context)
+                shared_packages.verify_bytes(root, expected_packages)
                 terraform(root, "apply", "-input=false", str(saved))
                 prepared, prepared_identity = current(root)
                 gate.require(
@@ -935,6 +1091,11 @@ def main() -> int:
                     context["foundation"] = json.loads(foundation.read_text())
                     context["bundle"] = production_bundle_identity()
                 write(context_file, context)
+            shared_status = shared_readiness(expected_packages)
+            gate.require(
+                all(status == "verified" for status in shared_status.values()),
+                "shared_readback",
+            )
             wait_routing(root, prepared)
             private_probe(root, prepared["slots"][prepared["active"]])
             evidence = validate_candidate(prepared, args.claim)
@@ -973,6 +1134,7 @@ def main() -> int:
                     "promote",
                     prepared,
                     gate.desired(prepared, promote=True),
+                    expected_packages,
                 )
                 gate.verify_evidence(evidence, current(root)[0], args.claim)
                 if args.phase == "promote-production":
@@ -992,21 +1154,38 @@ def main() -> int:
                     )
                     wait_routing(root, promoted)
                     private_probe(root, promoted["slots"][promoted["active"]])
+                    shared_status = shared_readiness(expected_packages)
+                    gate.require(
+                        all(status == "verified" for status in shared_status.values()),
+                        "shared_readback",
+                    )
                 except Exception:
                     result = {"deployment": "failed", "recovery": "failed"}
-                    if recover(root, bundle, foundation, work, prepared):
+                    if recover(
+                        root, bundle, foundation, work, prepared, expected_packages
+                    ):
                         result["recovery"] = "recovered"
                 else:
                     result = observe(
                         lambda: bool(probe(promoted["slots"][promoted["active"]])),
-                        lambda: recover(root, bundle, foundation, work, prepared),
+                        lambda: recover(
+                            root, bundle, foundation, work, prepared, expected_packages
+                        ),
                     )
                     result["active"] = current(root)[0]["active"]
+    except ValueError as error:
+        result["deployment"] = "failed"
+        # Terraform failures already emit a bounded classifier diagnostic.
+        if str(error) != "terraform_failed":
+            reason = (
+                str(error)
+                if str(error) in diagnostics.GATE_REASONS
+                else "gate_rejected"
+            )
+            print(f"deployment_gate_reason={reason}", file=sys.stderr)
     except (
-        gate.Rejected,
         checks.CheckFailure,
         KeyError,
-        ValueError,
         TypeError,
         OSError,
         subprocess.SubprocessError,
@@ -1014,6 +1193,16 @@ def main() -> int:
         result["deployment"] = "failed"
     if recovery_record is not None:
         result["recovery_record"] = recovery_record
+    # Readback failures never short-circuit the routing recovery above.
+    if (
+        authorized
+        and expected_packages is not None
+        and args.phase != "prepare-plan"
+        and result["deployment"] not in {"succeeded", "awaiting_approval"}
+    ):
+        shared_status = shared_readiness(expected_packages, wait=False)
+    if args.phase != "prepare-plan":
+        result["shared_components"] = shared_status
     if authorized and args.phase != "prepare-plan":
         try:
             final_state, _ = current(root)

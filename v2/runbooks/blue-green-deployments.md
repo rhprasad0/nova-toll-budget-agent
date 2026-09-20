@@ -51,11 +51,61 @@ Lambda ARN/version, runtime ARN/version/endpoint, and runtime-emitted release ID
 | Recover | Fresh gated Terraform plan restores retained public/private routing; verify both streamed answers and retained assets | Report recovery separately; deployment remains failed |
 | Complete | Record active/previous identities and keep the previous slot | After observation, cancellation or runner loss, use manual recovery |
 
-Preparation rejects active-slot, primary-routing, IAM, network, scheduled-job and
-shared cache/function changes. Those require a separate infrastructure review.
-Promotion/recovery reject artifacts or unrelated changes. Plans reject drift,
-unexpected moves and uncertain routing targets. A retry may reuse the identical
+Preparation admits verified code-only updates to the fixed loader, publisher,
+timed-checks and cost Lambdas, plus the existing reviewed billing changes and
+the pinned annotation-only CloudFront transition in either environment.
+Other active-slot, primary-routing, IAM, network, scheduled-job and shared
+configuration changes require a separate infrastructure review.
+Promotion/recovery reject artifacts or unrelated changes. Drift exceptions include
+the reviewed chat function finishing publication (`IN_PROGRESS` to `DEPLOYED`)
+and a revision-only refresh of the fixed primary distribution, with all configuration
+unchanged. Other drift, unexpected moves and uncertain routing targets are rejected.
+A retry may reuse the identical
 inactive descriptor but cannot change artifacts under its release ID.
+
+**Shared code stays installed when application routing rolls back.** Preparation
+approval authorizes those immediate shared-component effects and compatible
+migrations; the later production cutover approval authorizes application routing.
+Before preparation apply, the trusted gate requires the reviewed package hashes,
+unchanged schema contracts and serving baseline in
+`v2/scripts/shared-package-compatibility.json`. This record covers the currently
+serving `4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe` transition in both environments.
+An already-completed preparation retains these verified packages without needing
+to repeat that transition from the original baseline. Extending it requires
+review and focused compatibility tests; do not replace the baseline merely to
+silence a gate. Credential-free CI exercises old/new loader events, publishers,
+timed-check contracts, the unchanged independent costs handler, and the retained
+database contracts against the disposable upgraded schema.
+
+The trusted PR plan, initial preparation and saved-plan revalidation share the
+same package checks. The development manifest further limits allowed mutations;
+it does not grant blanket permission. Credentialed PR jobs execute policy from
+main, so a policy PR proves its new behavior through credential-free tests until
+merge. A retained-slot PR plan cannot prove state-dependent inactive-slot
+preparation or a future partial-application retry.
+
+On any partial preparation, create a **fresh plan against current state** and
+reuse the verified immutable release objects. Never reapply the stale plan,
+delete the release identity, or overwrite an immutable object to force rebuilding.
+The timed-check Lambda must reference its validated S3 producer. A retained
+object version is accepted only with matching bucket, key, package hash and exact
+Terraform reference; an unknown version requires the changing validated producer.
+Authority-bearing no-ops undergo the same identity and hash checks.
+
+After preparation and again before cutover, bounded Lambda configuration reads
+verify all four fixed identities, package hashes, `Active` state and `Successful`
+update status, including updates completed by earlier attempts. Existing exact
+`lambda:GetFunctionConfiguration` permissions are a prerequisite; missing access
+must be reviewed, never addressed by broadening IAM. These checks do not invoke
+business handlers. Private delivery context retains the expected identities and
+compatibility baseline. Failure summaries mark each shared component `verified`,
+`failed`, or `unknown`; shared readback failure does not prevent attempting routing
+recovery. A `recovered` routing result never claims shared code or schema restoration.
+
+Only fixed component/phase/action/field labels and unknown-resource counts appear
+in mutation summaries. Plans, arbitrary resource addresses, values and exception
+text remain private. The last pre-fix development failure preceded migrations
+and Terraform apply; its exact rejected resource was not confirmed.
 
 Descriptors freeze versioned S3 artifacts, configuration and asset prefixes;
 release-state output records actual published versions. Promotion only changes
@@ -217,8 +267,8 @@ application model, prompt, schedules, fixed migration limits and account isolati
    permissions using actual runtime, staging-distribution and deployment-policy IDs.
 5. Verify both slots' identities, immutable assets, origin restrictions, session
    handling, guardrails and protected traces; ordinary public/private traffic must
-   still serve healthy blue. Require ordinary release plans to leave shared
-   infrastructure unchanged. Have `pre_release_reviewer` assess the final candidate,
+   still serve healthy blue. Require ordinary release plans to keep shared changes
+   within the reviewed code-only and billing boundaries. Have `pre_release_reviewer` assess the final candidate,
    bootstrap evidence and remaining gates before enabling production delivery.
    Retire the historical activation checkout after bootstrap; subsequent operations
    use the current reviewed source.
@@ -265,8 +315,9 @@ does not lock a local shell: disable new delivery and confirm no run is active
 before taking this operator-held boundary.
 
 Use the original admitted release checkout/bundle and verified foundation
-variables in an isolated worktree. Verify the bundle with
-`verify_release_bundle.py verify --verify-checkout`; do not rebuild artifacts.
+variables in an isolated worktree. Set `TRUSTED_CHECKOUT` to a separate checkout
+of reviewed current `main` containing the recovery controller. Verify the bundle
+with `verify_release_bundle.py verify --verify-checkout`; do not rebuild artifacts.
 The private record is
 `releases/<candidate-id>/recovery/<run-id>:<attempt>.json` in the fixed artifact
 bucket. Read its exact S3 version from the delivery summary, or from the exact
@@ -283,7 +334,7 @@ terraform -chdir="$APPLICATION_ROOT" state pull |
 Using the fixed delivery role or the recorded development SSO administrator role:
 
 ```sh
-AWS_PROFILE=nova-toll-dev python3 v2/scripts/release_blue_green.py recover \
+AWS_PROFILE=nova-toll-dev python3 "$TRUSTED_CHECKOUT/v2/scripts/release_blue_green.py" recover \
   --environment development --terraform-root "$APPLICATION_ROOT" \
   --bundle-root "$VERIFIED_BUNDLE" --foundation-vars "$FOUNDATION_VARS" \
   --work-dir "$PRIVATE/recovery" --output "$PRIVATE/recovery-result.json" \
@@ -301,8 +352,14 @@ administrator session is required. Its record key is
 It verifies the completed original release run and development evidence, restores
 the exact admitted bundle and original candidate checkout, and reads foundation
 variables from the versioned record. Records without an exact bundle ID/digest
-binding are rejected. The serving application need not pass a health check before
-restoration; both ingress paths must pass afterward.
+binding are rejected. Package verification uses the admitted original release ID,
+including when the trusted workflow SHA is newer or a local shell has no
+`GITHUB_SHA`. The retained production baseline
+`4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe` alone may use its original record
+without shared-package fields: evidence comes from the verified original bundle,
+and its pinned old CloudFront chat code must remain an unchanged no-op. Partial
+or conflicting newer records are rejected. The serving application need not pass
+a health check before restoration; both ingress paths must pass afterward.
 
 The command checks claim, lineage, both descriptors and reviewed state identity,
 generates a fresh routing-only plan, rechecks serial before apply, and attempts
@@ -321,20 +378,20 @@ validation; pacing occurs outside the individual canary deadline.
 
 Shared loader, publisher and timed-check packages use paths relative to the
 Terraform module (`build/*.zip`) in both planning and delivery. Bootstrap must
-use these same paths: absolute workstation or runner paths cause unchanged
-packages to appear as shared-resource updates, which the release gates reject.
+use these same paths: absolute workstation or runner paths violate the package
+evidence contract, even when the bytes match.
 
 ## Rehearsal and evidence
 
 Local tests exercise controller branches with mocked AWS/Terraform I/O: invalid
 candidate, healthy promotion, two failed probes, partial switch, stale state and
-restore failure. SQL tests run PR-base and candidate contracts against the same
-upgraded disposable database. The PR base is not necessarily the deployed retained
-release after skipped or failed delivery. Before approving migrations, the human
-reviewer must require disposable contract-test evidence using the actual retained
-release commit as the baseline (`bash v2/scripts/run_db_tests.sh <retained-commit>`),
-and review compatibility with both retained applications. Ordinary PR CI alone
-does not establish that deployed-release compatibility. **These tests do not prove a live deployment.**
+restore failure. SQL tests run the reviewed compatibility baseline and candidate
+contracts against the same upgraded disposable database; the command's base-ref
+argument still selects migration-upgrade inputs. Before approving migrations,
+review the recorded baseline against the actual serving release and require
+compatibility evidence for both retained applications. A new shared-package
+transition requires updating the reviewed record and its focused tests together.
+**These tests do not prove a live deployment.**
 
 The [sanitized simulated rollback record](evidence/blue-green-simulated-rollback.json)
 records the executed controller-test outcomes separately from live evidence.

@@ -139,6 +139,8 @@ BUNDLE_FIXED_INPUTS = {
     "v2/db/oracle/data.sql",
 }
 BUNDLE_OPTIONAL_INPUTS = {
+    "v2/scripts/shared_packages.py",
+    "v2/scripts/shared-package-compatibility.json",
     "v2/scripts/blue_green.py",
     "v2/scripts/release_blue_green.py",
     "v2/scripts/check_development_admission.py",
@@ -512,9 +514,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bundle-root", type=Path)
     parser.add_argument("--write-evidence", type=Path)
     parser.add_argument("--evidence", type=Path)
+    parser.add_argument("--shared-evidence", type=Path)
     args = parser.parse_args(argv)
     try:
         result = verify(args)
+        if args.shared_evidence is not None:
+            try:
+                from scripts import shared_packages
+            except ModuleNotFoundError:
+                from v2.scripts import shared_packages
+            manifest = cast(
+                dict[str, JSON], _load(args.manifest, "manifest_unreadable")
+            )
+            packages = cast(dict[str, str], manifest["packages"])
+            expected = shared_packages.evidence(
+                "development", "903859731897", args.candidate_sha, packages
+            )
+            args.shared_evidence.write_text(json.dumps(expected, sort_keys=True) + "\n")
+            args.shared_evidence.chmod(0o600)
     except Invalid as error:
         result = {"status": "rejected", "reason_code": str(error)}
     except Exception:

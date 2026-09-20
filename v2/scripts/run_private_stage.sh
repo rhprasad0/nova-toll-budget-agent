@@ -80,7 +80,7 @@ run_private_stage() {
   if [[ -r "$stdout_log" && -r "$stderr_log" ]]; then
     if reason="$(python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/classify_deployment_error.py" "$stdout_log" "$stderr_log" 2>/dev/null)"; then :; else reason=diagnostic_unavailable; fi
     case "$reason" in
-      access_denied|expired_credentials|network|dns|tls|backend_config|state_lock|provider_installation|checksum|malformed_input|unclassified|diagnostic_unavailable) ;;
+      access_denied|expired_credentials|network|dns|tls|backend_config|state_lock|provider_installation|checksum|malformed_input|unclassified|diagnostic_unavailable|public_chat_identity|public_chat_code|phase_boundary|field_boundary|cost_release_boundary|unknown_target|provider|false_noop|moved_or_duplicate|action|release_output|gate_rejected|shared_package_boundary|shared_package_evidence|shared_package_path|shared_package_hash|shared_readback|shared_compatibility|incomplete_or_drift) ;;
       *) reason=unclassified ;;
     esac
   fi

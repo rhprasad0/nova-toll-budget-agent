@@ -1814,10 +1814,11 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
         "before migration credentials and fixed migration",
         "re-assumes the deploy role",
         "before applying that same plan",
-        "exactly one bounded canary",
-        "direct, arbitrary, regenerated,\nstale, or caller-selected plan/apply",
+        "separate `production-cutover` approval",
+        "new routing-only plan",
+        "Two consecutive failures",
+        "direct, arbitrary, stale, or caller-selected plan/apply",
         "sanitized",
-        "single bounded candidate-bound record",
     ):
         assert text in guarded
     assert "terraform plan" not in guarded
@@ -1834,6 +1835,10 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
         assert text in handoff
     assert "planned-output" not in handoff
     assert "foundation-plan path" not in handoff
+
+    assert "Historical pre-bootstrap recovery capture" in RUNBOOK
+    assert "**Historical pre-bootstrap procedure only.**" in RUNBOOK
+    assert "v2-production-recovery.yml" in RUNBOOK
 
     capture = RUNBOOK.split(
         "Before approving or deploying a production release", maxsplit=1
@@ -2033,9 +2038,10 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
         "saved plan",
         "reviewer approval",
         "Guards fail closed",
-        "capture the\nfixed routing targets",
-        "human-operated manual\nrestore",
-        "never an automatic rollback",
+        "separate `production-cutover` approval",
+        "routing-only promotion plan",
+        "Two consecutive post-cutover observation failures",
+        "v2-production-recovery.yml",
         "sanitized",
     ):
         assert text in readme
@@ -4758,7 +4764,11 @@ def test_timed_package_is_threaded_through_all_plan_paths() -> None:
     )
     assert '--bundle-root "$overlay"' in PRODUCTION_PLAN_WORKFLOW
     assert (
-        'blue_green.py prepare --plan "$plan_json" --saved-plan "$plan"'
+        'blue_green.py prepare --environment production --plan "$plan_json" --saved-plan "$plan"'
+        in PRODUCTION_PLAN_WORKFLOW
+    )
+    assert (
+        '--package-evidence "$RUNNER_TEMP/blue-green/package-evidence.json"'
         in PRODUCTION_PLAN_WORKFLOW
     )
     assert "-target" not in PRODUCTION_PLAN_WORKFLOW
@@ -6507,7 +6517,7 @@ def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup(
         called.append(args[1])
         raise gate.Rejected("terraform_failed")
 
-    def staged(_root: Path, _bundle: Path) -> None:
+    def staged(_root: Path, _bundle: Path, _expected: dict[str, Any]) -> None:
         pass
 
     with pytest.MonkeyPatch.context() as patch:
@@ -6522,6 +6532,7 @@ def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup(
                 "prepare",
                 state,
                 gate.desired(state, slot("green", "release2")),
+                {},
             )
     assert called == ["plan"]
     assert not (tmp_path / "prepare.tfplan").exists()

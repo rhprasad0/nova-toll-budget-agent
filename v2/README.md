@@ -39,7 +39,7 @@ plans, state evidence, or documentation.
 - [Missing I-95/495 OD validation](eval/results/i95-missing-od-pricing.md) and
   [production proxy mapping and pricing views](db/analysis.sql)
 
-The independently deployable `pricing` application schema is at **1.3.0**. Its
+The independently deployable `pricing` application schema is at **1.4.0**. Its
 version is stored in `pricing.schema_version`; CI tests
 the bootstrap, privileges, analytics, cleanup guard, and monotonic SemVer policy
 on PostgreSQL 17.9.
@@ -47,12 +47,12 @@ on PostgreSQL 17.9.
 The development-only bootstrap also creates the short-lived
 `schema_migrator_development` IAM login, the `pricing_owner_development` stable
 owner, and private `tollchat_migration.schema_history` metadata seeded with the
-1.3.0 pricing and 1.14.1 Oracle canonical baselines. It remains
+1.4.0 pricing and 1.15.0 Oracle canonical baselines. It remains
 canonical-schema-only: no released application migration is applied by the
 bootstrap, and this groundwork does not make hard-coded-owner migrations
 portable to development.
 
-The independently versioned `oracle` schema is at **1.14.1**. It installs
+The independently versioned `oracle` schema is at **1.15.0**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
 exposes route validation plus bounded prompt-point retrieval to `tollchat_agent`
 and internal pricing operations to `pricing_caller`.
@@ -137,6 +137,8 @@ uv run python oracle/build_oracle_data.py --check
 ./scripts/build_loader_zip.sh
 ./scripts/build_publisher_zip.sh
 ./scripts/build_agentcore_zips.sh
+./scripts/build_fetcher_zip.sh
+./scripts/build_timed_checks_zip.sh
 (cd infra/build && sha256sum --check AGENTCORE_SHA256SUMS)
 ```
 
@@ -179,12 +181,15 @@ Credential-free PR CI never runs `terraform plan` or `apply`. The protected
 production sequence is verified development bundle, stable `vX.Y.Z` admission
 and claim, exact candidate validation before planner credentials, one encrypted
 versioned/checksummed 24-hour saved plan, reviewer approval of the protected
-job, repeated plan/state validation before fixed migration and re-assumed deploy
-apply, fixed readiness, then one bounded canary. Guards fail closed before later
-stages and terminal evidence remains sanitized. Before approval, capture the
-fixed routing targets; a canary failure requires the human-operated manual
-restore in the [runbook](RUNBOOK.md#production-canary-failure-human-stop-and-manual-routing-restore),
-never an automatic rollback.
+`production` job, repeated plan/state validation before fixed migration and
+re-assumed deploy apply to the inactive slot, then candidate validation.
+A separate `production-cutover` approval gates fresh validation and a new
+routing-only promotion plan. Guards fail closed before later stages and terminal
+evidence remains sanitized. Two consecutive post-cutover observation failures
+trigger one recovery attempt. For recovery after the observation window,
+cancellation, or runner loss, use the protected `v2-production-recovery.yml`
+workflow with the original versioned recovery record. See the
+[blue-green delivery and recovery runbook](runbooks/blue-green-deployments.md).
 
 Development delivery reports an explicit `development-release` GitHub result
 only after exact-version readiness and bounded static/API/two-session agent

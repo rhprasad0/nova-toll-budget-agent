@@ -415,12 +415,12 @@ jobs:
         run: |
           set -euo pipefail
           jq -ce --arg candidate "$CANDIDATE" --argjson admission "$ADMISSION" --slurpfile result "$RUNNER_TEMP/blue-green-result.json" --slurpfile migration "$RUNNER_TEMP/v2-production-migrations-evidence.json" -n 'select($result[0].deployment == "awaiting_approval") | {candidate:$candidate,claim_id:$admission.claim_id,result:$result[0],migration:$migration[0]}' | sed 's/^/prepared=/' >>"$GITHUB_OUTPUT"
-          echo 'Candidate ready; public traffic unchanged. Test the candidate, then approve production-cutover.' >>"$GITHUB_STEP_SUMMARY"
+          echo 'Preparation has applied shared components and migrations immediately. Candidate ready; public application routing unchanged. Test the candidate, then approve production-cutover for routing.' >>"$GITHUB_STEP_SUMMARY"
       - name: Record deployment and recovery outcomes separately
         if: always()
         run: |
           if test -f "$RUNNER_TEMP/blue-green-result.json"; then
-            jq '{deployment,recovery,active,probes,releases,recovery_record}' "$RUNNER_TEMP/blue-green-result.json" >>"$GITHUB_STEP_SUMMARY"
+            jq '{deployment,recovery,active,probes,releases,recovery_record,shared_components}' "$RUNNER_TEMP/blue-green-result.json" >>"$GITHUB_STEP_SUMMARY"
           fi
       - name: Clear deploy credentials before evidence upload
         if: always()

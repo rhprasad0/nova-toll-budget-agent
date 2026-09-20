@@ -16,6 +16,7 @@ from zipfile import ZipFile
 import pytest
 
 from scripts import cost_dashboard_release as gate
+from scripts import shared_packages
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -249,8 +250,14 @@ locals {{
                 }
             )
     plan["configuration"] = {"root_module": {"resources": resources}}
+    package_evidence = shared_packages.evidence(
+        environment,
+        account,
+        "a" * 40,
+        dict.fromkeys(shared_packages.PACKAGES, "0" * 64),
+    )
     for item in plan["resource_changes"]:
-        gate.validate(item, environment, plan)
+        gate.validate(item, environment, plan, package_evidence)
         for key, value in (
             ("role", "arn:aws:iam::000000000000:role/other"),
             ("policy", "{}"),
@@ -264,11 +271,11 @@ locals {{
                 bad = deepcopy(item)
                 bad["change"]["after"][key] = value
                 with pytest.raises(ValueError):
-                    gate.validate(bad, environment, plan)
+                    gate.validate(bad, environment, plan, package_evidence)
         bad = deepcopy(item)
         bad["change"]["actions"] = ["delete"]
         with pytest.raises(ValueError):
-            gate.validate(bad, environment, plan)
+            gate.validate(bad, environment, plan, package_evidence)
     iam = next(
         item
         for item in plan["resource_changes"]
@@ -313,11 +320,12 @@ locals {{
             "resource_changes": plan["resource_changes"],
             "configuration": plan["configuration"],
         }
-        records = legacy._parse_plan(plan)
+        records = legacy._parse_plan(plan, package_evidence)
         assert len(records) == 10
         manifest = json.loads(
             (ROOT / "infra/development-release-manifest.json").read_text()
         )
+        manifest["packages"] = dict.fromkeys(manifest["packages"], "0" * 64)
         # Retain fresh-account coverage; the committed manifest now lists updates.
         creation_manifest = deepcopy(manifest)
         by_address = {record["address"]: record for record in records}
@@ -329,7 +337,7 @@ locals {{
                     changed_fields=list(record["changed_fields"]),
                 )
         result = legacy.validate_plan(
-            plan, creation_manifest, manifest["provider_identity"]
+            plan, creation_manifest, manifest["provider_identity"], package_evidence
         )
         assert result["status"] == "accepted", result
         # Installed resources must match the committed update declarations.
@@ -357,11 +365,17 @@ locals {{
             update["change"]["actions"] = ["update"]
             update["change"]["before"] = deepcopy(update["change"]["after"])
             update["change"]["before"].update(old_values[item["address"]])
+            if item["address"] == "aws_lambda_function.costs":
+                for side in ("before", "after"):
+                    update["change"][side]["arn"] = shared_packages.identities(
+                        package_evidence
+                    )["costs"]["arn"]
+                update["change"]["after_unknown"] = {}
             updates.append(update)
         assert len(updates) == 4
         updated_plan = {**plan, "resource_changes": updates}
         result = legacy.validate_plan(
-            updated_plan, manifest, manifest["provider_identity"]
+            updated_plan, manifest, manifest["provider_identity"], package_evidence
         )
         assert result["status"] == "accepted", result
         # Exercise the same real resources through the retained-slot gate.
@@ -371,11 +385,14 @@ locals {{
             rehearsal = importlib.import_module("test_blue_green")
         state = rehearsal.previous()
         prepared = rehearsal.plan(
-            rehearsal.gate.desired(state, rehearsal.slot("green", "release2")),
+            rehearsal.gate.desired(state, rehearsal.slot("green", "a" * 40)),
             plan["resource_changes"],
         )
         prepared["configuration"] = plan["configuration"]
-        rehearsal.gate.validate_plan(prepared, state, "prepare")
+        prepared["variables"]["environment"] = {"value": environment}
+        rehearsal.gate.validate_plan(
+            prepared, state, "prepare", package_evidence=package_evidence
+        )
         with pytest.raises(rehearsal.gate.Rejected):
             rehearsal.gate.validate_plan(prepared, state, "promote")
 

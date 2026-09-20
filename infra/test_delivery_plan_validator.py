@@ -1,3 +1,4 @@
+import base64
 import copy
 import hashlib
 import json
@@ -29,6 +30,7 @@ from infra.delivery_plan_validator import (
 from infra.delivery_plan_validator import (
     validate_plan as _validate_plan,
 )
+from v2.scripts import shared_packages
 
 
 # Builders describe valid fixture envelopes. Tests cast deliberate corruptions
@@ -167,6 +169,15 @@ def validate_plan(
         cast(JSON, plan),
         cast(JSON, manifest),
         cast(JSON, dict(EXPECTED_IDENTITY) if identity is None else identity),
+        shared_packages.evidence(
+            "development",
+            "903859731897",
+            "a" * 40,
+            {
+                **dict.fromkeys(shared_packages.PACKAGES, HASH),
+                **cast(Manifest, manifest).get("packages", {}),
+            },
+        ),
     )
 
 
@@ -271,6 +282,7 @@ def _plan(resource_changes: Sequence[Resource], **metadata: object) -> Plan:
 def lambda_plan(**changes: JSON) -> Plan:
     before: dict[str, JSON] = {
         "function_name": LAMBDA_FUNCTION_NAMES["loader"],
+        "arn": "arn:aws:lambda:us-east-1:903859731897:function:toll-v2-pricing-loader-dev",
         "filename": "old.zip",
         "source_code_hash": "old",
         "s3_bucket": None,
@@ -279,8 +291,9 @@ def lambda_plan(**changes: JSON) -> Plan:
     }
     after: dict[str, JSON] = {
         "function_name": LAMBDA_FUNCTION_NAMES["loader"],
-        "filename": "new.zip",
-        "source_code_hash": "new",
+        "arn": "arn:aws:lambda:us-east-1:903859731897:function:toll-v2-pricing-loader-dev",
+        "filename": "build/loader.zip",
+        "source_code_hash": base64.b64encode(bytes(32)).decode(),
         "s3_bucket": None,
         "s3_key": None,
         "s3_object_version": None,
@@ -483,6 +496,41 @@ def _mutation_change(
         _set_path(after, field, "new")
     for field, value in spec.create_identity:
         before[field] = after[field] = value
+    if address == shared_packages.CHAT_ROUTES:
+        code = (
+            Path(__file__).resolve().parents[1] / "v2/agent/public-api-gate.js"
+        ).read_text()
+        # Match the exact reviewed pre-annotation bytes, as in the blue/green fixture.
+        original = code[code.index("function handler") :]
+        values: dict[str, JSON] = {
+            "name": "tollchat-v2-public-chat-routes-dev",
+            "arn": "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-chat-routes-dev",
+            "runtime": "cloudfront-js-2.0",
+            "publish": True,
+        }
+        before.update(values)
+        after.update(values)
+        before["code"] = original
+        after["code"] = code
+    if address in shared_packages.RESOURCES:
+        if address == shared_packages.OBJECT:
+            before["source"] = (
+                "old.zip" if "source" in fields else "build/timed-checks.zip"
+            )
+            after["source"] = "build/timed-checks.zip"
+            after["source_hash"] = base64.b64encode(bytes(32)).decode()
+        else:
+            component = address.rsplit(".", 1)[1]
+            name, package = shared_packages.FUNCTIONS[component]
+            before["arn"] = after["arn"] = (
+                f"arn:aws:lambda:us-east-1:903859731897:function:{name}-dev"
+            )
+            if component != "timed_checks":
+                before["filename"] = (
+                    "old.zip" if "filename" in fields else f"build/{package}"
+                )
+                after["filename"] = f"build/{package}"
+            after["source_code_hash"] = base64.b64encode(bytes(32)).decode()
     if action == "no-op":
         after = copy.deepcopy(before)
     return _resource_change(address, action, before, after)
@@ -1066,7 +1114,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         plan = _plan([_mutation_change(address, ("code",))])
         self.assertEqual(validate_plan(plan, manifest)["status"], "accepted")
         after = plan["resource_changes"][0]["change"]["after"]
-        after["runtime"] = "cloudfront-js-2.0"
+        after["runtime"] = "cloudfront-js-1.0"
         self.assertEqual(
             validate_plan(plan, manifest)["reason_code"], "unsupported_field_delta"
         )
@@ -1081,8 +1129,15 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 ).read_text()
             ),
         )
+        current_loader = lambda_plan()
+        current_loader["resource_changes"][0]["change"]["before"]["filename"] = (
+            "build/loader.zip"
+        )
+        current_loader["resource_changes"][0]["change"]["after"]["source_code_hash"] = (
+            base64.b64encode(bytes.fromhex(manifest["packages"]["loader.zip"])).decode()
+        )
         self.assertEqual(
-            validate_plan(lambda_plan(filename="old.zip"), manifest)["status"],
+            validate_plan(current_loader, manifest)["status"],
             "accepted",
         )
         self.assertEqual(
@@ -1111,16 +1166,15 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             if record["address"] == "aws_lambda_function.loader"
         )
         self.assertEqual(loader["changed_fields"], ["source_code_hash"])
-        result = validate_plan(
-            _plan(
-                [
-                    _mutation_change(
-                        "aws_lambda_function.publisher", ("source_code_hash",)
-                    )
-                ]
-            ),
-            later_manifest,
+        publisher_plan = _plan(
+            [_mutation_change("aws_lambda_function.publisher", ("source_code_hash",))]
         )
+        publisher_plan["resource_changes"][0]["change"]["after"]["source_code_hash"] = (
+            base64.b64encode(
+                bytes.fromhex(later_manifest["packages"]["publisher.zip"])
+            ).decode()
+        )
+        result = validate_plan(publisher_plan, later_manifest)
         self.assertEqual(result["status"], "accepted")
         self.assertEqual(
             cast(list[str], result["addresses"]), ["aws_lambda_function.publisher"]
@@ -2384,6 +2438,9 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
 
     def test_accepts_one_fixture_for_every_contract_entry(self) -> None:
         for address, spec in CONTRACT.items():
+            if address in shared_packages.RESOURCES | {shared_packages.CHAT_ROUTES}:
+                # Real composed shared-package plans live in test_shared_packages.py.
+                continue
             if spec.operation_class.startswith("agentcore-trace-"):
                 continue
             if spec.operation_class in {"cost-publication", "cost-routing"}:
@@ -3287,7 +3344,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         self.assertIn("release_blue_green.py prepare-plan", workflow)
         self.assertIn("release_blue_green.py finish", workflow)
         self.assertIn(
-            "jq '{deployment,recovery,active,probes,releases,recovery_record}'",
+            "jq '{deployment,recovery,active,probes,releases,recovery_record,shared_components}'",
             workflow,
         )
         self.assertNotIn('cat "$PLAN_LOG"', workflow)
@@ -3606,6 +3663,34 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                     )
                 )
             fields = expected_mutations[address][1]
+            if address in shared_packages.RESOURCES:
+                row = _mutation_change(address, fields)
+                package = (
+                    "timed-checks.zip"
+                    if address == shared_packages.OBJECT
+                    else shared_packages.FUNCTIONS[address.rsplit(".", 1)[1]][1]
+                )
+                hash_field = (
+                    "source_hash"
+                    if address == shared_packages.OBJECT
+                    else "source_code_hash"
+                )
+                row["change"]["after"][hash_field] = base64.b64encode(
+                    bytes.fromhex(manifest["packages"][package])
+                ).decode()
+                if address in {
+                    shared_packages.OBJECT,
+                    "aws_lambda_function.timed_checks",
+                }:
+                    version_field = (
+                        "version_id"
+                        if address == shared_packages.OBJECT
+                        else "s3_object_version"
+                    )
+                    row["change"]["before"][version_field] = "old-version"
+                    row["change"]["after"][version_field] = None
+                    row["change"]["after_unknown"][version_field] = True
+                return row
             spec = CONTRACT[address]
             before: dict[str, JSON] = {}
             after: dict[str, JSON] = {}
@@ -3642,10 +3727,28 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             return _resource_change(address, "update", before, after)
 
         plan = _plan([update(address) for address in committed_updates])
+        plan["configuration"] = {
+            "root_module": {
+                "resources": [
+                    {
+                        "address": "aws_lambda_function.timed_checks",
+                        "expressions": {
+                            "s3_object_version": {
+                                "references": [
+                                    "aws_s3_object.timed_checks",
+                                    "aws_s3_object.timed_checks.version_id",
+                                ]
+                            }
+                        },
+                    }
+                ]
+            }
+        }
+
         accepted = validate_plan(plan, manifest)
         self.assertEqual(accepted["status"], "accepted", accepted)
         self.assertEqual(accepted["reason_code"], "ok")
-        self.assertEqual(accepted["addresses"], list(committed_updates))
+        self.assertEqual(accepted["addresses"], sorted(committed_updates))
 
         missing_permission = copy.deepcopy(manifest)
         missing_permission["permissions"] = [
@@ -4115,6 +4218,14 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 }
             },
         )
+        publisher_noop = _mutation_change(
+            "aws_lambda_function.publisher", ("source_code_hash",)
+        )
+        publisher_noop["change"]["before"] = copy.deepcopy(
+            publisher_noop["change"]["after"]
+        )
+        publisher_noop["change"]["actions"] = ["no-op"]
+        plan["resource_changes"][-1] = publisher_noop
         result = validate_plan(plan, lambda_manifest())
         self.assertEqual(result["status"], "accepted")
         self.assertEqual(result["reason_code"], "ok")
@@ -4469,6 +4580,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "aws_s3_object.index",
                 "aws_s3_object.faq",
                 "aws_s3_object.privacy",
+                "aws_s3_object.timed_checks",
             }:
                 continue
             if (
@@ -4692,6 +4804,36 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             identity_path.write_text(
                 json.dumps(dict(EXPECTED_IDENTITY)), encoding="utf-8"
             )
+            evidence_path = root / "evidence.json"
+            evidence_path.write_text(
+                json.dumps(
+                    shared_packages.evidence(
+                        "development",
+                        "903859731897",
+                        "a" * 40,
+                        dict.fromkeys(shared_packages.PACKAGES, HASH),
+                    )
+                )
+            )
+            result = subprocess.run(
+                [
+                    "python3",
+                    "infra/delivery_plan_validator.py",
+                    str(plan_path),
+                    str(manifest_path),
+                    "--package-evidence",
+                    str(evidence_path),
+                    "--identity",
+                    str(identity_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(json.loads(result.stdout)["status"], "accepted")
+
+            plan_path.write_text(json.dumps(_plan([])), encoding="utf-8")
             result = subprocess.run(
                 [
                     "python3",
@@ -4705,8 +4847,10 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0)
-            self.assertEqual(json.loads(result.stdout)["status"], "accepted")
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(
+                json.loads(result.stdout)["reason_code"], "shared_package_evidence"
+            )
 
             for missing in (manifest_path, identity_path):
                 missing.unlink()
