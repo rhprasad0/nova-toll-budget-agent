@@ -1,7 +1,10 @@
 # Curated v2 evaluation evidence
 
-Only technically valid, representative live runs belong here. Failed,
-superseded, and ad hoc reports are not curated.
+The table below contains selected live integration runs. The separate
+[golden baseline archive](golden/README.md) preserves frozen conversation runs,
+including failures, superseded measurements, and their review limitations.
+Live traffic checks and frozen golden scores are different kinds of evidence;
+do not compare their pass rates.
 
 | Report | Scenario | Type | Result |
 | :-- | :-- | :-- | :-- |

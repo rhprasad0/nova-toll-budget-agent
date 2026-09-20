@@ -1,0 +1,31 @@
+{
+  "policy": {
+    "version": "1.0.0",
+    "contract_sha256": "e5a1f2d4576c3cbe7744b6a7f3ba06e0f0de11233bc547b84efb66e57e3142d6",
+    "trials": 3,
+    "cases": 24,
+    "workers": 4,
+    "critical_passes": 3,
+    "noncritical_passes": 2,
+    "suite_success_min": 0.9,
+    "suite_pass_cubed_min": 0.75,
+    "lost_passes_max": 1,
+    "run_cost_max_usd": 5.0,
+    "agent_cost_per_success_max_usd": 0.05,
+    "latency_p50_max_seconds": 30.0,
+    "latency_p95_max_seconds": 60.0,
+    "candidate_max_age_hours": 24,
+    "production_max_age_hours": 720,
+    "sample_size": 8,
+    "replacement_runs_max": 1,
+    "max_output_tokens": 2048
+  },
+  "approval": {
+    "status": "approved",
+    "evidence_sha256": "1bef88a29402788f8d2aa8e3d38e4692f67f8d8558841f9ff5ffa5a4e25446aa",
+    "reviewer": "repository owner (conversation)",
+    "approved_at": "2026-09-20T18:48:05+00:00",
+    "evidence": "Owner selected Use these limits and 24 hours / 30 days, then instructed Implement the plan. Recorded before any new candidate evaluation.",
+    "scope": "Fixed numerical policy and implementation plan; not approval of calibration, historical trials, or production promotion."
+  }
+}

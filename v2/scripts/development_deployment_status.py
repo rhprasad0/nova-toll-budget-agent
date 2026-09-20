@@ -143,7 +143,7 @@ def _prefixed_digest(value: object) -> str:
     return value
 
 
-def _canary(
+def validate_canary(
     value: object,
     sha: str,
     run: int,
@@ -244,7 +244,7 @@ def _prerequisites(
         raise DeploymentStatusError("upstream_failed")
     artifact_id = _positive(build.get("artifact_id"))
     artifact_digest = _prefixed_digest(build.get("artifact_digest"))
-    canary = _canary(
+    canary = validate_canary(
         deploy.get("canary"), sha, run, attempt, record, artifact_id, artifact_digest
     )
     declared = {
