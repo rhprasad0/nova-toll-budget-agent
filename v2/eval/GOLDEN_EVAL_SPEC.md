@@ -159,7 +159,7 @@ in case 24. Version 1.0.0 was approved by Ryan in the case-review conversation
 No baseline runs exist for either version. Ryan approved the revised cases in the PR #570 follow-up conversation; see
 [review.json](golden/review.json) for the exact corpus hash and approval evidence.
 
-Version 1.0.8 names the approved i95:212NO entry explicitly in case 21 corrects false rejection of explicit statements that missing tolls are not $0.00, and gives the judge the existing SOP facts on estimates and operator independence. The completed 72-trial demo remains pinned to 1.0.5; its raw verdicts are unchanged. No baseline has been promoted.
+Version 1.0.7 names the approved i95:212NO entry explicitly in case 21, corrects false rejection of explicit statements that missing tolls are not $0.00, and gives the judge the existing SOP facts on estimates and operator independence. The completed 72-trial demo remains pinned to 1.0.5; its raw verdicts are unchanged. No baseline has been promoted.
 
 Meaningful case, fixture, actor, or grader changes require a new corpus version
 and renewed review. Rerun baseline and candidate on the same new version before
@@ -211,3 +211,7 @@ corrections; final calibration evidence and sampled conversations require review
 Version 1.0.2 is retained in the second calibration evidence. Version 1.0.3 also
 replaces the SDK final-answer framing with one complete ordered conversation.
 The case data and approved labels remain unchanged.
+
+Version 1.0.8 clarifies the grounding requirements for direct unsupported-route
+and unsupported-profile refusals. Approved labels are unchanged; calibration
+and review of the updated contract remain pending.
