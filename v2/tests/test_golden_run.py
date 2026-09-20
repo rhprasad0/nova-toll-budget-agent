@@ -363,6 +363,57 @@ def test_missing_usage_stops_future_calls_without_storing_exception(
     assert "secret-token" not in (journal.directory / "events.jsonl").read_text()
 
 
+@pytest.mark.parametrize("role", ["agent", "actor", "judge"])
+def test_real_sdk_transport_has_no_retries_and_bounded_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, role: str
+) -> None:
+    import httpx
+    import openai
+
+    from eval import simulated
+
+    monkeypatch.setattr(run.toll_agent, "load_openai_api_key", lambda: "offline")
+    monkeypatch.setattr(simulated, "load_openai_api_key", lambda: "offline")
+    native = (
+        run.toll_agent._build_model() if role == "agent" else run.build_eval_model()
+    )
+    requests = []
+    clients = []
+    original = openai.AsyncOpenAI
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(500, json={"error": {"message": "offline failure"}})
+
+    def client(**kwargs: Any) -> openai.AsyncOpenAI:  # noqa: ANN401
+        assert kwargs["max_retries"] == 0 and kwargs["timeout"] == 60
+        kwargs["http_client"] = httpx.AsyncClient(
+            transport=httpx.MockTransport(respond)
+        )
+        result = original(**kwargs)
+        assert result.max_retries == 0 and result.timeout == 60
+        clients.append(result)
+        return result
+
+    monkeypatch.setattr(openai, "AsyncOpenAI", client)
+    row = run.Attempt(id="transport", case_id="greenway-current", trial=1)
+    journal = run.Journal(tmp_path / role, 25)
+    model = journal.model(native, cast(Any, role), row, 4)
+
+    async def consume() -> None:
+        async for _ in cast(Any, model).stream(
+            [{"role": "user", "content": [{"text": "offline test"}]}]
+        ):
+            pass
+
+    with pytest.raises(openai.InternalServerError):
+        asyncio.run(consume())
+    with pytest.raises(run.StopRun):
+        asyncio.run(consume())
+    assert len(clients) == len(requests) == len(row.measurements) == 1
+    assert journal.unknown_usage and not row.measurements[0].complete
+
+
 def test_real_agent_keeps_conversation_and_uses_only_replay(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
