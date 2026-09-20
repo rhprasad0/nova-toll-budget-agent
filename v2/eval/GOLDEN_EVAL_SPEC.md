@@ -1,11 +1,11 @@
-# TollChat golden evaluation set, version 1.0.9
+# TollChat golden evaluation set, version 1.0.10
 
 This is a 24-case starting corpus for a repeatable baseline: 11 current-price
 conversations and 13 annual-affordability conversations. The
 [case review](golden/REVIEW.md) includes every question, actor brief, expected
 behavior, fixture reference, and proposed criticality.
 
-**Status: cases and labels approved; version 1.0.9 contract update awaits renewed calibration under #360.** These are authored cases and examples, not
+**Status: cases and labels approved; version 1.0.10 contract update awaits renewed calibration under #360.** These are authored cases and examples, not
 model results. There is no baseline score or calibrated judge yet. Approval is
 recorded separately in [review.json](golden/review.json).
 
@@ -141,7 +141,7 @@ is a distinct record owned by #362. This work neither qualifies a release nor
 defines numeric release thresholds. That policy remains human-reviewed work in
 #362/#363. Criticality does not excuse a failure in a noncritical case.
 
-The manifest pins version 1.0.9, three trials, model choices, and SHA-256 hashes
+The manifest pins version 1.0.10, three trials, model choices, and SHA-256 hashes
 of cases, fixtures, frozen context, examples, and grader sources. File hashes bind
 exact bytes; the aggregate hashes their sorted, compact UTF-8 JSON map. Approval
 is separate to avoid a self-referential hash and names the aggregate digest.
@@ -179,12 +179,12 @@ intentional.
 From `v2/`:
 
 ```bash
-uv run python -m eval.golden
 uv run python eval/run_evaluation.py --check
+uv run python -m eval.golden
 uv run pytest tests/test_golden_corpus.py tests/test_simulated_evaluation.py
 ```
 
-The existing `.github/workflows/ci.yml` `--check` step runs golden validation,
+The separate `.github/workflows/ci.yml` `python -m eval.golden` step runs golden validation,
 and its full pytest step includes `tests/test_golden_corpus.py`. It rejects wrong counts,
 duplicate IDs, wrong held-out membership, missing/unreferenced fixtures, invalid
 tool contracts, unknown endpoints, current I-95 cases, structural leakage,
@@ -218,3 +218,7 @@ and review of the updated contract remain pending.
 
 Version 1.0.9 combines those clarifications with the isolated artifact execution
 contract from #363. Its calibration and review remain pending.
+
+Version 1.0.10 moves golden corpus validation into its own CI step so golden
+changes do not alter the separately deployed daily-eval package. Cases and
+approved labels are unchanged; exact-contract review remains pending.

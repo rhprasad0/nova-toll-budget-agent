@@ -2004,9 +2004,6 @@ def main(
 
 
 def _self_check() -> None:
-    from eval.golden import validate as validate_golden
-
-    validate_golden()
     assert _movement_value_is_reported("down $0.50", "-0.50")
     assert _movement_value_is_reported("\u2212$0.50", "-0.50")
     assert not _movement_value_is_reported("$0.50", "-0.50")
