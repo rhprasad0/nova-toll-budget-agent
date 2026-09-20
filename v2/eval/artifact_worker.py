@@ -4,8 +4,6 @@ Only the application and its runtime dependencies come from the bundle. The
 parent owns fixtures, actor/judge execution, budget admission, and the journal.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 import os

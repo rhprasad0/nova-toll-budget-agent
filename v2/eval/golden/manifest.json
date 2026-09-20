@@ -4,7 +4,7 @@
   "actor_model": "gpt-5.6-luna",
   "judge_model": "gpt-5.6-luna",
   "review_status_file": "review.json",
-  "corpus_sha256": "f06182c8b71a0bb17a2ad35744bfd4c3ac9dc4fd9c1312356aa36b7b33b9f665",
+  "corpus_sha256": "b73da67c87d4585d32643d0323f1080dfc51cac963298da3ee8b773a2aa6ac47",
   "hashes": {
     "cases.jsonl": "920ff31f27f0bbc89c555f0272ff76ab887ad866fcb9c175a711aa3cbbad9e42",
     "prompt-points.json": "5537b59fef725f716b2360356ca9f88df71b31b66c15eed7eaa537763c9f2fee",
@@ -31,7 +31,7 @@
     "v2/eval/run_evaluation.py": "2ee7103f14e879b2f5384f49dd7858e4f8b0e784cbe8f31338f9733e9a73d266",
     "v2/eval/golden_run.py": "a2c2388d282f251754b16b9650ce9bfbe75d052d0986beeb05dd9e5614847b26",
     "v2/eval/artifact_agent.py": "df11e823db168a4c6f6c1c30d359a0a6f2db34e8d6d262c5d8a285c0eda8bb18",
-    "v2/eval/artifact_worker.py": "28e8d4ca853de92547e616aaa499ec3cdf8c6cede00e1da62672650e28ae5920",
+    "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
     "v2/agent_tools/current_price_domain.py": "e3bfc3f37d60e011493278fc72e132a74d2734a035bacbd76f781ae4016c0e3a",
     "v2/agent_tools/get_annual_toll_ballpark.py": "6576b279225160a4275945df56438ce1c4b84e4d1b0654ba2cb56bc088a6e777",
     "v2/agent_tools/validate_toll_route.py": "3346262a1ef2b24d4cc8d578177f6b7bbd0a1e601914044b45a566a96fe760be"
