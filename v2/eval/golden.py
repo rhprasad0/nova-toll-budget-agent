@@ -450,7 +450,7 @@ def validate(root: Path = ROOT) -> None:
         raise ValueError("each case needs a labeled good example")
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != "1.0.4"
+        manifest["version"] != "1.0.5"
         or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-5.6-luna"
         or manifest["judge_model"] != "gpt-5.6-luna"

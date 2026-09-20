@@ -29,7 +29,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
 
-VERSION = "1.0.3"
+VERSION = "1.0.4"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -79,8 +79,10 @@ BAD_RULES = {
 DOMAIN_FACTS = """Approved domain facts: this estimator supports two-axle passenger
 cars with E-ZPass in toll mode; a three-axle profile is unsupported. Downtown
 Baltimore is outside its supported origin catalog. Published Greenway fixed rates
-can vary by time of day without being dynamic observations. In the frozen I-66
-eastbound noon case, the off-peak published zero rate means outside toll hours.
+can vary by time of day without being dynamic observations: calling such a rate
+fixed is accurate. In the frozen I-66 eastbound noon case, the off-peak published
+zero rate means outside toll hours. The frozen I-66 eastbound 8 AM case is during
+toll hours, even when its current price observation is missing.
 These facts support direct refusals and schedule explanations without a live call.
 """
 
@@ -408,7 +410,7 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
     )
     reference_requirements = case.expected_assertion.replace(
         "Ground the price, time, availability, and provenance in the supplied tool result.",
-        "Every factual claim must be supported by the tool result. This is a claim-support requirement, not a requirement to list evaluation timestamps, observation-age limits, availability metadata, source URLs, or other tool fields.",
+        "Every factual claim must be supported by the supplied tool evidence, user facts, or approved domain facts. This is a claim-support requirement, not a requirement to list evaluation timestamps, observation-age limits, availability metadata, source URLs, or other tool fields.",
     ).replace(
         "and historical versus fixed or modeled sources where applicable.",
         "and the applicable source kind. For fixed-only facilities, published fixed-rate disclosure is sufficient; do not require historical sampling dates or an explicit no-modeling statement. For modeled history, disclose that it is modeled; do not require a no-fixed-rates statement.",
@@ -437,15 +439,16 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
             + (
                 "\nCase requirements: " + reference_requirements
                 if key == "rules"
-                else "\n" + DOMAIN_FACTS
+                else ""
             )
         )
+        reference += "\n" + DOMAIN_FACTS
         if key != "grounding":
             reference += (
                 "\nPermitted tool sequence from the approved case contract (not a transcript):\n"
                 + json.dumps(contract)
             )
-            reference += "\nAn initial discovery call on the original requested route is permitted when listed. Only calling a selected alternative requires the later choice. Check the actual call arguments and earliest turn against this contract."
+            reference += "\nOptional tool calls are not required for supported direct refusals. An initial discovery call on the original requested route is permitted when listed. Only calling a selected alternative requires the later choice. Check the actual call arguments and earliest turn against this contract."
             reference += (
                 "\nRecorded sequence (calls occur after that user message and before that assistant answer):\n"
                 + "\n".join(
