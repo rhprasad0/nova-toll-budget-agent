@@ -365,7 +365,13 @@ name `DEVELOPMENT_DELIVERY_ENABLED` and value `true`, then save it. This
 variable only enables the existing post-merge application delivery job; it does
 not bypass the explicit `workflow_dispatch`/`refs/heads/main` boundaries for
 route control, connectivity verification, or migrations.
-The equivalent operator-only CLI activation is:
+The final privileged deploy also requires the repository variable
+`DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true'`. Complete the separately reviewed
+[blue-green bootstrap](blue-green-deployments.md#bootstrap-review) before enabling
+that flag. Post-merge delivery remains skipped until both flags are true;
+`DEVELOPMENT_DELIVERY_ENABLED` alone is insufficient.
+
+The equivalent operator-only CLI activation of the delivery flag is:
 
 ```sh
 gh variable set DEVELOPMENT_DELIVERY_ENABLED --body true \
