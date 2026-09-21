@@ -19,8 +19,13 @@ from eval import golden_run as run
 def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Attempt:
     case = next(c for c in golden.load_cases() if c.id == example.case_id)
     turns = list(example.turns)
-    # The reference answer invites a different origin; this profile must decline it.
+    # Ask explicitly: an optional invitation after refusal needs no reply.
     if case.id == "unsupported-origin":
+        turns[0] = turns[0].model_copy(
+            update={
+                "response": "Downtown Baltimore is outside the supported origin list. I cannot price that whole trip. Which supported Greenway entry would you like instead?"
+            }
+        )
         turns.append(
             golden.Turn(
                 user="I mean downtown Baltimore, Maryland.",
