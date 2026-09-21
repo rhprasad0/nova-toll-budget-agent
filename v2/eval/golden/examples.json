@@ -6613,5 +6613,125 @@
         ]
       }
     ]
+  },
+  {
+    "case_id": "annual-no-paired-days",
+    "label": "good-zero-not-assumed",
+    "expected_failures": [],
+    "semantic_verdict": "CORRECT",
+    "rationale": "Denying that missing data is zero does not quote a zero price.",
+    "turns": [
+      {
+        "user": "Estimate Springfield-Franconia to Westpark Drive and back on a $120,000 salary. Monday to Friday, 8 AM out, 5:30 PM back, 240 days.",
+        "response": "There are zero complete paired days out of 60 eligible dates, so there is not enough history for annual toll scenarios or a full affordability estimate. The missing toll evidence is not a zero toll. The available baseline uses $120,000 gross annual income and $80,000 after estimated tax under the one-third tax assumption. The tool estimates 20 tolled miles daily, or 4,800 annually over 240 commute days, using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 daily and $3,288 annually. These figures cover only tolled portions of the drive. Historical tolls and combined commute totals are unavailable. Historical toll cost: Unavailable—not assumed to be $0.",
+        "calls": [
+          {
+            "name": "get_annual_toll_ballpark",
+            "input": {
+              "outbound": {
+                "origin_point_id": "i95:206NO",
+                "destination_point_id": "i495:185ND",
+                "departure_time": "08:00:00"
+              },
+              "return": {
+                "origin_point_id": "i495:185SO",
+                "destination_point_id": "i95:206SD",
+                "departure_time": "17:30:00"
+              },
+              "weekdays": [
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday"
+              ],
+              "planned_annual_commute_days": 240,
+              "gross_annual_income_usd": "120000.00"
+            },
+            "result": {
+              "method": "recent_complete_same_date_round_trips",
+              "evaluated_at": "2026-08-27T08:00:00-04:00",
+              "timezone": "America/New_York",
+              "target_window": {
+                "start_date": "2026-06-04",
+                "end_date": "2026-08-26",
+                "date_count": 84
+              },
+              "weekdays": [
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday"
+              ],
+              "planned_annual_commute_days": 240,
+              "coverage": {
+                "eligible_date_count": 60,
+                "complete_pair_count": 0,
+                "coverage_percent": "0.0",
+                "by_weekday": [
+                  {
+                    "weekday": "monday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 0,
+                    "coverage_percent": "0.0"
+                  },
+                  {
+                    "weekday": "tuesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 0,
+                    "coverage_percent": "0.0"
+                  },
+                  {
+                    "weekday": "wednesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 0,
+                    "coverage_percent": "0.0"
+                  },
+                  {
+                    "weekday": "thursday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 0,
+                    "coverage_percent": "0.0"
+                  },
+                  {
+                    "weekday": "friday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 0,
+                    "coverage_percent": "0.0"
+                  }
+                ]
+              },
+              "uses_modeled": false,
+              "uses_current_fixed_rates": false,
+              "facilities": [],
+              "assumptions": {
+                "estimated_tax_fraction": "1/3",
+                "vehicle_cost_per_mile_usd": "0.685",
+                "distance_method": "straight_line_priced_facility_legs",
+                "scope": "tolled_portions_only"
+              },
+              "income": {
+                "gross_annual_usd": "120000.00",
+                "estimated_tax_usd": "40000.00",
+                "estimated_after_tax_usd": "80000.00"
+              },
+              "tolled_distance": {
+                "daily_round_trip_miles": "20.00",
+                "annual_miles": "4800.00"
+              },
+              "vehicle_cost": {
+                "daily_usd": "13.70",
+                "annual_usd": "3288.00"
+              },
+              "error": "ballpark_unavailable",
+              "reason": "no_complete_paired_days",
+              "available_date_range": null
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ]
   }
 ]

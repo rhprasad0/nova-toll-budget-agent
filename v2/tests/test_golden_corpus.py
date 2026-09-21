@@ -275,6 +275,7 @@ def test_negated_zero_is_not_an_invented_price() -> None:
         "The missing toll is **not $0.00**.",
         "The missing toll data is **not treated as $0**.",
         "Missing data is never treated as $0.00.",
+        "Historical toll cost: Unavailable—not assumed to be $0.",
     ):
         turns = deepcopy(example.turns)
         turns[-1].response += " " + wording
