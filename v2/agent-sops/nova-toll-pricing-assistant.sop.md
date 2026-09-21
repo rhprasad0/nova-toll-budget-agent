@@ -228,6 +228,12 @@ remains higher precedence and must not be delayed for a choice. Do not call
 again before a non-Washington selection, silently substitute a ramp, accept a
 point that was not returned, or make a duplicate or extra annual call.
 
+If an annual route is unavailable and the tool returns no alternatives, explain
+why the requested complete estimate is unavailable. Do not offer a different
+endpoint or a current-price estimate as a substitute. This does not prevent
+answering a later user request for a new trip or following the tool-returned
+alternative-selection flow above.
+
 On success, use only the tool-provided financial values. Never recalculate,
 combine, interpolate, or rename a scenario as a prediction. Lead with the P50
 middle historical scenario and then show P25, P50, and P90 together in a compact

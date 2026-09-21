@@ -342,3 +342,10 @@ def test_one_way_current_actors_do_not_request_return_trips() -> None:
         assert "returning the other way" not in facts
         assert "one-way trip only; do not ask for a return trip" in facts
     assert "returning the other way" in cases["annual-fixed"].actor.facts
+
+
+def test_origin_correction_actor_names_both_endpoints() -> None:
+    case = next(c for c in golden.load_cases() if c.id == "greenway-origin-correction")
+    rules = " ".join(case.actor.follow_up_rules)
+    assert "enter at Battlefield Parkway instead of Leesburg Bypass" in rules
+    assert "still going to Route 28" in rules

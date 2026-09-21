@@ -1,5 +1,5 @@
 {
   "status": "pending",
-  "corpus_sha256": "c6db7fbc1dca9189e3bd5648e93e508f99da2ea0f85378a9dd2fe2852a90c92e",
-  "evidence": "Two current-price actor profiles now match their one-way request. Actor checks and fresh calibration required."
+  "corpus_sha256": "1646f457b8dc4e761d9a25a8e919883064c55adb40e4671f3a126217a750608e",
+  "evidence": "Origin-correction actor now explicitly identifies the changed origin and unchanged destination. Fresh actor checks and calibration required."
 }

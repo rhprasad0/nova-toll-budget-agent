@@ -238,6 +238,11 @@ def test_system_prompt_contains_rds_points_and_v2_behavior() -> None:
     assert "MUST immediately make one corrective retry" in normalized
     assert "non-Washington annual route validation failure" in normalized
     assert (
+        "If an annual route is unavailable and the tool returns no alternatives"
+        in normalized
+    )
+    assert "following the tool-returned alternative-selection flow above" in normalized
+    assert (
         "qualified-Washington single-alternative immediate corrective retry above"
         " remains higher precedence" in normalized
     )
@@ -339,7 +344,7 @@ def test_system_prompt_matches_its_versioned_contract() -> None:
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
 
-    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.3.4" == prompt_contract["current"]
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.3.5" == prompt_contract["current"]
     assert (
         toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
         == "1.0.0"

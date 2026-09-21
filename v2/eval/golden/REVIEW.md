@@ -85,7 +85,7 @@ Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Y
 
 Actor goal: Ask for the first price, then correct the origin to Battlefield Parkway and get the revised result.
 
-Follow-up rules: After the first answer, say you meant Battlefield Parkway. Make the correction before stopping.
+Follow-up rules: After the first answer, explicitly correct the origin: say you will enter at Battlefield Parkway instead of Leesburg Bypass and are still going to Route 28. State both the changed origin and unchanged destination before stopping.
 
 Frozen time: `2026-08-27T08:00:00-04:00`. Maximum: 4 assistant turns and 2 tool calls.
 
