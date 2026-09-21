@@ -1,5 +1,7 @@
 # Critical pass³ — final comparison
 
+Latest work uses a changed evaluation contract: see the [calibration-19 comparison](critical-pass3-calibration19-comparison.md), where reference 2.3.4 and candidate 2.3.5 both scored 15/17 critical pass³. Do not treat the historical clean run below as a stable result.
+
 **Subsequent repeat:** the unchanged candidate scored **16/17 critical pass³ and 68/72 trials**. See the [repeat analysis](critical-pass3-repeat-1.md); the passing run below is not consistently reproduced.
 
 **Prompt 2.3.4 meets the observed target: 17/17 critical cases pass all three trials (51/51), and all 72/72 trials pass.** The unchanged application reference scored 9/17 critical pass³ under the same evaluation contract: an observed increase of 47.1 percentage points.
