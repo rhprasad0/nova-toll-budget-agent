@@ -1,5 +1,5 @@
 {
   "status": "pending",
-  "corpus_sha256": "866f6b66c41fa5f5cd3b8566d1f6f2bc3e284f12bd68416ba7afd211a2f97cbc",
-  "evidence": "Wrong-route fixture now consistently prices Route 7 rather than requested Route 28. Fresh calibration and exact human review required."
+  "corpus_sha256": "262591e45ec19861f4e6e506649f21343c3aed7d95050d0eb34c1524b1a5a78a",
+  "evidence": "Discovery-call prose clarified to match the existing permitted sequence; premature replacement calls still fail. Fresh calibration required."
 }

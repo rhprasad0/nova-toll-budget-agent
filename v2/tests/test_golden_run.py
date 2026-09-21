@@ -602,6 +602,14 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
     assert "Optional tool calls are not required" in seen[0]
     assert "Permitted tool sequence" not in seen[1]
     for reference in (seen[0], seen[2]):
+        assert (
+            "original-route call is permitted before any alternative selection"
+            in reference
+        )
+        assert (
+            "Calling that replacement route before the user chooses still fails"
+            in reference
+        )
         assert '"earliest_assistant_turn": 1' in reference
         assert '"earliest_assistant_turn": 2' in reference
         assert '"origin_point_id": "i95:205SD"' in reference

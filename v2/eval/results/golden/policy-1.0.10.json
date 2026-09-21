@@ -1,0 +1,28 @@
+{
+  "policy": {
+    "version": "1.0.10",
+    "contract_sha256": "b5e8da4a826ffd64df01e7bf4f3ef73be360a6c81d6890b34ce54242e10d9bac",
+    "trials": 3,
+    "cases": 24,
+    "workers": 4,
+    "critical_passes": 3,
+    "noncritical_passes": 2,
+    "suite_success_min": 0.9,
+    "suite_pass_cubed_min": 0.75,
+    "lost_passes_max": 1,
+    "run_cost_max_usd": 5.0,
+    "agent_cost_per_success_max_usd": 0.05,
+    "latency_p50_max_seconds": 30.0,
+    "latency_p95_max_seconds": 60.0,
+    "candidate_max_age_hours": 24,
+    "production_max_age_hours": 720,
+    "sample_size": 8,
+    "replacement_runs_max": 1,
+    "max_output_tokens": 2048
+  },
+  "approval": {
+    "status": "pending",
+    "evidence_sha256": "cacc0a5f18596cea504c45b569a4c35a6fff02e979b336c7559175c75f2802c7",
+    "scope": "Discovery-call prose matches existing permitted sequence; numeric thresholds and protected CI four-worker timing policy unchanged."
+  }
+}
