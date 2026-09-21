@@ -47,11 +47,13 @@ RUBRICS = {
     "rules": "The conversation obeys clarification, consent, route selection, tool ordering, budgets, and explicit prohibitions against invented or misrepresented financial claims. Missing final-answer details alone are not a rule violation. Cite the turn and violated rule if incorrect.",
 }
 DIAGNOSTIC_PROMPT = """Assess only the named diagnostic criterion, not overall task completion.
-For grounding, missing clarification or consent alone is not a factual error.
-Check every affirmative factual claim against the evidence available when it was
-made. Later confirmation or a later tool result cannot retroactively support an
-earlier assertion. A conditional proposal is different from asserting a user fact.
-Ignore omissions and tool-order violations that make no unsupported claim.
+For grounding, ignore omissions, missing clarification, consent violations, and
+unauthorized or premature tool calls. Check only affirmative factual claims in
+assistant answers against facts available at that turn. Numbers supported by a
+recorded tool result remain grounded even if invoking that tool broke task rules.
+User facts must be supplied or confirmed before the assistant asserts them;
+later confirmation cannot retroactively support an earlier assertion.
+A conditional proposal is not an assertion of a user fact.
 Domain facts in the approved task context support statements about
 supported regions and vehicle profiles, even without a tool call. A fixed
 published rate can vary by time of day; it is not a dynamic observation.
@@ -109,6 +111,10 @@ method; uses_current_fixed_rates describes the price source. Both can be true.
 Mentioning sampled dates alongside explicit current fixed-rate disclosure is not
 claiming those fixed prices were observed on each historical date. An explicit
 claim of historical observation of fixed rates is unsupported.
+These facts explain evidence, not additional disclosure requirements. Natural
+language about paired samples and their coverage is sufficient; do not require
+the raw sample-method identifier. Fixed-rate or modeled-source disclosure does
+not require naming every metadata field.
 """
 
 
