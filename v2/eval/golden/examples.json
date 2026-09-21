@@ -4791,8 +4791,8 @@
     "expected_failures": [
       "missing_call"
     ],
-    "semantic_verdict": "INCORRECT",
-    "rationale": "Development-only regression from production-reference review; proposed for human adjudication.",
+    "semantic_verdict": "CORRECT",
+    "rationale": "Proposed consistency extension of the reviewed clarification rule: a necessary midpoint question can pass outcome while awaiting the user. This individual extension has not been explicitly adjudicated.",
     "turns": [
       {
         "user": "The offer is $110,000 to $130,000. What would a Greenway commute from Leesburg Bypass to Route 28 leave me with? Monday to Friday, 8 AM out and 5:30 PM back, 240 office days.",
@@ -4807,8 +4807,8 @@
     "expected_failures": [
       "missing_call"
     ],
-    "semantic_verdict": "INCORRECT",
-    "rationale": "Development-only regression from production-reference review; proposed for human adjudication.",
+    "semantic_verdict": "CORRECT",
+    "rationale": "Ryan adjudicated outcome Pass: asking for required annual-day confirmation is appropriate handling while awaiting the user.",
     "turns": [
       {
         "user": "I make $120,000 and commute on the Greenway from Leesburg Bypass to Route 28, Monday to Friday. I leave at 8 AM and return at 5:30 PM. What does that cost over a year?",
@@ -5473,8 +5473,8 @@
     "expected_failures": [
       "missing_call"
     ],
-    "semantic_verdict": "INCORRECT",
-    "rationale": "Development-only regression from production-reference review; proposed for human adjudication.",
+    "semantic_verdict": "CORRECT",
+    "rationale": "Ryan adjudicated Outcome Pass / Grounding Pass / Rules Fail: honest recovery from a rejected call passes outcome, while incorrect arguments remain a rule violation.",
     "turns": [
       {
         "user": "How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.",

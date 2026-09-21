@@ -62,9 +62,13 @@ When formatting structured output, preserve YOUR next user message. Never grade
 your own previous message or mistake writing it for delivering it to the assistant.
 """
 JUDGE_PROMPT = """Judge the whole conversation against every expected requirement,
-using the actual tool calls and results as evidence. Return CORRECT only if the
-required task was completed and all material claims are supported. An accurate
-but incomplete answer is INCORRECT. A supported unavailable answer can pass.
+using the actual tool calls and results as evidence. A completed, supported
+answer can pass. So can a necessary clarification awaiting the user's reply,
+or an honest explanation of an explicit tool rejection without an invented
+estimate. These are appropriate stopping points, not missing-answer failures.
+Otherwise, an incomplete or unsupported answer is INCORRECT. A supported
+unavailable answer can pass. Honest recovery does not make incorrect tool
+arguments compliant: the separate rules criterion still evaluates that error.
 Check clarification, consent, corrections, route identity, price provenance,
 time, coverage, and the labels attached to financial amounts. Distinguish fixed
 rates, observations, historical samples, and modeled estimates. Unknown prices

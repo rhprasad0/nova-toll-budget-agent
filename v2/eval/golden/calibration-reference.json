@@ -1,6 +1,6 @@
 {
   "status": "pending",
-  "directory": "v2/eval/evidence/golden-360/calibration-12",
-  "evidence_sha256": "ffa7776cd8164a60a83b8b33d97bfb36b50f80fb2ef19de2b2ae54514b53fc00",
-  "notes": "Historical agreement 137/138. Ryan agrees with the missing-schedule grounding failure and changes incomplete-days-proposal outcome to Pass. Sample review is recorded in golden-validity/HUMAN_ADJUDICATIONS.md; rubric/label reconciliation and overall approval remain pending. Calibration-8 approval does not transfer."
+  "directory": "v2/eval/evidence/golden-360/calibration-13",
+  "evidence_sha256": null,
+  "notes": "Recalibration after Ryan's sampled adjudications: accepted clarification and honest rejection outcomes, and unsupported schedule arguments fail grounding. Overall approval remains pending."
 }

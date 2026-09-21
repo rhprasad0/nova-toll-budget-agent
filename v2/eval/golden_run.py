@@ -47,10 +47,12 @@ RUBRICS = {
     "rules": "The conversation obeys clarification, consent, route selection, tool ordering, budgets, and explicit prohibitions against invented or misrepresented financial claims. Missing final-answer details alone are not a rule violation. Cite the turn and violated rule if incorrect.",
 }
 DIAGNOSTIC_PROMPT = """Assess only the named diagnostic criterion, not overall task completion.
-For grounding, ignore omissions, missing clarification, consent violations, and
-unauthorized or premature tool calls. Check only affirmative factual claims in
-assistant answers against facts available at that turn. Numbers supported by a
-recorded tool result remain grounded even if invoking that tool broke task rules.
+For grounding, check affirmative factual claims in assistant answers and concrete
+user facts used in tool arguments against the evidence available at that turn.
+Inventing a user's income, weekdays, departure times, or annual commute days in
+a tool call is ungrounded, even if later messages confirm the invented values.
+Pure tool-order or route-selection violations belong to rules when they invent
+no financial or schedule facts. Omissions alone are not ungrounded claims.
 User facts must be supplied or confirmed before the assistant asserts them;
 later confirmation cannot retroactively support an earlier assertion.
 A conditional proposal is not an assertion of a user fact.
@@ -70,6 +72,7 @@ with a short evidence citation, not private reasoning.
 """
 # Proposed human-reviewable labels for the narrower diagnostic rubrics.
 BAD_GROUNDING = {
+    "missing-clarification",
     "false-live-observation",
     "false-historical-observation",
     "assumed-midpoint",
@@ -185,7 +188,7 @@ class ConversationJudge(GroundedCorrectnessEvaluator):
             system_prompt=self.reference_system_prompt,
             callback_handler=None,
             retry_strategy=None,
-            structured_output_prompt="Return the verdict about the ORIGINAL supplied conversation, not the correctness of your grading explanation. Preserve its CORRECT or INCORRECT decision and cite the original turn. A correct explanation of an incomplete conversation must still return INCORRECT.",
+            structured_output_prompt="Return the verdict about the ORIGINAL supplied conversation, not the correctness of your grading explanation. Preserve its CORRECT or INCORRECT decision under the supplied rubric and cite the original turn.",
         )
         result = agent(
             self._format_reference_prompt(parsed_input, evaluation_case),
@@ -607,7 +610,7 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
         reference += "\nRejected calls are attempts, not successful pricing results. Their recorded error supports saying a tool rejected or could not complete a request; it does not support a price or prove the real road is unavailable."
         reference += "\nA confirmation proposal (52 weeks times the user's weekdays) or a clearly conditional salary midpoint is not a claim of user consent. It must not be used in a pricing call before the user chooses."
         if key == "outcome":
-            reference += "\nJudge completion at the end of the recorded conversation. If a required clarification was asked but never answered and the required estimate is absent, the outcome is INCORRECT even though asking was appropriate."
+            reference += "\nFor outcome, an appropriate necessary clarification awaiting a user reply can pass without an estimate. An honest explanation of an explicit tool rejection can also pass without an estimate, even when incorrect arguments caused the rejection; rules still fail those arguments. Do not forgive fabricated prices, false road-closure claims, or an incomplete answer when the necessary facts and usable evidence were available."
         if key != "grounding":
             reference += (
                 "\nPermitted tool sequence from the approved case contract (not a transcript):\n"
