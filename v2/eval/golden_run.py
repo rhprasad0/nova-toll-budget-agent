@@ -32,7 +32,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
 
-VERSION = "1.2.6"
+VERSION = "1.2.7"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -109,8 +109,10 @@ be overridden. This default does not establish unrelated facts about the user.
 The supplied location catalog associates Westpark Drive with Tysons Corner;
 "Westpark Drive in Tysons" is a supported location qualifier. Bare "Tysons"
 still requires choosing among the catalog's possible exits.
-Observation timestamps are displayed in America/New_York at minute precision:
-omit seconds without rounding the minute. Thus 07:59:30-04:00 is 7:59 AM EDT.
+For grading observation timestamps, both exact seconds and minute precision
+are valid; including accurate seconds is not itself a failure. At minute
+precision, omit seconds without rounding. Thus 07:59:30-04:00 can be displayed
+as either 7:59:30 AM EDT or 7:59 AM EDT.
 This applies to stale and available observations. Retain the actual observed
 hour and minute; never substitute evaluation time or a different interval time.
 Annual commute days may not exceed 53 times the number of selected weekdays.
