@@ -1,5 +1,10 @@
 # Golden baseline evidence
 
+[September 21 calibrated comparison baseline](calibrated-baseline-20260921.md):
+58/71 scored trials passed (81.7%); critical pass³ was 12/17 (70.6%).
+All 72 trials were attempted, with one actor-invalid trial inconclusive.
+This is a provisional source-checkout reference, not a qualified production baseline.
+
 [Open the static review page](review.html). It works offline and shows case
 failures before aggregate results, followed by eight transcript samples and
 the approved policy.
