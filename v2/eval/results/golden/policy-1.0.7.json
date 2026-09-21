@@ -1,0 +1,28 @@
+{
+  "policy": {
+    "version": "1.0.7",
+    "contract_sha256": "c1a577f755d831d38851a588d33c761ce002d1a471d2aaab6354a6b329ef9c18",
+    "trials": 3,
+    "cases": 24,
+    "workers": 4,
+    "critical_passes": 3,
+    "noncritical_passes": 2,
+    "suite_success_min": 0.9,
+    "suite_pass_cubed_min": 0.75,
+    "lost_passes_max": 1,
+    "run_cost_max_usd": 5.0,
+    "agent_cost_per_success_max_usd": 0.05,
+    "latency_p50_max_seconds": 30.0,
+    "latency_p95_max_seconds": 60.0,
+    "candidate_max_age_hours": 24,
+    "production_max_age_hours": 720,
+    "sample_size": 8,
+    "replacement_runs_max": 1,
+    "max_output_tokens": 2048
+  },
+  "approval": {
+    "status": "pending",
+    "evidence_sha256": "5a9cf9c6088690f47bdd271297c955a296187f5cf41c93b64dd48cbe36e454c2",
+    "scope": "Evaluator prefix caching and cache-write accounting. All numeric thresholds and four-worker scored timing policy unchanged."
+  }
+}

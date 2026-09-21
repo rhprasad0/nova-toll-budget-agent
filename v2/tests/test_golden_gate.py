@@ -244,6 +244,20 @@ def test_approved_contract_and_changed_policy(
         gate.POLICY.with_name("policy-1.0.1.json")
     )
     assert historical.version == "1.0.1"
+    # Exercise the historical approved contract while the new contract awaits review.
+    monkeypatch.setattr(gate, "POLICY", gate.POLICY.with_name("policy-1.0.6.json"))
+    read = gate.read
+
+    def historical_reference(path: Path) -> dict[str, Any]:
+        if path.name == "calibration-reference.json":
+            directory = "v2/eval/evidence/critical-pass3/calibration-21"
+            return {
+                **read(gate.ROOT / directory / "review.json"),
+                "directory": directory,
+            }
+        return read(path)
+
+    monkeypatch.setattr(gate, "read", historical_reference)
     gate.policy()
     workflow.calibration()
     document = gate.read(gate.POLICY)

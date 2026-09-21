@@ -1,8 +1,4 @@
 {
-  "status": "approved",
-  "directory": "v2/eval/evidence/critical-pass3/calibration-21",
-  "evidence_sha256": "82918bdb8d8714bc28e702bb3b65df34a23c700a6181ea71d2f0ffd05a0a3234",
-  "reviewer": "rhprasad0",
-  "approved_at": "2026-09-21T21:08:51.152855+00:00",
-  "evidence": "Ryan explicitly stated \"Approved\" in response to the calibration-21 and policy-1.0.6 review request, approving the exact 180/180 evidence and unchanged numeric thresholds. He requested a caching/cost review before the scored rerun; no new paid run has started."
+  "status": "pending",
+  "evidence": "Evaluator caching requires fresh calibration and exact human review."
 }
