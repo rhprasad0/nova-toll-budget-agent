@@ -177,6 +177,15 @@ class ArtifactAgent:
                         "get_annual_toll_ballpark",
                     }:
                         attempt.checks.append("unexpected_call")
+                    if attempt.checks:
+                        run.rejected_call(
+                            attempt,
+                            event["name"],
+                            event["input"],
+                            attempt.checks[0],
+                            "Frozen evaluation rejected this call.",
+                            journal,
+                        )
                     self.send({"event": "continue", "allowed": not attempt.checks})
                 else:
                     if attempt.checks or attempt.requested_tools.count(
@@ -207,10 +216,14 @@ class ArtifactAgent:
                         )
                     except ValueError as error:
                         attempt.checks.append(str(error))
-                        result = {
-                            "status": "error",
-                            "content": [{"text": "Frozen replay rejected this call."}],
-                        }
+                        result = run.rejected_call(
+                            attempt,
+                            event["name"],
+                            event["input"],
+                            str(error),
+                            "Frozen replay rejected this call.",
+                            journal,
+                        )
                     self.send({"event": "continue", "result": result})
             else:
                 raise run.StopRun("artifact_protocol_failure")

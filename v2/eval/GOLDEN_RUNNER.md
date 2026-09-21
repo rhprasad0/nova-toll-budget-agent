@@ -16,10 +16,27 @@ uv run python -m eval.golden_run run --output eval/private/golden-360/demo-1 \
   --prior-run eval/private/golden-360/calibration-1
 ```
 
-Calibration runs the 34 development examples. It excludes the four held-out
+Calibration runs the 46 development examples (138 criterion verdicts). It excludes the four held-out
 examples and preserves every disagreement. Outcome labels come from the approved
 corpus; the narrower diagnostic labels are proposals for human review. Calibration
 is evidence about judge accuracy, not a guarantee that every later verdict is right.
+
+Under the sampled human adjudications, Outcome can pass for a necessary
+clarification awaiting the user or an honest explanation of an explicit tool
+rejection, without an estimate. Incorrect arguments still fail Rules. Invented
+financial or schedule facts in tool arguments fail Grounding, even if later
+confirmed. Each diagnostic judge receives only its named criterion's rubric.
+Actor validity still requires separate review: a passing clarification response
+does not establish that the simulator completed its required exchanges.
+
+Before calibration, `python -m eval.golden_actor_check --output DIRECTORY
+--prior-spend-usd ACCOUNTED_SPEND` checks three fresh actors per development
+good example against scripted answers. Actor and judge models must emit their
+structured verdict directly. The judge uses medium reasoning; actor and
+application reasoning remain low. Actor stops derive from a nullable message;
+contradictory replies and simulator turn limits invalidate measurement. Judges
+receive rejected calls separately from successful pricing evidence. See the
+[validity review](GOLDEN_VALIDITY_REVIEW.md) for live results and limitations.
 
 A human must review disagreements before execution. Record that review in the
 calibration directory as `review.json`, with `status: "approved"`, the exact
@@ -94,7 +111,7 @@ human interpretation. Do not silently relabel or replace the original attempts.
 A local report cannot approve a release or promote a baseline. The mandatory
 [protected golden release workflow](GOLDEN_RELEASE.md) authenticates qualification
 and human approval. PR CI uses only offline tests and a canned packaged-agent
-smoke; paid execution requires a protected dispatch.
+smoke; release-qualifying paid execution requires a protected dispatch.
 
 ## Offline checks
 

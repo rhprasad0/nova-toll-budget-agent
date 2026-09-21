@@ -1,6 +1,6 @@
 # Frozen demo 1 review
 
-[Open the offline HTML sample-review page](demo-review.html).
+The original HTML sample-review page is recoverable from Git commit `0336ddf`.
 
 72/72 trials completed on corpus 1.0.5, candidate `e9abf4e`. Raw overall: 27/72 (37.5%). Outcome-only: 37/72. Pass cubed: 3/24 (12.5%). Held-out overall: 3/12. Descriptive case-cluster 95% interval: 25% to 50%. No infrastructure failures.
 

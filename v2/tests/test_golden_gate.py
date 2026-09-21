@@ -235,9 +235,24 @@ def test_unapproved_policy_and_calibration_are_blocked(
         workflow.calibration()
 
 
-def test_current_calibration_and_policy_have_exact_approval() -> None:
-    assert gate.policy()["contract_sha256"]
-    assert workflow.calibration().name == "calibration-8"
+def test_approved_contract_and_changed_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from eval import golden_baseline
+
+    historical, _ = golden_baseline.load_policy(
+        gate.POLICY.with_name("policy-1.0.1.json")
+    )
+    assert historical.version == "1.0.1"
+    gate.policy()
+    workflow.calibration()
+    document = gate.read(gate.POLICY)
+    document["policy"]["contract_sha256"] = "0" * 64
+    path = tmp_path / "changed-policy.json"
+    path.write_text(json.dumps(document))
+    monkeypatch.setattr(gate, "POLICY", path)
+    with pytest.raises(ValueError):
+        gate.policy()
 
 
 def test_active_contract_and_numeric_policy_are_pinned(

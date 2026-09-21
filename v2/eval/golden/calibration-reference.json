@@ -1,6 +1,6 @@
 {
   "status": "approved",
-  "directory": "v2/eval/evidence/golden-360/calibration-8",
-  "evidence_sha256": "38535582f2d90634d0a80744ce777945cbb0c7fae44c3ed5db8e02636aa2c3e7",
-  "notes": "Ryan explicitly approved calibration-8, corpus 1.0.10, and policy 1.0.1 under the exact evidence and contract hashes in the Codex conversation on 2026-09-20 America/New_York. Historical actor results remain unqualified; fresh actor validity requires separate review."
+  "directory": "v2/eval/evidence/golden-360/calibration-15",
+  "evidence_sha256": "09d1077e03c2c3724ff4c70755d6dad7bea791504e743bbe911426336156ac9e",
+  "notes": "Ryan approved calibration 15 and its exact contract after sample review, with 138/138 agreement, and accepted the actors-6 limitation. Production qualification remains separate."
 }

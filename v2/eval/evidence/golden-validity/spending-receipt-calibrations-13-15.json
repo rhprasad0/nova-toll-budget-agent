@@ -1,0 +1,59 @@
+{
+  "created_at": "2026-09-21T14:38:28.372326+00:00",
+  "purpose": "Account calibrations 13-15 after sampled human adjudications; no release qualification",
+  "prior_ledger_version": "HYjTZlWuNM82ujV6YArNfJwoeNw31IyY",
+  "prior_ledger_sha256": "d3caf194ce75d9bce99a7cd9cd22ab784281ff73aa2fdfa5fe8b4945aa91788d",
+  "prior_spend_usd": 1.85466768,
+  "additional_spend_usd": 0.27834384,
+  "new_spend_usd": 2.13301152,
+  "unknown_usage": false,
+  "runs": [
+    {
+      "run": "calibration-13",
+      "run_id": "81c4c652-62c9-427a-b70c-5f52e9f8f389",
+      "commit": "293de2a00ce51598d37d77f2c42cd77b323876fb",
+      "result": "131/138 label agreement",
+      "cost_usd": 0.110523,
+      "evidence_sha256": "3e3c6c6f65a038287ade815ea66f94f32ee3ba53fe8c9c088fc6ae32b99deadb",
+      "directory": "eval/evidence/golden-360/calibration-13"
+    },
+    {
+      "run": "calibration-14",
+      "run_id": "c5ea2a51-0cb5-4d6c-90fb-d74437b0ad5c",
+      "commit": "4ffc1bd283e6c2e33dca251c2c459f674eb0933b",
+      "result": "137/138 label agreement",
+      "cost_usd": 0.1019202,
+      "evidence_sha256": "733dc5a624afa78f4ea75a5bf7a0ad0f7c8eb9eb335381eae612ef380da8ce26",
+      "directory": "eval/evidence/golden-360/calibration-14"
+    },
+    {
+      "run": "calibration-15",
+      "run_id": "877023b1-7136-4d32-91ef-1f9679656ee1",
+      "commit": "41f09f991cf0a2db54bd9410b33eb55d080be6e9",
+      "result": "138/138 label agreement",
+      "cost_usd": 0.06590064,
+      "evidence_sha256": "09d1077e03c2c3724ff4c70755d6dad7bea791504e743bbe911426336156ac9e",
+      "directory": "eval/evidence/golden-360/calibration-15"
+    }
+  ],
+  "evidence_archive": {
+    "key": "calibration-accounting/golden-validity-28a95ba14723c2c00307ff66a38ed337b50a3cf58e0a449155b048f6d7ff013b/evidence.zip",
+    "version_id": "KdLz2QP61kIXFbSvkJwjn9RHkP8uM8qC",
+    "sha256": "b922ade4653ecfe8e0ea6e6ce8d39a1ea077b999176a78ead1b4ab95590c3019"
+  },
+  "intent": {
+    "key": "calibration-accounting/golden-validity-28a95ba14723c2c00307ff66a38ed337b50a3cf58e0a449155b048f6d7ff013b/intent.json",
+    "version_id": "_SNxLL8LuufjLhvwOFX2DVHN7HDlVsyS",
+    "sha256": "ab9d0ab2a7cad28e94381f52da06dd8963ae165f81342e6e084e60e8c9a798d4"
+  },
+  "ledger": {
+    "key": "budget/current.json",
+    "version_id": "rD21.blnQzyKWQV1v9Awv_sWSuoz1y6q",
+    "sha256": "eef53f937ac7ca37647bfb86975db1e74c7de45c71d7ae93c98d996c5e3691ff"
+  },
+  "receipt": {
+    "key": "calibration-accounting/golden-validity-28a95ba14723c2c00307ff66a38ed337b50a3cf58e0a449155b048f6d7ff013b/receipt.json",
+    "version_id": "058mgm4zLk1wzrU6AB.iee5.TFsPVBt0",
+    "sha256": "52cf6f0a75e19f44108b9b29faa3a52a1f2d2fca8931f7d024ffaee5c2ff8262"
+  }
+}

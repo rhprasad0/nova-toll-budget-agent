@@ -23,6 +23,13 @@ def test_full_corpus_is_network_free(monkeypatch: pytest.MonkeyPatch) -> None:
     golden.validate()
 
 
+def test_actor_schema_has_one_decision_and_cannot_discard_a_reply() -> None:
+    assert set(golden.ActorReply.model_json_schema()["properties"]) == {"message"}
+    assert not golden.ActorReply(message="Use 240 days.").stop
+    assert golden.ActorReply(message=None).stop
+    assert not golden.ActorReply(message="Use 240 days.", stop=True).stop
+
+
 def test_actor_and_judge_keep_private_expectations_separate() -> None:
     case = golden.load_cases()[12]
     secret = "PRIVATE_ORACLE_SENTINEL"

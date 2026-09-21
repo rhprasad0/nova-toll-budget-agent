@@ -6,10 +6,11 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-On September 20, 2026 (America/New_York), the 13 development golden resources
-were provisioned, the four environments were protected, and calibration 8 was
-approved against the exact corpus and policy contract. The versioned ledger
-records $0.94408728 including calibration. The historical demo remains unqualified.
+Ryan approved calibration 15's exact contract and accepted the documented actor
+limitation on September 21, 2026. It matches 138/138 development criterion labels.
+See the [engineering summary](GOLDEN_VALIDITY_REVIEW.md) for results and scope.
+Recorded cumulative model spending is **$2.13301152**; the initial demo and failed
+production-reference run remain unqualified.
 
 ## Execution and evidence
 
@@ -28,10 +29,11 @@ shared $5 run ceiling before starting. The durable ledger also reserves against
 the existing $25 authorization. Missing usage stops further paid calls and
 blocks subsequent runs until spending is reconciled. Provider retries are off.
 
-The original thresholds from policy 1.0.0 are unchanged in policy 1.0.1. Corpus
-1.0.10 and harness 1.2.0 add the packaged execution boundary; their new contract
-has calibration-8 evidence and exact digest approval. Historical evidence, labels,
-policy approvals, and the original baseline remain intact.
+The original thresholds from policy 1.0.0 are unchanged in policy 1.0.2. Corpus
+1.0.11 and harness 1.2.1 correct actor/judge validity and expand calibration to
+46 development examples. Ryan approved this exact contract on September 21, 2026;
+calibration-8 approval applies only to the historical 1.0.10/1.2.0 contract.
+Historical evidence, labels, policy approvals, and the original baseline remain intact.
 
 After machine qualification, inspect the `golden-evidence-RUN-1` artifact:
 `review.html`, `decision.json` (including per-case baseline deltas), and the
@@ -55,8 +57,8 @@ migration controls, exact-plan apply, and canary checks still apply.
 ## Activation prerequisites
 
 These are the activation and recovery requirements. Infrastructure, environment
-configuration, initialization, and calibration approval are complete; the first
-qualified production reference is still required. Keep these checks for future
+configuration and initialization are complete; new-contract calibration approval
+and the first qualified production reference are still required. Keep these checks for future
 contract changes and environment recovery.
 
 1. Provision `infra/golden_eval.tf` in development account `903859731897`. The
@@ -80,7 +82,7 @@ contract changes and environment recovery.
 4. Calibrate the new contract using the existing runner and approved labels.
    Approve its evidence and disagreements, update
    `golden/calibration-reference.json`, approve `golden/review.json` against
-   the current corpus digest, and approve policy 1.0.1 against its exact policy
+   the current corpus digest, and approve policy 1.0.2 against its exact policy
    digest. Those approvals must precede a candidate run. Reconcile any separate
    calibration spend into the versioned ledger before protected execution;
    retain provider usage and the prior ledger version, never reduce known spend

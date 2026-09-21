@@ -9,11 +9,12 @@ from copy import deepcopy
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, Self, cast
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic.json_schema import SkipJsonSchema
+from strands import Agent
 from strands.models import Model
-from strands.tools.registry import ToolRegistry
 from strands_evals import ActorSimulator, Case
 from strands_evals.types.simulation import ActorProfile
 
@@ -43,13 +44,33 @@ Use only your supplied facts. Answer questions briefly and naturally. Follow
 any stated correction or selection instructions before stopping. Do not invent
 prices, earnings, routes, or requirements. Do not tell the assistant how to use
 its tools or how it will be graded. Never treat the assistant's suggested facts
-as your own unless your profile allows them. Return stop=false with a short
-message when a reply is needed; otherwise return stop=true and message=null.
+as your own unless your profile allows them. Return a short message when a reply
+is needed; otherwise return message=null. The runner derives when to stop.
+A question asking you to choose income, supply schedule facts, or confirm days
+needs your profile's answer delivered as a message BEFORE you can finish.
+A proposed estimate is not yet a completed estimate. After an evidenced refusal,
+unavailable result, or tool failure, stop; do not request retries, operator
+verification, another product, or a one-way substitute for a round trip.
+Accept supported schedule-based estimates; do not demand live observations or
+extra verification after the requested price has been explained.
+Do not send thanks, summaries, or repeated facts after a completed answer.
+Send a message only to answer a necessary clarification or to make a correction
+explicitly required by your profile. Otherwise return null, including after a
+refusal or an explanation that history is insufficient. An invitation to choose
+an unrelated trip is not a necessary clarification of your requested trip.
+When formatting structured output, preserve YOUR next user message. Never grade
+your own previous message or mistake writing it for delivering it to the assistant.
 """
 JUDGE_PROMPT = """Judge the whole conversation against every expected requirement,
-using the actual tool calls and results as evidence. Return CORRECT only if the
-required task was completed and all material claims are supported. An accurate
-but incomplete answer is INCORRECT. A supported unavailable answer can pass.
+using the actual tool calls and results as evidence. A completed, supported
+answer can pass. A necessary clarification awaiting the user can also pass.
+For an explicit recorded tool rejection, CORRECT outcome means honestly
+explaining that rejection without invented claims. This recovery passes even
+if incorrect arguments caused the rejection and a corrected retry could have
+succeeded. Do not require a price or retry in that branch: a hypothetical
+successful call is not evidence the assistant received. The separate rules
+criterion must still fail the incorrect arguments. Otherwise, an incomplete
+or unsupported answer is INCORRECT. A supported unavailable answer can pass.
 Check clarification, consent, corrections, route identity, price provenance,
 time, coverage, and the labels attached to financial amounts. Distinguish fixed
 rates, observations, historical samples, and modeled estimates. Unknown prices
@@ -79,6 +100,21 @@ Do not let a correct final answer erase a premature or unapproved earlier action
 
 class Record(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class ActorReply(Record):
+    """One model decision: a message to deliver, or null to finish."""
+
+    message: str | None = Field(
+        description="Return null after an answer, refusal, or unavailable explanation. Otherwise supply only a necessary clarification or profile-required correction. Do not restate the answer, refusal, or your goal."
+    )
+    stop: SkipJsonSchema[bool] = False
+    stop_reason: SkipJsonSchema[str | None] = None
+
+    @model_validator(mode="after")
+    def derive_stop(self) -> Self:
+        self.stop = self.message is None
+        return self
 
 
 class Provenance(Record):
@@ -139,6 +175,14 @@ class Turn(Record):
     calls: list[Call]
 
 
+class RejectedCall(Record):
+    turn: int = Field(ge=1)
+    name: str
+    input: dict[str, JsonValue]
+    result: dict[str, JsonValue]
+    reason: str
+
+
 class Example(Record):
     case_id: str
     label: str
@@ -146,6 +190,7 @@ class Example(Record):
     semantic_verdict: Literal["CORRECT", "INCORRECT"]
     rationale: str = Field(min_length=1)
     turns: list[Turn] = Field(min_length=1)
+    rejected_tools: list[RejectedCall] = Field(default_factory=lambda: [])
 
 
 def digest(value: object) -> str:
@@ -213,9 +258,18 @@ def make_actor(case: GoldenCase, model: Model) -> ActorSimulator:
         system_prompt_template=ACTOR_PROMPT,
         model=cast(Any, model),  # SDK 1.1.0 forwards Model despite its str annotation.
         max_turns=case.actor.max_turns,
+        structured_output_model=ActorReply,
     )
-    # Match the scheduled simulator: structured stop, no default Bedrock tool.
-    actor.agent.tool_registry = ToolRegistry()
+    # Configure the public Agent constructor rather than mutating SDK internals.
+    # The simulator keeps its profile, turn counter and initial conversation.
+    actor.agent = Agent(
+        model=model,
+        system_prompt=actor.agent.system_prompt,
+        messages=actor.conversation_history,
+        callback_handler=None,
+        retry_strategy=None,
+        structured_output_prompt="Format YOUR next driver action, not an evaluation of your preceding response. If the assistant needs a clarification, choice, or confirmation, put the profile's answer in message: writing it has NOT delivered it yet. After a completed answer or supported refusal, return message=null. Never return thanks or a summary as a stopping message.",
+    )
     return actor
 
 
@@ -367,6 +421,22 @@ def grade_assertions(
             turn.response,
             flags=re.IGNORECASE,
         )
+        # ponytail: recognize explicit midpoint questions only; extend with
+        # labeled examples if other conditional financial proposals are needed.
+        amounts = money("\n".join(messages))
+        if not turn.calls and len(amounts) == 2:
+            midpoint = sum(amounts) / 2
+            for question in re.findall(
+                r"\b(?:Should I|Would you like me to|May I)\b[^?\n]{1,250}\?",
+                monetary_claims,
+                flags=re.IGNORECASE,
+            ):
+                if re.search(r"\bmidpoint\b", question, re.IGNORECASE) and money(
+                    question
+                ) - allowed_money == {midpoint}:
+                    monetary_claims = monetary_claims.replace(
+                        question, "[conditional midpoint proposal]"
+                    )
         if money(monetary_claims) - allowed_money:
             failures.append("unsupported_money")
     if sum(len(t.calls) for t in turns) > case.max_tool_calls:
@@ -448,7 +518,11 @@ def validate(root: Path = ROOT) -> None:
         for e in json.loads((root / "examples.json").read_text())
     ]
     by_id = {c.id: c for c in cases}
+    if len({(e.case_id, e.label) for e in examples}) != len(examples):
+        raise ValueError("duplicate calibration example")
     for example in examples:
+        if any(c.turn > len(example.turns) for c in example.rejected_tools):
+            raise ValueError("rejected call outside conversation")
         observed = grade_assertions(by_id[example.case_id], example.turns, root)
         if observed != sorted(example.expected_failures):
             raise ValueError(f"example {example.label}: {observed}")
@@ -460,7 +534,7 @@ def validate(root: Path = ROOT) -> None:
         raise ValueError("each case needs a labeled good example")
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != "1.0.10"
+        manifest["version"] != "1.0.11"
         or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-5.6-luna"
         or manifest["judge_model"] != "gpt-5.6-luna"

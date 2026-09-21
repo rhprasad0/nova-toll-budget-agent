@@ -179,5 +179,5 @@ or changed bytes block the update. The pending `initial-review.json` records
 outstanding reviews and assistant findings without claiming human approval.
 Failed promotion leaves `registry.json` byte-for-byte unchanged. The
 [protected release integration](../../GOLDEN_RELEASE.md) uses the same qualifier
-with versioned development S3 storage. Policy 1.0.1 is pending exact-contract
-approval; policy 1.0.0 and this historical archive are retained.
+with versioned development S3 storage. Policy 1.0.2 has exact-contract
+approval; approved policy 1.0.1, policy 1.0.0, and this historical archive are retained.

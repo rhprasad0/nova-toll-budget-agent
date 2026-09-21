@@ -17,13 +17,14 @@ from pathlib import Path
 from threading import RLock
 from typing import Any, Literal, cast
 
-from pydantic import Field
-from strands import tool  # pyright: ignore[reportUnknownVariableType]
+from pydantic import Field, JsonValue
+from strands import Agent, tool  # pyright: ignore[reportUnknownVariableType]
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
 from strands.models import Model
 from strands.types.exceptions import MaxTokensReachedException
 from strands.types.tools import ToolContext, ToolSpec
-from strands_evals.types.evaluation import EvaluationData
+from strands_evals.evaluators.correctness_evaluator import CorrectnessReferenceRating
+from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
 from strands_evals.types.simulation import ActorResponse
 from strands_evals.types.trace import Session, TraceLevelInput
 
@@ -31,7 +32,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
 
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -42,20 +43,27 @@ PRICES = {
     "output_per_million": 1.20,
 }
 RUBRICS = {
-    "grounding": "All material factual claims are supported by the actual user facts and tool evidence. Missing required information alone is not an unsupported factual claim. Cite the turn and claim if incorrect.",
-    "rules": "The conversation obeys clarification, consent, route selection, tool ordering, budgets, and explicit prohibitions against invented or misrepresented financial claims. Missing final-answer details alone are not a rule violation. Cite the turn and violated rule if incorrect.",
+    "grounding": """GROUNDING ONLY: Check affirmative factual claims and concrete financial/schedule
+facts used in tool arguments against the evidence available at that turn.
+Invented user income, weekdays, departure times, or annual commute days fail,
+even when later confirmed. An asserted salary differs from a conditional midpoint
+question. Pure route-selection, consent, or tool-order violations do not fail
+this criterion unless they invent financial/schedule facts or unsupported claims.
+Do not fail grounding merely because a call was unauthorized. Supplied tool
+results can support reported amounts despite that rule violation. Approved
+domain context also supports factual claims. Omissions alone do not fail.
+Cite the specific unsupported fact, not a task-rule violation.""",
+    "rules": """RULES ONLY: Check clarification, consent, route selection, actual tool arguments,
+ordering, budgets, and prohibitions against invented or misrepresented financial
+claims. A later reply cannot authorize an earlier call. Wrong arguments still
+fail even when the assistant honestly explains the rejection. Missing final-answer
+details alone do not fail this criterion: do not turn disclosure omissions into
+rule violations. Cite the actual prohibited action and its turn.""",
 }
 DIAGNOSTIC_PROMPT = """Assess only the named diagnostic criterion, not overall task completion.
-For grounding, ignore omissions, clarification, consent and ordering; check only
-whether affirmative factual claims contradict or lack support in the evidence or
-approved task context. Domain facts in that context support statements about
+Domain facts in the approved task context support statements about
 supported regions and vehicle profiles, even without a tool call. A fixed
 published rate can vary by time of day; it is not a dynamic observation.
-For rules, check required clarification, consent, route selection, ordering, budgets,
-and explicit prohibitions against invented prices or misrepresented financial facts.
-Grounding and rules can both fail for an invented price. Mere final-answer omissions
-belong to completion, not rule violations.
-A later user reply cannot authorize an earlier tool call. Respect recorded order.
 The context is not an additional checklist. Do not require source URLs, retrieval
 dates, historical date ranges, or disclosure of inapplicable source flags.
 Accept equivalent wording and requirements satisfied in earlier turns. Treat
@@ -64,6 +72,11 @@ with a short evidence citation, not private reasoning.
 """
 # Proposed human-reviewable labels for the narrower diagnostic rubrics.
 BAD_GROUNDING = {
+    "missing-clarification",
+    "false-live-observation",
+    "false-historical-observation",
+    "assumed-midpoint",
+    "rejected-call-invented-closure",
     "incorrect-money",
     "invented-annual-total",
     "missing-means-free",
@@ -71,6 +84,7 @@ BAD_GROUNDING = {
     "silent-modeling",
 }
 BAD_RULES = {
+    "rejected-call-honest",
     "wrong-route",
     "premature-call",
     "unsupported-substitution",
@@ -95,6 +109,15 @@ is compatible with a published fixed rate or an observed price when its source
 and time are otherwise accurately described. Do not require an official operator
 quote or reject the word estimate alone. Distinguish actual source kinds: do not
 accept claiming a published schedule rate is live observed, or vice versa.
+For annual estimates, recent_complete_same_date_round_trips describes the sample
+method; uses_current_fixed_rates describes the price source. Both can be true.
+Mentioning sampled dates alongside explicit current fixed-rate disclosure is not
+claiming those fixed prices were observed on each historical date. An explicit
+claim of historical observation of fixed rates is unsupported.
+These facts explain evidence, not additional disclosure requirements. Natural
+language about paired samples and their coverage is sufficient; do not require
+the raw sample-method identifier. Fixed-rate or modeled-source disclosure does
+not require naming every metadata field.
 """
 
 
@@ -122,6 +145,7 @@ class Attempt(golden.Record):
     turns: list[golden.Turn] = Field(default_factory=lambda: [])
     attempted_tools: list[dict[str, Any]] = Field(default_factory=lambda: [])
     requested_tools: list[dict[str, Any]] = Field(default_factory=lambda: [])
+    rejected_tools: list[golden.RejectedCall] = Field(default_factory=lambda: [])
     checks: list[str] = Field(default_factory=lambda: [])
     verdicts: dict[str, Verdict] = Field(default_factory=lambda: {})
     measurements: list[Measurement] = Field(default_factory=lambda: [])
@@ -154,11 +178,38 @@ class TaskFailure(Exception):
 class ConversationJudge(GroundedCorrectnessEvaluator):
     """The SDK default foregrounds the final answer; our task is the full dialogue."""
 
+    def _evaluate_with_reference(
+        self, parsed_input: TraceLevelInput, evaluation_case: EvaluationData[str, str]
+    ) -> list[EvaluationOutput]:
+        # Bind the SDK formatting follow-up to the original subject, not the
+        # correctness of the judge's own preceding explanation.
+        agent = Agent(
+            model=self.model,
+            system_prompt=self.reference_system_prompt,
+            callback_handler=None,
+            retry_strategy=None,
+            structured_output_prompt="Return the verdict about the ORIGINAL supplied conversation, not the correctness of your grading explanation. Preserve its CORRECT or INCORRECT decision under the supplied rubric and cite the original turn.",
+        )
+        result = agent(
+            self._format_reference_prompt(parsed_input, evaluation_case),
+            structured_output_model=CorrectnessReferenceRating,
+        )
+        rating = cast(CorrectnessReferenceRating, result.structured_output)
+        passed = rating.verdict.value == "CORRECT"
+        return [
+            EvaluationOutput(
+                score=float(passed),
+                test_pass=passed,
+                reason=rating.reasoning,
+                label=rating.verdict.value,
+            )
+        ]
+
     def _format_reference_prompt(
         self, parsed_input: TraceLevelInput, evaluation_case: EvaluationData[str, str]
     ) -> str:
         return (
-            "REQUIREMENTS FOR THE WHOLE CONVERSATION:\n"
+            "EVALUATION CRITERION AND SUPPORTING CONTEXT:\n"
             + (evaluation_case.expected_assertion or "")
             + "\n\nCOMPLETE ORDERED CONVERSATION (each turn contains user, calls, then assistant response):\n"
             + (evaluation_case.actual_output or "")
@@ -203,6 +254,51 @@ class RequestGuard(HookProvider):
             self.attempt.checks.append("tool_budget")
         if self.attempt.checks:
             event.cancel_tool = "Frozen evaluation rejected this call."
+            rejected_call(
+                self.attempt,
+                event.tool_use["name"],
+                event.tool_use["input"],
+                self.attempt.checks[0],
+                event.cancel_tool,
+                self.journal,
+            )
+
+
+def rejected_call(
+    attempt: Attempt,
+    name: str,
+    arguments: dict[str, Any],
+    reason: str,
+    message: str,
+    journal: Journal | None = None,
+) -> dict[str, Any]:
+    result: dict[str, JsonValue] = {"status": "error", "content": [{"text": message}]}
+    call = golden.RejectedCall(
+        turn=len(attempt.turns),
+        name=name,
+        input=deepcopy(arguments),
+        result=result,
+        reason=reason,
+    )
+    attempt.rejected_tools.append(call)
+    if journal:
+        journal.append(
+            {"event": "tool_rejected", "attempt": attempt.id, "call": call.model_dump()}
+        )
+    return result
+
+
+def actor_message(response: ActorResponse) -> str | None:
+    """Contradictory or undelivered actor output invalidates measurement."""
+    if response.stop_reason == "max_turns":
+        raise StopRun("actor_turn_limit")
+    if response.stop:
+        if response.message is not None:
+            raise StopRun("actor_stop_with_message")
+        return None
+    if not isinstance(response.message, str) or not response.message.strip():
+        raise StopRun("actor_missing_reply")
+    return response.message
 
 
 def cost(usage: dict[str, int]) -> float:
@@ -262,6 +358,11 @@ class Journal:
 
         async def measured(*args: Any, **kwargs: Any) -> AsyncIterator[Any]:  # noqa: ANN401
             nonlocal count
+            # Actors and judges have only a structured-output tool. Require it
+            # on the first call: prose followed by "format your previous answer"
+            # can make the simulator think its undelivered reply already happened.
+            if role in {"actor", "judge"}:
+                kwargs["tool_choice"] = {"any": {}}
             if failures:
                 raise TaskFailure(failures[0])
             if count >= max_calls:
@@ -407,11 +508,15 @@ def replay_tools(
                 yield result
             except ValueError as error:
                 attempt.checks.append(str(error))
-                yield {
-                    "toolUseId": use["toolUseId"],
-                    "status": "error",
-                    "content": [{"text": "Frozen replay rejected this call."}],
-                }
+                result = rejected_call(
+                    attempt,
+                    use["name"],
+                    use["input"],
+                    str(error),
+                    "Frozen replay rejected this call.",
+                    journal,
+                )
+                yield {**result, "toolUseId": use["toolUseId"]}
 
         frozen.tool_spec = cast(ToolSpec, deepcopy(spec))
         tools.append(frozen)
@@ -459,7 +564,11 @@ def trajectory(case: golden.GoldenCase, turns: list[golden.Turn]) -> Session:
 def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
     # Serialize SSM-backed model construction; provider calls run outside the lock.
     with journal.lock:
-        model = journal.model(build_eval_model(), "judge", attempt, 12)
+        native = build_eval_model()
+        native.update_config(
+            params={"max_output_tokens": 2048, "reasoning": {"effort": "medium"}}
+        )
+        model = journal.model(native, "judge", attempt, 12)
     evaluator = ConversationJudge(
         model=model, name="Correctness", reference_system_prompt=golden.JUDGE_PROMPT
     )
@@ -485,7 +594,9 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
     ]
     for key, rubric in {"outcome": reference_requirements, **RUBRICS}.items():
         evaluator.reference_system_prompt = (
-            golden.JUDGE_PROMPT if key == "outcome" else DIAGNOSTIC_PROMPT
+            golden.JUDGE_PROMPT
+            if key == "outcome"
+            else DIAGNOSTIC_PROMPT + "\n" + rubric
         )
         reference = (
             rubric
@@ -497,7 +608,12 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
                 else ""
             )
         )
+        reference = f"Criterion: {key.upper()}\n" + reference
         reference += "\n" + DOMAIN_FACTS
+        reference += "\nRejected calls are attempts, not successful pricing results. Their recorded error supports saying a tool rejected or could not complete a request; it does not support a price or prove the real road is unavailable."
+        reference += "\nA confirmation proposal (52 weeks times the user's weekdays) or a clearly conditional salary midpoint is not a claim of user consent. It must not be used in a pricing call before the user chooses."
+        if key == "outcome":
+            reference += "\nOutcome exceptions take precedence over the requirement to return a price: an appropriate necessary clarification awaiting the user passes; an honest explanation of an explicit recorded tool rejection passes even if wrong arguments caused it and a corrected retry could succeed. Rules still fail incorrect arguments. Judge the observed response, not hypothetical retry success. Fabricated prices and false road-closure claims fail. When a successful relevant tool result was actually returned and no clarification remains, the required supported answer must be supplied."
         if key != "grounding":
             reference += (
                 "\nPermitted tool sequence from the approved case contract (not a transcript):\n"
@@ -507,14 +623,25 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
             reference += (
                 "\nRecorded sequence (calls occur after that user message and before that assistant answer):\n"
                 + "\n".join(
-                    f"Turn {i + 1}: user={turn.user!r}; calls={json.dumps([{'name': c.name, 'input': c.input} for c in turn.calls])}; then assistant answers."
+                    f"Turn {i + 1}: user={turn.user!r}; successful_calls={json.dumps([{'name': c.name, 'input': c.input} for c in turn.calls])}; rejected_calls={json.dumps([c.model_dump() for c in attempt.rejected_tools if c.turn == i + 1])}; then assistant answers."
                     for i, turn in enumerate(attempt.turns)
                 )
             )
         data = EvaluationData[str, str](
             input=case.prompt,
             actual_output=json.dumps(
-                [t.model_dump() for t in attempt.turns], ensure_ascii=False
+                [
+                    {
+                        **t.model_dump(),
+                        "rejected_calls": [
+                            c.model_dump()
+                            for c in attempt.rejected_tools
+                            if c.turn == i + 1
+                        ],
+                    }
+                    for i, t in enumerate(attempt.turns)
+                ],
+                ensure_ascii=False,
             ),
             expected_assertion=reference,
             actual_trajectory=trajectory(case, attempt.turns),
@@ -529,7 +656,11 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
 
 def failure_class(attempt: Attempt) -> str | None:
     if attempt.status != "scored":
-        return "infrastructure"
+        return (
+            "actor_validity"
+            if (attempt.error or "").startswith("actor_")
+            else "infrastructure"
+        )
     if any("budget" in c for c in attempt.checks):
         return "budget"
     if any(c in ("premature_call", "missing_user_fact") for c in attempt.checks):
@@ -631,15 +762,18 @@ def execute(
             )
             response = cast(ActorResponse, actor.act(str(result)).structured_output)
             attempt.actor_replies.append(
-                {"stop": response.stop, "message": response.message}
+                {
+                    "stop": response.stop,
+                    "message": response.message,
+                    "stop_reason": response.stop_reason,
+                }
             )
-            if response.stop:
+            next_message = actor_message(response)
+            if next_message is None:
                 break
-            if not isinstance(response.message, str) or not response.message.strip():
-                raise StopRun("actor_missing_reply")
-            message = response.message
             if index == case.actor.max_turns - 1:
-                attempt.checks.append("turn_budget")
+                raise StopRun("actor_turn_limit")
+            message = next_message
         attempt.checks = sorted(
             set(attempt.checks + golden.grade_assertions(case, attempt.turns))
         )
@@ -709,11 +843,12 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
         "diagnostic_domain_facts": DOMAIN_FACTS,
         "diagnostic_prompt": DIAGNOSTIC_PROMPT,
         "model": "gpt-5.6-luna",
-        "reasoning_effort": "low",
+        "reasoning_effort": {"agent": "low", "actor": "low", "judge": "medium"},
         "max_output_tokens": 2048,
         "sampling": {"temperature": "provider default", "seed": "not supplied"},
         "transport": {
             "openai_max_retries": 0,
+            "evaluator_tool_choice": "required",
             "timeout_seconds": 60,
             "unknown_usage": "stop further paid calls",
         },
@@ -727,6 +862,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
             c.id: golden.actor_profile(c).model_dump(mode="json") for c in cases
         },
         "calibration_labels": {
+            "example_ids": [f"{e.case_id}-{e.label}" for e in development_examples()],
             "grounding_incorrect": sorted(BAD_GROUNDING),
             "rules_incorrect": sorted(BAD_RULES),
         },
@@ -751,6 +887,7 @@ def calibrate(journal: Journal, pool: ThreadPoolExecutor) -> list[dict[str, Any]
             case_id=example.case_id,
             trial=1,
             turns=example.turns,
+            rejected_tools=example.rejected_tools,
         )
         journal.append({"event": "attempt_started", **attempt.model_dump()})
         try:
@@ -959,12 +1096,21 @@ def render(directory: Path) -> dict[str, Any]:
     review = human_review(directory, evidence_digest)
     if manifest["mode"] == "calibrate":
         rows = [e for e in events if e["event"] == "calibration"]
+        expected_ids = (
+            manifest["identity"].get("calibration_labels", {}).get("example_ids")
+        )
+        complete_ids = (
+            len(rows) == 34
+            if expected_ids is None
+            else len(rows) == len(expected_ids)
+            and {r["id"] for r in rows} == set(expected_ids)
+        )
         report = {
             "manifest": manifest,
             "status": "reviewed"
             if review["status"] == "approved"
             else "pending_human_review",
-            "complete": len(rows) == 34
+            "complete": complete_ids
             and all(
                 r["status"] == "scored"
                 and len(r["verdicts"]) == 3
@@ -972,7 +1118,7 @@ def render(directory: Path) -> dict[str, Any]:
                 and all(m["complete"] for m in r["measurements"])
                 for r in rows
             ),
-            "expected_examples": 34,
+            "expected_examples": len(expected_ids) if expected_ids is not None else 34,
             "rows": rows,
         }
         lines = [
@@ -1027,6 +1173,10 @@ def render(directory: Path) -> dict[str, Any]:
                     elif event["event"] == "tool_replayed":
                         attempt.turns[int(event["turn"]) - 1].calls.append(
                             golden.Call.model_validate(event["call"])
+                        )
+                    elif event["event"] == "tool_rejected":
+                        attempt.rejected_tools.append(
+                            golden.RejectedCall.model_validate(event["call"])
                         )
                     elif event["event"] == "tool_requested":
                         attempt.requested_tools.append(
@@ -1121,6 +1271,10 @@ def render(directory: Path) -> dict[str, Any]:
             json.dumps(report["overall"], indent=2),
             "```",
         ]
+    # Historical reports predate explicit rejection records; preserve their shape.
+    if tuple(map(int, manifest["identity"]["harness_version"].split("."))) < (1, 2, 1):
+        for attempt in report.get("attempts", []):
+            attempt.pop("rejected_tools", None)
     report["review"] = review
     report["evidence_sha256"] = evidence_digest
     if "overall" in report:

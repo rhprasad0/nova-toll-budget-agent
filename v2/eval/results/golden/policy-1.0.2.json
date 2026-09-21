@@ -1,0 +1,31 @@
+{
+  "policy": {
+    "version": "1.0.2",
+    "contract_sha256": "89ada5c168390195d0964bb503879564d7917e8627b60359a47f4e0f79e7cd9d",
+    "trials": 3,
+    "cases": 24,
+    "workers": 4,
+    "critical_passes": 3,
+    "noncritical_passes": 2,
+    "suite_success_min": 0.9,
+    "suite_pass_cubed_min": 0.75,
+    "lost_passes_max": 1,
+    "run_cost_max_usd": 5.0,
+    "agent_cost_per_success_max_usd": 0.05,
+    "latency_p50_max_seconds": 30.0,
+    "latency_p95_max_seconds": 60.0,
+    "candidate_max_age_hours": 24,
+    "production_max_age_hours": 720,
+    "sample_size": 8,
+    "replacement_runs_max": 1,
+    "max_output_tokens": 2048
+  },
+  "approval": {
+    "status": "approved",
+    "evidence_sha256": "66bbc850f37199825cfb547ae10149422b4c44a82358f18b763d3e85f0bb3450",
+    "reviewer": "rhprasad0",
+    "approved_at": "2026-09-21T15:26:49.510944+00:00",
+    "evidence": "Ryan explicitly stated \"I approve both\" in the Codex conversation on 2026-09-21, approving the full calibration 15 corpus/judge/policy contract and accepting the actors-6 redundant vehicle/E-ZPass reply limitation (59/60 checks). See v2/eval/evidence/golden-validity/HUMAN_ADJUDICATIONS.md. No merge, deployment, or production qualification is authorized.",
+    "scope": "Numeric limits unchanged. Approval binds the exact calibration 15 corpus/judge contract and accepts the documented actor limitation."
+  }
+}
