@@ -6,8 +6,8 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-The active corpus 1.0.14 / harness 1.2.4 and policy 1.0.4 await exact calibration-18
-review: 158/159 development criterion labels agree, with one recorded Outcome
+The active corpus 1.0.14 / harness 1.2.4 and policy 1.0.4 have Ryan’s exact calibration-18
+approval, accepting the recorded Outcome disagreement: 158/159 development criterion labels agree, with one recorded Outcome
 disagreement. See the [review packet](evidence/critical-pass3/REVIEW-18.md).
 Ryan's earlier calibration-16, actors-2, and policy-1.0.3 approval remains
 preserved in the [prior packet](evidence/critical-pass3/REVIEW.md). Actor behavior

@@ -1,4 +1,7 @@
 {
-  "status": "pending",
-  "notes": "Corpus 1.0.14 / harness 1.2.4 awaits exact calibration-18 review. Calibration-16 approval remains preserved in eval/evidence/critical-pass3/calibration-16."
+  "status": "approved",
+  "corpus_sha256": "5ec0b3800b1ccd284371d3fff682849332810b5c17b6b91c25b644fc9f6b5024",
+  "reviewer": "rhprasad0",
+  "approved_at": "2026-09-21T19:46:08.241637+00:00",
+  "evidence": "Ryan explicitly stated \"Approve with documented disagreement\" in the Codex conversation, approving calibration 18 and policy 1.0.4 with unchanged numeric thresholds, retaining the wrong-route Outcome FAIL label and accepting its measured Outcome PASS disagreement. Rules and deterministic checks still reject the example. No merge, deployment, or production qualification is authorized."
 }

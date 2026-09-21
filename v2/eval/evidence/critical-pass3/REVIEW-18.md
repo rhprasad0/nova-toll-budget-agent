@@ -1,6 +1,6 @@
 # Calibration 18 — exact follow-up review
 
-**Pending approval.** The first approved-contract comparison improved critical pass³ from 9/17 to 12/17, but exposed three further wording false positives. The original runs are retained in [the comparison report](../../results/golden/critical-pass3-comparison-1.md).
+**Approved by Ryan with the documented disagreement; proposed labels and measured verdicts unchanged.** The first approved-contract comparison improved critical pass³ from 9/17 to 12/17, but exposed three further wording false positives. The original runs are retained in [the comparison report](../../results/golden/critical-pass3-comparison-1.md).
 
 ## Changes since calibration 16
 
@@ -53,4 +53,4 @@ There are zero complete paired days out of 60 eligible dates, so there is not en
 
 Prompt 2.3.2 retains the source fix and clarifies annualized-daily table labels, paired/eligible coverage counts, stale-observation timestamps, hourly-income clarification, and stopping when an annual route has no alternatives. It has not been scored under this contract.
 
-Approval would authorize fresh reference/candidate comparisons under this exact contract, accepting the documented calibration disagreement. It would not authorize merge, deployment, or production qualification.
+Approval authorizes fresh reference/candidate comparisons under this exact contract, accepting the documented calibration disagreement. It does not authorize merge, deployment, or production qualification.

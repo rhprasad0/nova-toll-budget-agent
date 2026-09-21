@@ -21,8 +21,11 @@
     "max_output_tokens": 2048
   },
   "approval": {
-    "status": "pending",
+    "status": "approved",
     "evidence_sha256": "99365d6276aeadee2778837c40b6cf03a9d46334181eaa2012dd21fd5a83d920",
-    "scope": "Numeric thresholds unchanged; calibration 18 extends deterministic monetary-proposal/denial coverage and calibration examples. Actors and judge instructions remain identical to calibration 16."
+    "scope": "Numeric thresholds unchanged; calibration 18 extends deterministic monetary-proposal/denial coverage and calibration examples. Actors and judge instructions remain identical to calibration 16.",
+    "reviewer": "rhprasad0",
+    "approved_at": "2026-09-21T19:46:08.241637+00:00",
+    "evidence": "Ryan explicitly stated \"Approve with documented disagreement\" in the Codex conversation, approving calibration 18 and policy 1.0.4 with unchanged numeric thresholds, retaining the wrong-route Outcome FAIL label and accepting its measured Outcome PASS disagreement. Rules and deterministic checks still reject the example. No merge, deployment, or production qualification is authorized."
   }
 }
