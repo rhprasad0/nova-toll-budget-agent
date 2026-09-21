@@ -3,7 +3,10 @@
 This change repairs measurement after [production-reference run 35549302121](https://github.com/rhprasad0/nova-toll-budget-agent/actions/runs/35549302121).
 That run completed 72 trials with 39 raw passes and eight cases passing all three trials.
 Its original report, decisions, and calibration-8 approval are unchanged.
-The findings below are assistant analysis, not human adjudication or application-only failure counts.
+The findings below are assistant analysis, not application-only failure counts.
+Subsequent [human adjudications](evidence/golden-validity/HUMAN_ADJUDICATIONS.md)
+supersede the initial proposed labels where explicitly noted; overall approval
+remains pending.
 
 ## Confirmed boundaries
 
@@ -42,14 +45,13 @@ Evidence SHA-256: `ffa7776cd8164a60a83b8b33d97bfb36b50f80fb2ef19de2b2ae54514b53f
 Its source commit is `ed03f4ba3cb1936ee98266e623e35f4d7ae6dd9c`; the exact policy
 contract is `1fbf33ab6f6779535ba7ed9c90374cb2b8a10b556364d17b8e9d5bfd661d8d25`.
 
-**Human adjudication remains pending.** For
-`annual-missing-schedule-missing-clarification`, the judge correctly fails outcome
-and rules because the tool call precedes the supplied schedule, but also fails
-grounding for that same ordering violation. The proposed grounding label remains
-Pass: the assistant's later financial claims are supported by the recorded tool
-result. Do not overwrite the measured failure. This known false rejection and
-the actor's redundant reply must be reviewed explicitly, alongside the 12 added
-labels, corpus digest, and unchanged policy limits. Agreement on this development
+**Overall human approval remains pending.** Ryan adjudicated
+`annual-missing-schedule-missing-clarification` as grounding Fail, agreeing with
+the judge. The earlier assistant assessment of a false rejection is withdrawn.
+Ryan also changed `incomplete-days-proposal` to outcome Pass during sample review.
+See the [adjudication record](evidence/golden-validity/HUMAN_ADJUDICATIONS.md) for
+the remaining clarification and required rubric/label reconciliation. The
+historical calibration results are not overwritten. Agreement on this development
 set is not held-out accuracy or evidence of flawless judgment.
 
 All six actor diagnostics and four calibrations cost **$0.51583054** in total.
@@ -85,7 +87,9 @@ Twelve additional development examples bring calibration to 46 examples / 138 bi
 | Full annual-day confirmation dialogue | Pass | Pass | Pass |
 | Full origin-correction dialogue | Pass | Pass | Pass |
 
-New labels are proposals until Ryan adjudicates this exact evidence. Never change a label to match a judge result.
+This table preserves the proposals tested in calibration 12; the linked human
+adjudications record subsequent corrections. Never change a label merely to
+match a judge result.
 Outcome, grounding, and rules are independent: a truthful explanation of a wrong call can pass grounding and still fail outcome/rules.
 
 ## Held-out exposure
