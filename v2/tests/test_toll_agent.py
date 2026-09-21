@@ -227,6 +227,9 @@ def test_system_prompt_contains_rds_points_and_v2_behavior() -> None:
     assert "Never make a third call" in normalized
     assert "exact point_id returned in that alternative" in normalized
     assert "use the required endpoint role as the tie-breaker" in normalized
+    assert "travel toward Route 28 uses eastbound (`EB`) points" in normalized
+    assert "travel away from Route 28 uses westbound (`WB`) points" in normalized
+    assert "Recheck this direction after an origin correction" in normalized
     assert "MUST immediately make one corrective retry" in normalized
     assert "non-Washington annual route validation failure" in normalized
     assert (
@@ -331,7 +334,7 @@ def test_system_prompt_matches_its_versioned_contract() -> None:
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
 
-    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.3.1" == prompt_contract["current"]
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.3.2" == prompt_contract["current"]
     assert (
         toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
         == "1.0.0"

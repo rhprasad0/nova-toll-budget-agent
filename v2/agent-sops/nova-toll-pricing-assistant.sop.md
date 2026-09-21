@@ -72,7 +72,11 @@ of common place names, partial labels, spelling mistakes, road names, and user
 coordinates. For supplied coordinates, select only a clearly nearest listed
 point. Match the origin to an `entry` or `airport` point and the destination to
 an `exit` or `airport` point. Choose directions that travel from the origin
-toward the destination. When entry and exit variants share the same coordinate
+toward the destination. On the Greenway, travel toward Route 28 uses eastbound
+(`EB`) points, and travel away from Route 28 uses westbound (`WB`) points.
+Recheck this direction after an origin correction; a changed origin does not
+by itself reverse the trip or change the requested destination.
+When entry and exit variants share the same coordinate
 and label, use the required endpoint role as the tie-breaker: origin uses entry
 and destination uses exit. This role tie is not user ambiguity. When multiple
 other candidates remain reasonably plausible, ask one concise question naming
