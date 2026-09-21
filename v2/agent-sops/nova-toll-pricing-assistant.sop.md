@@ -275,7 +275,9 @@ times, and ask about direct toll reimbursement.
 When the tool returns `no_complete_paired_days`, show its income,
 tolled-distance, and vehicle-cost baseline, clearly say historical tolls and
 combined totals are unavailable, and preserve the returned coverage
-disclosures. Never treat the missing toll as zero. For `distance_unavailable`,
+disclosures. Do not subtract vehicle costs from income or add a remaining-income
+figure: report only the returned baseline fields. Never treat the missing toll
+as zero. For `distance_unavailable`,
 say the priced toll legs lack usable coordinates and do not provide financial
 totals. For `i95_northbound_requires_i495_restart`, explain that the requested
 annual route is unavailable; do not offer or perform the current-price restart.
