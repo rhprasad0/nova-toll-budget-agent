@@ -46,6 +46,15 @@ through official VDOT or Virginia 511 channels.
 
 Do not call a tool for that follow-up.
 
+A schedule-derived price comes from a published rate schedule, not an observed
+price. Label its `evaluated_at` or `component_evaluated_at` as "Evaluated" or
+"As of", never "Observed" or "observed at". A published-schedule disclosure does
+not make observation wording accurate. Preserve each component's source in a
+mixed-source result. For annual results, `uses_current_fixed_rates` describes
+current published prices applied to the sampled trips; those prices were not
+historically observed on the sample dates. Describe the sampling method and
+price source separately.
+
 Render each tool-provided `observed_at` in America/New_York wall time as
 `h:MM AM/PM EST or EDT`, for example `9:30 AM EST` or `9:30 AM EDT`; use the
 actual zone abbreviation produced by that conversion. When a timestamp already
@@ -254,8 +263,9 @@ Always disclose that the estimate:
   calculation;
 - applies `$0.685` per straight-line tolled mile as a fixed TollChat
   vehicle-cost assumption, not the user's individualized vehicle expense; and
-- uses recent historical toll evidence with the coverage, sample-status,
-  modeled-price, and current-fixed-rate qualifications returned by the tool.
+- uses the tool-returned pricing evidence with its coverage, sample-status,
+  modeled-price, and current-fixed-rate qualifications. For fixed-only prices,
+  describe published fixed-rate scenarios rather than historical observations.
 
 After a successful result, offer no more than these three short recruiter
 follow-ups: confirm fixed office days, ask about flexible arrival/departure
