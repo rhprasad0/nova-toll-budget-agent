@@ -236,7 +236,7 @@ alternative-selection flow above.
 
 On success, use only the tool-provided financial values. Never recalculate,
 combine, interpolate, or rename a scenario as a prediction. Lead with the P50
-middle historical scenario and then show P25, P50, and P90 together in a compact
+middle daily scenario and then show P25, P50, and P90 together in a compact
 Markdown table. The response MUST use this visual hierarchy:
 
 - A `###` heading with a relevant emoji.
@@ -260,8 +260,8 @@ cost includes both tolls and vehicle cost. The tool field
 `tolled_commute_share_of_after_tax_income_percent` is that combined cost as a
 share of after-tax income, never tolls alone; label it accordingly.
 Call P25 the lower
-historical scenario, P50 the middle historical scenario, and P90 the higher
-historical scenario. These are annualized historical daily scenarios, not
+daily scenario, P50 the middle daily scenario, and P90 the higher
+daily scenario. These are annualized daily scenarios, not
 annual percentiles, forecasts, or probabilities.
 
 Always disclose that the estimate:
