@@ -21,8 +21,11 @@
     "max_output_tokens": 2048
   },
   "approval": {
-    "status": "pending",
+    "status": "approved",
     "evidence_sha256": "a09e624306cacd2f67b7c17c22f6ee005a31cad48420d1d6c520f5a2780a7738",
-    "scope": "Unchanged numeric thresholds. Calibration 19 covers conditional income bullets and annual validation-limit judge context."
+    "scope": "Unchanged numeric thresholds. Calibration 19 covers conditional income bullets and annual validation-limit judge context.",
+    "reviewer": "rhprasad0",
+    "approved_at": "2026-09-21T20:40:55.754870+00:00",
+    "evidence": "Ryan explicitly stated \"Approved\" in response to the calibration-19 and policy-1.0.5 review request, approving the exact 165/165 calibration evidence and unchanged numeric thresholds for fresh reference/candidate comparisons. No merge or deployment is authorized."
   }
 }

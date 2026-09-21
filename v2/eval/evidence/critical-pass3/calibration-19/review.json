@@ -1,0 +1,12 @@
+{
+  "status": "approved",
+  "reviewer": "rhprasad0",
+  "approved_at": "2026-09-21T20:40:55.754870+00:00",
+  "evidence": "Ryan explicitly stated \"Approved\" in response to the calibration-19 and policy-1.0.5 review request, approving the exact 165/165 calibration evidence and unchanged numeric thresholds for fresh reference/candidate comparisons. No merge or deployment is authorized.",
+  "evidence_sha256": "e856114529056e2b544f81c7c74f57302e61e300e5b7d9fb28953b867619f72c",
+  "adjudicated_disagreements": {},
+  "unresolved_findings": [],
+  "accepted_limitations": [
+    "Semantic judges remain stochastic; historical calibration disagreements remain preserved."
+  ]
+}

@@ -1,6 +1,6 @@
 # Calibration 19 — review packet
 
-**Pending exact-evidence approval. All 165/165 criterion labels agree across 55 development examples.** This contract fixes the two evaluator gaps exposed by the unchanged-candidate repeat. Numeric release thresholds are unchanged.
+**Approved by Ryan for fresh comparisons. All 165/165 criterion labels agree across 55 development examples.** This contract fixes the two evaluator gaps exposed by the unchanged-candidate repeat. Numeric release thresholds are unchanged.
 
 ## Changes ready for review
 
@@ -22,6 +22,6 @@ There are no disagreements in this calibration. The original wrong-route Outcome
 
 ## Approval scope and next comparison
 
-Approve this exact calibration evidence and policy 1.0.5 to permit fresh full reference/candidate comparisons under the changed evaluation contract. The reference should retain prompt 2.3.4; the candidate uses 2.3.5. This separates evaluator corrections from the application wording change. Historical scores will not be relabeled or compared as if their contracts were identical.
+Ryan approved this exact calibration evidence and policy 1.0.5 to permit fresh full reference/candidate comparisons under the changed evaluation contract. The reference should retain prompt 2.3.4; the candidate uses 2.3.5. This separates evaluator corrections from the application wording change. Historical scores will not be relabeled or compared as if their contracts were identical.
 
 The runner enforces exact-evidence human review before scored runs (`v2/eval/golden_run.py`, `main`, calibration approval check). Approval does not authorize push, PR, merge, deployment, or production qualification. Three trials remain regression evidence, and the nominal held-out cases have already been exposed during development.
