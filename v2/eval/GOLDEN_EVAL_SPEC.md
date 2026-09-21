@@ -5,12 +5,10 @@ conversations and 13 annual-affordability conversations. The
 [case review](golden/REVIEW.md) includes every question, actor brief, expected
 behavior, fixture reference, and proposed criticality.
 
-**Status: corpus 1.0.11 awaits exact-contract review.** See the
-[actor and judge validity review](GOLDEN_VALIDITY_REVIEW.md).
-The previous corpus 1.0.10 approval remains historical:
-[Calibration 8](evidence/golden-360/calibration-8/review.html) matches all 102
-criterion labels across the 34 development examples. The authored cases are
-not application results; no qualified production baseline exists yet.
+**Status: corpus 1.0.11 and its exact judge contract are approved.** See the
+[AI evaluation engineering summary](GOLDEN_VALIDITY_REVIEW.md).
+Calibration 15 matches all 138 criterion labels across 46 development examples.
+These are judge-calibration results; no qualified production baseline exists yet.
 Approval is recorded separately in [review.json](golden/review.json).
 
 ## Ownership and boundaries

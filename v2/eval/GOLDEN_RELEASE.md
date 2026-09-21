@@ -6,19 +6,11 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-On September 20, 2026 (America/New_York), the 13 development golden resources
-were provisioned, the four environments were protected, and calibration 8 was
-approved against the exact corpus and policy contract. The versioned ledger
-retains that calibration's spending. The failed production-reference run
-35549302121 brought recorded spending to $1.33883714 before the new validity
-work. [Validity diagnostics and calibrations 9–12](GOLDEN_VALIDITY_REVIEW.md)
-added $0.51583054, reconciled to a ledger total of $1.85466768. The historical
-demo remains unqualified.
-
-Sampled human adjudications required revised labels and criterion instructions.
-Calibration 15 matches 138/138 labels; Ryan approved its exact contract and accepted
-the documented actor limitation on September 21, 2026.
-Calibrations 13–15 added $0.27834384, reconciled to **$2.13301152** cumulative.
+Ryan approved calibration 15's exact contract and accepted the documented actor
+limitation on September 21, 2026. It matches 138/138 development criterion labels.
+See the [engineering summary](GOLDEN_VALIDITY_REVIEW.md) for results and scope.
+Recorded cumulative model spending is **$2.13301152**; the initial demo and failed
+production-reference run remain unqualified.
 
 ## Execution and evidence
 

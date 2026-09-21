@@ -4,7 +4,8 @@ Ryan reviewed a sample and explicitly approved the full calibration 15 contract
 and the remaining actor limitation on September 21, 2026: **"I approve both."**
 This approves corpus 1.0.11 / harness 1.2.1 / policy 1.0.2, not a merge,
 deployment, or production release.
-The original calibration-12 inputs, verdicts, and 137/138 agreement are retained.
+The original calibration-12 inputs, verdicts, and 137/138 agreement are retained
+in Git history at `0336ddf` and the archive identified by `spending-receipt.json`.
 
 | Example | Human decision |
 | --- | --- |
