@@ -379,7 +379,7 @@ jobs:
       TS_PRODUCTION_OAUTH_CLIENT_ID: ${{ secrets.TS_PRODUCTION_OAUTH_CLIENT_ID }}
       TS_PRODUCTION_OAUTH_SECRET: ${{ secrets.TS_PRODUCTION_OAUTH_SECRET }}
   release-result:
-    needs: [claim, planner, migrate]
+    needs: [admission, golden, claim, planner, migrate]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -391,6 +391,9 @@ jobs:
         persist-credentials: false
     - id: evidence
       env:
+        INITIAL_ADMISSION: ${{ needs.admission.outputs.admission }}
+        ADMISSION_RESULT: ${{ needs.admission.result }}
+        GOLDEN_RESULT: ${{ needs.golden.result }}
         ADMISSION: ${{ needs.claim.outputs.admission }}
         PLANNER: ${{ needs.planner.result }}
         MIGRATE: ${{ needs.migrate.result }}
@@ -417,6 +420,20 @@ jobs:
         trap finish EXIT
         result="$RUNNER_TEMP/production-release-evidence.json"
         publish() {
+          if [[ -z "$ADMISSION" ]]; then
+            initial="${INITIAL_ADMISSION:-}"
+            if [[ -z "$initial" ]]; then initial='{}'; fi
+            blocked_stage=claim
+            if [[ "${ADMISSION_RESULT:-}" != success ]]; then
+              blocked_stage=admission
+            elif [[ "${GOLDEN_RESULT:-}" != success ]]; then
+              blocked_stage=golden
+            fi
+            jq -n --argjson admission "$initial" --arg stage "$blocked_stage" --arg planner "$PLANNER" --arg migrate "$MIGRATE" --arg cancelled "$CANCELLED" '{schema_version:1,environment:"production-release",outcome:"failed",blocked_stage:$stage,planner:$planner,migrate:$migrate,migration_evidence:"not-run",canary:null,cancelled:$cancelled,release_id:$admission.release_id,claim_id:null,candidate:$admission.candidate,golden:null}' >"$result" || return
+            printf 'outcome=failed\n' >>"$GITHUB_OUTPUT" || return
+            printf 'Release blocked at %s before a deployment claim was created. Production planning and deployment did not run.\n' "$blocked_stage" >>"$GITHUB_STEP_SUMMARY"
+            return
+          fi
           migration_evidence=failed
           migration=null
           if candidate_migration="$(printf '%s' "$MIGRATION_EVIDENCE" | jq -ce 'select(type == "object")')"; then
@@ -465,6 +482,10 @@ jobs:
         }
         trap finish EXIT
         publish() {
+          if [[ -z "$ADMISSION" ]]; then
+            printf 'No deployment claim exists; no deployment status was updated.\n' >>"$GITHUB_STEP_SUMMARY"
+            return 1
+          fi
           printf '%s' "$ADMISSION" >"$RUNNER_TEMP/terminal-admission.json" || return
           python3 v2/scripts/check_production_release.py revalidate --admission "$RUNNER_TEMP/terminal-admission.json" --output "$RUNNER_TEMP/terminal-revalidated.json" || return
           claim="$(jq -er '.claim_id|select(type == "number")' "$RUNNER_TEMP/terminal-revalidated.json")" || return
