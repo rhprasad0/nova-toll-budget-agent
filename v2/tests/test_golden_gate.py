@@ -235,9 +235,17 @@ def test_unapproved_policy_and_calibration_are_blocked(
         workflow.calibration()
 
 
-def test_current_calibration_and_policy_have_exact_approval() -> None:
-    assert gate.policy()["contract_sha256"]
-    assert workflow.calibration().name == "calibration-8"
+def test_changed_contract_requires_fresh_approval() -> None:
+    from eval import golden_baseline
+
+    historical, _ = golden_baseline.load_policy(
+        gate.POLICY.with_name("policy-1.0.1.json")
+    )
+    assert historical.version == "1.0.1"
+    with pytest.raises(ValueError, match="human approval"):
+        gate.policy()
+    with pytest.raises(ValueError, match="human review"):
+        workflow.calibration()
 
 
 def test_active_contract_and_numeric_policy_are_pinned(

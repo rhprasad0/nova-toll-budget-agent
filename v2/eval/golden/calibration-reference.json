@@ -1,6 +1,6 @@
 {
-  "status": "approved",
-  "directory": "v2/eval/evidence/golden-360/calibration-8",
-  "evidence_sha256": "38535582f2d90634d0a80744ce777945cbb0c7fae44c3ed5db8e02636aa2c3e7",
-  "notes": "Ryan explicitly approved calibration-8, corpus 1.0.10, and policy 1.0.1 under the exact evidence and contract hashes in the Codex conversation on 2026-09-20 America/New_York. Historical actor results remain unqualified; fresh actor validity requires separate review."
+  "status": "pending",
+  "directory": "v2/eval/evidence/golden-360/calibration-9",
+  "evidence_sha256": null,
+  "notes": "Expanded calibration and actor validity review required; historical calibration-8 approval does not transfer."
 }

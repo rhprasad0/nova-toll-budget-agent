@@ -210,7 +210,7 @@ def test_aggregate_repeats_cost_failures_and_incomplete() -> None:
 
 def test_development_only_and_full_trajectory() -> None:
     examples = run.development_examples()
-    assert len(examples) == 34
+    assert len(examples) == 46
     held = {c.id for c in golden.load_cases() if c.held_out}
     assert not held.intersection(e.case_id for e in examples)
     example = next(e for e in examples if e.case_id == "greenway-origin-correction")
@@ -609,3 +609,173 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
     run.judge(case, row, journal)
     assert "claim-support requirement" in seen[0]
     assert "Ground the price, time, availability" not in seen[0]
+
+
+@pytest.mark.parametrize(
+    "stop,message,reason,error",
+    [
+        (True, "Use $120,000.", "goal_completed", "actor_stop_with_message"),
+        (False, None, None, "actor_missing_reply"),
+        (False, "   ", None, "actor_missing_reply"),
+        (True, None, "max_turns", "actor_turn_limit"),
+    ],
+)
+def test_invalid_actor_output_is_inconclusive(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stop: bool,
+    message: str | None,
+    reason: str | None,
+    error: str,
+) -> None:
+    from strands_evals.types.simulation import ActorResponse
+
+    from eval.artifact_agent import Answer
+
+    case = golden.load_cases()[14]
+    reply = ActorResponse(
+        reasoning="offline", stop=stop, message=message, stop_reason=reason
+    )
+    actor = Mock()
+    actor.act.return_value.structured_output = reply
+    monkeypatch.setattr(golden, "make_actor", Mock(return_value=actor))
+    monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
+    judge = Mock()
+    monkeypatch.setattr(run, "judge", judge)
+    agent = Mock()
+    answer = Answer("Which income should I use?")
+    answer.stop_reason = "end_turn"
+    agent.return_value = answer
+    result = run.execute(
+        case, 1, run.Journal(tmp_path / "actor", 25), Mock(return_value=agent)
+    )
+    assert result.status == "infrastructure" and result.error == error
+    assert result.failure_class == "actor_validity" and not result.passed
+    assert result.actor_replies[0]["message"] == message
+    judge.assert_not_called()
+
+
+def test_actor_reply_is_delivered_before_completion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from strands_evals.types.simulation import ActorResponse
+
+    from eval.artifact_agent import Answer
+
+    case = golden.load_cases()[14]
+    actor = Mock()
+    actor.act.side_effect = [
+        Mock(
+            structured_output=ActorResponse(
+                reasoning="offline",
+                stop=False,
+                message="Use $120,000.",
+                stop_reason=None,
+            )
+        ),
+        Mock(
+            structured_output=ActorResponse(
+                reasoning="offline",
+                stop=True,
+                message=None,
+                stop_reason="goal_completed",
+            )
+        ),
+    ]
+    monkeypatch.setattr(golden, "make_actor", Mock(return_value=actor))
+    monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
+
+    def judge(case: golden.GoldenCase, row: run.Attempt, journal: run.Journal) -> None:
+        row.verdicts = {
+            key: run.Verdict(passed=True, evidence="offline")
+            for key in ("outcome", "grounding", "rules")
+        }
+        row.measurements.append(measurement())
+
+    monkeypatch.setattr(run, "judge", judge)
+    agent = Mock()
+    answer = Answer("Answer")
+    answer.stop_reason = "end_turn"
+    agent.return_value = answer
+    result = run.execute(
+        case, 1, run.Journal(tmp_path / "delivered", 25), Mock(return_value=agent)
+    )
+    assert [call.args[0] for call in agent.call_args_list] == [
+        case.prompt,
+        "Use $120,000.",
+    ]
+    assert len(result.turns) == 2
+    assert result.error is None
+
+
+def test_judges_receive_rejected_calls_without_pricing_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[list[dict[str, Any]]] = []
+
+    def evaluate(
+        self: run.ConversationJudge, data: EvaluationData[str, str]
+    ) -> list[EvaluationOutput]:
+        seen.append(json.loads(data.actual_output or "[]"))
+        return [EvaluationOutput(score=0.0, test_pass=False, reason="offline")]
+
+    monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
+    monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
+    example = next(
+        e for e in run.development_examples() if e.label == "rejected-call-honest"
+    )
+    case = next(c for c in golden.load_cases() if c.id == example.case_id)
+    attempt = run.Attempt(
+        id="rejection",
+        case_id=case.id,
+        trial=1,
+        turns=example.turns,
+        rejected_tools=example.rejected_tools,
+    )
+    run.judge(case, attempt, run.Journal(tmp_path / "judge", 25))
+    assert len(seen) == 3
+    for transcript in seen:
+        assert transcript[0]["calls"] == []
+        assert transcript[0]["rejected_calls"][0]["result"]["status"] == "error"
+        assert (
+            transcript[0]["rejected_calls"][0]["input"]["destination_point_id"]
+            == "greenway:28:entry:WB"
+        )
+
+
+def test_packaged_replay_records_rejections() -> None:
+    from eval.artifact_agent import Answer, ArtifactAgent
+
+    case = golden.load_cases()[0]
+    fixture = golden.load_fixture(case.steps[0].fixture)
+    arguments = dict(fixture.input, destination_point_id="greenway:28:entry:WB")
+    attempt = run.Attempt(
+        id="packaged",
+        case_id=case.id,
+        trial=1,
+        turns=[golden.Turn(user=case.prompt, response="pending", calls=[])],
+    )
+    adapter = object.__new__(ArtifactAgent)
+    adapter.case, adapter.attempt, adapter.journal = case, attempt, Mock()
+    adapter.messages, adapter.replay, adapter.reserved = (
+        [case.prompt],
+        golden.Replay(case),
+        None,
+    )
+    adapter.send = Mock()
+    adapter.receive = Mock(
+        side_effect=[
+            {"event": "requested", "name": fixture.tool, "input": arguments},
+            {"event": "tool", "name": fixture.tool, "input": arguments},
+            {"event": "answer", "text": "Rejected.", "stop_reason": "end_turn"},
+        ]
+    )
+    assert isinstance(adapter(case.prompt), Answer)
+    assert not attempt.turns[0].calls
+    assert attempt.rejected_tools[0].reason == "tool_arguments"
+    assert (
+        attempt.rejected_tools[0].result
+        == adapter.send.call_args_list[-1].args[0]["result"]
+    )

@@ -45,6 +45,13 @@ prices, earnings, routes, or requirements. Do not tell the assistant how to use
 its tools or how it will be graded. Never treat the assistant's suggested facts
 as your own unless your profile allows them. Return stop=false with a short
 message when a reply is needed; otherwise return stop=true and message=null.
+A question asking you to choose income, supply schedule facts, or confirm days
+needs your profile's answer delivered with stop=false BEFORE you can finish.
+A proposed estimate is not yet a completed estimate. After an evidenced refusal,
+unavailable result, or tool failure, stop; do not request retries, operator
+verification, another product, or a one-way substitute for a round trip.
+When formatting structured output, preserve YOUR next user message. Never grade
+your own previous message or mistake writing it for delivering it to the assistant.
 """
 JUDGE_PROMPT = """Judge the whole conversation against every expected requirement,
 using the actual tool calls and results as evidence. Return CORRECT only if the
@@ -139,6 +146,14 @@ class Turn(Record):
     calls: list[Call]
 
 
+class RejectedCall(Record):
+    turn: int = Field(ge=1)
+    name: str
+    input: dict[str, JsonValue]
+    result: dict[str, JsonValue]
+    reason: str
+
+
 class Example(Record):
     case_id: str
     label: str
@@ -146,6 +161,7 @@ class Example(Record):
     semantic_verdict: Literal["CORRECT", "INCORRECT"]
     rationale: str = Field(min_length=1)
     turns: list[Turn] = Field(min_length=1)
+    rejected_tools: list[RejectedCall] = Field(default_factory=lambda: [])
 
 
 def digest(value: object) -> str:
@@ -367,6 +383,22 @@ def grade_assertions(
             turn.response,
             flags=re.IGNORECASE,
         )
+        # ponytail: recognize explicit midpoint questions only; extend with
+        # labeled examples if other conditional financial proposals are needed.
+        amounts = money("\n".join(messages))
+        if not turn.calls and len(amounts) == 2:
+            midpoint = sum(amounts) / 2
+            for question in re.findall(
+                r"\b(?:Should I|Would you like me to|May I)\b[^?\n]{1,250}\?",
+                monetary_claims,
+                flags=re.IGNORECASE,
+            ):
+                if re.search(r"\bmidpoint\b", question, re.IGNORECASE) and money(
+                    question
+                ) - allowed_money == {midpoint}:
+                    monetary_claims = monetary_claims.replace(
+                        question, "[conditional midpoint proposal]"
+                    )
         if money(monetary_claims) - allowed_money:
             failures.append("unsupported_money")
     if sum(len(t.calls) for t in turns) > case.max_tool_calls:
@@ -448,7 +480,11 @@ def validate(root: Path = ROOT) -> None:
         for e in json.loads((root / "examples.json").read_text())
     ]
     by_id = {c.id: c for c in cases}
+    if len({(e.case_id, e.label) for e in examples}) != len(examples):
+        raise ValueError("duplicate calibration example")
     for example in examples:
+        if any(c.turn > len(example.turns) for c in example.rejected_tools):
+            raise ValueError("rejected call outside conversation")
         observed = grade_assertions(by_id[example.case_id], example.turns, root)
         if observed != sorted(example.expected_failures):
             raise ValueError(f"example {example.label}: {observed}")
@@ -460,7 +496,7 @@ def validate(root: Path = ROOT) -> None:
         raise ValueError("each case needs a labeled good example")
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != "1.0.10"
+        manifest["version"] != "1.0.11"
         or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-5.6-luna"
         or manifest["judge_model"] != "gpt-5.6-luna"

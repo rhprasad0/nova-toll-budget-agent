@@ -1,7 +1,7 @@
 {
-  "status": "approved",
-  "corpus_sha256": "a689a55e0a6f885ca29e2e36912babe557035a4f5e14a92a7bc4473118d655e0",
-  "reviewer": "rhprasad0",
-  "evidence": "Ryan explicitly approved calibration-8, corpus 1.0.10, and policy 1.0.1 under the exact evidence and contract hashes in the Codex conversation on 2026-09-20 America/New_York. Historical actor results remain unqualified; fresh actor validity requires separate review.",
-  "notes": "Ryan approved the original cases and labels and adjudicated both calibration-5 outcome disagreements as judge false rejections. The 1.0.5 calibration adjudication is recorded in eval/evidence/golden-360/calibration-5/review.json. Corpus 1.0.7 fixes explicit negated-zero currency checking and supplies existing SOP facts on estimate wording and operator independence to the judge after the complete 72-trial demo; calibration 7 now matches all 34 outcome labels; two proposed grounding-diagnostic disagreements and actor sample review are pending. Ryan directed us to keep i95:212NO and clarify case 21 wording; that wording is now updated. Actor sample review remains outstanding. Earlier evidence and labels are unchanged. Corpus 1.0.8 and harness 1.2.0 add isolated immutable-artifact execution. The new contract requires recalibration and human approval; no historical approvals are carried forward. Corpus 1.0.9 clarifies grounding requirements for direct unsupported-route and unsupported-profile refusals without changing approved labels. Exact-contract calibration and review remain pending. Corpus 1.0.10 separates the CI corpus check from the deployed daily-eval module; cases and labels are unchanged. Exact-contract review remains pending. Current-contract calibration-8 completed with no disagreements and Ryan approved its exact evidence and contract. Historical demo actor findings remain; protected-run actor review is separate."
+  "status": "pending",
+  "corpus_sha256": "7bafd9a53ea24763e84c4eed9fcddd717223a253560906ea490de5f37eabccc4",
+  "reviewer": null,
+  "evidence": null,
+  "notes": "Actor/judge validity corrections and 12 new development calibration examples require exact-contract review. Calibration-8 and original labels remain historical evidence."
 }
