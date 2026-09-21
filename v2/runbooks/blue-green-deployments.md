@@ -391,6 +391,8 @@ The covered Python suite prints its 30 slowest setup, call and teardown phases
 lasting at least one second. Terraform validation and the Python test job reuse
 verified provider binaries within each job. IAM rendering uses the foundation's
 locked AWS provider, and the two delivery-policy tests share one rendering.
+When an installed provider mirror is available, rendering uses it without the
+cache: installed-provider symlinks may already point back into that cache.
 The npm cache key includes both tooling and proxy lockfiles.
 
 Blue-green substeps append fixed `stage`, `status`, `elapsed` (whole seconds),

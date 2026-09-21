@@ -480,6 +480,8 @@ def rendered_development_delivery_policies() -> tuple[
         environment["TF_DATA_DIR"] = str(root / ".terraform-data")
         provider_mirror = FOUNDATION_ROOT / ".terraform" / "providers"
         if provider_mirror.is_dir():
+            # Installed providers may link into the cache; never cache a mirror into itself.
+            environment.pop("TF_PLUGIN_CACHE_DIR", None)
             cli_config = root / "terraform.tfrc"
             cli_config.write_text(
                 dedent(
@@ -653,6 +655,7 @@ def _terraform_rendered_development_plan_policies() -> tuple[
         environment["TF_DATA_DIR"] = str(root / ".terraform-data")
         provider_mirror = FOUNDATION_ROOT / ".terraform" / "providers"
         if provider_mirror.is_dir():
+            environment.pop("TF_PLUGIN_CACHE_DIR", None)
             cli_config = root / "terraform.tfrc"
             cli_config.write_text(
                 dedent(
