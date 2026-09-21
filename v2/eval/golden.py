@@ -54,6 +54,10 @@ verification, another product, or a one-way substitute for a round trip.
 Accept supported schedule-based estimates; do not demand live observations or
 extra verification after the requested price has been explained.
 Do not send thanks, summaries, or repeated facts after a completed answer.
+Send a message only to answer a necessary clarification or to make a correction
+explicitly required by your profile. Otherwise return null, including after a
+refusal or an explanation that history is insufficient. An invitation to choose
+an unrelated trip is not a necessary clarification of your requested trip.
 When formatting structured output, preserve YOUR next user message. Never grade
 your own previous message or mistake writing it for delivering it to the assistant.
 """
@@ -96,7 +100,7 @@ class ActorReply(Record):
     """One model decision: a message to deliver, or null to finish."""
 
     message: str | None = Field(
-        description="Next driver reply to deliver; null only when no reply is needed."
+        description="Return null after an answer, refusal, or unavailable explanation. Otherwise supply only a necessary clarification or profile-required correction. Do not restate the answer, refusal, or your goal."
     )
     stop: SkipJsonSchema[bool] = False
     stop_reason: SkipJsonSchema[str | None] = None

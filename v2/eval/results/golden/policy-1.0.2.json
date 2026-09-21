@@ -1,7 +1,7 @@
 {
   "policy": {
     "version": "1.0.2",
-    "contract_sha256": "dc1850b5e0e8f8166e6d6d9bf6fbf69fc2af9a3ee1037188b05e89cff7922c19",
+    "contract_sha256": "e14fbab343bbf65281f1d3f528cca57e6bcce4344798eae2f478615fbaca1e8f",
     "trials": 3,
     "cases": 24,
     "workers": 4,
