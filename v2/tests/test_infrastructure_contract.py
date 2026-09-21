@@ -367,7 +367,8 @@ def _top_level_terraform_block(source: str, header: str, occurrence: int = 0) ->
     raise AssertionError(f"unclosed Terraform block {header!r}")
 
 
-def _terraform_rendered_development_delivery_policies() -> tuple[
+@pytest.fixture(scope="module")
+def rendered_development_delivery_policies() -> tuple[
     dict[str, dict[str, object]], list[dict[str, object]], dict[str, object]
 ]:
     """Render the policy locals in a backend-free, credential-free Terraform root."""
@@ -460,6 +461,15 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
     with tempfile.TemporaryDirectory(prefix="nova-toll-iam-render-") as directory:
         root = Path(directory)
         (root / "main.tf").write_text(configuration, encoding="utf-8")
+        # Only AWS is required here; unrelated entries make readonly init fail.
+        (root / ".terraform.lock.hcl").write_text(
+            _top_level_terraform_block(
+                (FOUNDATION_ROOT / ".terraform.lock.hcl").read_text(),
+                'provider "registry.terraform.io/hashicorp/aws"',
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         environment = {
             key: value
             for key, value in os.environ.items()
@@ -470,6 +480,8 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
         environment["TF_DATA_DIR"] = str(root / ".terraform-data")
         provider_mirror = FOUNDATION_ROOT / ".terraform" / "providers"
         if provider_mirror.is_dir():
+            # Installed providers may link into the cache; never cache a mirror into itself.
+            environment.pop("TF_PLUGIN_CACHE_DIR", None)
             cli_config = root / "terraform.tfrc"
             cli_config.write_text(
                 dedent(
@@ -488,7 +500,14 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
             )
             environment["TF_CLI_CONFIG_FILE"] = str(cli_config)
         init = subprocess.run(
-            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
+            [
+                "terraform",
+                "init",
+                "-backend=false",
+                "-input=false",
+                "-no-color",
+                "-lockfile=readonly",
+            ],
             cwd=root,
             env=environment,
             capture_output=True,
@@ -618,6 +637,15 @@ def _terraform_rendered_development_plan_policies() -> tuple[
     with tempfile.TemporaryDirectory(prefix="nova-toll-iam-plan-render-") as directory:
         root = Path(directory)
         (root / "main.tf").write_text(configuration, encoding="utf-8")
+        # Only AWS is required here; unrelated entries make readonly init fail.
+        (root / ".terraform.lock.hcl").write_text(
+            _top_level_terraform_block(
+                (FOUNDATION_ROOT / ".terraform.lock.hcl").read_text(),
+                'provider "registry.terraform.io/hashicorp/aws"',
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         environment = {
             key: value
             for key, value in os.environ.items()
@@ -627,6 +655,7 @@ def _terraform_rendered_development_plan_policies() -> tuple[
         environment["TF_DATA_DIR"] = str(root / ".terraform-data")
         provider_mirror = FOUNDATION_ROOT / ".terraform" / "providers"
         if provider_mirror.is_dir():
+            environment.pop("TF_PLUGIN_CACHE_DIR", None)
             cli_config = root / "terraform.tfrc"
             cli_config.write_text(
                 dedent(
@@ -645,7 +674,14 @@ def _terraform_rendered_development_plan_policies() -> tuple[
             )
             environment["TF_CLI_CONFIG_FILE"] = str(cli_config)
         init = subprocess.run(
-            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
+            [
+                "terraform",
+                "init",
+                "-backend=false",
+                "-input=false",
+                "-no-color",
+                "-lockfile=readonly",
+            ],
             cwd=root,
             env=environment,
             capture_output=True,
@@ -689,6 +725,66 @@ def _terraform_rendered_development_plan_policies() -> tuple[
             },
             cast(list[dict[str, object]], json.loads(aggregate)["Statement"]),
         )
+
+
+def test_iam_provider_lock_rejects_unverified_mirror_bytes(tmp_path: Path) -> None:
+    lock = (
+        _top_level_terraform_block(
+            (FOUNDATION_ROOT / ".terraform.lock.hcl").read_text(),
+            'provider "registry.terraform.io/hashicorp/aws"',
+        )
+        + "\n"
+    )
+    version = re.search(r'version\s*=\s*"([^"]+)"', lock)
+    assert version
+    platform = json.loads(subprocess.check_output(["terraform", "version", "-json"]))[
+        "platform"
+    ]
+    provider = (
+        tmp_path / "mirror/registry.terraform.io/hashicorp/aws" / version[1] / platform
+    )
+    provider.mkdir(parents=True)
+    (provider / f"terraform-provider-aws_v{version[1]}").write_text(
+        "unverified provider bytes"
+    )
+    (tmp_path / ".terraform.lock.hcl").write_text(lock)
+    (tmp_path / "main.tf").write_text(
+        'terraform {\n required_providers {\n aws = { source = "hashicorp/aws" }\n }\n }\n'
+    )
+    config = tmp_path / "terraform.tfrc"
+    config.write_text(
+        "provider_installation {\n filesystem_mirror {\n path = "
+        + json.dumps(str(tmp_path / "mirror"))
+        + "\n }\n }\n"
+    )
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("AWS_", "TF_"))
+    }
+    environment.update(
+        HOME=str(tmp_path),
+        TF_CLI_CONFIG_FILE=str(config),
+        TF_DATA_DIR=str(tmp_path / "data"),
+    )
+    result = subprocess.run(
+        [
+            "terraform",
+            "init",
+            "-backend=false",
+            "-input=false",
+            "-lockfile=readonly",
+            "-no-color",
+        ],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "checksum" in result.stderr.lower()
+    assert (tmp_path / ".terraform.lock.hcl").read_text() == lock
 
 
 def test_account_contract_records_the_replacement_development_boundary() -> None:
@@ -1572,6 +1668,13 @@ def test_development_foundation_gate_requires_the_complete_expected_set() -> Non
 
 def test_ci_installs_proxy_dependencies_once_before_testing() -> None:
     steps = yaml.safe_load(CI_WORKFLOW)["jobs"]["v2-loader"]["steps"]
+    node = next(
+        step for step in steps if step.get("uses", "").startswith("actions/setup-node@")
+    )
+    assert node["with"]["cache-dependency-path"].splitlines() == [
+        "v2/package-lock.json",
+        "v2/lambdas/chat_proxy/package-lock.json",
+    ]
     install = next(
         step
         for step in steps
@@ -9202,7 +9305,11 @@ def test_development_delivery_direct_api_denials_are_resource_scoped() -> None:
     )
 
 
-def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded() -> None:
+def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded(
+    rendered_development_delivery_policies: tuple[
+        dict[str, dict[str, object]], list[dict[str, object]], dict[str, object]
+    ],
+) -> None:
     delivery = _policy_by_sid(
         _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
     )
@@ -9305,9 +9412,7 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded() -> None:
     )
     assert "nova-toll-v2-agentcore-traces-logs-dev" not in role_discovery
     assert "nova-toll-v2-agentcore-traces-firehose-dev" not in role_discovery
-    _, rendered_delivery, foundation = (
-        _terraform_rendered_development_delivery_policies()
-    )
+    _, rendered_delivery, foundation = rendered_development_delivery_policies
     _assert_agentcore_trace_foundation_source(FOUNDATION_IAM)
     _assert_agentcore_trace_bucket_key_contract(FOUNDATION_IAM, MEASUREMENT_INFRA)
     _assert_agentcore_trace_resource_headers(FOUNDATION_IAM)
@@ -9572,7 +9677,11 @@ def test_agentcore_trace_iam_is_exact_scoped_and_production_excluded() -> None:
         )
 
 
-def test_development_delivery_policy_set_is_deterministic_and_bounded() -> None:
+def test_development_delivery_policy_set_is_deterministic_and_bounded(
+    rendered_development_delivery_policies: tuple[
+        dict[str, dict[str, object]], list[dict[str, object]], dict[str, object]
+    ],
+) -> None:
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
     assert len(statements) == 67
     expected_groups = {
@@ -9692,9 +9801,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded() -> None:
             ],
         ),
     }
-    rendered_documents, rendered_aggregate, _ = (
-        _terraform_rendered_development_delivery_policies()
-    )
+    rendered_documents, rendered_aggregate, _ = rendered_development_delivery_policies
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups) | {"telemetry"}
     assert len(rendered_aggregate) == len(statements) == 67

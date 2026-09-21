@@ -381,6 +381,46 @@ Terraform module (`build/*.zip`) in both planning and delivery. Bootstrap must
 use these same paths: absolute workstation or runner paths violate the package
 evidence contract, even when the bytes match.
 
+## CI and delivery timings
+
+Development admission waits up to 30 minutes for exact-commit CI evidence and
+its predecessor, polling every 10 seconds. Failed evidence still rejects
+immediately; the longer wait does not bypass any release check.
+
+The covered Python suite prints its 30 slowest setup, call and teardown phases
+lasting at least one second. Terraform validation and the Python test job reuse
+verified provider binaries within each job. IAM rendering uses the foundation's
+locked AWS provider, and the two delivery-policy tests share one rendering.
+When an installed provider mirror is available, rendering uses it without the
+cache: installed-provider symlinks may already point back into that cache.
+The npm cache key includes both tooling and proxy lockfiles.
+
+Blue-green substeps append fixed `stage`, `status`, `elapsed` (whole seconds),
+`exit` and `reason` fields to stderr and the job summary, even when the workflow
+redirects command output to private files. Stages cover planning, Terraform
+apply, shared/runtime readiness, routing, private probes, candidate canaries,
+promotion, observation and recovery. Repeated stages describe separate calls;
+parent timings include nested stages, so do not add them together. A recovered
+failed observation remains `status=fail`, with recovery reported separately.
+Diagnostic output failures do not change deployment or recovery outcomes.
+
+Compare successful runs of the same event type and record cache state, test
+counts and coverage alongside elapsed time. The full disposable release database
+contract, trusted builds, canary pacing and five observation probes retain their
+existing behavior. Use hosted measurements before splitting jobs, parallelizing
+tests, consolidating builds or adding caches shared across runs.
+
+Local measurements on 2026-09-21 for the three IAM policy tests:
+
+| Configuration | Elapsed |
+| --- | --- |
+| Before provider reuse and the shared fixture | 39.74 seconds |
+| Updated, initially empty provider cache | 23.54 seconds |
+| Updated, populated provider cache | 13.24 seconds |
+
+Each row is one local run, not a hosted estimate. All three tests passed, and
+fixture setup output confirmed one delivery-policy rendering for both consumers.
+
 ## Rehearsal and evidence
 
 Local tests exercise controller branches with mocked AWS/Terraform I/O: invalid

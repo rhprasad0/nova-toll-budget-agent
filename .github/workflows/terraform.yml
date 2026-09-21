@@ -21,6 +21,10 @@ jobs:
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_wrapper: false
+      - name: Reuse providers within this job
+        run: |
+          mkdir -p "$RUNNER_TEMP/terraform-provider-cache"
+          echo "TF_PLUGIN_CACHE_DIR=$RUNNER_TEMP/terraform-provider-cache" >> "$GITHUB_ENV"
       - run: terraform fmt -check -recursive
         working-directory: infra
       - run: terraform init -backend=false -input=false

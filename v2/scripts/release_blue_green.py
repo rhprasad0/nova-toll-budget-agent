@@ -16,7 +16,8 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager, nullcontext, suppress
 from pathlib import Path
 from typing import Any
 
@@ -58,29 +59,80 @@ def write(path: Path, value: object) -> None:
     path.chmod(0o600)
 
 
+TIMING_STAGES = {
+    "planning",
+    "terraform-plan",
+    "terraform-apply",
+    "shared-readiness",
+    "routing",
+    "runtime-readiness",
+    "private-probe",
+    "candidate-canary",
+    "promotion",
+    "observation",
+    "observation-recovery",
+    "recovery",
+}
+
+
+@contextmanager
+def timed_stage(stage: str) -> Generator[dict[str, bool]]:
+    """Diagnostic-only timings; fixed tokens are safe for the public summary."""
+    stage = stage if stage in TIMING_STAGES else "unknown"
+    started = time.monotonic()
+    outcome = {"ok": True}
+
+    def emit(status: str) -> None:
+        elapsed = max(int(time.monotonic() - started), 0)
+        exit_code = 1 if status == "fail" else 0
+        event = f"stage={stage} status={status} elapsed={elapsed} exit={exit_code} reason=unclassified"
+        with suppress(OSError, ValueError):
+            print(event, file=sys.stderr, flush=True)
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            try:
+                with Path(summary).open("a", encoding="utf-8") as output:
+                    output.write(event + "\n")
+            except (OSError, ValueError):
+                pass
+
+    emit("start")
+    completed = False
+    try:
+        yield outcome
+        completed = True
+    finally:
+        emit("pass" if completed and outcome["ok"] else "fail")
+
+
 def terraform(root: Path, *args: str) -> str:
-    result = subprocess.run(
-        ["terraform", f"-chdir={root}", *args],
-        capture_output=True,
-        text=True,
-        timeout=1200,
-        check=False,
-    )
-    if result.returncode != 0:
-        reason = diagnostics.classify_text(
-            result.stderr[-diagnostics.MAX_BYTES :]
-            + "\n"
-            + result.stdout[-diagnostics.MAX_BYTES :]
+    with (
+        timed_stage("terraform-" + args[0])
+        if args and args[0] in {"plan", "apply"}
+        else nullcontext()
+    ):
+        result = subprocess.run(
+            ["terraform", f"-chdir={root}", *args],
+            capture_output=True,
+            text=True,
+            timeout=1200,
+            check=False,
         )
-        # Only classifier constants cross the private Terraform log boundary.
-        label = (
-            "backend configuration"
-            if reason == "backend_config"
-            else reason.replace("_", " ")
-        )
-        print(f"Terraform failed: {label}", file=sys.stderr)
-        raise gate.Rejected("terraform_failed")
-    return result.stdout
+        if result.returncode != 0:
+            reason = diagnostics.classify_text(
+                result.stderr[-diagnostics.MAX_BYTES :]
+                + "\n"
+                + result.stdout[-diagnostics.MAX_BYTES :]
+            )
+            # Only classifier constants cross the private Terraform log boundary.
+            label = (
+                "backend configuration"
+                if reason == "backend_config"
+                else reason.replace("_", " ")
+            )
+            print(f"Terraform failed: {label}", file=sys.stderr)
+            raise gate.Rejected("terraform_failed")
+        return result.stdout
 
 
 def current(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -253,54 +305,57 @@ def package_evidence(bundle: Path, release: str | None = None) -> dict[str, Any]
 
 def shared_readiness(expected: dict[str, Any], *, wait: bool = True) -> dict[str, str]:
     """Bounded configuration readbacks; never invoke scheduled business handlers."""
-    identities = shared_packages.identities(expected)
-    statuses = dict.fromkeys(identities, "unknown")
-    deadline = time.monotonic() + 600
-    for attempt in range(60 if wait else 1):
-        pending = False
-        for component, identity in identities.items():
-            try:
-                actual = aws(
-                    "lambda",
-                    "get-function-configuration",
-                    "--function-name",
-                    identity["arn"],
-                )
-                if (
-                    actual.get("FunctionName") != identity["name"]
-                    or actual.get("FunctionArn") != identity["arn"]
-                    or actual.get("State") not in {"Pending", "Active"}
-                    or actual.get("LastUpdateStatus")
-                    not in {"InProgress", "Successful"}
-                ):
-                    statuses[component] = "failed"
-                elif (
-                    actual["State"] == "Pending"
-                    or actual["LastUpdateStatus"] == "InProgress"
+    with timed_stage("shared-readiness") as timing:
+        identities = shared_packages.identities(expected)
+        statuses = dict.fromkeys(identities, "unknown")
+        deadline = time.monotonic() + 600
+        for attempt in range(60 if wait else 1):
+            pending = False
+            for component, identity in identities.items():
+                try:
+                    actual = aws(
+                        "lambda",
+                        "get-function-configuration",
+                        "--function-name",
+                        identity["arn"],
+                    )
+                    if (
+                        actual.get("FunctionName") != identity["name"]
+                        or actual.get("FunctionArn") != identity["arn"]
+                        or actual.get("State") not in {"Pending", "Active"}
+                        or actual.get("LastUpdateStatus")
+                        not in {"InProgress", "Successful"}
+                    ):
+                        statuses[component] = "failed"
+                    elif (
+                        actual["State"] == "Pending"
+                        or actual["LastUpdateStatus"] == "InProgress"
+                    ):
+                        statuses[component] = "unknown"
+                        pending = True
+                    else:
+                        statuses[component] = (
+                            "verified"
+                            if actual.get("CodeSha256") == identity["sha256"]
+                            else "failed"
+                        )
+                except (
+                    checks.CheckFailure,
+                    KeyError,
+                    ValueError,
+                    OSError,
+                    subprocess.SubprocessError,
                 ):
                     statuses[component] = "unknown"
                     pending = True
-                else:
-                    statuses[component] = (
-                        "verified"
-                        if actual.get("CodeSha256") == identity["sha256"]
-                        else "failed"
-                    )
-            except (
-                checks.CheckFailure,
-                KeyError,
-                ValueError,
-                OSError,
-                subprocess.SubprocessError,
-            ):
-                statuses[component] = "unknown"
-                pending = True
-        if not pending or attempt == 59 or time.monotonic() >= deadline:
-            break
-        time.sleep(10)
-    return statuses
+            if not pending or attempt == 59 or time.monotonic() >= deadline:
+                break
+            time.sleep(10)
+        timing["ok"] = all(status == "verified" for status in statuses.values())
+        return statuses
 
 
+@timed_stage("planning")
 def plan(
     root: Path,
     bundle: Path,
@@ -340,6 +395,7 @@ def plan(
     return saved
 
 
+@timed_stage("routing")
 def wait_routing(root: Path, expected: dict[str, Any]) -> None:
     resources = {
         item["address"]: item["values"]
@@ -406,6 +462,7 @@ def wait_routing(root: Path, expected: dict[str, Any]) -> None:
     )
 
 
+@timed_stage("runtime-readiness")
 def readiness(slot: dict[str, Any]) -> None:
     function = aws(
         "lambda",
@@ -517,6 +574,7 @@ def probe(slot: dict[str, Any]) -> dict[str, Any]:
     return observed
 
 
+@timed_stage("private-probe")
 def private_probe(root: Path, slot: dict[str, Any]) -> None:
     preview = json.loads(terraform(root, "output", "-json", "private_preview"))
     public_site = checks.profile_site
@@ -579,6 +637,7 @@ def assets(slot: dict[str, Any], *, document: bool = False) -> None:
         )
 
 
+@timed_stage("candidate-canary")
 def validate_candidate(prepared: dict[str, Any], claim: str) -> dict[str, Any]:
     slot = prepared["slots"]["green" if prepared["active"] == "blue" else "blue"]
     readiness(slot)
@@ -649,35 +708,40 @@ def observe(
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
 ) -> dict[str, Any]:
-    failures = 0
-    results: list[bool] = []
-    for index in range(5):
-        started = clock()
-        try:
-            ok = probe_once() is True and clock() - started <= 60
-        except Exception:
-            ok = False
-        results.append(ok)
-        failures = 0 if ok else failures + 1
-        if failures == 2:
+    with timed_stage("observation") as timing:
+        failures = 0
+        results: list[bool] = []
+        for index in range(5):
+            started = clock()
             try:
-                recovered = restore() is True
+                ok = probe_once() is True and clock() - started <= 60
             except Exception:
-                recovered = False
-            return {
-                "deployment": "failed",
-                "recovery": "recovered" if recovered else "failed",
-                "probes": results,
-            }
-        if index < 4:
-            sleep(max(0, 60 - (clock() - started)))
-    return {
-        "deployment": "succeeded",
-        "recovery": "not_attempted",
-        "probes": results,
-    }
+                ok = False
+            results.append(ok)
+            failures = 0 if ok else failures + 1
+            if failures == 2:
+                timing["ok"] = False
+                try:
+                    with timed_stage("observation-recovery") as recovery:
+                        recovered = restore() is True
+                        recovery["ok"] = recovered
+                except Exception:
+                    recovered = False
+                return {
+                    "deployment": "failed",
+                    "recovery": "recovered" if recovered else "failed",
+                    "probes": results,
+                }
+            if index < 4:
+                sleep(max(0, 60 - (clock() - started)))
+        return {
+            "deployment": "succeeded",
+            "recovery": "not_attempted",
+            "probes": results,
+        }
 
 
+@timed_stage("recovery")
 def recover(
     root: Path,
     bundle: Path,
@@ -1143,22 +1207,27 @@ def main() -> int:
                         "stale_cutover",
                     )
                 try:
-                    terraform(root, "apply", "-input=false", str(saved))
-                    promoted, _ = current(root)
-                    gate.require(
-                        gate.desired(promoted) == gate.desired(prepared, promote=True),
-                        "promoted_identity",
-                    )
-                    gate.require(
-                        promoted["slots"] == prepared["slots"], "promoted_artifacts"
-                    )
-                    wait_routing(root, promoted)
-                    private_probe(root, promoted["slots"][promoted["active"]])
-                    shared_status = shared_readiness(expected_packages)
-                    gate.require(
-                        all(status == "verified" for status in shared_status.values()),
-                        "shared_readback",
-                    )
+                    with timed_stage("promotion"):
+                        terraform(root, "apply", "-input=false", str(saved))
+                        promoted, _ = current(root)
+                        gate.require(
+                            gate.desired(promoted)
+                            == gate.desired(prepared, promote=True),
+                            "promoted_identity",
+                        )
+                        gate.require(
+                            promoted["slots"] == prepared["slots"], "promoted_artifacts"
+                        )
+                        wait_routing(root, promoted)
+                        private_probe(root, promoted["slots"][promoted["active"]])
+                        shared_status = shared_readiness(expected_packages)
+                        gate.require(
+                            all(
+                                status == "verified"
+                                for status in shared_status.values()
+                            ),
+                            "shared_readback",
+                        )
                 except Exception:
                     result = {"deployment": "failed", "recovery": "failed"}
                     if recover(
