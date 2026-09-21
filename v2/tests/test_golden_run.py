@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Barrier, Event
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import Mock
 
@@ -34,6 +35,7 @@ def test_cli_runs_independent_work_in_parallel(
             "model",
             "reasoning_effort",
             "max_output_tokens",
+            "transport",
         ),
         "offline",
     )
@@ -575,7 +577,7 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
         self: run.ConversationJudge, data: EvaluationData[str, str]
     ) -> list[EvaluationOutput]:
         assert data.expected_assertion is not None
-        seen.append(data.expected_assertion)
+        seen.append(self.reference_system_prompt + "\n" + data.expected_assertion)
         return [EvaluationOutput(score=1.0, test_pass=True, reason="offline evidence")]
 
     monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
@@ -739,7 +741,7 @@ def test_judges_receive_rejected_calls_without_pricing_evidence(
     )
     run.judge(case, attempt, run.Journal(tmp_path / "judge", 25))
     native.update_config.assert_called_once_with(
-        params={"max_output_tokens": 2048, "reasoning": {"effort": "medium"}}
+        params={**run.EVAL_MODEL_PARAMS, "reasoning": {"effort": "medium"}}
     )
     assert len(seen) == 3
     assert "GROUNDING ONLY" in prompts[1] and "RULES ONLY" not in prompts[1]
@@ -809,3 +811,116 @@ def test_packaged_replay_records_rejections() -> None:
         attempt.rejected_tools[0].result
         == adapter.send.call_args_list[-1].args[0]["result"]
     )
+
+
+def test_eval_cache_prefix_and_write_accounting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from eval import simulated
+
+    monkeypatch.setattr(simulated, "load_openai_api_key", lambda: "offline")
+    requests: list[dict[str, Any]] = []
+
+    def evaluate(
+        self: run.ConversationJudge, data: EvaluationData[str, str]
+    ) -> list[EvaluationOutput]:
+        model = cast(Any, self.model)
+        request = model._format_request(
+            [{"role": "user", "content": [{"text": data.actual_output}]}],
+            system_prompt=self.reference_system_prompt,
+        )
+        requests.append(request)
+        assert request["reasoning"] == {"effort": "medium"}
+        assert request["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
+        assert request["prompt_cache_key"] == "tollchat-eval-v2"
+        assert request["store"] is False
+        assert "instructions" not in request
+        prefix = request["input"][0]
+        assert prefix["role"] == "developer"
+        assert prefix["content"][0]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+        assert run.DOMAIN_FACTS in prefix["content"][0]["text"]
+        assert run.DOMAIN_FACTS not in (data.expected_assertion or "")
+        return [EvaluationOutput(score=1.0, test_pass=True, reason="offline")]
+
+    monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
+    journal = run.Journal(tmp_path / "cache", 25)
+    for case in golden.load_cases()[:2]:
+        example = next(
+            e
+            for e in run.development_examples()
+            if e.case_id == case.id and e.label == "good"
+        )
+        row = run.Attempt(id=case.id, case_id=case.id, trial=1, turns=example.turns)
+        run.judge(case, row, journal)
+    assert len(requests) == 6  # No verdict memoization.
+    for first, second in zip(requests[:3], requests[3:], strict=True):
+        assert first["input"][0] == second["input"][0]
+        assert first["input"][1:] != second["input"][1:]
+
+    model = cast(Any, simulated.build_eval_model())
+    for written in (None, 0, 30):
+        details = SimpleNamespace(cached_tokens=50, cache_write_tokens=written)
+        chunk = model._format_chunk(
+            {
+                "chunk_type": "metadata",
+                "data": SimpleNamespace(
+                    input_tokens=100,
+                    output_tokens=10,
+                    total_tokens=110,
+                    input_tokens_details=details,
+                ),
+            }
+        )
+        usage = chunk["metadata"]["usage"]
+        assert usage.get("cacheWriteInputTokens", 0) == (written or 0)
+        assert usage["cacheReadInputTokens"] == 50
+        expected = (
+            (50 - (written or 0)) * 0.20 + 50 * 0.02 + (written or 0) * 0.25 + 10 * 1.20
+        ) / 1_000_000
+        assert run.cost(usage) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("changed", ["judge_prompt_sha256", "transport"])
+def test_cli_rejects_changed_cache_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: str
+) -> None:
+    keys = (
+        "corpus",
+        "judge_prompt_sha256",
+        "diagnostic_prompt",
+        "diagnostic_rubrics",
+        "diagnostic_domain_facts",
+        "model",
+        "reasoning_effort",
+        "max_output_tokens",
+        "transport",
+    )
+    pinned = dict.fromkeys(keys, "current")
+    previous = {**pinned, changed: "old"}
+    monkeypatch.setattr(run, "identity", Mock(return_value=pinned))
+    monkeypatch.setattr(
+        run,
+        "render",
+        Mock(
+            return_value={
+                "complete": True,
+                "review": {"status": "approved"},
+                "manifest": {"identity": previous},
+            }
+        ),
+    )
+    output = tmp_path / "must-not-start"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "golden_run",
+            "run",
+            "--output",
+            str(output),
+            "--calibration",
+            str(tmp_path / "old"),
+        ],
+    )
+    with pytest.raises(SystemExit, match="2"):
+        run.main()
+    assert not output.exists()

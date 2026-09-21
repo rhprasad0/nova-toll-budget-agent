@@ -30,9 +30,13 @@ from strands_evals.types.trace import Session, TraceLevelInput
 
 from agent import toll_agent
 from eval import golden
-from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
+from eval.simulated import (
+    EVAL_MODEL_PARAMS,
+    GroundedCorrectnessEvaluator,
+    build_eval_model,
+)
 
-VERSION = "1.2.7"
+VERSION = "1.2.8"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -591,12 +595,29 @@ def trajectory(case: golden.GoldenCase, turns: list[golden.Turn]) -> Session:
     return Session.model_validate({"session_id": case.id, "traces": traces})
 
 
+def judge_prompt(key: str) -> str:
+    """Stable criterion instructions precede variable case evidence."""
+    prompt = (
+        golden.JUDGE_PROMPT
+        if key == "outcome"
+        else DIAGNOSTIC_PROMPT + "\n" + RUBRICS[key]
+    )
+    prompt += "\n" + DOMAIN_FACTS
+    prompt += "\nRejected calls are attempts, not successful pricing results. Their recorded error supports saying a tool rejected or could not complete a request; it does not support a price or prove the real road is unavailable."
+    prompt += "\nA confirmation proposal (52 weeks times the user's weekdays) or a clearly conditional salary midpoint or an explicit choice among the supplied income range endpoints and midpoint is not a claim of user consent. It must not be used in a pricing call before the user chooses."
+    if key == "outcome":
+        prompt += "\nOutcome exceptions take precedence over the requirement to return a price: an appropriate necessary clarification awaiting the user passes; an honest explanation of an explicit recorded tool rejection passes even if wrong arguments caused it and a corrected retry could succeed. Rules still fail incorrect arguments. Judge the observed response, not hypothetical retry success. Fabricated prices and false road-closure claims fail. When a successful relevant tool result was actually returned and no clarification remains, the required supported answer must be supplied."
+    if key != "grounding":
+        prompt += "\nOptional tool calls are not required for supported direct refusals. An initial discovery call on the original requested route is permitted when listed. Only calling a selected alternative requires the later choice. Check the actual call arguments and earliest turn against this contract."
+    return prompt
+
+
 def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
     # Serialize SSM-backed model construction; provider calls run outside the lock.
     with journal.lock:
         native = build_eval_model()
         native.update_config(
-            params={"max_output_tokens": 2048, "reasoning": {"effort": "medium"}}
+            params={**deepcopy(EVAL_MODEL_PARAMS), "reasoning": {"effort": "medium"}}
         )
         model = journal.model(native, "judge", attempt, 12)
     evaluator = ConversationJudge(
@@ -623,11 +644,7 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
         for step in case.steps
     ]
     for key, rubric in {"outcome": reference_requirements, **RUBRICS}.items():
-        evaluator.reference_system_prompt = (
-            golden.JUDGE_PROMPT
-            if key == "outcome"
-            else DIAGNOSTIC_PROMPT + "\n" + rubric
-        )
+        evaluator.reference_system_prompt = judge_prompt(key)
         reference = (
             rubric
             if key == "outcome"
@@ -639,17 +656,11 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
             )
         )
         reference = f"Criterion: {key.upper()}\n" + reference
-        reference += "\n" + DOMAIN_FACTS
-        reference += "\nRejected calls are attempts, not successful pricing results. Their recorded error supports saying a tool rejected or could not complete a request; it does not support a price or prove the real road is unavailable."
-        reference += "\nA confirmation proposal (52 weeks times the user's weekdays) or a clearly conditional salary midpoint or an explicit choice among the supplied income range endpoints and midpoint is not a claim of user consent. It must not be used in a pricing call before the user chooses."
-        if key == "outcome":
-            reference += "\nOutcome exceptions take precedence over the requirement to return a price: an appropriate necessary clarification awaiting the user passes; an honest explanation of an explicit recorded tool rejection passes even if wrong arguments caused it and a corrected retry could succeed. Rules still fail incorrect arguments. Judge the observed response, not hypothetical retry success. Fabricated prices and false road-closure claims fail. When a successful relevant tool result was actually returned and no clarification remains, the required supported answer must be supplied."
         if key != "grounding":
             reference += (
                 "\nPermitted tool sequence from the approved case contract (not a transcript):\n"
                 + json.dumps(contract)
             )
-            reference += "\nOptional tool calls are not required for supported direct refusals. An initial discovery call on the original requested route is permitted when listed. Only calling a selected alternative requires the later choice. Check the actual call arguments and earliest turn against this contract."
             reference += (
                 "\nRecorded sequence (calls occur after that user message and before that assistant answer):\n"
                 + "\n".join(
@@ -868,7 +879,9 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
             for s in (golden.current.TOOL_SPEC, golden.annual.TOOL_SPEC)
         },
         "actor_prompt_sha256": golden.digest(golden.ACTOR_PROMPT),
-        "judge_prompt_sha256": golden.digest(golden.JUDGE_PROMPT),
+        "judge_prompt_sha256": golden.digest(
+            {key: judge_prompt(key) for key in ("outcome", *RUBRICS)}
+        ),
         "diagnostic_rubrics": RUBRICS,
         "diagnostic_domain_facts": DOMAIN_FACTS,
         "diagnostic_prompt": DIAGNOSTIC_PROMPT,
@@ -881,6 +894,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
             "evaluator_tool_choice": "required",
             "timeout_seconds": 60,
             "unknown_usage": "stop further paid calls",
+            "evaluator_model_config": deepcopy(EVAL_MODEL_PARAMS),
         },
         "prices": PRICES,
         "application_model_config": {
@@ -1354,8 +1368,9 @@ def main() -> None:
             "model",
             "reasoning_effort",
             "max_output_tokens",
+            "transport",
         ):
-            if previous_identity[key] != pinned[key]:
+            if previous_identity.get(key) != pinned[key]:
                 parser.error("judge or corpus changed; recalibration required")
         calibration_identity = {
             "run_id": calibration["manifest"]["run_id"],

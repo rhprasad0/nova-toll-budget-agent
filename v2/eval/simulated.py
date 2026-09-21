@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -27,7 +28,11 @@ from strands_evals.types.trace import (
     TraceLevelInput,
 )
 
-from agent.toll_agent import build_agent, load_openai_api_key
+from agent.toll_agent import (
+    _CachedResponsesModel,
+    build_agent,
+    load_openai_api_key,
+)
 
 _ACTOR_PROMPT = """Simulate the user described below, speaking in first person.
 {actor_profile}
@@ -53,15 +58,23 @@ Markdown, exact phrases, or the actor's satisfaction.
 """
 
 
+EVAL_MODEL_PARAMS: dict[str, Any] = {
+    "max_output_tokens": 2048,
+    "reasoning": {"effort": "low"},
+    "prompt_cache_key": "tollchat-eval-v2",
+    "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},
+}
+
+
 def build_eval_model() -> OpenAIResponsesModel:
     """Use the existing SSM credential without a default Bedrock model call."""
-    return OpenAIResponsesModel(
+    return _CachedResponsesModel(
         model_id="gpt-5.6-luna",
         client_args={
             "api_key": load_openai_api_key(),
             "base_url": "https://api.openai.com/v1",
         },
-        params={"max_output_tokens": 2048, "reasoning": {"effort": "low"}},
+        params=deepcopy(EVAL_MODEL_PARAMS),
         stateful=False,
     )
 

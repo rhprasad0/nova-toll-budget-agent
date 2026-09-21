@@ -1,7 +1,5 @@
 {
-  "status": "approved",
-  "corpus_sha256": "a14bd6ad7713e5c00c6160ce2b5c1302a13259db78fd80589ea913744950389c",
-  "reviewer": "rhprasad0",
-  "approved_at": "2026-09-21T21:08:51.152855+00:00",
-  "evidence": "Ryan explicitly stated \"Approved\" in response to the calibration-21 and policy-1.0.6 review request, approving the exact 180/180 evidence and unchanged numeric thresholds. He requested a caching/cost review before the scored rerun; no new paid run has started."
+  "status": "pending",
+  "corpus_sha256": "02b9a59f0c816b071d6ab917a690126983fe8e268e2e3d05d14916aeb1830bff",
+  "evidence": "Evaluator caching and usage accounting changed. Historical calibration-21 approval is preserved in its archived evidence; fresh exact evidence review is required."
 }
