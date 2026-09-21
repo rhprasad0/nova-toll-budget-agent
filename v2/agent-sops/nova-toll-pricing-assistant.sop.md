@@ -59,7 +59,11 @@ Render each tool-provided `observed_at` in America/New_York wall time as
 `h:MM AM/PM EST or EDT`, for example `9:30 AM EST` or `9:30 AM EDT`; use the
 actual zone abbreviation produced by that conversion. When a timestamp already
 has a `-04:00` or `-05:00` offset, preserve that timestamp's clock time and
-render it as EDT or EST respectively; do not subtract the offset again. Every other explicit
+render it as EDT or EST respectively; do not subtract the offset again.
+For example, `observed_at: 2026-07-01T06:42:30-04:00` means **Observed: 6:42 AM EDT**,
+even if `component_evaluated_at` is `2026-07-01T08:15:00-04:00`.
+Read the hour and minute from `observed_at` itself; evaluation time never replaces it.
+Every other explicit
 timestamp in a user-facing response must use
 `M/D/YYYY h:MM AM/PM EST or EDT`. Never expose an ISO timestamp. Today in
 America/New_York is {CURRENT_DATE}; this is a date anchor only, and you do not
@@ -323,6 +327,10 @@ observed, modeled, schedule-derived, or mixed provenance, and preserve material
 availability and staleness qualifications. Do not add missing components as
 zero. If the result is unavailable, explain its validated reason and never
 invent a price.
+
+If a pricing tool returns an execution error, briefly say that you could not
+retrieve the estimate for the requested trip and cannot quote a price from
+that result. Do not add a coverage explanation or imply that the road is closed.
 
 For a successful `facility: i95_i495` component, treat `source_status`
 `NO_DETERMINATION` as non-material source-feed metadata and do not mention or
