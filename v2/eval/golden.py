@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from strands import Agent
 from strands.models import Model
-from strands.tools.registry import ToolRegistry
 from strands_evals import ActorSimulator, Case
 from strands_evals.types.simulation import ActorProfile
 
@@ -50,6 +50,9 @@ needs your profile's answer delivered with stop=false BEFORE you can finish.
 A proposed estimate is not yet a completed estimate. After an evidenced refusal,
 unavailable result, or tool failure, stop; do not request retries, operator
 verification, another product, or a one-way substitute for a round trip.
+Accept supported schedule-based estimates; do not demand live observations or
+extra verification after the requested price has been explained.
+Do not send thanks, summaries, or repeated facts after a completed answer.
 When formatting structured output, preserve YOUR next user message. Never grade
 your own previous message or mistake writing it for delivering it to the assistant.
 """
@@ -230,8 +233,16 @@ def make_actor(case: GoldenCase, model: Model) -> ActorSimulator:
         model=cast(Any, model),  # SDK 1.1.0 forwards Model despite its str annotation.
         max_turns=case.actor.max_turns,
     )
-    # Match the scheduled simulator: structured stop, no default Bedrock tool.
-    actor.agent.tool_registry = ToolRegistry()
+    # Configure the public Agent constructor rather than mutating SDK internals.
+    # The simulator keeps its profile, turn counter and initial conversation.
+    actor.agent = Agent(
+        model=model,
+        system_prompt=actor.agent.system_prompt,
+        messages=actor.conversation_history,
+        callback_handler=None,
+        retry_strategy=None,
+        structured_output_prompt="Format YOUR next driver action, not an evaluation of your preceding response. If the assistant needs a clarification, choice, or confirmation, put the profile's answer in message and set stop=false: writing it has NOT delivered it yet. After a completed answer or supported refusal, set stop=true and message=null. Never return thanks or a summary as a stopping message.",
+    )
     return actor
 
 
