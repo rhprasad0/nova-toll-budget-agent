@@ -10,12 +10,13 @@ This PR changes the evaluation harness and gate only; the application prompt,
 model, contract, and application tests match main. The earlier prompt experiments
 remain historical evidence, not application changes included in this PR.
 
-The current corpus **1.0.20**, harness **1.2.9**, and policy **1.0.8** await exact
+The current corpus **1.0.20**, harness **1.2.9**, and policy **1.0.9** await exact
 human approval. See the [current review packet](results/golden/CACHING-SUMMARY.md).
 Historical four-worker calibration 24 agreed on **179/180** labels. Corpus 1.0.20
-corrects its contradictory wrong-route example; fresh eight-worker local
-calibration and exact review are required. Protected CI retains its four-worker
-scored timing policy. Activation remains pending adjudication.
+corrects its contradictory wrong-route example. Fresh eight-worker local
+calibration 25 agrees on **180/180** labels and awaits exact human review.
+Protected CI retains its four-worker scored timing policy. Activation remains
+pending approval.
 
 CI uses the same cached actor/judge factory and judge-prefix construction as the
 manual runner, through scripts.golden_release.execute → eval.golden_run.execute.

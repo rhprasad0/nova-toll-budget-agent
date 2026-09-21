@@ -5,9 +5,21 @@
 Corpus 1.0.20 corrects `greenway-current-wrong-route`: the call, result, and
 answer now consistently describe Route 7 while the user requests Route 28.
 Expected labels remain Outcome fail, Grounding pass, and Rules fail. The user
-adjudicated the previous Outcome pass as incorrect. Fresh calibration will use
-eight local workers; exact evidence approval remains pending. The 54 focused
-corpus and runner tests pass. Historical calibration-24 evidence remains intact.
+adjudicated the previous Outcome pass as incorrect. Fresh calibration-25 used
+eight local workers and reached **180/180 agreement** across 60 development
+examples, including Outcome fail / Grounding pass / Rules fail for wrong-route.
+All 180 fresh judge calls have complete usage: $0.10953080, 234,420 cache-read
+tokens, no cache-write tokens. Linked cumulative spend is $7.60716767.
+
+Candidate: `00585d9bb2696baf7a2aea2f460edd0a71f2c582`. Exact evidence digest:
+`95070932bbde164f79d36ca8a76a7fa1508b3c3f46865165c112dfb2d7b2ca32`.
+Full manifest, append-only events, reports, and summary remain locally under
+ignored `eval/private/critical-pass3/calibration-25/`. The next paid run must
+link that directory as its prior run. Exact human approval remains pending;
+no application-scored run or 17/17 streak is claimed. All 138 relevant corpus, runner, baseline, and gate tests pass
+(including a gate rerun after updating the pending policy contract). Historical calibration-24 evidence remains intact. Pending policy 1.0.9 binds
+the corrected corpus contract; numeric thresholds and protected CI workers are
+unchanged.
 
 ## Historical caching validation
 
@@ -46,8 +58,8 @@ are preserved locally under ignored `eval/private/` and in git at `5bc2e92`;
 restore and verify exact evidence before requesting approval or activating CI.
 The pending reference intentionally has no executable evidence directory.
 
-Recorded cumulative spend is $7.49763687; the next paid run must link private
-`eval/private/critical-pass3/calibration-24` as its prior run. Older totals retain
+Recorded cumulative spend through calibration-24 was $7.49763687;
+calibration-25 links it as its prior run. Older totals retain
 their documented accounting limitations. Historical application experiments do
 not qualify main's application behavior; no new application-scored run was made.
 

@@ -1,4 +1,5 @@
 {
   "status": "pending",
-  "notes": "Corpus 1.0.20 corrects the wrong-route calibration fixture. Fresh calibration and exact human review are required; calibration-24 remains historical evidence."
+  "evidence_sha256": "95070932bbde164f79d36ca8a76a7fa1508b3c3f46865165c112dfb2d7b2ca32",
+  "notes": "Calibration-25: corpus 1.0.20, 180/180 agreement, eight local workers. Exact human approval pending. Full evidence preserved under eval/private/critical-pass3/calibration-25; see CACHING-SUMMARY.md. This pending reference does not activate CI."
 }
