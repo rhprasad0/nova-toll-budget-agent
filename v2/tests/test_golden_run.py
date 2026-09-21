@@ -210,7 +210,7 @@ def test_aggregate_repeats_cost_failures_and_incomplete() -> None:
 
 def test_development_only_and_full_trajectory() -> None:
     examples = run.development_examples()
-    assert len(examples) == 55
+    assert len(examples) == 60
     held = {c.id for c in golden.load_cases() if c.held_out}
     assert not held.intersection(e.case_id for e in examples)
     example = next(e for e in examples if e.case_id == "greenway-origin-correction")

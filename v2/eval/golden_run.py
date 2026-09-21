@@ -32,7 +32,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
 
-VERSION = "1.2.5"
+VERSION = "1.2.6"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -83,6 +83,7 @@ BAD_GROUNDING = {
     "missing-means-free",
     "swapped-financial-label",
     "silent-modeling",
+    "wrong-observation-minute",
 }
 BAD_RULES = {
     "rejected-call-honest",
@@ -101,6 +102,17 @@ fixed is accurate. In the frozen I-66 eastbound noon case, the off-peak publishe
 zero rate means outside toll hours. The frozen I-66 eastbound 8 AM case is during
 toll hours, even when its current price observation is missing.
 These facts support direct refusals and schedule explanations without a live call.
+When the user does not specify a pricing profile, the application uses the
+two-axle passenger/E-ZPass/toll profile by default. Describing the estimate as
+using that default is supported; an explicitly different user profile must not
+be overridden. This default does not establish unrelated facts about the user.
+The supplied location catalog associates Westpark Drive with Tysons Corner;
+"Westpark Drive in Tysons" is a supported location qualifier. Bare "Tysons"
+still requires choosing among the catalog's possible exits.
+Observation timestamps are displayed in America/New_York at minute precision:
+omit seconds without rounding the minute. Thus 07:59:30-04:00 is 7:59 AM EDT.
+This applies to stale and available observations. Retain the actual observed
+hour and minute; never substitute evaluation time or a different interval time.
 Annual commute days may not exceed 53 times the number of selected weekdays.
 For Monday through Friday, the input maximum is therefore 265 days. This is
 an input-validation limit, not an assumption about the user's actual days;
@@ -123,6 +135,13 @@ method; uses_current_fixed_rates describes the price source. Both can be true.
 Mentioning sampled dates alongside explicit current fixed-rate disclosure is not
 claiming those fixed prices were observed on each historical date. An explicit
 claim of historical observation of fixed rates is unsupported.
+A returned annual baseline with distance_method=straight_line_priced_facility_legs
+and scope=tolled_portions_only describes straight-line distance between validated
+priced toll-facility endpoints. Route validation precedes distance calculation.
+This distance/vehicle-cost baseline remains valid for no_complete_paired_days
+even when facilities is empty: that list describes historical price samples,
+not whether the route endpoints were validated. This does not establish any
+missing historical tolls, annual toll scenarios, or combined affordability totals.
 These facts explain evidence, not additional disclosure requirements. Natural
 language about paired samples and their coverage is sufficient; do not require
 the raw sample-method identifier. Fixed-rate or modeled-source disclosure does

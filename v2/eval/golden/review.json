@@ -1,7 +1,5 @@
 {
-  "status": "approved",
-  "corpus_sha256": "890c27700b97dcf805ad82bc884428a0c64d197594de273ac9818a813b520e95",
-  "reviewer": "rhprasad0",
-  "approved_at": "2026-09-21T20:40:55.754870+00:00",
-  "evidence": "Ryan explicitly stated \"Approved\" in response to the calibration-19 and policy-1.0.5 review request, approving the exact 165/165 calibration evidence and unchanged numeric thresholds for fresh reference/candidate comparisons. No merge or deployment is authorized."
+  "status": "pending",
+  "corpus_sha256": "4b8004651ffab83ae69dafc03972da9aff4c91b3b9603c6657f3094bebcfb36a",
+  "notes": "Calibration 20 required for display precision, default pricing profile, catalog location, and validated distance baseline context."
 }
