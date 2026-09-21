@@ -2,7 +2,9 @@
 
 [Open the standalone HTML review page](calibration-review.html). Download and open it in a browser; it works offline.
 
-Latest: corpus 1.0.7 calibration 7 matches all 34 approved outcome labels, with 32/34 grounding and 34/34 rules agreement. [Latest HTML review](calibration-7/review.html), [report](calibration-7/report.md); two grounding-diagnostic disagreements remain for review. Four-worker elapsed time was 106.7 seconds, compared with 531.0 seconds for calibration 6. These runs used different reference revisions. [Timing evidence](calibration-7/timing.json).
+Latest: **calibration 8, corpus 1.0.10 / harness 1.2.0**, matches all 34 outcome, grounding, and rules labels (102/102 verdicts). Ryan approved its exact evidence and contract on September 20, 2026 (America/New_York). [Current HTML review](calibration-8/review.html), [report](calibration-8/report.json), [approval](calibration-8/review.json). Evidence SHA-256: `38535582f2d90634d0a80744ce777945cbb0c7fae44c3ed5db8e02636aa2c3e7`. Cost: $0.07217382; cumulative recorded spending: $0.94408728. There is no qualified production baseline yet; fresh protected-run actor review remains separate.
+
+Historical calibration 7 matched all 34 outcome labels, with 32/34 grounding and 34/34 rules agreement. Its two grounding disagreements remain part of that historical evidence. [Historical HTML review](calibration-7/review.html), [report](calibration-7/report.md), [timing evidence](calibration-7/timing.json).
 
 The sections below preserve the calibration-5 review and its human adjudication.
 
@@ -22,7 +24,7 @@ Total recorded cost: $0.336073, against the approved $25 ceiling. Each attempt p
 
 The outcome labels stayed fixed throughout. Grounding and rules labels are proposed diagnostics. Starting with calibration 4, rules explicitly include prohibitions against invented or misrepresented financial claims; grounding and rules can both fail for the same claim. Their rates across that change are not directly comparable.
 
-## Final calibration evidence
+## Historical calibration-5 evidence
 
 Candidate: `95a39e7c9b81356b9515155d78cc47a901fb91a6`. Corpus: `1.0.5`. Harness: `1.0.4`.
 Evidence SHA-256: `660f465f992d5de2a80fe805264bf6f973170f9a980825981329821fdfb08020`.

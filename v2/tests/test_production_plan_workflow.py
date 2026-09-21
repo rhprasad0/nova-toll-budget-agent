@@ -604,6 +604,60 @@ def test_finalizer_upload_is_always_required_and_terminal_status_is_always_run()
     assert terminal["if"] == "${{ always() }}"
 
 
+@pytest.mark.parametrize("blocked", ["admission", "golden", "claim"])
+def test_preclaim_rejection_retains_evidence_without_status_write(
+    tmp_path: Path, blocked: str
+) -> None:
+    (tmp_path / "v2").symlink_to(ROOT / "v2", target_is_directory=True)
+    (tmp_path / "runner").mkdir()
+    initial = {} if blocked == "admission" else {"candidate": "a" * 40, "release_id": 7}
+    env = {
+        "PATH": os.defpath,
+        "RUNNER_TEMP": str(tmp_path / "runner"),
+        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+        "GITHUB_OUTPUT": str(tmp_path / "output"),
+        "ADMISSION": "",
+        "INITIAL_ADMISSION": json.dumps(initial) if initial else "",
+        "ADMISSION_RESULT": "failure" if blocked == "admission" else "success",
+        "GOLDEN_RESULT": "success" if blocked == "claim" else "failure",
+        "CLAIM_RESULT": "failure" if blocked == "claim" else "skipped",
+        "PLANNER": "skipped",
+        "MIGRATE": "skipped",
+        "CANCELLED": "false",
+    }
+    result = subprocess.run(
+        ["bash", "-c", _result_step("evidence")],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    evidence = json.loads(
+        (tmp_path / "runner/production-release-evidence.json").read_text()
+    )
+    assert evidence["outcome"] == "failed"
+    assert evidence["blocked_stage"] == blocked
+    assert evidence["candidate"] == initial.get("candidate")
+    assert evidence["claim_id"] is None
+    assert evidence["claim_state"] == (
+        "unknown" if blocked == "claim" else "not-created"
+    )
+    assert evidence["canary"] is None
+    terminal = subprocess.run(
+        ["bash", "-c", _result_step("Record terminal release status")],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert terminal.returncode == 1
+    assert "no deployment status was updated" in (tmp_path / "summary").read_text()
+    assert not (tmp_path / "runner/terminal-admission.json").exists()
+
+
 @pytest.mark.parametrize(
     "outcome,cancelled,api_failure,expected",
     [

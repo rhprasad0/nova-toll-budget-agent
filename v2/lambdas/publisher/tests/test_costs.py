@@ -63,7 +63,12 @@ def source(
         Mock(get_cost_and_usage=Mock(side_effect=aws_pages(period, values))),
         costs.ACCOUNTS[environment],
         period,
-        costs.utc_text(now - timedelta(hours=1)),
+        costs.utc_text(
+            max(
+                now - timedelta(hours=1),
+                now.replace(hour=0, minute=0, second=0, microsecond=0),
+            )
+        ),
     )
 
 
@@ -77,10 +82,22 @@ def fixture(environment: str = "production", now: datetime = NOW) -> dict[str, A
         sources["aws_production"] = source("production", now, ("0.000000001", "-0.02"))
     sources["openai"].update(
         status="available",
-        retrieved_at=costs.utc_text(now - timedelta(minutes=10)),
+        retrieved_at=costs.utc_text(
+            max(
+                now - timedelta(minutes=10),
+                now.replace(hour=0, minute=0, second=0, microsecond=0),
+            )
+        ),
         daily=[{"date": day, "usd": "0.4"} for day in costs.dates(period)],
     )
     return costs.build_snapshot(environment, now, sources)
+
+
+@pytest.mark.parametrize("minute", [0, 9, 30, 60])
+def test_fixture_remains_valid_in_first_utc_hour(minute: int) -> None:
+    now = NOW.replace(hour=0, minute=0) + timedelta(minutes=minute)
+    snapshot = fixture("development", now)
+    assert costs.validate_snapshot(snapshot, "development", now) == snapshot
 
 
 def test_publication_after_midnight_preserves_requested_utc_period() -> None:
