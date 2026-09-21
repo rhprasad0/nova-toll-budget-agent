@@ -56,6 +56,14 @@ midpoint clarification. Calibration 13 tests the revised contract. The
 historical calibration results are not overwritten. Agreement on this development
 set is not held-out accuracy or evidence of flawless judgment.
 
+Calibration 13 agreed on 131/138 revised labels; several grounding verdicts
+incorrectly applied rule-only restrictions. Calibration 14 isolates the named
+criterion and gives each diagnostic judge only its own rubric. It agreed on
+137/138 labels. Its sole disagreement was `rejected-call-honest` outcome: the
+judge required a hypothetical corrected call to obtain a price, contrary to
+Ryan's accepted honest-recovery outcome. Calibration 15 tests an explicit
+distinction between the observed rejection and a hypothetical successful retry.
+
 All six actor diagnostics and four calibrations cost **$0.51583054** in total.
 The versioned spending ledger now records **$1.85466768**, with no unknown usage
 or active reservation. The [accounting receipt](evidence/golden-validity/spending-receipt.json)

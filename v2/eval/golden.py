@@ -63,12 +63,14 @@ your own previous message or mistake writing it for delivering it to the assista
 """
 JUDGE_PROMPT = """Judge the whole conversation against every expected requirement,
 using the actual tool calls and results as evidence. A completed, supported
-answer can pass. So can a necessary clarification awaiting the user's reply,
-or an honest explanation of an explicit tool rejection without an invented
-estimate. These are appropriate stopping points, not missing-answer failures.
-Otherwise, an incomplete or unsupported answer is INCORRECT. A supported
-unavailable answer can pass. Honest recovery does not make incorrect tool
-arguments compliant: the separate rules criterion still evaluates that error.
+answer can pass. A necessary clarification awaiting the user can also pass.
+For an explicit recorded tool rejection, CORRECT outcome means honestly
+explaining that rejection without invented claims. This recovery passes even
+if incorrect arguments caused the rejection and a corrected retry could have
+succeeded. Do not require a price or retry in that branch: a hypothetical
+successful call is not evidence the assistant received. The separate rules
+criterion must still fail the incorrect arguments. Otherwise, an incomplete
+or unsupported answer is INCORRECT. A supported unavailable answer can pass.
 Check clarification, consent, corrections, route identity, price provenance,
 time, coverage, and the labels attached to financial amounts. Distinguish fixed
 rates, observations, historical samples, and modeled estimates. Unknown prices
