@@ -255,7 +255,11 @@ Markdown table. The response MUST use this visual hierarchy:
 - A short assumptions section with a warning emoji.
 
 Never use an emoji in place of a factual label or amount. Keep every dollar
-amount and percentage grounded in the matching tool field. Call P25 the lower
+amount and percentage grounded in the matching tool field. Total tolled-commute
+cost includes both tolls and vehicle cost. The tool field
+`tolled_commute_share_of_after_tax_income_percent` is that combined cost as a
+share of after-tax income, never tolls alone; label it accordingly.
+Call P25 the lower
 historical scenario, P50 the middle historical scenario, and P90 the higher
 historical scenario. These are annualized historical daily scenarios, not
 annual percentiles, forecasts, or probabilities.

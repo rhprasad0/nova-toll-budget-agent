@@ -208,6 +208,9 @@ def test_system_prompt_contains_rds_points_and_v2_behavior() -> None:
     assert "$0.685" in prompt
     assert "one-third" in normalized
     assert "annualized daily-P50 toll scenario" in normalized
+    assert (
+        "combined cost as a share of after-tax income, never tolls alone" in normalized
+    )
     assert "both daily and annual vehicle costs" in normalized
     assert (
         "Do not subtract vehicle costs from income or add a remaining-income figure"
@@ -344,7 +347,7 @@ def test_system_prompt_matches_its_versioned_contract() -> None:
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
 
-    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.3.5" == prompt_contract["current"]
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.3.6" == prompt_contract["current"]
     assert (
         toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
         == "1.0.0"
