@@ -346,6 +346,11 @@ class Journal:
 
         async def measured(*args: Any, **kwargs: Any) -> AsyncIterator[Any]:  # noqa: ANN401
             nonlocal count
+            # Actors and judges have only a structured-output tool. Require it
+            # on the first call: prose followed by "format your previous answer"
+            # can make the simulator think its undelivered reply already happened.
+            if role in {"actor", "judge"}:
+                kwargs["tool_choice"] = {"any": {}}
             if failures:
                 raise TaskFailure(failures[0])
             if count >= max_calls:
@@ -824,6 +829,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
         "sampling": {"temperature": "provider default", "seed": "not supplied"},
         "transport": {
             "openai_max_retries": 0,
+            "evaluator_tool_choice": "required",
             "timeout_seconds": 60,
             "unknown_usage": "stop further paid calls",
         },

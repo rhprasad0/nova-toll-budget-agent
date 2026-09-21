@@ -745,6 +745,28 @@ def test_judges_receive_rejected_calls_without_pricing_evidence(
         )
 
 
+@pytest.mark.parametrize("role", ["actor", "judge", "agent"])
+def test_only_evaluators_force_structured_output(tmp_path: Path, role: str) -> None:
+    native = Mock(spec=Model)
+    native.client_args = {}
+    seen: list[dict[str, Any]] = []
+
+    async def stream(*args: Any, **kwargs: Any) -> AsyncIterator[dict[str, Any]]:  # noqa: ANN401
+        seen.append(kwargs)
+        yield {"metadata": {"usage": {"inputTokens": 100, "outputTokens": 20}}}
+
+    native.stream = stream
+    row = run.Attempt(id="format", case_id="greenway-current", trial=1)
+    model = run.Journal(tmp_path / role, 25).model(native, cast(Any, role), row, 1)
+
+    async def consume() -> None:
+        async for _ in cast(Any, model).stream([], tool_choice=None):
+            pass
+
+    asyncio.run(consume())
+    assert seen[0]["tool_choice"] == (None if role == "agent" else {"any": {}})
+
+
 def test_packaged_replay_records_rejections() -> None:
     from eval.artifact_agent import Answer, ArtifactAgent
 
