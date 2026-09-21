@@ -561,7 +561,11 @@ def trajectory(case: golden.GoldenCase, turns: list[golden.Turn]) -> Session:
 def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
     # Serialize SSM-backed model construction; provider calls run outside the lock.
     with journal.lock:
-        model = journal.model(build_eval_model(), "judge", attempt, 12)
+        native = build_eval_model()
+        native.update_config(
+            params={"max_output_tokens": 2048, "reasoning": {"effort": "medium"}}
+        )
+        model = journal.model(native, "judge", attempt, 12)
     evaluator = ConversationJudge(
         model=model, name="Correctness", reference_system_prompt=golden.JUDGE_PROMPT
     )
@@ -833,7 +837,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
         "diagnostic_domain_facts": DOMAIN_FACTS,
         "diagnostic_prompt": DIAGNOSTIC_PROMPT,
         "model": "gpt-5.6-luna",
-        "reasoning_effort": "low",
+        "reasoning_effort": {"agent": "low", "actor": "low", "judge": "medium"},
         "max_output_tokens": 2048,
         "sampling": {"temperature": "provider default", "seed": "not supplied"},
         "transport": {

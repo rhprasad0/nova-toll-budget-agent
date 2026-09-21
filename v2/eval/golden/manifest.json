@@ -4,7 +4,7 @@
   "actor_model": "gpt-5.6-luna",
   "judge_model": "gpt-5.6-luna",
   "review_status_file": "review.json",
-  "corpus_sha256": "dc8cb29c3b58981ae056852f1d302a7baa505799e99dc1894a4ce6a3cea0d588",
+  "corpus_sha256": "67c13c519d4d3aa166859fa54d932f5ab59b14c1fab1de84054f4464aaa4f116",
   "hashes": {
     "cases.jsonl": "1ced8cb0a47f0195a1227ee353d8f54859ed04a12fb6b45eee6d8023912b2ebb",
     "prompt-points.json": "441eef5a8f830f50074bd42df9356cde1e258c445e1fd7e1a5bbf033cf008315",
@@ -29,7 +29,7 @@
     "v2/eval/golden.py": "a490daa3c2e45dcb4380599778e89d6a9db5310ac6ba9f8c8f9a1e6fbde95450",
     "v2/eval/simulated.py": "fe27f33fadb90a20c58459723df6c91fb212156169d010f747819a4ce65a4449",
     "v2/eval/run_evaluation.py": "1a47911b0067fbe321a5555cccb10ea4ee6d9c8c662bbf625a755736d19ddc90",
-    "v2/eval/golden_run.py": "0ab971332ecf62da621c44ba44231df8b7263ccb35ed82cf259851b81485f5f8",
+    "v2/eval/golden_run.py": "f3be633c94c7e616d2154c713caf85160026480423152a76c173bdb38f1105f7",
     "v2/eval/artifact_agent.py": "124a904f56527480e28d4a6bf59c0efe838311bfbe4c01a6c5125d552aea9fab",
     "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
     "v2/agent_tools/current_price_domain.py": "e3bfc3f37d60e011493278fc72e132a74d2734a035bacbd76f781ae4016c0e3a",

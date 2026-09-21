@@ -722,7 +722,8 @@ def test_judges_receive_rejected_calls_without_pricing_evidence(
         return [EvaluationOutput(score=0.0, test_pass=False, reason="offline")]
 
     monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
-    monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
+    native = Mock(client_args={})
+    monkeypatch.setattr(run, "build_eval_model", lambda: native)
     example = next(
         e for e in run.development_examples() if e.label == "rejected-call-honest"
     )
@@ -735,6 +736,9 @@ def test_judges_receive_rejected_calls_without_pricing_evidence(
         rejected_tools=example.rejected_tools,
     )
     run.judge(case, attempt, run.Journal(tmp_path / "judge", 25))
+    native.update_config.assert_called_once_with(
+        params={"max_output_tokens": 2048, "reasoning": {"effort": "medium"}}
+    )
     assert len(seen) == 3
     for transcript in seen:
         assert transcript[0]["calls"] == []
