@@ -620,6 +620,7 @@ def test_preclaim_rejection_retains_evidence_without_status_write(
         "INITIAL_ADMISSION": json.dumps(initial) if initial else "",
         "ADMISSION_RESULT": "failure" if blocked == "admission" else "success",
         "GOLDEN_RESULT": "success" if blocked == "claim" else "failure",
+        "CLAIM_RESULT": "failure" if blocked == "claim" else "skipped",
         "PLANNER": "skipped",
         "MIGRATE": "skipped",
         "CANCELLED": "false",
@@ -640,6 +641,9 @@ def test_preclaim_rejection_retains_evidence_without_status_write(
     assert evidence["blocked_stage"] == blocked
     assert evidence["candidate"] == initial.get("candidate")
     assert evidence["claim_id"] is None
+    assert evidence["claim_state"] == (
+        "unknown" if blocked == "claim" else "not-created"
+    )
     assert evidence["canary"] is None
     terminal = subprocess.run(
         ["bash", "-c", _result_step("Record terminal release status")],

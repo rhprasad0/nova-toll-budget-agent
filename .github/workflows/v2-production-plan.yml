@@ -394,6 +394,7 @@ jobs:
         INITIAL_ADMISSION: ${{ needs.admission.outputs.admission }}
         ADMISSION_RESULT: ${{ needs.admission.result }}
         GOLDEN_RESULT: ${{ needs.golden.result }}
+        CLAIM_RESULT: ${{ needs.claim.result }}
         ADMISSION: ${{ needs.claim.outputs.admission }}
         PLANNER: ${{ needs.planner.result }}
         MIGRATE: ${{ needs.migrate.result }}
@@ -429,9 +430,11 @@ jobs:
             elif [[ "${GOLDEN_RESULT:-}" != success ]]; then
               blocked_stage=golden
             fi
-            jq -n --argjson admission "$initial" --arg stage "$blocked_stage" --arg planner "$PLANNER" --arg migrate "$MIGRATE" --arg cancelled "$CANCELLED" '{schema_version:1,environment:"production-release",outcome:"failed",blocked_stage:$stage,planner:$planner,migrate:$migrate,migration_evidence:"not-run",canary:null,cancelled:$cancelled,release_id:$admission.release_id,claim_id:null,candidate:$admission.candidate,golden:null}' >"$result" || return
+            claim_state=unknown
+            if [[ "${CLAIM_RESULT:-}" == skipped ]]; then claim_state=not-created; fi
+            jq -n --argjson admission "$initial" --arg stage "$blocked_stage" --arg claim_state "$claim_state" --arg planner "$PLANNER" --arg migrate "$MIGRATE" --arg cancelled "$CANCELLED" '{schema_version:1,environment:"production-release",outcome:"failed",blocked_stage:$stage,claim_state:$claim_state,planner:$planner,migrate:$migrate,migration_evidence:"not-run",canary:null,cancelled:$cancelled,release_id:$admission.release_id,claim_id:null,candidate:$admission.candidate,golden:null}' >"$result" || return
             printf 'outcome=failed\n' >>"$GITHUB_OUTPUT" || return
-            printf 'Release blocked at %s before a deployment claim was created. Production planning and deployment did not run.\n' "$blocked_stage" >>"$GITHUB_STEP_SUMMARY"
+            printf 'Release blocked at %s. Claim state: %s. Production planning and deployment did not run. If claim state is unknown, inspect the admitted release identity in deployment history before recovery; do not retry the release.\n' "$blocked_stage" "$claim_state" >>"$GITHUB_STEP_SUMMARY"
             return
           fi
           migration_evidence=failed
@@ -483,7 +486,7 @@ jobs:
         trap finish EXIT
         publish() {
           if [[ -z "$ADMISSION" ]]; then
-            printf 'No deployment claim exists; no deployment status was updated.\n' >>"$GITHUB_STEP_SUMMARY"
+            printf 'No validated claim output is available; no deployment status was updated. See the retained claim state before recovery.\n' >>"$GITHUB_STEP_SUMMARY"
             return 1
           fi
           printf '%s' "$ADMISSION" >"$RUNNER_TEMP/terminal-admission.json" || return

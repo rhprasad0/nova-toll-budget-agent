@@ -5,9 +5,11 @@ conversations and 13 annual-affordability conversations. The
 [case review](golden/REVIEW.md) includes every question, actor brief, expected
 behavior, fixture reference, and proposed criticality.
 
-**Status: cases and labels approved; version 1.0.10 contract update awaits renewed calibration under #360.** These are authored cases and examples, not
-model results. There is no baseline score or calibrated judge yet. Approval is
-recorded separately in [review.json](golden/review.json).
+**Status: corpus 1.0.10 and its calibrated judge contract are approved.**
+[Calibration 8](evidence/golden-360/calibration-8/review.html) matches all 102
+criterion labels across the 34 development examples. The authored cases are
+not application results; no qualified production baseline exists yet.
+Approval is recorded separately in [review.json](golden/review.json).
 
 ## Ownership and boundaries
 
@@ -199,9 +201,9 @@ and results.
 Ryan reviews case facts, fixture assumptions, criticality, held-out handling,
 and example labels. Record approval in `review.json` with status `approved`, the
 exact corpus SHA-256, reviewer, and an evidence link or transcript reference.
-The cases and labels retain their earlier approval. The current grader revision
-awaits calibration review; approving an implementation plan does not approve
-unseen cases.
+The cases and labels retain their earlier approval. Ryan separately approved
+the current grader contract against calibration-8 evidence; approving an
+implementation plan does not approve unseen cases or results.
 
 Version 1.0.3 retains all case data and labels. It corrects judge over-interpretation
 of disclosure requirements and tool-call chronology after the first paid calibration,
@@ -221,4 +223,6 @@ contract from #363. Its calibration and review remain pending.
 
 Version 1.0.10 moves golden corpus validation into its own CI step so golden
 changes do not alter the separately deployed daily-eval package. Cases and
-approved labels are unchanged; exact-contract review remains pending.
+approved labels are unchanged. Calibration 8 and exact-contract approval are
+recorded in the [review index](evidence/golden-360/REVIEW.md). Earlier pending
+states above describe those historical revisions.

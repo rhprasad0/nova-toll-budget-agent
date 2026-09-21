@@ -5,9 +5,11 @@ exact development release bundle. The gate is mandatory. Missing infrastructure,
 an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
-This implementation is installed in a **blocked state**. It does not qualify the
-current application or turn the historical demo into an approved baseline. No
-paid run or infrastructure apply is part of this change.
+Production qualification remains **blocked until a production reference passes**.
+On September 20, 2026 (America/New_York), the 13 development golden resources
+were provisioned, the four environments were protected, and calibration 8 was
+approved against the exact corpus and policy contract. The versioned ledger
+records $0.94408728 including calibration. The historical demo remains unqualified.
 
 ## Execution and evidence
 
@@ -28,7 +30,7 @@ blocks subsequent runs until spending is reconciled. Provider retries are off.
 
 The original thresholds from policy 1.0.0 are unchanged in policy 1.0.1. Corpus
 1.0.10 and harness 1.2.0 add the packaged execution boundary; their new contract
-needs calibration and exact digest approval. Historical evidence, labels,
+has calibration-8 evidence and exact digest approval. Historical evidence, labels,
 policy approvals, and the original baseline remain intact.
 
 After machine qualification, inspect the `golden-evidence-RUN-1` artifact:
@@ -52,8 +54,10 @@ migration controls, exact-plan apply, and canary checks still apply.
 
 ## Activation prerequisites
 
-Complete these through separately reviewed infrastructure and configuration
-changes. This PR does not perform them.
+These are the activation and recovery requirements. Infrastructure, environment
+configuration, initialization, and calibration approval are complete; the first
+qualified production reference is still required. Keep these checks for future
+contract changes and environment recovery.
 
 1. Provision `infra/golden_eval.tf` in development account `903859731897`. The
    private bucket is encrypted, versioned, protected against destruction, and
