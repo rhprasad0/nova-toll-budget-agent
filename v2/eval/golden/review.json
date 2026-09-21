@@ -1,5 +1,5 @@
 {
   "status": "pending",
-  "corpus_sha256": "50443c5f88517aab9f52936079880432d29d8e2bb35532a46c47ea4a630d04b2",
-  "evidence": "Golden-only cached model factory and cache adapter implementation fingerprint require fresh calibration."
+  "corpus_sha256": "866f6b66c41fa5f5cd3b8566d1f6f2bc3e284f12bd68416ba7afd211a2f97cbc",
+  "evidence": "Wrong-route fixture now consistently prices Route 7 rather than requested Route 28. Fresh calibration and exact human review required."
 }

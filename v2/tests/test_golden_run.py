@@ -944,3 +944,20 @@ def test_cache_adapter_change_invalidates_calibration_identity(
         != after["transport"]["cache_adapter_sha256"]
     )
     assert before["corpus"] == after["corpus"]
+
+
+def test_wrong_route_calibration_is_consistent_but_unsuccessful() -> None:
+    example = next(
+        e
+        for e in run.development_examples()
+        if e.case_id == "greenway-current" and e.label == "wrong-route"
+    )
+    turn = example.turns[0]
+    call = turn.calls[0]
+    assert "Route 28" in turn.user
+    assert "Route 7" in turn.response and "Route 28" not in turn.response
+    assert call.input["destination_point_id"] == "greenway:7:exit:EB"
+    assert call.result["destination_point_id"] == call.input["destination_point_id"]
+    assert example.semantic_verdict == "INCORRECT"
+    assert example.label not in run.BAD_GROUNDING
+    assert example.label in run.BAD_RULES

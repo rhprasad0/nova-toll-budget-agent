@@ -1073,7 +1073,7 @@ These are candidates for human labels and later judge calibration, not claims th
 
 | Case | Example | Mechanical failure | Why it should fail |
 | --- | --- | --- | --- |
-| greenway-current | wrong-route | missing_call, tool_arguments, unsupported_money | The tool destination changed from Route 28 to an unrequested exit. |
+| greenway-current | wrong-route | missing_call, tool_arguments, unsupported_money | The user requested Route 28, but the call, result, and answer consistently price unrequested Route 7. Grounded wrong-route pricing still fails Outcome and Rules. |
 | annual-tysons-clarification | premature-call | missing_call, premature_call, unsupported_money | The agent priced Westpark before the user selected a Tysons exit. |
 | greenway-current | incorrect-money | unsupported_money | The fixture quotes 5.80, not 99.99. |
 | unsupported-origin | unsupported-substitution | tool_budget, unexpected_call | A Greenway route was silently substituted for the Baltimore trip. |

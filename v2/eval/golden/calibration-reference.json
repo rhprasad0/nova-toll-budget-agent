@@ -1,5 +1,4 @@
 {
   "status": "pending",
-  "evidence_sha256": "c92c0dcb52f97b4dbcf87d8e41a0ae19a29a11255d2458c7d7b60c5e20ca9c30",
-  "notes": "179/180 agreement; wrong-route Outcome false positive requires human adjudication. See v2/eval/results/golden/CACHING-SUMMARY.md. Restore full exact evidence before approval or activation."
+  "notes": "Corpus 1.0.20 corrects the wrong-route calibration fixture. Fresh calibration and exact human review are required; calibration-24 remains historical evidence."
 }

@@ -1,5 +1,16 @@
 # Golden eval caching validation
 
+## Current fixture correction
+
+Corpus 1.0.20 corrects `greenway-current-wrong-route`: the call, result, and
+answer now consistently describe Route 7 while the user requests Route 28.
+Expected labels remain Outcome fail, Grounding pass, and Rules fail. The user
+adjudicated the previous Outcome pass as incorrect. Fresh calibration will use
+eight local workers; exact evidence approval remains pending. The 54 focused
+corpus and runner tests pass. Historical calibration-24 evidence remains intact.
+
+## Historical caching validation
+
 The manual runner and protected eval CI share explicit prefix caching and
 cache-write accounting. Application and scheduled-check sources are unchanged.
 Adversarial review isolated the factory to the golden runner, bound adapter source

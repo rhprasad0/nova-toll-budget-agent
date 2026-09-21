@@ -2875,11 +2875,11 @@
       "unsupported_money"
     ],
     "semantic_verdict": "INCORRECT",
-    "rationale": "The tool destination changed from Route 28 to an unrequested exit.",
+    "rationale": "The user requested Route 28, but the call, result, and answer consistently price unrequested Route 7. Grounded wrong-route pricing still fails Outcome and Rules.",
     "turns": [
       {
         "user": "How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.",
-        "response": "The published fixed Greenway toll from Leesburg Bypass to Route 28 is $5.80 for your passenger car with E-ZPass in toll mode, evaluated at 8 AM EDT.",
+        "response": "The published fixed Greenway toll from Leesburg Bypass to Route 7 is $5.80 for your passenger car with E-ZPass in toll mode, evaluated at 8 AM EDT.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -2894,7 +2894,7 @@
             },
             "result": {
               "origin_point_id": "greenway:1:entry:EB",
-              "destination_point_id": "greenway:28:exit:EB",
+              "destination_point_id": "greenway:7:exit:EB",
               "method": "latest_complete_current_facility_prices",
               "evaluated_at": "2026-08-27T08:00:00-04:00",
               "maximum_observation_age_minutes": 30,
