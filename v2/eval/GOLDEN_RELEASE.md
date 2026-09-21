@@ -14,6 +14,10 @@ preserved in the [prior packet](evidence/critical-pass3/REVIEW.md). Actor behavi
 is unchanged; its 60/60 development checks remain applicable. The initial demo
 and failed production-reference run remain unqualified.
 
+The [source-checkout pass³ comparison](results/golden/critical-pass3-comparison-final.md)
+records prompt 2.3.4 at 17/17 critical pass³ and 72/72 successful trials against
+the same-contract reference at 9/17. It does not qualify a production artifact.
+
 ## Execution and evidence
 
 `v2-golden-evaluation` runs only from main. Select `candidate` and the successful
