@@ -21,8 +21,11 @@
     "max_output_tokens": 2048
   },
   "approval": {
-    "status": "pending",
+    "status": "approved",
     "evidence_sha256": "921a8b239fcd469054e515807e6dec96b1c5ef1c8954d7f272bbae1860384f7b",
-    "scope": "Numeric thresholds unchanged. Calibration 21 aligns judge context with timestamp precision, default pricing profile, catalog location, and validated distance baseline contracts."
+    "scope": "Numeric thresholds unchanged. Calibration 21 aligns judge context with timestamp precision, default pricing profile, catalog location, and validated distance baseline contracts.",
+    "reviewer": "rhprasad0",
+    "approved_at": "2026-09-21T21:08:51.152855+00:00",
+    "evidence": "Ryan explicitly stated \"Approved\" in response to the calibration-21 and policy-1.0.6 review request, approving the exact 180/180 evidence and unchanged numeric thresholds. He requested a caching/cost review before the scored rerun; no new paid run has started."
   }
 }

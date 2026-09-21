@@ -1,5 +1,7 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "a14bd6ad7713e5c00c6160ce2b5c1302a13259db78fd80589ea913744950389c",
-  "notes": "Calibration 21 required for display precision, default pricing profile, catalog location, and validated distance baseline context."
+  "reviewer": "rhprasad0",
+  "approved_at": "2026-09-21T21:08:51.152855+00:00",
+  "evidence": "Ryan explicitly stated \"Approved\" in response to the calibration-21 and policy-1.0.6 review request, approving the exact 180/180 evidence and unchanged numeric thresholds. He requested a caching/cost review before the scored rerun; no new paid run has started."
 }
