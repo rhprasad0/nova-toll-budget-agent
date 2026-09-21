@@ -4,7 +4,7 @@
   "actor_model": "gpt-5.6-luna",
   "judge_model": "gpt-5.6-luna",
   "review_status_file": "review.json",
-  "corpus_sha256": "f11d17af3115be1f001ecebb551e7c75a09faa503dc74a80762f17067b4d5332",
+  "corpus_sha256": "cce3e45a7912d96f60a362b1c6de339cb9ce50b429ca2afbfd6246c146e2d3b9",
   "hashes": {
     "cases.jsonl": "1ced8cb0a47f0195a1227ee353d8f54859ed04a12fb6b45eee6d8023912b2ebb",
     "prompt-points.json": "441eef5a8f830f50074bd42df9356cde1e258c445e1fd7e1a5bbf033cf008315",
@@ -26,7 +26,7 @@
     "fixtures/i66-stale_observation.json": "45748ac15ab641dcc98980bc1259a1d2ae1c0be1b8cde2f46b05eeff4786f65e",
     "fixtures/unsupported-profile.json": "aa58124cf2503e1425811a684b030a2d77acd91ded284e4c4ac1242dd9de9328",
     "v2/uv.lock": "9454dd5fb0d1d636f7c974aa33cdf26346705889ea0aab21f8acdaa1e76857fd",
-    "v2/eval/golden.py": "e6715b1e9445756b039cd96eaa834282bc10d73f272d4256562a98d2c5221a0b",
+    "v2/eval/golden.py": "2f3b83a5012a76379114f5b5130632688419e54016d7c538e4987412e9cba5ca",
     "v2/eval/simulated.py": "fe27f33fadb90a20c58459723df6c91fb212156169d010f747819a4ce65a4449",
     "v2/eval/run_evaluation.py": "1a47911b0067fbe321a5555cccb10ea4ee6d9c8c662bbf625a755736d19ddc90",
     "v2/eval/golden_run.py": "20ad2bd4a5b84fbf1c35e9bb75fc42a4b3cd782e927644c18229c8b102d6b155",

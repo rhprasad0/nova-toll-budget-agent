@@ -9,9 +9,10 @@ from copy import deepcopy
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, Self, cast
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic.json_schema import SkipJsonSchema
 from strands import Agent
 from strands.models import Model
 from strands_evals import ActorSimulator, Case
@@ -43,10 +44,10 @@ Use only your supplied facts. Answer questions briefly and naturally. Follow
 any stated correction or selection instructions before stopping. Do not invent
 prices, earnings, routes, or requirements. Do not tell the assistant how to use
 its tools or how it will be graded. Never treat the assistant's suggested facts
-as your own unless your profile allows them. Return stop=false with a short
-message when a reply is needed; otherwise return stop=true and message=null.
+as your own unless your profile allows them. Return a short message when a reply
+is needed; otherwise return message=null. The runner derives when to stop.
 A question asking you to choose income, supply schedule facts, or confirm days
-needs your profile's answer delivered with stop=false BEFORE you can finish.
+needs your profile's answer delivered as a message BEFORE you can finish.
 A proposed estimate is not yet a completed estimate. After an evidenced refusal,
 unavailable result, or tool failure, stop; do not request retries, operator
 verification, another product, or a one-way substitute for a round trip.
@@ -89,6 +90,21 @@ Do not let a correct final answer erase a premature or unapproved earlier action
 
 class Record(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class ActorReply(Record):
+    """One model decision: a message to deliver, or null to finish."""
+
+    message: str | None = Field(
+        description="Next driver reply to deliver; null only when no reply is needed."
+    )
+    stop: SkipJsonSchema[bool] = False
+    stop_reason: SkipJsonSchema[str | None] = None
+
+    @model_validator(mode="after")
+    def derive_stop(self) -> Self:
+        self.stop = self.message is None
+        return self
 
 
 class Provenance(Record):
@@ -232,6 +248,7 @@ def make_actor(case: GoldenCase, model: Model) -> ActorSimulator:
         system_prompt_template=ACTOR_PROMPT,
         model=cast(Any, model),  # SDK 1.1.0 forwards Model despite its str annotation.
         max_turns=case.actor.max_turns,
+        structured_output_model=ActorReply,
     )
     # Configure the public Agent constructor rather than mutating SDK internals.
     # The simulator keeps its profile, turn counter and initial conversation.
@@ -241,7 +258,7 @@ def make_actor(case: GoldenCase, model: Model) -> ActorSimulator:
         messages=actor.conversation_history,
         callback_handler=None,
         retry_strategy=None,
-        structured_output_prompt="Format YOUR next driver action, not an evaluation of your preceding response. If the assistant needs a clarification, choice, or confirmation, put the profile's answer in message and set stop=false: writing it has NOT delivered it yet. After a completed answer or supported refusal, set stop=true and message=null. Never return thanks or a summary as a stopping message.",
+        structured_output_prompt="Format YOUR next driver action, not an evaluation of your preceding response. If the assistant needs a clarification, choice, or confirmation, put the profile's answer in message: writing it has NOT delivered it yet. After a completed answer or supported refusal, return message=null. Never return thanks or a summary as a stopping message.",
     )
     return actor
 
