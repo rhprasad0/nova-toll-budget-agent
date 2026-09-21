@@ -598,6 +598,7 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
     row = run.Attempt(id="contract", case_id=case.id, trial=1, turns=example.turns)
     run.judge(case, row, journal)
     assert all(run.DOMAIN_FACTS in reference for reference in seen)
+    assert "truthful statements of this scope and policy are supported" in seen[1]
     assert "Do not require an official operator" in seen[0]
     assert "Optional tool calls are not required" in seen[0]
     assert "Permitted tool sequence" not in seen[1]

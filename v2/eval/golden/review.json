@@ -1,5 +1,5 @@
 {
   "status": "pending",
-  "corpus_sha256": "944fda65b45ab2e712ecc05126d5ed21d272245131b44bec3b5ce95cf21fc2ff",
-  "evidence": "Direct-refusal wording clarified to match existing approved examples; exact-route/profile requirements still apply to actual calls. Fresh calibration required."
+  "corpus_sha256": "614e260c4b2ad5199201f501cccde8be89f75ade518e78f5d3c823da7eb6b436",
+  "evidence": "Judge domain context now includes the existing application coverage and no-substitution policy. Fresh calibration required."
 }

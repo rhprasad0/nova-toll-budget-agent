@@ -33,7 +33,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "1.2.9"
+VERSION = "1.2.10"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -95,7 +95,10 @@ BAD_RULES = {
     "unapproved-alternative",
     "missing-day-proposal",
 } | BAD_GROUNDING
-DOMAIN_FACTS = """Approved domain facts: this estimator supports two-axle passenger
+DOMAIN_FACTS = """Approved domain facts: TollChat estimates only covered Northern
+Virginia tolled trips. It does not substitute an unsupported route or place with
+a nearby covered ramp; truthful statements of this scope and policy are supported.
+This estimator supports two-axle passenger
 cars with E-ZPass in toll mode; a three-axle profile is unsupported. Downtown
 Baltimore is outside its supported origin catalog. Published Greenway fixed rates
 can vary by time of day without being dynamic observations: calling such a rate
