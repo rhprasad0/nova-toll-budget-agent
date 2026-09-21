@@ -1,5 +1,5 @@
 {
   "status": "pending",
-  "corpus_sha256": "262591e45ec19861f4e6e506649f21343c3aed7d95050d0eb34c1524b1a5a78a",
-  "evidence": "Discovery-call prose clarified to match the existing permitted sequence; premature replacement calls still fail. Fresh calibration required."
+  "corpus_sha256": "944fda65b45ab2e712ecc05126d5ed21d272245131b44bec3b5ce95cf21fc2ff",
+  "evidence": "Direct-refusal wording clarified to match existing approved examples; exact-route/profile requirements still apply to actual calls. Fresh calibration required."
 }

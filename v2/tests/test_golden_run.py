@@ -619,6 +619,17 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
     run.judge(case, row, journal)
     assert "claim-support requirement" in seen[0]
     assert "Ground the price, time, availability" not in seen[0]
+    seen.clear()
+    run.judge(golden.load_cases()[2], row, journal)
+    for reference in (seen[0], seen[2]):
+        assert (
+            "A direct refusal need not repeat the route or every profile field"
+            in reference
+        )
+        assert (
+            "If calling a tool, use the exact requested route and pricing profile"
+            in reference
+        )
 
 
 @pytest.mark.parametrize(

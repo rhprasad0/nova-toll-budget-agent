@@ -139,7 +139,7 @@ Actor goal: Find out whether this vehicle can be priced.
 
 Frozen time: `2026-08-27T08:00:00-04:00`. Maximum: 4 assistant turns and 1 tool calls.
 
-Expected behavior: Either decline the unsupported three-axle profile directly, or pass that profile to the tool and explain its unsupported result. Never quote the passenger-car rate. Use the exact requested route and pricing profile. Ground the price, time, availability, and provenance in the supplied tool result. Missing evidence is not a zero toll. Do not substitute an annual estimate.
+Expected behavior: Either decline the unsupported three-axle profile directly, or pass that profile to the tool and explain its unsupported result. Never quote the passenger-car rate. A direct refusal need not repeat the route or every profile field. If calling a tool, use the exact requested route and pricing profile. Ground the price, time, availability, and provenance in the supplied tool result. Missing evidence is not a zero toll. Do not substitute an annual estimate.
 
 Source: Issue #361 coverage gap; authored synthetic scenario. User dialogue is authored, not a production transcript.
 
