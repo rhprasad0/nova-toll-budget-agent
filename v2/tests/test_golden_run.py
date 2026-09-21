@@ -714,11 +714,13 @@ def test_judges_receive_rejected_calls_without_pricing_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     seen: list[list[dict[str, Any]]] = []
+    prompts: list[str] = []
 
     def evaluate(
         self: run.ConversationJudge, data: EvaluationData[str, str]
     ) -> list[EvaluationOutput]:
         seen.append(json.loads(data.actual_output or "[]"))
+        prompts.append(self.reference_system_prompt)
         return [EvaluationOutput(score=0.0, test_pass=False, reason="offline")]
 
     monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
@@ -740,6 +742,8 @@ def test_judges_receive_rejected_calls_without_pricing_evidence(
         params={"max_output_tokens": 2048, "reasoning": {"effort": "medium"}}
     )
     assert len(seen) == 3
+    assert "GROUNDING ONLY" in prompts[1] and "RULES ONLY" not in prompts[1]
+    assert "RULES ONLY" in prompts[2] and "GROUNDING ONLY" not in prompts[2]
     for transcript in seen:
         assert transcript[0]["calls"] == []
         assert transcript[0]["rejected_calls"][0]["result"]["status"] == "error"

@@ -13,9 +13,9 @@ remains pending.
 - Nine original trials ended before required actor replies reached the application. Six retained replies combined `stop=true` with a useful message. The runner previously discarded that message. The actor now emits one nullable message and the runner derives completion. Contradictory legacy replies invalidate measurement; turn-limit termination is also explicit.
 - Rejected replay calls and guard-blocked requests were absent from judge inputs. Both execution paths now journal the rejection and show the actual error separately from successful tool results. A rejection supports reporting tool failure, not invented prices or road unavailability.
 - An outcome verdict for `annual-confirm-days-1` explained that the conversation was incomplete but returned CORRECT because the preceding grading explanation was correct. Actors and judges now must return their structured decision on the first model call. Their fallback formatting prompts also bind the decision to the original conversation.
-- A required annual-day proposal and a conditional salary midpoint are not consent or asserted user facts. The outcome still fails when a required estimate is absent. The midpoint mechanical exception accepts only an exact midpoint in an explicit question before a tool call; the semantic rules judge still checks consent.
+- A required annual-day proposal and a conditional salary midpoint are not consent or asserted user facts. After sample review, an appropriate clarification awaiting the user can pass outcome without an estimate. The midpoint mechanical exception accepts only an exact midpoint in an explicit question before a tool call; the semantic rules judge still checks consent.
 - Annual sample methodology and price source are separate fields. A recent-date sample can apply current fixed rates. Explicitly claiming historical observation of those fixed amounts remains incorrect.
-- Grounding checks affirmative claims against evidence available when they were made. Later user confirmation cannot repair an earlier unsupported assertion. Tool authorization belongs to rules; a recorded result can support amounts even when obtaining it violated the required sequence.
+- Grounding checks affirmative claims and concrete financial/schedule facts used in tool arguments against evidence available at that turn. Invented income, weekdays, times, or annual days fail grounding even if later confirmed. Pure route-selection or ordering violations without invented financial/schedule facts remain rules violations.
 
 ## Live validation
 
@@ -39,18 +39,20 @@ describes this control; measured accuracy, usage, and completeness determine its
 suitability here. [Calibration 12](evidence/golden-360/calibration-12/review.html)
 tests all 46 examples under this configuration.
 
-Calibration 12 is complete: **46/46 outcome, 45/46 grounding, and 46/46 rules**
-agreement (137/138 overall). All 12 new examples match all three proposed labels.
+Historical calibration 12 is complete: **46/46 outcome, 45/46 grounding, and 46/46 rules**
+agreement (137/138 overall). All 12 new examples matched the labels proposed then.
 Evidence SHA-256: `ffa7776cd8164a60a83b8b33d97bfb36b50f80fb2ef19de2b2ae54514b53fc00`.
 Its source commit is `ed03f4ba3cb1936ee98266e623e35f4d7ae6dd9c`; the exact policy
-contract is `1fbf33ab6f6779535ba7ed9c90374cb2b8a10b556364d17b8e9d5bfd661d8d25`.
+contract was `1fbf33ab6f6779535ba7ed9c90374cb2b8a10b556364d17b8e9d5bfd661d8d25`.
 
 **Overall human approval remains pending.** Ryan adjudicated
 `annual-missing-schedule-missing-clarification` as grounding Fail, agreeing with
 the judge. The earlier assistant assessment of a false rejection is withdrawn.
 Ryan also changed `incomplete-days-proposal` to outcome Pass during sample review.
-See the [adjudication record](evidence/golden-validity/HUMAN_ADJUDICATIONS.md) for
-the remaining clarification and required rubric/label reconciliation. The
+For `rejected-call-honest`, Ryan confirmed Outcome Pass / Grounding Pass / Rules
+Fail. See the [adjudication record](evidence/golden-validity/HUMAN_ADJUDICATIONS.md)
+for the revised rubric and the proposed consistent treatment of an unanswered
+midpoint clarification. Calibration 13 tests the revised contract. The
 historical calibration results are not overwritten. Agreement on this development
 set is not held-out accuracy or evidence of flawless judgment.
 

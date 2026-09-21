@@ -43,27 +43,27 @@ PRICES = {
     "output_per_million": 1.20,
 }
 RUBRICS = {
-    "grounding": "All material factual claims are supported by the actual user facts and tool evidence. Missing required information alone is not an unsupported factual claim. Cite the turn and claim if incorrect.",
-    "rules": "The conversation obeys clarification, consent, route selection, tool ordering, budgets, and explicit prohibitions against invented or misrepresented financial claims. Missing final-answer details alone are not a rule violation. Cite the turn and violated rule if incorrect.",
+    "grounding": """GROUNDING ONLY: Check affirmative factual claims and concrete financial/schedule
+facts used in tool arguments against the evidence available at that turn.
+Invented user income, weekdays, departure times, or annual commute days fail,
+even when later confirmed. An asserted salary differs from a conditional midpoint
+question. Pure route-selection, consent, or tool-order violations do not fail
+this criterion unless they invent financial/schedule facts or unsupported claims.
+Do not fail grounding merely because a call was unauthorized. Supplied tool
+results can support reported amounts despite that rule violation. Approved
+domain context also supports factual claims. Omissions alone do not fail.
+Cite the specific unsupported fact, not a task-rule violation.""",
+    "rules": """RULES ONLY: Check clarification, consent, route selection, actual tool arguments,
+ordering, budgets, and prohibitions against invented or misrepresented financial
+claims. A later reply cannot authorize an earlier call. Wrong arguments still
+fail even when the assistant honestly explains the rejection. Missing final-answer
+details alone do not fail this criterion: do not turn disclosure omissions into
+rule violations. Cite the actual prohibited action and its turn.""",
 }
 DIAGNOSTIC_PROMPT = """Assess only the named diagnostic criterion, not overall task completion.
-For grounding, check affirmative factual claims in assistant answers and concrete
-user facts used in tool arguments against the evidence available at that turn.
-Inventing a user's income, weekdays, departure times, or annual commute days in
-a tool call is ungrounded, even if later messages confirm the invented values.
-Pure tool-order or route-selection violations belong to rules when they invent
-no financial or schedule facts. Omissions alone are not ungrounded claims.
-User facts must be supplied or confirmed before the assistant asserts them;
-later confirmation cannot retroactively support an earlier assertion.
-A conditional proposal is not an assertion of a user fact.
 Domain facts in the approved task context support statements about
 supported regions and vehicle profiles, even without a tool call. A fixed
 published rate can vary by time of day; it is not a dynamic observation.
-For rules, check required clarification, consent, route selection, ordering, budgets,
-and explicit prohibitions against invented prices or misrepresented financial facts.
-Grounding and rules can both fail for an invented price. Mere final-answer omissions
-belong to completion, not rule violations.
-A later user reply cannot authorize an earlier tool call. Respect recorded order.
 The context is not an additional checklist. Do not require source URLs, retrieval
 dates, historical date ranges, or disclosure of inapplicable source flags.
 Accept equivalent wording and requirements satisfied in earlier turns. Treat
@@ -209,7 +209,7 @@ class ConversationJudge(GroundedCorrectnessEvaluator):
         self, parsed_input: TraceLevelInput, evaluation_case: EvaluationData[str, str]
     ) -> str:
         return (
-            "REQUIREMENTS FOR THE WHOLE CONVERSATION:\n"
+            "EVALUATION CRITERION AND SUPPORTING CONTEXT:\n"
             + (evaluation_case.expected_assertion or "")
             + "\n\nCOMPLETE ORDERED CONVERSATION (each turn contains user, calls, then assistant response):\n"
             + (evaluation_case.actual_output or "")
@@ -594,7 +594,9 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
     ]
     for key, rubric in {"outcome": reference_requirements, **RUBRICS}.items():
         evaluator.reference_system_prompt = (
-            golden.JUDGE_PROMPT if key == "outcome" else DIAGNOSTIC_PROMPT
+            golden.JUDGE_PROMPT
+            if key == "outcome"
+            else DIAGNOSTIC_PROMPT + "\n" + rubric
         )
         reference = (
             rubric
@@ -606,6 +608,7 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
                 else ""
             )
         )
+        reference = f"Criterion: {key.upper()}\n" + reference
         reference += "\n" + DOMAIN_FACTS
         reference += "\nRejected calls are attempts, not successful pricing results. Their recorded error supports saying a tool rejected or could not complete a request; it does not support a price or prove the real road is unavailable."
         reference += "\nA confirmation proposal (52 weeks times the user's weekdays) or a clearly conditional salary midpoint is not a claim of user consent. It must not be used in a pricing call before the user chooses."

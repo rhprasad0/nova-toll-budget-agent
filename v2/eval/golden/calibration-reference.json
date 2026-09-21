@@ -1,6 +1,6 @@
 {
   "status": "pending",
-  "directory": "v2/eval/evidence/golden-360/calibration-13",
+  "directory": "v2/eval/evidence/golden-360/calibration-14",
   "evidence_sha256": null,
-  "notes": "Recalibration after Ryan's sampled adjudications: accepted clarification and honest rejection outcomes, and unsupported schedule arguments fail grounding. Overall approval remains pending."
+  "notes": "Recalibration after Ryan's sampled adjudications, with isolated criterion instructions. Overall approval remains pending; historical approval does not transfer."
 }
