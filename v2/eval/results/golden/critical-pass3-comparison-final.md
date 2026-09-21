@@ -1,5 +1,7 @@
 # Critical pass³ — final comparison
 
+**Subsequent repeat:** the unchanged candidate scored **16/17 critical pass³ and 68/72 trials**. See the [repeat analysis](critical-pass3-repeat-1.md); the passing run below is not consistently reproduced.
+
 **Prompt 2.3.4 meets the observed target: 17/17 critical cases pass all three trials (51/51), and all 72/72 trials pass.** The unchanged application reference scored 9/17 critical pass³ under the same evaluation contract: an observed increase of 47.1 percentage points.
 
 All runs below use corpus 1.0.14, harness 1.2.4, approved calibration 18 / policy 1.0.4, unchanged numeric thresholds, and the same model/settings, actors, fixtures, and graders. The application model remains `gpt-5.6-luna`. Each candidate was a fresh full run after a prompt change; failed attempts remain archived and contribute to the spend ledger.
