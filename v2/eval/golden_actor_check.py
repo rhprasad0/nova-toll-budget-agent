@@ -18,6 +18,16 @@ from eval import golden_run as run
 
 def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Attempt:
     case = next(c for c in golden.load_cases() if c.id == example.case_id)
+    turns = list(example.turns)
+    # The reference answer invites a different origin; this profile must decline it.
+    if case.id == "unsupported-origin":
+        turns.append(
+            golden.Turn(
+                user="I mean downtown Baltimore, Maryland.",
+                response="That exact Baltimore trip is outside the supported catalog, so I cannot price it.",
+                calls=[],
+            )
+        )
     row = run.Attempt(id=f"{case.id}-{trial}", case_id=case.id, trial=trial)
     journal.append({"event": "attempt_started", **row.model_dump()})
     try:
@@ -28,7 +38,10 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
         actor = golden.make_actor(case, model)
         message = case.prompt
         replay = golden.Replay(case)
-        for index, turn in enumerate(example.turns):
+        for index, turn in enumerate(turns):
+            if case.id == "unsupported-origin" and index == 1:
+                if "baltimore" not in message.casefold():
+                    raise run.StopRun("actor_profile_mismatch")
             row.turns.append(
                 golden.Turn(user=message, response=turn.response, calls=[])
             )
@@ -43,7 +56,7 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
                 }
             )
             next_message = run.actor_message(response)
-            if index == len(example.turns) - 1:
+            if index == len(turns) - 1:
                 if next_message is not None:
                     raise run.StopRun("actor_unnecessary_followup")
             elif next_message is None:

@@ -604,7 +604,7 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
             reference += (
                 "\nRecorded sequence (calls occur after that user message and before that assistant answer):\n"
                 + "\n".join(
-                    f"Turn {i + 1}: user={turn.user!r}; calls={json.dumps([{'name': c.name, 'input': c.input} for c in turn.calls])}; then assistant answers."
+                    f"Turn {i + 1}: user={turn.user!r}; successful_calls={json.dumps([{'name': c.name, 'input': c.input} for c in turn.calls])}; rejected_calls={json.dumps([c.model_dump() for c in attempt.rejected_tools if c.turn == i + 1])}; then assistant answers."
                     for i, turn in enumerate(attempt.turns)
                 )
             )
