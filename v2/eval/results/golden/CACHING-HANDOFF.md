@@ -1,5 +1,11 @@
 # Handoff: evaluator caching and cost accounting
 
+## Implementation follow-up — 2026-09-21
+
+Caching and cache-write accounting are now implemented. Read the current [review packet](../../evidence/critical-pass3/REVIEW-22.md) and [benchmark](caching-benchmark.json) before proceeding. Calibration 22: four workers, 180/180 labels, 130.67 seconds, $0.11008381. Calibration 23: eight workers, 179/180 labels, 70.09 seconds, $0.10902200; retained grounding false positive, so four workers remains recommended. Actors-3: 60/60, $0.01947340. New validation costs $0.23857921; recorded cumulative spending is $7.38792007.
+
+Corpus 1.0.18 / harness 1.2.8 / policy 1.0.7 await exact human review. Application prompt 2.3.5 and all numeric thresholds are unchanged. Next scored run requires approval of the review packet; use private calibration-22 and **actors-3 as the next --prior-run**. No scored rerun, push, PR, merge, or deployment has occurred. The following sections preserve the original pre-implementation handoff and measurements.
+
 User request: “Write a handoff note for a new conversation to proceed with the caching changes, then proceed with running the eval suite.” Caching work is for the next conversation; this conversation runs the currently approved suite first.
 
 ## Checkout and authorization

@@ -1,0 +1,95 @@
+{
+  "calibration-22": {
+    "workers": 4,
+    "calls": 180,
+    "wall_seconds": 130.67,
+    "input_tokens": 516298,
+    "output_tokens": 40101,
+    "cached_tokens": 230513,
+    "written_tokens": 3907,
+    "cost_usd": 0.11008381,
+    "input_cost_usd": 0.06196261000000001,
+    "output_cost_usd": 0.048121199999999996,
+    "cache_write_cost_usd": 0.00097675,
+    "p50_call_seconds": 2.4705245260047377,
+    "p95_call_seconds": 4.51221237199934,
+    "requests_per_minute": 82.6509527818168,
+    "average_input_output_tokens_per_minute": 255482.8193158338,
+    "same_tokens_uncached_cost_usd": 0.15138079999999998,
+    "cache_savings_usd": 0.04129698999999998,
+    "evidence_sha256": "4837d3ab8953734912147283738ff90d297a7c9f93ffbbb9855833f61da8b8ca",
+    "cumulative_cost_usd": 7.259424670000002,
+    "disagreements": {},
+    "agreement_labels": 180,
+    "archive": {
+      "archive": "runs/b456aa89e6c8182787d3254fff8d34433fcdd0cfae61bf066d5143ef98a7fcb3",
+      "archive_sha256": "b456aa89e6c8182787d3254fff8d34433fcdd0cfae61bf066d5143ef98a7fcb3",
+      "report_sha256": "c5b94cca72fff34d5dea2384ee1904458907cdfec1675d4248d43092fd238189",
+      "evidence_sha256": "4837d3ab8953734912147283738ff90d297a7c9f93ffbbb9855833f61da8b8ca"
+    }
+  },
+  "calibration-23": {
+    "workers": 8,
+    "calls": 180,
+    "wall_seconds": 70.09,
+    "input_tokens": 516298,
+    "output_tokens": 39965,
+    "cached_tokens": 234420,
+    "written_tokens": 0,
+    "cost_usd": 0.10902200000000001,
+    "input_cost_usd": 0.06106400000000001,
+    "output_cost_usd": 0.047958,
+    "cache_write_cost_usd": 0.0,
+    "p50_call_seconds": 2.415841672998795,
+    "p95_call_seconds": 4.346324450001703,
+    "requests_per_minute": 154.08760165501496,
+    "average_input_output_tokens_per_minute": 476184.6197745755,
+    "same_tokens_uncached_cost_usd": 0.1512176,
+    "cache_savings_usd": 0.0421956,
+    "evidence_sha256": "c38b3d2e933b699ee0cc035baaf6309675e600394995cdeb5ba481b00fd361d9",
+    "cumulative_cost_usd": 7.368446670000003,
+    "disagreements": {
+      "annual-tysons-clarification-silent-modeling": [
+        "grounding"
+      ]
+    },
+    "agreement_labels": 179,
+    "archive": {
+      "archive": "runs/de615ba39301761b1b55a19d412f5154748f8f2204435e715654413c98837acd",
+      "archive_sha256": "de615ba39301761b1b55a19d412f5154748f8f2204435e715654413c98837acd",
+      "report_sha256": "35e106b8fbce86afdfd85e0134444f3e7209f6ed033814474dea651a9c2ec78c",
+      "evidence_sha256": "c38b3d2e933b699ee0cc035baaf6309675e600394995cdeb5ba481b00fd361d9"
+    }
+  },
+  "actors-3": {
+    "workers": 4,
+    "calls": 87,
+    "wall_seconds": 27.8,
+    "input_tokens": 72443,
+    "output_tokens": 4154,
+    "cached_tokens": 0,
+    "written_tokens": 0,
+    "cost_usd": 0.019473400000000002,
+    "input_cost_usd": 0.0144886,
+    "output_cost_usd": 0.0049848,
+    "cache_write_cost_usd": 0.0,
+    "p50_call_seconds": 1.0125178769958438,
+    "p95_call_seconds": 1.5352842649954255,
+    "requests_per_minute": 187.76978417266187,
+    "average_input_output_tokens_per_minute": 165317.26618705035,
+    "same_tokens_uncached_cost_usd": 0.019473400000000002,
+    "cache_savings_usd": 0.0,
+    "evidence_sha256": "88664c340dcf3256ef84b262ae6732ed45b7ac8a421200b07db66ba87d064d1e",
+    "cumulative_cost_usd": 7.3879200700000025,
+    "valid_trials": 60
+  },
+  "method": {
+    "commands": "/usr/bin/time -f %e around uv run python -m eval.golden_run calibrate; --workers 4 then 8; identical 60 development examples, 180 fresh judge calls each.",
+    "actor_command": "uv run python -m eval.golden_actor_check --output eval/private/critical-pass3/actors-3 --prior-spend-usd 7.368446670000003",
+    "order": "calibration-22 began with cold evaluator prefixes; calibration-23 reused warm prefixes within the 30-minute TTL. No outputs were reused.",
+    "ledger": "candidate-6 -> calibration-22 -> calibration-23 -> actors-3 (actor-check accepts carried prior spend rather than prior-run ID)",
+    "quota": "User-confirmed shared 4,000,000 TPM. Reported TPM is run-average visible input plus output, not peak usage or provider quota debits. No account RPM value or rate-limit headers were captured. No infrastructure failures or observed throttling.",
+    "application": "Unchanged; no fresh application calls in calibration or actor checks. Last scored evidence is candidate-6. New scored timing evidence remains at four workers.",
+    "recommendation": "Retain four workers. Eight was 1.86x faster but had one grounding false positive; this single comparison does not establish a concurrency effect."
+  }
+}

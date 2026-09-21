@@ -1,0 +1,2950 @@
+{
+  "warning": "Scripted development answers; actor checks only, not application quality or release qualification. Human actor review remains required.",
+  "expected_trials": 60,
+  "valid_trials": 60,
+  "rows": [
+    {
+      "id": "greenway-current-1",
+      "case_id": "greenway-current",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.",
+          "response": "The published fixed Greenway toll from Leesburg Bypass to Route 28 is $5.80 for your passenger car with E-ZPass in toll mode, evaluated at 8 AM EDT.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 660,
+          "output_tokens": 44,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.5352796679944731,
+          "cost_usd": 0.00018480000000000002,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "greenway-current-2",
+      "case_id": "greenway-current",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.",
+          "response": "The published fixed Greenway toll from Leesburg Bypass to Route 28 is $5.80 for your passenger car with E-ZPass in toll mode, evaluated at 8 AM EDT.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 660,
+          "output_tokens": 43,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.4120805140046286,
+          "cost_usd": 0.0001836,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "greenway-current-3",
+      "case_id": "greenway-current",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.",
+          "response": "The published fixed Greenway toll from Leesburg Bypass to Route 28 is $5.80 for your passenger car with E-ZPass in toll mode, evaluated at 8 AM EDT.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 660,
+          "output_tokens": 58,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.4206932689994574,
+          "cost_usd": 0.0002016,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "greenway-origin-correction-1",
+      "case_id": "greenway-origin-correction",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What would I pay from Leesburg Bypass to Route 28 on the Greenway?",
+          "response": "The published Greenway toll from Leesburg Bypass to Route 28 is $5.80 at 8 AM EDT.",
+          "calls": []
+        },
+        {
+          "user": "I meant Battlefield Parkway to Route 28\u2014what would the toll be with E-ZPass?",
+          "response": "From Battlefield Parkway to Route 28, the published fixed toll is also $5.80 at 8 AM EDT. I checked the corrected route.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 667,
+          "output_tokens": 84,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.4332417470068322,
+          "cost_usd": 0.0002342,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 754,
+          "output_tokens": 35,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9667727260020911,
+          "cost_usd": 0.00019280000000000002,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "I meant Battlefield Parkway to Route 28\u2014what would the toll be with E-ZPass?",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "greenway-origin-correction-2",
+      "case_id": "greenway-origin-correction",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What would I pay from Leesburg Bypass to Route 28 on the Greenway?",
+          "response": "The published Greenway toll from Leesburg Bypass to Route 28 is $5.80 at 8 AM EDT.",
+          "calls": []
+        },
+        {
+          "user": "I meant Battlefield Parkway\u2014what would the toll be from there to Route 28 with E\u2011ZPass?",
+          "response": "From Battlefield Parkway to Route 28, the published fixed toll is also $5.80 at 8 AM EDT. I checked the corrected route.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 667,
+          "output_tokens": 90,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.648125177998736,
+          "cost_usd": 0.0002414,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 757,
+          "output_tokens": 36,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9714222600014182,
+          "cost_usd": 0.0001946,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "I meant Battlefield Parkway\u2014what would the toll be from there to Route 28 with E\u2011ZPass?",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "greenway-origin-correction-3",
+      "case_id": "greenway-origin-correction",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What would I pay from Leesburg Bypass to Route 28 on the Greenway?",
+          "response": "The published Greenway toll from Leesburg Bypass to Route 28 is $5.80 at 8 AM EDT.",
+          "calls": []
+        },
+        {
+          "user": "I meant Battlefield Parkway as the entrance, still exiting at Route 28.",
+          "response": "From Battlefield Parkway to Route 28, the published fixed toll is also $5.80 at 8 AM EDT. I checked the corrected route.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 668,
+          "output_tokens": 63,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.222179654003412,
+          "cost_usd": 0.0002092,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 751,
+          "output_tokens": 35,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0310838669975055,
+          "cost_usd": 0.0001922,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "I meant Battlefield Parkway as the entrance, still exiting at Route 28.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "unsupported-profile-1",
+      "case_id": "unsupported-profile",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the Greenway toll from Leesburg Bypass to Route 28 for my three-axle truck with E-ZPass?",
+          "response": "The pricing service does not support that three-axle vehicle profile, so I cannot quote a toll for your truck.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 646,
+          "output_tokens": 35,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8621115959977033,
+          "cost_usd": 0.00017120000000000001,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "unsupported-profile-2",
+      "case_id": "unsupported-profile",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the Greenway toll from Leesburg Bypass to Route 28 for my three-axle truck with E-ZPass?",
+          "response": "The pricing service does not support that three-axle vehicle profile, so I cannot quote a toll for your truck.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 646,
+          "output_tokens": 35,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.047993893000239,
+          "cost_usd": 0.00017120000000000001,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "unsupported-profile-3",
+      "case_id": "unsupported-profile",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the Greenway toll from Leesburg Bypass to Route 28 for my three-axle truck with E-ZPass?",
+          "response": "The pricing service does not support that three-axle vehicle profile, so I cannot quote a toll for your truck.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 646,
+          "output_tokens": 38,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.7247490690060658,
+          "cost_usd": 0.00017480000000000002,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "greenway-missing-destination-1",
+      "case_id": "greenway-missing-destination",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll if I get on the Greenway at Leesburg Bypass?",
+          "response": "Which Greenway exit are you heading to?",
+          "calls": []
+        },
+        {
+          "user": "Route 28.",
+          "response": "Leesburg Bypass to Route 28 is $5.80 under the published fixed rate at 8 AM EDT.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 639,
+          "output_tokens": 52,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.4421452730020974,
+          "cost_usd": 0.00019020000000000002,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 705,
+          "output_tokens": 36,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0125178769958438,
+          "cost_usd": 0.00018419999999999998,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Route 28.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "greenway-missing-destination-2",
+      "case_id": "greenway-missing-destination",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll if I get on the Greenway at Leesburg Bypass?",
+          "response": "Which Greenway exit are you heading to?",
+          "calls": []
+        },
+        {
+          "user": "Route 28.",
+          "response": "Leesburg Bypass to Route 28 is $5.80 under the published fixed rate at 8 AM EDT.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 639,
+          "output_tokens": 38,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9200118430017028,
+          "cost_usd": 0.0001734,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 705,
+          "output_tokens": 44,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.2736666659984621,
+          "cost_usd": 0.00019380000000000002,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Route 28.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "greenway-missing-destination-3",
+      "case_id": "greenway-missing-destination",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll if I get on the Greenway at Leesburg Bypass?",
+          "response": "Which Greenway exit are you heading to?",
+          "calls": []
+        },
+        {
+          "user": "Route 28.",
+          "response": "Leesburg Bypass to Route 28 is $5.80 under the published fixed rate at 8 AM EDT.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 639,
+          "output_tokens": 36,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0390845619986067,
+          "cost_usd": 0.000171,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 705,
+          "output_tokens": 35,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.6721143049944658,
+          "cost_usd": 0.000183,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Route 28.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "i66-no-comparison-1",
+      "case_id": "i66-no-comparison",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now? Has it gone up?",
+          "response": "The recorded eastbound toll from I-66 West to Route 7 is $4.25, observed at 7:59:30 AM EDT and evaluated at 8 AM. There is no comparison history here, so I cannot tell whether it increased.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 674,
+          "output_tokens": 39,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9413919490034459,
+          "cost_usd": 0.00018160000000000002,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "i66-no-comparison-2",
+      "case_id": "i66-no-comparison",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now? Has it gone up?",
+          "response": "The recorded eastbound toll from I-66 West to Route 7 is $4.25, observed at 7:59:30 AM EDT and evaluated at 8 AM. There is no comparison history here, so I cannot tell whether it increased.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 674,
+          "output_tokens": 39,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8474573200001032,
+          "cost_usd": 0.00018160000000000002,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "i66-no-comparison-3",
+      "case_id": "i66-no-comparison",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now? Has it gone up?",
+          "response": "The recorded eastbound toll from I-66 West to Route 7 is $4.25, observed at 7:59:30 AM EDT and evaluated at 8 AM. There is no comparison history here, so I cannot tell whether it increased.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 674,
+          "output_tokens": 43,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.7700463159999344,
+          "cost_usd": 0.0001864,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "i66-missing-price-1",
+      "case_id": "i66-missing-price",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now?",
+          "response": "There is no usable current observation for this I-66 route. It is a tolled period, but I cannot quote a toll from the available evidence. That does not mean the route is free or closed.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 640,
+          "output_tokens": 35,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9842751629985287,
+          "cost_usd": 0.00017,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "i66-missing-price-2",
+      "case_id": "i66-missing-price",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now?",
+          "response": "There is no usable current observation for this I-66 route. It is a tolled period, but I cannot quote a toll from the available evidence. That does not mean the route is free or closed.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 641,
+          "output_tokens": 18,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.6441012030045385,
+          "cost_usd": 0.0001498,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "i66-missing-price-3",
+      "case_id": "i66-missing-price",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now?",
+          "response": "There is no usable current observation for this I-66 route. It is a tolled period, but I cannot quote a toll from the available evidence. That does not mean the route is free or closed.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 641,
+          "output_tokens": 36,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8466238740002154,
+          "cost_usd": 0.00017140000000000002,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "i66-observed-price-1",
+      "case_id": "i66-observed-price",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now?",
+          "response": "The recorded eastbound toll from I-66 West to Route 7 is $4.25, observed at 7:59:30 AM EDT and evaluated at 8 AM.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 634,
+          "output_tokens": 37,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.7854714589993819,
+          "cost_usd": 0.00017120000000000001,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "i66-observed-price-2",
+      "case_id": "i66-observed-price",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now?",
+          "response": "The recorded eastbound toll from I-66 West to Route 7 is $4.25, observed at 7:59:30 AM EDT and evaluated at 8 AM.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 633,
+          "output_tokens": 43,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8530096320027951,
+          "cost_usd": 0.00017820000000000002,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "i66-observed-price-3",
+      "case_id": "i66-observed-price",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now?",
+          "response": "The recorded eastbound toll from I-66 West to Route 7 is $4.25, observed at 7:59:30 AM EDT and evaluated at 8 AM.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 633,
+          "output_tokens": 42,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.2189943560006213,
+          "cost_usd": 0.000177,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "i66-free-period-1",
+      "case_id": "i66-free-period",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now?",
+          "response": "At noon EDT, this I-66 eastbound trip is outside toll hours, so the schedule gives a $0.00 toll. This is a schedule-based price, not a live observation.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 636,
+          "output_tokens": 39,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9064481370005524,
+          "cost_usd": 0.000174,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "i66-free-period-2",
+      "case_id": "i66-free-period",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now?",
+          "response": "At noon EDT, this I-66 eastbound trip is outside toll hours, so the schedule gives a $0.00 toll. This is a schedule-based price, not a live observation.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 635,
+          "output_tokens": 35,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.1537234150018776,
+          "cost_usd": 0.000169,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "i66-free-period-3",
+      "case_id": "i66-free-period",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now?",
+          "response": "At noon EDT, this I-66 eastbound trip is outside toll hours, so the schedule gives a $0.00 toll. This is a schedule-based price, not a live observation.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 635,
+          "output_tokens": 43,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9403505290028988,
+          "cost_usd": 0.0001786,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "current-tool-error-1",
+      "case_id": "current-tool-error",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the Greenway toll from Leesburg Bypass to Route 28?",
+          "response": "The pricing service could not complete this request, so I do not have a toll to quote.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 626,
+          "output_tokens": 35,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0193158559995936,
+          "cost_usd": 0.0001672,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "current-tool-error-2",
+      "case_id": "current-tool-error",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the Greenway toll from Leesburg Bypass to Route 28?",
+          "response": "The pricing service could not complete this request, so I do not have a toll to quote.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 627,
+          "output_tokens": 34,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.1961161389990593,
+          "cost_usd": 0.0001662,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "current-tool-error-3",
+      "case_id": "current-tool-error",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the Greenway toll from Leesburg Bypass to Route 28?",
+          "response": "The pricing service could not complete this request, so I do not have a toll to quote.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 626,
+          "output_tokens": 37,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.449912318996212,
+          "cost_usd": 0.0001696,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "unsupported-origin-1",
+      "case_id": "unsupported-origin",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll from downtown Baltimore to Route 28 on the Greenway?",
+          "response": "Downtown Baltimore is outside the supported origin list. I cannot price that whole trip. Which supported Greenway entry would you like instead?",
+          "calls": []
+        },
+        {
+          "user": "I mean downtown Baltimore, Maryland. Please use that exact starting point.",
+          "response": "That exact Baltimore trip is outside the supported catalog, so I cannot price it.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 644,
+          "output_tokens": 63,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0056791550014168,
+          "cost_usd": 0.0002044,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 712,
+          "output_tokens": 34,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.990765365997504,
+          "cost_usd": 0.00018319999999999998,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "I mean downtown Baltimore, Maryland. Please use that exact starting point.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "unsupported-origin-2",
+      "case_id": "unsupported-origin",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll from downtown Baltimore to Route 28 on the Greenway?",
+          "response": "Downtown Baltimore is outside the supported origin list. I cannot price that whole trip. Which supported Greenway entry would you like instead?",
+          "calls": []
+        },
+        {
+          "user": "I mean downtown Baltimore, Maryland. End of conversation.",
+          "response": "That exact Baltimore trip is outside the supported catalog, so I cannot price it.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 645,
+          "output_tokens": 68,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.3891587640027865,
+          "cost_usd": 0.0002106,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 710,
+          "output_tokens": 47,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0784292129974347,
+          "cost_usd": 0.0001984,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "I mean downtown Baltimore, Maryland. End of conversation.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "unsupported-origin-3",
+      "case_id": "unsupported-origin",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What is the toll from downtown Baltimore to Route 28 on the Greenway?",
+          "response": "Downtown Baltimore is outside the supported origin list. I cannot price that whole trip. Which supported Greenway entry would you like instead?",
+          "calls": []
+        },
+        {
+          "user": "I mean downtown Baltimore, Maryland.",
+          "response": "That exact Baltimore trip is outside the supported catalog, so I cannot price it.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 644,
+          "output_tokens": 81,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0984493080031825,
+          "cost_usd": 0.000226,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 705,
+          "output_tokens": 35,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8699424809965421,
+          "cost_usd": 0.000183,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "I mean downtown Baltimore, Maryland.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-fixed-1",
+      "case_id": "annual-fixed",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I earn $120,000 a year. What would the Greenway commute from Leesburg Bypass to Route 28 cost me? I work Monday to Friday, leave at 8 AM, head home at 5:30 PM, and expect 240 office days.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP50: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP90: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 1118,
+          "output_tokens": 49,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9580634640005883,
+          "cost_usd": 0.00028240000000000003,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-fixed-2",
+      "case_id": "annual-fixed",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I earn $120,000 a year. What would the Greenway commute from Leesburg Bypass to Route 28 cost me? I work Monday to Friday, leave at 8 AM, head home at 5:30 PM, and expect 240 office days.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP50: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP90: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 1118,
+          "output_tokens": 49,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.794515155001136,
+          "cost_usd": 0.00028240000000000003,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-fixed-3",
+      "case_id": "annual-fixed",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I earn $120,000 a year. What would the Greenway commute from Leesburg Bypass to Route 28 cost me? I work Monday to Friday, leave at 8 AM, head home at 5:30 PM, and expect 240 office days.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP50: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP90: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 1118,
+          "output_tokens": 67,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0081190779965254,
+          "cost_usd": 0.000304,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-tysons-clarification-1",
+      "case_id": "annual-tysons-clarification",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I live near Springfield-Franconia and have a $120,000 offer in Tysons. What would the commute cost? Monday to Friday, 8 AM out, 5:30 PM back, 240 days a year.",
+          "response": "Which Tysons exit should I use: Westpark Drive, Jones Branch Drive, or Route 7?",
+          "calls": []
+        },
+        {
+          "user": "Use Westpark Drive.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. Some historical toll evidence is modeled, not directly observed. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $12.00; annual toll $2880.00; daily total $25.70; average monthly total $514.00; annual total $6168.00; income left after estimated tax and tolled commute $73832.00; commute share 7.7%; additional gross income to offset it $9252.00.\nP50: daily toll $16.00; annual toll $3840.00; daily total $29.70; average monthly total $594.00; annual total $7128.00; income left after estimated tax and tolled commute $72872.00; commute share 8.9%; additional gross income to offset it $10692.00.\nP90: daily toll $24.00; annual toll $5760.00; daily total $37.70; average monthly total $754.00; annual total $9048.00; income left after estimated tax and tolled commute $70952.00; commute share 11.3%; additional gross income to offset it $13572.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 737,
+          "output_tokens": 50,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8674501050045365,
+          "cost_usd": 0.0002074,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1168,
+          "output_tokens": 53,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.903935978996742,
+          "cost_usd": 0.00029720000000000007,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Use Westpark Drive.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-tysons-clarification-2",
+      "case_id": "annual-tysons-clarification",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I live near Springfield-Franconia and have a $120,000 offer in Tysons. What would the commute cost? Monday to Friday, 8 AM out, 5:30 PM back, 240 days a year.",
+          "response": "Which Tysons exit should I use: Westpark Drive, Jones Branch Drive, or Route 7?",
+          "calls": []
+        },
+        {
+          "user": "Use Westpark Drive.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. Some historical toll evidence is modeled, not directly observed. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $12.00; annual toll $2880.00; daily total $25.70; average monthly total $514.00; annual total $6168.00; income left after estimated tax and tolled commute $73832.00; commute share 7.7%; additional gross income to offset it $9252.00.\nP50: daily toll $16.00; annual toll $3840.00; daily total $29.70; average monthly total $594.00; annual total $7128.00; income left after estimated tax and tolled commute $72872.00; commute share 8.9%; additional gross income to offset it $10692.00.\nP90: daily toll $24.00; annual toll $5760.00; daily total $37.70; average monthly total $754.00; annual total $9048.00; income left after estimated tax and tolled commute $70952.00; commute share 11.3%; additional gross income to offset it $13572.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 737,
+          "output_tokens": 75,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.185634494999249,
+          "cost_usd": 0.0002374,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1168,
+          "output_tokens": 50,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.1003627390018664,
+          "cost_usd": 0.00029360000000000003,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Use Westpark Drive.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-tysons-clarification-3",
+      "case_id": "annual-tysons-clarification",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I live near Springfield-Franconia and have a $120,000 offer in Tysons. What would the commute cost? Monday to Friday, 8 AM out, 5:30 PM back, 240 days a year.",
+          "response": "Which Tysons exit should I use: Westpark Drive, Jones Branch Drive, or Route 7?",
+          "calls": []
+        },
+        {
+          "user": "Westpark Drive.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. Some historical toll evidence is modeled, not directly observed. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $12.00; annual toll $2880.00; daily total $25.70; average monthly total $514.00; annual total $6168.00; income left after estimated tax and tolled commute $73832.00; commute share 7.7%; additional gross income to offset it $9252.00.\nP50: daily toll $16.00; annual toll $3840.00; daily total $29.70; average monthly total $594.00; annual total $7128.00; income left after estimated tax and tolled commute $72872.00; commute share 8.9%; additional gross income to offset it $10692.00.\nP90: daily toll $24.00; annual toll $5760.00; daily total $37.70; average monthly total $754.00; annual total $9048.00; income left after estimated tax and tolled commute $70952.00; commute share 11.3%; additional gross income to offset it $13572.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 736,
+          "output_tokens": 43,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8681314749992453,
+          "cost_usd": 0.0001988,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1166,
+          "output_tokens": 58,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0995570110026165,
+          "cost_usd": 0.0003028,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Westpark Drive.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-missing-schedule-1",
+      "case_id": "annual-missing-schedule",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I earn $120,000 and would take the Greenway from Leesburg Bypass to Route 28. What would that commute do to my income?",
+          "response": "What weekdays will you commute, when will you leave and return, and how many office days should I use for the year?",
+          "calls": []
+        },
+        {
+          "user": "Monday through Friday; I leave at 8 AM and return at 5:30 PM. Use 240 office days for the year.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP50: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP90: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 728,
+          "output_tokens": 67,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8563789870022447,
+          "cost_usd": 0.000226,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1180,
+          "output_tokens": 50,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0878087710007094,
+          "cost_usd": 0.000296,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Monday through Friday; I leave at 8 AM and return at 5:30 PM. Use 240 office days for the year.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-missing-schedule-2",
+      "case_id": "annual-missing-schedule",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I earn $120,000 and would take the Greenway from Leesburg Bypass to Route 28. What would that commute do to my income?",
+          "response": "What weekdays will you commute, when will you leave and return, and how many office days should I use for the year?",
+          "calls": []
+        },
+        {
+          "user": "Monday through Friday; I\u2019d leave at 8:00 AM, return at 5:30 PM, and use 240 office days for the year.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP50: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP90: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 728,
+          "output_tokens": 75,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.5949433449932258,
+          "cost_usd": 0.0002356,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1184,
+          "output_tokens": 44,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8301583880020189,
+          "cost_usd": 0.00028960000000000005,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Monday through Friday; I\u2019d leave at 8:00 AM, return at 5:30 PM, and use 240 office days for the year.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-missing-schedule-3",
+      "case_id": "annual-missing-schedule",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I earn $120,000 and would take the Greenway from Leesburg Bypass to Route 28. What would that commute do to my income?",
+          "response": "What weekdays will you commute, when will you leave and return, and how many office days should I use for the year?",
+          "calls": []
+        },
+        {
+          "user": "Monday through Friday; I\u2019ll leave at 8:00 AM, return at 5:30 PM, and use 240 office days for the year.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP50: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP90: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 728,
+          "output_tokens": 74,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.3265777519991389,
+          "cost_usd": 0.00023439999999999998,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1184,
+          "output_tokens": 43,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8446674360020552,
+          "cost_usd": 0.0002884,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Monday through Friday; I\u2019ll leave at 8:00 AM, return at 5:30 PM, and use 240 office days for the year.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-salary-range-1",
+      "case_id": "annual-salary-range",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "The offer is $110,000 to $130,000. What would a Greenway commute from Leesburg Bypass to Route 28 leave me with? Monday to Friday, 8 AM out and 5:30 PM back, 240 office days.",
+          "response": "What single gross annual salary should I use from that range?",
+          "calls": []
+        },
+        {
+          "user": "Use $120,000 gross per year.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP50: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP90: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 758,
+          "output_tokens": 54,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9423646189970896,
+          "cost_usd": 0.00021639999999999997,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1191,
+          "output_tokens": 47,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.2237972139992053,
+          "cost_usd": 0.0002946,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Use $120,000 gross per year.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-salary-range-2",
+      "case_id": "annual-salary-range",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "The offer is $110,000 to $130,000. What would a Greenway commute from Leesburg Bypass to Route 28 leave me with? Monday to Friday, 8 AM out and 5:30 PM back, 240 office days.",
+          "response": "What single gross annual salary should I use from that range?",
+          "calls": []
+        },
+        {
+          "user": "Use $120,000 gross per year.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP50: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP90: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 757,
+          "output_tokens": 47,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9259163400056423,
+          "cost_usd": 0.0002078,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1190,
+          "output_tokens": 37,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8300551640058984,
+          "cost_usd": 0.0002824,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Use $120,000 gross per year.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-salary-range-3",
+      "case_id": "annual-salary-range",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "The offer is $110,000 to $130,000. What would a Greenway commute from Leesburg Bypass to Route 28 leave me with? Monday to Friday, 8 AM out and 5:30 PM back, 240 office days.",
+          "response": "What single gross annual salary should I use from that range?",
+          "calls": []
+        },
+        {
+          "user": "Use $120,000 as the single gross annual salary.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP50: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP90: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 757,
+          "output_tokens": 47,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.5179861080032424,
+          "cost_usd": 0.0002078,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1193,
+          "output_tokens": 54,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8669175429968163,
+          "cost_usd": 0.00030340000000000006,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Use $120,000 as the single gross annual salary.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-confirm-days-1",
+      "case_id": "annual-confirm-days",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I make $120,000 and commute on the Greenway from Leesburg Bypass to Route 28, Monday to Friday. I leave at 8 AM and return at 5:30 PM. What does that cost over a year?",
+          "response": "Five weekdays times 52 weeks is 260 commute days before time off. Should I use that, or a different count?",
+          "calls": []
+        },
+        {
+          "user": "Use 240 commute days after allowing for time off.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP50: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP90: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 761,
+          "output_tokens": 28,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0664841859979788,
+          "cost_usd": 0.00018580000000000002,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1196,
+          "output_tokens": 52,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.5044785229983972,
+          "cost_usd": 0.0003016,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Use 240 commute days after allowing for time off.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-confirm-days-2",
+      "case_id": "annual-confirm-days",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I make $120,000 and commute on the Greenway from Leesburg Bypass to Route 28, Monday to Friday. I leave at 8 AM and return at 5:30 PM. What does that cost over a year?",
+          "response": "Five weekdays times 52 weeks is 260 commute days before time off. Should I use that, or a different count?",
+          "calls": []
+        },
+        {
+          "user": "Use 240 commute days after allowing for time off.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP50: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP90: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 762,
+          "output_tokens": 59,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9743054829959874,
+          "cost_usd": 0.00022319999999999998,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1197,
+          "output_tokens": 42,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8556242089980515,
+          "cost_usd": 0.0002898,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Use 240 commute days after allowing for time off.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-confirm-days-3",
+      "case_id": "annual-confirm-days",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I make $120,000 and commute on the Greenway from Leesburg Bypass to Route 28, Monday to Friday. I leave at 8 AM and return at 5:30 PM. What does that cost over a year?",
+          "response": "Five weekdays times 52 weeks is 260 commute days before time off. Should I use that, or a different count?",
+          "calls": []
+        },
+        {
+          "user": "Use 240 commute days after allowing for time off.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP50: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nP90: daily toll $11.60; annual toll $2784.00; daily total $25.30; average monthly total $506.00; annual total $6072.00; income left after estimated tax and tolled commute $73928.00; commute share 7.6%; additional gross income to offset it $9108.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 761,
+          "output_tokens": 60,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0513516499995603,
+          "cost_usd": 0.00022420000000000003,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1196,
+          "output_tokens": 45,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0408260749973124,
+          "cost_usd": 0.0002932,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Use 240 commute days after allowing for time off.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-no-return-route-1",
+      "case_id": "annual-no-return-route",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "Could you estimate a Dulles Airport to Reagan Airport commute on a $120,000 salary? Monday to Friday, 8 AM out, 5:30 PM back, 240 days.",
+          "response": "The outbound Dulles Airport to Reagan Airport route is supported, but the return from Reagan Airport to Dulles Airport has no supported route. I cannot produce an annual round-trip toll or affordability estimate for it.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 732,
+          "output_tokens": 18,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.8853952360004769,
+          "cost_usd": 0.000168,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-no-return-route-2",
+      "case_id": "annual-no-return-route",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "Could you estimate a Dulles Airport to Reagan Airport commute on a $120,000 salary? Monday to Friday, 8 AM out, 5:30 PM back, 240 days.",
+          "response": "The outbound Dulles Airport to Reagan Airport route is supported, but the return from Reagan Airport to Dulles Airport has no supported route. I cannot produce an annual round-trip toll or affordability estimate for it.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 732,
+          "output_tokens": 35,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9505589830005192,
+          "cost_usd": 0.0001884,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-no-return-route-3",
+      "case_id": "annual-no-return-route",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "Could you estimate a Dulles Airport to Reagan Airport commute on a $120,000 salary? Monday to Friday, 8 AM out, 5:30 PM back, 240 days.",
+          "response": "The outbound Dulles Airport to Reagan Airport route is supported, but the return from Reagan Airport to Dulles Airport has no supported route. I cannot produce an annual round-trip toll or affordability estimate for it.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 732,
+          "output_tokens": 35,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.03761542000575,
+          "cost_usd": 0.0001884,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-partial-history-1",
+      "case_id": "annual-partial-history",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What would a Leesburg to Washington commute cost on a $120,000 salary? Monday to Friday, 8 AM outbound, 5:30 PM return, 240 days.",
+          "response": "Do you mean Washington via I-66 or I-395?",
+          "calls": []
+        },
+        {
+          "user": "I-395, via the Leesburg Bypass.",
+          "response": "This covers 30 of 60 eligible dates (50.0%). The historical coverage is partial. Some historical toll evidence is modeled, not directly observed. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $35.60; annual toll $8544.00; daily total $49.30; average monthly total $986.00; annual total $11832.00; income left after estimated tax and tolled commute $68168.00; commute share 14.8%; additional gross income to offset it $17748.00.\nP50: daily toll $39.60; annual toll $9504.00; daily total $53.30; average monthly total $1066.00; annual total $12792.00; income left after estimated tax and tolled commute $67208.00; commute share 16.0%; additional gross income to offset it $19188.00.\nP90: daily toll $47.60; annual toll $11424.00; daily total $61.30; average monthly total $1226.00; annual total $14712.00; income left after estimated tax and tolled commute $65288.00; commute share 18.4%; additional gross income to offset it $22068.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 712,
+          "output_tokens": 51,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9049416120033129,
+          "cost_usd": 0.0002036,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1159,
+          "output_tokens": 50,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9854957189963898,
+          "cost_usd": 0.0002918,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "I-395, via the Leesburg Bypass.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-partial-history-2",
+      "case_id": "annual-partial-history",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What would a Leesburg to Washington commute cost on a $120,000 salary? Monday to Friday, 8 AM outbound, 5:30 PM return, 240 days.",
+          "response": "Do you mean Washington via I-66 or I-395?",
+          "calls": []
+        },
+        {
+          "user": "I-395\u2014the Leesburg Bypass to Washington route.",
+          "response": "This covers 30 of 60 eligible dates (50.0%). The historical coverage is partial. Some historical toll evidence is modeled, not directly observed. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $35.60; annual toll $8544.00; daily total $49.30; average monthly total $986.00; annual total $11832.00; income left after estimated tax and tolled commute $68168.00; commute share 14.8%; additional gross income to offset it $17748.00.\nP50: daily toll $39.60; annual toll $9504.00; daily total $53.30; average monthly total $1066.00; annual total $12792.00; income left after estimated tax and tolled commute $67208.00; commute share 16.0%; additional gross income to offset it $19188.00.\nP90: daily toll $47.60; annual toll $11424.00; daily total $61.30; average monthly total $1226.00; annual total $14712.00; income left after estimated tax and tolled commute $65288.00; commute share 18.4%; additional gross income to offset it $22068.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 712,
+          "output_tokens": 46,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.5352842649954255,
+          "cost_usd": 0.0001976,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1160,
+          "output_tokens": 55,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0195543769950746,
+          "cost_usd": 0.000298,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "I-395\u2014the Leesburg Bypass to Washington route.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-partial-history-3",
+      "case_id": "annual-partial-history",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "What would a Leesburg to Washington commute cost on a $120,000 salary? Monday to Friday, 8 AM outbound, 5:30 PM return, 240 days.",
+          "response": "Do you mean Washington via I-66 or I-395?",
+          "calls": []
+        },
+        {
+          "user": "I-395\u2014the Leesburg Bypass to Washington route.",
+          "response": "This covers 30 of 60 eligible dates (50.0%). The historical coverage is partial. Some historical toll evidence is modeled, not directly observed. The fixed-rate components use current published rates. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $35.60; annual toll $8544.00; daily total $49.30; average monthly total $986.00; annual total $11832.00; income left after estimated tax and tolled commute $68168.00; commute share 14.8%; additional gross income to offset it $17748.00.\nP50: daily toll $39.60; annual toll $9504.00; daily total $53.30; average monthly total $1066.00; annual total $12792.00; income left after estimated tax and tolled commute $67208.00; commute share 16.0%; additional gross income to offset it $19188.00.\nP90: daily toll $47.60; annual toll $11424.00; daily total $61.30; average monthly total $1226.00; annual total $14712.00; income left after estimated tax and tolled commute $65288.00; commute share 18.4%; additional gross income to offset it $22068.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 711,
+          "output_tokens": 51,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9166031910062884,
+          "cost_usd": 0.0002034,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1159,
+          "output_tokens": 65,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0937900170029025,
+          "cost_usd": 0.0003098,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "I-395\u2014the Leesburg Bypass to Washington route.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-independent-ramps-1",
+      "case_id": "annual-independent-ramps",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I go from I-95 Near Franconia-Springfield Pkwy NB to Pentagon/Eads in the morning, then Pentagon/Eads southbound to Backlick Road in the evening. What would that cost on $120,000 a year? Monday to Friday, 8 AM out, 5:30 PM back, 240 days.",
+          "response": "I used Franconia-Springfield Parkway northbound to Pentagon/Eads in the morning and Pentagon/Eads southbound to Backlick Road in the evening. This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. Some historical toll evidence is modeled, not directly observed. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $12.00; annual toll $2880.00; daily total $25.70; average monthly total $514.00; annual total $6168.00; income left after estimated tax and tolled commute $73832.00; commute share 7.7%; additional gross income to offset it $9252.00.\nP50: daily toll $16.00; annual toll $3840.00; daily total $29.70; average monthly total $594.00; annual total $7128.00; income left after estimated tax and tolled commute $72872.00; commute share 8.9%; additional gross income to offset it $10692.00.\nP90: daily toll $24.00; annual toll $5760.00; daily total $37.70; average monthly total $754.00; annual total $9048.00; income left after estimated tax and tolled commute $70952.00; commute share 11.3%; additional gross income to offset it $13572.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 1183,
+          "output_tokens": 49,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9139121120024356,
+          "cost_usd": 0.0002954,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-independent-ramps-2",
+      "case_id": "annual-independent-ramps",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I go from I-95 Near Franconia-Springfield Pkwy NB to Pentagon/Eads in the morning, then Pentagon/Eads southbound to Backlick Road in the evening. What would that cost on $120,000 a year? Monday to Friday, 8 AM out, 5:30 PM back, 240 days.",
+          "response": "I used Franconia-Springfield Parkway northbound to Pentagon/Eads in the morning and Pentagon/Eads southbound to Backlick Road in the evening. This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. Some historical toll evidence is modeled, not directly observed. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $12.00; annual toll $2880.00; daily total $25.70; average monthly total $514.00; annual total $6168.00; income left after estimated tax and tolled commute $73832.00; commute share 7.7%; additional gross income to offset it $9252.00.\nP50: daily toll $16.00; annual toll $3840.00; daily total $29.70; average monthly total $594.00; annual total $7128.00; income left after estimated tax and tolled commute $72872.00; commute share 8.9%; additional gross income to offset it $10692.00.\nP90: daily toll $24.00; annual toll $5760.00; daily total $37.70; average monthly total $754.00; annual total $9048.00; income left after estimated tax and tolled commute $70952.00; commute share 11.3%; additional gross income to offset it $13572.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 1184,
+          "output_tokens": 62,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.056700004999584,
+          "cost_usd": 0.0003112,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-independent-ramps-3",
+      "case_id": "annual-independent-ramps",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I go from I-95 Near Franconia-Springfield Pkwy NB to Pentagon/Eads in the morning, then Pentagon/Eads southbound to Backlick Road in the evening. What would that cost on $120,000 a year? Monday to Friday, 8 AM out, 5:30 PM back, 240 days.",
+          "response": "I used Franconia-Springfield Parkway northbound to Pentagon/Eads in the morning and Pentagon/Eads southbound to Backlick Road in the evening. This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. Some historical toll evidence is modeled, not directly observed. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $12.00; annual toll $2880.00; daily total $25.70; average monthly total $514.00; annual total $6168.00; income left after estimated tax and tolled commute $73832.00; commute share 7.7%; additional gross income to offset it $9252.00.\nP50: daily toll $16.00; annual toll $3840.00; daily total $29.70; average monthly total $594.00; annual total $7128.00; income left after estimated tax and tolled commute $72872.00; commute share 8.9%; additional gross income to offset it $10692.00.\nP90: daily toll $24.00; annual toll $5760.00; daily total $37.70; average monthly total $754.00; annual total $9048.00; income left after estimated tax and tolled commute $70952.00; commute share 11.3%; additional gross income to offset it $13572.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 1183,
+          "output_tokens": 45,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.083144665004511,
+          "cost_usd": 0.0002906,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-select-alternative-1",
+      "case_id": "annual-select-alternative",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I want to go from Backlick Road to Pentagon/Eads in the morning and Pentagon/Eads southbound to Backlick in the evening. Can you estimate it? Salary $120,000, Monday to Friday, 8 AM and 5:30 PM, 240 days.",
+          "response": "Backlick is not a valid morning entry. The offered alternatives are Franconia-Springfield Parkway northbound and Old Keene Mill Road. Which do you want? Your evening Backlick exit can stay.",
+          "calls": []
+        },
+        {
+          "user": "Choose Franconia-Springfield Parkway northbound for the morning entry. Keep the evening Backlick exit.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. Some historical toll evidence is modeled, not directly observed. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $12.00; annual toll $2880.00; daily total $25.70; average monthly total $514.00; annual total $6168.00; income left after estimated tax and tolled commute $73832.00; commute share 7.7%; additional gross income to offset it $9252.00.\nP50: daily toll $16.00; annual toll $3840.00; daily total $29.70; average monthly total $594.00; annual total $7128.00; income left after estimated tax and tolled commute $72872.00; commute share 8.9%; additional gross income to offset it $10692.00.\nP90: daily toll $24.00; annual toll $5760.00; daily total $37.70; average monthly total $754.00; annual total $9048.00; income left after estimated tax and tolled commute $70952.00; commute share 11.3%; additional gross income to offset it $13572.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 806,
+          "output_tokens": 60,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0223003489954863,
+          "cost_usd": 0.00023320000000000003,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1254,
+          "output_tokens": 36,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.7835516659979476,
+          "cost_usd": 0.000294,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Choose Franconia-Springfield Parkway northbound for the morning entry. Keep the evening Backlick exit.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-select-alternative-2",
+      "case_id": "annual-select-alternative",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I want to go from Backlick Road to Pentagon/Eads in the morning and Pentagon/Eads southbound to Backlick in the evening. Can you estimate it? Salary $120,000, Monday to Friday, 8 AM and 5:30 PM, 240 days.",
+          "response": "Backlick is not a valid morning entry. The offered alternatives are Franconia-Springfield Parkway northbound and Old Keene Mill Road. Which do you want? Your evening Backlick exit can stay.",
+          "calls": []
+        },
+        {
+          "user": "Choose Franconia-Springfield Parkway northbound for the morning entry. Keep the evening Backlick exit.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. Some historical toll evidence is modeled, not directly observed. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $12.00; annual toll $2880.00; daily total $25.70; average monthly total $514.00; annual total $6168.00; income left after estimated tax and tolled commute $73832.00; commute share 7.7%; additional gross income to offset it $9252.00.\nP50: daily toll $16.00; annual toll $3840.00; daily total $29.70; average monthly total $594.00; annual total $7128.00; income left after estimated tax and tolled commute $72872.00; commute share 8.9%; additional gross income to offset it $10692.00.\nP90: daily toll $24.00; annual toll $5760.00; daily total $37.70; average monthly total $754.00; annual total $9048.00; income left after estimated tax and tolled commute $70952.00; commute share 11.3%; additional gross income to offset it $13572.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 806,
+          "output_tokens": 61,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.164673353996477,
+          "cost_usd": 0.00023440000000000003,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1254,
+          "output_tokens": 39,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.7816510859993286,
+          "cost_usd": 0.0002976,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Choose Franconia-Springfield Parkway northbound for the morning entry. Keep the evening Backlick exit.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-select-alternative-3",
+      "case_id": "annual-select-alternative",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "I want to go from Backlick Road to Pentagon/Eads in the morning and Pentagon/Eads southbound to Backlick in the evening. Can you estimate it? Salary $120,000, Monday to Friday, 8 AM and 5:30 PM, 240 days.",
+          "response": "Backlick is not a valid morning entry. The offered alternatives are Franconia-Springfield Parkway northbound and Old Keene Mill Road. Which do you want? Your evening Backlick exit can stay.",
+          "calls": []
+        },
+        {
+          "user": "Choose Franconia-Springfield Parkway northbound for the morning entry. Keep the evening Backlick exit.",
+          "response": "This covers 60 of 60 eligible dates (100.0%). All eligible dates have paired samples. Some historical toll evidence is modeled, not directly observed. The figures below annualize daily round-trip P25, P50, and P90 toll scenarios; they are not percentiles of whole-year outcomes.\nP25: daily toll $12.00; annual toll $2880.00; daily total $25.70; average monthly total $514.00; annual total $6168.00; income left after estimated tax and tolled commute $73832.00; commute share 7.7%; additional gross income to offset it $9252.00.\nP50: daily toll $16.00; annual toll $3840.00; daily total $29.70; average monthly total $594.00; annual total $7128.00; income left after estimated tax and tolled commute $72872.00; commute share 8.9%; additional gross income to offset it $10692.00.\nP90: daily toll $24.00; annual toll $5760.00; daily total $37.70; average monthly total $754.00; annual total $9048.00; income left after estimated tax and tolled commute $70952.00; commute share 11.3%; additional gross income to offset it $13572.00.\nThese estimates use 240 commute days and gross annual income of $120000.00. The one-third tax assumption leaves $80000.00 after estimated tax. The tool estimates 20.00 tolled miles per day using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 per day and $3288.00 per year. These are tolled portions only; the rest of the drive is excluded. They are estimates, not guaranteed future prices.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 806,
+          "output_tokens": 57,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.978828760999022,
+          "cost_usd": 0.00022960000000000002,
+          "complete": true
+        },
+        {
+          "role": "actor",
+          "input_tokens": 1254,
+          "output_tokens": 37,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9864176170012797,
+          "cost_usd": 0.00029519999999999997,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": false,
+          "message": "Choose Franconia-Springfield Parkway northbound for the morning entry. Keep the evening Backlick exit.",
+          "stop_reason": null
+        },
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-no-paired-days-1",
+      "case_id": "annual-no-paired-days",
+      "trial": 1,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "Estimate Springfield-Franconia to Westpark Drive and back on a $120,000 salary. Monday to Friday, 8 AM out, 5:30 PM back, 240 days.",
+          "response": "There are zero complete paired days out of 60 eligible dates, so there is not enough history for annual toll scenarios or a full affordability estimate. The missing toll evidence is not a zero toll. The available baseline uses $120,000 gross annual income and $80,000 after estimated tax under the one-third tax assumption. The tool estimates 20 tolled miles daily, or 4,800 annually over 240 commute days, using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 daily and $3,288 annually. These figures cover only tolled portions of the drive. Historical tolls and combined commute totals are unavailable.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 828,
+          "output_tokens": 50,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 0.9638800770044327,
+          "cost_usd": 0.00022560000000000004,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-no-paired-days-2",
+      "case_id": "annual-no-paired-days",
+      "trial": 2,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "Estimate Springfield-Franconia to Westpark Drive and back on a $120,000 salary. Monday to Friday, 8 AM out, 5:30 PM back, 240 days.",
+          "response": "There are zero complete paired days out of 60 eligible dates, so there is not enough history for annual toll scenarios or a full affordability estimate. The missing toll evidence is not a zero toll. The available baseline uses $120,000 gross annual income and $80,000 after estimated tax under the one-third tax assumption. The tool estimates 20 tolled miles daily, or 4,800 annually over 240 commute days, using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 daily and $3,288 annually. These figures cover only tolled portions of the drive. Historical tolls and combined commute totals are unavailable.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 828,
+          "output_tokens": 51,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.1926335140014999,
+          "cost_usd": 0.0002268,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    },
+    {
+      "id": "annual-no-paired-days-3",
+      "case_id": "annual-no-paired-days",
+      "trial": 3,
+      "status": "scored",
+      "turns": [
+        {
+          "user": "Estimate Springfield-Franconia to Westpark Drive and back on a $120,000 salary. Monday to Friday, 8 AM out, 5:30 PM back, 240 days.",
+          "response": "There are zero complete paired days out of 60 eligible dates, so there is not enough history for annual toll scenarios or a full affordability estimate. The missing toll evidence is not a zero toll. The available baseline uses $120,000 gross annual income and $80,000 after estimated tax under the one-third tax assumption. The tool estimates 20 tolled miles daily, or 4,800 annually over 240 commute days, using straight-line priced legs. At $0.685 per mile, vehicle costs are $13.70 daily and $3,288 annually. These figures cover only tolled portions of the drive. Historical tolls and combined commute totals are unavailable.",
+          "calls": []
+        }
+      ],
+      "attempted_tools": [],
+      "requested_tools": [],
+      "rejected_tools": [],
+      "checks": [],
+      "verdicts": {},
+      "measurements": [
+        {
+          "role": "actor",
+          "input_tokens": 828,
+          "output_tokens": 62,
+          "cached_tokens": 0,
+          "written_tokens": 0,
+          "seconds": 1.0713742110019666,
+          "cost_usd": 0.00024,
+          "complete": true
+        }
+      ],
+      "actor_replies": [
+        {
+          "stop": true,
+          "message": null,
+          "stop_reason": "goal_completed"
+        }
+      ],
+      "failure_class": null,
+      "error": null,
+      "seconds": 0
+    }
+  ],
+  "cost_usd": 0.019473399999995422,
+  "unknown_usage": false,
+  "evidence_sha256": "88664c340dcf3256ef84b262ae6732ed45b7ac8a421200b07db66ba87d064d1e"
+}
