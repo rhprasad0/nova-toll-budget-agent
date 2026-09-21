@@ -21,8 +21,11 @@
     "max_output_tokens": 2048
   },
   "approval": {
-    "status": "pending",
+    "status": "approved",
     "evidence_sha256": "0c6a65fe144526281e3f0337d477fe40b6c9b615a87659f3ac2058033be8f2e4",
-    "scope": "Numeric limits unchanged; revised critical pass\u00b3 corpus, actor, and judge contract awaiting exact evidence review."
+    "scope": "Numeric thresholds unchanged; exact calibration-16 and actors-2 contract approved.",
+    "reviewer": "rhprasad0",
+    "approved_at": "2026-09-21T19:23:33.515099+00:00",
+    "evidence": "Ryan explicitly approved calibration-16, actors-2, and policy 1.0.3 in the Codex conversation: \"Approve calibration, actors, and policy\". Approval binds the exact review packet and unchanged numeric thresholds; it does not authorize merge, deployment, or production qualification."
   }
 }

@@ -1,6 +1,6 @@
 # Critical pass³ — calibration review
 
-**Pending human approval. No scored comparison or production qualification yet.**
+**Approved by Ryan: "Approve calibration, actors, and policy". No production qualification is implied.**
 
 ## Changes for review
 
@@ -79,8 +79,8 @@ Please choose **one gross annual income estimate**—for example, **$110,000**, 
 - **grounding:** CORRECT: The response’s affirmative financial and schedule facts are grounded in the supplied user inputs and successful tool result: $120,000 income, 240 days, Monday–Friday at 08:00/17:30, 60/60 paired dates, fixed tolls of $11.60 daily, and the stated vehicle-cost and annualized amounts. No unsupported income, weekday, departure-time, or commute-day fact is introduced.
 - **rules:** CORRECT — Turn 1 requests one annual gross estimate and does not select a midpoint. After the user selects $120,000, the Turn 2 call uses the supplied $120,000 income, 240 days, weekdays, and 8:00/17:30 route schedule with the permitted route arguments. The response accurately discloses the one-third tax assumption, $0.685/mile vehicle-cost assumption, 20 tolled miles and tolled-only scope, current published fixed-rate source, and annualized daily P25/P50/P90 labeling. No prohibited premature call, current-price substitution, or unsupported financial claim occurred.
 
-## Approval requested
+## Approval recorded
 
-Approve this exact corpus, actor/judge calibration, and policy 1.0.3 contract for the unchanged-reference and prompt-candidate comparisons. No merge, deployment, or production baseline promotion is included.
+Ryan approved this exact corpus, actor/judge calibration, and policy 1.0.3 contract for the unchanged-reference and prompt-candidate comparisons. No merge, deployment, or production baseline promotion is included.
 
 The local runner requires this review before scored execution: `GOLDEN_RUNNER.md` says “A human must review disagreements before execution” and requires approval of the exact evidence digest.
