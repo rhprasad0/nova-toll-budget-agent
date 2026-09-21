@@ -14,9 +14,15 @@ tokens, no cache-write tokens. Linked cumulative spend is $7.60716767.
 Candidate: `00585d9bb2696baf7a2aea2f460edd0a71f2c582`. Exact evidence digest:
 `95070932bbde164f79d36ca8a76a7fa1508b3c3f46865165c112dfb2d7b2ca32`.
 Full manifest, append-only events, reports, and summary remain locally under
-ignored `eval/private/critical-pass3/calibration-25/`. The next paid run must
-link that directory as its prior run. Exact human approval remains pending;
-no application-scored run or 17/17 streak is claimed. All 138 relevant corpus, runner, baseline, and gate tests pass
+ignored `eval/private/critical-pass3/calibration-25/`. The user approved this exact calibration for local execution and authorized
+continuation through task completion. Approval is recorded in its private
+`review.json`; protected CI activation remains pending.
+
+Initial application run `durable-1` completed at 13/17 critical pass³ and
+60/72 successful trials. It remains retained, including a Rules false negative
+for a permitted discovery call. Prompt 2.3.1 addresses observed-versus-evaluated
+source labels, annualized daily scenario labels, and unchosen salary suggestions.
+The next paid run links `durable-1`; no passing streak is claimed yet. All 138 relevant corpus, runner, baseline, and gate tests pass
 (including a gate rerun after updating the pending policy contract). Historical calibration-24 evidence remains intact. Pending policy 1.0.9 binds
 the corrected corpus contract; numeric thresholds and protected CI workers are
 unchanged.

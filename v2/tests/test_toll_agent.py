@@ -246,6 +246,18 @@ def test_system_prompt_contains_rds_points_and_v2_behavior() -> None:
     assert "preserve that timestamp's clock time" in normalized
     assert "use the literal `EST` suffix year-round" not in normalized
     assert "For every observed or modeled component" in normalized
+    assert (
+        "Only an actual `observed_at` supports an observation-time label" in normalized
+    )
+    assert "Annualized daily scenarios" in normalized
+    assert (
+        "without suggesting a midpoint, example salary, or converted income"
+        in normalized
+    )
+    assert (
+        "does not make fixed or modeled prices historically observed tolls"
+        in normalized
+    )
     assert "recent_movement" in prompt
     assert "net_change_usd" in prompt
     assert "unchanged component must still show its `$0.00` net change" in normalized
@@ -319,7 +331,7 @@ def test_system_prompt_matches_its_versioned_contract() -> None:
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
 
-    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.3.0" == prompt_contract["current"]
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.3.1" == prompt_contract["current"]
     assert (
         toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
         == "1.0.0"

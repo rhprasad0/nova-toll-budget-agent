@@ -6,9 +6,9 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-This PR changes the evaluation harness and gate only; the application prompt,
-model, contract, and application tests match main. The earlier prompt experiments
-remain historical evidence, not application changes included in this PR.
+PR 581 now also includes authorized application prompt corrections for source
+labels, annualized daily scenarios, and user-selected income. The application
+model remains gpt-5.6-luna. Local repetition does not qualify a production release.
 
 The current corpus **1.0.20**, harness **1.2.9**, and policy **1.0.9** await exact
 human approval. See the [current review packet](results/golden/CACHING-SUMMARY.md).

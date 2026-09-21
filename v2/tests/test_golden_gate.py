@@ -285,6 +285,7 @@ def test_active_contract_and_numeric_policy_are_pinned(
     monkeypatch.setattr(run, "git", git)
     identity = run.identity(golden.load_cases())
     active = gate.read(gate.POLICY)["policy"]
+    golden_baseline.Policy.model_validate(active)
     assert active["contract_sha256"] == golden_baseline.contract(identity)
     historical = gate.read(gate.POLICY.with_name("policy-1.0.0.json"))["policy"]
     assert {
