@@ -443,14 +443,25 @@ def grade_assertions(
         if not turn.calls and len(amounts) == 2:
             plain = monetary_claims.replace("**", "")
             currency = r"\$[0-9][0-9,]*(?:\.[0-9]+)?[kK]?"
+            income = r"(?:one\s+)?(?:gross\s+)?(?:annual\s+)?income(?:\s+(?:figure|estimate|amount))?"
+            separator = r"(?:,\s*(?:or\s+)?|\s+or\s+)"
+            choices_pattern = currency + r"(?:" + separator + currency + r")+"
             for proposal in re.finditer(
-                r"\b(?:Please\s+)?(?:choose|select|pick)\s+(?:one\s+)?"
-                r"(?:gross\s+)?(?:annual\s+)?income(?:\s+(?:figure|estimate|amount))?"
-                r"\s*(?:[\u2014\u2013,:-]\s*)?(?:for example[,:]?\s*)?"
+                r"\b(?:Please\s+)?(?:choose|select|pick)\s+"
+                + income
+                + r"\s*(?:[\u2014\u2013,:-]\s*)?(?:for example[,:]?\s*)?"
+                + choices_pattern
+                + r"|\bWould you like to use\s+"
+                + choices_pattern
+                + r"\s*\?"
+                + r"|\bPlease provide\s+"
+                + income
+                + r"\s+between\s+"
                 + currency
-                + r"(?:(?:,\s*(?:or\s+)?|\s+or\s+)"
+                + r"\s+and\s+"
                 + currency
-                + r")+",
+                + r"\s*[\u2014\u2013,:-]\s*for example[,:]?\s*"
+                + currency,
                 plain,
                 flags=re.IGNORECASE,
             ):
@@ -557,7 +568,7 @@ def validate(root: Path = ROOT) -> None:
         raise ValueError("each case needs a labeled good example")
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != "1.0.12"
+        manifest["version"] != "1.0.13"
         or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-5.6-luna"
         or manifest["judge_model"] != "gpt-5.6-luna"

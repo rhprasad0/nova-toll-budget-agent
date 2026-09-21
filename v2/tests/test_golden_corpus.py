@@ -283,17 +283,24 @@ def test_negated_zero_is_not_an_invented_price() -> None:
         assert "unsupported_money" in golden.grade_assertions(case, turns)
 
 
-def test_income_choices_require_consent_and_cannot_hide_other_money() -> None:
+@pytest.mark.parametrize(
+    "label",
+    ["good-income-choices", "good-income-range-example", "good-income-choice-question"],
+)
+def test_income_choices_require_consent_and_cannot_hide_other_money(label: str) -> None:
     case = next(c for c in golden.load_cases() if c.id == "annual-salary-range")
     example = next(
         golden.Example.model_validate(e)
         for e in json.loads((golden.ROOT / "examples.json").read_text())
-        if e["case_id"] == case.id and e["label"] == "good-income-choices"
+        if e["case_id"] == case.id and e["label"] == label
     )
     assert not golden.grade_assertions(case, example.turns)
     for response in (
         "Your salary is $120,000.",
         "Please choose one income: $110,000, $125,000, or $130,000.",
+        "Would you like to use $110,000, $125,000, or $130,000?",
+        "Please provide one gross annual income estimate between $110,000 and $130,000—for example, $125,000.",
+        "I will use $120,000 as your annual income.",
         example.turns[0].response + " The toll is $120,000.",
     ):
         turns = deepcopy(example.turns)
