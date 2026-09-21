@@ -6,11 +6,11 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-Ryan approved calibration 15's exact contract and accepted the documented actor
-limitation on September 21, 2026. It matches 138/138 development criterion labels.
-See the [engineering summary](GOLDEN_VALIDITY_REVIEW.md) for results and scope.
-Recorded cumulative model spending is **$2.13301152**; the initial demo and failed
-production-reference run remain unqualified.
+Ryan approved calibration 16, actors-2, and policy 1.0.3 for the critical pass³
+work. Calibration matches 150/150 development criterion labels; the actor checks
+pass 60/60. See the [review packet](evidence/critical-pass3/REVIEW.md) for exact
+hashes, retained failures, spending, and approval scope. The initial demo and
+failed production-reference run remain unqualified.
 
 ## Execution and evidence
 
@@ -29,10 +29,10 @@ shared $5 run ceiling before starting. The durable ledger also reserves against
 the existing $25 authorization. Missing usage stops further paid calls and
 blocks subsequent runs until spending is reconciled. Provider retries are off.
 
-The original thresholds from policy 1.0.0 are unchanged in policy 1.0.2. Corpus
-1.0.11 and harness 1.2.1 correct actor/judge validity and expand calibration to
-46 development examples. Ryan approved this exact contract on September 21, 2026;
-calibration-8 approval applies only to the historical 1.0.10/1.2.0 contract.
+The original thresholds from policy 1.0.0 are unchanged in policy 1.0.3. Corpus
+1.0.12 and harness 1.2.2 correct route expectations, initial actor facts, and
+money/source grading, with 50 development calibration examples. Earlier
+approvals apply only to their historical contracts.
 Historical evidence, labels, policy approvals, and the original baseline remain intact.
 
 After machine qualification, inspect the `golden-evidence-RUN-1` artifact:
