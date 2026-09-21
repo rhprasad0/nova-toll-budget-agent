@@ -16,7 +16,7 @@ uv run python -m eval.golden_run run --output eval/private/golden-360/demo-1 \
   --prior-run eval/private/golden-360/calibration-1
 ```
 
-Calibration runs the 53 development examples (159 criterion verdicts). It excludes the four held-out
+Calibration runs the 55 development examples (165 criterion verdicts). It excludes the four held-out
 examples and preserves every disagreement. Outcome labels come from the approved
 corpus; the narrower diagnostic labels are proposals for human review. Calibration
 is evidence about judge accuracy, not a guarantee that every later verdict is right.

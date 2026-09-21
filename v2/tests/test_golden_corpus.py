@@ -286,7 +286,12 @@ def test_negated_zero_is_not_an_invented_price() -> None:
 
 @pytest.mark.parametrize(
     "label",
-    ["good-income-choices", "good-income-range-example", "good-income-choice-question"],
+    [
+        "good-income-choices",
+        "good-income-range-example",
+        "good-income-choice-question",
+        "good-income-bullets",
+    ],
 )
 def test_income_choices_require_consent_and_cannot_hide_other_money(label: str) -> None:
     case = next(c for c in golden.load_cases() if c.id == "annual-salary-range")
@@ -302,6 +307,9 @@ def test_income_choices_require_consent_and_cannot_hide_other_money(label: str) 
         "Would you like to use $110,000, $125,000, or $130,000?",
         "Please provide one gross annual income estimate between $110,000 and $130,000—for example, $125,000.",
         "I will use $120,000 as your annual income.",
+        "Which figure should I use?\n\n- $110,000\n- $125,000\n- $130,000\n",
+        "Your income is:\n\n- $110,000\n- $120,000\n- $130,000\n",
+        "Which figure should I use?\n\n- $110,000\n- The toll is $120,000\n- $130,000\n",
         example.turns[0].response + " The toll is $120,000.",
     ):
         turns = deepcopy(example.turns)

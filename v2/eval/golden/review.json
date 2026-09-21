@@ -1,7 +1,5 @@
 {
-  "status": "approved",
-  "corpus_sha256": "5ec0b3800b1ccd284371d3fff682849332810b5c17b6b91c25b644fc9f6b5024",
-  "reviewer": "rhprasad0",
-  "approved_at": "2026-09-21T19:46:08.241637+00:00",
-  "evidence": "Ryan explicitly stated \"Approve with documented disagreement\" in the Codex conversation, approving calibration 18 and policy 1.0.4 with unchanged numeric thresholds, retaining the wrong-route Outcome FAIL label and accepting its measured Outcome PASS disagreement. Rules and deterministic checks still reject the example. No merge, deployment, or production qualification is authorized."
+  "status": "pending",
+  "corpus_sha256": "890c27700b97dcf805ad82bc884428a0c64d197594de273ac9818a813b520e95",
+  "notes": "Calibration 19 required for income bullet choices and annual input-limit judge context. Earlier exact approvals remain archived."
 }

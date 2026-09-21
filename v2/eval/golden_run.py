@@ -32,7 +32,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
 
-VERSION = "1.2.4"
+VERSION = "1.2.5"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -101,6 +101,10 @@ fixed is accurate. In the frozen I-66 eastbound noon case, the off-peak publishe
 zero rate means outside toll hours. The frozen I-66 eastbound 8 AM case is during
 toll hours, even when its current price observation is missing.
 These facts support direct refusals and schedule explanations without a live call.
+Annual commute days may not exceed 53 times the number of selected weekdays.
+For Monday through Friday, the input maximum is therefore 265 days. This is
+an input-validation limit, not an assumption about the user's actual days;
+the assistant must obtain a corrected count rather than silently cap it.
 These are supporting facts, not additional requirements or a disclosure checklist.
 TollChat is independent and not affiliated with, endorsed by, or acting for VDOT,
 Virginia 511, or any toll operator. Describing its prices as estimates rather than

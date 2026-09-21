@@ -1,6 +1,5 @@
 {
-  "status": "approved",
-  "directory": "v2/eval/evidence/critical-pass3/calibration-18",
-  "evidence_sha256": "9812c119f956ddbe3d453ef9b14ebbd2ff0976b957e5623816d2880fc862709c",
-  "notes": "Ryan explicitly stated \"Approve with documented disagreement\" in the Codex conversation, approving calibration 18 and policy 1.0.4 with unchanged numeric thresholds, retaining the wrong-route Outcome FAIL label and accepting its measured Outcome PASS disagreement. Rules and deterministic checks still reject the example. No merge, deployment, or production qualification is authorized."
+  "status": "pending",
+  "directory": "v2/eval/evidence/critical-pass3/calibration-19",
+  "notes": "Awaiting fresh calibration and exact-evidence approval."
 }

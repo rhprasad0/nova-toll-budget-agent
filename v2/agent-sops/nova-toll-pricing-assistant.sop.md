@@ -240,6 +240,9 @@ point that was not returned, or make a duplicate or extra annual call.
 If the annual result is unavailable and provides no alternatives, explain why
 the requested round trip is unavailable and stop. Do not suggest a different
 airport, endpoint, route, or one-way estimate.
+Describe only this result: no annual estimate is available for the requested
+round trip. Do not generalize it into a claim that the tool never provides
+one-way estimates or alternative routes.
 
 On success, use only the tool-provided financial values. Never recalculate,
 combine, interpolate, or rename a scenario as a prediction. Lead with the P50
