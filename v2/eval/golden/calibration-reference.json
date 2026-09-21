@@ -1,5 +1,6 @@
 {
   "status": "pending",
   "directory": "v2/eval/evidence/critical-pass3/calibration-19",
-  "notes": "Awaiting fresh calibration and exact-evidence approval."
+  "notes": "Awaiting fresh calibration and exact-evidence approval.",
+  "evidence_sha256": "e856114529056e2b544f81c7c74f57302e61e300e5b7d9fb28953b867619f72c"
 }

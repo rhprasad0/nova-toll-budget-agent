@@ -6,7 +6,9 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-The active corpus 1.0.14 / harness 1.2.4 and policy 1.0.4 have Ryan’s exact calibration-18
+The active corpus 1.0.15 / harness 1.2.5 and policy 1.0.5 await exact calibration-19
+approval: **165/165 criterion labels agree**. See the [current review packet](evidence/critical-pass3/REVIEW-19.md).
+The prior corpus 1.0.14 / harness 1.2.4 and policy 1.0.4 have Ryan’s exact calibration-18
 approval, accepting the recorded Outcome disagreement: 158/159 development criterion labels agree, with one recorded Outcome
 disagreement. See the [review packet](evidence/critical-pass3/REVIEW-18.md).
 Ryan's earlier calibration-16, actors-2, and policy-1.0.3 approval remains
@@ -35,8 +37,8 @@ shared $5 run ceiling before starting. The durable ledger also reserves against
 the existing $25 authorization. Missing usage stops further paid calls and
 blocks subsequent runs until spending is reconciled. Provider retries are off.
 
-The original thresholds from policy 1.0.0 are unchanged in policy 1.0.4. The
-active corpus has 53 development calibration examples covering route
+The original thresholds from policy 1.0.0 are unchanged in policy 1.0.5. The
+active corpus has 55 development calibration examples covering route
 expectations, initial actor facts, monetary proposals/denials, and source
 grading. Earlier approvals apply only to their historical contracts.
 Historical evidence, labels, policy approvals, and the original baseline remain intact.
