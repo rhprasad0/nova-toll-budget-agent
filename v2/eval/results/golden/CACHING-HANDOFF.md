@@ -1,5 +1,15 @@
 # Handoff: evaluator caching and cost accounting
 
+## CI scope follow-up — 2026-09-21
+
+User clarified PR #581 is strictly eval harness improvements and requested the
+same improvements in the eval CI gate. CI already invokes the shared runner;
+added a CI execution-path regression check and fingerprinted the reused cache
+adapter. Removed earlier application prompt/model-contract/test changes from the
+PR diff so these match main (prompt 2.3.0). Historical source evidence below stays
+unchanged. Four scored workers and pending exact human review remain in force.
+See REVIEW-22.md for the current scope and evidence limitations.
+
 ## Implementation follow-up — 2026-09-21
 
 Caching and cache-write accounting are now implemented. Read the current [review packet](../../evidence/critical-pass3/REVIEW-22.md) and [benchmark](caching-benchmark.json) before proceeding. Calibration 22: four workers, 180/180 labels, 130.67 seconds, $0.11008381. Calibration 23: eight workers, 179/180 labels, 70.09 seconds, $0.10902200; retained grounding false positive, so four workers remains recommended. Actors-3: 60/60, $0.01947340. New validation costs $0.23857921; recorded cumulative spending is $7.38792007.

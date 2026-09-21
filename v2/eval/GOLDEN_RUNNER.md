@@ -49,7 +49,11 @@ Calibration examples and conversation trials run with four workers by default.
 Use `--workers 1` for sequential execution or choose 1 through 8 workers. Turns
 and the three judge criteria within each trial stay sequential. Each worker has
 its own agent, model clients, actor, and replay state. The manifest records the
-worker count. Shared budget reservations include in-flight calls, and journal
+worker count. The protected CI gate retains four workers and invokes this same
+runner with an isolated packaged application. Its actor/judge calls therefore use
+the same explicit 30-minute prefix caching and cache-write accounting. See the
+[caching benchmark](evidence/critical-pass3/REVIEW-22.md); eight workers remain
+available for diagnostics but are not the scored timing policy. Shared budget reservations include in-flight calls, and journal
 writes are serialized. Interrupting a run cancels queued work, allows active calls
 to finish recording usage, and prevents further calls in those trials.
 

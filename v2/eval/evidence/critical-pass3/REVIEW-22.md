@@ -2,6 +2,24 @@
 
 **Implementation complete; human approval pending.** Four-worker calibration 22 agrees on **180/180** labels; actor checks pass **60/60**. Eight-worker calibration 23 agrees on **179/180**, so retain four workers. No new application-scored run has started.
 
+## PR scope and CI follow-up
+
+The PR is now strictly eval harness/gate work. Earlier application prompt edits
+were removed from its diff; the application's prompt, model, contract, and tests
+match main (prompt 2.3.0). The measurements below retain their original source
+identity and prompt-2.3.5 context; they contain no application calls and their
+judge/corpus contract remains unchanged. Historical application-scored runs are
+not evidence for main's application behavior.
+
+The protected CI execution path shares the cached evaluator factory and judge
+with the manual runner. An offline integration check verifies cache configuration,
+medium judge reasoning, four-worker execution, cache-write accounting, and ledger
+settlement through that entrypoint. The gate now fingerprints the shared adapter
+module; changing it invalidates the evaluator source digest. Ninety-two focused
+gate, runner, and application contract tests pass. No paid CI dispatch or
+application-scored run is authorized by this follow-up; exact calibration/policy
+approval remains pending.
+
 ## Changes and validation
 
 Evaluator models reuse the application's cache adapter, including cache-write usage accounting. Judge instructions, unchanged domain facts, and unchanged criterion guidance now precede variable evidence, with explicit caching and a 30-minute TTL. The medium-reasoning update preserves cache parameters. Actor prompt text, application prompt **2.3.5**, model **gpt-5.6-luna**, rubrics, examples, trial counts, and thresholds remain unchanged. Outputs are always freshly generated.

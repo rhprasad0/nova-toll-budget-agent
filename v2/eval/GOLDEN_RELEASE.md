@@ -6,27 +6,26 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-The active corpus 1.0.17 / harness 1.2.7 and policy 1.0.6 have Ryan’s exact calibration-21
-approval: **180/180 labels agree**. See the [current review packet](evidence/critical-pass3/REVIEW-21.md).
-The [approved-contract rerun](results/golden/critical-pass3-calibration21-rerun.md)
-passed **17/17 critical pass³ and 72/72 trials** on unchanged prompt 2.3.5.
-This reflects corrected evaluation context, not an application change or stable reliability guarantee.
-The prior corpus 1.0.15 / harness 1.2.5 and policy 1.0.5 have Ryan’s exact calibration-19
-approval: **165/165 criterion labels agree**. See the [current review packet](evidence/critical-pass3/REVIEW-19.md).
-The [fresh comparison](results/golden/critical-pass3-calibration19-comparison.md)
-scored both reference 2.3.4 and candidate 2.3.5 at **15/17 critical pass³**;
-the three targeted regression cases passed all nine trials in each run.
-The prior corpus 1.0.14 / harness 1.2.4 and policy 1.0.4 have Ryan’s exact calibration-18
-approval, accepting the recorded Outcome disagreement: 158/159 development criterion labels agree, with one recorded Outcome
-disagreement. See the [review packet](evidence/critical-pass3/REVIEW-18.md).
-Ryan's earlier calibration-16, actors-2, and policy-1.0.3 approval remains
-preserved in the [prior packet](evidence/critical-pass3/REVIEW.md). Actor behavior
-is unchanged; its 60/60 development checks remain applicable. The initial demo
-and failed production-reference run remain unqualified.
+This PR changes the evaluation harness and gate only; the application prompt,
+model, contract, and application tests match main. The earlier prompt experiments
+remain historical evidence, not application changes included in this PR.
 
-The [source-checkout pass³ comparison](results/golden/critical-pass3-comparison-final.md)
-records prompt 2.3.4 at 17/17 critical pass³ and 72/72 successful trials against
-the same-contract reference at 9/17. It does not qualify a production artifact.
+The current corpus **1.0.18**, harness **1.2.8**, and policy **1.0.7** await exact
+human approval. See the [caching review packet](evidence/critical-pass3/REVIEW-22.md).
+Four-worker calibration agrees on **180/180** labels; actor checks pass **60/60**.
+Eight workers took 70 seconds instead of 131, but agreed on **179/180** labels.
+Retain four workers; the recorded false positive is not erased or relabeled.
+
+CI uses the same cached actor/judge factory and judge-prefix construction as the
+manual runner, through scripts.golden_release.execute → eval.golden_run.execute.
+There is no separate CI caching implementation. Cache reads and writes are included
+in its existing journal and shared spending ledger. The gate fingerprints the
+shared cache adapter as well as the evaluator source, so adapter changes invalidate
+receipts. Application calls still execute the exact packaged artifact in isolation.
+
+Historical calibration approvals and source-checkout application results remain
+archived. They do not approve this changed evaluator, qualify the current
+production artifact, or establish perfect judge reliability.
 
 ## Execution and evidence
 

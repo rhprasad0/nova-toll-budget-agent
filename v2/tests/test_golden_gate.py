@@ -1,12 +1,15 @@
 """Offline release demo: authentic passing evidence advances; altered evidence blocks."""
 
+import asyncio
 import hashlib
 import io
 import json
 import zipfile
+from collections.abc import AsyncIterator
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import Mock
 
@@ -597,3 +600,172 @@ def test_replacement_cannot_change_identity_repeat_or_hide_quality_failure(
         workflow.replacement(
             directory, prepared, "claims/original.json", 1, "actor_validity"
         )
+
+
+def test_ci_execution_uses_cached_evaluators_and_accounts_for_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from strands.models import Model
+    from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
+
+    from eval import golden, simulated
+
+    original_digest = gate.code_digest()
+    read_bytes = Path.read_bytes
+
+    def changed_adapter(path: Path) -> bytes:
+        data = read_bytes(path)
+        return (
+            data + b"\n# changed cache adapter"
+            if path == gate.ROOT / "v2/agent/toll_agent.py"
+            else data
+        )
+
+    with monkeypatch.context() as changed:
+        changed.setattr(Path, "read_bytes", changed_adapter)
+        assert gate.code_digest() != original_digest
+    case = golden.load_cases()[0]
+    example = next(
+        e
+        for e in run.development_examples()
+        if e.case_id == case.id and e.label == "good"
+    )
+    monkeypatch.setattr(golden, "load_cases", lambda: [case])
+    monkeypatch.setattr(run.toll_agent, "load_openai_api_key", lambda: "offline")
+    monkeypatch.setattr(simulated, "load_openai_api_key", lambda: "offline")
+    original = simulated.build_eval_model
+    requests: list[dict[str, Any]] = []
+
+    def build_model() -> Model:
+        model = original()
+
+        async def stream(
+            *args: object, **kwargs: object
+        ) -> AsyncIterator[dict[str, Any]]:
+            request = cast(Any, model)._format_request(*args, **kwargs)
+            requests.append(request)
+            yield cast(Any, model)._format_chunk(
+                {
+                    "chunk_type": "metadata",
+                    "data": SimpleNamespace(
+                        input_tokens=2000,
+                        output_tokens=10,
+                        total_tokens=2010,
+                        input_tokens_details=SimpleNamespace(
+                            cached_tokens=1200,
+                            cache_write_tokens=100,
+                        ),
+                    ),
+                }
+            )
+
+        cast(Any, model).stream = stream
+        return model
+
+    monkeypatch.setattr(run, "build_eval_model", build_model)
+
+    async def consume(model: Model, prompt: str) -> None:
+        async for _ in model.stream(
+            [{"role": "user", "content": [{"text": "variable evidence"}]}],
+            system_prompt=prompt,
+        ):
+            pass
+
+    def evaluate(
+        self: run.ConversationJudge, data: EvaluationData[str, str]
+    ) -> list[EvaluationOutput]:
+        asyncio.run(consume(cast(Model, self.model), self.reference_system_prompt))
+        return [EvaluationOutput(score=1, test_pass=True, reason="offline")]
+
+    monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
+
+    def execute(
+        selected: golden.GoldenCase,
+        trial: int,
+        journal: run.Journal,
+        factory: object,
+    ) -> run.Attempt:
+        assert callable(factory)
+        row = run.Attempt(
+            id=f"{selected.id}-{trial}",
+            case_id=selected.id,
+            trial=trial,
+            turns=example.turns,
+        )
+        actor = journal.model(build_model(), "actor", row, 1)
+        asyncio.run(consume(actor, golden.ACTOR_PROMPT))
+        run.judge(selected, row, journal)
+        return row
+
+    monkeypatch.setattr(run, "execute", execute)
+    digest = gate.code_digest()
+    gate.write(
+        tmp_path / "prepared.json",
+        {
+            "run_id": 42,
+            "evaluation_code_sha256": digest,
+            "identity": {"application": {}},
+        },
+    )
+    monkeypatch.setattr(
+        gate,
+        "get_object",
+        Mock(
+            side_effect=[
+                (
+                    gate.canonical(
+                        {"active_run": None, "unknown_usage": False, "spent_usd": 1.0}
+                    ),
+                    {"ETag": "before"},
+                ),
+                (gate.canonical({"active_run": 42}), {"ETag": "reserved"}),
+            ]
+        ),
+    )
+    put = Mock(return_value={})
+    monkeypatch.setattr(gate, "put_object", put)
+    monkeypatch.setattr(workflow, "archive", Mock(return_value={}))
+    monkeypatch.setattr(
+        run,
+        "render",
+        Mock(
+            return_value={
+                "manifest": {"run_id": "calibration"},
+                "evidence_sha256": "offline",
+                "review": {"status": "approved"},
+            }
+        ),
+    )
+    workflow.execute(tmp_path)
+
+    assert len(requests) == 12  # Three trials, one actor and three judge calls each.
+    for request in requests:
+        assert request["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
+        assert request["prompt_cache_key"] == "tollchat-eval-v2"
+        assert request["input"][0]["content"][0]["prompt_cache_breakpoint"] == {
+            "mode": "explicit"
+        }
+    assert sum(r["reasoning"] == {"effort": "medium"} for r in requests) == 9
+    directory = tmp_path / "packet/run"
+    assert gate.read(directory / "manifest.json")["workers"] == 4
+    events = [
+        json.loads(line)
+        for line in (directory / "events.jsonl").read_text().splitlines()
+    ]
+    finished = [e for e in events if e["event"] == "model_finished"]
+    assert len(finished) == 12 and all(e["complete"] for e in finished)
+    assert sum(e["written_tokens"] for e in finished) == 1200
+    settled = json.loads(put.call_args.args[1])
+    assert settled["spent_usd"] == pytest.approx(
+        1.0
+        + 12
+        * run.cost(
+            {
+                "inputTokens": 2000,
+                "outputTokens": 10,
+                "cacheReadInputTokens": 1200,
+                "cacheWriteInputTokens": 100,
+            }
+        )
+    )
+    assert settled["unknown_usage"] is False and settled["active_run"] is None

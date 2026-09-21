@@ -47,6 +47,7 @@ CODE = (
     "v2/eval/golden/manifest.json",
     "v2/eval/golden/calibration-reference.json",
     "v2/eval/simulated.py",
+    "v2/agent/toll_agent.py",  # Evaluator cache adapter and credential loader.
     "v2/eval/run_evaluation.py",
     "v2/uv.lock",
 )
