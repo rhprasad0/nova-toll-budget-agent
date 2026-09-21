@@ -39,9 +39,12 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
         message = case.prompt
         replay = golden.Replay(case)
         for index, turn in enumerate(turns):
-            if case.id == "unsupported-origin" and index == 1:
-                if "baltimore" not in message.casefold():
-                    raise run.StopRun("actor_profile_mismatch")
+            if (
+                case.id == "unsupported-origin"
+                and index == 1
+                and "baltimore" not in message.casefold()
+            ):
+                raise run.StopRun("actor_profile_mismatch")
             row.turns.append(
                 golden.Turn(user=message, response=turn.response, calls=[])
             )

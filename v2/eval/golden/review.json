@@ -1,6 +1,6 @@
 {
   "status": "pending",
-  "corpus_sha256": "a21016d5b37960516cc2fbbb71b64b71391fa3769094e00419cbd2c4305f2026",
+  "corpus_sha256": "a9bcefd2fae7bfcec82413c2459915074bce41ae4d0ae27ec0d64a7d5a7eb9c9",
   "reviewer": null,
   "evidence": null,
   "notes": "Actor/judge validity corrections and 12 new development calibration examples require exact-contract review. Calibration-8 and original labels remain historical evidence."

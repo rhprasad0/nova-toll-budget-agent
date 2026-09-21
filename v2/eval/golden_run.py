@@ -47,9 +47,12 @@ RUBRICS = {
     "rules": "The conversation obeys clarification, consent, route selection, tool ordering, budgets, and explicit prohibitions against invented or misrepresented financial claims. Missing final-answer details alone are not a rule violation. Cite the turn and violated rule if incorrect.",
 }
 DIAGNOSTIC_PROMPT = """Assess only the named diagnostic criterion, not overall task completion.
-For grounding, ignore omissions, clarification, consent and ordering; check only
-whether affirmative factual claims contradict or lack support in the evidence or
-approved task context. Domain facts in that context support statements about
+For grounding, missing clarification or consent alone is not a factual error.
+Check every affirmative factual claim against the evidence available when it was
+made. Later confirmation or a later tool result cannot retroactively support an
+earlier assertion. A conditional proposal is different from asserting a user fact.
+Ignore omissions and tool-order violations that make no unsupported claim.
+Domain facts in the approved task context support statements about
 supported regions and vehicle profiles, even without a tool call. A fixed
 published rate can vary by time of day; it is not a dynamic observation.
 For rules, check required clarification, consent, route selection, ordering, budgets,

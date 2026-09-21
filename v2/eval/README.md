@@ -1,7 +1,7 @@
 # TollChat v2 evaluation
 
 The separate [24-case golden corpus](GOLDEN_EVAL_SPEC.md) has offline validation;
-Ryan approved the current corpus 1.0.10 contract after [calibration 8](evidence/golden-360/calibration-8/review.html), with agreement on all 102 criterion labels. It has no qualified production baseline yet and excludes
+the corrected corpus 1.0.11 awaits [actor and judge validity review](GOLDEN_VALIDITY_REVIEW.md). Ryan's earlier 1.0.10 approval after [calibration 8](evidence/golden-360/calibration-8/review.html) remains historical. It has no qualified production baseline yet and excludes
 current I-95/I-395 direction cases; the scheduled suite below stays separate.
 
 The scheduled Strands suite uses simulated users and model-based judges for six

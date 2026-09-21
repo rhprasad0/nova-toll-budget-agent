@@ -1,11 +1,13 @@
-# TollChat golden evaluation set, version 1.0.10
+# TollChat golden evaluation set, version 1.0.11
 
 This is a 24-case starting corpus for a repeatable baseline: 11 current-price
 conversations and 13 annual-affordability conversations. The
 [case review](golden/REVIEW.md) includes every question, actor brief, expected
 behavior, fixture reference, and proposed criticality.
 
-**Status: corpus 1.0.10 and its calibrated judge contract are approved.**
+**Status: corpus 1.0.11 awaits exact-contract review.** See the
+[actor and judge validity review](GOLDEN_VALIDITY_REVIEW.md).
+The previous corpus 1.0.10 approval remains historical:
 [Calibration 8](evidence/golden-360/calibration-8/review.html) matches all 102
 criterion labels across the 34 development examples. The authored cases are
 not application results; no qualified production baseline exists yet.
@@ -143,7 +145,7 @@ is a distinct record owned by #362. This work neither qualifies a release nor
 defines numeric release thresholds. That policy remains human-reviewed work in
 #362/#363. Criticality does not excuse a failure in a noncritical case.
 
-The manifest pins version 1.0.10, three trials, model choices, and SHA-256 hashes
+The manifest pins version 1.0.11, three trials, model choices, and SHA-256 hashes
 of cases, fixtures, frozen context, examples, and grader sources. File hashes bind
 exact bytes; the aggregate hashes their sorted, compact UTF-8 JSON map. Approval
 is separate to avoid a self-referential hash and names the aggregate digest.
