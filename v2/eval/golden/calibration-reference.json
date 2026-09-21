@@ -1,6 +1,6 @@
 {
-  "status": "pending",
-  "directory": null,
-  "evidence_sha256": null,
-  "notes": "Harness 1.2.0 adds isolated immutable-artifact execution. Recalibrate and approve the exact 1.0.10 corpus contract before protected execution. Earlier approved labels and historical evidence are retained."
+  "status": "approved",
+  "directory": "v2/eval/evidence/golden-360/calibration-8",
+  "evidence_sha256": "38535582f2d90634d0a80744ce777945cbb0c7fae44c3ed5db8e02636aa2c3e7",
+  "notes": "Ryan explicitly approved calibration-8, corpus 1.0.10, and policy 1.0.1 under the exact evidence and contract hashes in the Codex conversation on 2026-09-20 America/New_York. Historical actor results remain unqualified; fresh actor validity requires separate review."
 }
