@@ -10,18 +10,21 @@ This PR changes the evaluation harness and gate only; the application prompt,
 model, contract, and application tests match main. The earlier prompt experiments
 remain historical evidence, not application changes included in this PR.
 
-The current corpus **1.0.18**, harness **1.2.8**, and policy **1.0.7** await exact
-human approval. See the [caching review packet](evidence/critical-pass3/REVIEW-22.md).
-Four-worker calibration agrees on **180/180** labels; actor checks pass **60/60**.
-Eight workers took 70 seconds instead of 131, but agreed on **179/180** labels.
-Retain four workers; the recorded false positive is not erased or relabeled.
+The current corpus **1.0.19**, harness **1.2.9**, and policy **1.0.8** await exact
+human approval. See the [current review packet](evidence/critical-pass3/REVIEW-24.md).
+Fresh four-worker calibration 24 agrees on **179/180** labels, with a retained
+wrong-route Outcome false positive. Historical eight-worker calibration also had
+one miss; concurrency is not established as its cause. Retain the existing
+four-worker scored timing policy. Activation remains pending adjudication.
 
 CI uses the same cached actor/judge factory and judge-prefix construction as the
 manual runner, through scripts.golden_release.execute → eval.golden_run.execute.
 There is no separate CI caching implementation. Cache reads and writes are included
 in its existing journal and shared spending ledger. The gate fingerprints the
 shared cache adapter as well as the evaluator source, so adapter changes invalidate
-receipts. Application calls still execute the exact packaged artifact in isolation.
+receipts and calibration identity. The cached factory lives only in golden_run;
+scheduled checks retain their existing factory. Application calls still execute
+the exact packaged artifact in isolation.
 
 Historical calibration approvals and source-checkout application results remain
 archived. They do not approve this changed evaluator, qualify the current

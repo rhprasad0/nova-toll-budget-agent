@@ -1,5 +1,27 @@
 # Handoff: evaluator caching and cost accounting
 
+## Adversarial review follow-up — 2026-09-21
+
+This section supersedes all earlier next steps and authorization notes below.
+User authorized adversarial review, fixes, and opening/updating PR #581. No merge
+or deployment is authorized. Application and scheduled-check files match main.
+Moved the cached factory into golden_run and bound the reused adapter's source to
+calibration identity as well as CI receipts. Updated stale activation-policy docs.
+
+Current corpus **1.0.19**, harness **1.2.9**, policy **1.0.8** remain pending.
+[Review 24](../../evidence/critical-pass3/REVIEW-24.md) retains calibration 24's
+**179/180** result, including a wrong-route Outcome false positive at four workers.
+Do not reroll or relabel it. Exact human adjudication/approval is still required
+before scored execution or activation. Earlier eight-worker evidence does not
+establish a concurrency effect. Keep four scored workers.
+
+Calibration 24 cost **$0.10971680**, cumulative **$7.49763687**; use private
+`eval/private/critical-pass3/calibration-24` as the next `--prior-run`.
+Its evidence digest is `c92c0dcb52f97b4dbcf87d8e41a0ae19a29a11255d2458c7d7b60c5e20ca9c30`.
+Earlier actor checks remain historical evidence, not a fresh check at this source.
+No new application-scored run was performed.
+
+
 ## CI scope follow-up — 2026-09-21
 
 User clarified PR #581 is strictly eval harness improvements and requested the

@@ -1,5 +1,7 @@
 # Evaluator caching — exact review packet
 
+**Historical packet; superseded by [REVIEW-24.md](REVIEW-24.md).** Its contract and approval request are no longer current.
+
 **Implementation complete; human approval pending.** Four-worker calibration 22 agrees on **180/180** labels; actor checks pass **60/60**. Eight-worker calibration 23 agrees on **179/180**, so retain four workers. No new application-scored run has started.
 
 ## PR scope and CI follow-up
