@@ -16,7 +16,8 @@ added $0.51583054, reconciled to a ledger total of $1.85466768. The historical
 demo remains unqualified.
 
 Sampled human adjudications required revised labels and criterion instructions.
-Calibration 15 matches 138/138 labels; exact-contract approval remains pending.
+Calibration 15 matches 138/138 labels; Ryan approved its exact contract and accepted
+the documented actor limitation on September 21, 2026.
 Calibrations 13–15 added $0.27834384, reconciled to **$2.13301152** cumulative.
 
 ## Execution and evidence
@@ -38,7 +39,7 @@ blocks subsequent runs until spending is reconciled. Provider retries are off.
 
 The original thresholds from policy 1.0.0 are unchanged in policy 1.0.2. Corpus
 1.0.11 and harness 1.2.1 correct actor/judge validity and expand calibration to
-46 development examples. This contract awaits fresh exact-digest approval;
+46 development examples. Ryan approved this exact contract on September 21, 2026;
 calibration-8 approval applies only to the historical 1.0.10/1.2.0 contract.
 Historical evidence, labels, policy approvals, and the original baseline remain intact.
 

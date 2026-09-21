@@ -21,11 +21,11 @@
     "max_output_tokens": 2048
   },
   "approval": {
-    "status": "pending",
-    "evidence_sha256": null,
-    "reviewer": null,
-    "approved_at": null,
-    "evidence": null,
-    "scope": "Numeric limits unchanged. Actor/judge corrections and expanded calibration require exact-contract approval."
+    "status": "approved",
+    "evidence_sha256": "66bbc850f37199825cfb547ae10149422b4c44a82358f18b763d3e85f0bb3450",
+    "reviewer": "rhprasad0",
+    "approved_at": "2026-09-21T15:26:49.510944+00:00",
+    "evidence": "Ryan explicitly stated \"I approve both\" in the Codex conversation on 2026-09-21, approving the full calibration 15 corpus/judge/policy contract and accepting the actors-6 redundant vehicle/E-ZPass reply limitation (59/60 checks). See v2/eval/evidence/golden-validity/HUMAN_ADJUDICATIONS.md. No merge, deployment, or production qualification is authorized.",
+    "scope": "Numeric limits unchanged. Approval binds the exact calibration 15 corpus/judge contract and accepts the documented actor limitation."
   }
 }

@@ -5,8 +5,8 @@ That run completed 72 trials with 39 raw passes and eight cases passing all thre
 Its original report, decisions, and calibration-8 approval are unchanged.
 The findings below are assistant analysis, not application-only failure counts.
 Subsequent [human adjudications](evidence/golden-validity/HUMAN_ADJUDICATIONS.md)
-supersede the initial proposed labels where explicitly noted; overall approval
-remains pending.
+supersede the initial proposed labels where explicitly noted. Ryan approved the
+full calibration 15 contract and accepted the actor limitation on September 21, 2026.
 
 ## Confirmed boundaries
 
@@ -21,19 +21,19 @@ remains pending.
 
 Latest: **[calibration 15](evidence/golden-360/calibration-15/review.html) agrees
 on all 138/138 labels**: 46/46 each for outcome, grounding, and rules. It includes
-Ryan's sampled decisions and the proposed consistent midpoint-clarification
-outcome. Overall approval remains pending.
+Ryan's sampled decisions, including the subsequently reviewed midpoint-clarification
+outcome. Overall human approval is recorded in the calibration's review.json.
 
 Evidence SHA-256: `09d1077e03c2c3724ff4c70755d6dad7bea791504e743bbe911426336156ac9e`.
 Source: `41f09f991cf0a2db54bd9410b33eb55d080be6e9`.
 Current contract: `89ada5c168390195d0964bb503879564d7917e8627b60359a47f4e0f79e7cd9d`.
-Pending corpus 1.0.11 / harness 1.2.1 / policy 1.0.2 now bind this revised digest;
-no prior approval transfers to it.
+Approved corpus 1.0.11 / harness 1.2.1 / policy 1.0.2 bind this revised digest;
+Ryan's fresh approval applies to this exact contract.
 
 All attempts, including regressions, are retained in the [evidence index](evidence/golden-validity/index.json).
 The [actor evidence review](evidence/golden-validity/README.md) explains the six scripted runs.
 The final actor run delivered every required clarification and passed 59/60 scripted checks.
-Its one failure was a redundant vehicle-profile reply after a completed answer; fresh actor review remains required.
+Its one failure was a redundant vehicle-profile reply after a completed answer; Ryan accepted this limitation. Fresh protected runs still require actor review.
 Earlier unsupported-origin diagnostic failures included a test-design error: the profile required a Baltimore clarification after the scripted invitation to choose another origin. The final diagnostic includes that exchange.
 
 Calibrations 9, 10, and 11 used low judge reasoning and agreed on 137/138, 133/138,
@@ -56,13 +56,13 @@ Evidence SHA-256: `ffa7776cd8164a60a83b8b33d97bfb36b50f80fb2ef19de2b2ae54514b53f
 Its source commit is `ed03f4ba3cb1936ee98266e623e35f4d7ae6dd9c`; the exact policy
 contract was `1fbf33ab6f6779535ba7ed9c90374cb2b8a10b556364d17b8e9d5bfd661d8d25`.
 
-**Overall human approval remains pending.** Ryan adjudicated
+**Ryan approved the full contract and accepted the actor limitation on September 21, 2026.** Ryan adjudicated
 `annual-missing-schedule-missing-clarification` as grounding Fail, agreeing with
 the judge. The earlier assistant assessment of a false rejection is withdrawn.
 Ryan also changed `incomplete-days-proposal` to outcome Pass during sample review.
 For `rejected-call-honest`, Ryan confirmed Outcome Pass / Grounding Pass / Rules
 Fail. See the [adjudication record](evidence/golden-validity/HUMAN_ADJUDICATIONS.md)
-for the revised rubric and the proposed consistent treatment of an unanswered
+for the revised rubric and the subsequently reviewed treatment of an unanswered
 midpoint clarification. Calibration 13 tests the revised contract. The
 historical calibration results are not overwritten. Agreement on this development
 set is not held-out accuracy or evidence of flawless judgment.
@@ -138,6 +138,6 @@ Actor checks use scripted development answers and three fresh simulations per ca
 Review their transcripts for profile fidelity as well as their mechanical pass counts.
 Retain all attempts and reconcile their measured costs into the versioned spending ledger before protected execution.
 
-Corpus 1.0.11, harness 1.2.1, and policy 1.0.2 require fresh exact-contract review.
+Corpus 1.0.11, harness 1.2.1, and policy 1.0.2 have fresh exact-contract approval.
 Policy 1.0.1 remains retained with its original approval. Numeric release limits are unchanged.
 A passing calibration is not a production-reference receipt. Genuine remaining application defects and protected production qualification are separate work.

@@ -1273,7 +1273,7 @@
     "calibration": null,
     "workers": 4
   },
-  "status": "pending_human_review",
+  "status": "reviewed",
   "complete": true,
   "expected_examples": 46,
   "rows": [
@@ -9303,8 +9303,13 @@
     }
   ],
   "review": {
-    "status": "pending",
-    "evidence_sha256": "09d1077e03c2c3724ff4c70755d6dad7bea791504e743bbe911426336156ac9e"
+    "status": "approved",
+    "evidence_sha256": "09d1077e03c2c3724ff4c70755d6dad7bea791504e743bbe911426336156ac9e",
+    "reviewer": "rhprasad0",
+    "approved_at": "2026-09-21T15:26:49.510944+00:00",
+    "evidence": "Ryan explicitly stated \"I approve both\" in the Codex conversation on 2026-09-21, approving the full calibration 15 corpus/judge/policy contract and accepting the actors-6 redundant vehicle/E-ZPass reply limitation (59/60 checks). See v2/eval/evidence/golden-validity/HUMAN_ADJUDICATIONS.md. No merge, deployment, or production qualification is authorized.",
+    "adjudicated_disagreements": {},
+    "unresolved_findings": []
   },
   "evidence_sha256": "09d1077e03c2c3724ff4c70755d6dad7bea791504e743bbe911426336156ac9e"
 }

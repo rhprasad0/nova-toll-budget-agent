@@ -21,7 +21,8 @@ Baltimore clarification. Its historical results above are not rewritten.
 In actors 6, all required clarifications were delivered. In
 `greenway-missing-destination-1`, the actor added its vehicle/E-ZPass profile after
 the completed answer. That redundant reply remains a failed scripted check.
-This is evidence of residual simulator variability, not an application failure.
+Ryan explicitly accepted this limitation on September 21, 2026; the 59/60 result
+is unchanged. This is residual simulator variability, not an application failure.
 Semantic profile fidelity and premature stops still require human transcript
 review on fresh application runs; the runtime guards cannot establish them alone.
 
