@@ -12,13 +12,13 @@ model remains gpt-5.6-luna. Local repetition does not qualify a production relea
 
 The current corpus **1.0.25**, harness **1.2.10**, and policy **1.0.14** await exact
 human approval. See the [current review packet](results/golden/CACHING-SUMMARY.md).
-Historical four-worker calibration 24 agreed on **179/180** labels. Corpus 1.0.20
-corrects its contradictory wrong-route example. Fresh eight-worker local
-calibration 25 agreed on **180/180** labels and was approved for local use.
-Corpus 1.0.21 now clarifies the permitted discovery call after two retained
-judge false negatives; fresh calibration is required.
+Latest local calibration 33 agreed on **179/180** labels; actor checks passed
+**60/60**. Outcome missed a premature alternative selection, while Rules and
+mandatory deterministic checks rejected it. The exact evidence and standing local
+approval are retained privately. Latest local application run reached **17/17
+critical pass³ and 72/72 trials**, one of the three requested consecutive successes.
 Protected CI retains its four-worker scored timing policy. Activation remains
-pending approval.
+pending approval; local success does not replace protected qualification.
 
 CI uses the same cached actor/judge factory and judge-prefix construction as the
 manual runner, through scripts.golden_release.execute → eval.golden_run.execute.
