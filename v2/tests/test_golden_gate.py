@@ -217,11 +217,27 @@ def test_unset_or_unpublished_production_blocks(
             gate.production_reference()
 
 
-def test_policy_and_calibration_start_blocked() -> None:
+def test_unapproved_policy_and_calibration_are_blocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy = gate.read(gate.POLICY)
+    policy["approval"]["status"] = "pending"
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(policy))
+    monkeypatch.setattr(gate, "POLICY", path)
+    reference = tmp_path / "v2/eval/golden/calibration-reference.json"
+    reference.parent.mkdir(parents=True)
+    reference.write_text('{"status":"pending"}')
+    monkeypatch.setattr(gate, "ROOT", tmp_path)
     with pytest.raises(ValueError, match="human approval"):
         gate.policy()
     with pytest.raises(ValueError, match="human review"):
         workflow.calibration()
+
+
+def test_current_calibration_and_policy_have_exact_approval() -> None:
+    assert gate.policy()["contract_sha256"]
+    assert workflow.calibration().name == "calibration-8"
 
 
 def test_active_contract_and_numeric_policy_are_pinned(
