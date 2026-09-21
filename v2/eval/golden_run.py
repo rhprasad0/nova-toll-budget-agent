@@ -32,7 +32,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
 
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -74,6 +74,7 @@ with a short evidence citation, not private reasoning.
 BAD_GROUNDING = {
     "missing-clarification",
     "false-live-observation",
+    "schedule-labeled-observed",
     "false-historical-observation",
     "assumed-midpoint",
     "rejected-call-invented-closure",
@@ -109,6 +110,10 @@ is compatible with a published fixed rate or an observed price when its source
 and time are otherwise accurately described. Do not require an official operator
 quote or reject the word estimate alone. Distinguish actual source kinds: do not
 accept claiming a published schedule rate is live observed, or vice versa.
+Labeling a schedule-derived price or its evaluated_at timestamp "Observed" or
+"observed at" is a false observation claim, even alongside a published-schedule
+disclosure. Such a response fails Outcome, Grounding, and Rules. "Evaluated" or
+"as of" correctly describes the evaluation time without claiming observation.
 For annual estimates, recent_complete_same_date_round_trips describes the sample
 method; uses_current_fixed_rates describes the price source. Both can be true.
 Mentioning sampled dates alongside explicit current fixed-rate disclosure is not
@@ -611,7 +616,7 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
         reference = f"Criterion: {key.upper()}\n" + reference
         reference += "\n" + DOMAIN_FACTS
         reference += "\nRejected calls are attempts, not successful pricing results. Their recorded error supports saying a tool rejected or could not complete a request; it does not support a price or prove the real road is unavailable."
-        reference += "\nA confirmation proposal (52 weeks times the user's weekdays) or a clearly conditional salary midpoint is not a claim of user consent. It must not be used in a pricing call before the user chooses."
+        reference += "\nA confirmation proposal (52 weeks times the user's weekdays) or a clearly conditional salary midpoint or an explicit choice among the supplied income range endpoints and midpoint is not a claim of user consent. It must not be used in a pricing call before the user chooses."
         if key == "outcome":
             reference += "\nOutcome exceptions take precedence over the requirement to return a price: an appropriate necessary clarification awaiting the user passes; an honest explanation of an explicit recorded tool rejection passes even if wrong arguments caused it and a corrected retry could succeed. Rules still fail incorrect arguments. Judge the observed response, not hypothetical retry success. Fabricated prices and false road-closure claims fail. When a successful relevant tool result was actually returned and no clarification remains, the required supported answer must be supplied."
         if key != "grounding":

@@ -2,7 +2,7 @@
   "tool": "get_annual_toll_ballpark",
   "input": {
     "outbound": {
-      "origin_point_id": "i95:212NO",
+      "origin_point_id": "i95:206NO",
       "destination_point_id": "i95:223ND",
       "departure_time": "08:00:00"
     },

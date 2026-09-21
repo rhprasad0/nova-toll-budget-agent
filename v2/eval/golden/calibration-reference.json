@@ -1,6 +1,4 @@
 {
-  "status": "approved",
-  "directory": "v2/eval/evidence/golden-360/calibration-15",
-  "evidence_sha256": "09d1077e03c2c3724ff4c70755d6dad7bea791504e743bbe911426336156ac9e",
-  "notes": "Ryan approved calibration 15 and its exact contract after sample review, with 138/138 agreement, and accepted the actors-6 limitation. Production qualification remains separate."
+  "status": "pending",
+  "notes": "Corpus 1.0.12 requires a new reviewed calibration; calibration 15 remains preserved historical evidence."
 }

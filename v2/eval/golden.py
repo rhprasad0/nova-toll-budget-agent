@@ -40,7 +40,9 @@ SOURCE_FILES = (
 )
 ACTOR_PROMPT = """Speak as the driver described below, in first person.
 {actor_profile}
-Use only your supplied facts. Answer questions briefly and naturally. Follow
+Use your initial request and supplied profile facts together. Profile omissions
+do not retract facts from your initial request. Only explicit correction or
+selection instructions change those facts. Answer questions briefly and naturally. Follow
 any stated correction or selection instructions before stopping. Do not invent
 prices, earnings, routes, or requirements. Do not tell the assistant how to use
 its tools or how it will be graded. Never treat the assistant's suggested facts
@@ -246,7 +248,7 @@ def actor_profile(case: GoldenCase) -> ActorProfile:
     """Allowlist user facts; never serialize the complete case into actor context."""
     return ActorProfile(
         traits={"communication_style": "brief, natural"},
-        context=case.actor.facts,
+        context=f"Initial user request: {case.prompt}\nAdditional driver facts: {case.actor.facts}",
         actor_goal="\n".join([case.actor.goal, *case.actor.follow_up_rules]),
     )
 
@@ -416,13 +418,12 @@ def grade_assertions(
         # Explicitly denying a zero toll is not a quoted zero price.
         # Other wording still goes through the semantic grounding judge.
         monetary_claims = re.sub(
-            r"\b(?:not|never)\s+(?:treat\s+[^$.\n!?]{1,120}\s+as\s+)?(?:\*\*)?\$0(?:\.0{1,2})?(?!\d|\.\d)",
+            r"\b(?:not|never)\s+(?:treat\s+[^$.\n!?]{1,120}\s+as\s+|treated\s+as\s+)?(?:\*\*)?\$0(?:\.0{1,2})?(?!\w|\.\d)",
             "[negated zero toll]",
             turn.response,
             flags=re.IGNORECASE,
         )
-        # ponytail: recognize explicit midpoint questions only; extend with
-        # labeled examples if other conditional financial proposals are needed.
+        # Only explicit proposals can introduce the midpoint before consent.
         amounts = money("\n".join(messages))
         if not turn.calls and len(amounts) == 2:
             midpoint = sum(amounts) / 2
@@ -437,6 +438,28 @@ def grade_assertions(
                     monetary_claims = monetary_claims.replace(
                         question, "[conditional midpoint proposal]"
                     )
+        # ponytail: bounded income-choice syntax; extend only with labeled
+        # examples, leaving other proposals to fail closed.
+        if not turn.calls and len(amounts) == 2:
+            plain = monetary_claims.replace("**", "")
+            currency = r"\$[0-9][0-9,]*(?:\.[0-9]+)?[kK]?"
+            for proposal in re.finditer(
+                r"\b(?:Please\s+)?(?:choose|select|pick)\s+(?:one\s+)?"
+                r"(?:gross\s+)?(?:annual\s+)?income(?:\s+(?:figure|estimate|amount))?"
+                r"\s*(?:[\u2014\u2013,:-]\s*)?(?:for example[,:]?\s*)?"
+                + currency
+                + r"(?:(?:,\s*(?:or\s+)?|\s+or\s+)"
+                + currency
+                + r")+",
+                plain,
+                flags=re.IGNORECASE,
+            ):
+                choices = money(proposal.group())
+                if choices <= amounts | {sum(amounts) / 2}:
+                    plain = plain.replace(
+                        proposal.group(), "[conditional income choices]"
+                    )
+            monetary_claims = plain
         if money(monetary_claims) - allowed_money:
             failures.append("unsupported_money")
     if sum(len(t.calls) for t in turns) > case.max_tool_calls:
@@ -534,7 +557,7 @@ def validate(root: Path = ROOT) -> None:
         raise ValueError("each case needs a labeled good example")
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != "1.0.11"
+        manifest["version"] != "1.0.12"
         or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-5.6-luna"
         or manifest["judge_model"] != "gpt-5.6-luna"
