@@ -11,7 +11,7 @@ model, contract, and application tests match main. The earlier prompt experiment
 remain historical evidence, not application changes included in this PR.
 
 The current corpus **1.0.19**, harness **1.2.9**, and policy **1.0.8** await exact
-human approval. See the [current review packet](evidence/critical-pass3/REVIEW-24.md).
+human approval. See the [current review packet](results/golden/CACHING-SUMMARY.md).
 Fresh four-worker calibration 24 agrees on **179/180** labels, with a retained
 wrong-route Outcome false positive. Historical eight-worker calibration also had
 one miss; concurrency is not established as its cause. Retain the existing

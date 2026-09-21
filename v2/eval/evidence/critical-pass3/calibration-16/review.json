@@ -1,9 +1,0 @@
-{
-  "status": "approved",
-  "evidence_sha256": "e7b5426525cab3aec9b735b4b91dafc44fe6f96e026cd7859ea1a5dd8ec795a4",
-  "reviewer": "rhprasad0",
-  "approved_at": "2026-09-21T19:23:33.515099+00:00",
-  "evidence": "Ryan explicitly approved calibration-16, actors-2, and policy 1.0.3 in the Codex conversation: \"Approve calibration, actors, and policy\". Approval binds the exact review packet and unchanged numeric thresholds; it does not authorize merge, deployment, or production qualification.",
-  "adjudicated_disagreements": {},
-  "unresolved_findings": []
-}

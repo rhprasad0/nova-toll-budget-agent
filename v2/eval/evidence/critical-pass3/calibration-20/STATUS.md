@@ -1,1 +1,0 @@
-Calibration 20 is retained but not approved. One Outcome judge rejected an accurate seconds-inclusive timestamp because the new minute-precision context was too prescriptive. Calibration 21 clarifies that both forms are valid for grading. Original labels and verdicts are unchanged.

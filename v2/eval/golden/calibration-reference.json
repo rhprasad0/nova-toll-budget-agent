@@ -1,6 +1,5 @@
 {
   "status": "pending",
-  "directory": "v2/eval/evidence/critical-pass3/calibration-24",
   "evidence_sha256": "c92c0dcb52f97b4dbcf87d8e41a0ae19a29a11255d2458c7d7b60c5e20ca9c30",
-  "notes": "179/180 agreement; Outcome false positive for greenway-current-wrong-route requires human adjudication. See REVIEW-24.md. No scored execution or activation approval."
+  "notes": "179/180 agreement; wrong-route Outcome false positive requires human adjudication. See v2/eval/results/golden/CACHING-SUMMARY.md. Restore full exact evidence before approval or activation."
 }
