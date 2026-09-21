@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import math
 import random
@@ -30,13 +31,9 @@ from strands_evals.types.trace import Session, TraceLevelInput
 
 from agent import toll_agent
 from eval import golden
-from eval.simulated import (
-    EVAL_MODEL_PARAMS,
-    GroundedCorrectnessEvaluator,
-    build_eval_model,
-)
+from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "1.2.8"
+VERSION = "1.2.9"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -153,6 +150,27 @@ language about paired samples and their coverage is sufficient; do not require
 the raw sample-method identifier. Fixed-rate or modeled-source disclosure does
 not require naming every metadata field.
 """
+
+
+EVAL_MODEL_PARAMS: dict[str, Any] = {
+    "max_output_tokens": 2048,
+    "reasoning": {"effort": "low"},
+    "prompt_cache_key": "tollchat-eval-v2",
+    "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},
+}
+
+
+def build_eval_model() -> Model:
+    """Cache golden actor/judge inputs without changing deployed timed checks."""
+    return toll_agent._CachedResponsesModel(
+        model_id="gpt-5.6-luna",
+        client_args={
+            "api_key": toll_agent.load_openai_api_key(),
+            "base_url": "https://api.openai.com/v1",
+        },
+        params=deepcopy(EVAL_MODEL_PARAMS),
+        stateful=False,
+    )
 
 
 class Measurement(golden.Record):
@@ -895,6 +913,9 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
             "timeout_seconds": 60,
             "unknown_usage": "stop further paid calls",
             "evaluator_model_config": deepcopy(EVAL_MODEL_PARAMS),
+            "cache_adapter_sha256": golden.digest(
+                inspect.getsource(toll_agent._CachedResponsesModel)
+            ),
         },
         "prices": PRICES,
         "application_model_config": {

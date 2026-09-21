@@ -608,7 +608,7 @@ def test_ci_execution_uses_cached_evaluators_and_accounts_for_writes(
     from strands.models import Model
     from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
 
-    from eval import golden, simulated
+    from eval import golden
 
     original_digest = gate.code_digest()
     read_bytes = Path.read_bytes
@@ -632,8 +632,7 @@ def test_ci_execution_uses_cached_evaluators_and_accounts_for_writes(
     )
     monkeypatch.setattr(golden, "load_cases", lambda: [case])
     monkeypatch.setattr(run.toll_agent, "load_openai_api_key", lambda: "offline")
-    monkeypatch.setattr(simulated, "load_openai_api_key", lambda: "offline")
-    original = simulated.build_eval_model
+    original = run.build_eval_model
     requests: list[dict[str, Any]] = []
 
     def build_model() -> Model:

@@ -1,5 +1,5 @@
 {
   "status": "pending",
-  "corpus_sha256": "02b9a59f0c816b071d6ab917a690126983fe8e268e2e3d05d14916aeb1830bff",
-  "evidence": "Evaluator caching and usage accounting changed. Historical calibration-21 approval is preserved in its archived evidence; fresh exact evidence review is required."
+  "corpus_sha256": "50443c5f88517aab9f52936079880432d29d8e2bb35532a46c47ea4a630d04b2",
+  "evidence": "Golden-only cached model factory and cache adapter implementation fingerprint require fresh calibration."
 }

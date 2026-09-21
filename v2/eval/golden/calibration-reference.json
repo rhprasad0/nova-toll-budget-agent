@@ -1,6 +1,4 @@
 {
   "status": "pending",
-  "directory": "v2/eval/evidence/critical-pass3/calibration-22",
-  "evidence_sha256": "4837d3ab8953734912147283738ff90d297a7c9f93ffbbb9855833f61da8b8ca",
-  "evidence": "Proposed four-worker calibration: 180/180 labels. Exact human review required; eight-worker calibration-23 false positive retained in REVIEW-22.md."
+  "evidence": "Awaiting calibration-24 for the isolated golden factory and adapter fingerprint."
 }

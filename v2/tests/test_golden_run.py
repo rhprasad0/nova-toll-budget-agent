@@ -816,9 +816,7 @@ def test_packaged_replay_records_rejections() -> None:
 def test_eval_cache_prefix_and_write_accounting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from eval import simulated
-
-    monkeypatch.setattr(simulated, "load_openai_api_key", lambda: "offline")
+    monkeypatch.setattr(run.toll_agent, "load_openai_api_key", lambda: "offline")
     requests: list[dict[str, Any]] = []
 
     def evaluate(
@@ -857,7 +855,7 @@ def test_eval_cache_prefix_and_write_accounting(
         assert first["input"][0] == second["input"][0]
         assert first["input"][1:] != second["input"][1:]
 
-    model = cast(Any, simulated.build_eval_model())
+    model = cast(Any, run.build_eval_model())
     for written in (None, 0, 30):
         details = SimpleNamespace(cached_tokens=50, cache_write_tokens=written)
         chunk = model._format_chunk(
@@ -924,3 +922,25 @@ def test_cli_rejects_changed_cache_contract(
     with pytest.raises(SystemExit, match="2"):
         run.main()
     assert not output.exists()
+
+
+def test_cache_adapter_change_invalidates_calibration_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_git = run.git
+
+    def clean_git(*args: str) -> str:
+        return "" if args[0] == "status" else original_git(*args)
+
+    monkeypatch.setattr(run, "git", clean_git)
+    before = run.identity(golden.load_cases())
+    source = run.inspect.getsource(run.toll_agent._CachedResponsesModel)
+    monkeypatch.setattr(
+        run.inspect, "getsource", Mock(return_value=source + "\n# adapter changed")
+    )
+    after = run.identity(golden.load_cases())
+    assert (
+        before["transport"]["cache_adapter_sha256"]
+        != after["transport"]["cache_adapter_sha256"]
+    )
+    assert before["corpus"] == after["corpus"]

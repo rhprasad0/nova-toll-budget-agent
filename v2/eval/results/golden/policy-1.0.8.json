@@ -1,0 +1,28 @@
+{
+  "policy": {
+    "version": "1.0.8",
+    "contract_sha256": "90cd27c9cb250c185c8dcdce31ab1a6b1e9db4f580898d7b91231f82a1465e69",
+    "trials": 3,
+    "cases": 24,
+    "workers": 4,
+    "critical_passes": 3,
+    "noncritical_passes": 2,
+    "suite_success_min": 0.9,
+    "suite_pass_cubed_min": 0.75,
+    "lost_passes_max": 1,
+    "run_cost_max_usd": 5.0,
+    "agent_cost_per_success_max_usd": 0.05,
+    "latency_p50_max_seconds": 30.0,
+    "latency_p95_max_seconds": 60.0,
+    "candidate_max_age_hours": 24,
+    "production_max_age_hours": 720,
+    "sample_size": 8,
+    "replacement_runs_max": 1,
+    "max_output_tokens": 2048
+  },
+  "approval": {
+    "status": "pending",
+    "evidence_sha256": "f969ed44d8d18a9b21ff11f7f3e78d79b504790be78580a908bb19d368681766",
+    "scope": "Golden-only caching and adapter source fingerprint; all numeric thresholds and four-worker timing policy unchanged."
+  }
+}

@@ -97,8 +97,8 @@ contract changes and environment recovery.
 4. Calibrate the new contract using the existing runner and approved labels.
    Approve its evidence and disagreements, update
    `golden/calibration-reference.json`, approve `golden/review.json` against
-   the current corpus digest, and approve policy 1.0.2 against its exact policy
-   digest. Those approvals must precede a candidate run. Reconcile any separate
+   the current corpus digest, and approve the active policy selected by scripts/golden_gate.py against
+   its exact digest. Those approvals must precede a candidate run. Reconcile any separate
    calibration spend into the versioned ledger before protected execution;
    retain provider usage and the prior ledger version, never reduce known spend
    or clear unknown usage without accounting for the interrupted calls.
