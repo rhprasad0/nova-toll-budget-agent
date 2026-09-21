@@ -57,12 +57,18 @@ jobs:
         with:
           terraform_wrapper: false
           terraform_version: "1.15.8"
+      - name: Reuse providers within this job
+        run: |
+          mkdir -p "$RUNNER_TEMP/terraform-provider-cache"
+          echo "TF_PLUGIN_CACHE_DIR=$RUNNER_TEMP/terraform-provider-cache" >> "$GITHUB_ENV"
       - run: uv sync --locked
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22.22.1"
           cache: npm
-          cache-dependency-path: v2/package-lock.json
+          cache-dependency-path: |
+            v2/package-lock.json
+            v2/lambdas/chat_proxy/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm ci --ignore-scripts --prefix lambdas/chat_proxy
       - name: Install pinned shell, workflow and secret checkers
@@ -79,7 +85,7 @@ jobs:
       - run: uv run python -m scripts.check_agent_contract_versions "$AGENT_CONTRACT_BASE_REF"
         env:
           AGENT_CONTRACT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-      - run: uv run coverage run -m pytest
+      - run: uv run coverage run -m pytest --durations=30 --durations-min=1
       - run: uv run coverage report
       - run: node --test tests/*.mjs
       - if: github.event_name != 'pull_request'

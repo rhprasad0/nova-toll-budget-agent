@@ -223,6 +223,8 @@ def rendered_production_policies(
         environment["TF_DATA_DIR"] = str(root / ".terraform-data")
         provider_mirror = ROOT / "infra" / ".terraform" / "providers"
         if provider_mirror.is_dir():
+            # Installed providers may link into the cache; never cache a mirror into itself.
+            environment.pop("TF_PLUGIN_CACHE_DIR", None)
             cli_config = root / "terraform.tfrc"
             cli_config.write_text(
                 dedent(
@@ -379,6 +381,7 @@ def rendered_production_migration_identity() -> tuple[PolicyDocument, PolicyDocu
         environment["TF_DATA_DIR"] = str(root / ".terraform-data")
         provider_mirror = ROOT / "infra" / ".terraform" / "providers"
         if provider_mirror.is_dir():
+            environment.pop("TF_PLUGIN_CACHE_DIR", None)
             cli_config = root / "terraform.tfrc"
             cli_config.write_text(
                 dedent(

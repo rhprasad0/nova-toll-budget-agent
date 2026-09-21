@@ -55,7 +55,7 @@ jobs:
               --event-file "$GITHUB_EVENT_PATH" \
               --paths-file "$changed_paths" \
               --run-id "$GITHUB_RUN_ID" \
-              --timeout-seconds 900 \
+              --timeout-seconds 1800 \
               --poll-seconds 10 \
               >"$RUNNER_TEMP/development-admission.result"; then
             :

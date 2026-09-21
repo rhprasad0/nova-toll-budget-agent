@@ -329,3 +329,47 @@ def test_retained_artifact_guard_rejects_malformed_metadata() -> None:
             check=False,
         )
         assert result.returncode != 0
+
+
+@pytest.mark.parametrize("ending", ["success", "failure", "pending"])
+def test_workflow_waits_thirty_minutes_without_relaxing_evidence(
+    monkeypatch: pytest.MonkeyPatch, ending: str
+) -> None:
+    import re
+
+    workflow = (
+        Path(__file__).parents[2] / ".github/workflows/v2-development-delivery.yml"
+    ).read_text()
+    match = re.search(r"--timeout-seconds (\d+)", workflow)
+    assert match and int(match[1]) == 1800
+    elapsed = 0.0
+    api = FakeAPI()
+    run = api.runs["ci.yml"][0]
+    run.update(status="in_progress", conclusion=None)
+    monkeypatch.setattr(admission.time, "monotonic", lambda: elapsed)
+
+    def advance(seconds: float) -> None:
+        nonlocal elapsed
+        elapsed += seconds
+        if elapsed >= 1110 and ending != "pending":
+            run.update(status="completed", conclusion=ending)
+
+    def admit() -> bool:
+        return admission.admit(
+            cast(Any, api),
+            repository=REPOSITORY,
+            sha=SHA,
+            before=BEFORE,
+            paths=[],
+            timeout_seconds=int(match[1]),
+            poll_seconds=10,
+            sleep=advance,
+        )
+
+    if ending == "success":
+        assert admit() is True
+    else:
+        reason = "timed out" if ending == "pending" else "not successful"
+        with pytest.raises(admission.AdmissionError, match=reason):
+            admit()
+    assert elapsed == (1800 if ending == "pending" else 1110)

@@ -1445,7 +1445,9 @@ def test_terraform_failure_classification_survives_private_stage_without_leaks(
         delivery.terraform(tmp_path, "plan")
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == "Terraform failed: access denied\n"
+    assert "Terraform failed: access denied\n" in captured.err
+    assert "stage=terraform-plan status=fail" in captured.err
+    assert "private-" not in captured.err
     monkeypatch.setattr(delivery.subprocess, "run", real_run)
     script = Path(__file__).parents[1] / "scripts/run_private_stage.sh"
     result = real_run(
@@ -1466,3 +1468,97 @@ def test_terraform_failure_classification_survives_private_stage_without_leaks(
     assert result.returncode == 1
     assert "reason=access_denied" in result.stdout + result.stderr
     assert "private-" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("ending", ["success", "returned_failure", "exception"])
+def test_substep_timings_are_bounded_and_preserve_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    ending: str,
+) -> None:
+    summary = tmp_path / "summary"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    elapsed = 0.0
+    monkeypatch.setattr(delivery.time, "monotonic", lambda: elapsed)
+    error = RuntimeError("private-state-and-credential-marker")
+    try:
+        with delivery.timed_stage("promotion") as outcome:
+            elapsed = 7.0
+            if ending == "exception":
+                raise error
+            outcome["ok"] = ending == "success"
+    except RuntimeError as caught:
+        assert caught is error
+    else:
+        assert ending != "exception"
+    captured = capsys.readouterr()
+    status = "pass" if ending == "success" else "fail"
+    code = 0 if ending == "success" else 1
+    assert captured.out == ""
+    assert (
+        summary.read_text()
+        == captured.err
+        == (
+            "stage=promotion status=start elapsed=0 exit=0 reason=unclassified\n"
+            f"stage=promotion status={status} elapsed=7 exit={code} reason=unclassified\n"
+        )
+    )
+
+
+@pytest.mark.parametrize("destination", ["missing", "unwritable", "broken_stderr"])
+def test_timing_output_failures_do_not_change_control_flow(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    destination: str,
+) -> None:
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    if destination == "unwritable":
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path))
+    if destination == "broken_stderr":
+        monkeypatch.setattr(
+            delivery.sys, "stderr", Mock(write=Mock(side_effect=OSError))
+        )
+    with delivery.timed_stage("planning"):
+        pass
+    error = RuntimeError("original failure")
+    with pytest.raises(RuntimeError) as caught, delivery.timed_stage("planning"):
+        raise error
+    assert caught.value is error
+
+
+def test_unknown_timing_label_is_not_exposed(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    with delivery.timed_stage("private-command-and-path"):
+        pass
+    output = capsys.readouterr().err
+    assert "stage=unknown" in output
+    assert "private-" not in output
+
+
+@pytest.mark.parametrize("recovered", [True, False])
+def test_observation_timings_report_returned_failure_and_recovery(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    recovered: bool,
+) -> None:
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    result = delivery.observe(
+        lambda: False,
+        lambda: recovered,
+        sleep=lambda _: None,
+        clock=lambda: 0,
+    )
+    assert result == {
+        "deployment": "failed",
+        "recovery": "recovered" if recovered else "failed",
+        "probes": [False, False],
+    }
+    output = capsys.readouterr().err
+    assert "stage=observation status=fail" in output
+    assert (
+        f"stage=observation-recovery status={'pass' if recovered else 'fail'}" in output
+    )
