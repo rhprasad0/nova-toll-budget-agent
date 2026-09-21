@@ -21,6 +21,14 @@ examples and preserves every disagreement. Outcome labels come from the approved
 corpus; the narrower diagnostic labels are proposals for human review. Calibration
 is evidence about judge accuracy, not a guarantee that every later verdict is right.
 
+Under the sampled human adjudications, Outcome can pass for a necessary
+clarification awaiting the user or an honest explanation of an explicit tool
+rejection, without an estimate. Incorrect arguments still fail Rules. Invented
+financial or schedule facts in tool arguments fail Grounding, even if later
+confirmed. Each diagnostic judge receives only its named criterion's rubric.
+Actor validity still requires separate review: a passing clarification response
+does not establish that the simulator completed its required exchanges.
+
 Before calibration, `python -m eval.golden_actor_check --output DIRECTORY
 --prior-spend-usd ACCOUNTED_SPEND` checks three fresh actors per development
 good example against scripted answers. Actor and judge models must emit their

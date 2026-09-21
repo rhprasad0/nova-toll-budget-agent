@@ -2,7 +2,7 @@
 
 [Open the standalone HTML review page](calibration-review.html). Download and open it in a browser; it works offline.
 
-Latest: **[calibration 12](calibration-12/review.html), corpus 1.0.11 / harness 1.2.1**, has 46/46 outcome, 45/46 grounding, and 46/46 rules agreement. Exact-contract human review is pending; see the [validity review](../../GOLDEN_VALIDITY_REVIEW.md) for the proposed adjudication, prior attempts, actor limitations, and release boundary.
+Latest: **[calibration 15](calibration-15/review.html), corpus 1.0.11 / harness 1.2.1**, has 46/46 agreement for each criterion: **138/138** overall. It incorporates sampled human adjudications and isolates criterion instructions. Exact-contract approval remains pending; see the [validity review](../../GOLDEN_VALIDITY_REVIEW.md) for decisions, the proposed midpoint-clarification extension, prior attempts, actor limitations, and release boundary. Historical calibration 12 remains 137/138 against its original proposed labels.
 
 Historical **calibration 8, corpus 1.0.10 / harness 1.2.0**, matches all 34 outcome, grounding, and rules labels (102/102 verdicts). Ryan approved its exact evidence and contract on September 20, 2026 (America/New_York). [Historical HTML review](calibration-8/review.html), [report](calibration-8/report.json), [approval](calibration-8/review.json). Evidence SHA-256: `38535582f2d90634d0a80744ce777945cbb0c7fae44c3ed5db8e02636aa2c3e7`. Cost: $0.07217382; cumulative recorded spending then: $0.94408728. There is no qualified production baseline yet; fresh protected-run actor review remains separate.
 

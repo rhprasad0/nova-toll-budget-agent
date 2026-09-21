@@ -19,6 +19,17 @@ remains pending.
 
 ## Live validation
 
+Latest: **[calibration 15](evidence/golden-360/calibration-15/review.html) agrees
+on all 138/138 labels**: 46/46 each for outcome, grounding, and rules. It includes
+Ryan's sampled decisions and the proposed consistent midpoint-clarification
+outcome. Overall approval remains pending.
+
+Evidence SHA-256: `09d1077e03c2c3724ff4c70755d6dad7bea791504e743bbe911426336156ac9e`.
+Source: `41f09f991cf0a2db54bd9410b33eb55d080be6e9`.
+Current contract: `89ada5c168390195d0964bb503879564d7917e8627b60359a47f4e0f79e7cd9d`.
+Pending corpus 1.0.11 / harness 1.2.1 / policy 1.0.2 now bind this revised digest;
+no prior approval transfers to it.
+
 All attempts, including regressions, are retained in the [evidence index](evidence/golden-validity/index.json).
 The [actor evidence review](evidence/golden-validity/README.md) explains the six scripted runs.
 The final actor run delivered every required clarification and passed 59/60 scripted checks.
@@ -37,7 +48,7 @@ cap. Actor and application reasoning remain low. The exact role settings are
 bound into the contract. The [OpenAI reasoning documentation](https://developers.openai.com/api/docs/guides/reasoning)
 describes this control; measured accuracy, usage, and completeness determine its
 suitability here. [Calibration 12](evidence/golden-360/calibration-12/review.html)
-tests all 46 examples under this configuration.
+first tested all 46 examples with medium reasoning; later runs revise the rubric.
 
 Historical calibration 12 is complete: **46/46 outcome, 45/46 grounding, and 46/46 rules**
 agreement (137/138 overall). All 12 new examples matched the labels proposed then.
@@ -65,10 +76,15 @@ Ryan's accepted honest-recovery outcome. Calibration 15 tests an explicit
 distinction between the observed rejection and a hypothetical successful retry.
 
 All six actor diagnostics and four calibrations cost **$0.51583054** in total.
-The versioned spending ledger now records **$1.85466768**, with no unknown usage
+At that point, the versioned spending ledger recorded **$1.85466768**, with no unknown usage
 or active reservation. The [accounting receipt](evidence/golden-validity/spending-receipt.json)
 binds the prior/new ledger versions and an immutable S3 archive of every manifest,
 journal, and report. The $25 cumulative ceiling and $5 protected-run ceiling remain unchanged.
+
+Calibrations 13–15 added **$0.27834384**, reconciled to a cumulative ledger total
+of **$2.13301152** with no unknown usage or active reservation. Their
+[separate accounting receipt](evidence/golden-validity/spending-receipt-calibrations-13-15.json)
+preserves the prior ledger version and an immutable archive of all three runs.
 
 ## Frozen catalog
 

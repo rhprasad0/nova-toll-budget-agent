@@ -15,6 +15,10 @@ work. [Validity diagnostics and calibrations 9–12](GOLDEN_VALIDITY_REVIEW.md)
 added $0.51583054, reconciled to a ledger total of $1.85466768. The historical
 demo remains unqualified.
 
+Sampled human adjudications required revised labels and criterion instructions.
+Calibration 15 matches 138/138 labels; exact-contract approval remains pending.
+Calibrations 13–15 added $0.27834384, reconciled to **$2.13301152** cumulative.
+
 ## Execution and evidence
 
 `v2-golden-evaluation` runs only from main. Select `candidate` and the successful

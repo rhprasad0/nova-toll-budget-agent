@@ -1,6 +1,6 @@
 {
   "status": "pending",
   "directory": "v2/eval/evidence/golden-360/calibration-15",
-  "evidence_sha256": null,
-  "notes": "Recalibration after sampled human adjudications; isolated criteria and explicit honest-recovery outcome. Overall approval remains pending."
+  "evidence_sha256": "09d1077e03c2c3724ff4c70755d6dad7bea791504e743bbe911426336156ac9e",
+  "notes": "Calibration 15 agrees on 138/138 labels after sampled human adjudications, isolated criteria, and explicit honest-recovery outcome. The midpoint clarification extension is proposed; overall approval and actor-limitation review remain pending."
 }

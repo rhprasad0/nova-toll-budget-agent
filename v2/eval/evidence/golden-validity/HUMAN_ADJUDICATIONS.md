@@ -19,5 +19,8 @@ arguments now fail grounding; later user confirmation does not repair them.
 
 For consistency, `incomplete-midpoint-choice` is also proposed as outcome Pass.
 This is an assistant-inferred extension of the clarification decision, not a
-claim that Ryan individually reviewed that example. These revisions are tested
-in calibration 13; the calibration-12 evidence remains unchanged.
+claim that Ryan individually reviewed that example. Calibration 13 tested these
+revisions (131/138 agreement); calibration 14 isolated criterion instructions
+(137/138). Calibration 15 clarified that honest rejection recovery is graded
+against the observed error, not a hypothetical successful retry: **138/138**.
+The calibration-12 evidence remains unchanged. Overall approval is still pending.
