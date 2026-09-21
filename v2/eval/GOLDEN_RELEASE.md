@@ -8,6 +8,9 @@ blocks planning before production credentials are available.
 Production qualification remains **blocked until a production reference passes**.
 The active corpus 1.0.17 / harness 1.2.7 and policy 1.0.6 have Ryan’s exact calibration-21
 approval: **180/180 labels agree**. See the [current review packet](evidence/critical-pass3/REVIEW-21.md).
+The [approved-contract rerun](results/golden/critical-pass3-calibration21-rerun.md)
+passed **17/17 critical pass³ and 72/72 trials** on unchanged prompt 2.3.5.
+This reflects corrected evaluation context, not an application change or stable reliability guarantee.
 The prior corpus 1.0.15 / harness 1.2.5 and policy 1.0.5 have Ryan’s exact calibration-19
 approval: **165/165 criterion labels agree**. See the [current review packet](evidence/critical-pass3/REVIEW-19.md).
 The [fresh comparison](results/golden/critical-pass3-calibration19-comparison.md)

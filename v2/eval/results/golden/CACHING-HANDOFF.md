@@ -57,4 +57,8 @@ Prior calibration-19 comparison: both reference 2.3.4 and candidate 2.3.5 scored
 
 ## Latest run
 
-The approved-contract rerun is pending at handoff creation. Its final report and ledger will be linked here before this conversation ends.
+The approved-contract rerun is complete: **17/17 critical pass³, 51/51 critical trials, 72/72 overall**, zero invalid trials. See the [calibration-21 rerun report](critical-pass3-calibration21-rerun.md). Application 2.3.5 is unchanged; this is a result under corrected judging, not application improvement or proof of stable perfect reliability.
+
+Evaluated commit `f4093e3`; private run `eval/private/critical-pass3/candidate-6`; archived evidence `98522cad7c84e23bd993c7f16d301964b2186aecb4e1a5bcc6a03ad6f8f3ae05`. Use candidate-6 as the next `--prior-run`. Run cost $0.40641310, linked cumulative ledger $7.14934086. The report includes fresh per-role caching measurements: application input 98.2% cached, actors/judges zero recorded cache reads. Archive replay and secret scans passed. No live calls remain running.
+
+Next conversation should implement the caching/accounting changes above. No caching code has been changed yet, and no user approval question is currently pending for the completed run.
