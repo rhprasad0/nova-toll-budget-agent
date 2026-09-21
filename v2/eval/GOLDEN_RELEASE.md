@@ -11,7 +11,9 @@ were provisioned, the four environments were protected, and calibration 8 was
 approved against the exact corpus and policy contract. The versioned ledger
 retains that calibration's spending. The failed production-reference run
 35549302121 brought recorded spending to $1.33883714 before the new validity
-work. The historical demo remains unqualified.
+work. [Validity diagnostics and calibrations 9–12](GOLDEN_VALIDITY_REVIEW.md)
+added $0.51583054, reconciled to a ledger total of $1.85466768. The historical
+demo remains unqualified.
 
 ## Execution and evidence
 

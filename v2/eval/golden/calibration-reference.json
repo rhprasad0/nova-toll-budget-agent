@@ -1,6 +1,6 @@
 {
   "status": "pending",
-  "directory": "v2/eval/evidence/golden-360/calibration-9",
-  "evidence_sha256": null,
-  "notes": "Expanded calibration and actor validity review required; historical calibration-8 approval does not transfer."
+  "directory": "v2/eval/evidence/golden-360/calibration-12",
+  "evidence_sha256": "ffa7776cd8164a60a83b8b33d97bfb36b50f80fb2ef19de2b2ae54514b53fc00",
+  "notes": "137/138 agreement; one false grounding rejection awaits human adjudication. Expanded labels and actor validity limitations require review; calibration-8 approval does not transfer."
 }

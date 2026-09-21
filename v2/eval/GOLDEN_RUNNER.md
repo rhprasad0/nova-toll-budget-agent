@@ -24,7 +24,8 @@ is evidence about judge accuracy, not a guarantee that every later verdict is ri
 Before calibration, `python -m eval.golden_actor_check --output DIRECTORY
 --prior-spend-usd ACCOUNTED_SPEND` checks three fresh actors per development
 good example against scripted answers. Actor and judge models must emit their
-structured verdict directly. Actor stops derive from a nullable message;
+structured verdict directly. The judge uses medium reasoning; actor and
+application reasoning remain low. Actor stops derive from a nullable message;
 contradictory replies and simulator turn limits invalidate measurement. Judges
 receive rejected calls separately from successful pricing evidence. See the
 [validity review](GOLDEN_VALIDITY_REVIEW.md) for live results and limitations.

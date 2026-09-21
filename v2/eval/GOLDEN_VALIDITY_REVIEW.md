@@ -7,11 +7,56 @@ The findings below are assistant analysis, not human adjudication or application
 
 ## Confirmed boundaries
 
-- Nine original trials ended before required actor replies reached the application. Six retained replies combined `stop=true` with a useful message. The runner previously discarded that message. Contradictory replies now invalidate measurement; turn-limit termination is also explicit.
+- Nine original trials ended before required actor replies reached the application. Six retained replies combined `stop=true` with a useful message. The runner previously discarded that message. The actor now emits one nullable message and the runner derives completion. Contradictory legacy replies invalidate measurement; turn-limit termination is also explicit.
 - Rejected replay calls and guard-blocked requests were absent from judge inputs. Both execution paths now journal the rejection and show the actual error separately from successful tool results. A rejection supports reporting tool failure, not invented prices or road unavailability.
-- An outcome verdict for `annual-confirm-days-1` explained that the conversation was incomplete but returned CORRECT because the preceding grading explanation was correct. The judge's structured-output follow-up now explicitly binds its verdict to the original conversation.
+- An outcome verdict for `annual-confirm-days-1` explained that the conversation was incomplete but returned CORRECT because the preceding grading explanation was correct. Actors and judges now must return their structured decision on the first model call. Their fallback formatting prompts also bind the decision to the original conversation.
 - A required annual-day proposal and a conditional salary midpoint are not consent or asserted user facts. The outcome still fails when a required estimate is absent. The midpoint mechanical exception accepts only an exact midpoint in an explicit question before a tool call; the semantic rules judge still checks consent.
 - Annual sample methodology and price source are separate fields. A recent-date sample can apply current fixed rates. Explicitly claiming historical observation of those fixed amounts remains incorrect.
+- Grounding checks affirmative claims against evidence available when they were made. Later user confirmation cannot repair an earlier unsupported assertion. Tool authorization belongs to rules; a recorded result can support amounts even when obtaining it violated the required sequence.
+
+## Live validation
+
+All attempts, including regressions, are retained in the [evidence index](evidence/golden-validity/index.json).
+The [actor evidence review](evidence/golden-validity/README.md) explains the six scripted runs.
+The final actor run delivered every required clarification and passed 59/60 scripted checks.
+Its one failure was a redundant vehicle-profile reply after a completed answer; fresh actor review remains required.
+Earlier unsupported-origin diagnostic failures included a test-design error: the profile required a Baltimore clarification after the scripted invitation to choose another origin. The final diagnostic includes that exchange.
+
+Calibrations 9, 10, and 11 used low judge reasoning and agreed on 137/138, 133/138,
+and 132/138 proposed criterion labels respectively. Their errors included
+retroactive factual support, treating task-order violations as grounding failures,
+invented disclosure requirements, and missed route/argument violations.
+Each rerun followed a recorded contract change; no unchanged trial was retried for a better score.
+The labels and original case transcripts were preserved throughout.
+
+The current judge uses **medium reasoning**, with the same model and 2,048-token
+cap. Actor and application reasoning remain low. The exact role settings are
+bound into the contract. The [OpenAI reasoning documentation](https://developers.openai.com/api/docs/guides/reasoning)
+describes this control; measured accuracy, usage, and completeness determine its
+suitability here. [Calibration 12](evidence/golden-360/calibration-12/review.html)
+tests all 46 examples under this configuration.
+
+Calibration 12 is complete: **46/46 outcome, 45/46 grounding, and 46/46 rules**
+agreement (137/138 overall). All 12 new examples match all three proposed labels.
+Evidence SHA-256: `ffa7776cd8164a60a83b8b33d97bfb36b50f80fb2ef19de2b2ae54514b53fc00`.
+Its source commit is `ed03f4ba3cb1936ee98266e623e35f4d7ae6dd9c`; the exact policy
+contract is `1fbf33ab6f6779535ba7ed9c90374cb2b8a10b556364d17b8e9d5bfd661d8d25`.
+
+**Human adjudication remains pending.** For
+`annual-missing-schedule-missing-clarification`, the judge correctly fails outcome
+and rules because the tool call precedes the supplied schedule, but also fails
+grounding for that same ordering violation. The proposed grounding label remains
+Pass: the assistant's later financial claims are supported by the recorded tool
+result. Do not overwrite the measured failure. This known false rejection and
+the actor's redundant reply must be reviewed explicitly, alongside the 12 added
+labels, corpus digest, and unchanged policy limits. Agreement on this development
+set is not held-out accuracy or evidence of flawless judgment.
+
+All six actor diagnostics and four calibrations cost **$0.51583054** in total.
+The versioned spending ledger now records **$1.85466768**, with no unknown usage
+or active reservation. The [accounting receipt](evidence/golden-validity/spending-receipt.json)
+binds the prior/new ledger versions and an immutable S3 archive of every manifest,
+journal, and report. The $25 cumulative ceiling and $5 protected-run ceiling remain unchanged.
 
 ## Frozen catalog
 
@@ -66,4 +111,3 @@ Retain all attempts and reconcile their measured costs into the versioned spendi
 Corpus 1.0.11, harness 1.2.1, and policy 1.0.2 require fresh exact-contract review.
 Policy 1.0.1 remains retained with its original approval. Numeric release limits are unchanged.
 A passing calibration is not a production-reference receipt. Genuine remaining application defects and protected production qualification are separate work.
-
