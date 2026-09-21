@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ACCOUNT = "903859731897"
 BUCKET = "nova-toll-golden-evidence-903859731897"
 WORKFLOW = ".github/workflows/v2-golden-evaluation.yml"
-POLICY = ROOT / "v2/eval/results/golden/policy-1.0.12.json"
+POLICY = ROOT / "v2/eval/results/golden/policy-1.0.13.json"
 MAX_BYTES = 32 * 1024 * 1024
 CODE = (
     WORKFLOW,

@@ -333,3 +333,12 @@ def test_divergent_trip_infers_direction_and_requires_confirmation() -> None:
     with pytest.raises(ValueError, match="premature_call"):
         replay.call(fixture.tool, fixture.input, [case.prompt])
     assert replay.call(fixture.tool, fixture.input, [case.prompt, "Yes, combine them."])
+
+
+def test_one_way_current_actors_do_not_request_return_trips() -> None:
+    cases = {c.id: c for c in golden.load_cases()}
+    for case_id in ("greenway-current", "current-tool-error"):
+        facts = cases[case_id].actor.facts
+        assert "returning the other way" not in facts
+        assert "one-way trip only; do not ask for a return trip" in facts
+    assert "returning the other way" in cases["annual-fixed"].actor.facts

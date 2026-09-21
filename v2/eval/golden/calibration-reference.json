@@ -1,4 +1,4 @@
 {
   "status": "pending",
-  "notes": "Corpus 1.0.23 / harness 1.2.10 require fresh calibration after adding existing application scope to judge context. Historical evidence remains retained."
+  "notes": "Corpus 1.0.24 requires fresh actor validation and calibration; historical evidence retained."
 }

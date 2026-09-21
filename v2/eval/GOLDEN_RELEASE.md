@@ -10,7 +10,7 @@ PR 581 now also includes authorized application prompt corrections for source
 labels, annualized daily scenarios, and user-selected income. The application
 model remains gpt-5.6-luna. Local repetition does not qualify a production release.
 
-The current corpus **1.0.23**, harness **1.2.10**, and policy **1.0.12** await exact
+The current corpus **1.0.24**, harness **1.2.10**, and policy **1.0.13** await exact
 human approval. See the [current review packet](results/golden/CACHING-SUMMARY.md).
 Historical four-worker calibration 24 agreed on **179/180** labels. Corpus 1.0.20
 corrects its contradictory wrong-route example. Fresh eight-worker local

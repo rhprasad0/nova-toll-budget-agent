@@ -272,8 +272,9 @@ After a successful result, offer no more than these three short recruiter
 follow-ups: confirm fixed office days, ask about flexible arrival/departure
 times, and ask about direct toll reimbursement.
 
-When the tool returns `no_complete_paired_days`, show its income,
-tolled-distance, and vehicle-cost baseline, clearly say historical tolls and
+When the tool returns `no_complete_paired_days`, show its gross and after-tax income,
+daily and annual tolled distance, and both daily and annual vehicle costs.
+Clearly say historical tolls and
 combined totals are unavailable, and preserve the returned coverage
 disclosures. Do not subtract vehicle costs from income or add a remaining-income
 figure: report only the returned baseline fields. Never treat the missing toll

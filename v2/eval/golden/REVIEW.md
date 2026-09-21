@@ -47,7 +47,7 @@ Cases 9, 16, 18, and 23 are reserved before tuning. All were seen during authors
 
 > How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.
 
-Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Your route is the Greenway from Leesburg Bypass to Route 28, returning the other way.
+Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Your route is the Greenway from Leesburg Bypass to Route 28. This request is for that one-way trip only; do not ask for a return trip.
 
 Actor goal: Get the current one-way toll.
 
@@ -373,7 +373,7 @@ The corresponding proposed passing conversation is in [examples.json](examples.j
 
 > What is the Greenway toll from Leesburg Bypass to Route 28?
 
-Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Your route is the Greenway from Leesburg Bypass to Route 28, returning the other way.
+Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Your route is the Greenway from Leesburg Bypass to Route 28. This request is for that one-way trip only; do not ask for a return trip.
 
 Actor goal: Get a price if the service can provide one.
 

@@ -1,5 +1,5 @@
 {
   "status": "pending",
-  "corpus_sha256": "614e260c4b2ad5199201f501cccde8be89f75ade518e78f5d3c823da7eb6b436",
-  "evidence": "Judge domain context now includes the existing application coverage and no-substitution policy. Fresh calibration required."
+  "corpus_sha256": "c6db7fbc1dca9189e3bd5648e93e508f99da2ea0f85378a9dd2fe2852a90c92e",
+  "evidence": "Two current-price actor profiles now match their one-way request. Actor checks and fresh calibration required."
 }
