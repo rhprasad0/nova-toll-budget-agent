@@ -649,14 +649,9 @@
     },
     {
       "address": "aws_s3_object.cost_assets[\"costs.css\"]",
-      "action": "create",
+      "action": "update",
       "operation_class": "cost-publication",
       "changed_fields": [
-        "bucket",
-        "cache_control",
-        "content_type",
-        "key",
-        "source",
         "source_hash"
       ]
     },

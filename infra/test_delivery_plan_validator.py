@@ -3616,6 +3616,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "aws_lambda_function.costs": "source_code_hash",
             "aws_iam_role_policy.costs": "policy",
             "aws_s3_object.cost_dashboard": "content",
+            'aws_s3_object.cost_assets["costs.css"]': "source_hash",
             'aws_s3_object.cost_assets["costs.mjs"]': "source_hash",
         }.items():
             expected_mutations[address] = ("cost-publication", (field,))
