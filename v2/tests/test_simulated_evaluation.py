@@ -44,7 +44,7 @@ def test_simulation_preserves_evidence_and_bounds_turns(
     def model_answer(
         agent: Agent, prompt: str, *, structured_output_model: type[BaseModel]
     ) -> SimpleNamespace:
-        assert agent.model.get_config().get("model_id") == "gpt-5.6-luna"
+        assert agent.model.get_config().get("model_id") == "gpt-6-luna"
         assert not agent.tool_names  # No hidden Bedrock completion tool.
         if structured_output_model is ActorResponse:
             assert "must make this correction" in str(agent.system_prompt)

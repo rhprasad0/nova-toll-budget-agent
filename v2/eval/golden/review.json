@@ -1,5 +1,5 @@
 {
   "status": "pending",
-  "corpus_sha256": "282f75094736d9e7cd00520d3f1851c6635187e117e96c3eb4909044d34ae7a7",
-  "evidence": "Contract 2.0.2 corrects one definite legacy Grounding label found in calibration 2 and packaged-agent budget failure attribution. Both raw runs remain archived. The final exact corpus requires fresh authorized calibration and human review; no historical approval is transferred."
+  "corpus_sha256": "b24771d6e52d2c774a52fc1b652e28ebdae6fcc8c0311e3ba2d0e7a27ed3ca10",
+  "evidence": "Contract 2.0.3 migrates application, actors, and judges to GPT-6 Luna and updates token prices. Cases, labels, prompts, reasoning effort, and token limits are unchanged. Fresh exact-contract calibration and human review are required; no historical approval is transferred."
 }

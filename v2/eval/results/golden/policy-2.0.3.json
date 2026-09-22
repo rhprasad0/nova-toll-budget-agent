@@ -1,0 +1,28 @@
+{
+  "policy": {
+    "version": "2.0.3",
+    "contract_sha256": "64cd4790740958ee92d4cfcbc4e034c9fbbc7619a3998073e428070c280872ec",
+    "trials": 3,
+    "cases": 200,
+    "workers": 4,
+    "critical_passes": 3,
+    "noncritical_passes": 2,
+    "suite_success_min": 0.9,
+    "suite_pass_cubed_min": 0.75,
+    "lost_passes_max": 1,
+    "run_cost_max_usd": 5.0,
+    "agent_cost_per_success_max_usd": 0.05,
+    "latency_p50_max_seconds": 30.0,
+    "latency_p95_max_seconds": 60.0,
+    "candidate_max_age_hours": 24,
+    "production_max_age_hours": 720,
+    "sample_size": 8,
+    "replacement_runs_max": 1,
+    "max_output_tokens": 2048
+  },
+  "approval": {
+    "status": "pending",
+    "evidence_sha256": "146cd69d9f54ecdc9b284d54af8b2baf2aa71531df5939fa102d02fe3fe617a8",
+    "scope": "GPT-6 Luna migration; cases, labels, prompts, and numerical limits unchanged. Fresh exact-contract calibration and human review remain pending."
+  }
+}

@@ -6,7 +6,7 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-The active corpus, harness, and policy are **2.0.2**. They cover **200 cases**:
+The active corpus, harness, and policy are **2.0.3**. They cover **200 cases**:
 160 development and 40 public, authorship-exposed reservations. The new corpus,
 calibration, and policy require exact human review; their approvals are pending.
 The application model and prompt remain unchanged in this expansion.
@@ -14,7 +14,7 @@ The application model and prompt remain unchanged in this expansion.
 Two local calibration passes completed within a **combined $25 ceiling**;
 their [raw reports and adjudication proposals](evidence/golden-200/CALIBRATION.md)
 remain pending human review. They measured contracts 2.0.0 and 2.0.1. The final
-2.0.2 label correction and packaged-agent budget attribution fix require fresh
+2.0.3 GPT-6 Luna migration requires fresh
 authorized exact-contract calibration. No protected application execution,
 production qualification, or policy limit increase is authorized by those runs.
 
@@ -62,7 +62,7 @@ one-hour credentials. This is execution headroom, not a relaxation of
 the cost or per-trial latency policy. See the
 [timing calculation](evidence/golden-200/CALIBRATION.md#protected-workflow-capacity).
 
-The numerical thresholds from policy 1.0.0 remain unchanged in policy 2.0.2,
+The numerical thresholds from policy 1.0.0 remain unchanged in policy 2.0.3,
 including the **$5 protected-run ceiling**, critical/noncritical pass requirements,
 suite floors, regression limits, and latency limits. Expansion does not establish
 that 600 conversations can meet those limits. Any later policy change requires

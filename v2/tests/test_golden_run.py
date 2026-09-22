@@ -111,7 +111,7 @@ def test_cli_runs_independent_work_in_parallel(
 def test_parallel_calls_reserve_shared_budget_before_provider_calls(
     tmp_path: Path,
 ) -> None:
-    journal = run.Journal(tmp_path / "budget", 0.02)
+    journal = run.Journal(tmp_path / "budget", 0.009)
     release = Event()
 
     def invoke(number: int, invalid_usage: bool = False) -> bool:
@@ -156,7 +156,7 @@ def test_parallel_calls_reserve_shared_budget_before_provider_calls(
             release.set()
         assert sum(f.result() for f in futures) == 2
     assert journal.reserved == pytest.approx(0)
-    assert journal.spent == pytest.approx(2 * 0.000044)
+    assert journal.spent == pytest.approx(2 * 0.000020)
     assert not journal.unknown_usage
     events = [
         json.loads(line)
@@ -296,7 +296,7 @@ def test_usage_meter_and_budget_stop(tmp_path: Path) -> None:
             pass
 
     asyncio.run(consume())
-    assert row.measurements[0].cost_usd == pytest.approx(0.000044)
+    assert row.measurements[0].cost_usd == pytest.approx(0.000020)
     assert journal.spent == row.measurements[0].cost_usd
     with pytest.raises(run.TaskFailure):
         asyncio.run(consume())
@@ -308,7 +308,7 @@ def test_usage_meter_and_budget_stop(tmp_path: Path) -> None:
             "cacheReadInputTokens": 50,
             "cacheWriteInputTokens": 30,
         }
-    ) == pytest.approx(0.0000365)
+    ) == pytest.approx(0.00001625)
 
 
 def test_incomplete_report_retains_interrupted_measurements(
@@ -996,7 +996,10 @@ def test_eval_cache_prefix_and_write_accounting(
         assert usage.get("cacheWriteInputTokens", 0) == (written or 0)
         assert usage["cacheReadInputTokens"] == 50
         expected = (
-            (50 - (written or 0)) * 0.20 + 50 * 0.02 + (written or 0) * 0.25 + 10 * 1.20
+            (50 - (written or 0)) * 0.10
+            + 50 * 0.01
+            + (written or 0) * 0.125
+            + 10 * 0.50
         ) / 1_000_000
         assert run.cost(usage) == pytest.approx(expected)
 

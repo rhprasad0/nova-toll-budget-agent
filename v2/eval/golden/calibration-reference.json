@@ -1,4 +1,4 @@
 {
   "status": "pending",
-  "notes": "Two authorized runs are archived at eval/evidence/golden-200/CALIBRATION.md. Run 2 measured corpus/harness 2.0.1. The subsequent Grounding-label correction and packaged-agent budget-attribution fix create contract 2.0.2 and require fresh authorized exact-contract calibration and human adjudication before application execution. These runs do not imply approval."
+  "notes": "Contract 2.0.3 migrates application, actors, and judges to GPT-6 Luna. Fresh exact-contract calibration and human review are required. Archived GPT-5.6 Luna evidence remains historical and does not approve this contract."
 }

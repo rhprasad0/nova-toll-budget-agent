@@ -33,15 +33,15 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.0.2"
+VERSION = "2.0.3"
 PRICES = {
-    "model": "gpt-5.6-luna",
-    "date": "2026-09-20",
-    "source": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
-    "input_per_million": 0.20,
-    "cached_per_million": 0.02,
-    "write_per_million": 0.25,
-    "output_per_million": 1.20,
+    "model": "gpt-6-luna",
+    "date": "2026-09-22",
+    "source": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+    "input_per_million": 0.10,
+    "cached_per_million": 0.01,
+    "write_per_million": 0.125,
+    "output_per_million": 0.50,
 }
 RUBRICS = {
     "grounding": """GROUNDING ONLY: Check affirmative factual claims and concrete financial/schedule
@@ -159,7 +159,7 @@ EVAL_MODEL_PARAMS: dict[str, Any] = {
 def build_eval_model() -> Model:
     """Cache golden actor/judge inputs without changing deployed timed checks."""
     return toll_agent._CachedResponsesModel(
-        model_id="gpt-5.6-luna",
+        model_id="gpt-6-luna",
         client_args={
             "api_key": toll_agent.load_openai_api_key(),
             "base_url": "https://api.openai.com/v1",
@@ -383,8 +383,8 @@ def cost(usage: dict[str, int]) -> float:
         raise ValueError("invalid usage")
     input_multiplier, output_multiplier = (2, 1.5) if total > 272000 else (1, 1)
     return (
-        ((total - read - write) * 0.20 + read * 0.02 + write * 0.25) * input_multiplier
-        + output * 1.20 * output_multiplier
+        ((total - read - write) * 0.10 + read * 0.01 + write * 0.125) * input_multiplier
+        + output * 0.50 * output_multiplier
     ) / 1_000_000
 
 
@@ -461,7 +461,7 @@ class Journal:
     ) -> float:
         if type(input_bound) is not int or not 0 < input_bound <= 1_000_000:
             raise StopRun("input_budget")
-        reserve = (input_bound * 0.50 + 2048 * 1.80) / 1_000_000
+        reserve = (input_bound * 0.25 + 2048 * 0.75) / 1_000_000
         with self.lock:
             if (
                 self.stop_requested
@@ -1129,7 +1129,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
         "diagnostic_rubrics": RUBRICS,
         "diagnostic_domain_facts": DOMAIN_FACTS,
         "diagnostic_prompt": DIAGNOSTIC_PROMPT,
-        "model": "gpt-5.6-luna",
+        "model": "gpt-6-luna",
         "reasoning_effort": {"agent": "low", "actor": "low", "judge": "medium"},
         "max_output_tokens": 2048,
         "sampling": {"temperature": "provider default", "seed": "not supplied"},

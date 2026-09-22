@@ -296,7 +296,7 @@ def promotion(decision: dict[str, Any]) -> dict[str, Any]:
             "call_count": 1,
             "total_usd": "1.00",
             "elapsed_ms": 1000,
-            "model": "gpt-5.6-luna",
+            "model": "gpt-6-luna",
             "tool_contract": "1.5.0",
             "prompt_version": "2.3.7",
             "renderer_version": "1.0.0",

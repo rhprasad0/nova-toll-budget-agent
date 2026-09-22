@@ -74,7 +74,7 @@ function evidence(r) {
         `<div class="check"><div class="check-line"><span>${checkLabels[c.name]}</span><span class="${c.passed ? "green" : "red"}">${c.passed ? "Passed" : "Failed"}</span></div><p>${escapeHtml(c.reason)}</p></div>`,
     )
     .join("");
-  return `<div class="evidence"><h4>Recorded conversation</h4>${turns || "<p>No completed conversation was recorded.</p>"}<h4>Checks</h4>${checks || "<p>Not scored. An interrupted or late run is not a passing evaluation.</p>"}<p class="tool-evidence">Application, simulated user, and judges: ${escapeHtml(e.model || "gpt-5.6-luna")}. Internal diagnostics are omitted from public evidence.</p></div>`;
+  return `<div class="evidence"><h4>Recorded conversation</h4>${turns || "<p>No completed conversation was recorded.</p>"}<h4>Checks</h4>${checks || "<p>Not scored. An interrupted or late run is not a passing evaluation.</p>"}<p class="tool-evidence">Application, simulated user, and judges: ${escapeHtml(e.model || "gpt-6-luna")}. Internal diagnostics are omitted from public evidence.</p></div>`;
 }
 
 function render() {

@@ -56,7 +56,7 @@ Markdown, exact phrases, or the actor's satisfaction.
 def build_eval_model() -> OpenAIResponsesModel:
     """Use the existing SSM credential without a default Bedrock model call."""
     return OpenAIResponsesModel(
-        model_id="gpt-5.6-luna",
+        model_id="gpt-6-luna",
         client_args={
             "api_key": load_openai_api_key(),
             "base_url": "https://api.openai.com/v1",

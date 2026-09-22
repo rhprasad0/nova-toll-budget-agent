@@ -586,7 +586,7 @@ def test_agent_uses_luna_ssm_and_explicit_prompt_cache(
     )
 
     assert calls == [{"Name": "/nova-toll/openai_api_key", "WithDecryption": True}]
-    assert model.get_config().get("model_id") == "gpt-5.6-luna"
+    assert model.get_config().get("model_id") == "gpt-6-luna"
     assert request["prompt_cache_key"] == "tollchat-agent-v2"
     assert request["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
     assert request["store"] is False

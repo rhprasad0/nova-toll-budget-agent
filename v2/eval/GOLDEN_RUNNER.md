@@ -1,6 +1,6 @@
 # Running the frozen golden corpus
 
-The active corpus and harness are **2.0.2**: **200 cases**, split into **160
+The active corpus and harness are **2.0.3**: **200 cases**, split into **160
 development and 40 reserved cases**, with three fresh trials per case. A complete
 application run has **600 conversations**. Reserved cases are public and
 exposed to their authors; they are excluded from calibration, not claimed to be
@@ -8,7 +8,7 @@ secret or independently authored holdouts.
 
 The runner executes the candidate application against frozen pricing evidence.
 Adaptive users provide only their case facts and required follow-ups. No database
-or live pricing service is used. The application model and prompt are unchanged;
+or live pricing service is used. Application, actors, and judges use `gpt-6-luna` with unchanged prompts;
 model credentials come from the existing SSM parameter.
 
 ## Calibration and execution
@@ -161,3 +161,11 @@ uv run pytest tests/test_golden_corpus.py tests/test_golden_run.py \
 These checks cover corpus counts, split isolation, labeled replay, actor and
 application attribution, calibration exclusion, consent timing, accounting,
 completion, and historical reporting. They do not measure model performance.
+
+## GPT-6 Luna migration (2.0.3)
+
+The application, actor, and judge models move to `gpt-6-luna`, with dated
+GPT-6 Luna token prices. Cases, labels, prompts, reasoning effort, and token
+limits are unchanged. This exact contract requires fresh calibration and human
+review; prior model results and approvals remain historical. The local migration
+run has a $25 cumulative ceiling across calibration and application execution.
