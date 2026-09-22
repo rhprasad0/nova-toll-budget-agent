@@ -246,7 +246,7 @@ jobs:
         printf '%s' "$ADMISSION" >"$input"
         run_private_stage release-verification "$RUNNER_TEMP/production-revalidation.out" "$RUNNER_TEMP/production-revalidation.err" python3 trusted/v2/scripts/check_production_release.py revalidate --admission "$input" --output "$output"
         rm -f -- "$input" "$output"
-    - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+    - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
       with:
         role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-planner
         aws-region: us-east-1
