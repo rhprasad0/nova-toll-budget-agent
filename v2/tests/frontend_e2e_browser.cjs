@@ -81,7 +81,7 @@ const { chromium } = require('playwright');
           const box = await page.locator(selector).boundingBox(); assert.ok(box);
           assert.ok(box.y >= 0 && box.y + box.height <= 901, `${selector} fits the first desktop screen with ${font}`);
         }
-        await style.evaluate(node => node.remove());
+      await style.evaluate(node => node.parentNode?.removeChild(node));
       }
       await noOverflow(page);
       const sent = page.waitForResponse(response => response.url().endsWith('/api/chat'));
