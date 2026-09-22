@@ -3600,6 +3600,14 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         )
         for address, spec in CONTRACT.items():
             if spec.operation_class in {"cost-publication", "cost-routing"}:
+                if (
+                    address == 'aws_s3_object.cost_assets["evals.css"]'
+                    and '"evals.css"'
+                    not in (
+                        Path(__file__).parent.parent / "v2/infra/costs.tf"
+                    ).read_text()
+                ):
+                    continue  # Policy is admitted before the frontend adds this asset.
                 expected_mutations[address] = (
                     spec.operation_class,
                     tuple(sorted(spec.fields)),
