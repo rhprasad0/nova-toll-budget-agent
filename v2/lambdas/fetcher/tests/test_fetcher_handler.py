@@ -1,5 +1,6 @@
 import io
 import logging
+import traceback
 import urllib.error
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
@@ -15,7 +16,7 @@ TOKEN_I66 = "super-secret-i66-token"
 def reset_module_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """handler.py caches clients/tokens as module globals; isolate tests."""
     monkeypatch.setattr(handler, "_clients", {})
-    monkeypatch.setattr(handler, "_tokens", None)
+    monkeypatch.setattr(handler, "_tokens", {})
     monkeypatch.setenv("I95_TOKEN_PARAM", "/nova-toll/i95-token")
     monkeypatch.setenv("I66_TOKEN_PARAM", "/nova-toll/i66-token")
     monkeypatch.setenv("RAW_BUCKET", "nova-toll-raw-test")
@@ -120,7 +121,7 @@ def test_one_feed_failing_does_not_block_the_other(
     with pytest.raises(RuntimeError, match="i95"):
         handler.handler({}, None)
 
-    assert any(record.exc_info for record in caplog.records)
+    assert not any(record.exc_info for record in caplog.records)
 
     # i66 still made it through despite i95 failing.
     stub_aws["s3"].put_object.assert_called_once()
@@ -140,6 +141,13 @@ def test_event_selects_which_feeds_to_poll(
 ) -> None:
     """The two feeds ride separate EventBridge rules, each naming its feed."""
 
+    def selected_token(Name: str, WithDecryption: object) -> object:
+        if Name != "/nova-toll/i66-token":
+            raise RuntimeError("unselected feed token unavailable")
+        return {"Parameter": {"Value": TOKEN_I66}}
+
+    stub_aws["ssm"].get_parameter.side_effect = selected_token
+
     def _callback_3(url: str, timeout: object = None) -> object:
         return io.BytesIO(b"<opt/>")
 
@@ -151,10 +159,42 @@ def test_event_selects_which_feeds_to_poll(
 
     result = handler.handler({"feeds": ["i66"], "drill_id": "0123456789abcdef"}, None)
 
+    stub_aws["ssm"].get_parameter.assert_called_once_with(
+        WithDecryption=True, Name="/nova-toll/i66-token"
+    )
     stub_aws["s3"].put_object.assert_called_once()
     key = stub_aws["s3"].put_object.call_args.kwargs["Key"]
     assert key.endswith("-0123456789abcdef.xml")
     assert result == {"keys": [key]}
+
+
+def test_failed_token_lookup_is_isolated_and_retried_while_successes_are_cached(
+    monkeypatch: pytest.MonkeyPatch,
+    stub_aws: dict[str, MagicMock],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    stub_aws["ssm"].get_parameter.side_effect = [
+        RuntimeError(TOKEN_I95),
+        {"Parameter": {"Value": TOKEN_I66}},
+        {"Parameter": {"Value": TOKEN_I95}},
+    ]
+    fetch = MagicMock(side_effect=[io.BytesIO(b"feed") for _ in range(5)])
+    monkeypatch.setattr(handler.urllib.request, "urlopen", fetch)
+
+    with pytest.raises(RuntimeError, match=r"poll failed for feed\(s\): i95"):
+        handler.handler({}, None)
+
+    stub_aws["s3"].put_object.assert_called_once()
+    assert "/feed=i66/" in stub_aws["s3"].put_object.call_args.kwargs["Key"]
+    assert TOKEN_I95 not in caplog.text
+    for _ in range(2):
+        assert len(handler.handler({}, None)["keys"]) == 2
+    assert [
+        call.kwargs["Name"] for call in stub_aws["ssm"].get_parameter.call_args_list
+    ] == ["/nova-toll/i95-token", "/nova-toll/i66-token", "/nova-toll/i95-token"]
+    assert fetch.call_count == 5
+    assert stub_aws["s3"].put_object.call_count == 5
+    assert stub_aws["cloudwatch"].put_metric_data.call_count == 5
 
 
 def test_empty_event_still_polls_every_feed(
@@ -180,6 +220,7 @@ def test_empty_event_still_polls_every_feed(
 def test_unknown_feed_is_rejected(stub_aws: dict[str, MagicMock]) -> None:
     with pytest.raises(RuntimeError, match="unknown feed"):
         handler.handler({"feeds": ["i495"]}, None)
+    stub_aws["ssm"].get_parameter.assert_not_called()
 
 
 @pytest.mark.parametrize("drill_id", ["", "ABCDEF0123456789", "../not-a-key"])
@@ -188,6 +229,7 @@ def test_drill_id_is_strictly_validated(
 ) -> None:
     with pytest.raises(RuntimeError, match="drill_id"):
         handler.handler({"feeds": ["i66"], "drill_id": drill_id}, None)
+    stub_aws["ssm"].get_parameter.assert_not_called()
 
 
 @pytest.mark.parametrize("feeds", ["i95", [1]])
@@ -196,19 +238,33 @@ def test_feed_selection_must_be_a_string_list(
 ) -> None:
     with pytest.raises(RuntimeError, match="list of strings"):
         handler.handler({"feeds": feeds}, None)
+    stub_aws["ssm"].get_parameter.assert_not_called()
 
 
+@pytest.mark.parametrize("failure_stage", ["fetch", "ssm", "s3", "cloudwatch"])
 def test_token_never_appears_in_logs_or_exception(
     monkeypatch: pytest.MonkeyPatch,
     stub_aws: dict[str, MagicMock],
     caplog: pytest.LogCaptureFixture,
+    failure_stage: str,
 ) -> None:
     caplog.set_level(logging.INFO)
 
-    def fake_urlopen(url: str, timeout: float | None = None) -> None:
-        raise urllib.error.URLError(f"connection refused for {url}")
+    def fake_urlopen(url: str, timeout: float | None = None) -> io.BytesIO:
+        if failure_stage == "fetch":
+            raise urllib.error.URLError(f"connection refused for {url}")
+        return io.BytesIO(b"feed")
 
     monkeypatch.setattr(handler.urllib.request, "urlopen", fake_urlopen)
+    failures = {
+        "ssm": stub_aws["ssm"].get_parameter,
+        "s3": stub_aws["s3"].put_object,
+        "cloudwatch": stub_aws["cloudwatch"].put_metric_data,
+    }
+    if failure_stage in failures:
+        failures[failure_stage].side_effect = RuntimeError(
+            f"unsanitized failure: {TOKEN_I95} {TOKEN_I66}"
+        )
 
     with pytest.raises(RuntimeError) as exc_info:
         handler.handler({}, None)
@@ -217,3 +273,7 @@ def test_token_never_appears_in_logs_or_exception(
     assert TOKEN_I66 not in caplog.text
     assert TOKEN_I95 not in str(exc_info.value)
     assert TOKEN_I66 not in str(exc_info.value)
+    rendered = "".join(traceback.format_exception(exc_info.value))
+    assert TOKEN_I95 not in rendered
+    assert TOKEN_I66 not in rendered
+    assert not any(record.exc_info for record in caplog.records)

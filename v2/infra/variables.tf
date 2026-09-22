@@ -10,18 +10,6 @@ variable "publisher_package_path" {
   default     = ""
 }
 
-variable "agentcore_package_path" {
-  description = "Reviewed v2 AgentCore runtime zip. Empty uses a validation-only placeholder."
-  type        = string
-  default     = ""
-}
-
-variable "chat_proxy_package_path" {
-  description = "Reviewed v2 private chat proxy zip. Empty uses a validation-only placeholder."
-  type        = string
-  default     = ""
-}
-
 variable "timed_checks_package_path" {
   description = "Reviewed v2 timed-checks Lambda zip; required for deployment."
   type        = string

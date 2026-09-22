@@ -1,15 +1,18 @@
-# TollChat golden evaluation set, version 1.0.11
+# TollChat golden evaluation set, version 1.0.26
 
 This is a 24-case starting corpus for a repeatable baseline: 11 current-price
 conversations and 13 annual-affordability conversations. The
 [case review](golden/REVIEW.md) includes every question, actor brief, expected
 behavior, fixture reference, and proposed criticality.
 
-**Status: corpus 1.0.11 and its exact judge contract are approved.** See the
-[AI evaluation engineering summary](GOLDEN_VALIDITY_REVIEW.md).
-Calibration 15 matches all 138 criterion labels across 46 development examples.
-These are judge-calibration results; no qualified production baseline exists yet.
-Approval is recorded separately in [review.json](golden/review.json).
+**Status: corpus 1.0.26 and its exact evaluation contract await review.** This
+revision removes an unused route-tool adapter and moves offline evaluator
+assertions into pytest. Cases, fixtures, expected labels, prompts, and cached
+actor/judge behavior are unchanged from 1.0.25. Source fingerprints have changed,
+so earlier calibration does not approve this revision. See the
+[historical calibration results](results/golden/CACHING-SUMMARY.md).
+No qualified production baseline exists. Approval remains separately recorded
+in [review.json](golden/review.json).
 
 ## Ownership and boundaries
 
@@ -143,7 +146,7 @@ is a distinct record owned by #362. This work neither qualifies a release nor
 defines numeric release thresholds. That policy remains human-reviewed work in
 #362/#363. Criticality does not excuse a failure in a noncritical case.
 
-The manifest pins version 1.0.11, three trials, model choices, and SHA-256 hashes
+The manifest pins version 1.0.26, three trials, model choices, and SHA-256 hashes
 of cases, fixtures, frozen context, examples, and grader sources. File hashes bind
 exact bytes; the aggregate hashes their sorted, compact UTF-8 JSON map. Approval
 is separate to avoid a self-referential hash and names the aggregate digest.
@@ -181,7 +184,7 @@ intentional.
 From `v2/`:
 
 ```bash
-uv run python eval/run_evaluation.py --check
+uv run pytest -q tests/test_run_evaluation.py
 uv run python -m eval.golden
 uv run pytest tests/test_golden_corpus.py tests/test_simulated_evaluation.py
 ```

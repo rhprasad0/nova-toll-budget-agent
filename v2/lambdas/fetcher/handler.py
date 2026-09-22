@@ -87,7 +87,7 @@ FEEDS: dict[str, FeedConfig] = {
 # Lazy singletons: created on first use, not at import time, so tests can
 # stub them without a real AWS region/credentials configured.
 _clients: dict[str, object] = {}
-_tokens: dict[str, str] | None = None
+_tokens: dict[str, str] = {}
 
 
 def _client(name: Literal["ssm", "s3", "cloudwatch"]) -> object:
@@ -99,21 +99,17 @@ def _client(name: Literal["ssm", "s3", "cloudwatch"]) -> object:
     return _clients[name]
 
 
-def _load_tokens() -> dict[str, str]:
-    """Read both feed tokens from SSM SecureString params, once per cold start."""
-    global _tokens
-    if _tokens is None:
+def _load_token(feed: str) -> str:
+    """Cache each feed's successful SSM lookup independently."""
+    if feed not in _tokens:
         ssm = cast(SsmClient, _client("ssm"))
-        _tokens = {
-            feed: cast(
-                str,
-                ssm.get_parameter(
-                    Name=os.environ[cfg["token_param_env"]], WithDecryption=True
-                )["Parameter"]["Value"],
-            )
-            for feed, cfg in FEEDS.items()
-        }
-    return _tokens
+        _tokens[feed] = cast(
+            str,
+            ssm.get_parameter(
+                Name=os.environ[FEEDS[feed]["token_param_env"]], WithDecryption=True
+            )["Parameter"]["Value"],
+        )
+    return _tokens[feed]
 
 
 def _scrub(text: str, token: str) -> str:
@@ -199,7 +195,6 @@ def handler(event: dict[str, Any] | None, _context: object) -> dict[str, list[st
     empty event still means "all feeds" -- that's what a manual invoke and
     scripts/smoke.sh --fire send.
     """
-    tokens = _load_tokens()
     now = datetime.now(UTC)
     requested_value = (event or {}).get("feeds")
     if requested_value is None:
@@ -225,11 +220,11 @@ def handler(event: dict[str, Any] | None, _context: object) -> dict[str, list[st
     for feed in requested:
         cfg = FEEDS[feed]
         try:
-            keys.append(_poll_feed(feed, cfg, tokens[feed], now, drill_id))
+            token = _load_token(feed)
+            keys.append(_poll_feed(feed, cfg, token, now, drill_id))
         except Exception as exc:
-            logger.exception(
-                "feed=%s poll failed: %s", feed, _scrub(str(exc), tokens[feed])
-            )
+            # Messages and tracebacks can contain a token, including before lookup succeeds.
+            logger.error("feed=%s poll failed: %s", feed, type(exc).__name__)
             failed_feeds.append(feed)
     if failed_feeds:
         # Surfaces as a Lambda Errors metric (spec Observability alarm #1)

@@ -1,5 +1,5 @@
 {
   "status": "pending",
-  "corpus_sha256": "1646f457b8dc4e761d9a25a8e919883064c55adb40e4671f3a126217a750608e",
-  "evidence": "Origin-correction actor now explicitly identifies the changed origin and unchanged destination. Fresh actor checks and calibration required."
+  "corpus_sha256": "fc086b61455bc6eacb8b977456ebd8eca6bc645a668e29cc2cd919c9e59e8ee2",
+  "evidence": "Cleanup removes the unused Python route adapter and relocates evaluator self-checks into pytest. Cases, fixtures, labels, prompts, and cached actor/judge behavior are unchanged from 1.0.25; source fingerprints changed. Fresh exact-contract calibration and human review remain required."
 }

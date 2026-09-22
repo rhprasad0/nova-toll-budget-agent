@@ -4650,8 +4650,9 @@ def test_v2_agent_packages_are_required_for_real_deployments() -> None:
     variables = (V2_ROOT / "infra" / "variables.tf").read_text()
     agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
     build = V2_ROOT / "scripts" / "build_agentcore_zips.sh"
-    assert 'variable "agentcore_package_path"' in variables
-    assert 'variable "chat_proxy_package_path"' in variables
+    assert 'variable "agentcore_package_path"' not in variables
+    assert 'variable "chat_proxy_package_path"' not in variables
+    assert "for_each           = var.release_slots" in agentcore
     assert "AgentCore must use the immutable release artifact" in agentcore
     assert "Chat proxy must use the immutable release artifact" in agentcore
     assert build.exists()
@@ -4669,6 +4670,96 @@ def test_reviewed_zip_builders_use_store_mode() -> None:
         assert re.search(rf"(?m)^[ \t]*\([^\n]*\| {archive_call}\)$", script)
 
 
+def test_ca_helper_can_be_sourced_without_build_side_effects(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            dedent("""\
+                set +e +u
+                set +o pipefail
+                PATH=/nonexistent
+                V2_ROOT=caller BUILD=caller STAGE=caller EPOCH=caller
+                before_environment=$(export -p)
+                before_flags="$-"
+                before_options=$(set +o)
+                source "$1" || exit
+                [[ "$before_environment" == "$(export -p)" ]] || exit 1
+                [[ "$before_flags" == "$-" ]] || exit 1
+                [[ "$before_options" == "$(set +o)" ]] || exit 1
+                [[ "$V2_ROOT:$BUILD:$STAGE:$EPOCH" == caller:caller:caller:caller ]] || exit 1
+                declare -F download_rds_ca_bundle >/dev/null
+                """),
+            "bash",
+            str(V2_ROOT / "scripts/build_loader_zip.sh"),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert not result.stdout and not result.stderr
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("curl_status, expected_status", [(23, 23), (0, 1)])
+def test_ca_helper_rejects_download_and_checksum_failures(
+    tmp_path: Path, curl_status: int, expected_status: int
+) -> None:
+    destination = tmp_path / "rds-ca-bundle.pem"
+    curl_log = tmp_path / "curl-args"
+    checksum_log = tmp_path / "checksum-called"
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            dedent("""\
+                source "$1"
+                curl_log="$3" checksum_log="$4" curl_status="$5"
+                curl() {
+                  printf '%s\n' "$@" >"$curl_log"
+                  printf 'untrusted certificate' >"${@: -1}"
+                  return "$curl_status"
+                }
+                sha256sum() {
+                  tee "$checksum_log" | command sha256sum "$@"
+                }
+                download_rds_ca_bundle "$2"
+                """),
+            "bash",
+            str(V2_ROOT / "scripts/build_loader_zip.sh"),
+            str(destination),
+            str(curl_log),
+            str(checksum_log),
+            str(curl_status),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == expected_status
+    assert curl_log.read_text().splitlines() == [
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--location",
+        "--proto",
+        "=https",
+        "--tlsv1.2",
+        "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem",
+        "-o",
+        str(destination),
+    ]
+    assert checksum_log.exists() is (curl_status == 0)
+    if curl_status == 0:
+        assert checksum_log.read_text() == (
+            "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
+            f"  {destination}\n"
+        )
+    assert ("RDS CA bundle digest mismatch" in result.stderr) is (curl_status == 0)
+
+
 def test_timed_builder_import_smoke_is_secret_isolated() -> None:
     script = (V2_ROOT / "scripts" / "build_timed_checks_zip.sh").read_text()
     assert "env -i" in script
@@ -4679,7 +4770,8 @@ def test_timed_builder_import_smoke_is_secret_isolated() -> None:
         in script
     )
     assert "uv run --python 3.13 --no-project python" in script
-    assert "global-bundle.pem" in script
+    assert 'source "$V2_ROOT/scripts/build_loader_zip.sh"' in script
+    assert 'download_rds_ca_bundle "$STAGE/rds-ca-bundle.pem"' in script
     assert (
         'DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"' in TIMED_CHECKS_TF
     )
@@ -6082,8 +6174,6 @@ def _assert_development_plan_workflow(source: str) -> None:
     for package_variable in (
         "loader_package_path",
         "publisher_package_path",
-        "agentcore_package_path",
-        "chat_proxy_package_path",
         "timed_checks_package_path",
     ):
         assert f"-var {package_variable}" in plan_source

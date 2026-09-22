@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Mapping, Sequence
 from copy import copy, deepcopy
 from datetime import date, datetime
 from hashlib import sha256
@@ -46,6 +47,56 @@ _DUPLICATE_TOOL_MESSAGE = (
     "This exact tool call already ran during this request. "
     "Use its previous result and continue."
 )
+
+_TOOL_LABELS = {
+    "get_current_toll_price": "Checking current toll price",
+    "get_annual_toll_ballpark": "Calculating annual toll-commute affordability",
+}
+
+
+def activity_updates(
+    message: object, activities: dict[str, dict[str, object]]
+) -> list[dict[str, object]]:
+    """Track tool progress without exposing tool inputs or result content."""
+    if not isinstance(message, Mapping):
+        return []
+    content = cast(Mapping[object, object], message).get("content", [])
+    if not isinstance(content, Sequence):
+        return []
+    events: list[dict[str, object]] = []
+    for block in cast(Sequence[object], content):
+        if not isinstance(block, Mapping):
+            continue
+        data = cast(Mapping[str, object], block)
+        tool_use = data.get("toolUse")
+        if isinstance(tool_use, Mapping):
+            use = cast(Mapping[str, object], tool_use)
+            tool_id = use.get("toolUseId")
+            if isinstance(tool_id, str) and tool_id not in activities:
+                activity: dict[str, object] = {
+                    "index": len(activities),
+                    "label": _TOOL_LABELS.get(
+                        str(use.get("name")), "Checking toll data"
+                    ),
+                    "status": "running",
+                }
+                activities[tool_id] = activity
+                events.append(dict(activity))
+            continue
+        tool_result = data.get("toolResult")
+        if isinstance(tool_result, Mapping):
+            result = cast(Mapping[str, object], tool_result)
+            tool_id = result.get("toolUseId")
+            if isinstance(tool_id, str) and tool_id in activities:
+                activity = activities[tool_id]
+                activity["status"] = (
+                    "failed"
+                    if result.get("status") == "error"
+                    and result.get("content") != [{"text": _DUPLICATE_TOOL_MESSAGE}]
+                    else "completed"
+                )
+                events.append(dict(activity))
+    return events
 
 
 class _Model(BaseModel):

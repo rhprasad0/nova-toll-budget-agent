@@ -2,11 +2,11 @@
 set -euo pipefail
 
 V2_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=v2/scripts/build_loader_zip.sh
+source "$V2_ROOT/scripts/build_loader_zip.sh"
 BUILD="$V2_ROOT/infra/build"
 AGENT_STAGE="$BUILD/agentcore"
 PROXY_STAGE="$BUILD/chat-proxy"
-CA_URL="https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
-CA_SHA256="e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
 EPOCH="2020-01-01 00:00:00Z"
 export TZ=UTC
 export UV_MANAGED_PYTHON=1 UV_PYTHON_INSTALL_DIR=/tmp/nova-toll-cpython
@@ -22,13 +22,7 @@ cp "$V2_ROOT"/agent/{__init__.py,agentcore_entrypoint.py,toll_agent.py,telemetry
 cp "$V2_ROOT"/agent_tools/*.py "$AGENT_STAGE/agent_tools/"
 cp "$V2_ROOT/agent-sops/nova-toll-pricing-assistant.sop.md" \
   "$AGENT_STAGE/agent-sops/"
-curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-  "$CA_URL" -o "$AGENT_STAGE/rds-ca-bundle.pem"
-echo "$CA_SHA256  $AGENT_STAGE/rds-ca-bundle.pem" | \
-  sha256sum --check --status || {
-    echo "RDS CA bundle digest mismatch; review AWS's CA rotation notice." >&2
-    exit 1
-  }
+download_rds_ca_bundle "$AGENT_STAGE/rds-ca-bundle.pem"
 
 uv export --directory "$V2_ROOT" --frozen --no-dev --no-emit-project \
   --no-header --no-annotate --output-file "$BUILD/agentcore-requirements.txt"

@@ -2,7 +2,6 @@
 
 import logging
 import os
-from collections.abc import Mapping
 from itertools import pairwise
 from typing import Annotated, Any, Literal, Self, cast
 
@@ -20,9 +19,7 @@ logger = logging.getLogger(__name__)
 
 _AGENT_DB_USER = "tollchat_agent"
 _PRICING_DB_USER = "pricing_caller"
-_SQL = "SELECT * FROM oracle.validate_toll_route(%s, %s)"
 _PRICING_SQL = "SELECT * FROM oracle.validate_pricing_route(%s, %s)"
-_SAFE_ERROR = "Unable to validate the toll route. Reference: {tool_use_id}."
 
 Status = Literal[
     "invalid_origin",
@@ -639,25 +636,6 @@ def connect_to_pricing_database() -> object:
     return _connect_to_database(os.environ.get("PRICING_DB_USER", _PRICING_DB_USER))
 
 
-def _log_failure_and_build_error_result(
-    tool_use_id: str, stage: str, error: Exception
-) -> dict[str, Any]:
-    logger.error(
-        "validate_toll_route failed",
-        extra={
-            "toolUseId": tool_use_id,
-            "failureStage": stage,
-            "exceptionType": type(error).__name__,
-        },
-        exc_info=(type(error), error, error.__traceback__),
-    )
-    return {
-        "toolUseId": tool_use_id,
-        "status": "error",
-        "content": [{"text": _SAFE_ERROR.format(tool_use_id=tool_use_id)}],
-    }
-
-
 def _log_pricing_error(stage: _PricingFailureStage, error: Exception) -> None:
     safe_error = RuntimeError(f"{type(error).__name__} during {stage}")
     for note in getattr(error, "__notes__", []):
@@ -737,72 +715,6 @@ def fetch_validated_pricing_route(
     return response
 
 
-def validate_toll_route(tool_use: Mapping[str, Any], **_: Any) -> dict[str, Any]:  # noqa: ANN401
-    """Validate a toll route and return the oracle's seven-field response."""
-    tool_use_id = "unknown"
-    try:
-        tool_data = cast(Any, tool_use)
-        candidate_id = tool_data.get("toolUseId")
-        if isinstance(candidate_id, str):
-            tool_use_id = candidate_id
-        route_input = _RouteInput.model_validate(tool_data.get("input"))
-    except Exception as error:
-        return _log_failure_and_build_error_result(
-            tool_use_id, "input_validation", error
-        )
-
-    try:
-        connection = cast(Any, connect_to_database())
-    except Exception as error:
-        return _log_failure_and_build_error_result(tool_use_id, "connection", error)
-
-    database_error: tuple[str, Exception] | None = None
-    rows: list[dict[str, Any]] = []
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                _SQL,
-                (route_input.origin_point_id, route_input.destination_point_id),
-            )
-            rows = cast(list[dict[str, Any]], cursor.fetchall())
-    except Exception as error:
-        database_error = ("query", error)
-
-    try:
-        connection.close()
-    except Exception as error:
-        if database_error is None:
-            database_error = ("connection_close", error)
-        else:
-            database_error[1].add_note(f"Connection close also failed: {error!r}")
-
-    if database_error is not None:
-        return _log_failure_and_build_error_result(tool_use_id, *database_error)
-
-    try:
-        if len(rows) != 1:
-            raise ValueError("route oracle must return exactly one row")
-        response = _RouteResponse.model_validate(
-            rows[0], context={"request": route_input}
-        )
-    except (ValidationError, ValueError) as error:
-        return _log_failure_and_build_error_result(
-            tool_use_id, "response_validation", error
-        )
-    except Exception as error:
-        return _log_failure_and_build_error_result(tool_use_id, "unexpected", error)
-
-    try:
-        content = response.model_dump(mode="json")
-        return {
-            "toolUseId": tool_use_id,
-            "status": "success",
-            "content": [{"json": content}],
-        }
-    except Exception as error:
-        return _log_failure_and_build_error_result(tool_use_id, "unexpected", error)
-
-
 # Explicit exports for the domain contract tests.
 __all__ = (
     "_ChargePricingKey",
@@ -811,4 +723,6 @@ __all__ = (
     "_I66FacilityLeg",
     "_I95FacilityLeg",
     "_PricingRouteResponse",
+    "_RouteInput",
+    "_RouteResponse",
 )

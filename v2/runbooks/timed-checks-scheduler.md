@@ -71,8 +71,6 @@ terraform -chdir="$ROOT/v2/infra" plan -input=false \
   -var-file=development.tfvars -var-file="$DEV_FOUNDATION_VARS" \
   -var loader_package_path="$ROOT/v2/infra/build/loader.zip" \
   -var publisher_package_path="$ROOT/v2/infra/build/publisher.zip" \
-  -var agentcore_package_path="$ROOT/v2/infra/build/agentcore.zip" \
-  -var chat_proxy_package_path="$ROOT/v2/infra/build/chat-proxy.zip" \
   -var timed_checks_package_path="$ROOT/v2/infra/build/timed-checks.zip" \
   "${TIMED_TARGETS[@]}" -out="$ROOT/v2/infra/build/timed-checks-bootstrap.tfplan"
 ```

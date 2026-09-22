@@ -1634,9 +1634,7 @@ PY
   terraform -chdir="$ROOT/v2/infra" plan -input=false -out="$REPRESENTATIVE_PLAN" \
     -var-file=development.tfvars -var-file="$BOOTSTRAP_FOUNDATION_VARS" \
     -var "loader_package_path=$REVIEWED_V2_PACKAGE_DIR/loader.zip" \
-    -var "publisher_package_path=$REVIEWED_V2_PACKAGE_DIR/publisher.zip" \
-    -var "agentcore_package_path=$REVIEWED_V2_PACKAGE_DIR/agentcore.zip" \
-    -var "chat_proxy_package_path=$REVIEWED_V2_PACKAGE_DIR/chat-proxy.zip"
+    -var "publisher_package_path=$REVIEWED_V2_PACKAGE_DIR/publisher.zip"
   terraform -chdir="$ROOT/v2/infra" show -json "$REPRESENTATIVE_PLAN" >"$REPRESENTATIVE_PLAN_JSON"
   REPRESENTATIVE_PLAN_BODY="$WORK_DIR/representative-plan-body.tsv"
   python3 - "$REPRESENTATIVE_PLAN_JSON" "$REPRESENTATIVE_PLAN_BODY" <<'PY'

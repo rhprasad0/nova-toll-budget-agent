@@ -26,7 +26,9 @@ from agent.agentcore_entrypoint import (
     TollChatRuntime,
     _canary_event,  # pyright: ignore[reportPrivateUsage]
 )
+from agent.dev_chat import DevChat
 from agent.telemetry import protect_console
+from agent.toll_agent import _DUPLICATE_TOOL_MESSAGE, activity_updates
 
 
 @pytest.mark.parametrize("enabled", ["", "false"])
@@ -154,6 +156,82 @@ def collect(runtime: TollChatRuntime, payload: object) -> list[dict[str, object]
         return [event async for event in runtime.stream(payload)]
 
     return asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("status", "content", "expected_status"),
+    [
+        ("success", [{"text": "private result"}], "completed"),
+        ("error", [{"text": "private failure"}], "failed"),
+        ("error", [{"text": _DUPLICATE_TOOL_MESSAGE}], "completed"),
+        ("error", [{"text": _DUPLICATE_TOOL_MESSAGE + " extra"}], "failed"),
+    ],
+)
+def test_local_and_public_tool_progress_agree(
+    status: str, content: list[dict[str, str]], expected_status: str
+) -> None:
+    names = ["get_current_toll_price", "get_annual_toll_ballpark", "unknown"]
+    uses = [
+        {"toolUse": {"toolUseId": str(index), "name": name, "input": "private"}}
+        for index, name in enumerate(names)
+    ]
+    events: list[dict[str, object]] = [
+        {"message": {"content": [None, {}, *uses]}},
+        {"message": {"content": uses}},  # Repeated starts do not add activities.
+        {
+            "message": {
+                "content": [
+                    {
+                        "toolResult": {
+                            "toolUseId": tool_id,
+                            "status": status,
+                            "content": content,
+                        }
+                    }
+                    for tool_id in ["orphan", "0", "1", "2"]
+                ]
+            }
+        },
+    ]
+
+    async def local_updates() -> list[dict[str, object]]:
+        app = DevChat(lambda: StreamingAgent(events))
+        return [
+            update
+            async for event in app.stream("browser", "price it")
+            for update in cast(list[dict[str, object]], event.get("tool_updates", []))
+        ]
+
+    updates = asyncio.run(local_updates())
+    expected = [
+        {"index": index, "label": label, "status": state}
+        for state in ["running", expected_status]
+        for index, label in enumerate(
+            [
+                "Checking current toll price",
+                "Calculating annual toll-commute affordability",
+                "Checking toll data",
+            ]
+        )
+    ]
+    assert updates == expected
+    public = collect(
+        TollChatRuntime(lambda: StreamingAgent(events), FakeGuardrail()),
+        {"prompt": "price it"},
+    )
+    assert [event for event in public if event["type"] == "tool"] == [
+        {"type": "tool", **update} for update in expected
+    ]
+    assert "private" not in str(public)
+
+
+@pytest.mark.parametrize(
+    "message", [None, [], {}, {"content": None}, {"content": "bad"}]
+)
+def test_activity_updates_ignore_malformed_messages(message: object) -> None:
+    activities: dict[str, dict[str, object]] = {}
+    assert activity_updates(message, activities) == []
+    assert activities == {}
 
 
 def test_checked_text_arrives_before_generation_completes() -> None:
