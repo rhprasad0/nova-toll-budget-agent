@@ -75,9 +75,13 @@ const { chromium } = require('playwright');
   };
   try {
     await flow('desktop-starter-stream-reset', { width: 1440, height: 900 }, async page => {
-      for (const selector of ['h1', '.project-evidence', '#chat', '.map-panel']) {
-        const box = await page.locator(selector).boundingBox(); assert.ok(box);
-        assert.ok(box.y >= 0 && box.y + box.height <= 901, `${selector} fits the first desktop screen`);
+      for (const font of ['system-ui', '"DejaVu Sans", sans-serif']) {
+        const style = await page.addStyleTag({ content: `body { font-family: ${font}; }` });
+        for (const selector of ['h1', '.project-evidence', '#chat', '.map-panel']) {
+          const box = await page.locator(selector).boundingBox(); assert.ok(box);
+          assert.ok(box.y >= 0 && box.y + box.height <= 901, `${selector} fits the first desktop screen with ${font}`);
+        }
+        await style.evaluate(node => node.remove());
       }
       await noOverflow(page);
       const sent = page.waitForResponse(response => response.url().endsWith('/api/chat'));
