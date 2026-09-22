@@ -53,7 +53,7 @@ jobs:
   evaluate:
     needs: resolve
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 45
+    timeout-minutes: 90
     environment: golden-evaluation
     permissions:
       contents: read
@@ -77,6 +77,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         with:
           role-to-assume: arn:aws:iam::903859731897:role/nova-toll-golden-evaluator
+          role-duration-seconds: 7200
           aws-region: us-east-1
           allowed-account-ids: '903859731897'
       - name: Verify readiness, exact artifact, and declare execution
@@ -90,7 +91,7 @@ jobs:
           printf '%s' "$CONTEXT" >"$RUNNER_TEMP/context.json"
           cd trusted/v2
           uv run python -m scripts.golden_release prepare --context "$RUNNER_TEMP/context.json" --candidate-root "$GITHUB_WORKSPACE/candidate" --directory "$RUNNER_TEMP/golden" --superseded-run "$SUPERSEDED_RUN" --replacement-reason "$REPLACEMENT_REASON"
-      - name: Execute 72 fresh frozen trials within the approved budget
+      - name: Execute the complete frozen corpus within the approved budget
         run: |
           cd trusted/v2
           uv run python -m scripts.golden_release execute --directory "$RUNNER_TEMP/golden"

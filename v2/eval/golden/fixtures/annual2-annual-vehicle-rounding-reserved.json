@@ -1,0 +1,166 @@
+{
+  "tool": "get_annual_toll_ballpark",
+  "input": {
+    "outbound": {
+      "origin_point_id": "greenway:1:entry:EB",
+      "destination_point_id": "greenway:28:exit:EB",
+      "departure_time": "08:00:00"
+    },
+    "return": {
+      "origin_point_id": "greenway:28:entry:WB",
+      "destination_point_id": "greenway:1:exit:WB",
+      "departure_time": "17:30:00"
+    },
+    "weekdays": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "planned_annual_commute_days": 240,
+    "gross_annual_income_usd": "123400.00"
+  },
+  "result": {
+    "method": "recent_complete_same_date_round_trips",
+    "evaluated_at": "2026-08-27T08:00:00-04:00",
+    "timezone": "America/New_York",
+    "target_window": {
+      "start_date": "2026-06-04",
+      "end_date": "2026-08-26",
+      "date_count": 84
+    },
+    "weekdays": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "planned_annual_commute_days": 240,
+    "coverage": {
+      "eligible_date_count": 60,
+      "complete_pair_count": 60,
+      "coverage_percent": "100.0",
+      "by_weekday": [
+        {
+          "weekday": "monday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 12,
+          "coverage_percent": "100.0"
+        },
+        {
+          "weekday": "tuesday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 12,
+          "coverage_percent": "100.0"
+        },
+        {
+          "weekday": "wednesday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 12,
+          "coverage_percent": "100.0"
+        },
+        {
+          "weekday": "thursday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 12,
+          "coverage_percent": "100.0"
+        },
+        {
+          "weekday": "friday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 12,
+          "coverage_percent": "100.0"
+        }
+      ]
+    },
+    "uses_modeled": false,
+    "uses_current_fixed_rates": true,
+    "facilities": [
+      {
+        "facility": "greenway",
+        "sample_count": 60,
+        "uses_modeled": false,
+        "uses_current_fixed_rates": true,
+        "scenarios": {
+          "p25": {
+            "daily_toll_usd": "11.60",
+            "annual_toll_usd": "2784.00"
+          },
+          "p50": {
+            "daily_toll_usd": "11.60",
+            "annual_toll_usd": "2784.00"
+          },
+          "p90": {
+            "daily_toll_usd": "11.60",
+            "annual_toll_usd": "2784.00"
+          }
+        }
+      }
+    ],
+    "assumptions": {
+      "estimated_tax_fraction": "1/3",
+      "vehicle_cost_per_mile_usd": "0.685",
+      "distance_method": "straight_line_priced_facility_legs",
+      "scope": "tolled_portions_only"
+    },
+    "income": {
+      "gross_annual_usd": "123400.00",
+      "estimated_tax_usd": "41133.33",
+      "estimated_after_tax_usd": "82266.67"
+    },
+    "tolled_distance": {
+      "daily_round_trip_miles": "23.11",
+      "annual_miles": "5547.36"
+    },
+    "vehicle_cost": {
+      "daily_usd": "15.83",
+      "annual_usd": "3799.94"
+    },
+    "sample_status": "complete",
+    "available_date_range": {
+      "start_date": "2026-06-04",
+      "end_date": "2026-08-26"
+    },
+    "scenarios": {
+      "p25": {
+        "daily_toll_usd": "11.60",
+        "annual_toll_usd": "2784.00",
+        "daily_total_tolled_commute_cost_usd": "27.43",
+        "average_monthly_tolled_commute_cost_usd": "548.66",
+        "annual_total_tolled_commute_cost_usd": "6583.94",
+        "estimated_annual_income_after_tax_and_tolled_commute_usd": "75682.73",
+        "tolled_commute_share_of_after_tax_income_percent": "8.0",
+        "additional_gross_income_to_offset_usd": "9875.91"
+      },
+      "p50": {
+        "daily_toll_usd": "11.60",
+        "annual_toll_usd": "2784.00",
+        "daily_total_tolled_commute_cost_usd": "27.43",
+        "average_monthly_tolled_commute_cost_usd": "548.66",
+        "annual_total_tolled_commute_cost_usd": "6583.94",
+        "estimated_annual_income_after_tax_and_tolled_commute_usd": "75682.73",
+        "tolled_commute_share_of_after_tax_income_percent": "8.0",
+        "additional_gross_income_to_offset_usd": "9875.91"
+      },
+      "p90": {
+        "daily_toll_usd": "11.60",
+        "annual_toll_usd": "2784.00",
+        "daily_total_tolled_commute_cost_usd": "27.43",
+        "average_monthly_tolled_commute_cost_usd": "548.66",
+        "annual_total_tolled_commute_cost_usd": "6583.94",
+        "estimated_annual_income_after_tax_and_tolled_commute_usd": "75682.73",
+        "tolled_commute_share_of_after_tax_income_percent": "8.0",
+        "additional_gross_income_to_offset_usd": "9875.91"
+      }
+    }
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "agent_tools/get_annual_toll_ballpark.py:_build_ballpark_response; tests/test_get_annual_toll_ballpark.py",
+    "note": "Frozen request; synthetic priced-leg straight-line daily distance=23.114 miles. Synthetic complete paired samples=60/60; daily P25/P50/P90 tolls=['11.60', '11.60', '11.60']; facility source inputs=[{'facility': 'greenway', 'modeled': False, 'daily': ['11.60', '11.60', '11.60']}]. Money computed by the actual _build_ballpark_response after _SummaryRow validation, never hand-edited. Authored offline, not captured production traffic."
+  },
+  "synthetic_daily_distance_miles": "23.114"
+}

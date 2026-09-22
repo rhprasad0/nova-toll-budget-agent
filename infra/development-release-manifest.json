@@ -24,7 +24,7 @@
     "infra/data.tf": "e8e443e33a9d908f405eec54fa6bee2075fa8c228e293d734d1b0a5fc0428bc1",
     "infra/delivery_plan_validator.py": "27ac8ca7130fde0a5234e039b37b9aba9ad11ddada21056b95a0c22a1c1bc5d4",
     "infra/development-tracing.tf": "489b1cb626e528a6fb0dc68d8d2dbf8e3beb24d40a7b3d7fa92631f00e920c97",
-    "infra/golden_eval.tf": "63ffb5711a64806cb378097460b4a5d895defeb907c3f1fe7b2c8359a9b3daef",
+    "infra/golden_eval.tf": "ce2e667eabaa8245475c70cb9c226ca408a37f9b5b129ba422313f6656adda88",
     "infra/iam.tf": "969e7b53b4c457f58f840d665737d72df3d3fafdb7adf6c2d41b862d9eb373e0",
     "infra/kms.tf": "be9512e49926805d56b6c521793c08880929948b820f943f0a2c5a0f9e589168",
     "infra/lambda-stub/handler.py": "d86cf7746868e087960da8c551496bcf21aa71d79baf4d910e60fb3f43a05868",

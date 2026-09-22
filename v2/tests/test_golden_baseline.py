@@ -37,7 +37,10 @@ def passing() -> dict[str, Any]:
     manifest = baseline.read(EVIDENCE / "calibration-7/manifest.json")
     manifest.update(mode="run", created_at=(NOW - timedelta(hours=1)).isoformat())
     manifest["identity"].update(artifact_kind="release_bundle", artifact_id="123")
-    cases = golden.load_cases()
+    cases = [
+        golden.GoldenCase.model_validate_json(json.dumps(c))
+        for c in manifest["identity"]["cases"]
+    ]
     attempts = [
         run.Attempt(
             id=f"{c.id}-{n}",

@@ -1,135 +1,163 @@
 # Running the frozen golden corpus
 
-The manual runner executes the real candidate agent with frozen pricing evidence.
-It uses the approved ActorSimulator and CorrectnessEvaluator configuration, plus
-separate binary grounding and rule-compliance diagnostics. The application model,
-prompt, renderer, and tool schemas stay unchanged. No database or live pricing
-service is used. Model credentials come from the existing SSM parameter.
+The active corpus and harness are **2.0.2**: **200 cases**, split into **160
+development and 40 reserved cases**, with three fresh trials per case. A complete
+application run has **600 conversations**. Reserved cases are public and
+exposed to their authors; they are excluded from calibration, not claimed to be
+secret or independently authored holdouts.
 
-From a clean, committed checkout in `v2/`:
+The runner executes the candidate application against frozen pricing evidence.
+Adaptive users provide only their case facts and required follow-ups. No database
+or live pricing service is used. The application model and prompt are unchanged;
+model credentials come from the existing SSM parameter.
+
+## Calibration and execution
+
+The corpus contains **326 reference examples**. Calibration selects **274
+development examples**: 272 have explicit Outcome, Grounding, and Rules labels
+(816 application labels), and two deliberately invalid actor examples have only
+an actor-validity label. The 52 reserved examples are excluded. Example names do
+not determine verdicts. Fixed-reference mode judges the supplied user turns and any
+explicit stop records; it does not invent simulator stops for authored transcripts. Reports preserve disagreements and separate criterion
+confusion matrices from actor-validity confusion and measurement failures.
+
+The **two authorized calibration passes are complete**, within their combined
+$25 ceiling. The [calibration review](evidence/golden-200/CALIBRATION.md) retains
+both runs and every disagreement. They measured contracts 2.0.0 and 2.0.1;
+the final 2.0.2 contract corrects one Grounding label and classifies packaged-agent
+model-budget exhaustion as an application failure. It still requires fresh
+authorized exact-contract calibration and human review before application execution.
+
+The recorded calibration commands were run from clean, committed checkouts in
+`v2/`. These are provenance, not authorization to repeat them:
 
 ```bash
-uv run python -m eval.golden_run calibrate --output eval/private/golden-360/calibration-1
-uv run python -m eval.golden_run render --output eval/private/golden-360/calibration-1
-uv run python -m eval.golden_run run --output eval/private/golden-360/demo-1 \
-  --calibration eval/private/golden-360/calibration-1 \
-  --prior-run eval/private/golden-360/calibration-1
+uv run python -m eval.golden_run calibrate \
+  --output eval/private/golden-200/calibration-1 --budget-usd 25
+uv run python -m eval.golden_run calibrate \
+  --output eval/private/golden-200/calibration-2 --budget-usd 25 \
+  --prior-run eval/private/golden-200/calibration-1
+uv run python -m eval.golden_run render \
+  --output eval/private/golden-200/calibration-2
 ```
 
-Calibration runs the 60 development examples (180 criterion verdicts). It excludes the four held-out
-examples and preserves every disagreement. Outcome labels come from the approved
-corpus; the narrower diagnostic labels are proposals for human review. Calibration
-is evidence about judge accuracy, not a guarantee that every later verdict is right.
+Retain both passes, including disagreements and failed measurements. Human review
+records `status: "approved"`, the exact report `evidence_sha256`, `reviewer`, and
+an evidence reference in the calibration directory's `review.json`. Include
+adjudications and remaining limitations. Approval does not rewrite measured
+verdicts or agreement. Corpus, evaluator, actor-check, label, model, and prompt
+identities must match before calibration can support application execution.
 
-Under the sampled human adjudications, Outcome can pass for a necessary
-clarification awaiting the user or an honest explanation of an explicit tool
-rejection, without an estimate. Incorrect arguments still fail Rules. Invented
-financial or schedule facts in tool arguments fail Grounding, even if later
-confirmed. Each diagnostic judge receives only its named criterion's rubric.
-Actor validity still requires separate review: a passing clarification response
-does not establish that the simulator completed its required exchanges.
+A separately authorized application run uses a newly reviewed calibration that
+matches the final contract (neither archived run does):
 
-Before calibration, `python -m eval.golden_actor_check --output DIRECTORY
---prior-spend-usd ACCOUNTED_SPEND` checks three fresh actors per development
-good example against scripted answers. Actor and judge models must emit their
-structured verdict directly. The judge uses medium reasoning; actor and
-application reasoning remain low. Actor stops derive from a nullable message;
-contradictory replies and simulator turn limits invalidate measurement. Judges
-receive rejected calls separately from successful pricing evidence. See the
-[validity review](GOLDEN_VALIDITY_REVIEW.md) for live results and limitations.
+```bash
+uv run python -m eval.golden_run run \
+  --output eval/private/golden-200/application-1 \
+  --calibration PATH_TO_APPROVED_MATCHING_CALIBRATION \
+  --prior-run PATH_TO_LATEST_ACCOUNTED_RUN
+```
 
-A human must review disagreements before execution. Record that review in the
-calibration directory as `review.json`, with `status: "approved"`, the exact
-`evidence_sha256` from its report, `reviewer`, and an `evidence` reference to the
-conversation or review. Include adjudications and remaining limitations in that
-record. Approval never changes the measured judge outputs or their agreement rate.
-The run command checks that the corpus and judge configuration match calibration.
+Without `--cases`, all 600 trial slots are required. Stable IDs after `--cases`
+select a partial diagnostic run, which cannot qualify as complete corpus evidence.
+Never overwrite an attempt or retry a trial until it passes. Use a new output
+directory and preserve run lineage.
 
-Calibration examples and conversation trials run with four workers by default.
-Use `--workers 1` for sequential execution or choose 1 through 8 workers. Turns
-and the three judge criteria within each trial stay sequential. Each worker has
-its own agent, model clients, actor, and replay state. The manifest records the
-worker count. The protected CI gate retains four workers and invokes this same
-runner with an isolated packaged application. Its actor/judge calls therefore use
-the same explicit 30-minute prefix caching and cache-write accounting. See the
-[current caching review](results/golden/CACHING-SUMMARY.md); eight workers remain
-available for diagnostics but are not the scored timing policy. Shared budget reservations include in-flight calls, and journal
-writes are serialized. Interrupting a run cancels queued work, allows active calls
-to finish recording usage, and prevents further calls in those trials.
+The separate `python -m eval.golden_actor_check --output DIRECTORY
+--prior-spend-usd ACCOUNTED_SPEND` check exercises three fresh actors per
+development good reference against scripted answers. It measures actor behavior,
+not application quality. Any paid actor check needs authorization and must be
+included in spending reconciliation; it is not part of the two calibration
+commands above.
 
-Every selected case gets three fresh trial slots. With no `--cases` option, this
-means 72 conversations. For a partial diagnostic run, supply stable case IDs after
-`--cases`; its report identifies that it is not a complete corpus run. Preserve the
-first run even if it fails. Use a new directory and `--prior-run` for subsequent
-runs; never overwrite an attempt or retry a trial until it passes.
+## What gets scored
 
-The default total spend ceiling is $25, including prior linked runs, with agent,
-actor, and judge costs counted separately. Recorded prices are dated estimates,
-including cache reads and writes, from the linked provider source. The meter
-reserves a conservative text-input bound and the 2,048-token output cap before
-each call. A missing usage record stops additional calls and makes the run
-incomplete. Reconcile interrupted or unknown-usage attempts before more paid runs.
+Each case declares its intended terminal result: answer, supported refusal,
+unavailable explanation, necessary terminal clarification, or cancellation.
+Clarification is not a blanket Outcome pass. An honest explanation of an
+agent-caused error may pass Grounding while failing Outcome and Rules. Repeated
+unnecessary questions that exhaust the dialogue budget are application failures
+when the actor supplied the requested facts.
 
-## Evidence and reporting
+Outcome and actor validity are assessed separately. Actor validity compares the
+profile with the actual delivered messages and stop records. Application
+judgments use only information available to the application. Invalid or uncertain
+actors make the trial inconclusive; private actor facts do not authorize a call.
+Rules assess consent and corrections at the time of each call using the latest
+delivered user messages. Later approval cannot authorize an earlier call, and an
+earlier “yes” cannot override a withdrawal. Deterministic replay still enforces
+schemas, exact contractual arguments, fixture order, minimum turns, and budgets.
 
-`manifest.json` identifies the clean candidate commit and source-checkout digest,
-corpus and grader hashes, prompt renderer and rendered prompts, tool schemas,
-model settings, actor profile, prices, and run lineage. It does not claim the
-checkout is a deployed package. `events.jsonl` preserves attempts and usage as they
-happen. `report.json` and `report.md` are derived offline and can be regenerated.
+A scored success requires Outcome, Grounding, Rules, valid actor behavior, and
+all mandatory deterministic checks. Reports distinguish application failures,
+invalid or uncertain actors, judge/provider failures, and harness errors. Missing
+measurements or identities cannot produce a pass. Deliberate fixture tool errors
+are case evidence; unexpected infrastructure errors are inconclusive.
 
-Saved conversation evidence contains user and assistant text, validated fixture
-calls/results, simulator stop decisions, and short judge evidence explanations.
-It excludes hidden model reasoning, credentials, headers, and provider exception
-messages. Initial output stays under ignored `eval/private/`; inspect it before
-committing sanitized calibration and demo evidence. Never commit local secrets.
+Calibration references, including their explicit labels, require human review.
+Offline assertion success establishes replay consistency, not semantic judge
+accuracy. Candidate text and tool-returned instructions cannot redefine the
+rubric or authorize a route change.
 
-Overall trial success requires outcome success, both diagnostic verdicts, and all
-mandatory deterministic checks. Outcome-only results remain visible. Reports
-separate infrastructure failures from scored agent failures and show completion
-denominators. A deliberate fixture tool error tests recovery; an unexpected SDK,
-provider, or harness failure is inconclusive. Agent loops and task-budget exhaustion
-are scored failures. Missing measurements or identities cannot produce a pass.
+## Budget, evidence, and reports
 
-Pass@1 is successful scored trials divided by scored trials. Pass³ is cases with
-three passing trials divided by selected cases. Missing trials cannot count as
-successes. Reports separate development, held-out, current-price, and annual cases.
-The descriptive 95% interval resamples entire cases, retaining their three trials,
-10,000 times with analysis seed 360. It is not an independence claim or evidence
-of broad population reliability, especially for the four held-out cases.
+The default local ceiling is $25, including linked prior runs, with agent, actor,
+and judge usage accounted separately. Calls reserve their input bound and
+2,048-token output cap before execution. Missing usage stops further calls;
+reconcile unknown or interrupted usage before spending again. Recorded prices
+include cache reads and writes and retain their dated provider source.
 
-Grounding and rule-violation rates use scored trials as their denominator; a trial
-can violate both. These are not exhaustive counts of individual factual claims.
-Latency is wall-clock trial time, including actor and judge work, with nearest-rank
-p50/p95 and sample counts. Model-role timing and usage are retained separately.
-Agent cost per success includes failed-attempt costs and is undefined at zero
-successes. Zero observed violations does not imply zero underlying risk.
+Four workers are the default and protected scoring policy; `--workers` accepts
+1–8 for diagnostics. Each worker owns its application, actor, model clients, and
+replay state. Shared reservations include in-flight calls, and journal writes are
+serialized. Cancellation stops queued work and retains usage from active calls.
+The manual and protected runners use the same cached actor/judge factory. See the
+[historical caching review](results/golden/CACHING-SUMMARY.md).
 
-Review one development conversation for each of origin correction, clarification,
-alternative selection, divergent-leg confirmation where available outside the
-held-out set, and missing-history handling. The divergent-leg case is held out;
-inspect its actor behavior only after the final run, never use it for tuning.
-Record actor-caused deviations and treat affected results as inconclusive during
-human interpretation. Do not silently relabel or replace the original attempts.
+`manifest.json` identifies the candidate, corpus, labels, evaluator components,
+actor checks, model settings, prompts, tool schemas, prices, and lineage.
+`events.jsonl` retains every attempt and usage record. Reports can be regenerated
+offline. Evidence includes delivered dialogue, calls/results, actor decisions,
+and short judge explanations; it excludes private reasoning, credentials,
+headers, and provider exception messages. Keep initial artifacts under ignored
+`eval/private/` and inspect them before committing sanitized evidence.
 
-A local report cannot approve a release or promote a baseline. The mandatory
-[protected golden release workflow](GOLDEN_RELEASE.md) authenticates qualification
-and human approval. PR CI uses only offline tests and a canned packaged-agent
-smoke; release-qualifying paid execution requires a protected dispatch.
+Pass@1 uses scored trials as its denominator. For 2.0.x, pass³ uses cases with
+three scored trials; incomplete cases and inconclusive trials remain explicit,
+and a partial denominator cannot satisfy full-run completion. Family reports show
+expected, scored, successful, and inconclusive counts. Separate subsets cover
+development, reserved, current, annual, and mixed workflows.
+
+The descriptive 95% interval resamples entire `split_group` clusters, preserving
+paired scenarios and shared evidence, 10,000 times with seed 360. Reports include
+the number of groups. This is finite-corpus uncertainty, not evidence of broad
+population reliability or independent repeated trials. Archived contracts retain
+their original case-cluster calculations, denominator semantics, and report shape.
+
+Grounding and Rules rates use scored trials, while observed violations and costs
+from other attempts remain visible. A trial may violate both criteria. Latency
+includes actor and judge work and reports p50/p95 with sample counts. Agent cost
+per success includes failed-attempt cost and is undefined with no successes.
+Zero observed violations does not establish zero underlying risk.
+
+Human review should inspect corrections, consent withdrawal, alternative
+selection, mixed workflows, partial evidence, financial extremes, actor validity,
+and disagreements. Do not relabel or replace the original attempts. Historical
+24-case reports and approvals remain historical and do not approve 2.0.2.
+
+A local report cannot qualify a release or promote a baseline. The
+[protected golden workflow](GOLDEN_RELEASE.md) authenticates release provenance
+and approval. PR CI uses offline tests and a canned packaged-agent smoke.
 
 ## Offline checks
 
 ```bash
-uv run pytest tests/test_golden_run.py tests/test_golden_corpus.py tests/test_simulated_evaluation.py
-uv run pytest -q tests/test_run_evaluation.py
+uv run python -m eval.golden
+uv run pytest tests/test_golden_corpus.py tests/test_golden_run.py \
+  tests/test_golden_baseline.py tests/test_golden_gate.py \
+  tests/test_simulated_evaluation.py tests/test_run_evaluation.py
 ```
 
-The tests cover real Strands replay, multi-turn context, fresh fixture state,
-mandatory rejection checks, accounting across successes and failures, interrupted
-runs, missing usage, identity validation, and held-out exclusion. Synthetic test
-reports demonstrate that an infrastructure error cannot yield a passing decision.
-
-The [golden baseline policy and archive](results/golden/README.md) preserve the
-initial run, define the approved comparison limits, and provide a static HTML
-review page. Baseline qualification is offline; the protected workflow supplies
-production authorization and provenance enforcement.
+These checks cover corpus counts, split isolation, labeled replay, actor and
+application attribution, calibration exclusion, consent timing, accounting,
+completion, and historical reporting. They do not measure model performance.
