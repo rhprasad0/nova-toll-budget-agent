@@ -96,16 +96,19 @@ def test_replay_is_fresh_strict_and_does_not_share_evidence() -> None:
         first.call(fixture.tool, fixture.input, [case.prompt])
 
 
-def test_clarification_and_consent_require_a_later_user_reply() -> None:
+def test_earliest_turn_is_mechanical_but_consent_is_semantic() -> None:
     for number in (4, 13, 14, 15, 16, 17, 18, 20, 23):
         case = golden.load_cases()[number - 1]
         fixture = golden.load_fixture(case.steps[0].fixture)
         with pytest.raises(ValueError, match="premature_call"):
             golden.match_step(case, 0, fixture.tool, fixture.input, [case.prompt])
-        with pytest.raises(ValueError, match="missing_user_fact"):
+        # Replay supplies evidence; semantic authorization still needs judging.
+        assert (
             golden.match_step(
                 case, 0, fixture.tool, fixture.input, [case.prompt, "I don't know."]
             )
+            == fixture
+        )
 
 
 def test_weekday_order_is_equivalent_but_invalid_argument_types_fail() -> None:
@@ -151,7 +154,7 @@ def test_labeled_rejection_examples_and_semantic_limits() -> None:
     ):
         example = by_label[label]
         assert not golden.grade_assertions(cases[example.case_id], example.turns)
-        assert example.semantic_verdict == "INCORRECT"
+        assert example.expected is not None and not example.expected.outcome
     assert golden.money("$120k and $0.685 per mile") == {
         golden.Decimal("120000"),
         golden.Decimal("0.685"),
@@ -167,7 +170,7 @@ def test_labeled_rejection_examples_and_semantic_limits() -> None:
         ("total", "fixture total"),
         ("hash", "hash drift"),
         ("leak", "oracle leakage"),
-        ("i95", "I-95 direction"),
+        ("endpoint", "unknown endpoint"),
         ("approval", "approval must identify"),
     ],
 )
@@ -181,7 +184,7 @@ def test_invalid_corpus_is_rejected(tmp_path: Path, mutation: str, reason: str) 
         rows[1]["id"] = rows[0]["id"]
     elif mutation == "missing":
         (root / "fixtures" / rows[0]["steps"][0]["fixture"]).unlink()
-    elif mutation in ("contract", "i95", "total"):
+    elif mutation in ("contract", "endpoint", "total"):
         path = root / "fixtures" / rows[0]["steps"][0]["fixture"]
         fixture = json.loads(path.read_text())
         if mutation == "contract":
@@ -189,8 +192,8 @@ def test_invalid_corpus_is_rejected(tmp_path: Path, mutation: str, reason: str) 
         elif mutation == "total":
             fixture["result"]["total_usd"] = "900.00"
         else:
-            fixture["input"]["origin_point_id"] = "i95:206NO"
-            fixture["result"]["origin_point_id"] = "i95:206NO"
+            fixture["input"]["origin_point_id"] = "unlisted:origin"
+            fixture["result"]["origin_point_id"] = "unlisted:origin"
         path.write_text(json.dumps(fixture))
     elif mutation == "hash":
         rows[0]["expected_assertion"] += " Changed difficulty."
@@ -284,42 +287,82 @@ def test_negated_zero_is_not_an_invented_price() -> None:
         assert "unsupported_money" in golden.grade_assertions(case, turns)
 
 
-@pytest.mark.parametrize(
-    "label",
-    [
-        "good-income-choices",
-        "good-income-range-example",
-        "good-income-choice-question",
-        "good-income-bullets",
-    ],
-)
-def test_income_choices_require_consent_and_cannot_hide_other_money(label: str) -> None:
-    case = next(c for c in golden.load_cases() if c.id == "annual-salary-range")
-    example = next(
+def test_salary_suggestions_do_not_pass_the_current_contract() -> None:
+    examples = [
         golden.Example.model_validate(e)
         for e in json.loads((golden.ROOT / "examples.json").read_text())
-        if e["case_id"] == case.id and e["label"] == label
+    ]
+    suggestions = [
+        e
+        for e in examples
+        if e.case_id == "annual-salary-range"
+        and e.label
+        in {
+            "good-midpoint-choice",
+            "good-income-choices",
+            "good-income-range-example",
+            "good-income-choice-question",
+            "good-income-bullets",
+        }
+    ]
+    assert suggestions
+    for example in suggestions:
+        assert example.expected is not None and not example.expected.rules
+
+
+def test_annual_financial_cross_fields_are_not_just_schema_checked(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "corpus"
+    (root / "fixtures").mkdir(parents=True)
+    fixture = json.loads((golden.ROOT / "fixtures/annual-fixed.json").read_text())
+    fixture["result"]["scenarios"]["p50"]["annual_total_tolled_commute_cost_usd"] = (
+        "1.00"
     )
-    assert not golden.grade_assertions(case, example.turns)
-    for response in (
-        "Your salary is $120,000.",
-        "Please choose one income: $110,000, $125,000, or $130,000.",
-        "Would you like to use $110,000, $125,000, or $130,000?",
-        "Please provide one gross annual income estimate between $110,000 and $130,000—for example, $125,000.",
-        "I will use $120,000 as your annual income.",
-        "Which figure should I use?\n\n- $110,000\n- $125,000\n- $130,000\n",
-        "Your income is:\n\n- $110,000\n- $120,000\n- $130,000\n",
-        "Which figure should I use?\n\n- $110,000\n- The toll is $120,000\n- $130,000\n",
-        example.turns[0].response + " The toll is $120,000.",
-    ):
-        turns = deepcopy(example.turns)
-        turns[0].response = response
-        assert "unsupported_money" in golden.grade_assertions(case, turns)
-    turns = deepcopy(example.turns)
-    turns[0].calls = turns[1].calls
-    turns[1].calls = []
-    assert "premature_call" in golden.grade_assertions(case, turns)
-    assert "unsupported_money" in golden.grade_assertions(case, turns)
+    (root / "fixtures/broken.json").write_text(json.dumps(fixture))
+    with pytest.raises(ValueError, match="scenario arithmetic"):
+        golden.load_fixture("broken.json", root)
+
+
+def test_behavioral_groups_cannot_cross_splits() -> None:
+    cases = deepcopy(golden.load_cases())
+    reserved = next(c for c in cases if c.held_out)
+    development = next(c for c in cases if not c.held_out)
+    reserved.split_group = development.split_group
+    with pytest.raises(ValueError, match="scenario group crosses"):
+        golden.validate_coverage(cases)
+
+
+def test_one_sample_cannot_imply_a_percentile_spread(tmp_path: Path) -> None:
+    fixture = golden.load_fixture("annual2-coverage-one-pair-reserved.json")
+    root = tmp_path / "corpus"
+    (root / "fixtures").mkdir(parents=True)
+    altered = fixture.model_dump(mode="json")
+    altered["result"]["scenarios"]["p90"]["daily_toll_usd"] = "24.00"
+    (root / "fixtures/broken.json").write_text(json.dumps(altered))
+    with pytest.raises(ValueError, match="one sampled pair"):
+        golden.load_fixture("broken.json", root)
+
+
+def test_current_route_failure_fixtures_validate_request_alignment(
+    tmp_path: Path,
+) -> None:
+    fixture = next(
+        golden.load_fixture(s.fixture)
+        for c in golden.load_cases()
+        if c.coverage_family == "current_i95"
+        for s in c.steps
+        if golden.load_fixture(s.fixture).result.get("point_ids")
+    )
+    root = tmp_path / "corpus"
+    (root / "fixtures").mkdir(parents=True)
+    altered = fixture.model_dump(mode="json")
+    altered["input"]["origin_point_id"] = "airport_iad"
+    if altered["result"]["point_ids"][0] == "airport_iad":
+        altered["input"]["origin_point_id"] = "i95:206NO"
+    (root / "fixtures/broken.json").write_text(json.dumps(altered))
+    with pytest.raises(ValueError, match="requested origin"):
+        golden.load_fixture("broken.json", root)
 
 
 def test_divergent_trip_infers_direction_and_requires_confirmation() -> None:

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
+from pydantic import JsonValue
 from strands.models import Model
 from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
 
@@ -55,13 +57,20 @@ def test_cli_runs_independent_work_in_parallel(
     examples = run.development_examples()[:3]
     monkeypatch.setattr(run, "development_examples", lambda: examples)
 
-    def judge(case: golden.GoldenCase, row: run.Attempt, journal: run.Journal) -> None:
+    def judge(
+        case: golden.GoldenCase,
+        row: run.Attempt,
+        journal: run.Journal,
+        *,
+        fixed_reference: bool = False,
+    ) -> None:
         barrier.wait()
         row.verdicts = {
             key: run.Verdict(passed=True, evidence="offline")
             for key in ("outcome", "grounding", "rules")
         }
         row.measurements.append(measurement())
+        row.actor_validity = run.ActorAssessment(status="valid", evidence="offline")
 
     def execute(
         case: golden.GoldenCase, number: int, journal: run.Journal
@@ -179,6 +188,7 @@ def attempt(case: golden.GoldenCase, number: int) -> run.Attempt:
         case_id=case.id,
         trial=number,
         status="scored",
+        actor_validity=run.ActorAssessment(status="valid", evidence="offline"),
         turns=[golden.Turn(user=case.prompt, response="A supported answer.", calls=[])],
         measurements=[measurement()],
         verdicts={
@@ -212,7 +222,7 @@ def test_aggregate_repeats_cost_failures_and_incomplete() -> None:
 
 def test_development_only_and_full_trajectory() -> None:
     examples = run.development_examples()
-    assert len(examples) == 60
+    assert len(examples) >= 160
     held = {c.id for c in golden.load_cases() if c.held_out}
     assert not held.intersection(e.case_id for e in examples)
     example = next(e for e in examples if e.case_id == "greenway-origin-correction")
@@ -231,8 +241,8 @@ def test_development_only_and_full_trajectory() -> None:
     data.actual_output = json.dumps([t.model_dump() for t in example.turns])
     prompt = whole._format_reference_prompt(parsed, data)  # pyright: ignore[reportPrivateUsage]
     assert "COMPLETE ORDERED CONVERSATION" in prompt
-    assert example.turns[0].response in prompt
-    assert example.turns[1].response in prompt
+    assert json.dumps(example.turns[0].response) in prompt
+    assert json.dumps(example.turns[1].response) in prompt
     assert "AGENT RESPONSE:" not in prompt
 
 
@@ -553,6 +563,7 @@ def test_repeating_agent_is_scored_failure_not_infrastructure(
     def reject(
         case: golden.GoldenCase, attempt: run.Attempt, journal: run.Journal
     ) -> None:
+        attempt.actor_validity = run.ActorAssessment(status="valid", evidence="offline")
         attempt.verdicts = {
             key: run.Verdict(passed=False, evidence="Repeated tool call")
             for key in ("outcome", "grounding", "rules")
@@ -589,7 +600,7 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
         ),
     )
     journal = run.Journal(tmp_path / "contract", 25)
-    case = golden.load_cases()[21]
+    case = golden.load_cases()[21].model_copy(update={"contract_version": 1})
     example = next(
         e
         for e in run.development_examples()
@@ -616,21 +627,18 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
         assert '"origin_point_id": "i95:205SD"' in reference
         assert '"origin_point_id": "i95:212NO"' in reference
     seen.clear()
-    case = golden.load_cases()[3]
+    case = golden.load_cases()[3].model_copy(update={"contract_version": 1})
     run.judge(case, row, journal)
     assert "claim-support requirement" in seen[0]
     assert "Ground the price, time, availability" not in seen[0]
     seen.clear()
-    run.judge(golden.load_cases()[2], row, journal)
+    run.judge(
+        golden.load_cases()[2].model_copy(update={"contract_version": 1}), row, journal
+    )
     for reference in (seen[0], seen[2]):
-        assert (
-            "A direct refusal need not repeat the route or every profile field"
-            in reference
-        )
-        assert (
-            "If calling a tool, use the exact requested route and pricing profile"
-            in reference
-        )
+        assert "without calling a tool" in reference
+        assert "Never substitute that rate for the truck" in reference
+        assert '"earliest_assistant_turn"' not in reference
 
 
 @pytest.mark.parametrize(
@@ -639,7 +647,6 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
         (True, "Use $120,000.", "goal_completed", "actor_stop_with_message"),
         (False, None, None, "actor_missing_reply"),
         (False, "   ", None, "actor_missing_reply"),
-        (True, None, "max_turns", "actor_turn_limit"),
     ],
 )
 def test_invalid_actor_output_is_inconclusive(
@@ -654,7 +661,7 @@ def test_invalid_actor_output_is_inconclusive(
 
     from eval.artifact_agent import Answer
 
-    case = golden.load_cases()[14]
+    case = golden.load_cases()[14].model_copy(update={"contract_version": 2})
     reply = ActorResponse(
         reasoning="offline", stop=stop, message=message, stop_reason=reason
     )
@@ -671,7 +678,10 @@ def test_invalid_actor_output_is_inconclusive(
     result = run.execute(
         case, 1, run.Journal(tmp_path / "actor", 25), Mock(return_value=agent)
     )
-    assert result.status == "infrastructure" and result.error == error
+    assert result.status == "inconclusive" and result.error == error
+    assert (
+        result.actor_validity is not None and result.actor_validity.status == "invalid"
+    )
     assert result.failure_class == "actor_validity" and not result.passed
     assert result.actor_replies[0]["message"] == message
     judge.assert_not_called()
@@ -708,12 +718,19 @@ def test_actor_reply_is_delivered_before_completion(
     monkeypatch.setattr(golden, "make_actor", Mock(return_value=actor))
     monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
 
-    def judge(case: golden.GoldenCase, row: run.Attempt, journal: run.Journal) -> None:
+    def judge(
+        case: golden.GoldenCase,
+        row: run.Attempt,
+        journal: run.Journal,
+        *,
+        fixed_reference: bool = False,
+    ) -> None:
         row.verdicts = {
             key: run.Verdict(passed=True, evidence="offline")
             for key in ("outcome", "grounding", "rules")
         }
         row.measurements.append(measurement())
+        row.actor_validity = run.ActorAssessment(status="valid", evidence="offline")
 
     monkeypatch.setattr(run, "judge", judge)
     agent = Mock()
@@ -751,7 +768,9 @@ def test_judges_receive_rejected_calls_without_pricing_evidence(
     example = next(
         e for e in run.development_examples() if e.label == "rejected-call-honest"
     )
-    case = next(c for c in golden.load_cases() if c.id == example.case_id)
+    case = next(c for c in golden.load_cases() if c.id == example.case_id).model_copy(
+        update={"contract_version": 1}
+    )
     attempt = run.Attempt(
         id="rejection",
         case_id=case.id,
@@ -833,6 +852,89 @@ def test_packaged_replay_records_rejections() -> None:
     )
 
 
+@pytest.mark.parametrize("overlapping_call", [False, True])
+def test_packaged_model_budget_is_scored_but_protocol_failure_is_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, overlapping_call: bool
+) -> None:
+    from eval.artifact_agent import ArtifactAgent
+
+    case = golden.load_cases()[0]
+    call_limit = case.actor.max_turns + case.max_tool_calls + 2
+    usage = {"inputTokens": 100, "outputTokens": 20}
+    events: list[dict[str, Any]] = []
+    for _ in range(call_limit):
+        events.extend(
+            [
+                {"event": "model_start", "input_bound": 100},
+                {"event": "model_end", "usage": usage, "seconds": 0.1},
+            ]
+        )
+    if overlapping_call:
+        events.pop()  # The last started call has no usage before another starts.
+    events.append({"event": "model_start", "input_bound": 100})
+
+    adapter = object.__new__(ArtifactAgent)
+    adapter.calls, adapter.reserved = 0, None
+    adapter.send, adapter.receive = Mock(), Mock(side_effect=events)
+    adapter.process = Mock()
+
+    def factory(
+        case: golden.GoldenCase,
+        row: run.Attempt,
+        journal: run.Journal,
+        messages: list[str],
+    ) -> ArtifactAgent:
+        adapter.case, adapter.attempt, adapter.journal = case, row, journal
+        adapter.messages, adapter.replay = messages, golden.Replay(case)
+        return adapter
+
+    monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
+    monkeypatch.setattr(golden, "make_actor", Mock())
+
+    def judge(case: golden.GoldenCase, row: run.Attempt, journal: run.Journal) -> None:
+        row.actor_validity = run.ActorAssessment(status="valid", evidence="offline")
+        row.verdicts = {
+            key: run.Verdict(passed=False, evidence="No completed response")
+            for key in ("outcome", "grounding", "rules")
+        }
+
+    monkeypatch.setattr(run, "judge", judge)
+    journal = run.Journal(tmp_path / "packaged-budget", 25)
+    result = run.execute(case, 1, journal, agent_factory=factory)
+    assert len(result.measurements) == call_limit
+    assert adapter.calls == call_limit
+    assert journal.reserved == pytest.approx(0)
+    assert journal.spent == pytest.approx(sum(m.cost_usd for m in result.measurements))
+    assert not result.passed
+    if overlapping_call:
+        assert result.status == "infrastructure"
+        assert result.error == "artifact_unsettled_call"
+        assert journal.unknown_usage and not result.measurements[-1].complete
+        assert "model_call_budget" not in result.checks
+    else:
+        assert result.status == "scored" and result.failure_class == "budget"
+        assert result.error is None and "model_call_budget" in result.checks
+        assert not journal.unknown_usage
+        assert journal.spent == pytest.approx(call_limit * run.cost(usage))
+        for number in (2, 3):
+            journal.append(
+                {"event": "attempt_finished", **attempt(case, number).model_dump()}
+            )
+        manifest = json.loads(
+            (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
+        )
+        manifest["identity"]["harness_version"] = run.VERSION
+        manifest["identity"]["corpus"]["case_count"] = 1
+        manifest["identity"]["cases"] = [case.model_dump(mode="json")]
+        (journal.directory / "manifest.json").write_text(json.dumps(manifest))
+        report = run.render(journal.directory)
+        # Infrastructure replacement requires incomplete evidence; a scored budget
+        # failure leaves the measured corpus complete and cannot authorize one.
+        assert report["full_corpus_complete"]
+        assert report["overall"]["scored_trials"] == 3
+        assert report["overall"]["successful_trials"] == 2
+
+
 def test_eval_cache_prefix_and_write_accounting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -863,6 +965,7 @@ def test_eval_cache_prefix_and_write_accounting(
     monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
     journal = run.Journal(tmp_path / "cache", 25)
     for case in golden.load_cases()[:2]:
+        case = case.model_copy(update={"contract_version": 1})
         example = next(
             e
             for e in run.development_examples()
@@ -966,7 +1069,7 @@ def test_cache_adapter_change_invalidates_calibration_identity(
     assert before["corpus"] == after["corpus"]
 
 
-def test_wrong_route_calibration_is_consistent_but_unsuccessful() -> None:
+def test_wrong_route_reference_also_misnames_its_endpoint() -> None:
     example = next(
         e
         for e in run.development_examples()
@@ -978,6 +1081,388 @@ def test_wrong_route_calibration_is_consistent_but_unsuccessful() -> None:
     assert "Route 7" in turn.response and "Route 28" not in turn.response
     assert call.input["destination_point_id"] == "greenway:7:exit:EB"
     assert call.result["destination_point_id"] == call.input["destination_point_id"]
-    assert example.semantic_verdict == "INCORRECT"
-    assert example.label not in run.BAD_GROUNDING
-    assert example.label in run.BAD_RULES
+    catalog = json.loads((golden.ROOT / "prompt-points.json").read_text())
+    endpoint = next(
+        point
+        for point in catalog
+        if point["point_id"] == call.input["destination_point_id"]
+    )
+    assert "Loudoun County" in endpoint["label"]
+    assert example.expected is not None
+    assert not example.expected.outcome
+    assert not example.expected.grounding
+    assert not example.expected.rules
+
+
+@pytest.mark.parametrize("fixed_reference", [False, True])
+def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fixed_reference: bool
+) -> None:
+    case = golden.load_cases()[0].model_copy(deep=True)
+    case.contract_version = 2
+    case.terminal_objective = "cancellation"
+    case.actor.facts += " PRIVATE_PROFILE_SENTINEL"
+    row = run.Attempt(
+        id="independent",
+        case_id=case.id,
+        trial=1,
+        turns=[
+            golden.Turn(user="Cancel that request.", response="Cancelled.", calls=[])
+        ],
+    )
+    outcome_prompts: list[str] = []
+    diagnostic_prompts: list[str] = []
+
+    def outcome(prompt: str, **kwargs: object) -> SimpleNamespace:
+        outcome_prompts.append(prompt)
+        assert kwargs["structured_output_model"] is run.OutcomeAssessment
+        return SimpleNamespace(
+            structured_output=run.OutcomeAssessment(
+                outcome=run.Verdict(passed=True, evidence="Cancellation acknowledged."),
+                actor_validity=run.ActorAssessment(
+                    status="invalid", evidence="Cancellation contradicts this profile."
+                ),
+            )
+        )
+
+    def diagnostic(
+        self: run.ConversationJudge, data: EvaluationData[str, str]
+    ) -> list[EvaluationOutput]:
+        diagnostic_prompts.append(
+            self.reference_system_prompt
+            + (data.expected_assertion or "")
+            + (data.actual_output or "")
+        )
+        return [
+            EvaluationOutput(score=1, test_pass=True, reason="Delivered evidence only.")
+        ]
+
+    factory = Mock(return_value=outcome)
+    monkeypatch.setattr(run, "Agent", factory)
+    monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
+    monkeypatch.setattr(run.ConversationJudge, "evaluate", diagnostic)
+    run.judge(
+        case,
+        row,
+        run.Journal(tmp_path / "private", 25),
+        fixed_reference=fixed_reference,
+    )
+    assert len(outcome_prompts) == 1 and len(diagnostic_prompts) == 2
+    assert "PRIVATE_PROFILE_SENTINEL" in outcome_prompts[0]
+    assert "Declared terminal objective: cancellation" in outcome_prompts[0]
+    assert all(
+        "PRIVATE_PROFILE_SENTINEL" not in prompt for prompt in diagnostic_prompts
+    )
+    prefix = factory.call_args.kwargs["system_prompt"]
+    assert (run.FIXED_REFERENCE_PROMPT in prefix) is fixed_reference
+    for prompt in [prefix, *diagnostic_prompts]:
+        assert "greenway:2A:entry:EB" in prompt and "Battlefield Pkwy" in prompt
+        assert '"coordinates"' in prompt
+    assert all("Recorded sequence" in prompt for prompt in diagnostic_prompts)
+    assert "Permitted tool sequence" not in diagnostic_prompts[0]
+    assert row.verdicts["outcome"].passed
+    assert row.actor_validity is not None and row.actor_validity.status == "invalid"
+    row.measurements.append(measurement())
+    run.finish_assessment(case, row)
+    assert row.status == "inconclusive" and not row.passed
+
+
+@pytest.mark.parametrize("validity", ["invalid", "uncertain"])
+def test_v2_inconclusive_trials_keep_costs_and_violations_outside_scores(
+    validity: str,
+) -> None:
+    case = golden.load_cases()[0].model_copy(
+        update={
+            "contract_version": 2,
+            "coverage_family": "current",
+            "split_group": "paired",
+        }
+    )
+    rows = [attempt(case, number) for number in (1, 2, 3)]
+    rows[-1].actor_validity = run.ActorAssessment.model_validate(
+        {"status": validity, "evidence": "Actor diverged."}
+    )
+    rows[-1].checks = ["unsupported_money"]
+    run.finish_assessment(case, rows[-1])
+    result = run.summary(rows, [case])
+    assert result["scored_trials"] == result["successful_trials"] == 2
+    assert result["inconclusive_trials"] == 1
+    assert result["pass_at_1"] == 1
+    assert result["pass_cubed"] is None
+    assert result["pass_cubed_case_denominator"] == 0
+    assert result["families"]["current"]["scored_trials"] == 2
+    assert result["observed_violations"]["grounding"] == 1
+    assert result["cost_usd"]["agent"] == pytest.approx(0.03)
+    assert not result["complete"]
+
+
+def test_v2_bootstrap_keeps_paired_cases_in_one_cluster() -> None:
+    cases = [
+        c.model_copy(update={"contract_version": 2, "split_group": "one-pair"})
+        for c in golden.load_cases()[:2]
+    ]
+    rows = [attempt(case, number) for case in cases for number in (1, 2, 3)]
+    for row in rows[3:]:
+        row.verdicts["outcome"].passed = False
+    result = run.summary(rows, cases)
+    assert result["scenario_group_count"] == 1
+    assert result["success_ci95"] == [0.5, 0.5]
+    assert result["pass_cubed"] == 0.5
+
+
+@pytest.mark.parametrize(
+    "validity,completed", [("valid", False), ("invalid", False), ("valid", True)]
+)
+def test_v2_turn_limit_is_application_failure_only_for_valid_actor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, validity: str, completed: bool
+) -> None:
+    from eval.artifact_agent import Answer
+
+    case = golden.load_cases()[0].model_copy(deep=True)
+    case.contract_version = 2
+    case.actor.max_turns = 2
+    if completed:
+        case.steps, case.max_tool_calls = [], 0
+    actor = golden.make_actor(case, Mock(spec=Model))
+    actor.agent = Mock(
+        side_effect=[
+            SimpleNamespace(
+                structured_output=golden.ActorReply(
+                    message="I already provided that route."
+                )
+            ),
+            SimpleNamespace(
+                structured_output=golden.ActorReply(
+                    message=None if completed else "I already provided that route."
+                )
+            ),
+        ]
+    )
+    monkeypatch.setattr(golden, "make_actor", Mock(return_value=actor))
+    monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
+
+    def judge(
+        case: golden.GoldenCase,
+        row: run.Attempt,
+        journal: run.Journal,
+        *,
+        fixed_reference: bool = False,
+    ) -> None:
+        row.verdicts = {
+            key: run.Verdict(passed=completed or key != "outcome", evidence="offline")
+            for key in ("outcome", "grounding", "rules")
+        }
+        row.actor_validity = run.ActorAssessment.model_validate(
+            {"status": validity, "evidence": "Supplied the requested facts."}
+        )
+        row.measurements.append(measurement())
+
+    monkeypatch.setattr(run, "judge", judge)
+    agent = Mock()
+    answer = Answer("Which route again?")
+    answer.stop_reason = "end_turn"
+    agent.return_value = answer
+    row = run.execute(
+        case, 1, run.Journal(tmp_path / validity, 25), Mock(return_value=agent)
+    )
+    assert len(row.turns) == 2
+    assert ("agent_turn_budget" in row.checks) is (
+        validity == "valid" and not completed
+    )
+    if completed:
+        assert row.passed and row.actor_replies[-1]["stop_reason"] == "goal_completed"
+    elif validity == "valid":
+        assert row.status == "scored" and row.failure_class == "budget"
+        assert not row.verdicts["outcome"].passed
+        assert row.actor_replies[-1]["stop_reason"] == "max_turns"
+        assert row.actor_replies[-1]["message"] == "I already provided that route."
+    else:
+        assert row.status == "inconclusive" and row.failure_class == "actor_validity"
+
+
+def test_v2_explicit_calibration_labels_ignore_names_and_missing_verdicts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = next(
+        e
+        for e in run.development_examples()
+        if e.expected is not None and not e.expected.rules
+    )
+    renamed = original.model_copy(update={"label": "good"})
+    missing = original.model_copy(update={"label": "missing"})
+    monkeypatch.setattr(run, "development_examples", lambda: [renamed, missing])
+
+    def judge(
+        case: golden.GoldenCase,
+        row: run.Attempt,
+        journal: run.Journal,
+        *,
+        fixed_reference: bool = False,
+    ) -> None:
+        assert original.expected is not None
+        row.verdicts = {
+            key: run.Verdict(passed=value, evidence="explicit label")
+            for key, value in original.expected.model_dump().items()
+        }
+        row.actor_validity = run.ActorAssessment(status="valid", evidence="offline")
+        row.measurements.append(measurement())
+        if row.id.endswith("-missing"):
+            del row.verdicts["rules"]
+
+    monkeypatch.setattr(run, "judge", judge)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        rows = run.calibrate(run.Journal(tmp_path / "labels", 25), pool)
+    assert original.expected is not None
+    assert rows[0]["expected"] == original.expected.model_dump()
+    assert rows[0]["disagreements"] == [] and rows[0]["measurement_complete"]
+    assert rows[1]["disagreements"] == [] and not rows[1]["measurement_complete"]
+
+
+def test_archived_report_reproduces_original_application_scores(tmp_path: Path) -> None:
+    source = golden.V2 / "eval/evidence/golden-360/demo-1"
+    expected = json.loads((source / "report.json").read_text())
+    directory = tmp_path / "archive"
+    shutil.copytree(source, directory)
+    actual = run.render(directory)
+    for key in ("overall", "attempts", "subsets", "full_corpus_complete"):
+        assert actual[key] == expected[key]
+    assert all(
+        "actor_validity" not in row and "failure_phase" not in row
+        for row in actual["attempts"]
+    )
+
+
+def test_v2_render_accounts_for_600_trials_and_embedded_case_count(
+    tmp_path: Path,
+) -> None:
+    source = golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json"
+    manifest = json.loads(source.read_text())
+    template = golden.load_cases()[0]
+    cases = [
+        template.model_copy(
+            update={
+                "number": number,
+                "id": f"accounting-{number}",
+                "contract_version": 2,
+                "coverage_family": "accounting",
+                "split_group": f"pair-{(number - 1) // 2}",
+                "kind": "mixed" if number <= 2 else "current",
+                "held_out": False,
+            }
+        )
+        for number in range(1, 201)
+    ]
+    manifest["identity"]["harness_version"] = run.VERSION
+    manifest["identity"]["corpus"]["case_count"] = 200
+    manifest["identity"]["cases"] = [case.model_dump(mode="json") for case in cases]
+    directory = tmp_path / "accounting"
+    journal = run.Journal(directory, 25)
+    (directory / "manifest.json").write_text(json.dumps(manifest))
+    for case in cases:
+        for number in (1, 2, 3):
+            row = attempt(case, number)
+            journal.append({"event": "attempt_finished", **row.model_dump()})
+    report = run.render(directory)
+    assert (
+        report["overall"]["expected_trials"]
+        == report["overall"]["scored_trials"]
+        == 600
+    )
+    assert report["full_corpus_complete"]
+    assert report["subsets"]["mixed"]["expected_trials"] == 6
+    events = (directory / "events.jsonl").read_text().splitlines()
+    (directory / "events.jsonl").write_text("\n".join(events[:-1]) + "\n")
+    partial = run.render(directory)
+    assert partial["overall"]["expected_trials"] == 600
+    assert partial["overall"]["scored_trials"] == 599
+    assert not partial["full_corpus_complete"]
+
+
+def test_invalid_actor_probe_is_complete_calibration_without_application_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case = golden.load_cases()[0].model_copy(update={"contract_version": 2})
+    replies: list[dict[str, JsonValue]] = [
+        {"stop": True, "message": None, "stop_reason": "goal_completed"}
+    ]
+    example = golden.Example(
+        case_id=case.id,
+        label="actor-invalid-probe",
+        expected_failures=["missing_call"],
+        expected=None,
+        actor_validity="invalid",
+        actor_replies=replies,
+        rationale="Only the simulator is labeled in this probe.",
+        turns=[golden.Turn(user=case.prompt, response="Which route?", calls=[])],
+    )
+    monkeypatch.setattr(run, "development_examples", lambda: [example])
+    monkeypatch.setattr(golden, "load_cases", lambda: [case])
+
+    def judge(
+        case: golden.GoldenCase,
+        row: run.Attempt,
+        journal: run.Journal,
+        *,
+        fixed_reference: bool = False,
+    ) -> None:
+        assert row.actor_replies == replies
+        assert fixed_reference
+        row.verdicts = {
+            key: run.Verdict(passed=False, evidence="Not used as application labels.")
+            for key in ("outcome", "grounding", "rules")
+        }
+        row.actor_validity = run.ActorAssessment(
+            status="invalid", evidence="Required follow-up omitted."
+        )
+        row.measurements.append(measurement())
+
+    monkeypatch.setattr(run, "judge", judge)
+    directory = tmp_path / "invalid-probe"
+    journal = run.Journal(directory, 25)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        rows = run.calibrate(journal, pool)
+    assert rows[0]["measurement_complete"] and rows[0]["status"] == "inconclusive"
+    assert rows[0]["disagreements"] == [] and rows[0]["expected"] is None
+    manifest = json.loads(
+        (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
+    )
+    manifest["mode"] = "calibrate"
+    manifest["identity"]["harness_version"] = run.VERSION
+    manifest["identity"]["calibration_labels"] = {"example_ids": [rows[0]["id"]]}
+    (directory / "manifest.json").write_text(json.dumps(manifest))
+    report = run.render(directory)
+    assert report["complete"] and report["measurement_failures"] == 0
+    assert report["actor_validity_confusion"]["expected_invalid_predicted_invalid"] == 1
+    assert all(
+        sum(matrix.values()) == 0 for matrix in report["confusion_matrices"].values()
+    )
+
+
+def test_interrupted_calibration_counts_missing_rows_without_judge_disagreements(
+    tmp_path: Path,
+) -> None:
+    manifest = json.loads(
+        (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
+    )
+    manifest["mode"] = "calibrate"
+    manifest["identity"]["harness_version"] = run.VERSION
+    manifest["identity"]["calibration_labels"] = {"example_ids": ["started", "queued"]}
+    journal = run.Journal(tmp_path / "interrupted-calibration", 25)
+    (journal.directory / "manifest.json").write_text(json.dumps(manifest))
+    row = run.Attempt(id="started", case_id="greenway-current", trial=1)
+    journal.append({"event": "attempt_started", **row.model_dump()})
+    journal.append(
+        {"event": "model_finished", "attempt": row.id, **measurement().model_dump()}
+    )
+    report = run.render(journal.directory)
+    assert not report["complete"]
+    assert report["missing_example_ids"] == ["queued", "started"]
+    assert report["missing_examples"] == report["measurement_failures"] == 2
+    assert report["measurement_failure_counts"] == {"missing": 2}
+    assert report["rows"] == []
+    assert all(
+        sum(matrix.values()) == 0 for matrix in report["confusion_matrices"].values()
+    )
+    assert (journal.directory / "report.md").read_text().count(
+        "MISSING | Not assessed"
+    ) == 2

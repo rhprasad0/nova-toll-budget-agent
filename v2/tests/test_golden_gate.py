@@ -289,10 +289,15 @@ def test_active_contract_and_numeric_policy_are_pinned(
     assert active["contract_sha256"] == golden_baseline.contract(identity)
     historical = gate.read(gate.POLICY.with_name("policy-1.0.0.json"))["policy"]
     assert {
-        k: v for k, v in active.items() if k not in {"version", "contract_sha256"}
+        k: v
+        for k, v in active.items()
+        if k not in {"version", "contract_sha256", "cases"}
     } == {
-        k: v for k, v in historical.items() if k not in {"version", "contract_sha256"}
+        k: v
+        for k, v in historical.items()
+        if k not in {"version", "contract_sha256", "cases"}
     }
+    assert active["cases"] == len(golden.load_cases()) == 200
 
 
 def test_archive_is_bounded_and_rejects_traversal(tmp_path: Path) -> None:
@@ -388,7 +393,21 @@ def test_workflow_gate_precedes_production_credentials_and_is_not_optional() -> 
         assert "920534282028" not in source
         assert "903859731897" in source
         assert "continue-on-error" not in source
+    evaluation = yaml.safe_load(
+        (root / ".github/workflows/v2-golden-evaluation.yml").read_text()
+    )["jobs"]["evaluate"]
+    credentials = next(
+        step["with"]
+        for step in evaluation["steps"]
+        if step.get("uses", "").startswith("aws-actions/configure-aws-credentials@")
+    )
+    assert evaluation["timeout-minutes"] == 90
+    assert credentials["role-duration-seconds"] == 7200
+    assert credentials["role-duration-seconds"] > evaluation["timeout-minutes"] * 60
     infra = (root / "infra/golden_eval.tf").read_text()
+    assert 'max_session_duration = each.key == "evaluator" ? 7200 : 3600' in " ".join(
+        infra.split()
+    )
     assert 'status = "Enabled"' in infra
     assert "prevent_destroy = true" in infra
     assert "s3:DeleteObjectVersion" in infra and 'Effect = "Deny"' in infra
@@ -678,6 +697,23 @@ def test_ci_execution_uses_cached_evaluators_and_accounts_for_writes(
         return [EvaluationOutput(score=1, test_pass=True, reason="offline")]
 
     monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
+
+    def assess_outcome(
+        selected: golden.GoldenCase,
+        row: run.Attempt,
+        model: Model,
+        reference: str,
+        conversation: str,
+        *,
+        fixed_reference: bool = False,
+    ) -> None:
+        asyncio.run(
+            consume(model, run.judge_prompt("outcome") + run.ACTOR_ASSESSMENT_PROMPT)
+        )
+        row.verdicts["outcome"] = run.Verdict(passed=True, evidence="offline")
+        row.actor_validity = run.ActorAssessment(status="valid", evidence="offline")
+
+    monkeypatch.setattr(run, "assess_outcome", assess_outcome)
 
     def execute(
         selected: golden.GoldenCase,

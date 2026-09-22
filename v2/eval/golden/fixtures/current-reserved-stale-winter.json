@@ -1,0 +1,34 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "i66:4:entry:WB",
+    "destination_point_id": "i66:5:exit:WB",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "i66:4:entry:WB",
+    "destination_point_id": "i66:5:exit:WB",
+    "error": "pricing_unavailable",
+    "reason": "incomplete_route_price",
+    "unavailable_components": [
+      {
+        "route_step_id": "step-1",
+        "reason": "stale_observation",
+        "component_evaluated_at": "2026-01-15T17:00:00-05:00",
+        "interval_end_at": "2026-01-15T16:59:00-05:00",
+        "observed_at": "2026-01-15T16:29:00-05:00",
+        "source_status": null
+      }
+    ]
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "tests/test_get_current_toll_price.py:_i66_rows; current_price_domain._build_price_comparisons",
+    "note": "Frozen synthetic inputs passed through current_price_domain.build_current_price_result; not production traffic. Comparison rows are independent synthetic six-minute samples; prior weeks use actual seven-day offsets."
+  }
+}

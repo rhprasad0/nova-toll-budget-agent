@@ -1,0 +1,58 @@
+{
+  "tool": "get_annual_toll_ballpark",
+  "input": {
+    "outbound": {
+      "origin_point_id": "airport_iad",
+      "destination_point_id": "airport_dca",
+      "departure_time": "08:00:00"
+    },
+    "return": {
+      "origin_point_id": "airport_dca",
+      "destination_point_id": "airport_iad",
+      "departure_time": "17:30:00"
+    },
+    "weekdays": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "planned_annual_commute_days": 240,
+    "gross_annual_income_usd": "120000.00"
+  },
+  "result": {
+    "error": "ballpark_unavailable",
+    "reason": "route_unavailable",
+    "outbound": {
+      "origin_point_id": "airport_iad",
+      "destination_point_id": "airport_dca",
+      "status": "no_supported_route",
+      "reason": {
+        "code": "no_supported_route",
+        "details": {
+          "origin_point_id": "airport_iad",
+          "destination_point_id": "airport_dca"
+        }
+      }
+    },
+    "return": {
+      "origin_point_id": "airport_dca",
+      "destination_point_id": "airport_iad",
+      "status": "no_supported_route",
+      "reason": {
+        "code": "no_supported_route",
+        "details": {
+          "origin_point_id": "airport_dca",
+          "destination_point_id": "airport_iad"
+        }
+      }
+    }
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "agent_tools/get_annual_toll_ballpark.py:_build_ballpark_response; tests/test_get_annual_toll_ballpark.py",
+    "note": "Frozen request; synthetic priced-leg straight-line daily distance=20.00 miles. Synthetic bounded unavailable/error response, validated against the public tool output schema. Authored offline, not captured production traffic."
+  }
+}

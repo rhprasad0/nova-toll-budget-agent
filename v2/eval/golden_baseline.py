@@ -64,10 +64,13 @@ class Policy(golden.Record):
         "1.0.13",
         "1.0.14",
         "1.0.15",
+        "2.0.0",
+        "2.0.1",
+        "2.0.2",
     ]
     contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     trials: Literal[3]
-    cases: Literal[24]
+    cases: Literal[24, 200]
     workers: Literal[4]
     critical_passes: Literal[3]
     noncritical_passes: Literal[2]
@@ -224,7 +227,9 @@ def inspect_report(
         or len({c["id"] for c in cases}) != policy.cases
         or len(attempts) != policy.cases * policy.trials
     ):
-        errors.append("requires the complete 24-case, 72-trial run")
+        errors.append(
+            f"requires the complete {policy.cases}-case, {policy.cases * policy.trials}-trial run"
+        )
     if manifest.get("workers") != policy.workers:
         errors.append("requires four-worker timing evidence")
     if identity.get("artifact_kind") != "release_bundle" or not identity.get(
@@ -650,8 +655,8 @@ def render_review(directory: Path, policy_path: Path, output: Path) -> None:
         )
     )
     samples = "".join(
-        f"<details><summary>{escape(a['id'])}: {'PASS' if a['overall_success'] else 'FAIL'}</summary>"
-        f"<pre>{escape(json.dumps({k: a[k] for k in ('turns', 'actor_replies', 'checks', 'verdicts')}, indent=2))}</pre></details>"
+        f"<details><summary>{escape(a['id'])}: {'INCONCLUSIVE' if a['status'] != 'scored' else 'PASS' if a['overall_success'] else 'FAIL'}</summary>"
+        f"<pre>{escape(json.dumps({k: a.get(k) for k in ('status', 'error', 'failure_phase', 'actor_validity', 'turns', 'actor_replies', 'checks', 'verdicts')}, indent=2))}</pre></details>"
         for a in sorted(report["attempts"], key=lambda a: a["id"])
         if a["id"] in sample_ids(report)
     )

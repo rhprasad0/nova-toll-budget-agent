@@ -1,5 +1,9 @@
 # Golden baseline evidence
 
+The active [200-case contract](../../GOLDEN_EVAL_SPEC.md) and
+[policy 2.0.2](policy-2.0.2.json) await exact review. The measurements below are
+historical 24-case results and cannot be compared directly with the expanded set.
+
 [September 21 calibrated comparison baseline](calibrated-baseline-20260921.md):
 58/71 scored trials passed (81.7%); critical pass³ was 12/17 (70.6%).
 All 72 trials were attempted, with one actor-invalid trial inconclusive.
