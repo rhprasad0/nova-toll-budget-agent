@@ -2,29 +2,22 @@
 /** @typedef {EstimateSnapshot['estimates'][number]} Estimate */
 /** @typedef {{schema_version: number, locations: {coordinates: number[], points: {point_id: string, facility: string, label: string, direction: string | null, role: string}[]}[]}} CoverageSnapshot */
 /** @typedef {CoverageSnapshot['locations'][number]} Location */
-import { routeData } from "./commute-routes.mjs";
+import { routeData, tp1Coordinates } from "./commute-routes.mjs";
 
 const EXPECTED_IDS = ["dumfries", "springfield-franconia", "leesburg", "i66-west"];
 const MONEY = /^(?:0|[1-9][0-9]{0,8})[.][0-9]{2}$/;
 const MAP_BOUNDS = [[-77.61, 38.28], [-77.01, 39.15]];
+const MAP_PADDING = { top: 72, right: 48, bottom: 32, left: 48 };
 const COLORS = {
-  i66: "#24a8f2",
-  i95: "#f47735",
-  i495: "#f4c430",
-  dulles: "#51d49b",
-  greenway: "#8e6ad8",
+  i66: "#3f79aa",
+  i95: "#087f83",
+  i495: "#ad7d35",
+  dulles: "#428568",
+  greenway: "#8072a3",
 };
-/** @type {Record<string, string>} */
-const COVERAGE_COLORS = {
-  i66: COLORS.i66,
-  i95: COLORS.i95,
-  i495: COLORS.i495,
-  dtr: COLORS.dulles,
-  greenway: COLORS.greenway,
-  airport_iad: "#8bd4ff",
-  airport_dca: "#8bd4ff",
-};
-const COVERAGE_FACILITIES = new Set(Object.keys(COVERAGE_COLORS));
+const CORRIDOR_LABELS = ["I-66", "I-95 / 395", "I-495", "Dulles Toll Road", "Greenway"];
+const ACCESS_COLOR = "#63736d";
+const COVERAGE_FACILITIES = new Set(["i66", "i95", "i495", "dtr", "greenway", "airport_iad", "airport_dca"]);
 const COVERAGE_DIRECTIONS = new Set(["NB", "SB", "EB", "WB"]);
 /** @type {Record<string, string>} */
 const DIRECTION_NAMES = {
@@ -34,47 +27,6 @@ const DIRECTION_NAMES = {
   WB: "Westbound",
 };
 const TP1_POINT_IDS = new Set(["i495:192NO", "i495:192SD"]);
-const TP1_JUNCTION = [-77.154508, 38.793504];
-const I95_EAST_FRAGMENTS = new Set([5, 7, 11, 19, 29, 30, 32, 33]);
-// Census TIGER/Line 2019 I-495 LINEARID 1106220849438, from the v1 trim to TP1.
-const TP1_CONNECTOR = [
-  [-77.205634, 38.799923], [-77.205254, 38.799834], [-77.196633, 38.797845],
-  [-77.196032, 38.797707], [-77.194412, 38.797333], [-77.193925, 38.797214],
-  [-77.193856, 38.797198], [-77.193789, 38.797181], [-77.193345, 38.797073],
-  [-77.192065, 38.796777], [-77.191757, 38.796709], [-77.190516, 38.796436],
-  [-77.190389, 38.796408], [-77.189607, 38.796212], [-77.188871, 38.79601],
-  [-77.188272, 38.795836], [-77.18737, 38.795553], [-77.186449, 38.795244],
-  [-77.186133, 38.795167], [-77.185731, 38.795048], [-77.185344, 38.79493],
-  [-77.184416, 38.794607], [-77.183988, 38.79444], [-77.18385, 38.794384],
-  [-77.183718, 38.794332], [-77.183439, 38.794239], [-77.1829, 38.79402],
-  [-77.182581, 38.793887], [-77.181571, 38.793481], [-77.181085, 38.793282],
-  [-77.18034, 38.793023], [-77.179629, 38.792803], [-77.17904, 38.792676],
-  [-77.178869, 38.792627], [-77.178253, 38.792467], [-77.177854, 38.79238],
-  [-77.177594, 38.79232], [-77.177357, 38.792267], [-77.177307, 38.792257],
-  [-77.176569, 38.792131], [-77.176078, 38.792058], [-77.175781, 38.792009],
-  [-77.175575, 38.791978], [-77.175415, 38.791947], [-77.175279, 38.791924],
-  [-77.175063, 38.791891], [-77.17453, 38.791828], [-77.174405, 38.791813],
-  [-77.174159, 38.791788], [-77.173073, 38.791643], [-77.172321, 38.791555],
-  [-77.172211, 38.791541], [-77.17197, 38.791516], [-77.171812, 38.791499],
-  [-77.171565, 38.791482], [-77.171001, 38.791444], [-77.170402, 38.791415],
-  [-77.170294, 38.79141], [-77.170108, 38.791404], [-77.16999, 38.7914],
-  [-77.169247, 38.791374], [-77.168646, 38.791361], [-77.166796, 38.791422],
-  [-77.166366, 38.791438], [-77.166018, 38.791453], [-77.165689, 38.791467],
-  [-77.165196, 38.791499], [-77.164711, 38.791542], [-77.164455, 38.791568],
-  [-77.163853, 38.791634], [-77.162999, 38.791747], [-77.162744, 38.791792],
-  [-77.162229, 38.791883], [-77.161938, 38.79194], [-77.160691, 38.792184],
-  [-77.159398, 38.792463], [-77.157902, 38.792829], [-77.156391, 38.793131],
-  [-77.1554, 38.793337], [-77.154988, 38.793412], [-77.154738, 38.793466],
-  TP1_JUNCTION,
-];
-const i95 = /** @type {typeof routeData.features[number]} */ (routeData.features.find(({ properties }) => properties.facility === "i95"));
-// ponytail: indices match the pinned TIGER/Line 2019 geometry; revisit if that archive changes.
-i95.geometry.coordinates = i95.geometry.coordinates
-  .map((line, index) => index === 2 ? line.slice(8) : index === 3 ? line.slice(7) : line)
-  .filter((_, index) => !I95_EAST_FRAGMENTS.has(index));
-/** @type {typeof routeData.features[number]} */ (routeData.features.find(({ properties }) => properties.facility === "i495"))
-  .geometry.coordinates.push(TP1_CONNECTOR);
-
 const invalid = () => {
   throw new Error("invalid commute estimate snapshot");
 };
@@ -158,16 +110,51 @@ const isTp1 = (location) => location.points.length === TP1_POINT_IDS.size
   && location.points.every(({ point_id: pointId }) => TP1_POINT_IDS.has(pointId));
 
 /** @param {Location} location */
-export const coverageCoordinates = (location) => (
-  isTp1(location) ? TP1_JUNCTION : location.coordinates
-);
+export function coverageCoordinates(location) {
+  if (isTp1(location)) return tp1Coordinates;
+  if (location.points.some(({ role }) => role === "airport")) return location.coordinates;
+  // I-66 point 7 is the modeled Route 123 feeder on the Dulles Connector Road.
+  const movements = new Set(location.points.map(({ facility, direction, role, point_id: pointId }) => (
+    `${facility === "dtr" || pointId.startsWith("i66:7:") ? "dulles" : facility}:${direction}:${role}`
+  )));
+  const [longitude, latitude] = location.coordinates;
+  // Local meter projection is sufficient for this regional, 500 m display adjustment.
+  const xScale = 111320 * Math.cos(latitude * Math.PI / 180);
+  let nearest = location.coordinates;
+  let distanceSquared = 500 ** 2;
+  for (const { properties, geometry } of routeData.features) {
+    for (let lineIndex = 0; lineIndex < geometry.coordinates.length; lineIndex++) {
+      if (!properties.way_movements[lineIndex].some((movement) => movements.has(movement))) continue;
+      const line = geometry.coordinates[lineIndex];
+      for (let index = 1; index < line.length; index++) {
+        const start = line[index - 1];
+        const end = line[index];
+        const x = (start[0] - longitude) * xScale;
+        const y = (start[1] - latitude) * 111320;
+        const dx = (end[0] - start[0]) * xScale;
+        const dy = (end[1] - start[1]) * 111320;
+        const lengthSquared = dx * dx + dy * dy;
+        const fraction = lengthSquared ? Math.max(0, Math.min(1, -(x * dx + y * dy) / lengthSquared)) : 0;
+        const distance = (x + fraction * dx) ** 2 + (y + fraction * dy) ** 2;
+        if (distance < distanceSquared) {
+          distanceSquared = distance;
+          nearest = [start[0] + fraction * (end[0] - start[0]), start[1] + fraction * (end[1] - start[1])];
+        }
+      }
+    }
+  }
+  return nearest;
+}
 
 /** @param {Location} location */
 export function coverageDetail(location) {
   if (isTp1(location)) return {
     kicker: "Supported route point",
     title: "I-495/I-95 near Van Dorn Street",
-    paragraphs: ["Northbound entrance · Southbound exit"],
+    paragraphs: [
+      "Northbound entrance · Southbound exit",
+      "The dashed connection follows the Beltway approach to the express lanes.",
+    ],
   };
   /** @type {Map<string, Set<string>>} */
   const names = new Map();
@@ -216,161 +203,242 @@ const showError = () => {
   /** @type {HTMLElement} */ (document.querySelector("#map-error")).hidden = false;
 };
 
-/** @param {Location} location */
-const markerColor = (location) => {
+/** @param {Location} location @param {Record<string, string>} colors */
+const markerColor = (location, colors) => {
   const facilities = new Set(location.points.map(({ facility }) => facility));
-  return facilities.size === 1 ? COVERAGE_COLORS[/** @type {string} */ (facilities.values().next().value)] : "#ffffff";
+  return facilities.size === 1 ? colors[/** @type {string} */ (facilities.values().next().value)] : "#667985";
 };
 
-export async function mountCommuteMap() {
+/** @param {ReturnType<typeof setTimeout>} [watchdog] */
+export async function mountCommuteMap(watchdog = setTimeout(showError, 12000)) {
   const detail = /** @type {HTMLElement} */ (document.querySelector("#map-detail"));
   const reset = /** @type {HTMLButtonElement} */ (document.querySelector("#reset-map"));
   reset.disabled = true;
-  const [estimateResponse, coverageResponse] = await Promise.all([
-    fetch("/assets/commute-estimates.json", { cache: "no-store" }),
-    fetch("/assets/coverage-locations.json", { cache: "no-store" }),
-  ]);
-  if (!estimateResponse.ok || !coverageResponse.ok) throw new Error("map data unavailable");
-  const snapshot = validateEstimateSnapshot(await estimateResponse.json());
-  const coverage = validateCoverageLocations(await coverageResponse.json());
-  const maplibregl = await import("./maplibre-gl-6.0.0/maplibre-gl.mjs");
-  const map = new maplibregl.Map({
-    container: "commute-map",
-    style: "https://tiles.openfreemap.org/styles/dark",
-    bounds: MAP_BOUNDS,
-    fitBoundsOptions: { padding: 48, duration: 0 },
-    maxBounds: [[-78.05, 38.05], [-76.7, 39.42]],
-    cooperativeGestures: true,
-    dragRotate: false,
-    attributionControl: false,
-  });
-  map.touchPitch.disable();
-  map.keyboard.disableRotation();
-  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-  map.addControl(new maplibregl.AttributionControl({
-    customAttribution: "Basemap © OpenStreetMap contributors · Corridors: U.S. Census Bureau TIGER/Line 2019",
-    compact: true,
-  }), "bottom-right");
-
-  let ready = false;
-  /** @type {HTMLElement | undefined} */
-  let selected;
-  const clearSelection = () => {
-    selected?.removeAttribute("data-selected");
-    selected = undefined;
-  };
-  /** @param {HTMLElement} marker */
-  const selectMarker = (marker) => {
-    clearSelection();
-    selected = marker;
-    marker.dataset.selected = "true";
-  };
-  const showGuide = () => setDetail(detail, "Map guide", "Select a commute, entrance, or exit", [
-    "Large pins show historical P50 annual toll estimates for commutes to Washington.",
-    "Small pins show the place names and directions TollChat supports in route questions.",
-    `Estimate snapshot generated ${new Date(snapshot.generated_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}.`,
-  ]);
-  /** @param {Estimate} estimate @param {HTMLElement} marker */
-  const selectEstimate = (estimate, marker) => {
-    selectMarker(marker);
-    const { scenarios, coverage: evidence } = estimate;
-    setDetail(detail, "Annual toll ballpark", `${estimate.label} → Washington, DC`, [
-      `P25 ${formatAnnualToll(scenarios.p25.annual_toll_usd)} · P50 ${formatAnnualToll(scenarios.p50.annual_toll_usd)} · P90 ${formatAnnualToll(scenarios.p90.annual_toll_usd)}`,
-      `${evidence.complete_pair_count} of ${evidence.eligible_date_count} eligible recent weekdays had complete round-trip evidence (${evidence.coverage_percent}% coverage).`,
-      "This historical ballpark covers tolls for a 2-axle E-ZPass vehicle over 240 commute days. It is not a forecast or a quote from a toll operator.",
+  try {
+    const theme = getComputedStyle(document.documentElement);
+    const colors = Object.fromEntries(Object.entries(COLORS).map(([key, fallback]) => [
+      key, theme.getPropertyValue(`--route-${key}`).trim() || fallback,
+    ]));
+    const coverageColors = { ...colors, dtr: colors.dulles, airport_iad: "#326387", airport_dca: "#326387" };
+    const legend = document.querySelector("#map-legend");
+    legend?.replaceChildren(...[...Object.values(colors), ACCESS_COLOR].map((color, index) => {
+      const item = document.createElement("span");
+      const swatch = document.createElement("span");
+      item.className = "map-legend-item";
+      item.setAttribute("role", "listitem");
+      swatch.className = "map-legend-swatch";
+      if (index === CORRIDOR_LABELS.length) swatch.classList.add("map-legend-access");
+      swatch.style.setProperty("--corridor-color", color);
+      swatch.setAttribute("aria-hidden", "true");
+      item.append(swatch, CORRIDOR_LABELS[index] || "Access connection");
+      return item;
+    }));
+    const [estimateResponse, coverageResponse] = await Promise.all([
+      fetch("/assets/commute-estimates.json", { cache: "no-store" }),
+      fetch("/assets/coverage-locations.json", { cache: "no-store" }),
     ]);
-  };
-  /** @param {Location} location @param {HTMLElement} marker */
-  const selectCoverage = (location, marker) => {
-    selectMarker(marker);
-    const selectedDetail = coverageDetail(location);
-    setDetail(detail, selectedDetail.kicker, selectedDetail.title, selectedDetail.paragraphs);
-  };
-
-  reset.addEventListener("click", () => {
-    clearSelection();
+    if (!estimateResponse.ok || !coverageResponse.ok) throw new Error("map data unavailable");
+    const snapshot = validateEstimateSnapshot(await estimateResponse.json());
+    const coverage = validateCoverageLocations(await coverageResponse.json());
+    const snapshotDate = `Estimate snapshot generated ${new Date(snapshot.generated_at).toLocaleDateString("en-US", { dateStyle: "medium" })}.`;
+    const showGuide = () => setDetail(detail, "Map guide", "Select a commute, entrance, or exit", [
+      "Large pins show historical P50 annual toll estimates for commutes to Washington.",
+      "Small pins show the place names and directions TollChat supports in route questions.",
+      "Zoom in to see entrance ramps and interchange connections.",
+      "Dashed lines show access connections to the toll corridors.",
+      snapshotDate,
+    ]);
     showGuide();
-    map.fitBounds(MAP_BOUNDS, {
-      padding: 48,
-      duration: globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? 0 : 450,
+    const maplibregl = await import("./maplibre-gl-6.0.0/maplibre-gl.mjs");
+    const map = new maplibregl.Map({
+      container: "commute-map",
+      style: "https://tiles.openfreemap.org/styles/positron",
+      bounds: MAP_BOUNDS,
+      fitBoundsOptions: { padding: MAP_PADDING, duration: 0 },
+      cooperativeGestures: true,
+      dragRotate: false,
+      attributionControl: false,
     });
-  });
+    map.touchPitch.disable();
+    map.keyboard.disableRotation();
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(new maplibregl.AttributionControl({
+      // The basemap includes this same credit; MapLibre deduplicates it.
+      customAttribution: 'Data from <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>',
+      compact: true,
+    }), "bottom-right");
 
-  map.on("load", () => {
-    ready = true;
-    map.addSource("toll-corridors", { type: "geojson", data: routeData });
-    map.addLayer({
-      id: "toll-corridor-casing",
-      type: "line",
-      source: "toll-corridors",
-      paint: { "line-color": "#07142f", "line-width": 8, "line-opacity": 0.78 },
-    });
-    map.addLayer({
-      id: "toll-corridors",
-      type: "line",
-      source: "toll-corridors",
-      paint: {
-        "line-color": ["match", ["get", "facility"], ...Object.entries(COLORS).flat(), "#24a8f2"],
-        "line-width": 4,
-        "line-opacity": 0.9,
-      },
+    let ready = false;
+    /** @type {HTMLElement | undefined} */
+    let selected;
+    const clearSelection = () => {
+      selected?.removeAttribute("data-selected");
+      selected = undefined;
+    };
+    /** @param {HTMLElement} marker */
+    const selectMarker = (marker) => {
+      clearSelection();
+      selected = marker;
+      marker.dataset.selected = "true";
+    };
+    /** @param {Estimate} estimate @param {HTMLElement} marker */
+    const selectEstimate = (estimate, marker) => {
+      selectMarker(marker);
+      const { scenarios, coverage: evidence } = estimate;
+      setDetail(detail, "Historical annual estimate", `${estimate.label} → Washington, DC`, [
+        `P25 ${formatAnnualToll(scenarios.p25.annual_toll_usd)} · P50 ${formatAnnualToll(scenarios.p50.annual_toll_usd)} · P90 ${formatAnnualToll(scenarios.p90.annual_toll_usd)}`,
+        `${evidence.complete_pair_count} of ${evidence.eligible_date_count} eligible recent weekdays had complete round-trip evidence (${evidence.coverage_percent}% coverage).`,
+        "Tolls only · 2-axle E-ZPass vehicle · 240 commute days · 8:30 AM outbound / 5:30 PM return. This historical estimate is not a forecast or an operator quote.",
+        snapshotDate,
+      ]);
+    };
+    /** @param {Location} location @param {HTMLElement} marker */
+    const selectCoverage = (location, marker) => {
+      selectMarker(marker);
+      const selectedDetail = coverageDetail(location);
+      setDetail(detail, selectedDetail.kicker, selectedDetail.title, selectedDetail.paragraphs);
+    };
+
+    reset.addEventListener("click", () => {
+      clearSelection();
+      showGuide();
+      map.resize();
+      map.fitBounds(MAP_BOUNDS, {
+        padding: MAP_PADDING,
+        duration: globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? 0 : 450,
+      });
     });
 
-    for (const location of coverage.locations) {
-      const marker = document.createElement("button");
-      const markerDetail = coverageDetail(location);
-      marker.className = "coverage-marker";
-      marker.type = "button";
-      marker.style.setProperty("--coverage-color", markerColor(location));
-      if (location.points.some(({ role }) => role === "airport")) marker.dataset.airport = "true";
-      marker.setAttribute(
-        "aria-label",
-        `${markerDetail.title}. ${markerDetail.paragraphs.join(". ")}`,
-      );
-      marker.addEventListener("click", () => selectCoverage(location, marker));
-      marker.addEventListener("focus", () => selectCoverage(location, marker));
-      new maplibregl.Marker({ element: marker, anchor: "center" })
-        .setLngLat(coverageCoordinates(location))
+    map.on("load", () => {
+      map.addSource("toll-corridors", { type: "geojson", data: routeData });
+      map.addLayer({
+        id: "toll-corridor-casing",
+        type: "line",
+        source: "toll-corridors",
+        filter: ["==", ["get", "role"], "mainline"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.95 },
+      });
+      map.addLayer({
+        id: "toll-corridors",
+        type: "line",
+        source: "toll-corridors",
+        filter: ["==", ["get", "role"], "mainline"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ["match", ["get", "facility"], ...Object.entries(colors).flat(), colors.i66],
+          "line-width": 4,
+          "line-opacity": 0.9,
+        },
+      });
+
+      map.addLayer({
+        id: "toll-access-connections",
+        type: "line",
+        source: "toll-corridors",
+        filter: ["==", ["get", "role"], "access"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ACCESS_COLOR,
+          "line-width": 3,
+          "line-dasharray": [2, 2],
+        },
+      });
+
+      map.addLayer({
+        id: "toll-ramp-casing",
+        type: "line",
+        source: "toll-corridors",
+        minzoom: 10,
+        filter: ["==", ["get", "role"], "ramp"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3, 13, 5, 16, 7],
+          "line-opacity": 0.95,
+        },
+      });
+      map.addLayer({
+        id: "toll-ramps",
+        type: "line",
+        source: "toll-corridors",
+        minzoom: 10,
+        filter: ["==", ["get", "role"], "ramp"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ["match", ["get", "facility"], ...Object.entries(colors).flat(), ACCESS_COLOR],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 13, 2, 16, 3.5],
+          "line-opacity": 0.95,
+        },
+      });
+
+      for (const location of coverage.locations) {
+        const marker = document.createElement("button");
+        const markerDetail = coverageDetail(location);
+        marker.className = "coverage-marker";
+        marker.type = "button";
+        marker.style.setProperty("--coverage-color", markerColor(location, coverageColors));
+        if (location.points.some(({ role }) => role === "airport")) marker.dataset.airport = "true";
+        marker.setAttribute(
+          "aria-label",
+          `${markerDetail.title}. ${markerDetail.paragraphs.join(". ")}`,
+        );
+        marker.addEventListener("click", () => selectCoverage(location, marker));
+        marker.addEventListener("focus", () => selectCoverage(location, marker));
+        new maplibregl.Marker({ element: marker, anchor: "center" })
+          .setLngLat(coverageCoordinates(location))
+          .addTo(map);
+      }
+
+      for (const estimate of snapshot.estimates) {
+        const origin = coverage.locations.find(({ points }) => points.some(
+          ({ point_id: pointId }) => pointId === estimate.outbound.origin_point_id,
+        ));
+        const pin = document.createElement("button");
+        const marker = document.createElement("span");
+        const place = document.createElement("span");
+        const price = document.createElement("strong");
+        pin.className = "estimate-pin";
+        const below = estimate.id === "springfield-franconia" || estimate.id === "dumfries";
+        if (below) pin.dataset.orientation = "below";
+        pin.type = "button";
+        pin.setAttribute("aria-label", `${estimate.label}: P50 annual toll ${formatAnnualToll(estimate.scenarios.p50.annual_toll_usd)} to Washington, DC`);
+        marker.className = "estimate-marker";
+        place.textContent = estimate.label;
+        price.textContent = formatAnnualToll(estimate.scenarios.p50.annual_toll_usd);
+        marker.append(place, price);
+        pin.append(marker);
+        pin.addEventListener("click", () => selectEstimate(estimate, pin));
+        pin.addEventListener("focus", () => selectEstimate(estimate, pin));
+        new maplibregl.Marker({ element: pin, anchor: below ? "top" : "bottom" })
+          .setLngLat(origin ? coverageCoordinates(origin) : estimate.coordinates)
+          .addTo(map);
+      }
+
+      const destination = document.createElement("div");
+      destination.className = "destination-marker";
+      destination.textContent = "DC";
+      destination.setAttribute("aria-label", "Washington, DC destination");
+      new maplibregl.Marker({ element: destination, anchor: "center" })
+        .setLngLat([-77.0369, 38.9072])
         .addTo(map);
-    }
-
-    for (const estimate of snapshot.estimates) {
-      const pin = document.createElement("button");
-      const marker = document.createElement("span");
-      const place = document.createElement("span");
-      const price = document.createElement("strong");
-      pin.className = "estimate-pin";
-      pin.type = "button";
-      pin.setAttribute("aria-label", `${estimate.label}: P50 annual toll ${formatAnnualToll(estimate.scenarios.p50.annual_toll_usd)} to Washington, DC`);
-      marker.className = "estimate-marker";
-      place.textContent = estimate.label;
-      price.textContent = formatAnnualToll(estimate.scenarios.p50.annual_toll_usd);
-      marker.append(place, price);
-      pin.append(marker);
-      pin.addEventListener("click", () => selectEstimate(estimate, pin));
-      pin.addEventListener("focus", () => selectEstimate(estimate, pin));
-      new maplibregl.Marker({ element: pin, anchor: "bottom" })
-        .setLngLat(estimate.coordinates)
-        .addTo(map);
-    }
-
-    const destination = document.createElement("div");
-    destination.className = "destination-marker";
-    destination.textContent = "DC";
-    destination.setAttribute("aria-label", "Washington, DC destination");
-    new maplibregl.Marker({ element: destination, anchor: "center" })
-      .setLngLat([-77.0369, 38.9072])
-      .addTo(map);
-    /** @type {HTMLElement} */ (document.querySelector("#map-loading")).hidden = true;
-    /** @type {HTMLElement} */ (document.querySelector("#map-error")).hidden = true;
-    reset.disabled = false;
-    showGuide();
-  });
-  map.on("error", (event) => {
-    console.error("TollChat map failed", event.error);
-  });
-  setTimeout(() => {
-    if (!ready) showError();
-  }, 12000);
-  return map;
+      /** @type {HTMLElement} */ (document.querySelector("#map-loading")).hidden = true;
+      /** @type {HTMLElement} */ (document.querySelector("#map-error")).hidden = true;
+      reset.disabled = false;
+      ready = true;
+      clearTimeout(watchdog);
+    });
+    map.on("error", (event) => {
+      if (!ready) {
+        clearTimeout(watchdog);
+        showError();
+      }
+      console.error("TollChat map failed", event.error);
+    });
+    return map;
+  } catch (error) {
+    clearTimeout(watchdog);
+    showError();
+    throw error;
+  }
 }

@@ -6,46 +6,77 @@
   <meta name="description" content="How TollChat v2 sources current prices, estimates annual commute costs, handles privacy, and tests whether answers stay within tool data.">
   <title>FAQ · TollChat v2</title>
   <link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png">
+  <link rel="stylesheet" href="/assets/evals.css">
   <style>
-    :root { color-scheme:light; --navy:#0b1438; --blue:#007bff; --orange:#f47735; --paper:#fff; --wash:#f3f6fa; --line:#d9e1eb; --text:#15213c; --muted:#5d687d; font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-    * { box-sizing:border-box; }
-    body { min-width:320px; margin:0; background:var(--wash); color:var(--text); font-size:16px; line-height:1.6; }
-    a { color:#075eb9; text-underline-offset:3px; }
-    a:focus-visible { outline:3px solid var(--orange); outline-offset:3px; }
-    .shell { width:min(920px,calc(100% - 32px)); margin:auto; padding:24px 0 48px; }
-    .back { display:inline-block; margin-bottom:20px; font-weight:800; }
-    .hero { padding:26px clamp(20px,5vw,46px); border-radius:18px; background:var(--navy); color:#fff; box-shadow:0 18px 48px rgba(11,20,56,.16); }
-    .brand { display:flex; align-items:center; gap:14px; }
-    .brand img { width:58px; height:58px; border-radius:14px; object-fit:cover; }
-    .eyebrow,.kicker { color:#66c7ff; font-size:.7rem; font-weight:850; letter-spacing:.14em; text-transform:uppercase; }
-    .eyebrow { margin:0; }
-    h1 { margin:3px 0 0; font-size:clamp(2.2rem,7vw,4.5rem); letter-spacing:-.055em; line-height:.95; }
-    .lede { max-width:46rem; margin:18px 0 0; color:#cbd5ea; }
-    .faq-list { display:grid; gap:14px; margin-top:24px; }
-    .faq-list section { padding:21px 24px; border:1px solid var(--line); border-left:4px solid var(--blue); border-radius:0 10px 10px 0; background:var(--paper); }
-    .faq-list section:nth-child(even) { border-left-color:var(--orange); }
-    .kicker { display:block; margin-bottom:4px; color:var(--blue); }
-    .faq-list section:nth-child(even) .kicker { color:#b94a14; }
-    h2 { margin:0; color:var(--navy); font-size:1.3rem; letter-spacing:-.025em; }
-    p { margin:10px 0 0; color:var(--muted); }
-    strong { color:var(--text); }
-    .sources { display:flex; flex-wrap:wrap; gap:7px 15px; margin-top:12px; font-size:.88rem; }
-    footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px 18px; margin-top:22px; padding:18px 4px; font-size:.82rem; }
-    footer p { margin:0; }
-    @media (max-width:600px) { .shell { width:min(100% - 24px,920px); padding-top:14px; } .hero { padding:22px 18px; border-radius:12px; } .faq-list section { padding:18px 16px; } }
+    .faq-page { min-width:320px; }
+    .faq-hero { padding:52px 0 42px; border-bottom:1px solid var(--line); }
+    .faq-hero h1 { max-width:850px; margin:17px 0 19px; font-size:clamp(38px,5vw,66px); font-weight:650; letter-spacing:-.055em; line-height:1.08; }
+    .faq-hero h1 span { color:var(--blue); }
+    .faq-hero .lede { max-width:720px; color:var(--muted); font-size:16px; line-height:1.8; }
+    .faq-layout { display:grid; grid-template-columns:210px minmax(0,1fr); gap:clamp(40px,7vw,110px); align-items:start; padding:42px 0 0; }
+    .contents { position:sticky; top:32px; }
+    .contents-label { margin:0 0 15px; color:var(--muted); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.12em; }
+    .contents a { display:flex; gap:13px; align-items:center; padding:8px 0; font-size:12px; color:var(--muted); text-decoration:none; }
+    .contents a span { color:var(--blue); font-size:10px; font-variant-numeric:tabular-nums; }
+    .contents a:hover { color:var(--ink); }
+    .faq-list { max-width:810px; min-width:0; }
+    .faq-list section { padding:0 0 34px; margin-bottom:34px; border-bottom:1px solid var(--line); }
+    .faq-list section:last-child { border-bottom:0; margin-bottom:0; }
+    .faq-list h2 { scroll-margin-top:26px; margin:0 0 15px; color:var(--ink); font-size:clamp(23px,2.2vw,29px); font-weight:600; letter-spacing:-.035em; line-height:1.25; }
+    .kicker { display:block; margin-bottom:10px; color:var(--blue); font-size:10px; font-weight:650; letter-spacing:.12em; text-transform:uppercase; }
+    .faq-list p { margin:12px 0 0; color:var(--muted); font-size:14px; line-height:1.85; }
+    .faq-list strong { color:var(--ink); font-weight:600; }
+    .sources { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+    .sources a { display:inline-flex; padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; font-size:11px; line-height:1.5; text-decoration:none; }
+    .sources a:hover { border-color:var(--blue); }
+    .faq-page footer { display:block; margin-top:8px; padding:26px 0 32px; border-top:1px solid var(--line); }
+    .faq-page footer p { max-width:1040px; margin:0 0 14px; color:var(--muted); font-size:11px; line-height:1.8; }
+    .faq-page footer > a { display:inline-block; font-size:11px; }
+    @media (max-width:850px) {
+      .faq-layout { grid-template-columns:160px minmax(0,1fr); gap:32px; }
+      .faq-hero { padding:38px 0 32px; }
+    }
+    @media (max-width:620px) {
+      .faq-hero { padding:30px 0; }
+      .faq-hero h1 { font-size:38px; margin:14px 0 16px; }
+      .faq-hero .lede { font-size:14px; }
+      .faq-layout { grid-template-columns:1fr; gap:30px; padding-top:28px; }
+      .contents { position:static; display:grid; grid-template-columns:1fr 1fr; gap:0 12px; padding-bottom:24px; border-bottom:1px solid var(--line); }
+      .contents-label { grid-column:1/-1; margin-bottom:10px; }
+      .contents a { gap:8px; font-size:11px; padding:6px 0; }
+      .faq-list p { font-size:14px; line-height:1.8; }
+      .faq-list section { padding-bottom:28px; margin-bottom:28px; }
+    }
   </style>
 </head>
-<body>
-  <main class="shell">
-    <a class="back" href="/">← Back to TollChat</a>
-    <header class="hero">
-      <div class="brand">
-        <img src="/assets/tollchat-logo.png" alt="TollChat roadway logo" width="58" height="58">
-        <div><p class="eyebrow">Sources · Limits · Privacy</p><h1>How TollChat estimates commute costs</h1></div>
-      </div>
+<body class="faq-page">
+  <a class="skip" href="#main">Skip to frequently asked questions</a>
+  <div class="wrap">
+    <header class="nav">
+      <a class="brand" href="/" aria-label="TollChat home"><span class="mark" aria-hidden="true">T</span><span class="brand-name">tollchat<span style="color:var(--blue)">.</span></span><span class="nav-caption">An applied AI project</span></a>
+      <nav class="nav-links" aria-label="Project pages"><a href="/">Chat</a><a href="/cost-dashboard">Cost</a><a href="/eval-dashboard">Evaluation results</a></nav>
+    </header>
+  <main id="main">
+    <header class="faq-hero">
+      <p class="eyebrow">Sources · Limits · Privacy</p>
+      <h1>How TollChat estimates <br><span>commute costs</span></h1>
       <p class="lede">TollChat limits the model to reviewed route and pricing tools, shows where the evidence ends, and publishes its code and test methods so you can review them.</p>
     </header>
 
+    <div class="faq-layout">
+      <nav class="contents" aria-label="On this page">
+        <p class="contents-label">A closer look</p>
+        <a href="#sources-title"><span>01</span>Sources</a>
+        <a href="#methods-title"><span>02</span>Annual estimates</a>
+        <a href="#take-home-title"><span>03</span>Take-home pay</a>
+        <a href="#map-title"><span>04</span>Map pins</a>
+        <a href="#oracle-title"><span>05</span>Route oracle</a>
+        <a href="#gap-title"><span>06</span>Known gaps</a>
+        <a href="#i66-outside-title"><span>07</span>I-66 Outside</a>
+        <a href="#hallucinations-title"><span>08</span>Answer reliability</a>
+        <a href="#free-title"><span>09</span>Why free?</a>
+        <a href="#privacy-title"><span>10</span>Privacy &amp; support</a>
+      </nav>
     <div class="faq-list">
       <section aria-labelledby="sources-title">
         <span class="kicker">01 · Sources</span>
@@ -123,12 +154,14 @@
       </section>
     </div>
 
+    </div>
+  </main>
     <footer>
       <p>TollChat is independent and is not affiliated with VDOT or any toll operator. It uses public data from <a href="https://smarterroads.vdot.virginia.gov/faq" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">VDOT SmarterRoads</a> and rates published by toll operators. Source data may be delayed, incomplete, or inaccurate. Verify current rates and road conditions with the relevant operator before travel. TollChat is not a navigation or emergency service. It does not provide future toll quotes. Use its estimates for general information only. Do not rely on them for financial or employment decisions, tax filing, legal matters, or other important decisions.</p>
       <p>&copy; 2026 Benevolent Clankers LLC. Source code is licensed under <a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Apache-2.0</a>; TollChat name and branding reserved.</p>
       <p><a href="/">TollChat</a> · <a href="/privacy.txt">Privacy</a> · <a href="/terms.txt">Terms</a> · <a href="mailto:contact@tollchat.ai">contact@tollchat.ai</a></p>
     <a href="/eval-dashboard">Evaluation results</a>
 </footer>
-  </main>
+  </div>
 </body>
 </html>

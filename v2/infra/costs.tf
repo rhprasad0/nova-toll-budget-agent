@@ -139,12 +139,12 @@ resource "aws_s3_object" "cost_dashboard" {
 
 resource "aws_s3_object" "cost_assets" {
   region        = data.aws_region.current.region
-  for_each      = toset(["costs.css", "costs.mjs"])
+  for_each      = toset(["costs.css", "costs.mjs", "evals.css"])
   bucket        = aws_s3_bucket.site.id
   key           = "assets/${each.key}"
   source        = "${path.module}/../agent/assets/${each.key}"
   source_hash   = filebase64sha256("${path.module}/../agent/assets/${each.key}")
-  content_type  = each.key == "costs.css" ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8"
+  content_type  = endswith(each.key, ".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8"
   cache_control = "no-cache"
   depends_on    = [aws_s3_bucket_server_side_encryption_configuration.site]
 }

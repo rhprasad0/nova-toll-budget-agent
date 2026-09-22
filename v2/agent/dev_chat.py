@@ -157,6 +157,14 @@ def create_server(
             _ASSET_ROOT / "assets/favicon.png",
             "image/png",
         ),
+        "/assets/evals.css": (
+            _ASSET_ROOT / "assets/evals.css",
+            "text/css; charset=utf-8",
+        ),
+        "/assets/chat.css": (
+            _ASSET_ROOT / "assets/chat.css",
+            "text/css; charset=utf-8",
+        ),
         "/assets/commute-map.mjs": (
             _ASSET_ROOT / "assets/commute-map.mjs",
             "text/javascript; charset=utf-8",

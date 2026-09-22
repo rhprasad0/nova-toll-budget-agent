@@ -30,18 +30,20 @@ RESOURCES = {
     "aws_s3_object.cost_dashboard",
     'aws_s3_object.cost_assets["costs.css"]',
     'aws_s3_object.cost_assets["costs.mjs"]',
+    'aws_s3_object.cost_assets["evals.css"]',
     "aws_s3_object.evals",
     "aws_cloudfront_function.public_report_routes",
 }
 # Reviewed public bytes. Update these pins when changing these public assets.
 ASSET_SHA256: dict[str, str] = {
-    "costs.css": "caef4ba5afe4813d1424db6e4d6ca628d803843113ee8050f39a8110abfd1995",
-    "costs.mjs": "49e45c2f4001944e027c35c4485e148df778986f8d3524d3e9e4f8dc79904ddd",
+    "costs.css": "36b86fbc8d0ace7b303d25cfa4aac02d7e158a03fc7d3bc8fcade098b241fff4",
+    "costs.mjs": "962cbafcfeed7a6746841eb03c0bd770f162ed47e8981643b9baefd2ca51c2c8",
+    "evals.css": "35b65eaa463083b1bdcf167ae6a5436556f82aed92ceb1c9e25a45db51f851fa",
     "public-report-routes.js": "a3a436e0f34f493030ebe787884f1b033dfba2a031c2a5cb4a88688e1ff0a799",
-    "development/costs.html": "b7de8751c3ee8c28faea43db150b19c1267ee3c203e02a202e290a067edc348a",
-    "development/evals.html": "05150cfaa397498efbbbdef5ba173aba12db18244b87a39cbdc5d66175dab7b0",
-    "production/costs.html": "cb80c0b6ee3765c7cbb020c997f0b6dc3352dc9b9bc830b0410a238e79d2a1dd",
-    "production/evals.html": "1f5216ba4cb3538ab482ab5d5e3e5389e7240689db7eeb0ee9dea2ec52d6bd79",
+    "development/costs.html": "181e609a9655bce44cfcca0ff1acd653321670a8d3c78166776d5c443abbd21c",
+    "development/evals.html": "4af04cdb88add277c545a6c40200db4f52a9a28ff73b8707a40b1972d7b3b4e1",
+    "production/costs.html": "419ca77230b4a1a8c9448391dc7ab66358bdd80192c281504e667039e4501d04",
+    "production/evals.html": "ec1f3246b081e2a4cc42c305feb254889eaddc7330d09dc82a59b2a41cc80745",
 }
 
 
@@ -155,6 +157,7 @@ def validate_drift(item: dict[str, Any], environment: str) -> None:
         "aws_s3_object.cost_dashboard": {"tags", "metadata"},
         'aws_s3_object.cost_assets["costs.css"]': {"tags", "metadata"},
         'aws_s3_object.cost_assets["costs.mjs"]': {"tags", "metadata"},
+        'aws_s3_object.cost_assets["evals.css"]': {"tags", "metadata"},
     }
     require(address in fields and environment in ACCOUNTS)
     before, after = (dict(change[key]) for key in ("before", "after"))

@@ -103,6 +103,64 @@ jobs:
       - if: github.event_name == 'pull_request'
         run: ./scripts/build_timed_checks_zip.sh
 
+  frontend-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: v2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select frontend changes
+        id: changes
+        working-directory: .
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          if [[ -n "$BASE_REF" ]] && git cat-file -e "$BASE_REF^{commit}" 2>/dev/null &&
+            git diff --quiet "$BASE_REF" HEAD -- .github/workflows/ci.yml \
+              v2/agent 'v2/package*.json' 'v2/tests/*browser.cjs' v2/tests/fixtures \
+              v2/tests/test_frontend_browser_ci.py; then
+            echo 'frontend=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'frontend=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        if: steps.changes.outputs.frontend == 'true'
+        with:
+          node-version: "22.22.1"
+          cache: npm
+          cache-dependency-path: v2/package-lock.json
+      - if: steps.changes.outputs.frontend == 'true'
+        run: npm ci --ignore-scripts
+      - name: Install Chromium and Firefox
+        id: browsers
+        if: steps.changes.outputs.frontend == 'true'
+        run: npx playwright install --with-deps chromium firefox
+      - name: Run browser and end-to-end checks with local fixtures
+        if: steps.changes.outputs.frontend == 'true'
+        run: |
+          status=0
+          for check in eval_dashboard cost_dashboard public_chat_scroll commute_map frontend_e2e; do
+            node "tests/${check}_browser.cjs" || status=1
+          done
+          exit "$status"
+      - name: Check candidate chat against the deployed development AI
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: node tests/deployed_chat_browser.cjs
+      - name: Upload browser screenshots and traces
+        if: always() && steps.changes.outputs.frontend == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: frontend-browser-evidence
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
   v2-database:
     runs-on: ubuntu-latest
     services:

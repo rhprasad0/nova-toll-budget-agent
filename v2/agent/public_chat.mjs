@@ -160,7 +160,7 @@ const start = () => {
   const transcript = /** @type {HTMLElement} */ (document.querySelector("#transcript"));
   const form = /** @type {HTMLFormElement} */ (document.querySelector("#chat"));
   const input = /** @type {HTMLTextAreaElement} */ (document.querySelector("#message"));
-  const submit = /** @type {HTMLButtonElement} */ (form.querySelector("button"));
+  const submit = /** @type {HTMLButtonElement} */ (form.querySelector('button[type="submit"]'));
   const reset = /** @type {HTMLButtonElement} */ (document.querySelector("#reset"));
   const starterWrap = /** @type {HTMLElement} */ (document.querySelector("#starter-wrap"));
   const starterButtons = [.../** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll("[data-prompt-index]"))];
@@ -173,9 +173,14 @@ const start = () => {
     form.setAttribute("aria-busy", String(busy));
   };
 
+  const mapWatchdog = setTimeout(() => {
+    /** @type {HTMLElement} */ (document.querySelector("#map-loading")).hidden = true;
+    /** @type {HTMLElement} */ (document.querySelector("#map-error")).hidden = false;
+  }, 12000);
   import("./assets/commute-map.mjs")
-    .then(({ mountCommuteMap }) => mountCommuteMap())
+    .then(({ mountCommuteMap }) => mountCommuteMap(mapWatchdog))
     .catch((error) => {
+      clearTimeout(mapWatchdog);
       console.error("TollChat map failed", error);
       /** @type {HTMLElement} */ (document.querySelector("#map-loading")).hidden = true;
       /** @type {HTMLElement} */ (document.querySelector("#map-error")).hidden = false;
