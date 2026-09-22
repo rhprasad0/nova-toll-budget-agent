@@ -8096,7 +8096,7 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc() -> None
         _assert_development_delivery_privileged,
         DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW,
         "- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-        "- uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c",
+        "- uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd",
     )
 
 
@@ -13708,7 +13708,7 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
         in DEVELOPMENT_MIGRATIONS_WORKFLOW
     )
     assert (
-        "aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c"
+        "aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd"
         in DEVELOPMENT_MIGRATIONS_WORKFLOW
     )
     assert (
