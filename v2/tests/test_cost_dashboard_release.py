@@ -264,6 +264,8 @@ locals {{
             ("source_account", "000000000000"),
             ("handler", "handler.handler"),
             ("bucket", "other-bucket"),
+            ("content_type", "application/octet-stream"),
+            ("source_hash", base64.b64encode(b"a" * 32).decode()),
             ("kms_key_id", "foreign-key"),
             ("schedule_expression", "rate(1 minute)"),
         ):
@@ -321,7 +323,7 @@ locals {{
             "configuration": plan["configuration"],
         }
         records = legacy._parse_plan(plan, package_evidence)
-        assert len(records) == 10
+        assert len(records) == 11
         manifest = json.loads(
             (ROOT / "infra/development-release-manifest.json").read_text()
         )
@@ -340,7 +342,7 @@ locals {{
             plan, creation_manifest, manifest["provider_identity"], package_evidence
         )
         assert result["status"] == "accepted", result
-        # Installed resources must match the committed update declarations.
+        # Installed resources and the new shared CSS match reviewed declarations.
         old_policy = gate.policy(environment)
         old_policy["Statement"] = [
             row
@@ -359,6 +361,9 @@ locals {{
         }
         updates: list[dict[str, Any]] = []
         for item in plan["resource_changes"]:
+            if item["address"] == 'aws_s3_object.cost_assets["evals.css"]':
+                updates.append(deepcopy(item))
+                continue
             if item["address"] not in old_values:
                 continue
             update = deepcopy(item)
@@ -372,7 +377,7 @@ locals {{
                     )["costs"]["arn"]
                 update["change"]["after_unknown"] = {}
             updates.append(update)
-        assert len(updates) == 4
+        assert len(updates) == 5
         updated_plan = {**plan, "resource_changes": updates}
         result = legacy.validate_plan(
             updated_plan, manifest, manifest["provider_identity"], package_evidence
@@ -606,7 +611,7 @@ def test_first_billing_refresh_preserves_release_authority(
             "status": "IN_PROGRESS",
         },
     }
-    for asset in ("costs.html", "costs.css", "costs.mjs"):
+    for asset in ("costs.html", "costs.css", "costs.mjs", "evals.css"):
         address = (
             "aws_s3_object.cost_dashboard"
             if asset.endswith("html")

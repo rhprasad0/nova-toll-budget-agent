@@ -271,6 +271,13 @@ def test_http_server_serves_assets_streams_ndjson_and_resets() -> None:
         assert "Strands events" not in html
         assert 'id="reset-map"' in html
         assert "Small pins mark supported entrances and exits" in html
+        for stylesheet in ("evals.css", "chat.css"):
+            assert f'href="/assets/{stylesheet}"' in html
+            response = urllib.request.urlopen(
+                f"{base_url}/assets/{stylesheet}", timeout=2
+            )
+            assert response.headers.get_content_type() == "text/css"
+            assert response.read()
         assert "price unavailable" not in html.lower()
         assert "data-facility" not in html
         assert (
@@ -286,7 +293,8 @@ def test_http_server_serves_assets_streams_ndjson_and_resets() -> None:
         )
         faq = urllib.request.urlopen(f"{base_url}/faq.html", timeout=2).read().decode()
         assert 'href="/assets/favicon.png"' in faq
-        assert "How TollChat estimates commute costs" in faq
+        assert "How TollChat estimates" in faq
+        assert "commute costs" in faq
         assert "Why doesn't TollChat cover I-66 Outside the Beltway?" in faq
         assert "VDOT's public feeds do not include" in faq
         assert "Why is TollChat free?" in faq

@@ -9,17 +9,17 @@
   <link rel="stylesheet" href="/assets/evals.css">
   <link rel="stylesheet" href="/assets/costs.css">
 </head>
-<body>
+<body class="dashboard-page cost-page">
   <a class="skip" href="#main">Skip to costs</a>
   <div class="demo"><strong id="deployment">${environment} · Billing</strong> · Refreshed daily · USD · UTC</div>
   <div class="wrap">
     <header class="nav">
-      <a class="brand" href="/"><span class="mark" aria-hidden="true">T</span><span class="brand-name">tollchat<span style="color:var(--blue)">.</span></span><span class="nav-caption">Engineering notebook</span></a>
+      <a class="brand" href="/"><span class="mark" aria-hidden="true">T</span><span class="brand-name">tollchat<span style="color:var(--blue)">.</span></span><span class="nav-caption">An applied AI project</span></a>
       <nav class="nav-links" aria-label="Project pages"><a href="/">Chat</a><a href="/cost-dashboard" aria-current="page">Cost</a><a href="/eval-dashboard">Evaluation results</a></nav>
     </header>
     <main id="main">
       <section class="cost-hero" aria-labelledby="title">
-        <div><p class="eyebrow">The cost of running TollChat</p><h1 id="title">Real infrastructure.<br><span>An open bill.</span></h1><p class="lede">What it costs to build, test, and run this reference implementation. AWS infrastructure and OpenAI API usage, together in one place.</p></div>
+        <div><p class="eyebrow">The cost of running TollChat</p><h1 id="title">Real infrastructure.<br><span>An open bill.</span></h1><p class="lede">The cost of building, testing, and running TollChat. AWS infrastructure and OpenAI API usage, on one transparent bill.</p></div>
         <div class="period"><span class="pill">Provisional</span><strong id="period-label">Awaiting billing snapshot</strong><span>Month to date · USD · UTC</span></div>
       </section>
       <div id="state-notice" class="state-notice" role="status" hidden></div>
@@ -53,7 +53,7 @@
       </div></details>
       <noscript><p class="state-notice">JavaScript is needed to display billing amounts. <a href="/costs.json">Read the aggregate JSON snapshot.</a></p></noscript>
     </main>
-    <footer><span id="publication-label">No snapshot loaded</span><a href="https://github.com/rhprasad0/nova-toll-budget-agent/issues/543">Issue #543 ↗</a></footer>
+    <footer><span id="publication-label">No snapshot loaded</span><a href="https://github.com/rhprasad0/nova-toll-budget-agent/issues/543">Billing implementation ↗</a></footer>
   </div>
   <script type="module" src="/assets/costs.mjs"></script>
 </body>

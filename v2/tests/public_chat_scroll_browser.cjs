@@ -24,7 +24,7 @@ const { firefox, chromium } = require('playwright');
     if (!file.startsWith(root + path.sep)) { response.writeHead(404).end(); return; }
     try {
       response.setHeader('content-type', file.endsWith('.mjs') ? 'text/javascript'
-        : file.endsWith('.html') ? 'text/html' : 'application/octet-stream');
+        : file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css' : 'application/octet-stream');
       // Retain the map layout without unrelated map rendering or network traffic.
       response.end(file.endsWith('/commute-map.mjs') ? 'export function mountCommuteMap() {}' : await readFile(file));
     } catch { response.writeHead(404).end(); }
@@ -46,8 +46,10 @@ const { firefox, chromium } = require('playwright');
             if (!starter) await page.locator('#message').fill('Explain the toll estimate.');
             await Promise.all([
               page.waitForResponse(response => response.url().endsWith('/api/chat')),
-              page.locator(starter ? '[data-prompt-index="0"]' : '#chat button').click(),
+              page.locator(starter ? '[data-prompt-index="0"]' : '#chat button[type="submit"]').click(),
             ]);
+            assert.equal(await page.locator('#chat button[type="submit"]').isDisabled(), true);
+            assert.equal(await page.locator('#reset').isDisabled(), true);
             const position = () => page.evaluate(() => {
               const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
               return { y: browser.scrollY, bottom: /** @type {HTMLElement} */ (browser.document.querySelector('.assistant-turn')).getBoundingClientRect().bottom, height: browser.innerHeight };

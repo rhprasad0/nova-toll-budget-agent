@@ -12,7 +12,7 @@ const expectedEnvironment = /** @type {HTMLMetaElement} */ (document.querySelect
 /** @type {Record<string, string>} */
 const names = { aws_production: 'AWS production account', aws_development: 'AWS development account', openai: 'OpenAI organization' };
 /** @type {Record<string, string>} */
-const colors = { production: '#175ccd', development: '#7093c7', shared: '#102746', unallocated: '#b8893a' };
+const colors = { production: 'var(--blue)', development: 'var(--slate)', shared: 'var(--ink)', unallocated: 'var(--route-i495)' };
 /** @type {Record<string, string>} */
 const scopes = { aws_production: 'production-account', aws_development: 'development-account', openai: 'organization' };
 /** @param {unknown} value */
@@ -168,15 +168,15 @@ function chart(rows) {
   const y = value => 196 - (value - lower) / span * 176;
   for (let i = 0; i <= 4; i++) {
     const value = lower + span * i / 4;
-    add('line', { x1: 56, x2: width - 4, y1: y(value), y2: y(value), stroke: '#e8ecf1' });
+    add('line', { x1: 56, x2: width - 4, y1: y(value), y2: y(value), stroke: 'var(--line)' });
     const label = value !== 0 && Math.abs(value) < .01 ? '$' + value.toExponential(1) : money(value.toString());
     add('text', { x: 49, y: y(value) + 4, 'text-anchor': 'end' }, label);
   }
-  add('line', { x1: 56, x2: width - 4, y1: y(0), y2: y(0), stroke: '#8090a4' });
+  add('line', { x1: 56, x2: width - 4, y1: y(0), y2: y(0), stroke: 'var(--muted)' });
   rows.forEach((row, index) => {
     const x = 60 + index * step;
     let positive = 0, negative = 0;
-    for (const [provider, color] of [['aws', '#175ccd'], ['openai', '#176746']]) {
+    for (const [provider, color] of [['aws', 'var(--slate)'], ['openai', 'var(--blue)']]) {
       if (row[/** @type {keyof Totals} */ (provider)] === null) continue;
       const value = Number(row[/** @type {keyof Totals} */ (provider)]);
       const start = value < 0 ? negative : positive;

@@ -31,6 +31,7 @@ plans, state evidence, or documentation.
   [schema](db/oracle/schema.sql), and
   [reviewed source-data builder](oracle/build_oracle_data.py)
 - [Shared route validation](agent_tools/validate_toll_route.py)
+- [Map corridor geometry and OpenStreetMap provenance](docs/commute-routes.md)
 
 ## Database bootstrap
 
@@ -121,6 +122,29 @@ upstream Markdown/MapLibre distributions are excluded. Narrow external-tool
 exceptions must remain useful; blanket and unused suppressions fail. Terraform
 formatting/validation and disposable database contracts retain their existing CI
 jobs, and behavioral checks run after the shared static gate.
+
+Frontend changes also run Playwright in CI: dashboard rendering, map geometry,
+chat scrolling in Chromium and Firefox, and three end-to-end UI journeys.
+Run them locally from `v2/`:
+
+```sh
+npx playwright install --with-deps chromium firefox
+node tests/eval_dashboard_browser.cjs
+node tests/cost_dashboard_browser.cjs
+node tests/public_chat_scroll_browser.cjs
+node tests/commute_map_browser.cjs
+node tests/frontend_e2e_browser.cjs
+```
+
+CI also runs `node tests/deployed_chat_browser.cjs`, which makes **three real AI
+calls to development**: a current price, a follow-up, and a fresh conversation
+after reset. It serves the candidate frontend against `https://dev.tollchat.ai`
+and uses the real public session/chat endpoints without AWS credentials. These
+calls incur normal development inference usage. CI saves screenshots and
+sanitized outcomes; only local fixture tests capture browser traces, which can
+otherwise contain live session cookies. Browser evidence is retained for seven
+days. Deployment outages or rate limits fail the live check rather than being
+reported as successful tests.
 
 From `v2/`, run the offline tests and deterministic release builds:
 
