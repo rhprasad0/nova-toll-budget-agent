@@ -3,9 +3,11 @@
 The [200-case golden corpus](GOLDEN_EVAL_SPEC.md) covers current pricing, annual
 affordability, multi-turn changes, evidence failures, and explicit workflow switches.
 The [review catalog](golden/REVIEW.md) links every case and labeled reference.
-Contract 2.0.3 has 160 development and 40 reserved cases; labels and exact-contract
-calibration await human review. No qualified production baseline exists. Earlier
-measurements remain in the [historical evidence archive](results/golden/README.md).
+Contract 2.0.3 has 160 development and 40 reserved cases. Ryan approved the
+GPT-6 Luna corpus and calibration for the [first local baseline](evidence/gpt-6-luna/BASELINE.md):
+600 trials attempted, 409 passed, 184 failed, and 7 inconclusive. No qualified
+production baseline exists. Earlier measurements remain in the
+[historical evidence archive](results/golden/README.md).
 
 The scheduled Strands suite uses simulated users and model-based judges for six
 current-toll scenarios. The broader code-graded regression catalog retains eight

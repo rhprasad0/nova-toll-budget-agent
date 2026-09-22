@@ -3,8 +3,10 @@
 **200 cases: 160 development and 40 reserved.** The [review catalog](golden/REVIEW.md)
 links every prompt, intended behavior, actor brief, fixture, reference answer, and
 negative example. Original case IDs 1–24 are preserved and classified as development
-because they have already been exposed. Case and judge labels remain proposals for
-human review; [review.json](golden/review.json) records approval separately.
+because they have already been exposed. Ryan approved this exact corpus and
+calibration, with documented limitations, for the local GPT-6 Luna baseline;
+[review.json](golden/review.json) records that approval separately. The
+[first baseline report](evidence/gpt-6-luna/BASELINE.md) retains all 600 attempts.
 
 This is a synthetic, task-specific evaluation of two real workflows: current toll
 pricing and annual commute affordability. It does not measure general intelligence,

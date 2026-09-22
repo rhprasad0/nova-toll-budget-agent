@@ -320,7 +320,7 @@ The tool could not estimate the requested morning leg because Backlick is not a 
 
 Ryan explicitly approved this exact corpus/calibration with the listed limitations in this conversation. The [approval record](calibration-1/review.json) binds the exact evidence. This permits the local baseline only; no production policy or release is approved.
 
-Run the existing local runner from a clean committed checkout, preserving the lineage and $25 total ceiling:
+The approved [application run is now recorded](BASELINE.md). Its command preserved the lineage and $25 total ceiling:
 
 ```bash
 AWS_PROFILE=nova-toll-dev AWS_DEFAULT_REGION=us-east-1 \

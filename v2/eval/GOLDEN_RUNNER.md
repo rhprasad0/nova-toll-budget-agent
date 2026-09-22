@@ -169,3 +169,9 @@ GPT-6 Luna token prices. Cases, labels, prompts, reasoning effort, and token
 limits are unchanged. This exact contract requires fresh calibration and human
 review; prior model results and approvals remain historical. The local migration
 run has a $25 cumulative ceiling across calibration and application execution.
+
+The fresh calibration was approved by Ryan with its documented disagreements.
+The [first GPT-6 Luna local baseline](evidence/gpt-6-luna/BASELINE.md) ran all
+600 slots: 409 passed, 184 failed, and 7 were inconclusive. It remains an
+incomplete scored baseline because of those seven trials; no production
+reference was qualified or published.
