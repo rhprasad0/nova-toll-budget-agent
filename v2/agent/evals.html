@@ -11,7 +11,7 @@
     <title>TollChat · Evaluation explorer</title>
     <link rel="stylesheet" href="/assets/evals.css" />
   </head>
-  <body>
+  <body class="dashboard-page">
     <a class="skip" href="#main">Skip to results</a>
     <div class="demo">
       <strong id="environment">Evaluation explorer</strong> ·
@@ -19,11 +19,11 @@
     </div>
     <div class="wrap">
       <header class="nav">
-        <a class="brand" href="#main" aria-label="TollChat evaluation explorer"
+        <a class="brand" href="/" aria-label="TollChat home"
           ><span class="mark" aria-hidden="true">T</span
           ><span class="brand-name"
             >tollchat<span style="color: var(--blue)">.</span></span
-          ><span class="nav-caption">Engineering notebook</span></a
+          ><span class="nav-caption">An applied AI project</span></a
         >
         <nav class="nav-links" aria-label="Project pages">
           <a href="/">Chat</a><a href="/cost-dashboard">Cost</a>
@@ -35,58 +35,25 @@
           <div>
             <p class="eyebrow">Evaluation explorer</p>
             <h1 id="title">
-              A useful answer.<br /><span>An inspectable result.</span>
+              Good answers.<br /><span>Visible evidence.</span>
             </h1>
             <p class="lede">
-              TollChat is an AI assistant for Northern Virginia toll prices. It
-              looks up road and pricing evidence, then explains the result.
-              These automated conversations test whether it answers the request
-              without inventing facts.
-            </p>
-            <p class="hero-note">
-              <strong>The engineering challenge:</strong> prices change, express
-              lanes reverse direction, and people change their minds.
+              Scheduled conversations test TollChat against real road conditions.
+              Inspect the answers, pricing evidence, and checks behind every result.
             </p>
           </div>
-          <aside class="process" aria-label="How one test works">
-            <p class="process-title">
-              FROM A USER QUESTION TO CHECKABLE EVIDENCE
-            </p>
-            <div class="step">
-              <span class="step-no">01</span>
-              <div>
-                <h3>A simulated user asks a real-world question</h3>
-                <p>
-                  Including follow-ups like “I meant a different starting
-                  point.”
-                </p>
-              </div>
+          <aside class="hero-aside" aria-label="Explore the evidence">
+            <p>Every result has a paper trail.</p>
+            <div class="evidence-path" aria-label="Conversation, tool call, verdict">
+              <span>Conversation</span> → <span>Tool call</span> → <span>Verdict</span>
             </div>
-            <div class="step">
-              <span class="step-no">02</span>
-              <div>
-                <h3>The assistant consults a pricing tool</h3>
-                <p>
-                  The tool provides the route, price, and available evidence.
-                </p>
-              </div>
-            </div>
-            <div class="step">
-              <span class="step-no">03</span>
-              <div>
-                <h3>Three checks inspect what happened</h3>
-                <p>
-                  Did it answer the request? Are its claims supported? Did it
-                  use one pricing lookup per turn?
-                </p>
-              </div>
-            </div>
+            <a class="text-link" href="#scenario-title">Explore the scenarios <span aria-hidden="true">↗</span></a>
           </aside>
         </section>
         <section aria-labelledby="snapshot-title">
           <div class="section-head">
             <div>
-              <h2 id="snapshot-title">A small test suite. Visible outcomes.</h2>
+              <h2 id="snapshot-title">The latest picture.</h2>
               <p>
                 Six selected scenarios, scheduled for the road conditions they
                 exercise.
@@ -152,6 +119,42 @@
             ><span>Rolling seven-day history · All times Eastern</span>
           </div>
         </section>
+        <aside class="process" aria-label="How one test works">
+          <p class="process-title">
+            FROM A USER QUESTION TO CHECKABLE EVIDENCE
+          </p>
+          <div class="process-steps">
+            <div class="step">
+              <span class="step-no">01</span>
+              <div>
+                <h3>A simulated user asks a real-world question</h3>
+                <p>
+                  Including follow-ups like “I meant a different starting
+                  point.”
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="step-no">02</span>
+              <div>
+                <h3>The assistant consults a pricing tool</h3>
+                <p>
+                  The tool provides the route, price, and available evidence.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="step-no">03</span>
+              <div>
+                <h3>Three checks inspect what happened</h3>
+                <p>
+                  Did it answer the request? Are its claims supported? Did it
+                  use one pricing lookup per turn?
+                </p>
+              </div>
+            </div>
+          </div>
+        </aside>
         <section class="method" aria-labelledby="method-title">
           <div>
             <p class="eyebrow">Behind the results</p>

@@ -6301,9 +6301,10 @@ def _assert_required_event_callers(source: str) -> None:
         "TOOL_CONTRACT_BASE_REF",
         "AGENT_CONTRACT_BASE_REF",
         "SCHEMA_BASE_REF",
+        "BASE_REF",
     ):
         assert f"{variable}: ${{{{ {base_expression} }}}}" in source
-    assert source.count(base_expression) == 3
+    assert source.count(base_expression) == 4
 
     caller = ci_jobs["trusted-development-plan"]
     assert (
@@ -6381,7 +6382,10 @@ def test_required_event_callers_are_unfiltered_and_fail_closed() -> None:
             "github.event.pull_request.base.sha || github.event.before",
         ),
         ("@main", "@feature"),
-        ("if: always()", "if: success()"),
+        (
+            "development-plan:\n    if: always()",
+            "development-plan:\n    if: success()",
+        ),
         ('test "$PLAN_RESULT" = success', 'test "$PLAN_RESULT" = skipped'),
     ):
         _must_reject(
