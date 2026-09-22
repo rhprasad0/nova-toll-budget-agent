@@ -1,6 +1,6 @@
 # GPT-6 Luna calibration review
 
-**Migration implemented; calibration complete; human review pending.** No application baseline trials have run.
+**Migration implemented; calibration complete and approved by Ryan for the local baseline.** Approval accepts the documented disagreements and limitations; raw verdicts and labels are unchanged.
 
 The application, simulated users, and judges now use `gpt-6-luna`. Prompts, reasoning settings, tool contracts, all 200 cases, reference examples, and fixtures are unchanged. Corpus and harness are **2.0.3**. Historical evidence remains untouched.
 
@@ -318,9 +318,9 @@ The tool could not estimate the requested morning leg because Backlick is not a 
 - Calibration evidence: `00174bb8948bad6dd4f281090b7a7a89760385ed474a54f15ead58da2b71aa00`.
 - [Complete report](calibration-1/report.json), [measurement index](calibration-1/report.md), [run manifest](calibration-1/manifest.json), and [raw journal](calibration-1/events.jsonl).
 
-Human review must approve this exact corpus/calibration and address or accept the listed limitations before the application run. This report is not approval. The requirement is enforced by the [golden runner](../../GOLDEN_RUNNER.md#calibration-and-execution).
+Ryan explicitly approved this exact corpus/calibration with the listed limitations in this conversation. The [approval record](calibration-1/review.json) binds the exact evidence. This permits the local baseline only; no production policy or release is approved.
 
-After review, run the existing local runner from a clean committed checkout, preserving the lineage and $25 total ceiling:
+Run the existing local runner from a clean committed checkout, preserving the lineage and $25 total ceiling:
 
 ```bash
 AWS_PROFILE=nova-toll-dev AWS_DEFAULT_REGION=us-east-1 \
