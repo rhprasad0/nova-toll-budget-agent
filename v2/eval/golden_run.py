@@ -33,7 +33,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",

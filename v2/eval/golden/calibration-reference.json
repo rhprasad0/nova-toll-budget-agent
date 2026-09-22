@@ -1,4 +1,4 @@
 {
   "status": "pending",
-  "notes": "Contract 2.0.1 requires exact-contract calibration and human adjudication. The two authorized local calibration runs do not imply approval; historical evidence remains unchanged."
+  "notes": "Two authorized runs are archived at eval/evidence/golden-200/CALIBRATION.md. Run 2 measured corpus/harness 2.0.1. The subsequent Grounding-label correction and packaged-agent budget-attribution fix create contract 2.0.2 and require fresh authorized exact-contract calibration and human adjudication before application execution. These runs do not imply approval."
 }

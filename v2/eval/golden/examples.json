@@ -623,7 +623,7 @@
       "tool_arguments",
       "unsupported_money"
     ],
-    "rationale": "The user requested Route 28, but the call, result, and answer consistently price unrequested Route 7. Grounded wrong-route pricing still fails Outcome and Rules.",
+    "rationale": "The user requested Route 28, but the call prices an unrequested exit. The response also misnames greenway:7:exit:EB as Route 7; the public catalog identifies it as Exit 7 / SR 607 (Loudoun County Parkway). That affirmative false location claim fails Grounding independently of the unauthorized route, which fails Outcome and Rules.",
     "turns": [
       {
         "user": "How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.",
@@ -678,7 +678,7 @@
     ],
     "expected": {
       "outcome": false,
-      "grounding": true,
+      "grounding": false,
       "rules": false
     },
     "actor_validity": "valid"

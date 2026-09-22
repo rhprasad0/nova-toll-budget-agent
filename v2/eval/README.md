@@ -3,7 +3,7 @@
 The [200-case golden corpus](GOLDEN_EVAL_SPEC.md) covers current pricing, annual
 affordability, multi-turn changes, evidence failures, and explicit workflow switches.
 The [review catalog](golden/REVIEW.md) links every case and labeled reference.
-Contract 2.0.1 has 160 development and 40 reserved cases; labels and exact-contract
+Contract 2.0.2 has 160 development and 40 reserved cases; labels and exact-contract
 calibration await human review. No qualified production baseline exists. Earlier
 measurements remain in the [historical evidence archive](results/golden/README.md).
 

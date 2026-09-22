@@ -6,15 +6,17 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-The active corpus, harness, and policy are **2.0.1**. They cover **200 cases**:
+The active corpus, harness, and policy are **2.0.2**. They cover **200 cases**:
 160 development and 40 public, authorship-exposed reservations. The new corpus,
 calibration, and policy require exact human review; their approvals are pending.
 The application model and prompt remain unchanged in this expansion.
 
-Two local calibration passes are authorized within a **combined $25 ceiling**.
-Their evidence is pending execution and adjudication. That authorization does not
-approve protected application execution, production qualification, or a policy
-limit increase. Local repetition does not qualify a production release.
+Two local calibration passes completed within a **combined $25 ceiling**;
+their [raw reports and adjudication proposals](evidence/golden-200/CALIBRATION.md)
+remain pending human review. They measured contracts 2.0.0 and 2.0.1. The final
+2.0.2 label correction and packaged-agent budget attribution fix require fresh
+authorized exact-contract calibration. No protected application execution,
+production qualification, or policy limit increase is authorized by those runs.
 
 Historical 24-case measurements, including the PR #581 packet's 179/180
 calibration agreement, 60/60 actor checks, and 72/72 application trials, retain
@@ -52,7 +54,7 @@ model call reserves against one shared $5 run ceiling before starting. The durab
 the existing $25 authorization. Missing usage stops further paid calls and
 blocks subsequent runs until spending is reconciled. Provider retries are off.
 
-The numerical thresholds from policy 1.0.0 remain unchanged in policy 2.0.1,
+The numerical thresholds from policy 1.0.0 remain unchanged in policy 2.0.2,
 including the **$5 protected-run ceiling**, critical/noncritical pass requirements,
 suite floors, regression limits, and latency limits. Expansion does not establish
 that 600 conversations can meet those limits. Any later policy change requires
@@ -65,7 +67,7 @@ reports include criterion and actor-validity confusion matrices, disagreements,
 and measurement-failure counts. Earlier approvals apply only to their original
 contracts.
 
-The 2.0.1 assessment separates application outcome from actor validity. Invalid or
+The 2.0.x assessment separates application outcome from actor validity. Invalid or
 uncertain simulations and missing judgments are inconclusive. Consent is judged
 from the latest messages delivered before each call; private actor facts and
 later approval cannot authorize earlier action. Honest agent-caused errors and

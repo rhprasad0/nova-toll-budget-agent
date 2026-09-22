@@ -1,4 +1,4 @@
-# TollChat golden evaluation contract 2.0.1
+# TollChat golden evaluation contract 2.0.2
 
 **200 cases: 160 development and 40 reserved.** The [review catalog](golden/REVIEW.md)
 links every prompt, intended behavior, actor brief, fixture, reference answer, and
@@ -118,8 +118,8 @@ an explicit expected boolean on every valid calibration example. Actor-invalid
 examples have no application labels. Example names never determine labels.
 
 A trial passes only with valid measurement, all three application verdicts true,
-and all mandatory checks passing. Good wording is not an exact-match requirement;
-only product rules that explicitly prescribe wording require it. Money labels,
+and all mandatory checks passing. Equivalent wording is accepted when it preserves
+the required meaning and financial labels. Money labels,
 percentages, omissions and claims outside the currency parser need semantic review.
 The same model family serves actor and judges, so correlated errors remain possible.
 
@@ -148,12 +148,15 @@ and their trials together. It describes this finite suite, not a population guar
 Failed and inconclusive attempts remain in cost accounting.
 
 The manifest binds exact case, fixture, example, catalog and evaluator source bytes,
-including the standalone actor check, to corpus version 2.0.1. The preserved
-[2.0.0 calibration](evidence/golden-200/calibration-1/report.md) and
-[correction ledger](evidence/golden-200/corrections.json) explain the patch: proposed
-label/reference repairs, the public catalog and SOP facts for judges, and explicit
-fixed-transcript provenance. The pending
-[policy 2.0.1](results/golden/policy-2.0.1.json) changes coverage to 200 and preserves
+including the standalone actor check, to corpus version 2.0.2. The preserved
+[two calibration runs](evidence/golden-200/CALIBRATION.md) and
+[first correction ledger](evidence/golden-200/corrections.json) explain the reference
+repairs, public catalog and SOP context, and explicit fixed-transcript provenance.
+After run 2, one definite legacy Grounding label was corrected and packaged-agent
+model-budget exhaustion was classified as an application failure. Neither raw
+run qualifies this final exact contract; fresh authorized calibration and human
+review remain required. The pending
+[policy 2.0.2](results/golden/policy-2.0.2.json) changes coverage to 200 and preserves
 existing numerical limits. No production baseline is promoted, and no historical
 approval is transferred. Historical reports still render under their original
 contract. Baseline and candidate comparisons require the same reviewed contract;

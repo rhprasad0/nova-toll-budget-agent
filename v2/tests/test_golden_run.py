@@ -852,6 +852,89 @@ def test_packaged_replay_records_rejections() -> None:
     )
 
 
+@pytest.mark.parametrize("overlapping_call", [False, True])
+def test_packaged_model_budget_is_scored_but_protocol_failure_is_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, overlapping_call: bool
+) -> None:
+    from eval.artifact_agent import ArtifactAgent
+
+    case = golden.load_cases()[0]
+    call_limit = case.actor.max_turns + case.max_tool_calls + 2
+    usage = {"inputTokens": 100, "outputTokens": 20}
+    events: list[dict[str, Any]] = []
+    for _ in range(call_limit):
+        events.extend(
+            [
+                {"event": "model_start", "input_bound": 100},
+                {"event": "model_end", "usage": usage, "seconds": 0.1},
+            ]
+        )
+    if overlapping_call:
+        events.pop()  # The last started call has no usage before another starts.
+    events.append({"event": "model_start", "input_bound": 100})
+
+    adapter = object.__new__(ArtifactAgent)
+    adapter.calls, adapter.reserved = 0, None
+    adapter.send, adapter.receive = Mock(), Mock(side_effect=events)
+    adapter.process = Mock()
+
+    def factory(
+        case: golden.GoldenCase,
+        row: run.Attempt,
+        journal: run.Journal,
+        messages: list[str],
+    ) -> ArtifactAgent:
+        adapter.case, adapter.attempt, adapter.journal = case, row, journal
+        adapter.messages, adapter.replay = messages, golden.Replay(case)
+        return adapter
+
+    monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
+    monkeypatch.setattr(golden, "make_actor", Mock())
+
+    def judge(case: golden.GoldenCase, row: run.Attempt, journal: run.Journal) -> None:
+        row.actor_validity = run.ActorAssessment(status="valid", evidence="offline")
+        row.verdicts = {
+            key: run.Verdict(passed=False, evidence="No completed response")
+            for key in ("outcome", "grounding", "rules")
+        }
+
+    monkeypatch.setattr(run, "judge", judge)
+    journal = run.Journal(tmp_path / "packaged-budget", 25)
+    result = run.execute(case, 1, journal, agent_factory=factory)
+    assert len(result.measurements) == call_limit
+    assert adapter.calls == call_limit
+    assert journal.reserved == pytest.approx(0)
+    assert journal.spent == pytest.approx(sum(m.cost_usd for m in result.measurements))
+    assert not result.passed
+    if overlapping_call:
+        assert result.status == "infrastructure"
+        assert result.error == "artifact_unsettled_call"
+        assert journal.unknown_usage and not result.measurements[-1].complete
+        assert "model_call_budget" not in result.checks
+    else:
+        assert result.status == "scored" and result.failure_class == "budget"
+        assert result.error is None and "model_call_budget" in result.checks
+        assert not journal.unknown_usage
+        assert journal.spent == pytest.approx(call_limit * run.cost(usage))
+        for number in (2, 3):
+            journal.append(
+                {"event": "attempt_finished", **attempt(case, number).model_dump()}
+            )
+        manifest = json.loads(
+            (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
+        )
+        manifest["identity"]["harness_version"] = run.VERSION
+        manifest["identity"]["corpus"]["case_count"] = 1
+        manifest["identity"]["cases"] = [case.model_dump(mode="json")]
+        (journal.directory / "manifest.json").write_text(json.dumps(manifest))
+        report = run.render(journal.directory)
+        # Infrastructure replacement requires incomplete evidence; a scored budget
+        # failure leaves the measured corpus complete and cannot authorize one.
+        assert report["full_corpus_complete"]
+        assert report["overall"]["scored_trials"] == 3
+        assert report["overall"]["successful_trials"] == 2
+
+
 def test_eval_cache_prefix_and_write_accounting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -986,7 +1069,7 @@ def test_cache_adapter_change_invalidates_calibration_identity(
     assert before["corpus"] == after["corpus"]
 
 
-def test_wrong_route_calibration_is_consistent_but_unsuccessful() -> None:
+def test_wrong_route_reference_also_misnames_its_endpoint() -> None:
     example = next(
         e
         for e in run.development_examples()
@@ -998,9 +1081,16 @@ def test_wrong_route_calibration_is_consistent_but_unsuccessful() -> None:
     assert "Route 7" in turn.response and "Route 28" not in turn.response
     assert call.input["destination_point_id"] == "greenway:7:exit:EB"
     assert call.result["destination_point_id"] == call.input["destination_point_id"]
+    catalog = json.loads((golden.ROOT / "prompt-points.json").read_text())
+    endpoint = next(
+        point
+        for point in catalog
+        if point["point_id"] == call.input["destination_point_id"]
+    )
+    assert "Loudoun County" in endpoint["label"]
     assert example.expected is not None
     assert not example.expected.outcome
-    assert example.expected.grounding
+    assert not example.expected.grounding
     assert not example.expected.rules
 
 

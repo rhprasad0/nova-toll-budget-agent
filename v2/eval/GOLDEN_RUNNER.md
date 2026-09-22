@@ -1,6 +1,6 @@
 # Running the frozen golden corpus
 
-The active corpus and harness are **2.0.1**: **200 cases**, split into **160
+The active corpus and harness are **2.0.2**: **200 cases**, split into **160
 development and 40 reserved cases**, with three fresh trials per case. A complete
 application run has **600 conversations**. Reserved cases are public and
 exposed to their authors; they are excluded from calibration, not claimed to be
@@ -21,11 +21,15 @@ not determine verdicts. Fixed-reference mode judges the supplied user turns and 
 explicit stop records; it does not invent simulator stops for authored transcripts. Reports preserve disagreements and separate criterion
 confusion matrices from actor-validity confusion and measurement failures.
 
-The current local authorization covers **two calibration passes within a combined
-$25 ceiling**. Their evidence is pending execution and review; this authorization
-does not establish judge agreement or approve an application run. Link the second
-pass to the first so prior usage remains charged to the shared limit. From a
-clean, committed checkout in `v2/`:
+The **two authorized calibration passes are complete**, within their combined
+$25 ceiling. The [calibration review](evidence/golden-200/CALIBRATION.md) retains
+both runs and every disagreement. They measured contracts 2.0.0 and 2.0.1;
+the final 2.0.2 contract corrects one Grounding label and classifies packaged-agent
+model-budget exhaustion as an application failure. It still requires fresh
+authorized exact-contract calibration and human review before application execution.
+
+The recorded calibration commands were run from clean, committed checkouts in
+`v2/`. These are provenance, not authorization to repeat them:
 
 ```bash
 uv run python -m eval.golden_run calibrate \
@@ -44,13 +48,14 @@ adjudications and remaining limitations. Approval does not rewrite measured
 verdicts or agreement. Corpus, evaluator, actor-check, label, model, and prompt
 identities must match before calibration can support application execution.
 
-A separately authorized application run uses reviewed calibration:
+A separately authorized application run uses a newly reviewed calibration that
+matches the final contract (neither archived run does):
 
 ```bash
 uv run python -m eval.golden_run run \
   --output eval/private/golden-200/application-1 \
-  --calibration eval/private/golden-200/calibration-2 \
-  --prior-run eval/private/golden-200/calibration-2
+  --calibration PATH_TO_APPROVED_MATCHING_CALIBRATION \
+  --prior-run PATH_TO_LATEST_ACCOUNTED_RUN
 ```
 
 Without `--cases`, all 600 trial slots are required. Stable IDs after `--cases`
@@ -117,7 +122,7 @@ and short judge explanations; it excludes private reasoning, credentials,
 headers, and provider exception messages. Keep initial artifacts under ignored
 `eval/private/` and inspect them before committing sanitized evidence.
 
-Pass@1 uses scored trials as its denominator. For 2.0.1, pass³ uses cases with
+Pass@1 uses scored trials as its denominator. For 2.0.x, pass³ uses cases with
 three scored trials; incomplete cases and inconclusive trials remain explicit,
 and a partial denominator cannot satisfy full-run completion. Family reports show
 expected, scored, successful, and inconclusive counts. Separate subsets cover
@@ -138,7 +143,7 @@ Zero observed violations does not establish zero underlying risk.
 Human review should inspect corrections, consent withdrawal, alternative
 selection, mixed workflows, partial evidence, financial extremes, actor validity,
 and disagreements. Do not relabel or replace the original attempts. Historical
-24-case reports and approvals remain historical and do not approve 2.0.1.
+24-case reports and approvals remain historical and do not approve 2.0.2.
 
 A local report cannot qualify a release or promote a baseline. The
 [protected golden workflow](GOLDEN_RELEASE.md) authenticates release provenance
