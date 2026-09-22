@@ -1,11 +1,11 @@
 # TollChat v2 evaluation
 
-The separate [24-case golden corpus](GOLDEN_EVAL_SPEC.md) has offline validation;
-corpus 1.0.26 and its exact evaluation contract await review. The cleanup preserves
-1.0.25's cases, fixtures, labels, prompts, and caching behavior while changing
-source fingerprints. See the [historical calibration results](results/golden/CACHING-SUMMARY.md)
-for recorded measurements and limitations. No qualified production baseline exists;
-current I-95/I-395 direction cases remain excluded from the golden corpus.
+The [200-case golden corpus](GOLDEN_EVAL_SPEC.md) covers current pricing, annual
+affordability, multi-turn changes, evidence failures, and explicit workflow switches.
+The [review catalog](golden/REVIEW.md) links every case and labeled reference.
+Contract 2.0.0 has 160 development and 40 reserved cases; labels and exact-contract
+calibration await human review. No qualified production baseline exists. Earlier
+measurements remain in the [historical evidence archive](results/golden/README.md).
 
 The scheduled Strands suite uses simulated users and model-based judges for six
 current-toll scenarios. The broader code-graded regression catalog retains eight

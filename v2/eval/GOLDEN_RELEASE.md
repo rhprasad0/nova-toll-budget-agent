@@ -6,21 +6,21 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-PR 581 now also includes authorized application prompt corrections for source
-labels, annualized daily scenarios, and user-selected income. The application
-model remains gpt-5.6-luna. Local repetition does not qualify a production release.
+The active corpus, harness, and policy are **2.0.0**. They cover **200 cases**:
+160 development and 40 public, authorship-exposed reservations. The new corpus,
+calibration, and policy require exact human review; their approvals are pending.
+The application model and prompt remain unchanged in this expansion.
 
-The current corpus **1.0.26**, harness **1.2.10**, and policy **1.0.15** await exact
-human approval. The cleanup preserves cases, labels, prompts, and caching behavior
-but changes source fingerprints. Fresh calibration must use this exact contract.
-See the [historical PR #581 review packet](results/golden/CACHING-SUMMARY.md).
-Its local calibration 33 agreed on **179/180** labels; actor checks passed
-**60/60**. Outcome missed a premature alternative selection, while Rules and
-mandatory deterministic checks rejected it. The exact evidence and standing local
-approval are retained privately. Its local application run reached **17/17
-critical pass³ and 72/72 trials**, one of the three requested consecutive successes.
-Protected CI retains its four-worker scored timing policy. Activation remains
-pending approval; local success does not replace protected qualification.
+Two local calibration passes are authorized within a **combined $25 ceiling**.
+Their evidence is pending execution and adjudication. That authorization does not
+approve protected application execution, production qualification, or a policy
+limit increase. Local repetition does not qualify a production release.
+
+Historical 24-case measurements, including the PR #581 packet's 179/180
+calibration agreement, 60/60 actor checks, and 72/72 application trials, retain
+their original identities and semantics. They are historical evidence, not
+measurements of the expanded corpus. See the
+[historical review packet](results/golden/CACHING-SUMMARY.md).
 
 CI uses the same cached actor/judge factory and judge-prefix construction as the
 manual runner, through scripts.golden_release.execute → eval.golden_run.execute.
@@ -46,17 +46,33 @@ the trusted parent runs ActorSimulator, the correctness judges, and frozen tool
 replay. The child receives no AWS or GitHub credentials. The application model
 and prompt remain unchanged.
 
-Each execution includes all 24 cases, including the four held-out cases, with
-three fresh trials and four workers. Every model call reserves against one
-shared $5 run ceiling before starting. The durable ledger also reserves against
+Each execution includes all 200 cases, including the 40 reserved cases, with
+three fresh trials per case: **600 conversations**, using four workers. Every
+model call reserves against one shared $5 run ceiling before starting. The durable ledger also reserves against
 the existing $25 authorization. Missing usage stops further paid calls and
 blocks subsequent runs until spending is reconciled. Provider retries are off.
 
-The original thresholds from policy 1.0.0 are unchanged in policy 1.0.15. The
-active corpus has 60 development calibration examples covering route
-expectations, initial actor facts, monetary proposals/denials, and source
-grading. Earlier approvals apply only to their historical contracts.
-Historical evidence, labels, policy approvals, and the original baseline remain intact.
+The numerical thresholds from policy 1.0.0 remain unchanged in policy 2.0.0,
+including the **$5 protected-run ceiling**, critical/noncritical pass requirements,
+suite floors, regression limits, and latency limits. Expansion does not establish
+that 600 conversations can meet those limits. Any later policy change requires
+its own review; no limit is silently raised here.
+
+The corpus contains 326 reference examples; calibration selects 274 development
+examples and excludes 52 reserved examples. Application labels are explicit per
+criterion, and invalid actor examples have no application labels. Calibration
+reports include criterion and actor-validity confusion matrices, disagreements,
+and measurement-failure counts. Earlier approvals apply only to their original
+contracts.
+
+The 2.0.0 assessment separates application outcome from actor validity. Invalid or
+uncertain simulations and missing judgments are inconclusive. Consent is judged
+from the latest messages delivered before each call; private actor facts and
+later approval cannot authorize earlier action. Honest agent-caused errors and
+unfinished clarifications receive no blanket Outcome exception. Family reports
+retain scored and inconclusive denominators, and uncertainty resamples whole
+scenario groups. Full qualification still requires all 600 valid scored trial
+slots; missing measurements cannot produce a pass.
 
 After machine qualification, inspect the `golden-evidence-RUN-1` artifact:
 `review.html`, `decision.json` (including per-case baseline deltas), and the
@@ -102,8 +118,9 @@ contract changes and environment recovery.
    from `v2/`. Conditional writes retain the original archive, initialize an
    unset production reference, and seed known spending at **$0.87191346**.
    Repeating initialization cannot reset the ledger or replace a baseline.
-4. Calibrate the new contract using the existing runner and approved labels.
-   Approve its evidence and disagreements, update
+4. Calibrate the new contract using the existing runner and explicit reference
+   labels. Review the labels, actor-validity judgments, measurement failures, and
+   disagreements, then approve the exact evidence and update
    `golden/calibration-reference.json`, approve `golden/review.json` against
    the current corpus digest, and approve the active policy selected by scripts/golden_gate.py against
    its exact digest. Those approvals must precede a candidate run. Reconcile any separate

@@ -1,0 +1,27 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "greenway:1:entry:EB",
+    "destination_point_id": "i95:2249ND",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "toolUseId": "golden-error",
+    "status": "error",
+    "content": [
+      {
+        "text": "Unable to get the current toll price. Reference: golden-error."
+      }
+    ]
+  },
+  "is_error": true,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "eval/test-cases.jsonl:leesburg-to-washington-i395-current-price; tests/test_get_current_toll_price.py:test_route_failure_streams_failed_and_returns_only_safe_error",
+    "note": "Frozen synthetic inputs passed through current_price_domain.build_current_price_result; not production traffic. Synthetic operation error after the correctly clarified request; no invented route price."
+  }
+}

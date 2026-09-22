@@ -90,7 +90,7 @@ jobs:
           printf '%s' "$CONTEXT" >"$RUNNER_TEMP/context.json"
           cd trusted/v2
           uv run python -m scripts.golden_release prepare --context "$RUNNER_TEMP/context.json" --candidate-root "$GITHUB_WORKSPACE/candidate" --directory "$RUNNER_TEMP/golden" --superseded-run "$SUPERSEDED_RUN" --replacement-reason "$REPLACEMENT_REASON"
-      - name: Execute 72 fresh frozen trials within the approved budget
+      - name: Execute the complete frozen corpus within the approved budget
         run: |
           cd trusted/v2
           uv run python -m scripts.golden_release execute --directory "$RUNNER_TEMP/golden"

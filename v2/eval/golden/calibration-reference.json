@@ -1,4 +1,4 @@
 {
   "status": "pending",
-  "notes": "Corpus 1.0.26 requires fresh exact-contract actor validation and calibration; historical evidence retained without reassignment."
+  "notes": "Contract 2.0.0 requires exact-contract calibration and human adjudication. The two authorized local calibration runs do not imply approval; historical evidence remains unchanged."
 }
