@@ -682,19 +682,6 @@
       "changed_fields": [
         "ordered_cache_behavior"
       ]
-    },
-    {
-      "address": "aws_s3_object.cost_assets[\"evals.css\"]",
-      "action": "create",
-      "operation_class": "cost-publication",
-      "changed_fields": [
-        "bucket",
-        "cache_control",
-        "content_type",
-        "key",
-        "source",
-        "source_hash"
-      ]
     }
   ],
   "permissions": [
@@ -1186,12 +1173,6 @@
       "address": "aws_cloudfront_distribution.staging",
       "action": "cloudfront:UpdateDistribution",
       "resource": "arn:aws:cloudfront::903859731897:distribution/*",
-      "conditions": {}
-    },
-    {
-      "address": "aws_s3_object.cost_assets[\"evals.css\"]",
-      "action": "s3:PutObject",
-      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/assets/evals.css",
       "conditions": {}
     }
   ]
