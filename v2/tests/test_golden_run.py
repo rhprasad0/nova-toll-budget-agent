@@ -57,7 +57,13 @@ def test_cli_runs_independent_work_in_parallel(
     examples = run.development_examples()[:3]
     monkeypatch.setattr(run, "development_examples", lambda: examples)
 
-    def judge(case: golden.GoldenCase, row: run.Attempt, journal: run.Journal) -> None:
+    def judge(
+        case: golden.GoldenCase,
+        row: run.Attempt,
+        journal: run.Journal,
+        *,
+        fixed_reference: bool = False,
+    ) -> None:
         barrier.wait()
         row.verdicts = {
             key: run.Verdict(passed=True, evidence="offline")
@@ -712,7 +718,13 @@ def test_actor_reply_is_delivered_before_completion(
     monkeypatch.setattr(golden, "make_actor", Mock(return_value=actor))
     monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
 
-    def judge(case: golden.GoldenCase, row: run.Attempt, journal: run.Journal) -> None:
+    def judge(
+        case: golden.GoldenCase,
+        row: run.Attempt,
+        journal: run.Journal,
+        *,
+        fixed_reference: bool = False,
+    ) -> None:
         row.verdicts = {
             key: run.Verdict(passed=True, evidence="offline")
             for key in ("outcome", "grounding", "rules")
@@ -992,8 +1004,9 @@ def test_wrong_route_calibration_is_consistent_but_unsuccessful() -> None:
     assert not example.expected.rules
 
 
+@pytest.mark.parametrize("fixed_reference", [False, True])
 def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fixed_reference: bool
 ) -> None:
     case = golden.load_cases()[0].model_copy(deep=True)
     case.contract_version = 2
@@ -1026,22 +1039,37 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
         self: run.ConversationJudge, data: EvaluationData[str, str]
     ) -> list[EvaluationOutput]:
         diagnostic_prompts.append(
-            (data.expected_assertion or "") + (data.actual_output or "")
+            self.reference_system_prompt
+            + (data.expected_assertion or "")
+            + (data.actual_output or "")
         )
         return [
             EvaluationOutput(score=1, test_pass=True, reason="Delivered evidence only.")
         ]
 
-    monkeypatch.setattr(run, "Agent", Mock(return_value=outcome))
+    factory = Mock(return_value=outcome)
+    monkeypatch.setattr(run, "Agent", factory)
     monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
     monkeypatch.setattr(run.ConversationJudge, "evaluate", diagnostic)
-    run.judge(case, row, run.Journal(tmp_path / "private", 25))
+    run.judge(
+        case,
+        row,
+        run.Journal(tmp_path / "private", 25),
+        fixed_reference=fixed_reference,
+    )
     assert len(outcome_prompts) == 1 and len(diagnostic_prompts) == 2
     assert "PRIVATE_PROFILE_SENTINEL" in outcome_prompts[0]
     assert "Declared terminal objective: cancellation" in outcome_prompts[0]
     assert all(
         "PRIVATE_PROFILE_SENTINEL" not in prompt for prompt in diagnostic_prompts
     )
+    prefix = factory.call_args.kwargs["system_prompt"]
+    assert (run.FIXED_REFERENCE_PROMPT in prefix) is fixed_reference
+    for prompt in [prefix, *diagnostic_prompts]:
+        assert "greenway:2A:entry:EB" in prompt and "Battlefield Pkwy" in prompt
+        assert '"coordinates"' in prompt
+    assert all("Recorded sequence" in prompt for prompt in diagnostic_prompts)
+    assert "Permitted tool sequence" not in diagnostic_prompts[0]
     assert row.verdicts["outcome"].passed
     assert row.actor_validity is not None and row.actor_validity.status == "invalid"
     row.measurements.append(measurement())
@@ -1123,7 +1151,13 @@ def test_v2_turn_limit_is_application_failure_only_for_valid_actor(
     monkeypatch.setattr(golden, "make_actor", Mock(return_value=actor))
     monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
 
-    def judge(case: golden.GoldenCase, row: run.Attempt, journal: run.Journal) -> None:
+    def judge(
+        case: golden.GoldenCase,
+        row: run.Attempt,
+        journal: run.Journal,
+        *,
+        fixed_reference: bool = False,
+    ) -> None:
         row.verdicts = {
             key: run.Verdict(passed=completed or key != "outcome", evidence="offline")
             for key in ("outcome", "grounding", "rules")
@@ -1168,7 +1202,13 @@ def test_v2_explicit_calibration_labels_ignore_names_and_missing_verdicts(
     missing = original.model_copy(update={"label": "missing"})
     monkeypatch.setattr(run, "development_examples", lambda: [renamed, missing])
 
-    def judge(case: golden.GoldenCase, row: run.Attempt, journal: run.Journal) -> None:
+    def judge(
+        case: golden.GoldenCase,
+        row: run.Attempt,
+        journal: run.Journal,
+        *,
+        fixed_reference: bool = False,
+    ) -> None:
         assert original.expected is not None
         row.verdicts = {
             key: run.Verdict(passed=value, evidence="explicit label")
@@ -1268,8 +1308,15 @@ def test_invalid_actor_probe_is_complete_calibration_without_application_labels(
     monkeypatch.setattr(run, "development_examples", lambda: [example])
     monkeypatch.setattr(golden, "load_cases", lambda: [case])
 
-    def judge(case: golden.GoldenCase, row: run.Attempt, journal: run.Journal) -> None:
+    def judge(
+        case: golden.GoldenCase,
+        row: run.Attempt,
+        journal: run.Journal,
+        *,
+        fixed_reference: bool = False,
+    ) -> None:
         assert row.actor_replies == replies
+        assert fixed_reference
         row.verdicts = {
             key: run.Verdict(passed=False, evidence="Not used as application labels.")
             for key in ("outcome", "grounding", "rules")

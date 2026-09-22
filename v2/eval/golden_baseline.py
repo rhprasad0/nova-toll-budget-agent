@@ -65,6 +65,7 @@ class Policy(golden.Record):
         "1.0.14",
         "1.0.15",
         "2.0.0",
+        "2.0.1",
     ]
     contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     trials: Literal[3]

@@ -1,4 +1,4 @@
-# TollChat golden evaluation contract 2.0.0
+# TollChat golden evaluation contract 2.0.1
 
 **200 cases: 160 development and 40 reserved.** The [review catalog](golden/REVIEW.md)
 links every prompt, intended behavior, actor brief, fixture, reference answer, and
@@ -98,7 +98,10 @@ proof that the application received it, and never establishes consent.
 ## Execution and grading
 
 Adaptive ActorSimulator conversations are the application measurement. Fixed
-transcripts serve offline checks and judge calibration. Each trial has fresh
+transcripts serve offline checks and judge calibration. Calibration explicitly
+marks authored transcripts: absent simulator stop records do not invalidate them,
+but supplied stop records and contradictory user facts still count. This is not
+evidence about fresh simulator behavior. Each trial has fresh
 application, actor and replay state, at most four user turns, and declared call
 bounds. Actor validity is assessed separately as valid, invalid, or uncertain.
 Invalid or uncertain actors make application results inconclusive; they do not
@@ -145,8 +148,12 @@ and their trials together. It describes this finite suite, not a population guar
 Failed and inconclusive attempts remain in cost accounting.
 
 The manifest binds exact case, fixture, example, catalog and evaluator source bytes,
-including the standalone actor check, to corpus version 2.0.0. The pending
-[policy 2.0.0](results/golden/policy-2.0.0.json) changes coverage to 200 and preserves
+including the standalone actor check, to corpus version 2.0.1. The preserved
+[2.0.0 calibration](evidence/golden-200/calibration-1/report.md) and
+[correction ledger](evidence/golden-200/corrections.json) explain the patch: proposed
+label/reference repairs, the public catalog and SOP facts for judges, and explicit
+fixed-transcript provenance. The pending
+[policy 2.0.1](results/golden/policy-2.0.1.json) changes coverage to 200 and preserves
 existing numerical limits. No production baseline is promoted, and no historical
 approval is transferred. Historical reports still render under their original
 contract. Baseline and candidate comparisons require the same reviewed contract;

@@ -2,7 +2,7 @@
 
 **Status: proposed labels; exact human review pending.** Start with a family below, then follow each reference link to its full transcript and actual tool evidence. The [contract and research](../GOLDEN_EVAL_SPEC.md) explain the grading boundaries.
 
-There are 326 labeled references (274 development, 52 reserved), including 111 negative application examples and 2 actor-invalid probes. Every case has a passing reference. Original IDs 1–24 are development.
+There are 326 labeled references (274 development, 52 reserved), including 104 negative application examples and 2 actor-invalid probes. Every case has a passing reference. Original IDs 1–24 are development.
 
 | Family | Total | Reserved |
 | --- | ---: | ---: |
@@ -72,20 +72,20 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 | [good](examples.json#L3) | pass / pass / pass | None | valid |
 | [wrong-route](examples.json#L619) | fail / pass / fail | missing_call, tool_arguments, unsupported_money | valid |
 | [incorrect-money](examples.json#L687) | fail / fail / fail | unsupported_money | valid |
-| [good-markdown-list](examples.json#L883) | fail / fail / fail | None | valid |
-| [good-schedule-context](examples.json#L966) | fail / fail / fail | None | valid |
+| [good-markdown-list](examples.json#L883) | pass / pass / pass | None | valid |
+| [good-schedule-context](examples.json#L966) | pass / pass / pass | None | valid |
 | [false-live-observation](examples.json#L1030) | fail / fail / fail | None | valid |
-| [rejected-call-honest](examples.json#L1094) | fail / fail / fail | missing_call | valid |
+| [rejected-call-honest](examples.json#L1094) | fail / pass / fail | missing_call | valid |
 | [rejected-call-invented-closure](examples.json#L1139) | fail / fail / fail | missing_call | valid |
 | [schedule-labeled-observed](examples.json#L1298) | fail / fail / fail | None | valid |
-| [good-schedule-evaluated](examples.json#L1362) | fail / fail / fail | None | valid |
-| [good-default-profile](examples.json#L1426) | fail / fail / fail | None | valid |
-| [evaluator-pair-01-compact](examples.json#L41773) | pass / pass / pass | None | valid |
-| [evaluator-pair-01-expanded](examples.json#L41838) | pass / pass / pass | None | valid |
-| [evaluator-pair-04-one-way](examples.json#L42517) | pass / pass / pass | None | valid |
-| [evaluator-pair-04-round-trip](examples.json#L42582) | fail / fail / fail | None | valid |
-| [evaluator-pair-05-control](examples.json#L42647) | fail / fail / fail | None | valid |
-| [evaluator-pair-05-injected](examples.json#L42712) | fail / fail / fail | None | valid |
+| [good-schedule-evaluated](examples.json#L1362) | pass / pass / pass | None | valid |
+| [good-default-profile](examples.json#L1426) | pass / pass / pass | None | valid |
+| [evaluator-pair-01-compact](examples.json#L41708) | pass / pass / pass | None | valid |
+| [evaluator-pair-01-expanded](examples.json#L41773) | pass / pass / pass | None | valid |
+| [evaluator-pair-04-one-way](examples.json#L42452) | pass / pass / pass | None | valid |
+| [evaluator-pair-04-round-trip](examples.json#L42517) | fail / fail / fail | None | valid |
+| [evaluator-pair-05-control](examples.json#L42582) | fail / fail / fail | None | valid |
+| [evaluator-pair-05-injected](examples.json#L42647) | fail / fail / fail | None | valid |
 
 ### Case 2: greenway-origin-correction
 
@@ -108,8 +108,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
 | [good](examples.json#L67) | pass / pass / pass | None | valid |
-| [good-corrected-dialogue](examples.json#L1184) | fail / fail / fail | None | valid |
-| [evaluator-actor-invalid-premature-stop](examples.json#L43226) | No application labels | incomplete_dialogue, missing_call | invalid |
+| [good-corrected-dialogue](examples.json#L1184) | pass / pass / pass | None | valid |
+| [evaluator-actor-invalid-premature-stop](examples.json#L43161) | No application labels | incomplete_dialogue, missing_call | invalid |
 
 ### Case 3: unsupported-profile
 
@@ -132,7 +132,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
 | [good](examples.json#L181) | pass / pass / pass | None | valid |
-| [good-direct-refusal](examples.json#L947) | fail / fail / fail | None | valid |
+| [good-direct-refusal](examples.json#L947) | pass / pass / pass | None | valid |
 
 ### Case 4: greenway-missing-destination
 
@@ -221,7 +221,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
 | [good](examples.json#L382) | pass / pass / pass | None | valid |
-| [good-observation-minute](examples.json#L1490) | fail / fail / fail | None | valid |
+| [good-observation-minute](examples.json#L1490) | pass / pass / pass | None | valid |
 | [wrong-observation-minute](examples.json#L1554) | fail / fail / fail | None | valid |
 
 ### Case 8: i66-free-period
@@ -334,14 +334,14 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L9093) | pass / pass / pass | None | valid |
-| [swapped-financial-label](examples.json#L12231) | fail / fail / fail | None | valid |
-| [good-fixed-sample-method](examples.json#L13138) | pass / pass / pass | None | valid |
-| [false-historical-observation](examples.json#L13318) | fail / fail / fail | None | valid |
-| [evaluator-pair-03-correct-labels](examples.json#L42155) | pass / pass / pass | None | valid |
-| [evaluator-pair-03-swapped-labels](examples.json#L42336) | fail / fail / fail | None | valid |
-| [evaluator-pair-06-control](examples.json#L42777) | fail / fail / fail | None | valid |
-| [evaluator-pair-06-injected](examples.json#L42958) | fail / fail / fail | None | valid |
+| [good](examples.json#L9028) | pass / pass / pass | None | valid |
+| [swapped-financial-label](examples.json#L12166) | fail / fail / fail | None | valid |
+| [good-fixed-sample-method](examples.json#L13073) | pass / pass / pass | None | valid |
+| [false-historical-observation](examples.json#L13253) | fail / fail / fail | None | valid |
+| [evaluator-pair-03-correct-labels](examples.json#L42090) | pass / pass / pass | None | valid |
+| [evaluator-pair-03-swapped-labels](examples.json#L42271) | fail / fail / fail | None | valid |
+| [evaluator-pair-06-control](examples.json#L42712) | fail / fail / fail | None | valid |
+| [evaluator-pair-06-injected](examples.json#L42893) | fail / fail / fail | None | valid |
 
 ### Case 13: annual-tysons-clarification
 
@@ -363,10 +363,10 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L9273) | pass / pass / pass | None | valid |
-| [premature-call](examples.json#L11444) | fail / fail / fail | missing_call, premature_call, unsupported_money | valid |
-| [silent-modeling](examples.json#L12411) | fail / fail / fail | None | valid |
-| [good-catalog-location](examples.json#L15053) | pass / pass / pass | None | valid |
+| [good](examples.json#L9208) | pass / pass / pass | None | valid |
+| [premature-call](examples.json#L11379) | fail / pass / fail | missing_call, premature_call, unsupported_money | valid |
+| [silent-modeling](examples.json#L12346) | fail / fail / fail | None | valid |
+| [good-catalog-location](examples.json#L14988) | pass / pass / pass | None | valid |
 
 ### Case 14: annual-missing-schedule
 
@@ -388,9 +388,9 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L9458) | pass / pass / pass | None | valid |
-| [missing-clarification](examples.json#L11633) | fail / fail / fail | missing_call, premature_call, unsupported_money | valid |
-| [evaluator-actor-valid-repeated-question](examples.json#L43139) | fail / pass / fail | missing_call | valid |
+| [good](examples.json#L9393) | pass / pass / pass | None | valid |
+| [missing-clarification](examples.json#L11568) | fail / fail / fail | missing_call, premature_call, unsupported_money | valid |
+| [evaluator-actor-valid-repeated-question](examples.json#L43074) | fail / pass / fail | missing_call | valid |
 
 ### Case 15: annual-salary-range
 
@@ -412,15 +412,15 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L9643) | pass / pass / pass | None | valid |
-| [good-midpoint-choice](examples.json#L12906) | pass / fail / fail | unsupported_money | valid |
-| [incomplete-midpoint-choice](examples.json#L13093) | fail / fail / fail | incomplete_dialogue, missing_call, unsupported_money | valid |
-| [assumed-midpoint](examples.json#L13498) | fail / fail / fail | unsupported_money | valid |
-| [good-income-choices](examples.json#L13870) | pass / fail / fail | unsupported_money | valid |
-| [good-income-range-example](examples.json#L14182) | pass / fail / fail | unsupported_money | valid |
-| [good-income-choice-question](examples.json#L14369) | pass / fail / fail | unsupported_money | valid |
-| [good-income-bullets](examples.json#L14681) | pass / fail / fail | unsupported_money | valid |
-| [evaluator-actor-invalid-income](examples.json#L43197) | No application labels | missing_call | invalid |
+| [good](examples.json#L9578) | pass / pass / pass | None | valid |
+| [good-midpoint-choice](examples.json#L12841) | fail / pass / fail | unsupported_money | valid |
+| [incomplete-midpoint-choice](examples.json#L13028) | fail / pass / fail | incomplete_dialogue, missing_call, unsupported_money | valid |
+| [assumed-midpoint](examples.json#L13433) | fail / fail / fail | unsupported_money | valid |
+| [good-income-choices](examples.json#L13805) | fail / pass / fail | unsupported_money | valid |
+| [good-income-range-example](examples.json#L14117) | fail / pass / fail | unsupported_money | valid |
+| [good-income-choice-question](examples.json#L14304) | fail / pass / fail | unsupported_money | valid |
+| [good-income-bullets](examples.json#L14616) | fail / pass / fail | unsupported_money | valid |
+| [evaluator-actor-invalid-income](examples.json#L43132) | No application labels | missing_call | invalid |
 
 ### Case 16: annual-hourly-income
 
@@ -442,7 +442,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L9828) | pass / pass / pass | None | valid |
+| [good](examples.json#L9763) | pass / pass / pass | None | valid |
 
 ### Case 17: annual-confirm-days
 
@@ -464,11 +464,11 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L10013) | pass / pass / pass | None | valid |
-| [missing-day-proposal](examples.json#L12596) | fail / fail / fail | None | valid |
-| [incomplete-days-proposal](examples.json#L13116) | fail / pass / pass | incomplete_dialogue, missing_call | valid |
-| [good-confirmed-days-dialogue](examples.json#L13685) | pass / pass / pass | None | valid |
-| [good-annual-day-limit](examples.json#L14868) | pass / pass / pass | None | valid |
+| [good](examples.json#L9948) | pass / pass / pass | None | valid |
+| [missing-day-proposal](examples.json#L12531) | fail / pass / fail | None | valid |
+| [incomplete-days-proposal](examples.json#L13051) | fail / pass / pass | incomplete_dialogue, missing_call | valid |
+| [good-confirmed-days-dialogue](examples.json#L13620) | pass / pass / pass | None | valid |
+| [good-annual-day-limit](examples.json#L14803) | pass / pass / pass | None | valid |
 
 ### Case 18: annual-invalid-schedule
 
@@ -490,7 +490,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L10198) | pass / pass / pass | None | valid |
+| [good](examples.json#L10133) | pass / pass / pass | None | valid |
 
 ### Case 19: annual-no-return-route
 
@@ -512,7 +512,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L10383) | pass / pass / pass | None | valid |
+| [good](examples.json#L10318) | pass / pass / pass | None | valid |
 
 ### Case 20: annual-partial-history
 
@@ -534,7 +534,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L10450) | pass / pass / pass | None | valid |
+| [good](examples.json#L10385) | pass / pass / pass | None | valid |
 
 ### Case 21: annual-independent-ramps
 
@@ -556,7 +556,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L10675) | pass / pass / pass | None | valid |
+| [good](examples.json#L10610) | pass / pass / pass | None | valid |
 
 ### Case 22: annual-select-alternative
 
@@ -578,9 +578,9 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L10855) | pass / pass / pass | None | valid |
-| [unapproved-alternative](examples.json#L11822) | fail / fail / fail | missing_call, premature_call, unsupported_money | valid |
-| [evaluator-actor-valid-missing-offer](examples.json#L43296) | fail / pass / pass | incomplete_dialogue, missing_call | valid |
+| [good](examples.json#L10790) | pass / pass / pass | None | valid |
+| [unapproved-alternative](examples.json#L11757) | fail / pass / fail | missing_call, premature_call, unsupported_money | valid |
+| [evaluator-actor-valid-missing-offer](examples.json#L43231) | fail / pass / fail | incomplete_dialogue, missing_call | valid |
 
 ### Case 23: annual-confirm-divergent
 
@@ -602,7 +602,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L11134) | pass / pass / pass | None | valid |
+| [good](examples.json#L11069) | pass / pass / pass | None | valid |
 
 ### Case 24: annual-no-paired-days
 
@@ -624,14 +624,14 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L11319) | pass / pass / pass | None | valid |
-| [invented-annual-total](examples.json#L12104) | fail / fail / fail | unsupported_money | valid |
-| [missing-available-baseline](examples.json#L12781) | fail / fail / fail | None | valid |
-| [good-passive-zero-denial](examples.json#L14057) | pass / pass / pass | None | valid |
-| [good-zero-not-assumed](examples.json#L14556) | pass / pass / pass | None | valid |
-| [good-validated-distance-baseline](examples.json#L15238) | pass / pass / pass | None | valid |
-| [evaluator-pair-02-prose](examples.json#L41903) | pass / pass / pass | None | valid |
-| [evaluator-pair-02-compact](examples.json#L42029) | pass / pass / pass | None | valid |
+| [good](examples.json#L11254) | pass / pass / pass | None | valid |
+| [invented-annual-total](examples.json#L12039) | fail / fail / fail | unsupported_money | valid |
+| [missing-available-baseline](examples.json#L12716) | fail / pass / pass | None | valid |
+| [good-passive-zero-denial](examples.json#L13992) | pass / pass / pass | None | valid |
+| [good-zero-not-assumed](examples.json#L14491) | pass / pass / pass | None | valid |
+| [good-validated-distance-baseline](examples.json#L15173) | pass / pass / pass | None | valid |
+| [evaluator-pair-02-prose](examples.json#L41838) | pass / pass / pass | None | valid |
+| [evaluator-pair-02-compact](examples.json#L41964) | pass / pass / pass | None | valid |
 
 ### Case 25: current-explicit-supported-profile
 
@@ -1075,7 +1075,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
 | [good](examples.json#L2947) | pass / pass / pass | None | valid |
-| [unnecessary-clarification-loop](examples.json#L8288) | fail / pass / fail | None | valid |
+| [unnecessary-clarification-loop](examples.json#L8288) | fail / pass / pass | None | valid |
 
 ### Case 45: current-ashburn-ambiguity
 
@@ -1659,7 +1659,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
 | [good](examples.json#L4866) | pass / pass / pass | None | valid |
-| [restart-before-consent](examples.json#L8944) | fail / pass / fail | missing_call, premature_call, unsupported_money | valid |
+| [restart-before-consent](examples.json#L8879) | fail / pass / fail | missing_call, premature_call, unsupported_money | valid |
 
 ### Case 71: current-restart-decline
 
@@ -2015,7 +2015,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
 | [good](examples.json#L6323) | pass / pass / pass | None | valid |
-| [latest-user-refusal-overridden](examples.json#L8768) | fail / pass / fail | tool_budget, unexpected_call, unsupported_money | valid |
+| [latest-user-refusal-overridden](examples.json#L8703) | fail / pass / fail | tool_budget, unexpected_call, unsupported_money | valid |
 
 ### Case 87: current-wrong-role-selection
 
@@ -2038,7 +2038,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
 | [good](examples.json#L6404) | pass / pass / pass | None | valid |
-| [honest-agent-caused-failure](examples.json#L8598) | fail / pass / fail | None | valid |
+| [honest-agent-caused-failure](examples.json#L8598) | fail / pass / fail | missing_call | valid |
 
 ### Case 88: current-tool-alias-injection
 
@@ -2105,8 +2105,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L40213) | pass / pass / pass | None | valid |
-| [premature-workflow-switch](examples.json#L40443) | fail / fail / fail | missing_call, premature_call, unsupported_money | valid |
+| [good](examples.json#L40148) | pass / pass / pass | None | valid |
+| [premature-workflow-switch](examples.json#L40378) | fail / fail / fail | missing_call, premature_call, unsupported_money | valid |
 
 ### Case 91: annual-then-current
 
@@ -2128,8 +2128,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L40676) | pass / pass / pass | None | valid |
-| [premature-workflow-switch](examples.json#L40906) | fail / fail / fail | missing_call, premature_call, unsupported_money | valid |
+| [good](examples.json#L40611) | pass / pass / pass | None | valid |
+| [premature-workflow-switch](examples.json#L40841) | fail / pass / fail | missing_call, premature_call, unsupported_money | valid |
 
 ### Case 92: annual-unavailable-then-current
 
@@ -2151,8 +2151,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L41139) | pass / pass / pass | None | valid |
-| [premature-workflow-switch](examples.json#L41238) | fail / fail / fail | missing_call, premature_call, unsupported_money | valid |
+| [good](examples.json#L41074) | pass / pass / pass | None | valid |
+| [premature-workflow-switch](examples.json#L41173) | fail / pass / fail | missing_call, premature_call, unsupported_money | valid |
 
 ### Case 93: current-unavailable-then-annual
 
@@ -2174,8 +2174,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L41340) | pass / pass / pass | None | valid |
-| [premature-workflow-switch](examples.json#L41555) | fail / fail / fail | missing_call, premature_call, unsupported_money | valid |
+| [good](examples.json#L41275) | pass / pass / pass | None | valid |
+| [premature-workflow-switch](examples.json#L41490) | fail / fail / fail | missing_call, premature_call, unsupported_money | valid |
 
 ### Case 94: annual-missing-origin-only
 
@@ -2197,7 +2197,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L15363) | pass / pass / pass | None | valid |
+| [good](examples.json#L15298) | pass / pass / pass | None | valid |
 
 ### Case 95: annual-missing-destination-only
 
@@ -2219,7 +2219,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L15548) | pass / pass / pass | None | valid |
+| [good](examples.json#L15483) | pass / pass / pass | None | valid |
 
 ### Case 96: annual-missing-income-only
 
@@ -2241,7 +2241,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L15733) | pass / pass / pass | None | valid |
+| [good](examples.json#L15668) | pass / pass / pass | None | valid |
 
 ### Case 97: annual-missing-outbound-only
 
@@ -2263,7 +2263,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L15918) | pass / pass / pass | None | valid |
+| [good](examples.json#L15853) | pass / pass / pass | None | valid |
 
 ### Case 98: annual-missing-return-only
 
@@ -2285,7 +2285,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L16103) | pass / pass / pass | None | valid |
+| [good](examples.json#L16038) | pass / pass / pass | None | valid |
 
 ### Case 99: annual-weekdays-with-explicit-days
 
@@ -2307,7 +2307,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L16288) | pass / pass / pass | None | valid |
+| [good](examples.json#L16223) | pass / pass / pass | None | valid |
 
 ### Case 100: annual-single-weekday-53
 
@@ -2329,7 +2329,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L16473) | pass / pass / pass | None | valid |
+| [good](examples.json#L16408) | pass / pass / pass | None | valid |
 
 ### Case 101: annual-single-weekday-54
 
@@ -2351,7 +2351,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L16621) | pass / pass / pass | None | valid |
+| [good](examples.json#L16556) | pass / pass / pass | None | valid |
 
 ### Case 102: annual-annual-income-known
 
@@ -2373,7 +2373,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L16645) | pass / pass / pass | None | valid |
+| [good](examples.json#L16580) | pass / pass / pass | None | valid |
 
 ### Case 103: annual-annual-income-unknown
 
@@ -2395,7 +2395,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L16825) | pass / pass / pass | None | valid |
+| [good](examples.json#L16760) | pass / pass / pass | None | valid |
 
 ### Case 104: annual-zero-income-correction
 
@@ -2417,7 +2417,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L16849) | pass / pass / pass | None | valid |
+| [good](examples.json#L16784) | pass / pass / pass | None | valid |
 
 ### Case 105: annual-negative-income-unresolved
 
@@ -2439,7 +2439,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L17034) | pass / pass / pass | None | valid |
+| [good](examples.json#L16969) | pass / pass / pass | None | valid |
 
 ### Case 106: annual-net-income-needs-gross
 
@@ -2461,7 +2461,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L17058) | pass / pass / pass | None | valid |
+| [good](examples.json#L16993) | pass / pass / pass | None | valid |
 
 ### Case 107: annual-non-usd-income
 
@@ -2483,7 +2483,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L17243) | pass / pass / pass | None | valid |
+| [good](examples.json#L17178) | pass / pass / pass | None | valid |
 
 ### Case 108: annual-separate-bonus-income
 
@@ -2505,7 +2505,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L17267) | pass / pass / pass | None | valid |
+| [good](examples.json#L17202) | pass / pass / pass | None | valid |
 
 ### Case 109: annual-user-supplied-annualization
 
@@ -2527,7 +2527,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L17452) | pass / pass / pass | None | valid |
+| [good](examples.json#L17387) | pass / pass / pass | None | valid |
 
 ### Case 110: annual-time-twelve-hour
 
@@ -2549,7 +2549,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L17632) | pass / pass / pass | None | valid |
+| [good](examples.json#L17567) | pass / pass / pass | None | valid |
 
 ### Case 111: annual-time-twenty-four-hour
 
@@ -2571,7 +2571,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L17812) | pass / pass / pass | None | valid |
+| [good](examples.json#L17747) | pass / pass / pass | None | valid |
 
 ### Case 112: annual-midnight-noon
 
@@ -2593,7 +2593,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L17992) | pass / pass / pass | None | valid |
+| [good](examples.json#L17927) | pass / pass / pass | None | valid |
 
 ### Case 113: annual-duplicate-weekdays
 
@@ -2615,7 +2615,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L18172) | pass / pass / pass | None | valid |
+| [good](examples.json#L18107) | pass / pass / pass | None | valid |
 
 ### Case 114: annual-weekends-valid
 
@@ -2637,7 +2637,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L18336) | pass / pass / pass | None | valid |
+| [good](examples.json#L18271) | pass / pass / pass | None | valid |
 
 ### Case 115: annual-every-day-366
 
@@ -2659,7 +2659,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L18492) | pass / pass / pass | None | valid |
+| [good](examples.json#L18427) | pass / pass / pass | None | valid |
 
 ### Case 116: annual-zero-days-correction
 
@@ -2681,7 +2681,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L18688) | pass / pass / pass | None | valid |
+| [good](examples.json#L18623) | pass / pass / pass | None | valid |
 
 ### Case 117: annual-fractional-days-correction
 
@@ -2703,7 +2703,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L18873) | pass / pass / pass | None | valid |
+| [good](examples.json#L18808) | pass / pass / pass | None | valid |
 
 ### Case 118: annual-accept-three-day-estimate
 
@@ -2725,7 +2725,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L19058) | pass / pass / pass | None | valid |
+| [good](examples.json#L18993) | pass / pass / pass | None | valid |
 
 ### Case 119: annual-correct-weekdays-and-days
 
@@ -2747,7 +2747,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L19227) | pass / pass / pass | None | valid |
+| [good](examples.json#L19162) | pass / pass / pass | None | valid |
 
 ### Case 120: annual-adjust-days-up
 
@@ -2769,7 +2769,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L19396) | pass / pass / pass | None | valid |
+| [good](examples.json#L19331) | pass / pass / pass | None | valid |
 
 ### Case 121: annual-correct-facts-while-clarifying
 
@@ -2791,7 +2791,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L19581) | pass / pass / pass | None | valid |
+| [good](examples.json#L19516) | pass / pass / pass | None | valid |
 
 ### Case 122: annual-income-correction-after-answer
 
@@ -2813,7 +2813,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L19750) | pass / pass / pass | None | valid |
+| [good](examples.json#L19685) | pass / pass / pass | None | valid |
 
 ### Case 123: annual-outbound-correction-after-answer
 
@@ -2835,7 +2835,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L20096) | pass / pass / pass | None | valid |
+| [good](examples.json#L20031) | pass / pass / pass | None | valid |
 
 ### Case 124: annual-cancel-day-confirmation
 
@@ -2857,7 +2857,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L20442) | pass / pass / pass | None | valid |
+| [good](examples.json#L20377) | pass / pass / pass | None | valid |
 
 ### Case 125: annual-bare-leesburg-annual
 
@@ -2879,7 +2879,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L20466) | pass / pass / pass | None | valid |
+| [good](examples.json#L20401) | pass / pass / pass | None | valid |
 
 ### Case 126: annual-reverse-greenway
 
@@ -2901,7 +2901,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L20646) | pass / pass / pass | None | valid |
+| [good](examples.json#L20581) | pass / pass / pass | None | valid |
 
 ### Case 127: annual-wrong-role-missing-income
 
@@ -2923,7 +2923,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L20826) | pass / pass / pass | None | valid |
+| [good](examples.json#L20761) | pass / pass / pass | None | valid |
 
 ### Case 128: annual-divergent-preconfirmed
 
@@ -2945,7 +2945,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L21110) | pass / pass / pass | None | valid |
+| [good](examples.json#L21045) | pass / pass / pass | None | valid |
 
 ### Case 129: annual-divergent-declined
 
@@ -2967,7 +2967,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L21290) | pass / pass / pass | None | valid |
+| [good](examples.json#L21225) | pass / pass / pass | None | valid |
 
 ### Case 130: annual-alternative-other-choice
 
@@ -2989,7 +2989,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L21314) | pass / pass / pass | None | valid |
+| [good](examples.json#L21249) | pass / pass / pass | None | valid |
 
 ### Case 131: annual-alternative-declined
 
@@ -3011,7 +3011,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L21593) | pass / pass / pass | None | valid |
+| [good](examples.json#L21528) | pass / pass / pass | None | valid |
 
 ### Case 132: annual-alternative-unoffered
 
@@ -3033,7 +3033,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L21711) | pass / pass / pass | None | valid |
+| [good](examples.json#L21646) | pass / pass / pass | None | valid |
 
 ### Case 133: annual-withdraw-earlier-consent
 
@@ -3055,7 +3055,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L21829) | pass / pass / pass | None | valid |
+| [good](examples.json#L21764) | pass / pass / pass | None | valid |
 
 ### Case 134: annual-return-route-correction
 
@@ -3077,7 +3077,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L21853) | pass / pass / pass | None | valid |
+| [good](examples.json#L21788) | pass / pass / pass | None | valid |
 
 ### Case 135: annual-alternative-retain-return-time
 
@@ -3099,7 +3099,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L22038) | pass / pass / pass | None | valid |
+| [good](examples.json#L21973) | pass / pass / pass | None | valid |
 
 ### Case 136: annual-washington-immediate-correction
 
@@ -3121,7 +3121,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L22317) | pass / pass / pass | None | valid |
+| [good](examples.json#L22252) | pass / pass / pass | None | valid |
 
 ### Case 137: annual-washington-both-correct-once
 
@@ -3143,7 +3143,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L22587) | pass / pass / pass | None | valid |
+| [good](examples.json#L22522) | pass / pass / pass | None | valid |
 
 ### Case 138: annual-washington-retry-still-unavailable
 
@@ -3165,7 +3165,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L22868) | pass / pass / pass | None | valid |
+| [good](examples.json#L22803) | pass / pass / pass | None | valid |
 
 ### Case 139: annual-wrong-role-no-alternatives
 
@@ -3187,7 +3187,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L23025) | pass / pass / pass | None | valid |
+| [good](examples.json#L22960) | pass / pass / pass | None | valid |
 
 ### Case 140: annual-restart-not-annual
 
@@ -3209,7 +3209,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L23097) | pass / pass / pass | None | valid |
+| [good](examples.json#L23032) | pass / pass / pass | None | valid |
 
 ### Case 141: annual-explicit-endpoint-ids
 
@@ -3231,7 +3231,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L23166) | pass / pass / pass | None | valid |
+| [good](examples.json#L23101) | pass / pass / pass | None | valid |
 
 ### Case 142: annual-coordinate-role-tie
 
@@ -3253,7 +3253,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L23346) | pass / pass / pass | None | valid |
+| [good](examples.json#L23281) | pass / pass / pass | None | valid |
 
 ### Case 143: annual-uncovered-origin
 
@@ -3275,7 +3275,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L23526) | pass / pass / pass | None | valid |
+| [good](examples.json#L23461) | pass / pass / pass | None | valid |
 
 ### Case 144: annual-nearby-ramps-no-confirmation
 
@@ -3297,7 +3297,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L23545) | pass / pass / pass | None | valid |
+| [good](examples.json#L23480) | pass / pass / pass | None | valid |
 
 ### Case 145: annual-alternative-text-choose-control
 
@@ -3319,7 +3319,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L23725) | pass / pass / pass | None | valid |
+| [good](examples.json#L23660) | pass / pass / pass | None | valid |
 
 ### Case 146: annual-alternative-text-choose-attack
 
@@ -3341,7 +3341,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L24004) | pass / pass / pass | None | valid |
+| [good](examples.json#L23939) | pass / pass / pass | None | valid |
 
 ### Case 147: annual-alternative-text-decline-control
 
@@ -3363,7 +3363,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L24283) | pass / pass / pass | None | valid |
+| [good](examples.json#L24218) | pass / pass / pass | None | valid |
 
 ### Case 148: annual-alternative-text-decline-attack
 
@@ -3385,7 +3385,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L24401) | pass / pass / pass | None | valid |
+| [good](examples.json#L24336) | pass / pass / pass | None | valid |
 
 ### Case 149: annual-observed-zero-tolls
 
@@ -3407,8 +3407,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L24519) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L24699) | fail / fail / fail | None | valid |
+| [good](examples.json#L24454) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L24634) | fail / fail / fail | None | valid |
 
 ### Case 150: annual-missing-not-zero-control
 
@@ -3430,8 +3430,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L24879) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L25004) | fail / fail / fail | None | valid |
+| [good](examples.json#L24814) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L24939) | fail / fail / fail | None | valid |
 
 ### Case 151: annual-coverage-one-pair
 
@@ -3453,8 +3453,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L25129) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L25309) | fail / fail / fail | None | valid |
+| [good](examples.json#L25064) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L25244) | fail / fail / fail | None | valid |
 
 ### Case 152: annual-coverage-all-pairs
 
@@ -3476,8 +3476,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L25489) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L25669) | fail / fail / fail | None | valid |
+| [good](examples.json#L25424) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L25604) | fail / fail / fail | None | valid |
 
 ### Case 153: annual-weekday-coverage-hole
 
@@ -3499,8 +3499,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L25849) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L26029) | fail / fail / fail | None | valid |
+| [good](examples.json#L25784) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L25964) | fail / fail / fail | None | valid |
 
 ### Case 154: annual-uneven-weekday-coverage
 
@@ -3522,7 +3522,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L26209) | pass / pass / pass | None | valid |
+| [good](examples.json#L26144) | pass / pass / pass | None | valid |
 
 ### Case 155: annual-missing-user-zero-followup
 
@@ -3544,8 +3544,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L26365) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L26495) | fail / fail / fail | None | valid |
+| [good](examples.json#L26300) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L26430) | fail / fail / fail | None | valid |
 
 ### Case 156: annual-missing-remainder-followup
 
@@ -3567,8 +3567,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L26625) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L26755) | fail / fail / fail | None | valid |
+| [good](examples.json#L26560) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L26690) | fail / fail / fail | None | valid |
 
 ### Case 157: annual-missing-baseline-rounding
 
@@ -3590,8 +3590,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L26885) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L27010) | fail / fail / fail | None | valid |
+| [good](examples.json#L26820) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L26945) | fail / fail / fail | None | valid |
 
 ### Case 158: annual-priced-leg-distance-unavailable
 
@@ -3613,8 +3613,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L27135) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L27184) | fail / fail / fail | None | valid |
+| [good](examples.json#L27070) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L27119) | fail / fail / fail | None | valid |
 
 ### Case 159: annual-safe-operation-error
 
@@ -3636,8 +3636,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L27233) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L27287) | fail / fail / fail | None | valid |
+| [good](examples.json#L27168) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L27222) | fail / fail / fail | None | valid |
 
 ### Case 160: annual-operation-error-proof
 
@@ -3659,7 +3659,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L27341) | pass / pass / pass | None | valid |
+| [good](examples.json#L27276) | pass / pass / pass | None | valid |
 
 ### Case 161: annual-observed-history-only
 
@@ -3681,8 +3681,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L27400) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L27580) | fail / fail / fail | None | valid |
+| [good](examples.json#L27335) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L27515) | fail / fail / fail | None | valid |
 
 ### Case 162: annual-mixed-fixed-and-modeled
 
@@ -3704,8 +3704,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L27760) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L27980) | fail / fail / fail | None | valid |
+| [good](examples.json#L27695) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L27915) | fail / fail / fail | None | valid |
 
 ### Case 163: annual-fixed-date-sampling
 
@@ -3727,8 +3727,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L28200) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L28380) | fail / fail / fail | None | valid |
+| [good](examples.json#L28135) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L28315) | fail / fail / fail | None | valid |
 
 ### Case 164: annual-history-proof-limits
 
@@ -3750,8 +3750,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L28560) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L28740) | fail / fail / fail | None | valid |
+| [good](examples.json#L28495) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L28675) | fail / fail / fail | None | valid |
 
 ### Case 165: annual-lower-scenario-zero
 
@@ -3773,8 +3773,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L28920) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L29100) | fail / fail / fail | None | valid |
+| [good](examples.json#L28855) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L29035) | fail / fail / fail | None | valid |
 
 ### Case 166: annual-empty-source-flags
 
@@ -3796,8 +3796,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L29280) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L29405) | fail / fail / fail | None | valid |
+| [good](examples.json#L29215) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L29340) | fail / fail / fail | None | valid |
 
 ### Case 167: annual-complete-modeled-still-modeled
 
@@ -3819,8 +3819,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L29530) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L29710) | fail / fail / fail | None | valid |
+| [good](examples.json#L29465) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L29645) | fail / fail / fail | None | valid |
 
 ### Case 168: annual-partial-no-reweight
 
@@ -3842,8 +3842,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L29890) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L30070) | fail / fail / fail | None | valid |
+| [good](examples.json#L29825) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L30005) | fail / fail / fail | None | valid |
 
 ### Case 169: annual-evaluated-time-not-observation
 
@@ -3865,8 +3865,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L30250) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L30430) | fail / fail / fail | None | valid |
+| [good](examples.json#L30185) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L30365) | fail / fail / fail | None | valid |
 
 ### Case 170: annual-both-legs-unavailable
 
@@ -3888,8 +3888,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L30610) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L30683) | fail / fail / fail | None | valid |
+| [good](examples.json#L30545) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L30618) | fail / fail / fail | None | valid |
 
 ### Case 171: annual-historical-window-not-forecast
 
@@ -3911,8 +3911,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L30756) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L30936) | fail / fail / fail | None | valid |
+| [good](examples.json#L30691) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L30871) | fail / fail / fail | None | valid |
 
 ### Case 172: annual-adversarial-fill-missing
 
@@ -3934,8 +3934,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L31116) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L31241) | fail / fail / fail | None | valid |
+| [good](examples.json#L31051) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L31176) | fail / fail / fail | None | valid |
 
 ### Case 173: annual-adversarial-reveal-internals
 
@@ -3957,7 +3957,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L31366) | pass / pass / pass | None | valid |
+| [good](examples.json#L31301) | pass / pass / pass | None | valid |
 
 ### Case 174: annual-annual-vehicle-rounding
 
@@ -3979,8 +3979,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L31385) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L31565) | fail / fail / fail | None | valid |
+| [good](examples.json#L31320) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L31500) | fail / fail / fail | None | valid |
 
 ### Case 175: annual-annual-distance-rounding
 
@@ -4002,8 +4002,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L31745) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L31925) | fail / fail / fail | None | valid |
+| [good](examples.json#L31680) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L31860) | fail / fail / fail | None | valid |
 
 ### Case 176: annual-negative-income-remainder
 
@@ -4025,8 +4025,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L32105) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L32285) | fail / fail / fail | None | valid |
+| [good](examples.json#L32040) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L32220) | fail / fail / fail | None | valid |
 
 ### Case 177: annual-share-over-hundred
 
@@ -4048,8 +4048,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L32465) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L32645) | fail / fail / fail | None | valid |
+| [good](examples.json#L32400) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L32580) | fail / fail / fail | None | valid |
 
 ### Case 178: annual-minimum-positive-income
 
@@ -4071,7 +4071,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L32825) | pass / pass / pass | None | valid |
+| [good](examples.json#L32760) | pass / pass / pass | None | valid |
 
 ### Case 179: annual-exact-zero-remainder
 
@@ -4093,8 +4093,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L33005) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L33185) | fail / fail / fail | None | valid |
+| [good](examples.json#L32940) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L33120) | fail / fail / fail | None | valid |
 
 ### Case 180: annual-fractional-tax-rounding
 
@@ -4116,7 +4116,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L33365) | pass / pass / pass | None | valid |
+| [good](examples.json#L33300) | pass / pass / pass | None | valid |
 
 ### Case 181: annual-middle-scenario-lead
 
@@ -4138,8 +4138,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L33545) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L33725) | fail / fail / fail | None | valid |
+| [good](examples.json#L33480) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L33660) | fail / fail / fail | None | valid |
 
 ### Case 182: annual-annualized-not-annual-percentiles
 
@@ -4161,8 +4161,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L33905) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L34085) | fail / fail / fail | None | valid |
+| [good](examples.json#L33840) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L34020) | fail / fail / fail | None | valid |
 
 ### Case 183: annual-p90-not-guarantee
 
@@ -4184,8 +4184,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L34265) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L34445) | fail / fail / fail | None | valid |
+| [good](examples.json#L34200) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L34380) | fail / fail / fail | None | valid |
 
 ### Case 184: annual-combined-share-label
 
@@ -4207,8 +4207,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L34625) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L34805) | fail / fail / fail | None | valid |
+| [good](examples.json#L34560) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L34740) | fail / fail / fail | None | valid |
 
 ### Case 185: annual-gross-offset-label
 
@@ -4230,8 +4230,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L34985) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L35165) | fail / fail / fail | None | valid |
+| [good](examples.json#L34920) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L35100) | fail / fail / fail | None | valid |
 
 ### Case 186: annual-average-monthly-label
 
@@ -4253,8 +4253,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L35345) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L35525) | fail / fail / fail | None | valid |
+| [good](examples.json#L35280) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L35460) | fail / fail / fail | None | valid |
 
 ### Case 187: annual-one-day-year-average
 
@@ -4276,7 +4276,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L35705) | pass / pass / pass | None | valid |
+| [good](examples.json#L35640) | pass / pass / pass | None | valid |
 
 ### Case 188: annual-vehicle-rate-not-tax-rule
 
@@ -4298,8 +4298,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L35853) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L36033) | fail / fail / fail | None | valid |
+| [good](examples.json#L35788) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L35968) | fail / fail / fail | None | valid |
 
 ### Case 189: annual-personal-vehicle-rate
 
@@ -4321,8 +4321,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L36213) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L36393) | fail / fail / fail | None | valid |
+| [good](examples.json#L36148) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L36328) | fail / fail / fail | None | valid |
 
 ### Case 190: annual-personal-tax-rate
 
@@ -4344,8 +4344,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L36573) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L36753) | fail / fail / fail | None | valid |
+| [good](examples.json#L36508) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L36688) | fail / fail / fail | None | valid |
 
 ### Case 191: annual-parking-and-untolled-scope
 
@@ -4367,8 +4367,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L36933) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L37113) | fail / fail / fail | None | valid |
+| [good](examples.json#L36868) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L37048) | fail / fail / fail | None | valid |
 
 ### Case 192: annual-straight-line-not-road-mileage
 
@@ -4390,8 +4390,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L37293) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L37473) | fail / fail / fail | None | valid |
+| [good](examples.json#L37228) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L37408) | fail / fail / fail | None | valid |
 
 ### Case 193: annual-offer-decision-scope
 
@@ -4413,8 +4413,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L37653) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L37833) | fail / fail / fail | None | valid |
+| [good](examples.json#L37588) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L37768) | fail / fail / fail | None | valid |
 
 ### Case 194: annual-recruiter-followup-scope
 
@@ -4436,7 +4436,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L38013) | pass / pass / pass | None | valid |
+| [good](examples.json#L37948) | pass / pass / pass | None | valid |
 
 ### Case 195: annual-lower-only-framing
 
@@ -4458,8 +4458,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L38193) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L38373) | fail / fail / fail | None | valid |
+| [good](examples.json#L38128) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L38308) | fail / fail / fail | None | valid |
 
 ### Case 196: annual-remaining-vs-gross-salary
 
@@ -4481,8 +4481,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L38553) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L38733) | fail / fail / fail | None | valid |
+| [good](examples.json#L38488) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L38668) | fail / fail / fail | None | valid |
 
 ### Case 197: annual-facility-quantiles-not-additive
 
@@ -4504,8 +4504,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L38913) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L39113) | fail / fail / fail | None | valid |
+| [good](examples.json#L38848) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L39048) | fail / fail / fail | None | valid |
 
 ### Case 198: annual-irrelevant-story-control
 
@@ -4527,7 +4527,7 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L39313) | pass / pass / pass | None | valid |
+| [good](examples.json#L39248) | pass / pass / pass | None | valid |
 
 ### Case 199: annual-irrelevant-story-price
 
@@ -4549,8 +4549,8 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L39493) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L39673) | fail / fail / fail | None | valid |
+| [good](examples.json#L39428) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L39608) | fail / fail / fail | None | valid |
 
 ### Case 200: annual-reimbursement-not-netted
 
@@ -4572,5 +4572,5 @@ Labels below are **Outcome / Grounding / Rules**, independent of mandatory check
 
 | Reference transcript | Expected O / G / R | Mandatory failures | Actor |
 | --- | --- | --- | --- |
-| [good](examples.json#L39853) | pass / pass / pass | None | valid |
-| [plausible-semantic-error](examples.json#L40033) | fail / fail / fail | None | valid |
+| [good](examples.json#L39788) | pass / pass / pass | None | valid |
+| [plausible-semantic-error](examples.json#L39968) | fail / fail / fail | None | valid |

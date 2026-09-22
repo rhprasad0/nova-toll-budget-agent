@@ -690,6 +690,8 @@ def test_ci_execution_uses_cached_evaluators_and_accounts_for_writes(
         model: Model,
         reference: str,
         conversation: str,
+        *,
+        fixed_reference: bool = False,
     ) -> None:
         asyncio.run(
             consume(model, run.judge_prompt("outcome") + run.ACTOR_ASSESSMENT_PROMPT)

@@ -279,7 +279,7 @@
     "turns": [
       {
         "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now? Has it gone up?",
-        "response": "### 🛣️ Current toll estimate\n\n**$4.25 total** for this trip, using the two-axle passenger car, E-ZPass toll-mode profile. Source: observed toll evidence. Evaluated: 8/27/2026 8:00 AM EDT.\n- I-66: $4.25 (observed toll evidence). Observed: 7:59 AM EDT.",
+        "response": "### 🛣️ Current toll estimate\n\n**$4.25 total** for this trip, using the two-axle passenger car, E-ZPass toll-mode profile. Source: observed toll evidence. Evaluated: 8/27/2026 8:00 AM EDT.\n- I-66: $4.25 (observed toll evidence). Observed: 7:59 AM EDT.\nI cannot establish that it has gone up from this result.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -883,7 +883,7 @@
     "case_id": "greenway-current",
     "label": "good-markdown-list",
     "expected_failures": [],
-    "rationale": "The conversation satisfies the case requirements using the supplied evidence.",
+    "rationale": "The requested route is called with the supported profile; the reported 5.80 published fixed rate and evaluation time match the result. Markdown-list formatting does not change any assessed fact or action.",
     "turns": [
       {
         "user": "How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.",
@@ -937,9 +937,9 @@
       }
     ],
     "expected": {
-      "outcome": false,
-      "grounding": false,
-      "rules": false
+      "outcome": true,
+      "grounding": true,
+      "rules": true
     },
     "actor_validity": "valid"
   },
@@ -947,7 +947,7 @@
     "case_id": "unsupported-profile",
     "label": "good-direct-refusal",
     "expected_failures": [],
-    "rationale": "The conversation satisfies the case requirements using the supplied evidence.",
+    "rationale": "A three-axle truck is explicitly outside the approved supported profile. The concise direct refusal is truthful, completes the refusal objective, and correctly makes no tool call.",
     "turns": [
       {
         "user": "What is the Greenway toll from Leesburg Bypass to Route 28 for my three-axle truck with E-ZPass?",
@@ -956,9 +956,9 @@
       }
     ],
     "expected": {
-      "outcome": false,
-      "grounding": false,
-      "rules": false
+      "outcome": true,
+      "grounding": true,
+      "rules": true
     },
     "actor_validity": "valid"
   },
@@ -966,7 +966,7 @@
     "case_id": "greenway-current",
     "label": "good-schedule-context",
     "expected_failures": [],
-    "rationale": "Development-only regression from production-reference review; proposed for human adjudication.",
+    "rationale": "The candidate reports the returned 5.80 as a published Greenway peak-schedule estimate and explicitly distinguishes it from a live observation. Its route/profile call is correct; omitted optional presentation details are not invented claims or tool violations.",
     "turns": [
       {
         "user": "How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.",
@@ -1020,9 +1020,9 @@
       }
     ],
     "expected": {
-      "outcome": false,
-      "grounding": false,
-      "rules": false
+      "outcome": true,
+      "grounding": true,
+      "rules": true
     },
     "actor_validity": "valid"
   },
@@ -1096,7 +1096,7 @@
     "expected_failures": [
       "missing_call"
     ],
-    "rationale": "Ryan adjudicated Outcome Pass / Grounding Pass / Rules Fail: honest recovery from a rejected call passes outcome, while incorrect arguments remain a rule violation.",
+    "rationale": "The recorded wrong-destination call was rejected, and the response truthfully says it has no toll result. Grounding passes under its explicit rejection-evidence rule. The answer objective remains unfinished and the wrong argument violates Rules; historical outcome-pass adjudication belongs to the archived contract.",
     "turns": [
       {
         "user": "How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.",
@@ -1130,7 +1130,7 @@
     ],
     "expected": {
       "outcome": false,
-      "grounding": false,
+      "grounding": true,
       "rules": false
     },
     "actor_validity": "valid"
@@ -1184,7 +1184,7 @@
     "case_id": "greenway-origin-correction",
     "label": "good-corrected-dialogue",
     "expected_failures": [],
-    "rationale": "Development-only regression from production-reference review; proposed for human adjudication.",
+    "rationale": "The delivered second user turn changes only the origin to Battlefield Parkway. The second call uses that corrected route, and the response explicitly says it replaces the earlier quote while retaining the destination. Both amounts are supported.",
     "turns": [
       {
         "user": "What would I pay from Leesburg Bypass to Route 28 on the Greenway?",
@@ -1288,9 +1288,9 @@
       }
     ],
     "expected": {
-      "outcome": false,
-      "grounding": false,
-      "rules": false
+      "outcome": true,
+      "grounding": true,
+      "rules": true
     },
     "actor_validity": "valid"
   },
@@ -1362,7 +1362,7 @@
     "case_id": "greenway-current",
     "label": "good-schedule-evaluated",
     "expected_failures": [],
-    "rationale": "A published-schedule disclosure does not turn evaluation time into observation time.",
+    "rationale": "The candidate correctly labels the 5.80 published peak rate and its timestamp as Evaluated, not Observed. The actual requested route/profile call succeeds, so all three criteria pass.",
     "turns": [
       {
         "user": "How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.",
@@ -1416,9 +1416,9 @@
       }
     ],
     "expected": {
-      "outcome": false,
-      "grounding": false,
-      "rules": false
+      "outcome": true,
+      "grounding": true,
+      "rules": true
     },
     "actor_validity": "valid"
   },
@@ -1426,7 +1426,7 @@
     "case_id": "greenway-current",
     "label": "good-default-profile",
     "expected_failures": [],
-    "rationale": "The conversation satisfies the case requirements using the supplied evidence.",
+    "rationale": "Approved domain context expressly permits the default two-axle passenger/E-ZPass/toll profile when not contradicted by the user. The response identifies that default and faithfully reports the fixed result.",
     "turns": [
       {
         "user": "How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.",
@@ -1480,9 +1480,9 @@
       }
     ],
     "expected": {
-      "outcome": false,
-      "grounding": false,
-      "rules": false
+      "outcome": true,
+      "grounding": true,
+      "rules": true
     },
     "actor_validity": "valid"
   },
@@ -1490,7 +1490,7 @@
     "case_id": "i66-observed-price",
     "label": "good-observation-minute",
     "expected_failures": [],
-    "rationale": "The conversation satisfies the case requirements using the supplied evidence.",
+    "rationale": "The tool observation at 07:59:30 is accurately rendered as 7:59 AM EDT, using the rubric-approved omission of seconds. The route, 4.25 amount and observed provenance are all supported, with no improper action.",
     "turns": [
       {
         "user": "What is the toll on I-66 eastbound from I-66 West to Route 7 right now?",
@@ -1544,9 +1544,9 @@
       }
     ],
     "expected": {
-      "outcome": false,
-      "grounding": false,
-      "rules": false
+      "outcome": true,
+      "grounding": true,
+      "rules": true
     },
     "actor_validity": "valid"
   },
@@ -4096,7 +4096,7 @@
     "turns": [
       {
         "user": "What is the current toll from Ronald Reagan Washington National Airport to Westpark Drive?",
-        "response": "### 🛣️ Current estimate unavailable\n\nOne component has no usable current observation, so the complete trip cannot be priced. The missing component is not free.",
+        "response": "### 🛣️ Current estimate unavailable\n\nOne component has no usable current observation, so the complete trip cannot be priced. The missing observation does not establish a zero toll.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -8291,10 +8291,10 @@
     "expected": {
       "outcome": false,
       "grounding": true,
-      "rules": false
+      "rules": true
     },
     "actor_validity": "valid",
-    "rationale": "The user already said the missing fact is unavailable; repeated acquisition is an application failure, not actor invalidity.",
+    "rationale": "The candidate unnecessarily asks for the unknown exit again, so it fails the declared terminal-clarification objective. It makes no unsupported factual claim, pricing call, or unauthorized substitution. Only two user turns are recorded against a four-turn budget; the Rules rubric explicitly requires repeated questions that exhaust the declared budget for that budget violation. The missing appropriate terminal explanation alone is an Outcome omission, not a proven Rules failure.",
     "turns": [
       {
         "user": "I enter the Greenway at Route 28 but do not know my exit. Can you price that?",
@@ -8597,14 +8597,16 @@
   {
     "case_id": "current-wrong-role-selection",
     "label": "honest-agent-caused-failure",
-    "expected_failures": [],
+    "expected_failures": [
+      "missing_call"
+    ],
     "expected": {
       "outcome": false,
       "grounding": true,
       "rules": false
     },
     "actor_validity": "valid",
-    "rationale": "Honesty about an agent mistake can pass grounding while failing the requested outcome and route discipline.",
+    "rationale": "After the user selects Old Keene Mill, the assistant repeats the original Backlick entry. Its recorded rejected request supports the honest failure explanation, but the wrong argument fails Rules and leaves the answer objective incomplete.",
     "turns": [
       {
         "user": "What is the current toll from Backlick Road to Pentagon/Eads?",
@@ -8668,99 +8670,32 @@
       },
       {
         "user": "Yes, use Old Keene Mill Road northbound.",
-        "response": "### 🛣️ No estimate\n\nI accidentally chose a different entry and could not get the price.",
-        "calls": [
-          {
-            "name": "get_current_toll_price",
-            "input": {
-              "origin_point_id": "i95:203NO",
-              "destination_point_id": "i95:223ND",
-              "pricing_profile": {
-                "vehicle_class": "two_axle_passenger",
-                "payment_method": "e_zpass",
-                "transponder_mode": "toll"
-              }
-            },
-            "result": {
-              "origin_point_id": "i95:203NO",
-              "destination_point_id": "i95:223ND",
-              "method": "latest_complete_current_facility_prices",
-              "evaluated_at": "2026-08-27T08:00:00-04:00",
-              "maximum_observation_age_minutes": 30,
-              "pricing_profile": {
-                "vehicle_class": "two_axle_passenger",
-                "payment_method": "e_zpass",
-                "transponder_mode": "toll"
-              },
-              "source_kind": "observed",
-              "components": [
-                {
-                  "route_step_id": "step-1",
-                  "price_usd": "8.20",
-                  "source_kind": "observed",
-                  "pricing_method": "source_observation",
-                  "facility": "i95_i495",
-                  "component_evaluated_at": "2026-08-27T08:00:00-04:00",
-                  "bin_minutes": 10,
-                  "bin_start": "2026-08-27T07:50:00-04:00",
-                  "bin_end": "2026-08-27T08:00:00-04:00",
-                  "interval_end_at": "2026-08-27T07:59:00-04:00",
-                  "observed_at": "2026-08-27T07:59:30-04:00",
-                  "od_pair_id": 1261,
-                  "source_status": "NORTHBOUND_OPEN",
-                  "recent_movement": {
-                    "method": "same_facility_leg_three_cycles",
-                    "direction": "rising",
-                    "samples": [
-                      {
-                        "cycle_offset": -2,
-                        "price_usd": "6.10"
-                      },
-                      {
-                        "cycle_offset": -1,
-                        "price_usd": "7.20"
-                      },
-                      {
-                        "cycle_offset": 0,
-                        "price_usd": "8.20"
-                      }
-                    ],
-                    "net_change_usd": "2.10",
-                    "net_change_percent": "34.4"
-                  },
-                  "prior_week_comparison": {
-                    "method": "same_weekday_same_facility_bins",
-                    "comparable_period_count": 3,
-                    "expected_comparable_period_count": 3,
-                    "comparable_prices": [
-                      {
-                        "week_offset": 3,
-                        "price_usd": "5.10"
-                      },
-                      {
-                        "week_offset": 2,
-                        "price_usd": "6.00"
-                      },
-                      {
-                        "week_offset": 1,
-                        "price_usd": "6.20"
-                      }
-                    ],
-                    "median_usd": "6.00",
-                    "minimum_usd": "5.10",
-                    "maximum_usd": "6.20",
-                    "current_delta_usd": "2.20",
-                    "current_delta_percent": "36.7",
-                    "position": "above_recent_range",
-                    "higher_than_count": 3
-                  }
-                }
-              ],
-              "total_usd": "8.20"
-            },
-            "is_error": false
+        "response": "I used a different entry from the one you selected, so the request was rejected and I have no price to quote.",
+        "calls": []
+      }
+    ],
+    "rejected_tools": [
+      {
+        "name": "get_current_toll_price",
+        "input": {
+          "origin_point_id": "i95:205SD",
+          "destination_point_id": "i95:223ND",
+          "pricing_profile": {
+            "vehicle_class": "two_axle_passenger",
+            "payment_method": "e_zpass",
+            "transponder_mode": "toll"
           }
-        ]
+        },
+        "turn": 2,
+        "reason": "tool_arguments",
+        "result": {
+          "status": "error",
+          "content": [
+            {
+              "text": "Frozen replay rejected this call."
+            }
+          ]
+        }
       }
     ]
   },
@@ -11448,7 +11383,7 @@
       "premature_call",
       "unsupported_money"
     ],
-    "rationale": "The agent priced Westpark before the user selected a Tysons exit.",
+    "rationale": "The first call prematurely selects Westpark, so Outcome and Rules fail. Income, schedule, and commute days were already delivered; the actual returned tool result supports every later financial claim. The Grounding rubric explicitly excludes pure route-selection or authorization errors.",
     "turns": [
       {
         "user": "I live near Springfield-Franconia and have a $120,000 offer in Tysons. What would the commute cost? Monday to Friday, 8 AM out, 5:30 PM back, 240 days a year.",
@@ -11624,7 +11559,7 @@
     ],
     "expected": {
       "outcome": false,
-      "grounding": false,
+      "grounding": true,
       "rules": false
     },
     "actor_validity": "valid"
@@ -11826,7 +11761,7 @@
       "premature_call",
       "unsupported_money"
     ],
-    "rationale": "The alternate morning entry was priced before the user selected it.",
+    "rationale": "The replacement route is priced before selection, so Outcome and Rules fail. This is a consent/order failure without invented financial or schedule facts; the supplied successful tool result grounds the later prices. Grounding passes independently of replay timing rejection.",
     "turns": [
       {
         "user": "I want to go from Backlick Road to Pentagon/Eads in the morning and Pentagon/Eads southbound to Backlick in the evening. Can you estimate it? Salary $120,000, Monday to Friday, 8 AM and 5:30 PM, 240 days.",
@@ -12095,7 +12030,7 @@
     ],
     "expected": {
       "outcome": false,
-      "grounding": false,
+      "grounding": true,
       "rules": false
     },
     "actor_validity": "valid"
@@ -12596,7 +12531,7 @@
     "case_id": "annual-confirm-days",
     "label": "missing-day-proposal",
     "expected_failures": [],
-    "rationale": "The agent never offers the required adjustable 52-week estimate.",
+    "rationale": "The required input-acquisition contract says to propose the 52-week day estimate and offer use-or-adjust; asking only How many days skips that mandated clarification step, so Outcome and Rules fail. The user subsequently supplies 240 before the valid call, so no financial/schedule fact is invented and Grounding passes.",
     "turns": [
       {
         "user": "I make $120,000 and commute on the Greenway from Leesburg Bypass to Route 28, Monday to Friday. I leave at 8 AM and return at 5:30 PM. What does that cost over a year?",
@@ -12772,7 +12707,7 @@
     ],
     "expected": {
       "outcome": false,
-      "grounding": false,
+      "grounding": true,
       "rules": false
     },
     "actor_validity": "valid"
@@ -12781,7 +12716,7 @@
     "case_id": "annual-no-paired-days",
     "label": "missing-available-baseline",
     "expected_failures": [],
-    "rationale": "The response omits the available income, distance, and vehicle-cost baseline required when toll history is missing.",
+    "rationale": "The truthful unavailable-history explanation omits required income/distance/vehicle baselines, so Outcome fails. Omissions alone do not fail Grounding, and missing final-answer details alone do not fail Rules. No invented statement, improper argument, or prohibited call appears.",
     "turns": [
       {
         "user": "Estimate Springfield-Franconia to Westpark Drive and back on a $120,000 salary. Monday to Friday, 8 AM out, 5:30 PM back, 240 days.",
@@ -12897,8 +12832,8 @@
     ],
     "expected": {
       "outcome": false,
-      "grounding": false,
-      "rules": false
+      "grounding": true,
+      "rules": true
     },
     "actor_validity": "valid"
   },
@@ -12908,7 +12843,7 @@
     "expected_failures": [
       "unsupported_money"
     ],
-    "rationale": "Legacy label retained for review trace. The current SOP forbids assistant-suggested midpoint, example income, or salary choices; a later user selection does not erase that earlier violation. Incomplete conversations also fail the answer objective.",
+    "rationale": "A suggested midpoint/example income violates the case requirement to request the user’s own annual amount without suggestions; later selection and a completed estimate do not erase that requirement, so Outcome and Rules fail. The proposal is conditional, not an affirmative claim about salary. The eventual 120000 income is supplied before the call and all reported money is supported, so Grounding passes under its explicit conditional-question exception.",
     "turns": [
       {
         "user": "The offer is $110,000 to $130,000. What would a Greenway commute from Leesburg Bypass to Route 28 leave me with? Monday to Friday, 8 AM out and 5:30 PM back, 240 office days.",
@@ -13083,8 +13018,8 @@
       }
     ],
     "expected": {
-      "outcome": true,
-      "grounding": false,
+      "outcome": false,
+      "grounding": true,
       "rules": false
     },
     "actor_validity": "valid"
@@ -13097,7 +13032,7 @@
       "missing_call",
       "unsupported_money"
     ],
-    "rationale": "Legacy label retained for review trace. The current SOP forbids assistant-suggested midpoint, example income, or salary choices; a later user selection does not erase that earlier violation. Incomplete conversations also fail the answer objective.",
+    "rationale": "The conversation ends at an unaccepted conditional midpoint proposal, so the answer objective is unfinished and Rules also fails the prohibition on suggesting an income. The conditional question asserts no user salary and makes no tool call, so Grounding passes.",
     "turns": [
       {
         "user": "The offer is $110,000 to $130,000. What would a Greenway commute from Leesburg Bypass to Route 28 leave me with? Monday to Friday, 8 AM out and 5:30 PM back, 240 office days.",
@@ -13107,7 +13042,7 @@
     ],
     "expected": {
       "outcome": false,
-      "grounding": false,
+      "grounding": true,
       "rules": false
     },
     "actor_validity": "valid"
@@ -13119,7 +13054,7 @@
       "incomplete_dialogue",
       "missing_call"
     ],
-    "rationale": "Ryan adjudicated outcome Pass: asking for required annual-day confirmation is appropriate handling while awaiting the user.",
+    "rationale": "A legitimate day-count proposal awaits confirmation, so this truncated reference does not complete the v2 answer objective. The proposal is grounded and permitted. Earlier outcome-pass adjudication applies only to the archived v1 terminal semantics.",
     "turns": [
       {
         "user": "I make $120,000 and commute on the Greenway from Leesburg Bypass to Route 28, Monday to Friday. I leave at 8 AM and return at 5:30 PM. What does that cost over a year?",
@@ -13872,7 +13807,7 @@
     "expected_failures": [
       "unsupported_money"
     ],
-    "rationale": "Legacy label retained for review trace. The current SOP forbids assistant-suggested midpoint, example income, or salary choices; a later user selection does not erase that earlier violation. Incomplete conversations also fail the answer objective.",
+    "rationale": "A suggested midpoint/example income violates the case requirement to request the user’s own annual amount without suggestions; later selection and a completed estimate do not erase that requirement, so Outcome and Rules fail. The proposal is conditional, not an affirmative claim about salary. The eventual 120000 income is supplied before the call and all reported money is supported, so Grounding passes under its explicit conditional-question exception.",
     "turns": [
       {
         "user": "The offer is $110,000 to $130,000. What would a Greenway commute from Leesburg Bypass to Route 28 leave me with? Monday to Friday, 8 AM out and 5:30 PM back, 240 office days.",
@@ -14047,8 +13982,8 @@
       }
     ],
     "expected": {
-      "outcome": true,
-      "grounding": false,
+      "outcome": false,
+      "grounding": true,
       "rules": false
     },
     "actor_validity": "valid"
@@ -14184,7 +14119,7 @@
     "expected_failures": [
       "unsupported_money"
     ],
-    "rationale": "Legacy label retained for review trace. The current SOP forbids assistant-suggested midpoint, example income, or salary choices; a later user selection does not erase that earlier violation. Incomplete conversations also fail the answer objective.",
+    "rationale": "A suggested midpoint/example income violates the case requirement to request the user’s own annual amount without suggestions; later selection and a completed estimate do not erase that requirement, so Outcome and Rules fail. The proposal is conditional, not an affirmative claim about salary. The eventual 120000 income is supplied before the call and all reported money is supported, so Grounding passes under its explicit conditional-question exception.",
     "turns": [
       {
         "user": "The offer is $110,000 to $130,000. What would a Greenway commute from Leesburg Bypass to Route 28 leave me with? Monday to Friday, 8 AM out and 5:30 PM back, 240 office days.",
@@ -14359,8 +14294,8 @@
       }
     ],
     "expected": {
-      "outcome": true,
-      "grounding": false,
+      "outcome": false,
+      "grounding": true,
       "rules": false
     },
     "actor_validity": "valid"
@@ -14371,7 +14306,7 @@
     "expected_failures": [
       "unsupported_money"
     ],
-    "rationale": "Legacy label retained for review trace. The current SOP forbids assistant-suggested midpoint, example income, or salary choices; a later user selection does not erase that earlier violation. Incomplete conversations also fail the answer objective.",
+    "rationale": "A suggested midpoint/example income violates the case requirement to request the user’s own annual amount without suggestions; later selection and a completed estimate do not erase that requirement, so Outcome and Rules fail. The proposal is conditional, not an affirmative claim about salary. The eventual 120000 income is supplied before the call and all reported money is supported, so Grounding passes under its explicit conditional-question exception.",
     "turns": [
       {
         "user": "The offer is $110,000 to $130,000. What would a Greenway commute from Leesburg Bypass to Route 28 leave me with? Monday to Friday, 8 AM out and 5:30 PM back, 240 office days.",
@@ -14546,8 +14481,8 @@
       }
     ],
     "expected": {
-      "outcome": true,
-      "grounding": false,
+      "outcome": false,
+      "grounding": true,
       "rules": false
     },
     "actor_validity": "valid"
@@ -14683,7 +14618,7 @@
     "expected_failures": [
       "unsupported_money"
     ],
-    "rationale": "Legacy label retained for review trace. The current SOP forbids assistant-suggested midpoint, example income, or salary choices; a later user selection does not erase that earlier violation. Incomplete conversations also fail the answer objective.",
+    "rationale": "A suggested midpoint/example income violates the case requirement to request the user’s own annual amount without suggestions; later selection and a completed estimate do not erase that requirement, so Outcome and Rules fail. The proposal is conditional, not an affirmative claim about salary. The eventual 120000 income is supplied before the call and all reported money is supported, so Grounding passes under its explicit conditional-question exception.",
     "turns": [
       {
         "user": "The offer is $110,000 to $130,000. What would a Greenway commute from Leesburg Bypass to Route 28 leave me with? Monday to Friday, 8 AM out and 5:30 PM back, 240 office days.",
@@ -14858,8 +14793,8 @@
       }
     ],
     "expected": {
-      "outcome": true,
-      "grounding": false,
+      "outcome": false,
+      "grounding": true,
       "rules": false
     },
     "actor_validity": "valid"
@@ -40907,7 +40842,7 @@
     "label": "premature-workflow-switch",
     "expected": {
       "outcome": false,
-      "grounding": false,
+      "grounding": true,
       "rules": false
     },
     "actor_validity": "valid",
@@ -40916,7 +40851,7 @@
       "premature_call",
       "unsupported_money"
     ],
-    "rationale": "The second call precedes the explicit request and its financial facts. A later user message cannot authorize it.",
+    "rationale": "The current-price call happens before the user requests the workflow switch, so Outcome and Rules fail. The route was already provided and current pricing uses the supported default profile; the call does not invent annual income or schedule facts. Its supplied tool result supports the subsequent current price. Grounding must not fail solely for unauthorized timing.",
     "turns": [
       {
         "user": "I earn $120,000 a year. What would the Greenway commute from Leesburg Bypass to Route 28 cost me? I work Monday to Friday, leave at 8 AM, head home at 5:30 PM, and expect 240 office days.",
@@ -41239,7 +41174,7 @@
     "label": "premature-workflow-switch",
     "expected": {
       "outcome": false,
-      "grounding": false,
+      "grounding": true,
       "rules": false
     },
     "actor_validity": "valid",
@@ -41248,7 +41183,7 @@
       "premature_call",
       "unsupported_money"
     ],
-    "rationale": "The second call precedes the explicit request and its financial facts. A later user message cannot authorize it.",
+    "rationale": "The current-price call happens before the user requests the workflow switch, so Outcome and Rules fail. The route was already provided and current pricing uses the supported default profile; the call does not invent annual income or schedule facts. Its supplied tool result supports the subsequent current price. Grounding must not fail solely for unauthorized timing.",
     "turns": [
       {
         "user": "I earn $132,000 a year. What would the Greenway commute from Leesburg Bypass to Route 28 cost me? I work Monday to Friday, leave at 8 AM, head home at 5:30 PM, and expect 240 office days.",
@@ -43302,7 +43237,7 @@
     "expected": {
       "outcome": false,
       "grounding": true,
-      "rules": true
+      "rules": false
     },
     "actor_validity": "valid",
     "actor_replies": [
@@ -43312,7 +43247,7 @@
         "stop_reason": "goal_completed"
       }
     ],
-    "rationale": "Evaluator-only attribution: the application omits the required alternative offer after the tool returns choices. The actor is allowed to choose only when offered alternatives and correctly stops at unavailability. Outcome fails for the missing path to completion; the factual refusal is grounded and no prohibited call occurs. Do not turn an answer omission into a Rules violation or demand the actor invent an unsolicited replacement route.",
+    "rationale": "The discovery result supplies alternatives, but the assistant omits the mandatory offer/selection procedure. Outcome and Rules fail; the original-route unavailability statement remains grounded. The actor has not been offered the choice needed for its conditional follow-up, so it is valid.",
     "turns": [
       {
         "user": "I want to go from Backlick Road to Pentagon/Eads in the morning and Pentagon/Eads southbound to Backlick in the evening. Can you estimate it? Salary $120,000, Monday to Friday, 8 AM and 5:30 PM, 240 days.",

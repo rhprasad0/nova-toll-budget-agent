@@ -1,6 +1,6 @@
 # Running the frozen golden corpus
 
-The active corpus and harness are **2.0.0**: **200 cases**, split into **160
+The active corpus and harness are **2.0.1**: **200 cases**, split into **160
 development and 40 reserved cases**, with three fresh trials per case. A complete
 application run has **600 conversations**. Reserved cases are public and
 exposed to their authors; they are excluded from calibration, not claimed to be
@@ -17,7 +17,8 @@ The corpus contains **326 reference examples**. Calibration selects **274
 development examples**: 272 have explicit Outcome, Grounding, and Rules labels
 (816 application labels), and two deliberately invalid actor examples have only
 an actor-validity label. The 52 reserved examples are excluded. Example names do
-not determine verdicts. Reports preserve disagreements and separate criterion
+not determine verdicts. Fixed-reference mode judges the supplied user turns and any
+explicit stop records; it does not invent simulator stops for authored transcripts. Reports preserve disagreements and separate criterion
 confusion matrices from actor-validity confusion and measurement failures.
 
 The current local authorization covers **two calibration passes within a combined
@@ -116,7 +117,7 @@ and short judge explanations; it excludes private reasoning, credentials,
 headers, and provider exception messages. Keep initial artifacts under ignored
 `eval/private/` and inspect them before committing sanitized evidence.
 
-Pass@1 uses scored trials as its denominator. For 2.0.0, pass³ uses cases with
+Pass@1 uses scored trials as its denominator. For 2.0.1, pass³ uses cases with
 three scored trials; incomplete cases and inconclusive trials remain explicit,
 and a partial denominator cannot satisfy full-run completion. Family reports show
 expected, scored, successful, and inconclusive counts. Separate subsets cover
@@ -137,7 +138,7 @@ Zero observed violations does not establish zero underlying risk.
 Human review should inspect corrections, consent withdrawal, alternative
 selection, mixed workflows, partial evidence, financial extremes, actor validity,
 and disagreements. Do not relabel or replace the original attempts. Historical
-24-case reports and approvals remain historical and do not approve 2.0.0.
+24-case reports and approvals remain historical and do not approve 2.0.1.
 
 A local report cannot qualify a release or promote a baseline. The
 [protected golden workflow](GOLDEN_RELEASE.md) authenticates release provenance

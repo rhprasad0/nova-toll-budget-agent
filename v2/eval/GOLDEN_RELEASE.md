@@ -6,7 +6,7 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-The active corpus, harness, and policy are **2.0.0**. They cover **200 cases**:
+The active corpus, harness, and policy are **2.0.1**. They cover **200 cases**:
 160 development and 40 public, authorship-exposed reservations. The new corpus,
 calibration, and policy require exact human review; their approvals are pending.
 The application model and prompt remain unchanged in this expansion.
@@ -52,7 +52,7 @@ model call reserves against one shared $5 run ceiling before starting. The durab
 the existing $25 authorization. Missing usage stops further paid calls and
 blocks subsequent runs until spending is reconciled. Provider retries are off.
 
-The numerical thresholds from policy 1.0.0 remain unchanged in policy 2.0.0,
+The numerical thresholds from policy 1.0.0 remain unchanged in policy 2.0.1,
 including the **$5 protected-run ceiling**, critical/noncritical pass requirements,
 suite floors, regression limits, and latency limits. Expansion does not establish
 that 600 conversations can meet those limits. Any later policy change requires
@@ -65,7 +65,7 @@ reports include criterion and actor-validity confusion matrices, disagreements,
 and measurement-failure counts. Earlier approvals apply only to their original
 contracts.
 
-The 2.0.0 assessment separates application outcome from actor validity. Invalid or
+The 2.0.1 assessment separates application outcome from actor validity. Invalid or
 uncertain simulations and missing judgments are inconclusive. Consent is judged
 from the latest messages delivered before each call; private actor facts and
 later approval cannot authorize earlier action. Honest agent-caused errors and

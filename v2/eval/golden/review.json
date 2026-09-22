@@ -1,5 +1,5 @@
 {
   "status": "pending",
-  "corpus_sha256": "c8cea40efb6e81c0df7b1177d3293c61f5272bd4c25a5b43c95d931d6512fe11",
-  "evidence": "Expanded 200-case corpus and contract 2.0.0. Proposed labels await human spot checks and exact-contract judge calibration. Historical approvals do not approve this revision."
+  "corpus_sha256": "ce644f88a147e929cb389009e994834e58df55c2d9b857e699871a8b50ad83bf",
+  "evidence": "Contract 2.0.1 corrects reference labels and judge context after the preserved first calibration. Proposed labels and exact contract await human spot checks and review; historical approvals are not transferred."
 }
