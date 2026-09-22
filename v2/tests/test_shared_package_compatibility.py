@@ -19,10 +19,8 @@ ROOT = Path(__file__).resolve().parents[2]
 REVIEW = json.loads((ROOT / "v2/scripts/shared-package-compatibility.json").read_text())
 
 
-def retained(path: str) -> bytes:
-    return subprocess.check_output(
-        ["git", "show", f"{REVIEW['baseline']}:{path}"], cwd=ROOT
-    )
+def retained(path: str, baseline: str) -> bytes:
+    return subprocess.check_output(["git", "show", f"{baseline}:{path}"], cwd=ROOT)
 
 
 def load(path: Path, name: str) -> ModuleType:
@@ -34,15 +32,18 @@ def load(path: Path, name: str) -> ModuleType:
     return module
 
 
+@pytest.mark.parametrize(
+    "baseline", [REVIEW["baseline"], REVIEW["development_baseline"]]
+)
 def test_mixed_loader_publisher_timed_and_cost_contracts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, baseline: str
 ) -> None:
     monkeypatch.setattr(sys, "path", [str(ROOT / "v2/lambdas/loader"), *sys.path])
     modules: dict[str, list[Any]] = {}
     for name in ("loader", "publisher", "timed_checks"):
         path = f"v2/lambdas/{name}/handler.py"
         old = tmp_path / (name + ".py")
-        old.write_bytes(retained(path))
+        old.write_bytes(retained(path, baseline))
         modules[name] = [
             load(old, "retained_" + name),
             load(ROOT / path, "candidate_" + name),
@@ -50,9 +51,9 @@ def test_mixed_loader_publisher_timed_and_cost_contracts(
     # Costs is independently scheduled, has no loader or database coupling, and
     # its executable source is unchanged in this reviewed transition.
     costs = "v2/lambdas/publisher/costs.py"
-    assert retained(costs) == (ROOT / costs).read_bytes()
+    assert retained(costs, baseline) == (ROOT / costs).read_bytes()
     for name, digest in REVIEW["schemas"].items():
-        assert hashlib.sha256(retained("v2/db/" + name)).hexdigest() == digest
+        assert hashlib.sha256(retained("v2/db/" + name, baseline)).hexdigest() == digest
         assert (
             hashlib.sha256((ROOT / "v2/db" / name).read_bytes()).hexdigest() == digest
         )
@@ -82,12 +83,17 @@ def test_mixed_loader_publisher_timed_and_cost_contracts(
                 ) == (window, schedule)
 
 
+@pytest.mark.parametrize("environment", ["development", "production"])
 def test_compatibility_gate_binds_the_serving_baseline_and_built_packages(
     tmp_path: Path,
+    environment: str,
 ) -> None:
+    baseline = REVIEW[
+        "development_baseline" if environment == "development" else "baseline"
+    ]
     expected = shared_packages.evidence(
-        "development",
-        shared_packages.ACCOUNTS["development"],
+        environment,
+        shared_packages.ACCOUNTS[environment],
         "a" * 40,
         REVIEW["packages"],
     )
@@ -96,14 +102,14 @@ def test_compatibility_gate_binds_the_serving_baseline_and_built_packages(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes((ROOT / "v2/db" / name).read_bytes())
     assert (
-        shared_packages.compatibility(tmp_path, expected, REVIEW["baseline"])["status"]
+        shared_packages.compatibility(tmp_path, expected, baseline)["status"]
         == "reviewed"
     )
     with pytest.raises(ValueError, match="shared_compatibility"):
         shared_packages.compatibility(tmp_path, expected, "b" * 40)
     expected["packages"]["loader.zip"]["sha256"] = "f" * 64
     with pytest.raises(ValueError, match="shared_compatibility"):
-        shared_packages.compatibility(tmp_path, expected, REVIEW["baseline"])
+        shared_packages.compatibility(tmp_path, expected, baseline)
 
 
 def test_committed_shared_packages_match_compatibility_review() -> None:

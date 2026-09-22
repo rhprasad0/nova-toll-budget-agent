@@ -106,5 +106,6 @@
     "kind": "synthetic",
     "source": "get_annual_toll_ballpark.py:_build_ballpark_response; synthetic 20-mile distance and historical samples",
     "note": "Authored offline from the current contract; not a captured production response."
-  }
+  },
+  "synthetic_daily_distance_miles": "20.00"
 }

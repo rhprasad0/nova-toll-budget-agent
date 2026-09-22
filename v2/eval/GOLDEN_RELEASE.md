@@ -6,21 +6,23 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-PR 581 now also includes authorized application prompt corrections for source
-labels, annualized daily scenarios, and user-selected income. The application
-model remains gpt-5.6-luna. Local repetition does not qualify a production release.
+The active corpus, harness, and policy are **2.0.2**. They cover **200 cases**:
+160 development and 40 public, authorship-exposed reservations. The new corpus,
+calibration, and policy require exact human review; their approvals are pending.
+The application model and prompt remain unchanged in this expansion.
 
-The current corpus **1.0.26**, harness **1.2.10**, and policy **1.0.15** await exact
-human approval. The cleanup preserves cases, labels, prompts, and caching behavior
-but changes source fingerprints. Fresh calibration must use this exact contract.
-See the [historical PR #581 review packet](results/golden/CACHING-SUMMARY.md).
-Its local calibration 33 agreed on **179/180** labels; actor checks passed
-**60/60**. Outcome missed a premature alternative selection, while Rules and
-mandatory deterministic checks rejected it. The exact evidence and standing local
-approval are retained privately. Its local application run reached **17/17
-critical pass³ and 72/72 trials**, one of the three requested consecutive successes.
-Protected CI retains its four-worker scored timing policy. Activation remains
-pending approval; local success does not replace protected qualification.
+Two local calibration passes completed within a **combined $25 ceiling**;
+their [raw reports and adjudication proposals](evidence/golden-200/CALIBRATION.md)
+remain pending human review. They measured contracts 2.0.0 and 2.0.1. The final
+2.0.2 label correction and packaged-agent budget attribution fix require fresh
+authorized exact-contract calibration. No protected application execution,
+production qualification, or policy limit increase is authorized by those runs.
+
+Historical 24-case measurements, including the PR #581 packet's 179/180
+calibration agreement, 60/60 actor checks, and 72/72 application trials, retain
+their original identities and semantics. They are historical evidence, not
+measurements of the expanded corpus. See the
+[historical review packet](results/golden/CACHING-SUMMARY.md).
 
 CI uses the same cached actor/judge factory and judge-prefix construction as the
 manual runner, through scripts.golden_release.execute → eval.golden_run.execute.
@@ -46,17 +48,41 @@ the trusted parent runs ActorSimulator, the correctness judges, and frozen tool
 replay. The child receives no AWS or GitHub credentials. The application model
 and prompt remain unchanged.
 
-Each execution includes all 24 cases, including the four held-out cases, with
-three fresh trials and four workers. Every model call reserves against one
-shared $5 run ceiling before starting. The durable ledger also reserves against
+Each execution includes all 200 cases, including the 40 reserved cases, with
+three fresh trials per case: **600 conversations**, using four workers. Every
+model call reserves against one shared $5 run ceiling before starting. The durable ledger also reserves against
 the existing $25 authorization. Missing usage stops further paid calls and
 blocks subsequent runs until spending is reconciled. Provider retries are off.
 
-The original thresholds from policy 1.0.0 are unchanged in policy 1.0.15. The
-active corpus has 60 development calibration examples covering route
-expectations, initial actor facts, monetary proposals/denials, and source
-grading. Earlier approvals apply only to their historical contracts.
-Historical evidence, labels, policy approvals, and the original baseline remain intact.
+The evaluation job has a **90-minute timeout** and requests a **7,200-second
+evaluator session**. The evaluator role alone permits that session length;
+other golden roles retain one hour. The measured capacity estimate is about
+61 minutes before setup and archival, exceeding the previous 45-minute job and
+one-hour credentials. This is execution headroom, not a relaxation of
+the cost or per-trial latency policy. See the
+[timing calculation](evidence/golden-200/CALIBRATION.md#protected-workflow-capacity).
+
+The numerical thresholds from policy 1.0.0 remain unchanged in policy 2.0.2,
+including the **$5 protected-run ceiling**, critical/noncritical pass requirements,
+suite floors, regression limits, and latency limits. Expansion does not establish
+that 600 conversations can meet those limits. Any later policy change requires
+its own review; no limit is silently raised here.
+
+The corpus contains 326 reference examples; calibration selects 274 development
+examples and excludes 52 reserved examples. Application labels are explicit per
+criterion, and invalid actor examples have no application labels. Calibration
+reports include criterion and actor-validity confusion matrices, disagreements,
+and measurement-failure counts. Earlier approvals apply only to their original
+contracts.
+
+The 2.0.x assessment separates application outcome from actor validity. Invalid or
+uncertain simulations and missing judgments are inconclusive. Consent is judged
+from the latest messages delivered before each call; private actor facts and
+later approval cannot authorize earlier action. Honest agent-caused errors and
+unfinished clarifications receive no blanket Outcome exception. Family reports
+retain scored and inconclusive denominators, and uncertainty resamples whole
+scenario groups. Full qualification still requires all 600 valid scored trial
+slots; missing measurements cannot produce a pass.
 
 After machine qualification, inspect the `golden-evidence-RUN-1` artifact:
 `review.html`, `decision.json` (including per-case baseline deltas), and the
@@ -79,17 +105,22 @@ migration controls, exact-plan apply, and canary checks still apply.
 
 ## Activation prerequisites
 
-These are the activation and recovery requirements. Infrastructure, environment
-configuration and initialization are complete; new-contract calibration approval
-and the first qualified production reference are still required. Keep these checks for future
-contract changes and environment recovery.
+These are the activation and recovery requirements. The existing bucket,
+environments and ledger are initialized. This expansion additionally requires
+applying the reviewed development IAM change that permits the evaluator's
+7,200-second session; this PR does not deploy it. New-contract calibration approval
+and the first qualified production reference remain required. Keep these checks
+for future contract changes and environment recovery.
 
 1. Provision `infra/golden_eval.tf` in development account `903859731897`. The
    private bucket is encrypted, versioned, protected against destruction, and
    has no lifecycle expiry. Workflow roles cannot delete evidence. Evaluator,
    reviewer, reader, and publisher have separate write scopes; only the
    evaluator can read the fixed development OpenAI parameter. They have no
-   production role, database permission, or network path to a database.
+   production role, database permission, or network path to a database. Before
+   activating this workflow, apply and verify the evaluator role's
+   `max_session_duration = 7200`; the workflow requests that duration so SSM
+   reads, final spending settlement and evidence archival can finish.
 2. Create `golden-evaluation`, `golden-review`, `golden-read`, and
    `golden-baseline` environments. Each must allow only the `main` branch with
    administrator bypass disabled. Require Ryan's approval on the first two;
@@ -102,8 +133,9 @@ contract changes and environment recovery.
    from `v2/`. Conditional writes retain the original archive, initialize an
    unset production reference, and seed known spending at **$0.87191346**.
    Repeating initialization cannot reset the ledger or replace a baseline.
-4. Calibrate the new contract using the existing runner and approved labels.
-   Approve its evidence and disagreements, update
+4. Calibrate the new contract using the existing runner and explicit reference
+   labels. Review the labels, actor-validity judgments, measurement failures, and
+   disagreements, then approve the exact evidence and update
    `golden/calibration-reference.json`, approve `golden/review.json` against
    the current corpus digest, and approve the active policy selected by scripts/golden_gate.py against
    its exact digest. Those approvals must precede a candidate run. Reconcile any separate

@@ -1,0 +1,55 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "i95:203NO",
+    "destination_point_id": "i95:2249ND",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "status": "invalid_destination",
+    "reason": {
+      "code": "destination_ramp_incompatible",
+      "details": {
+        "point_id": "i95:2249ND",
+        "point_type": "exit",
+        "alternatives": [
+          {
+            "point_id": "i95:224ND",
+            "network_id": "i95",
+            "source_node_id": "224ND",
+            "point_type": "exit",
+            "direction": "NB",
+            "label": "Washington D.C. I-95/I-395 Northbound",
+            "aliases": [
+              "Washington D.C.",
+              "Washington",
+              "District of Columbia"
+            ],
+            "location": {
+              "type": "Point",
+              "coordinates": [
+                -77.039642,
+                38.878016
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "point_ids": [],
+    "connection_ids": [],
+    "connection_types": [],
+    "general_purpose_gaps": [],
+    "i95_evidence": null
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "agent-sops/nova-toll-pricing-assistant.sop.md:Washington correction check; validate_toll_route._IncompatibleRampReason",
+    "note": "Frozen synthetic inputs passed through current_price_domain.build_current_price_result; not production traffic. "
+  }
+}

@@ -344,9 +344,12 @@ def compatibility(
     reviewed = json.loads(
         Path(__file__).with_name("shared-package-compatibility.json").read_text()
     )
-    require(
-        not changing or serving_release == reviewed["baseline"], "shared_compatibility"
+    baseline = (
+        reviewed["development_baseline"]
+        if expected["environment"] == "development"
+        else reviewed["baseline"]
     )
+    require(not changing or serving_release == baseline, "shared_compatibility")
     require(
         reviewed["packages"]
         == {name: row["sha256"] for name, row in expected["packages"].items()},
@@ -360,7 +363,7 @@ def compatibility(
         )
     return {
         "baseline": serving_release,
-        "reviewed_baseline": reviewed["baseline"],
+        "reviewed_baseline": baseline,
         "status": "reviewed" if changing else "unchanged",
     }
 

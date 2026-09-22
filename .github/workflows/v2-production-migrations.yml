@@ -210,7 +210,7 @@ jobs:
         with:
           terraform_wrapper: false
           terraform_version: 1.15.8
-      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         if: inputs.phase == 'prepare-production'
         with:
           role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-deploy
@@ -287,7 +287,7 @@ jobs:
             jq -e 'type == "object" and .chatEnabled == true' "$RUNNER_TEMP/production-api-config.json" >/dev/null
           }
           run_private_stage release-verification "$RUNNER_TEMP/production-api.out" "$RUNNER_TEMP/production-api.err" check_private_api
-      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         if: inputs.phase == 'prepare-production'
         with:
           role-to-assume: arn:aws:iam::920534282028:role/nova-toll-v2-production-migrations
@@ -328,7 +328,7 @@ jobs:
           PRODUCTION_MIGRATION_CANDIDATE: ${{ steps.admission.outputs.candidate }}
           PRODUCTION_MIGRATION_ADMISSION: ${{ inputs.admission }}
         run: bash v2/scripts/run_production_migrations_workflow.sh
-      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         with:
           role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-deploy
           aws-region: us-east-1

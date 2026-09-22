@@ -201,5 +201,6 @@
     "kind": "synthetic",
     "source": "get_annual_toll_ballpark.py:_build_ballpark_response; synthetic 20-mile distance and historical samples",
     "note": "Authored offline from the current contract; not a captured production response. DTR includes the $2 ramp and $4 mainline in each direction (greenway_to_dtr, EB:28:1819, WB:1819:28, dtr_to_greenway); fixed rates checked with price_dtr_leg against db/oracle/data.sql."
-  }
+  },
+  "synthetic_daily_distance_miles": "20.00"
 }
