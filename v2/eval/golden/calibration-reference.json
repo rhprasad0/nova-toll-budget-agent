@@ -1,4 +1,4 @@
 {
   "status": "pending",
-  "notes": "Contract 2.0.3 migrates application, actors, and judges to GPT-6 Luna. Fresh exact-contract calibration and human review are required. Archived GPT-5.6 Luna evidence remains historical and does not approve this contract."
+  "notes": "GPT-6 Luna calibration for contract 2.0.3 completed all 274 development references with no measurement failures. See eval/evidence/gpt-6-luna/CALIBRATION.md for the exact evidence and 14 disagreements requiring human review. No application baseline has run and no approval is implied."
 }
