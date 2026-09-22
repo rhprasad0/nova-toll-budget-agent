@@ -54,6 +54,14 @@ model call reserves against one shared $5 run ceiling before starting. The durab
 the existing $25 authorization. Missing usage stops further paid calls and
 blocks subsequent runs until spending is reconciled. Provider retries are off.
 
+The evaluation job has a **90-minute timeout** and requests a **7,200-second
+evaluator session**. The evaluator role alone permits that session length;
+other golden roles retain one hour. The measured capacity estimate is about
+61 minutes before setup and archival, exceeding the previous 45-minute job and
+one-hour credentials. This is execution headroom, not a relaxation of
+the cost or per-trial latency policy. See the
+[timing calculation](evidence/golden-200/CALIBRATION.md#protected-workflow-capacity).
+
 The numerical thresholds from policy 1.0.0 remain unchanged in policy 2.0.2,
 including the **$5 protected-run ceiling**, critical/noncritical pass requirements,
 suite floors, regression limits, and latency limits. Expansion does not establish
@@ -97,17 +105,22 @@ migration controls, exact-plan apply, and canary checks still apply.
 
 ## Activation prerequisites
 
-These are the activation and recovery requirements. Infrastructure, environment
-configuration and initialization are complete; new-contract calibration approval
-and the first qualified production reference are still required. Keep these checks for future
-contract changes and environment recovery.
+These are the activation and recovery requirements. The existing bucket,
+environments and ledger are initialized. This expansion additionally requires
+applying the reviewed development IAM change that permits the evaluator's
+7,200-second session; this PR does not deploy it. New-contract calibration approval
+and the first qualified production reference remain required. Keep these checks
+for future contract changes and environment recovery.
 
 1. Provision `infra/golden_eval.tf` in development account `903859731897`. The
    private bucket is encrypted, versioned, protected against destruction, and
    has no lifecycle expiry. Workflow roles cannot delete evidence. Evaluator,
    reviewer, reader, and publisher have separate write scopes; only the
    evaluator can read the fixed development OpenAI parameter. They have no
-   production role, database permission, or network path to a database.
+   production role, database permission, or network path to a database. Before
+   activating this workflow, apply and verify the evaluator role's
+   `max_session_duration = 7200`; the workflow requests that duration so SSM
+   reads, final spending settlement and evidence archival can finish.
 2. Create `golden-evaluation`, `golden-review`, `golden-read`, and
    `golden-baseline` environments. Each must allow only the `main` branch with
    administrator bypass disabled. Require Ryan's approval on the first two;

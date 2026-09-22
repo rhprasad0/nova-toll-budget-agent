@@ -46,8 +46,9 @@ resource "aws_s3_bucket_public_access_block" "golden" {
 }
 
 resource "aws_iam_role" "golden" {
-  for_each = local.golden_roles
-  name     = "nova-toll-golden-${each.key}"
+  for_each             = local.golden_roles
+  name                 = "nova-toll-golden-${each.key}"
+  max_session_duration = each.key == "evaluator" ? 7200 : 3600
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{

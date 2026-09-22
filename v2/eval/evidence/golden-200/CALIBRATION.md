@@ -37,6 +37,28 @@ The measured problems include hindsight about facts supplied after a call, misse
 
 The corpus is synthetic and public, the judgments share a model family, and outcome/actor assessment shares a model request. These calibrations do not establish fresh actor reliability, application success, or production quality. Mandatory replay checks catch some mistakes that an individual semantic judge misses, but they do not establish semantic judge accuracy. Neither calibration approval nor a production baseline is promoted.
 
+## Protected workflow capacity
+
+The automatic PR review identified a separate execution-capacity gap. The
+[historical 72-trial report](../golden-360/demo-1/report.json) records 542.636
+agent seconds, 295.385 actor seconds, and 25.783 seconds of unmetered trial
+overhead (summed trial wall time minus all model measurements). Run 2 records
+3,398.629 judge seconds across 274 references. Using those means as a proxy:
+
+`(11.639 agent/actor + 0.358 overhead + 12.404 judge) × 600 / 4 / 60 ≈ 61 minutes`.
+
+This is a planning estimate, not a measured 600-trial application runtime; it
+assumes four busy workers and omits setup and packaged-agent startup. It exceeds
+the previous 45-minute job timeout. The protected job now allows 90 minutes and
+requests a 7,200-second evaluator session, with a matching maximum only on that
+IAM role. Other golden roles retain one hour. The action and IAM otherwise
+default to one hour ([action configuration](https://github.com/aws-actions/configure-aws-credentials#options),
+[IAM session duration](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_update-role-settings.html)).
+Credentials must remain valid for ongoing SSM reads and final S3 spending
+settlement and archival. The reviewed Terraform update must be applied before
+activation; this task did not deploy it. The $5 protected-run ceiling, $25
+cumulative authorization, and per-trial latency thresholds are unchanged.
+
 ## Every run-2 disagreement
 
 | Case / reference | Criterion | Expected → measured | Proposed classification |

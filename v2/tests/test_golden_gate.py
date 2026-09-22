@@ -393,7 +393,21 @@ def test_workflow_gate_precedes_production_credentials_and_is_not_optional() -> 
         assert "920534282028" not in source
         assert "903859731897" in source
         assert "continue-on-error" not in source
+    evaluation = yaml.safe_load(
+        (root / ".github/workflows/v2-golden-evaluation.yml").read_text()
+    )["jobs"]["evaluate"]
+    credentials = next(
+        step["with"]
+        for step in evaluation["steps"]
+        if step.get("uses", "").startswith("aws-actions/configure-aws-credentials@")
+    )
+    assert evaluation["timeout-minutes"] == 90
+    assert credentials["role-duration-seconds"] == 7200
+    assert credentials["role-duration-seconds"] > evaluation["timeout-minutes"] * 60
     infra = (root / "infra/golden_eval.tf").read_text()
+    assert 'max_session_duration = each.key == "evaluator" ? 7200 : 3600' in " ".join(
+        infra.split()
+    )
     assert 'status = "Enabled"' in infra
     assert "prevent_destroy = true" in infra
     assert "s3:DeleteObjectVersion" in infra and 'Effect = "Deny"' in infra

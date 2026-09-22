@@ -23,5 +23,6 @@
       "reason": "The user requested Route 28, but the call prices an unrequested exit. The response also misnames greenway:7:exit:EB as Route 7; the public catalog identifies it as Exit 7 / SR 607 (Loudoun County Parkway). That affirmative false location claim fails Grounding independently of the unauthorized route, which fails Outcome and Rules."
     }
   ],
-  "harness_change": "Packaged-agent model-budget exhaustion is an application failure, consistent with source execution; judge rubrics and model settings remain unchanged from run 2."
+  "harness_change": "Packaged-agent model-budget exhaustion is an application failure, consistent with source execution; judge rubrics and model settings remain unchanged from run 2.",
+  "workflow_capacity_change": "PR review found that 600 trials project beyond the old 45-minute timeout and one-hour evaluator credentials. The protected job timeout is 90 minutes, its session request is 7200 seconds, and only the evaluator IAM role maximum is extended to match. Spending and latency policy limits are unchanged; the IAM update requires deployment before activation and was not applied in this task."
 }
