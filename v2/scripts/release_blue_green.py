@@ -385,13 +385,25 @@ def plan(
     ):
         args.append(f"-var={variable}_package_path=build/{name}.zip")
     terraform(root, *args)
+    document = json.loads(terraform(root, "show", "-json", str(saved)))
     gate.validate_plan(
-        json.loads(terraform(root, "show", "-json", str(saved))),
+        document,
         previous,
         phase,
         saved,
         expected,
     )
+    if phase == "prepare":
+        shared_packages.compatibility(
+            bundle,
+            expected,
+            previous["slots"][previous["active"]]["release_id"],
+            changing=any(
+                item["address"] in shared_packages.RESOURCES
+                and item["change"]["actions"] != ["no-op"]
+                for item in document["resource_changes"]
+            ),
+        )
     return saved
 
 
