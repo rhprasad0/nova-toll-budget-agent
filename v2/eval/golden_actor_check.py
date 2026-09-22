@@ -20,7 +20,7 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
     case = next(c for c in golden.load_cases() if c.id == example.case_id)
     turns = list(example.turns)
     # Ask explicitly: an optional invitation after refusal needs no reply.
-    if case.id == "unsupported-origin":
+    if case.contract_version < 2 and case.id == "unsupported-origin":
         turns[0] = turns[0].model_copy(
             update={
                 "response": "Downtown Baltimore is outside the supported origin list. I cannot price that whole trip. Which supported Greenway entry would you like instead?"
@@ -36,6 +36,7 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
     row = run.Attempt(id=f"{case.id}-{trial}", case_id=case.id, trial=trial)
     journal.append({"event": "attempt_started", **row.model_dump()})
     try:
+        row.failure_phase = "actor"
         with journal.lock:
             model = journal.model(
                 run.build_eval_model(), "actor", row, case.actor.max_turns * 3
@@ -46,6 +47,7 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
         for index, turn in enumerate(turns):
             if (
                 case.id == "unsupported-origin"
+                and case.contract_version < 2
                 and index == 1
                 and "baltimore" not in message.casefold()
             ):
@@ -54,7 +56,9 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
                 golden.Turn(user=message, response=turn.response, calls=[])
             )
             for call in turn.calls:
-                replay.call(call.name, call.input, [t.user for t in row.turns])
+                row.turns[-1].calls.append(
+                    replay.call(call.name, call.input, [t.user for t in row.turns])
+                )
             response = cast(ActorResponse, actor.act(turn.response).structured_output)
             row.actor_replies.append(
                 {
@@ -72,15 +76,35 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
             else:
                 message = next_message
         if not row.measurements or any(not m.complete for m in row.measurements):
-            raise run.StopRun("actor_missing_usage")
+            raise run.StopRun("missing_usage")
+        if case.contract_version >= 2:
+            row.failure_phase = "judge"
+            with journal.lock:
+                model = journal.model(run.build_eval_model(), "judge", row, 3)
+            run.assess_outcome(
+                case,
+                row,
+                model,
+                f"Declared terminal objective: {case.terminal_objective}.\n{case.expected_assertion}",
+                json.dumps([t.model_dump() for t in row.turns]),
+            )
+            row.verdicts.clear()  # Scripted assistant answers are not application trials.
+            if row.actor_validity is None or row.actor_validity.status != "valid":
+                raise run.StopRun("actor_profile_mismatch")
+            if any(not m.complete for m in row.measurements):
+                raise run.StopRun("missing_usage")
         row.status = "scored"
+        row.failure_phase = None
     except Exception as error:
         row.status = "infrastructure"
-        row.error = (
-            str(error)
-            if isinstance(error, (run.StopRun, ValueError))
-            else type(error).__name__
-        )
+        row.error = run.error_code(error)
+        if case.contract_version >= 2 and (row.error or "").startswith("actor_"):
+            row.status = "inconclusive"
+            if row.actor_validity is None:
+                row.actor_validity = run.ActorAssessment(
+                    status="invalid", evidence=row.error or "actor_invalid"
+                )
+        row.failure_class = run.failure_class(row)
     journal.append({"event": "actor_check", **row.model_dump()})
     print(f"{row.id}: {row.error or 'valid scripted exchange'}", flush=True)
     return row
@@ -93,7 +117,15 @@ def main() -> None:
     args = parser.parse_args()
     cases = golden.load_cases()
     identity = run.identity(cases)
-    examples = [e for e in run.development_examples() if e.label == "good"]
+    passing: dict[str, golden.Example] = {}
+    for example in run.development_examples():
+        if (
+            example.actor_validity == "valid"
+            and example.expected is not None
+            and all(example.expected.model_dump().values())
+        ):
+            passing.setdefault(example.case_id, example)
+    examples = list(passing.values())
     journal = run.Journal(args.output, 25, args.prior_spend_usd)
     manifest = {
         "mode": "actor-check",

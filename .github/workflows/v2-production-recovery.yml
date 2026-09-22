@@ -94,7 +94,7 @@ jobs:
           oauth-client-id: ${{ secrets.TS_PRODUCTION_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_PRODUCTION_OAUTH_SECRET }}
           tags: tag:ci
-      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         with:
           role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-deploy
           aws-region: us-east-1

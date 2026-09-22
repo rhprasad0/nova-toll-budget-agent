@@ -143,11 +143,10 @@ class ArtifactAgent:
                 answer.stop_reason = event["stop_reason"]
                 return answer
             if kind == "model_start":
-                if (
-                    self.reserved is not None
-                    or self.calls >= case.actor.max_turns + case.max_tool_calls + 2
-                ):
-                    raise run.StopRun("artifact_model_budget")
+                if self.reserved is not None:
+                    raise run.StopRun("artifact_unsettled_call")
+                if self.calls >= case.actor.max_turns + case.max_tool_calls + 2:
+                    raise run.TaskFailure("model_call_budget")
                 self.reserved = journal.reserve(attempt, "agent", event["input_bound"])
                 self.calls += 1
                 self.send({"event": "continue"})

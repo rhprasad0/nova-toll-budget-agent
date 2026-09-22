@@ -1,0 +1,61 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "i495:180SO",
+    "destination_point_id": "i95:205SD",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "status": "currently_unavailable",
+    "reason": {
+      "code": "i95_fully_closed",
+      "details": {
+        "required_i95_directions": [
+          "SB"
+        ],
+        "availability": "closed"
+      }
+    },
+    "point_ids": [
+      "i495:180SO",
+      "i95:205SD"
+    ],
+    "connection_ids": [
+      "i495_to_i95_south"
+    ],
+    "connection_types": [
+      "general_purpose_gap"
+    ],
+    "general_purpose_gaps": [
+      {
+        "connection_id": "i495_to_i95_south",
+        "boundary_point_id": "i495:192SD",
+        "role": "suffix",
+        "i95_direction": "SB",
+        "fallback_required": true
+      }
+    ],
+    "i95_evidence": {
+      "availability": "closed",
+      "northbound_corridor_name": "I-95 NB",
+      "northbound_link_status": "CLOSED",
+      "northbound_interval_end_at": "2026-08-27T12:00:00+00:00",
+      "northbound_calculated_at": "2026-08-27T11:59:00+00:00",
+      "southbound_corridor_name": "I-95 SB",
+      "southbound_link_status": "CLOSED",
+      "southbound_interval_end_at": "2026-08-27T12:00:00+00:00",
+      "southbound_calculated_at": "2026-08-27T11:59:00+00:00"
+    },
+    "facility_legs": []
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "tests/test_validate_toll_route.py:_unavailable_row; _availability_transition_row",
+    "note": "Frozen synthetic inputs passed through current_price_domain.build_current_price_result; not production traffic. Frozen direction-feed evidence is synthetic; it is not an official closure notice."
+  }
+}

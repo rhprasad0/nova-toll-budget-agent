@@ -1,0 +1,106 @@
+{
+  "tool": "get_annual_toll_ballpark",
+  "input": {
+    "outbound": {
+      "origin_point_id": "i95:206NO",
+      "destination_point_id": "i95:2249ND",
+      "departure_time": "08:00:00"
+    },
+    "return": {
+      "origin_point_id": "i95:224ND",
+      "destination_point_id": "i95:206SD",
+      "departure_time": "17:30:00"
+    },
+    "weekdays": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "planned_annual_commute_days": 240,
+    "gross_annual_income_usd": "120000.00"
+  },
+  "result": {
+    "error": "ballpark_unavailable",
+    "reason": "route_unavailable",
+    "outbound": {
+      "origin_point_id": "i95:206NO",
+      "destination_point_id": "i95:2249ND",
+      "status": "invalid_destination",
+      "reason": {
+        "code": "destination_ramp_incompatible",
+        "details": {
+          "point_id": "i95:2249ND",
+          "point_type": "exit",
+          "alternatives": [
+            {
+              "point_id": "i95:224ND",
+              "network_id": "i95",
+              "source_node_id": "224ND",
+              "point_type": "exit",
+              "direction": "NB",
+              "label": "Washington D.C. I-95/I-395 Northbound",
+              "aliases": [
+                "Washington D.C.",
+                "Washington",
+                "District of Columbia"
+              ],
+              "location": {
+                "type": "Point",
+                "coordinates": [
+                  -77.039642,
+                  38.878016
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "return": {
+      "origin_point_id": "i95:224ND",
+      "destination_point_id": "i95:206SD",
+      "status": "invalid_origin",
+      "reason": {
+        "code": "origin_not_entry",
+        "details": {
+          "point_id": "i95:224ND",
+          "point_type": "exit",
+          "alternatives": [
+            {
+              "point_id": "i95:2232SO",
+              "network_id": "i95",
+              "source_node_id": "2232SO",
+              "point_type": "entry",
+              "direction": "SB",
+              "label": "Washington D.C. I-395 Southbound",
+              "aliases": [
+                "Washington D.C.",
+                "Washington",
+                "District of Columbia"
+              ],
+              "location": {
+                "type": "Point",
+                "coordinates": [
+                  -77.03933,
+                  38.878511
+                ]
+              }
+            }
+          ],
+          "allowed_point_types": [
+            "entry",
+            "airport"
+          ]
+        }
+      }
+    }
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "agent_tools/get_annual_toll_ballpark.py:_build_ballpark_response; tests/test_get_annual_toll_ballpark.py",
+    "note": "Frozen request; synthetic priced-leg straight-line daily distance=20.00 miles. Synthetic bounded unavailable/error response, validated against the public tool output schema. Authored offline, not captured production traffic."
+  }
+}
