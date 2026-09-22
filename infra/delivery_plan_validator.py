@@ -933,7 +933,7 @@ def _build_contract() -> dict[str, Mutation]:
                 ),
                 ("s3:PutObject", f"{SITE_BUCKET}/assets/{asset}"),
             )
-            for asset in ("costs.css", "costs.mjs")
+            for asset in ("costs.css", "costs.mjs", "evals.css")
         },
     }
     for address, (fields, *permissions) in billing.items():
