@@ -48,7 +48,7 @@
     "v2/agent/agentcore_entrypoint.py": "82598d64578acd3c9aea7398dc88836e321c52e52e69752f8f819237b3f8b0e7",
     "v2/agent/assets/LICENSE.txt": "792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473",
     "v2/agent/assets/chat-markdown.mjs": "76d3c21d3a0b6f2af17ec86bfcdf082284d229191f10879dd4498fcda2ca930b",
-    "v2/agent/assets/chat.css": "79fd2b2687f751d9c93c0fdaf3e25b453aaadaaa7104ae5ec1fc44d2338a6275",
+    "v2/agent/assets/chat.css": "513e2974e5c1433fa224dadf0770fd34e96145eec4f9012af7401c3a14bd081c",
     "v2/agent/assets/commute-estimates.json": "8174f18481adbc5d32505fa6290a318a83e4926b49b287451db07dc3b3552558",
     "v2/agent/assets/commute-map.mjs": "6c630856b96c921b4408e6d957c53443e9b2e493281395ce843e652ee3a5de9b",
     "v2/agent/assets/commute-routes.mjs": "11ace26948706adabd14d3a995a9c8dcb117c21a4f089e56e238248b759b3cb3",
