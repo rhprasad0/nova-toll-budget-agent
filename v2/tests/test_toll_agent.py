@@ -208,6 +208,16 @@ def test_system_prompt_contains_rds_points_and_v2_behavior() -> None:
     assert "$0.685" in prompt
     assert "one-third" in normalized
     assert "annualized daily-P50 toll scenario" in normalized
+    assert "middle daily scenario" in normalized
+    assert "middle historical scenario" not in normalized
+    assert (
+        "combined cost as a share of after-tax income, never tolls alone" in normalized
+    )
+    assert "both daily and annual vehicle costs" in normalized
+    assert (
+        "Do not subtract vehicle costs from income or add a remaining-income figure"
+        in normalized
+    )
     assert "both its daily and annual toll amounts" in normalized
     assert "P50 annual toll" not in normalized
     assert "fixed TollChat vehicle-cost assumption" in normalized
@@ -227,8 +237,16 @@ def test_system_prompt_contains_rds_points_and_v2_behavior() -> None:
     assert "Never make a third call" in normalized
     assert "exact point_id returned in that alternative" in normalized
     assert "use the required endpoint role as the tie-breaker" in normalized
+    assert "travel toward Route 28 uses eastbound (`EB`) points" in normalized
+    assert "travel away from Route 28 uses westbound (`WB`) points" in normalized
+    assert "Recheck this direction after an origin correction" in normalized
     assert "MUST immediately make one corrective retry" in normalized
     assert "non-Washington annual route validation failure" in normalized
+    assert (
+        "If an annual route is unavailable and the tool returns no alternatives"
+        in normalized
+    )
+    assert "following the tool-returned alternative-selection flow above" in normalized
     assert (
         "qualified-Washington single-alternative immediate corrective retry above"
         " remains higher precedence" in normalized
@@ -246,6 +264,18 @@ def test_system_prompt_contains_rds_points_and_v2_behavior() -> None:
     assert "preserve that timestamp's clock time" in normalized
     assert "use the literal `EST` suffix year-round" not in normalized
     assert "For every observed or modeled component" in normalized
+    assert (
+        "Only an actual `observed_at` supports an observation-time label" in normalized
+    )
+    assert "Annualized daily scenarios" in normalized
+    assert (
+        "without suggesting a midpoint, example salary, or converted income"
+        in normalized
+    )
+    assert (
+        "does not make fixed or modeled prices historically observed tolls"
+        in normalized
+    )
     assert "recent_movement" in prompt
     assert "net_change_usd" in prompt
     assert "unchanged component must still show its `$0.00` net change" in normalized
@@ -319,7 +349,7 @@ def test_system_prompt_matches_its_versioned_contract() -> None:
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
 
-    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.3.0" == prompt_contract["current"]
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.3.7" == prompt_contract["current"]
     assert (
         toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
         == "1.0.0"

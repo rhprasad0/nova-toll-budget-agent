@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ACCOUNT = "903859731897"
 BUCKET = "nova-toll-golden-evidence-903859731897"
 WORKFLOW = ".github/workflows/v2-golden-evaluation.yml"
-POLICY = ROOT / "v2/eval/results/golden/policy-1.0.2.json"
+POLICY = ROOT / "v2/eval/results/golden/policy-1.0.14.json"
 MAX_BYTES = 32 * 1024 * 1024
 CODE = (
     WORKFLOW,
@@ -47,6 +47,7 @@ CODE = (
     "v2/eval/golden/manifest.json",
     "v2/eval/golden/calibration-reference.json",
     "v2/eval/simulated.py",
+    "v2/agent/toll_agent.py",  # Evaluator cache adapter and credential loader.
     "v2/eval/run_evaluation.py",
     "v2/uv.lock",
 )

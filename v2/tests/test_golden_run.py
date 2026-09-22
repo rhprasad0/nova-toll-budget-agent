@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Barrier, Event
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import Mock
 
@@ -34,6 +35,7 @@ def test_cli_runs_independent_work_in_parallel(
             "model",
             "reasoning_effort",
             "max_output_tokens",
+            "transport",
         ),
         "offline",
     )
@@ -210,7 +212,7 @@ def test_aggregate_repeats_cost_failures_and_incomplete() -> None:
 
 def test_development_only_and_full_trajectory() -> None:
     examples = run.development_examples()
-    assert len(examples) == 46
+    assert len(examples) == 60
     held = {c.id for c in golden.load_cases() if c.held_out}
     assert not held.intersection(e.case_id for e in examples)
     example = next(e for e in examples if e.case_id == "greenway-origin-correction")
@@ -575,7 +577,7 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
         self: run.ConversationJudge, data: EvaluationData[str, str]
     ) -> list[EvaluationOutput]:
         assert data.expected_assertion is not None
-        seen.append(data.expected_assertion)
+        seen.append(self.reference_system_prompt + "\n" + data.expected_assertion)
         return [EvaluationOutput(score=1.0, test_pass=True, reason="offline evidence")]
 
     monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
@@ -596,10 +598,19 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
     row = run.Attempt(id="contract", case_id=case.id, trial=1, turns=example.turns)
     run.judge(case, row, journal)
     assert all(run.DOMAIN_FACTS in reference for reference in seen)
+    assert "truthful statements of this scope and policy are supported" in seen[1]
     assert "Do not require an official operator" in seen[0]
     assert "Optional tool calls are not required" in seen[0]
     assert "Permitted tool sequence" not in seen[1]
     for reference in (seen[0], seen[2]):
+        assert (
+            "original-route call is permitted before any alternative selection"
+            in reference
+        )
+        assert (
+            "Calling that replacement route before the user chooses still fails"
+            in reference
+        )
         assert '"earliest_assistant_turn": 1' in reference
         assert '"earliest_assistant_turn": 2' in reference
         assert '"origin_point_id": "i95:205SD"' in reference
@@ -609,6 +620,17 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
     run.judge(case, row, journal)
     assert "claim-support requirement" in seen[0]
     assert "Ground the price, time, availability" not in seen[0]
+    seen.clear()
+    run.judge(golden.load_cases()[2], row, journal)
+    for reference in (seen[0], seen[2]):
+        assert (
+            "A direct refusal need not repeat the route or every profile field"
+            in reference
+        )
+        assert (
+            "If calling a tool, use the exact requested route and pricing profile"
+            in reference
+        )
 
 
 @pytest.mark.parametrize(
@@ -739,7 +761,7 @@ def test_judges_receive_rejected_calls_without_pricing_evidence(
     )
     run.judge(case, attempt, run.Journal(tmp_path / "judge", 25))
     native.update_config.assert_called_once_with(
-        params={"max_output_tokens": 2048, "reasoning": {"effort": "medium"}}
+        params={**run.EVAL_MODEL_PARAMS, "reasoning": {"effort": "medium"}}
     )
     assert len(seen) == 3
     assert "GROUNDING ONLY" in prompts[1] and "RULES ONLY" not in prompts[1]
@@ -809,3 +831,153 @@ def test_packaged_replay_records_rejections() -> None:
         attempt.rejected_tools[0].result
         == adapter.send.call_args_list[-1].args[0]["result"]
     )
+
+
+def test_eval_cache_prefix_and_write_accounting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(run.toll_agent, "load_openai_api_key", lambda: "offline")
+    requests: list[dict[str, Any]] = []
+
+    def evaluate(
+        self: run.ConversationJudge, data: EvaluationData[str, str]
+    ) -> list[EvaluationOutput]:
+        model = cast(Any, self.model)
+        request = model._format_request(
+            [{"role": "user", "content": [{"text": data.actual_output}]}],
+            system_prompt=self.reference_system_prompt,
+        )
+        requests.append(request)
+        assert request["reasoning"] == {"effort": "medium"}
+        assert request["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
+        assert request["prompt_cache_key"] == "tollchat-eval-v2"
+        assert request["store"] is False
+        assert "instructions" not in request
+        prefix = request["input"][0]
+        assert prefix["role"] == "developer"
+        assert prefix["content"][0]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+        assert run.DOMAIN_FACTS in prefix["content"][0]["text"]
+        assert run.DOMAIN_FACTS not in (data.expected_assertion or "")
+        return [EvaluationOutput(score=1.0, test_pass=True, reason="offline")]
+
+    monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
+    journal = run.Journal(tmp_path / "cache", 25)
+    for case in golden.load_cases()[:2]:
+        example = next(
+            e
+            for e in run.development_examples()
+            if e.case_id == case.id and e.label == "good"
+        )
+        row = run.Attempt(id=case.id, case_id=case.id, trial=1, turns=example.turns)
+        run.judge(case, row, journal)
+    assert len(requests) == 6  # No verdict memoization.
+    for first, second in zip(requests[:3], requests[3:], strict=True):
+        assert first["input"][0] == second["input"][0]
+        assert first["input"][1:] != second["input"][1:]
+
+    model = cast(Any, run.build_eval_model())
+    for written in (None, 0, 30):
+        details = SimpleNamespace(cached_tokens=50, cache_write_tokens=written)
+        chunk = model._format_chunk(
+            {
+                "chunk_type": "metadata",
+                "data": SimpleNamespace(
+                    input_tokens=100,
+                    output_tokens=10,
+                    total_tokens=110,
+                    input_tokens_details=details,
+                ),
+            }
+        )
+        usage = chunk["metadata"]["usage"]
+        assert usage.get("cacheWriteInputTokens", 0) == (written or 0)
+        assert usage["cacheReadInputTokens"] == 50
+        expected = (
+            (50 - (written or 0)) * 0.20 + 50 * 0.02 + (written or 0) * 0.25 + 10 * 1.20
+        ) / 1_000_000
+        assert run.cost(usage) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("changed", ["judge_prompt_sha256", "transport"])
+def test_cli_rejects_changed_cache_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: str
+) -> None:
+    keys = (
+        "corpus",
+        "judge_prompt_sha256",
+        "diagnostic_prompt",
+        "diagnostic_rubrics",
+        "diagnostic_domain_facts",
+        "model",
+        "reasoning_effort",
+        "max_output_tokens",
+        "transport",
+    )
+    pinned = dict.fromkeys(keys, "current")
+    previous = {**pinned, changed: "old"}
+    monkeypatch.setattr(run, "identity", Mock(return_value=pinned))
+    monkeypatch.setattr(
+        run,
+        "render",
+        Mock(
+            return_value={
+                "complete": True,
+                "review": {"status": "approved"},
+                "manifest": {"identity": previous},
+            }
+        ),
+    )
+    output = tmp_path / "must-not-start"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "golden_run",
+            "run",
+            "--output",
+            str(output),
+            "--calibration",
+            str(tmp_path / "old"),
+        ],
+    )
+    with pytest.raises(SystemExit, match="2"):
+        run.main()
+    assert not output.exists()
+
+
+def test_cache_adapter_change_invalidates_calibration_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_git = run.git
+
+    def clean_git(*args: str) -> str:
+        return "" if args[0] == "status" else original_git(*args)
+
+    monkeypatch.setattr(run, "git", clean_git)
+    before = run.identity(golden.load_cases())
+    source = run.inspect.getsource(run.toll_agent._CachedResponsesModel)
+    monkeypatch.setattr(
+        run.inspect, "getsource", Mock(return_value=source + "\n# adapter changed")
+    )
+    after = run.identity(golden.load_cases())
+    assert (
+        before["transport"]["cache_adapter_sha256"]
+        != after["transport"]["cache_adapter_sha256"]
+    )
+    assert before["corpus"] == after["corpus"]
+
+
+def test_wrong_route_calibration_is_consistent_but_unsuccessful() -> None:
+    example = next(
+        e
+        for e in run.development_examples()
+        if e.case_id == "greenway-current" and e.label == "wrong-route"
+    )
+    turn = example.turns[0]
+    call = turn.calls[0]
+    assert "Route 28" in turn.user
+    assert "Route 7" in turn.response and "Route 28" not in turn.response
+    assert call.input["destination_point_id"] == "greenway:7:exit:EB"
+    assert call.result["destination_point_id"] == call.input["destination_point_id"]
+    assert example.semantic_verdict == "INCORRECT"
+    assert example.label not in run.BAD_GROUNDING
+    assert example.label in run.BAD_RULES

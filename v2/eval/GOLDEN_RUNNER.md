@@ -16,7 +16,7 @@ uv run python -m eval.golden_run run --output eval/private/golden-360/demo-1 \
   --prior-run eval/private/golden-360/calibration-1
 ```
 
-Calibration runs the 46 development examples (138 criterion verdicts). It excludes the four held-out
+Calibration runs the 60 development examples (180 criterion verdicts). It excludes the four held-out
 examples and preserves every disagreement. Outcome labels come from the approved
 corpus; the narrower diagnostic labels are proposals for human review. Calibration
 is evidence about judge accuracy, not a guarantee that every later verdict is right.
@@ -49,7 +49,11 @@ Calibration examples and conversation trials run with four workers by default.
 Use `--workers 1` for sequential execution or choose 1 through 8 workers. Turns
 and the three judge criteria within each trial stay sequential. Each worker has
 its own agent, model clients, actor, and replay state. The manifest records the
-worker count. Shared budget reservations include in-flight calls, and journal
+worker count. The protected CI gate retains four workers and invokes this same
+runner with an isolated packaged application. Its actor/judge calls therefore use
+the same explicit 30-minute prefix caching and cache-write accounting. See the
+[current caching review](results/golden/CACHING-SUMMARY.md); eight workers remain
+available for diagnostics but are not the scored timing policy. Shared budget reservations include in-flight calls, and journal
 writes are serialized. Interrupting a run cancels queued work, allows active calls
 to finish recording usage, and prevents further calls in those trials.
 

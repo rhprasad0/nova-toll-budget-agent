@@ -47,7 +47,7 @@ Cases 9, 16, 18, and 23 are reserved before tuning. All were seen during authors
 
 > How much is the Greenway from Leesburg Bypass to Route 28 right now? I have E-ZPass.
 
-Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Your route is the Greenway from Leesburg Bypass to Route 28, returning the other way.
+Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Your route is the Greenway from Leesburg Bypass to Route 28. This request is for that one-way trip only; do not ask for a return trip.
 
 Actor goal: Get the current one-way toll.
 
@@ -85,7 +85,7 @@ Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Y
 
 Actor goal: Ask for the first price, then correct the origin to Battlefield Parkway and get the revised result.
 
-Follow-up rules: After the first answer, say you meant Battlefield Parkway. Make the correction before stopping.
+Follow-up rules: After the first answer, explicitly correct the origin: say you will enter at Battlefield Parkway instead of Leesburg Bypass and are still going to Route 28. State both the changed origin and unchanged destination before stopping.
 
 Frozen time: `2026-08-27T08:00:00-04:00`. Maximum: 4 assistant turns and 2 tool calls.
 
@@ -139,7 +139,7 @@ Actor goal: Find out whether this vehicle can be priced.
 
 Frozen time: `2026-08-27T08:00:00-04:00`. Maximum: 4 assistant turns and 1 tool calls.
 
-Expected behavior: Either decline the unsupported three-axle profile directly, or pass that profile to the tool and explain its unsupported result. Never quote the passenger-car rate. Use the exact requested route and pricing profile. Ground the price, time, availability, and provenance in the supplied tool result. Missing evidence is not a zero toll. Do not substitute an annual estimate.
+Expected behavior: Either decline the unsupported three-axle profile directly, or pass that profile to the tool and explain its unsupported result. Never quote the passenger-car rate. A direct refusal need not repeat the route or every profile field. If calling a tool, use the exact requested route and pricing profile. Ground the price, time, availability, and provenance in the supplied tool result. Missing evidence is not a zero toll. Do not substitute an annual estimate.
 
 Source: Issue #361 coverage gap; authored synthetic scenario. User dialogue is authored, not a production transcript.
 
@@ -373,7 +373,7 @@ The corresponding proposed passing conversation is in [examples.json](examples.j
 
 > What is the Greenway toll from Leesburg Bypass to Route 28?
 
-Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Your route is the Greenway from Leesburg Bypass to Route 28, returning the other way.
+Actor facts: You drive a two-axle passenger car with E-ZPass set to toll mode. Your route is the Greenway from Leesburg Bypass to Route 28. This request is for that one-way trip only; do not ask for a return trip.
 
 Actor goal: Get a price if the service can provide one.
 
@@ -911,7 +911,7 @@ Follow-up rules: If offered alternatives, choose Franconia-Springfield Parkway n
 
 Frozen time: `2026-08-27T08:00:00-04:00`. Maximum: 4 assistant turns and 2 tool calls.
 
-Expected behavior: Present the actual offered alternatives, wait for the user to choose, then use Franconia-Springfield Parkway northbound. Retain the return leg, income, and schedule. Use the supplied income and schedule. Ground each monetary claim in its labeled tool field and scenario. For available financial estimates, explain the one-third tax assumption, $0.685 per tolled mile vehicle-cost assumption, tolled-only distance/scope, and historical versus fixed or modeled sources where applicable. Label annual figures as annualized daily P25/P50/P90 estimates, not percentiles of annual outcomes. Do not substitute a current-price call.
+Expected behavior: First make the required discovery call on the original Backlick route to obtain authoritative alternatives. Its invalid-origin result is expected: this original-route call is permitted before any alternative selection and is not a premature pricing violation. Present the actual offered alternatives, wait for the user to choose, then use Franconia-Springfield Parkway northbound. Calling that replacement route before the user chooses still fails. Retain the return leg, income, and schedule. Use the supplied income and schedule. Ground each monetary claim in its labeled tool field and scenario. For available financial estimates, explain the one-third tax assumption, $0.685 per tolled mile vehicle-cost assumption, tolled-only distance/scope, and historical versus fixed or modeled sources where applicable. Label annual figures as annualized daily P25/P50/P90 estimates, not percentiles of annual outcomes. Do not substitute a current-price call.
 
 Source: test-cases.jsonl:annual-backlick-alternative-selection. User dialogue is authored, not a production transcript.
 
@@ -1073,7 +1073,7 @@ These are candidates for human labels and later judge calibration, not claims th
 
 | Case | Example | Mechanical failure | Why it should fail |
 | --- | --- | --- | --- |
-| greenway-current | wrong-route | missing_call, tool_arguments, unsupported_money | The tool destination changed from Route 28 to an unrequested exit. |
+| greenway-current | wrong-route | missing_call, tool_arguments, unsupported_money | The user requested Route 28, but the call, result, and answer consistently price unrequested Route 7. Grounded wrong-route pricing still fails Outcome and Rules. |
 | annual-tysons-clarification | premature-call | missing_call, premature_call, unsupported_money | The agent priced Westpark before the user selected a Tysons exit. |
 | greenway-current | incorrect-money | unsupported_money | The fixture quotes 5.80, not 99.99. |
 | unsupported-origin | unsupported-substitution | tool_budget, unexpected_call | A Greenway route was silently substituted for the Baltimore trip. |

@@ -1,0 +1,28 @@
+{
+  "policy": {
+    "version": "1.0.12",
+    "contract_sha256": "440d74283de2a6cba1e3aa9dec0e6627ea9e16365460d25bcd534ef7d21cf17a",
+    "trials": 3,
+    "cases": 24,
+    "workers": 4,
+    "critical_passes": 3,
+    "noncritical_passes": 2,
+    "suite_success_min": 0.9,
+    "suite_pass_cubed_min": 0.75,
+    "lost_passes_max": 1,
+    "run_cost_max_usd": 5.0,
+    "agent_cost_per_success_max_usd": 0.05,
+    "latency_p50_max_seconds": 30.0,
+    "latency_p95_max_seconds": 60.0,
+    "candidate_max_age_hours": 24,
+    "production_max_age_hours": 720,
+    "sample_size": 8,
+    "replacement_runs_max": 1,
+    "max_output_tokens": 2048
+  },
+  "approval": {
+    "status": "pending",
+    "evidence_sha256": "d36358bbeff6a99e4d8b81d1124490b30bee6599aca324cadea6f91e61d8a2d2",
+    "scope": "Judge context includes existing application coverage and no-substitution policy; numeric thresholds and protected CI four-worker timing policy unchanged."
+  }
+}

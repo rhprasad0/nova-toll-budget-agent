@@ -1,0 +1,28 @@
+{
+  "policy": {
+    "version": "1.0.9",
+    "contract_sha256": "cbbde8506a6f05b466adeab612aaff65bbe061cd93f033ada3046658c29a1f1e",
+    "trials": 3,
+    "cases": 24,
+    "workers": 4,
+    "critical_passes": 3,
+    "noncritical_passes": 2,
+    "suite_success_min": 0.9,
+    "suite_pass_cubed_min": 0.75,
+    "lost_passes_max": 1,
+    "run_cost_max_usd": 5.0,
+    "agent_cost_per_success_max_usd": 0.05,
+    "latency_p50_max_seconds": 30.0,
+    "latency_p95_max_seconds": 60.0,
+    "candidate_max_age_hours": 24,
+    "production_max_age_hours": 720,
+    "sample_size": 8,
+    "replacement_runs_max": 1,
+    "max_output_tokens": 2048
+  },
+  "approval": {
+    "status": "pending",
+    "evidence_sha256": "4e3fa3c7c5938f53d221b8858f0939079f45c39438e9641f582f6b6df5a1f788",
+    "scope": "Corrected wrong-route corpus fixture; all numeric thresholds and four-worker protected CI timing policy unchanged."
+  }
+}

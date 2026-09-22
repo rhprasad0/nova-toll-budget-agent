@@ -42,6 +42,7 @@ def test_actor_and_judge_keep_private_expectations_separate() -> None:
     assert secret not in str(actor.agent.system_prompt)
     assert secret not in golden.actor_profile(case).model_dump_json()
     assert case.actor.goal in str(actor.agent.system_prompt)
+    assert case.prompt in golden.actor_profile(case).context
     assert golden.judge_case(case).expected_assertion == secret
     # Judge prompt contains the reference, full conversation, and actual evidence.
     data = EvaluationData[str, str](input=case.prompt, expected_assertion=secret)
@@ -272,9 +273,79 @@ def test_negated_zero_is_not_an_invented_price() -> None:
         "The missing toll is not $0.00.",
         "Do not treat the missing toll as $0.00.",
         "The missing toll is **not $0.00**.",
+        "The missing toll data is **not treated as $0**.",
+        "Missing data is never treated as $0.00.",
+        "Historical toll cost: Unavailable—not assumed to be $0.",
     ):
         turns = deepcopy(example.turns)
         turns[-1].response += " " + wording
         assert "unsupported_money" not in golden.grade_assertions(case, turns)
         turns[-1].response += " The toll is $0.00."
         assert "unsupported_money" in golden.grade_assertions(case, turns)
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "good-income-choices",
+        "good-income-range-example",
+        "good-income-choice-question",
+        "good-income-bullets",
+    ],
+)
+def test_income_choices_require_consent_and_cannot_hide_other_money(label: str) -> None:
+    case = next(c for c in golden.load_cases() if c.id == "annual-salary-range")
+    example = next(
+        golden.Example.model_validate(e)
+        for e in json.loads((golden.ROOT / "examples.json").read_text())
+        if e["case_id"] == case.id and e["label"] == label
+    )
+    assert not golden.grade_assertions(case, example.turns)
+    for response in (
+        "Your salary is $120,000.",
+        "Please choose one income: $110,000, $125,000, or $130,000.",
+        "Would you like to use $110,000, $125,000, or $130,000?",
+        "Please provide one gross annual income estimate between $110,000 and $130,000—for example, $125,000.",
+        "I will use $120,000 as your annual income.",
+        "Which figure should I use?\n\n- $110,000\n- $125,000\n- $130,000\n",
+        "Your income is:\n\n- $110,000\n- $120,000\n- $130,000\n",
+        "Which figure should I use?\n\n- $110,000\n- The toll is $120,000\n- $130,000\n",
+        example.turns[0].response + " The toll is $120,000.",
+    ):
+        turns = deepcopy(example.turns)
+        turns[0].response = response
+        assert "unsupported_money" in golden.grade_assertions(case, turns)
+    turns = deepcopy(example.turns)
+    turns[0].calls = turns[1].calls
+    turns[1].calls = []
+    assert "premature_call" in golden.grade_assertions(case, turns)
+    assert "unsupported_money" in golden.grade_assertions(case, turns)
+
+
+def test_divergent_trip_infers_direction_and_requires_confirmation() -> None:
+    case = next(c for c in golden.load_cases() if c.id == "annual-confirm-divergent")
+    assert "northbound" not in case.prompt.lower()
+    fixture = golden.load_fixture(case.steps[0].fixture)
+    outbound = fixture.input["outbound"]
+    assert isinstance(outbound, dict)
+    assert outbound["origin_point_id"] == "i95:206NO"
+    replay = golden.Replay(case)
+    with pytest.raises(ValueError, match="premature_call"):
+        replay.call(fixture.tool, fixture.input, [case.prompt])
+    assert replay.call(fixture.tool, fixture.input, [case.prompt, "Yes, combine them."])
+
+
+def test_one_way_current_actors_do_not_request_return_trips() -> None:
+    cases = {c.id: c for c in golden.load_cases()}
+    for case_id in ("greenway-current", "current-tool-error"):
+        facts = cases[case_id].actor.facts
+        assert "returning the other way" not in facts
+        assert "one-way trip only; do not ask for a return trip" in facts
+    assert "returning the other way" in cases["annual-fixed"].actor.facts
+
+
+def test_origin_correction_actor_names_both_endpoints() -> None:
+    case = next(c for c in golden.load_cases() if c.id == "greenway-origin-correction")
+    rules = " ".join(case.actor.follow_up_rules)
+    assert "enter at Battlefield Parkway instead of Leesburg Bypass" in rules
+    assert "still going to Route 28" in rules

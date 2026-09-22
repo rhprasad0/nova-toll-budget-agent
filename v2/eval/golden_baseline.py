@@ -47,7 +47,23 @@ CONTRACT_KEYS = (
 
 
 class Policy(golden.Record):
-    version: Literal["1.0.0", "1.0.1", "1.0.2"]
+    version: Literal[
+        "1.0.0",
+        "1.0.1",
+        "1.0.2",
+        "1.0.3",
+        "1.0.4",
+        "1.0.5",
+        "1.0.6",
+        "1.0.7",
+        "1.0.8",
+        "1.0.9",
+        "1.0.10",
+        "1.0.11",
+        "1.0.12",
+        "1.0.13",
+        "1.0.14",
+    ]
     contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     trials: Literal[3]
     cases: Literal[24]

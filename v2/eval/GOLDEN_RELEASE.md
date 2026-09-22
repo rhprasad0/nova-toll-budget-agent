@@ -6,11 +6,32 @@ an unset production baseline, pending reviews, stale evidence, or a failed run
 blocks planning before production credentials are available.
 
 Production qualification remains **blocked until a production reference passes**.
-Ryan approved calibration 15's exact contract and accepted the documented actor
-limitation on September 21, 2026. It matches 138/138 development criterion labels.
-See the [engineering summary](GOLDEN_VALIDITY_REVIEW.md) for results and scope.
-Recorded cumulative model spending is **$2.13301152**; the initial demo and failed
-production-reference run remain unqualified.
+PR 581 now also includes authorized application prompt corrections for source
+labels, annualized daily scenarios, and user-selected income. The application
+model remains gpt-5.6-luna. Local repetition does not qualify a production release.
+
+The current corpus **1.0.25**, harness **1.2.10**, and policy **1.0.14** await exact
+human approval. See the [current review packet](results/golden/CACHING-SUMMARY.md).
+Latest local calibration 33 agreed on **179/180** labels; actor checks passed
+**60/60**. Outcome missed a premature alternative selection, while Rules and
+mandatory deterministic checks rejected it. The exact evidence and standing local
+approval are retained privately. Latest local application run reached **17/17
+critical pass³ and 72/72 trials**, one of the three requested consecutive successes.
+Protected CI retains its four-worker scored timing policy. Activation remains
+pending approval; local success does not replace protected qualification.
+
+CI uses the same cached actor/judge factory and judge-prefix construction as the
+manual runner, through scripts.golden_release.execute → eval.golden_run.execute.
+There is no separate CI caching implementation. Cache reads and writes are included
+in its existing journal and shared spending ledger. The gate fingerprints the
+shared cache adapter as well as the evaluator source, so adapter changes invalidate
+receipts and calibration identity. The cached factory lives only in golden_run;
+scheduled checks retain their existing factory. Application calls still execute
+the exact packaged artifact in isolation.
+
+Historical calibration approvals and source-checkout application results remain
+archived. They do not approve this changed evaluator, qualify the current
+production artifact, or establish perfect judge reliability.
 
 ## Execution and evidence
 
@@ -29,10 +50,10 @@ shared $5 run ceiling before starting. The durable ledger also reserves against
 the existing $25 authorization. Missing usage stops further paid calls and
 blocks subsequent runs until spending is reconciled. Provider retries are off.
 
-The original thresholds from policy 1.0.0 are unchanged in policy 1.0.2. Corpus
-1.0.11 and harness 1.2.1 correct actor/judge validity and expand calibration to
-46 development examples. Ryan approved this exact contract on September 21, 2026;
-calibration-8 approval applies only to the historical 1.0.10/1.2.0 contract.
+The original thresholds from policy 1.0.0 are unchanged in policy 1.0.6. The
+active corpus has 60 development calibration examples covering route
+expectations, initial actor facts, monetary proposals/denials, and source
+grading. Earlier approvals apply only to their historical contracts.
 Historical evidence, labels, policy approvals, and the original baseline remain intact.
 
 After machine qualification, inspect the `golden-evidence-RUN-1` artifact:
@@ -82,8 +103,8 @@ contract changes and environment recovery.
 4. Calibrate the new contract using the existing runner and approved labels.
    Approve its evidence and disagreements, update
    `golden/calibration-reference.json`, approve `golden/review.json` against
-   the current corpus digest, and approve policy 1.0.2 against its exact policy
-   digest. Those approvals must precede a candidate run. Reconcile any separate
+   the current corpus digest, and approve the active policy selected by scripts/golden_gate.py against
+   its exact digest. Those approvals must precede a candidate run. Reconcile any separate
    calibration spend into the versioned ledger before protected execution;
    retain provider usage and the prior ledger version, never reduce known spend
    or clear unknown usage without accounting for the interrupted calls.

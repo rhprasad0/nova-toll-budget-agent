@@ -1,8 +1,5 @@
 {
-  "status": "approved",
-  "corpus_sha256": "6d23cb6e60503146d227fcfd51cb03426d3b79a1718a3533d7a71fea444fd7d0",
-  "reviewer": "rhprasad0",
-  "evidence": "Ryan explicitly stated \"I approve both\" in the Codex conversation on 2026-09-21, approving the full calibration 15 corpus/judge/policy contract and accepting the actors-6 redundant vehicle/E-ZPass reply limitation (59/60 checks). See v2/eval/evidence/golden-validity/HUMAN_ADJUDICATIONS.md. No merge, deployment, or production qualification is authorized.",
-  "notes": "Ryan approved the full exact contract after sample review, including the midpoint clarification, and accepted the recorded actor limitation.",
-  "approved_at": "2026-09-21T15:26:49.510944+00:00"
+  "status": "pending",
+  "corpus_sha256": "1646f457b8dc4e761d9a25a8e919883064c55adb40e4671f3a126217a750608e",
+  "evidence": "Origin-correction actor now explicitly identifies the changed origin and unchanged destination. Fresh actor checks and calibration required."
 }

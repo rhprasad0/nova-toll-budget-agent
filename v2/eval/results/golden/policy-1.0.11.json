@@ -1,0 +1,28 @@
+{
+  "policy": {
+    "version": "1.0.11",
+    "contract_sha256": "11e8a1543b979184353a7ae23923c1e70d5622c6429c9d4e0f0cb85de484666e",
+    "trials": 3,
+    "cases": 24,
+    "workers": 4,
+    "critical_passes": 3,
+    "noncritical_passes": 2,
+    "suite_success_min": 0.9,
+    "suite_pass_cubed_min": 0.75,
+    "lost_passes_max": 1,
+    "run_cost_max_usd": 5.0,
+    "agent_cost_per_success_max_usd": 0.05,
+    "latency_p50_max_seconds": 30.0,
+    "latency_p95_max_seconds": 60.0,
+    "candidate_max_age_hours": 24,
+    "production_max_age_hours": 720,
+    "sample_size": 8,
+    "replacement_runs_max": 1,
+    "max_output_tokens": 2048
+  },
+  "approval": {
+    "status": "pending",
+    "evidence_sha256": "b3d43067d8f934b0a271562100cdf0015b3bff89900346cccd62eaa464531bf0",
+    "scope": "Direct-refusal prose matches existing approved examples; numeric thresholds and protected CI four-worker timing policy unchanged."
+  }
+}

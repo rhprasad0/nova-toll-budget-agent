@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import math
 import random
@@ -30,9 +31,9 @@ from strands_evals.types.trace import Session, TraceLevelInput
 
 from agent import toll_agent
 from eval import golden
-from eval.simulated import GroundedCorrectnessEvaluator, build_eval_model
+from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "1.2.1"
+VERSION = "1.2.10"
 PRICES = {
     "model": "gpt-5.6-luna",
     "date": "2026-09-20",
@@ -74,6 +75,7 @@ with a short evidence citation, not private reasoning.
 BAD_GROUNDING = {
     "missing-clarification",
     "false-live-observation",
+    "schedule-labeled-observed",
     "false-historical-observation",
     "assumed-midpoint",
     "rejected-call-invented-closure",
@@ -82,6 +84,7 @@ BAD_GROUNDING = {
     "missing-means-free",
     "swapped-financial-label",
     "silent-modeling",
+    "wrong-observation-minute",
 }
 BAD_RULES = {
     "rejected-call-honest",
@@ -92,7 +95,10 @@ BAD_RULES = {
     "unapproved-alternative",
     "missing-day-proposal",
 } | BAD_GROUNDING
-DOMAIN_FACTS = """Approved domain facts: this estimator supports two-axle passenger
+DOMAIN_FACTS = """Approved domain facts: TollChat estimates only covered Northern
+Virginia tolled trips. It does not substitute an unsupported route or place with
+a nearby covered ramp; truthful statements of this scope and policy are supported.
+This estimator supports two-axle passenger
 cars with E-ZPass in toll mode; a three-axle profile is unsupported. Downtown
 Baltimore is outside its supported origin catalog. Published Greenway fixed rates
 can vary by time of day without being dynamic observations: calling such a rate
@@ -100,6 +106,23 @@ fixed is accurate. In the frozen I-66 eastbound noon case, the off-peak publishe
 zero rate means outside toll hours. The frozen I-66 eastbound 8 AM case is during
 toll hours, even when its current price observation is missing.
 These facts support direct refusals and schedule explanations without a live call.
+When the user does not specify a pricing profile, the application uses the
+two-axle passenger/E-ZPass/toll profile by default. Describing the estimate as
+using that default is supported; an explicitly different user profile must not
+be overridden. This default does not establish unrelated facts about the user.
+The supplied location catalog associates Westpark Drive with Tysons Corner;
+"Westpark Drive in Tysons" is a supported location qualifier. Bare "Tysons"
+still requires choosing among the catalog's possible exits.
+For grading observation timestamps, both exact seconds and minute precision
+are valid; including accurate seconds is not itself a failure. At minute
+precision, omit seconds without rounding. Thus 07:59:30-04:00 can be displayed
+as either 7:59:30 AM EDT or 7:59 AM EDT.
+This applies to stale and available observations. Retain the actual observed
+hour and minute; never substitute evaluation time or a different interval time.
+Annual commute days may not exceed 53 times the number of selected weekdays.
+For Monday through Friday, the input maximum is therefore 265 days. This is
+an input-validation limit, not an assumption about the user's actual days;
+the assistant must obtain a corrected count rather than silently cap it.
 These are supporting facts, not additional requirements or a disclosure checklist.
 TollChat is independent and not affiliated with, endorsed by, or acting for VDOT,
 Virginia 511, or any toll operator. Describing its prices as estimates rather than
@@ -109,16 +132,48 @@ is compatible with a published fixed rate or an observed price when its source
 and time are otherwise accurately described. Do not require an official operator
 quote or reject the word estimate alone. Distinguish actual source kinds: do not
 accept claiming a published schedule rate is live observed, or vice versa.
+Labeling a schedule-derived price or its evaluated_at timestamp "Observed" or
+"observed at" is a false observation claim, even alongside a published-schedule
+disclosure. Such a response fails Outcome, Grounding, and Rules. "Evaluated" or
+"as of" correctly describes the evaluation time without claiming observation.
 For annual estimates, recent_complete_same_date_round_trips describes the sample
 method; uses_current_fixed_rates describes the price source. Both can be true.
 Mentioning sampled dates alongside explicit current fixed-rate disclosure is not
 claiming those fixed prices were observed on each historical date. An explicit
 claim of historical observation of fixed rates is unsupported.
+A returned annual baseline with distance_method=straight_line_priced_facility_legs
+and scope=tolled_portions_only describes straight-line distance between validated
+priced toll-facility endpoints. Route validation precedes distance calculation.
+This distance/vehicle-cost baseline remains valid for no_complete_paired_days
+even when facilities is empty: that list describes historical price samples,
+not whether the route endpoints were validated. This does not establish any
+missing historical tolls, annual toll scenarios, or combined affordability totals.
 These facts explain evidence, not additional disclosure requirements. Natural
 language about paired samples and their coverage is sufficient; do not require
 the raw sample-method identifier. Fixed-rate or modeled-source disclosure does
 not require naming every metadata field.
 """
+
+
+EVAL_MODEL_PARAMS: dict[str, Any] = {
+    "max_output_tokens": 2048,
+    "reasoning": {"effort": "low"},
+    "prompt_cache_key": "tollchat-eval-v2",
+    "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},
+}
+
+
+def build_eval_model() -> Model:
+    """Cache golden actor/judge inputs without changing deployed timed checks."""
+    return toll_agent._CachedResponsesModel(
+        model_id="gpt-5.6-luna",
+        client_args={
+            "api_key": toll_agent.load_openai_api_key(),
+            "base_url": "https://api.openai.com/v1",
+        },
+        params=deepcopy(EVAL_MODEL_PARAMS),
+        stateful=False,
+    )
 
 
 class Measurement(golden.Record):
@@ -561,12 +616,29 @@ def trajectory(case: golden.GoldenCase, turns: list[golden.Turn]) -> Session:
     return Session.model_validate({"session_id": case.id, "traces": traces})
 
 
+def judge_prompt(key: str) -> str:
+    """Stable criterion instructions precede variable case evidence."""
+    prompt = (
+        golden.JUDGE_PROMPT
+        if key == "outcome"
+        else DIAGNOSTIC_PROMPT + "\n" + RUBRICS[key]
+    )
+    prompt += "\n" + DOMAIN_FACTS
+    prompt += "\nRejected calls are attempts, not successful pricing results. Their recorded error supports saying a tool rejected or could not complete a request; it does not support a price or prove the real road is unavailable."
+    prompt += "\nA confirmation proposal (52 weeks times the user's weekdays) or a clearly conditional salary midpoint or an explicit choice among the supplied income range endpoints and midpoint is not a claim of user consent. It must not be used in a pricing call before the user chooses."
+    if key == "outcome":
+        prompt += "\nOutcome exceptions take precedence over the requirement to return a price: an appropriate necessary clarification awaiting the user passes; an honest explanation of an explicit recorded tool rejection passes even if wrong arguments caused it and a corrected retry could succeed. Rules still fail incorrect arguments. Judge the observed response, not hypothetical retry success. Fabricated prices and false road-closure claims fail. When a successful relevant tool result was actually returned and no clarification remains, the required supported answer must be supplied."
+    if key != "grounding":
+        prompt += "\nOptional tool calls are not required for supported direct refusals. An initial discovery call on the original requested route is permitted when listed. Only calling a selected alternative requires the later choice. Check the actual call arguments and earliest turn against this contract."
+    return prompt
+
+
 def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
     # Serialize SSM-backed model construction; provider calls run outside the lock.
     with journal.lock:
         native = build_eval_model()
         native.update_config(
-            params={"max_output_tokens": 2048, "reasoning": {"effort": "medium"}}
+            params={**deepcopy(EVAL_MODEL_PARAMS), "reasoning": {"effort": "medium"}}
         )
         model = journal.model(native, "judge", attempt, 12)
     evaluator = ConversationJudge(
@@ -593,11 +665,7 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
         for step in case.steps
     ]
     for key, rubric in {"outcome": reference_requirements, **RUBRICS}.items():
-        evaluator.reference_system_prompt = (
-            golden.JUDGE_PROMPT
-            if key == "outcome"
-            else DIAGNOSTIC_PROMPT + "\n" + rubric
-        )
+        evaluator.reference_system_prompt = judge_prompt(key)
         reference = (
             rubric
             if key == "outcome"
@@ -609,17 +677,11 @@ def judge(case: golden.GoldenCase, attempt: Attempt, journal: Journal) -> None:
             )
         )
         reference = f"Criterion: {key.upper()}\n" + reference
-        reference += "\n" + DOMAIN_FACTS
-        reference += "\nRejected calls are attempts, not successful pricing results. Their recorded error supports saying a tool rejected or could not complete a request; it does not support a price or prove the real road is unavailable."
-        reference += "\nA confirmation proposal (52 weeks times the user's weekdays) or a clearly conditional salary midpoint is not a claim of user consent. It must not be used in a pricing call before the user chooses."
-        if key == "outcome":
-            reference += "\nOutcome exceptions take precedence over the requirement to return a price: an appropriate necessary clarification awaiting the user passes; an honest explanation of an explicit recorded tool rejection passes even if wrong arguments caused it and a corrected retry could succeed. Rules still fail incorrect arguments. Judge the observed response, not hypothetical retry success. Fabricated prices and false road-closure claims fail. When a successful relevant tool result was actually returned and no clarification remains, the required supported answer must be supplied."
         if key != "grounding":
             reference += (
                 "\nPermitted tool sequence from the approved case contract (not a transcript):\n"
                 + json.dumps(contract)
             )
-            reference += "\nOptional tool calls are not required for supported direct refusals. An initial discovery call on the original requested route is permitted when listed. Only calling a selected alternative requires the later choice. Check the actual call arguments and earliest turn against this contract."
             reference += (
                 "\nRecorded sequence (calls occur after that user message and before that assistant answer):\n"
                 + "\n".join(
@@ -838,7 +900,9 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
             for s in (golden.current.TOOL_SPEC, golden.annual.TOOL_SPEC)
         },
         "actor_prompt_sha256": golden.digest(golden.ACTOR_PROMPT),
-        "judge_prompt_sha256": golden.digest(golden.JUDGE_PROMPT),
+        "judge_prompt_sha256": golden.digest(
+            {key: judge_prompt(key) for key in ("outcome", *RUBRICS)}
+        ),
         "diagnostic_rubrics": RUBRICS,
         "diagnostic_domain_facts": DOMAIN_FACTS,
         "diagnostic_prompt": DIAGNOSTIC_PROMPT,
@@ -851,6 +915,10 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
             "evaluator_tool_choice": "required",
             "timeout_seconds": 60,
             "unknown_usage": "stop further paid calls",
+            "evaluator_model_config": deepcopy(EVAL_MODEL_PARAMS),
+            "cache_adapter_sha256": golden.digest(
+                inspect.getsource(toll_agent._CachedResponsesModel)
+            ),
         },
         "prices": PRICES,
         "application_model_config": {
@@ -1324,8 +1392,9 @@ def main() -> None:
             "model",
             "reasoning_effort",
             "max_output_tokens",
+            "transport",
         ):
-            if previous_identity[key] != pinned[key]:
+            if previous_identity.get(key) != pinned[key]:
                 parser.error("judge or corpus changed; recalibration required")
         calibration_identity = {
             "run_id": calibration["manifest"]["run_id"],
