@@ -43,9 +43,11 @@ def shared_fixture(bundle: Path, environment: str = "development") -> dict[str, 
 def test_plan_package_paths_are_workspace_independent(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, separate_bundle: bool, phase: str
 ) -> None:
-    terraform = Mock(return_value="{}")
+    terraform = Mock(return_value='{"resource_changes": []}')
     monkeypatch.setattr(delivery, "terraform", terraform)
     monkeypatch.setattr(gate, "validate_plan", Mock())
+    compatibility = Mock()
+    monkeypatch.setattr(shared_packages, "compatibility", compatibility)
     monkeypatch.setenv("GITHUB_SHA", "a" * 40)
     delivery.configure("development")
     for workspace in ("bootstrap", "trusted", "release-overlay"):
@@ -64,10 +66,19 @@ def test_plan_package_paths_are_workspace_independent(
             tmp_path / "foundation.json",
             tmp_path,
             phase,
-            {},
+            previous(),
             {},
             expected,
         )
+        if phase == "prepare":
+            compatibility.assert_called_with(
+                bundle,
+                expected,
+                previous()["slots"]["blue"]["release_id"],
+                changing=False,
+            )
+        else:
+            compatibility.assert_not_called()
         args = terraform.call_args_list[-2].args
         assert {arg for arg in args[1:] if arg.startswith("-var=")} == {
             "-var=loader_package_path=build/loader.zip",

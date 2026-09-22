@@ -1,5 +1,6 @@
 {
   "baseline": "4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe",
+  "development_baseline": "b7c581c9d7f72360eecd5f4d7af1204ebb2077cd",
   "packages": {
     "loader.zip": "089969a77cd61816f1471656ad6dfda793b595c3f9244a1027c2e11ad71054fb",
     "publisher.zip": "80a65b1261419bff6b358404c525f1aec750e839be17f13640fce78d6a08db74",
