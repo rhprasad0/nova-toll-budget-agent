@@ -1,0 +1,28 @@
+{
+  "policy": {
+    "version": "1.0.15",
+    "contract_sha256": "096c09a86703e96f65a4802a6ca4d3bff9c1042937d2d66d25b4c3310498eed6",
+    "trials": 3,
+    "cases": 24,
+    "workers": 4,
+    "critical_passes": 3,
+    "noncritical_passes": 2,
+    "suite_success_min": 0.9,
+    "suite_pass_cubed_min": 0.75,
+    "lost_passes_max": 1,
+    "run_cost_max_usd": 5.0,
+    "agent_cost_per_success_max_usd": 0.05,
+    "latency_p50_max_seconds": 30.0,
+    "latency_p95_max_seconds": 60.0,
+    "candidate_max_age_hours": 24,
+    "production_max_age_hours": 720,
+    "sample_size": 8,
+    "replacement_runs_max": 1,
+    "max_output_tokens": 2048
+  },
+  "approval": {
+    "status": "pending",
+    "evidence_sha256": "254722a0b8036a96ee666a022549c5c8a0c2f59109e394a93be367e38c7430ea",
+    "scope": "Source-only cleanup removes the unused Python route adapter and relocates evaluator assertions into pytest. Cases, labels, prompts, caching, numeric thresholds, and protected four-worker timing policy are unchanged; exact-contract review and fresh calibration remain required."
+  }
+}

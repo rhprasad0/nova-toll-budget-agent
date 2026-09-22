@@ -30,7 +30,7 @@ plans, state evidence, or documentation.
 - [Directed routing contract](db/oracle/CONTRACT.md),
   [schema](db/oracle/schema.sql), and
   [reviewed source-data builder](oracle/build_oracle_data.py)
-- [Agent-facing route validation](agent_tools/validate_toll_route.py)
+- [Shared route validation](agent_tools/validate_toll_route.py)
 
 ## Database bootstrap
 
@@ -127,7 +127,7 @@ From `v2/`, run the offline tests and deterministic release builds:
 ```sh
 uv sync --locked
 python3 scripts/check_repository.py
-uv run python eval/run_evaluation.py --check
+uv run pytest -q tests/test_run_evaluation.py
 uv run coverage run -m pytest
 uv run coverage report
 node --test tests/*.mjs
@@ -274,19 +274,22 @@ emoji, tool activity, metrics, and raw Strands events without browser analytics
 or on-disk conversation storage. It also serves the FAQ and a checked-in map of
 supported toll-road access points beneath four annual toll ballparks to
 Washington. From `v2/`, configure the
-same AWS and database environment used by the live agent tests, then run:
+development database endpoint (`DB_HOST`, `DB_PORT`) and verified CA bundle
+(`DB_CA_BUNDLE_PATH`), then run:
 
 ```sh
-AWS_PROFILE=nova-toll AWS_DEFAULT_REGION=us-east-1 \
-  uv run python -m agent.dev_chat
+export AWS_PROFILE=nova-toll-dev AWS_DEFAULT_REGION=us-east-1
+export DB_NAME=nova_toll_development DB_USER=tollchat_agent_development
+export PRICING_DB_USER=pricing_caller_development
+uv run python -m agent.dev_chat
 ```
 
 Open <http://127.0.0.1:8000>. The agent reads its OpenAI credential from SSM;
-the Boto3 login provider refreshes the `nova-toll` profile's temporary
-credentials without writing them to a project file. Run `aws login --profile
-nova-toll` again when its login session expires after up to 12 hours. Required
-database variables are `DB_HOST`, `DB_PORT`, `DB_NAME`, and
-`DB_CA_BUNDLE_PATH`. If needed, `scripts/build_loader_zip.sh` creates the
+the Boto3 credential provider uses the `nova-toll-dev` profile's temporary
+credentials without writing them to a project file. Renew that profile's configured
+login session when it expires. The account, database,
+and IAM database roles above must all target development. If needed,
+`scripts/build_loader_zip.sh` creates the
 verified RDS CA bundle at `infra/build/loader/rds-ca-bundle.pem`.
 
 Its stable developer prompt uses OpenAI's explicit provider-managed prompt cache

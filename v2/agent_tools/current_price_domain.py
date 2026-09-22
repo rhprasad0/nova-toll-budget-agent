@@ -152,9 +152,7 @@ class _IncompleteRoutePriceResponse(_Model):
     unavailable_components: Annotated[list[_UnavailableComponent], Field(min_length=1)]
 
 
-class _NonValidRouteResponse(
-    route_validation._RouteResponse  # pyright: ignore[reportPrivateUsage]
-):
+class _NonValidRouteResponse(route_validation._RouteResponse):
     status: Literal[  # pyright: ignore[reportIncompatibleVariableOverride]
         "invalid_origin",
         "invalid_destination",
@@ -165,9 +163,7 @@ class _NonValidRouteResponse(
     ]
 
 
-class _PricingRouteUnavailableResponse(
-    route_validation._RouteResponse  # pyright: ignore[reportPrivateUsage]
-):
+class _PricingRouteUnavailableResponse(route_validation._RouteResponse):
     status: Literal[  # pyright: ignore[reportIncompatibleVariableOverride]
         "currently_unavailable", "unknown_availability"
     ]

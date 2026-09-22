@@ -4,22 +4,11 @@ from collections.abc import Callable, Sequence
 from typing import Self, cast
 
 import pytest
-from strands.types.tools import ToolUse
+from pydantic import ValidationError
 
 from agent_tools import validate_toll_route as route_tool
 
 type JSON = str | int | float | bool | list[JSON] | dict[str, JSON] | None
-
-
-def _tool_use(input_data: object, tool_use_id: str = "tool-123") -> ToolUse:
-    return cast(
-        ToolUse,
-        {
-            "name": "validate_toll_route",
-            "toolUseId": tool_use_id,
-            "input": input_data,
-        },
-    )
 
 
 def _valid_row() -> dict[str, JSON]:
@@ -323,11 +312,7 @@ class _Connection:
             raise self.close_error
 
 
-def _invoke(
-    monkeypatch: pytest.MonkeyPatch, row: dict[str, JSON]
-) -> tuple[dict[str, object], _Connection]:
-    connection = _Connection([row])
-    monkeypatch.setattr(route_tool, "connect_to_database", lambda: connection)
+def _validate_response(row: dict[str, JSON]) -> route_tool._RouteResponse:
     origin_point_id = (
         cast(list[JSON], row["point_ids"])[0] if row["point_ids"] else "origin"
     )
@@ -359,15 +344,13 @@ def _invoke(
             destination_point_id = cast(
                 dict[str, JSON], cast(dict[str, JSON], row["reason"])["details"]
             )["point_id"]
-    result = route_tool.validate_toll_route(
-        _tool_use(
-            {
-                "origin_point_id": origin_point_id,
-                "destination_point_id": destination_point_id,
-            }
-        )
+    request = route_tool._RouteInput.model_validate(
+        {
+            "origin_point_id": origin_point_id,
+            "destination_point_id": destination_point_id,
+        }
     )
-    return result, connection
+    return route_tool._RouteResponse.model_validate(row, context={"request": request})
 
 
 @pytest.mark.parametrize(
@@ -382,30 +365,12 @@ def _invoke(
         },
     ],
 )
-def test_invalid_input_is_logged_and_never_connects(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
+def test_route_input_rejects_missing_mistyped_and_extra_fields(
     input_data: object,
 ) -> None:
-    monkeypatch.setattr(
-        route_tool,
-        "connect_to_database",
-        lambda: pytest.fail("invalid input opened a database connection"),
-    )
-    with caplog.at_level(logging.ERROR):
-        result = route_tool.validate_toll_route(_tool_use(input_data))
-
-    assert result == {
-        "toolUseId": "tool-123",
-        "status": "error",
-        "content": [
-            {"text": "Unable to validate the toll route. Reference: tool-123."}
-        ],
-    }
-    assert len(caplog.records) == 1
-    assert caplog.records[0].__dict__["toolUseId"] == "tool-123"
-    assert caplog.records[0].__dict__["failureStage"] == "input_validation"
-    assert "TOP-SECRET" not in caplog.text
+    with pytest.raises(ValidationError) as error:
+        route_tool._RouteInput.model_validate(input_data)
+    assert "TOP-SECRET" not in str(error.value)
 
 
 @pytest.mark.parametrize(
@@ -475,58 +440,23 @@ def test_invalid_input_is_logged_and_never_connects(
         },
     ],
 )
-def test_documented_domain_rows_are_successful(
-    monkeypatch: pytest.MonkeyPatch, row: dict[str, JSON]
-) -> None:
-    result, connection = _invoke(monkeypatch, row)
-    assert result == {
-        "toolUseId": "tool-123",
-        "status": "success",
-        "content": [{"json": row}],
-    }
-    assert connection.closed
+def test_documented_domain_rows_are_valid(row: dict[str, JSON]) -> None:
+    assert _validate_response(row).model_dump(mode="json") == row
 
 
 @pytest.mark.parametrize("origin_point_id", ["airport_dca", "i95:2233SO"])
-def test_southbound_prefix_route_to_westpark_is_valid(
-    monkeypatch: pytest.MonkeyPatch, origin_point_id: str
-) -> None:
+def test_southbound_prefix_route_to_westpark_is_valid(origin_point_id: str) -> None:
     row = _southbound_westpark_row(origin_point_id)
-
-    result, connection = _invoke(monkeypatch, row)
-
-    assert result == {
-        "toolUseId": "tool-123",
-        "status": "success",
-        "content": [{"json": row}],
-    }
-    assert connection.closed
+    assert _validate_response(row).model_dump(mode="json") == row
 
 
-def test_route_rejects_unknown_gap_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_route_rejects_unknown_gap_boundary() -> None:
     row = _southbound_westpark_row()
     cast(dict[str, JSON], cast(list[JSON], row["general_purpose_gaps"])[0])[
         "boundary_point_id"
     ] = "i495:999SD"
-
-    result, connection = _invoke(monkeypatch, row)
-
-    assert result["status"] == "error"
-    assert connection.closed
-
-
-def test_query_uses_bound_parameters_and_closes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    result, connection = _invoke(monkeypatch, _valid_row())
-    assert result["status"] == "success"
-    assert connection.cursor_instance.calls == [
-        (
-            "SELECT * FROM oracle.validate_toll_route(%s, %s)",
-            ("i66:1:entry:EB", "i66:4:exit:EB"),
-        )
-    ]
-    assert connection.closed
+    with pytest.raises(ValidationError):
+        _validate_response(row)
 
 
 def test_iam_tls_connection_contract(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -608,100 +538,15 @@ def test_iam_tls_connection_contract(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize(
-    "rows",
+    "row",
     [
-        [],
-        [_valid_row(), _valid_row()],
-        [{**_valid_row(), "point_ids": []}],
-        [{**_valid_row(), "secret_extra_column": "rejected"}],
+        {**_valid_row(), "point_ids": []},
+        {**_valid_row(), "secret_extra_column": "rejected"},
     ],
 )
-def test_bad_database_rows_are_sanitized_logged_and_closed(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-    rows: list[dict[str, JSON]],
-) -> None:
-    connection = _Connection(rows)
-    monkeypatch.setattr(route_tool, "connect_to_database", lambda: connection)
-    with caplog.at_level(logging.ERROR):
-        result = route_tool.validate_toll_route(
-            _tool_use(
-                {
-                    "origin_point_id": "origin",
-                    "destination_point_id": "destination",
-                }
-            )
-        )
-
-    assert result["status"] == "error"
-    assert result["content"] == [
-        {"text": "Unable to validate the toll route. Reference: tool-123."}
-    ]
-    assert connection.closed
-    assert len(caplog.records) == 1
-    assert caplog.records[0].__dict__["failureStage"] == "response_validation"
-
-
-def test_connection_error_is_sanitized_and_logged(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    monkeypatch.setattr(
-        route_tool,
-        "connect_to_database",
-        lambda: (_ for _ in ()).throw(RuntimeError("password=do-not-return")),
-    )
-    with caplog.at_level(logging.ERROR):
-        result = route_tool.validate_toll_route(
-            _tool_use(
-                {
-                    "origin_point_id": "origin",
-                    "destination_point_id": "destination",
-                }
-            )
-        )
-
-    assert result["status"] == "error"
-    assert "password" not in result["content"][0].get("text", "")
-    assert caplog.records[0].__dict__["failureStage"] == "connection"
-    assert caplog.records[0].__dict__["exceptionType"] == "RuntimeError"
-
-
-@pytest.mark.parametrize(
-    ("query_error", "close_error", "expected_stage"),
-    [
-        (RuntimeError("SELECT secret"), None, "query"),
-        (None, RuntimeError("close secret"), "connection_close"),
-        (RuntimeError("query secret"), RuntimeError("close secret"), "query"),
-    ],
-)
-def test_database_errors_are_sanitized_logged_and_closed(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-    query_error: Exception | None,
-    close_error: Exception | None,
-    expected_stage: str,
-) -> None:
-    connection = _Connection(
-        [_valid_row()], query_error=query_error, close_error=close_error
-    )
-    monkeypatch.setattr(route_tool, "connect_to_database", lambda: connection)
-    with caplog.at_level(logging.ERROR):
-        result = route_tool.validate_toll_route(
-            _tool_use(
-                {
-                    "origin_point_id": "origin",
-                    "destination_point_id": "destination",
-                }
-            )
-        )
-
-    assert result["status"] == "error"
-    assert result["content"] == [
-        {"text": "Unable to validate the toll route. Reference: tool-123."}
-    ]
-    assert connection.closed
-    assert len(caplog.records) == 1
-    assert caplog.records[0].__dict__["failureStage"] == expected_stage
+def test_route_response_rejects_malformed_rows(row: dict[str, JSON]) -> None:
+    with pytest.raises(ValidationError):
+        _validate_response(row)
 
 
 def _callback_1(row: dict[str, JSON]) -> object:
@@ -729,31 +574,25 @@ def _strict_callback_3(row: dict[str, JSON]) -> object:
     ],
 )
 def test_cross_field_contract_violations_fail_safely(
-    monkeypatch: pytest.MonkeyPatch, mutation: Callable[[dict[str, JSON]], object]
+    mutation: Callable[[dict[str, JSON]], object],
 ) -> None:
     row = copy.deepcopy(_unavailable_row())
     mutation(row)
-    result, connection = _invoke(monkeypatch, row)
-    assert result["status"] == "error"
-    assert connection.closed
+    with pytest.raises(ValidationError):
+        _validate_response(row)
 
 
-def test_path_must_match_requested_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
-    connection = _Connection([_valid_row()])
-    monkeypatch.setattr(route_tool, "connect_to_database", lambda: connection)
-    result = route_tool.validate_toll_route(
-        _tool_use(
-            {
-                "origin_point_id": "different-origin",
-                "destination_point_id": "i66:4:exit:EB",
-            }
-        )
+def test_path_must_match_requested_endpoints() -> None:
+    request = route_tool._RouteInput(
+        origin_point_id="different-origin", destination_point_id="i66:4:exit:EB"
     )
-    assert result["status"] == "error"
-    assert connection.closed
+    with pytest.raises(ValidationError, match="requested origin"):
+        route_tool._RouteResponse.model_validate(
+            _valid_row(), context={"request": request}
+        )
 
 
-def test_cyclic_path_fails_safely(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cyclic_path_fails_safely() -> None:
     row = _valid_row()
     row.update(
         {
@@ -767,9 +606,8 @@ def test_cyclic_path_fails_safely(monkeypatch: pytest.MonkeyPatch) -> None:
             "connection_types": cast(list[JSON], ["within_facility"] * 3),
         }
     )
-    result, connection = _invoke(monkeypatch, row)
-    assert result["status"] == "error"
-    assert connection.closed
+    with pytest.raises(ValidationError):
+        _validate_response(row)
 
 
 @pytest.mark.parametrize(
@@ -803,17 +641,14 @@ def test_cyclic_path_fails_safely(monkeypatch: pytest.MonkeyPatch) -> None:
         },
     ],
 )
-def test_contradictory_i95_evidence_fails_safely(
-    monkeypatch: pytest.MonkeyPatch, row: dict[str, JSON]
-) -> None:
-    result, connection = _invoke(monkeypatch, row)
-    assert result["status"] == "error"
-    assert connection.closed
+def test_contradictory_i95_evidence_fails_safely(row: dict[str, JSON]) -> None:
+    with pytest.raises(ValidationError):
+        _validate_response(row)
 
 
 @pytest.mark.parametrize("alternatives", [[], None])
 def test_incompatible_ramp_alternatives_follow_contract(
-    monkeypatch: pytest.MonkeyPatch, alternatives: list[JSON] | None
+    alternatives: list[JSON] | None,
 ) -> None:
     returned_alternatives: list[JSON] = (
         []
@@ -847,9 +682,8 @@ def test_incompatible_ramp_alternatives_follow_contract(
         "general_purpose_gaps": [],
         "i95_evidence": None,
     }
-    result, connection = _invoke(monkeypatch, row)
-    assert result["status"] == "error"
-    assert connection.closed
+    with pytest.raises(ValidationError):
+        _validate_response(row)
 
 
 def _callback_9(details: dict[str, JSON]) -> object:
@@ -890,16 +724,13 @@ def _strict_callback_5(details: dict[str, JSON]) -> object:
     ],
 )
 def test_i95_northbound_restart_rejects_malformed_details(
-    monkeypatch: pytest.MonkeyPatch,
     mutation: Callable[[dict[str, JSON]], object],
     message: str,
 ) -> None:
     row = _i95_northbound_restart_row()
     mutation(cast(dict[str, JSON], cast(dict[str, JSON], row["reason"])["details"]))
-    result, connection = _invoke(monkeypatch, row)
-
-    assert result["status"] == "error"
-    assert connection.closed
+    with pytest.raises(ValidationError, match=message):
+        _validate_response(row)
 
 
 def test_pricing_route_returns_typed_facility_legs(

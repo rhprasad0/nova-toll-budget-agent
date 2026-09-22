@@ -1,10 +1,11 @@
 # TollChat v2 evaluation
 
 The separate [24-case golden corpus](GOLDEN_EVAL_SPEC.md) has offline validation;
-corpus 1.0.11 and its judge contract are approved. See the
-[AI evaluation engineering summary](GOLDEN_VALIDITY_REVIEW.md) for the work,
-results, and limitations. It has no qualified production baseline yet and excludes
-current I-95/I-395 direction cases; the scheduled suite below stays separate.
+corpus 1.0.26 and its exact evaluation contract await review. The cleanup preserves
+1.0.25's cases, fixtures, labels, prompts, and caching behavior while changing
+source fingerprints. See the [historical calibration results](results/golden/CACHING-SUMMARY.md)
+for recorded measurements and limitations. No qualified production baseline exists;
+current I-95/I-395 direction cases remain excluded from the golden corpus.
 
 The scheduled Strands suite uses simulated users and model-based judges for six
 current-toll scenarios. The broader code-graded regression catalog retains eight
@@ -83,15 +84,27 @@ of its verdicts are still needed before relying on the new scores.
 ## Offline check
 
 ```bash
-uv run python eval/run_evaluation.py --check
+uv run pytest -q tests/test_run_evaluation.py
 ```
 
 This command is network-free and runs in normal pull-request CI.
 
 ## Live run
 
+Use the development account and its database roles for the live commands below:
+
 ```bash
-env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
+export AWS_PROFILE=nova-toll-dev AWS_DEFAULT_REGION=us-east-1
+export DB_NAME=nova_toll_development DB_USER=tollchat_agent_development
+export PRICING_DB_USER=pricing_caller_development
+```
+
+Configure `DB_HOST`, `DB_PORT`, and `DB_CA_BUNDLE_PATH` for the development
+database as described in the [local console setup](../README.md#local-agent-console).
+Credentials come from the configured AWS profile and SSM, not a project secrets file.
+
+```bash
+env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll-dev \
   uv run python eval/run_evaluation.py --window i95_southbound --suite scheduled
 ```
 
@@ -100,7 +113,7 @@ a Monday-Friday northbound window. The same command also checks the
 Dulles-to-Reagan cross-direction route every northbound day:
 
 ```bash
-env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
+env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll-dev \
   uv run python eval/run_evaluation.py --window i95_northbound --suite direct
 ```
 
@@ -123,7 +136,7 @@ Slice 3 reuses these existing cases and adds no prompt or model invocation.
 The twelve annual cases are independent of the live I-95 direction:
 
 ```bash
-env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
+env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll-dev \
   uv run python eval/run_evaluation.py --window all --suite annual
 ```
 
@@ -139,7 +152,7 @@ result is valid only after that exact route call; `route_unavailable` or a
 Springfield alternative remains a failure.
 
 The independent-leg daily cases select every new annual behavior in each of
-`i95_northbound`, `i95_southbound`, and `i95_reversal`. The offline `--check`
+`i95_northbound`, `i95_southbound`, and `i95_reversal`. The offline regression check
 asserts exact endpoint inputs, the observed Backlick alternatives, retained
 selection fields, confirmation timing, rejection mutations, and tool-grounded
 financial claims. A bounded authenticated run requested the `i95_southbound`
@@ -152,13 +165,13 @@ claim):
 
 ```bash
 for run in 1 2 3 4 5; do
-  env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
+  env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll-dev \
     uv run python eval/run_evaluation.py --window i95_southbound --suite direct \
     | tee "/tmp/leesburg-i395-current-${run}.txt" || exit
 done
 
 for run in 1 2 3 4 5; do
-  env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
+  env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll-dev \
     uv run python eval/run_evaluation.py --window all --suite annual \
     | tee "/tmp/leesburg-i395-annual-${run}.txt" || exit
 done
@@ -169,7 +182,7 @@ live tests, then the normal v2 lint/format/type/test/contract/build checks and
 disposable PostgreSQL migration/contracts validation. Live reports are ignored;
 the checks read existing services only and do not deploy or mutate deployed data.
 
-The live run needs the RDS CA bundle at `infra/build/ca/rds-ca-bundle.pem`, AWS
+The live run needs the RDS CA bundle at `infra/build/loader/rds-ca-bundle.pem`, AWS
 access to RDS and `/nova-toll/openai_api_key`, and network access to the private
 database. The window must match the live state. The timed Lambda selects the I-66 eastbound case at 7:23 AM and the westbound
 case at 5:23 PM Eastern. Other I-66 states require explicit regression runs.
@@ -185,7 +198,7 @@ files stay in ignored `eval/private/`; the small canonical fixture is
 Prepare and inspect the exact packet without calling OpenAI:
 
 ```bash
-AWS_PROFILE=nova-toll AWS_DEFAULT_REGION=us-east-1 \
+AWS_PROFILE=nova-toll-dev AWS_DEFAULT_REGION=us-east-1 \
   uv run python eval/ballpark_hallucination_batch.py prepare
 jq .preflight eval/private/annual-ballpark-hallucination/manifest.json
 ```
@@ -194,7 +207,7 @@ Submit only after reviewing that report. The command recounts the packet and
 all visible nonterminal Luna Batch inputs before uploading:
 
 ```bash
-AWS_PROFILE=nova-toll AWS_DEFAULT_REGION=us-east-1 \
+AWS_PROFILE=nova-toll-dev AWS_DEFAULT_REGION=us-east-1 \
   uv run python eval/ballpark_hallucination_batch.py submit
 ```
 
@@ -203,7 +216,7 @@ may be powered off. Later, run `collect`; it checks once and exits immediately
 when the job is still pending:
 
 ```bash
-AWS_PROFILE=nova-toll AWS_DEFAULT_REGION=us-east-1 \
+AWS_PROFILE=nova-toll-dev AWS_DEFAULT_REGION=us-east-1 \
   uv run python eval/ballpark_hallucination_batch.py collect
 ```
 

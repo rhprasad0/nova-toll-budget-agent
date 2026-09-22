@@ -15,16 +15,12 @@ from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
-from agent.toll_agent import build_agent
+from agent.toll_agent import activity_updates, build_agent
 
 _ASSET_ROOT = Path(__file__).resolve().parent
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 _MAX_MESSAGE_CHARS = 8_000
 _EASTERN = ZoneInfo("America/New_York")
-_TOOL_LABELS = {
-    "get_current_toll_price": "Checking current toll price",
-    "get_annual_toll_ballpark": "Estimating annual commute tolls",
-}
 logger = logging.getLogger(__name__)
 
 
@@ -46,50 +42,6 @@ def _json_safe(value: object) -> object:
     if isinstance(value, Sequence):
         return [_json_safe(item) for item in cast(Sequence[object], value)]
     return str(value)
-
-
-def _activity_updates(
-    message: object, activities: dict[str, dict[str, object]]
-) -> list[dict[str, object]]:
-    if not isinstance(message, Mapping):
-        return []
-    message_data = cast(Mapping[object, object], message)
-    content = message_data.get("content", [])
-    if not isinstance(content, Sequence):
-        return []
-    updates: list[dict[str, object]] = []
-    for block in cast(Sequence[object], content):
-        if not isinstance(block, Mapping):
-            continue
-        block_data = cast(Mapping[object, object], block)
-        tool_use = block_data.get("toolUse")
-        if isinstance(tool_use, Mapping):
-            tool_use_data = cast(Mapping[object, object], tool_use)
-            tool_id = tool_use_data.get("toolUseId")
-            if isinstance(tool_id, str) and tool_id not in activities:
-                activity: dict[str, object] = {
-                    "index": len(activities),
-                    "label": _TOOL_LABELS.get(
-                        str(tool_use_data.get("name")), "Checking toll data"
-                    ),
-                    "status": "running",
-                }
-                activities[tool_id] = activity
-                updates.append(dict(activity))
-            continue
-        tool_result = block_data.get("toolResult")
-        if isinstance(tool_result, Mapping):
-            tool_result_data = cast(Mapping[object, object], tool_result)
-            tool_id = tool_result_data.get("toolUseId")
-            if isinstance(tool_id, str) and tool_id in activities:
-                activity = activities[tool_id]
-                activity["status"] = (
-                    "failed"
-                    if tool_result_data.get("status") == "error"
-                    else "completed"
-                )
-                updates.append(dict(activity))
-    return updates
 
 
 class DevChat:
@@ -135,7 +87,7 @@ class DevChat:
                     }
                     if isinstance(event.get("data"), str):
                         payload["text_delta"] = event["data"]
-                    if updates := _activity_updates(event.get("message"), activities):
+                    if updates := activity_updates(event.get("message"), activities):
                         payload["tool_updates"] = updates
                     if "result" in event and (result := event["result"]) is not None:
                         metrics = getattr(result, "metrics", None)

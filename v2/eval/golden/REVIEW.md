@@ -1,10 +1,13 @@
-# Golden case review, version 1.0.7
+# Golden case review, version 1.0.26
 
-**Cases and labels approved; version 1.0.7 judge calibration awaits review.** Approval includes the corrected fixed charges in case 20, required baseline in case 24, and Markdown currency-list example. The 38 example conversations were authored without live model or pricing calls. All tool fixtures are synthetic. Paid calibration of those examples is recorded separately under `eval/evidence/golden-360/`.
+**The current exact contract awaits review.** Cases, fixtures, labels, and actor
+briefs are unchanged from 1.0.25. This revision removes an unused Python route
+adapter and relocates evaluator self-checks into pytest; changed source hashes
+require fresh exact-contract review. The corpus digest is recorded in
+[manifest.json](manifest.json), and approval status in [review.json](review.json).
 
-Corpus SHA-256: `f5826201361001fdea03a80f3097b0ca8e9bd50b0480ec483918d20cf3ab8ffc`
-
-The questions and actor briefs use the humanizer skill. Review their meaning as well as their wording. In particular, check that the actor only knows ordinary user facts and that a rubric accepts a useful equivalent answer.
+Earlier measurements remain in the [PR #581 report](../results/golden/CACHING-SUMMARY.md).
+They do not approve the current digest. All tool fixtures are synthetic.
 
 ## Coverage and proposed criticality
 
@@ -1088,9 +1091,9 @@ These are candidates for human labels and later judge calibration, not claims th
 
 ## Review record
 
-- Cases/fixtures and labels: unchanged from the approved 1.0.1 set. New grader and harness evidence await review; see [review.json](review.json).
-- Judge calibration: not run; belongs to #360.
-- Baseline execution: not run; belongs to #360/#362.
+- Cases/fixtures and labels: unchanged from 1.0.25. Exact source-contract review remains pending; see [review.json](review.json).
+- Judge calibration: historical runs retained; fresh exact-contract calibration remains outstanding.
+- Baseline execution: historical runs retained; no qualified production reference exists for this contract.
 - Coverage review: initial 24 cases, with current I-95 direction and guardrail scenarios deliberately excluded.
 - Next review: before any corpus revision or when a new observed failure is considered.
 

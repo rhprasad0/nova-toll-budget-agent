@@ -2,8 +2,8 @@
   "baseline": "4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe",
   "packages": {
     "loader.zip": "089969a77cd61816f1471656ad6dfda793b595c3f9244a1027c2e11ad71054fb",
-    "publisher.zip": "dd27878fdd0020520590046c5217a11d6a5c264075159c3fd2be6b8f24410218",
-    "timed-checks.zip": "e5301dcb8f0db3ec3a23ed88532fcaa665e664593badd416f7309ba2b029a12f"
+    "publisher.zip": "80a65b1261419bff6b358404c525f1aec750e839be17f13640fce78d6a08db74",
+    "timed-checks.zip": "245b348db38566c4f99d3c1d39d37eebade057cf26482ea62096ffe839ad54d8"
   },
   "schemas": {
     "application-schemas.json": "7db6fcb374162aaa157116b4107dab3160854ffeb5603557771043faf0dce85d",

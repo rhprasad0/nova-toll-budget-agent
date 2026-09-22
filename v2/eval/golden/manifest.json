@@ -1,10 +1,10 @@
 {
-  "version": "1.0.25",
+  "version": "1.0.26",
   "trials_per_case": 3,
   "actor_model": "gpt-5.6-luna",
   "judge_model": "gpt-5.6-luna",
   "review_status_file": "review.json",
-  "corpus_sha256": "1646f457b8dc4e761d9a25a8e919883064c55adb40e4671f3a126217a750608e",
+  "corpus_sha256": "fc086b61455bc6eacb8b977456ebd8eca6bc645a668e29cc2cd919c9e59e8ee2",
   "hashes": {
     "cases.jsonl": "5f37d6a8cb3519790a7a0c9fec9f9631455df13486d86b69c890beb8e7b6939f",
     "prompt-points.json": "441eef5a8f830f50074bd42df9356cde1e258c445e1fd7e1a5bbf033cf008315",
@@ -26,14 +26,14 @@
     "fixtures/i66-stale_observation.json": "45748ac15ab641dcc98980bc1259a1d2ae1c0be1b8cde2f46b05eeff4786f65e",
     "fixtures/unsupported-profile.json": "aa58124cf2503e1425811a684b030a2d77acd91ded284e4c4ac1242dd9de9328",
     "v2/uv.lock": "9454dd5fb0d1d636f7c974aa33cdf26346705889ea0aab21f8acdaa1e76857fd",
-    "v2/eval/golden.py": "dd46cccc9a46222e850ad3a765a15b215cd7c8fcae339c68268b6bc3e0526e47",
+    "v2/eval/golden.py": "828469d5f4c57ee602e18d17a7cec52676311299382b437e00cb42e065312b40",
     "v2/eval/simulated.py": "fe27f33fadb90a20c58459723df6c91fb212156169d010f747819a4ce65a4449",
-    "v2/eval/run_evaluation.py": "1a47911b0067fbe321a5555cccb10ea4ee6d9c8c662bbf625a755736d19ddc90",
+    "v2/eval/run_evaluation.py": "4a141a87ef4ca6d0cdb40d85f58ce5ace1335d88ccda3d1abb4db14a9b57bf2b",
     "v2/eval/golden_run.py": "e41d533874ac307e2cb5621cb3cfead638905605067d7d72006c9f4ee3520bde",
     "v2/eval/artifact_agent.py": "124a904f56527480e28d4a6bf59c0efe838311bfbe4c01a6c5125d552aea9fab",
     "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
-    "v2/agent_tools/current_price_domain.py": "e3bfc3f37d60e011493278fc72e132a74d2734a035bacbd76f781ae4016c0e3a",
+    "v2/agent_tools/current_price_domain.py": "620601d7ed40983c20cd13b58417d46f5519cdae76e699fafffb24ecbec6144e",
     "v2/agent_tools/get_annual_toll_ballpark.py": "6576b279225160a4275945df56438ce1c4b84e4d1b0654ba2cb56bc088a6e777",
-    "v2/agent_tools/validate_toll_route.py": "3346262a1ef2b24d4cc8d578177f6b7bbd0a1e601914044b45a566a96fe760be"
+    "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   }
 }

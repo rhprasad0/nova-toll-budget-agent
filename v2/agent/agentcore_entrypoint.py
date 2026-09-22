@@ -22,7 +22,7 @@ from opentelemetry.trace import StatusCode
 from strands.types.agent import Limits
 
 from agent.toll_agent import (
-    _DUPLICATE_TOOL_MESSAGE,
+    activity_updates,
     build_agent,
 )
 
@@ -46,10 +46,6 @@ _CREDENTIAL = re.compile(
     r"bearer\s+\S+|(?:AKIA|ASIA)[0-9A-Z]{16}|(?:sk|gh[pousr]_)[A-Za-z0-9_-]{8,}|"
     r"github_pat_[A-Za-z0-9_-]{20,})"
 )
-_TOOL_LABELS = {
-    "get_current_toll_price": "Checking current toll price",
-    "get_annual_toll_ballpark": "Calculating annual toll-commute affordability",
-}
 _TEXT_BOUNDARY = re.compile(r"""[.!?]["')\]]*(?=\s)|\n\n""")
 logger = logging.getLogger(__name__)
 
@@ -81,56 +77,6 @@ def _text_boundary(text: str, published: int) -> int:
     # Wait for whitespace so even a credential split across model deltas stays whole.
     whitespace = re.search(r"\s", text[published + 400 :])
     return published + 400 + whitespace.end() if whitespace else published
-
-
-def _duplicate(result: Mapping[str, object]) -> bool:
-    return result.get("status") == "error" and result.get("content") == [
-        {"text": _DUPLICATE_TOOL_MESSAGE}
-    ]
-
-
-def _activity_events(
-    message: object, activities: dict[str, dict[str, object]]
-) -> list[dict[str, object]]:
-    if not isinstance(message, Mapping):
-        return []
-    content = cast(Mapping[object, object], message).get("content", [])
-    if not isinstance(content, Sequence):
-        return []
-    events: list[dict[str, object]] = []
-    for block in cast(Sequence[object], content):
-        if not isinstance(block, Mapping):
-            continue
-        data = cast(Mapping[str, object], block)
-        tool_use = data.get("toolUse")
-        if isinstance(tool_use, Mapping):
-            use = cast(Mapping[str, object], tool_use)
-            tool_id = use.get("toolUseId")
-            if isinstance(tool_id, str) and tool_id not in activities:
-                activity: dict[str, object] = {
-                    "type": "tool",
-                    "index": len(activities),
-                    "label": _TOOL_LABELS.get(
-                        str(use.get("name")), "Checking toll data"
-                    ),
-                    "status": "running",
-                }
-                activities[tool_id] = activity
-                events.append(dict(activity))
-            continue
-        tool_result = data.get("toolResult")
-        if isinstance(tool_result, Mapping):
-            result = cast(Mapping[str, object], tool_result)
-            tool_id = result.get("toolUseId")
-            if isinstance(tool_id, str) and tool_id in activities:
-                activity = activities[tool_id]
-                activity["status"] = (
-                    "failed"
-                    if result.get("status") == "error" and not _duplicate(result)
-                    else "completed"
-                )
-                events.append(dict(activity))
-    return events
 
 
 def _canary_event(messages: Sequence[object]) -> dict[str, object]:
@@ -335,8 +281,8 @@ class TollChatRuntime:
                         text, published = "", 0
                     if canary and "message" in event:
                         canary_messages.append(event["message"])
-                    for activity in _activity_events(event.get("message"), activities):
-                        yield activity
+                    for activity in activity_updates(event.get("message"), activities):
+                        yield {"type": "tool", **activity}
                     if "result" in event:
                         result = event["result"]
             finally:

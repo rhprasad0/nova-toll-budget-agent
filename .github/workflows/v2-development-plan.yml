@@ -409,8 +409,6 @@ jobs:
             -var-file="$RUNNER_TEMP/retained-slots.tfvars.json" \
             -var loader_package_path=build/loader.zip \
             -var publisher_package_path=build/publisher.zip \
-            -var agentcore_package_path=build/agentcore.zip \
-            -var chat_proxy_package_path=build/chat-proxy.zip \
             -var timed_checks_package_path=build/timed-checks.zip \
             >"$PLAN_LOG" 2>&1
           terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" show -json "$PLAN" \

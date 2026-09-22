@@ -121,7 +121,7 @@ smoke; release-qualifying paid execution requires a protected dispatch.
 
 ```bash
 uv run pytest tests/test_golden_run.py tests/test_golden_corpus.py tests/test_simulated_evaluation.py
-uv run python eval/run_evaluation.py --check
+uv run pytest -q tests/test_run_evaluation.py
 ```
 
 The tests cover real Strands replay, multi-turn context, fresh fixture state,

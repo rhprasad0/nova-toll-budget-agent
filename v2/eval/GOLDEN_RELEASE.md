@@ -10,12 +10,14 @@ PR 581 now also includes authorized application prompt corrections for source
 labels, annualized daily scenarios, and user-selected income. The application
 model remains gpt-5.6-luna. Local repetition does not qualify a production release.
 
-The current corpus **1.0.25**, harness **1.2.10**, and policy **1.0.14** await exact
-human approval. See the [current review packet](results/golden/CACHING-SUMMARY.md).
-Latest local calibration 33 agreed on **179/180** labels; actor checks passed
+The current corpus **1.0.26**, harness **1.2.10**, and policy **1.0.15** await exact
+human approval. The cleanup preserves cases, labels, prompts, and caching behavior
+but changes source fingerprints. Fresh calibration must use this exact contract.
+See the [historical PR #581 review packet](results/golden/CACHING-SUMMARY.md).
+Its local calibration 33 agreed on **179/180** labels; actor checks passed
 **60/60**. Outcome missed a premature alternative selection, while Rules and
 mandatory deterministic checks rejected it. The exact evidence and standing local
-approval are retained privately. Latest local application run reached **17/17
+approval are retained privately. Its local application run reached **17/17
 critical pass³ and 72/72 trials**, one of the three requested consecutive successes.
 Protected CI retains its four-worker scored timing policy. Activation remains
 pending approval; local success does not replace protected qualification.
@@ -50,7 +52,7 @@ shared $5 run ceiling before starting. The durable ledger also reserves against
 the existing $25 authorization. Missing usage stops further paid calls and
 blocks subsequent runs until spending is reconciled. Provider retries are off.
 
-The original thresholds from policy 1.0.0 are unchanged in policy 1.0.6. The
+The original thresholds from policy 1.0.0 are unchanged in policy 1.0.15. The
 active corpus has 60 development calibration examples covering route
 expectations, initial actor facts, monetary proposals/denials, and source
 grading. Earlier approvals apply only to their historical contracts.
