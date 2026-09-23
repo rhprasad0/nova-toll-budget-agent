@@ -1,9 +1,10 @@
 # Prompt experiment: A / B / C
 
 Prepared from `8a82e7399dd435e57464f5cbf18f1597aeb86525`. Local experiment only;
-no push, deployment, or production qualification. Combined paid-run ceiling: **$15**.
+PR #592 contains the preparation; this comparison is a layer above it.
+No deployment or production qualification. Combined paid-run ceiling: **$15**.
 
-**Calibration 2.0.8 completed; human review remains pending.** Both runs checked
+**Calibration 2.0.8 reviewed; diagnostic comparison completed; full runs in progress.** Both runs checked
 286 development references with no measurement failures. A has 5 label disagreements
 and B/C has 9, versus 6 and 10 under 2.0.7. The complete-history coverage-count
 false failures are gone. Both match all five semantic controls and the natural
@@ -14,8 +15,13 @@ evidence, transcript-reading errors and remaining interpretation disagreements.
 This round cost $0.915263. Cumulative spending is **$3.609137 of $15**, leaving
 $11.390863. Historical [2.0.5](CALIBRATION-REVIEW.md),
 [2.0.6](CALIBRATION-REVIEW-2.0.6.md) and [2.0.7](CALIBRATION-REVIEW-2.0.7.md)
-evidence remains unchanged. No application trials have run and no calibration
-approval has been recorded.
+evidence remains unchanged. Ryan authorized application comparisons after reviewing
+these results; the exact approvals are in [calibration-approvals-2.0.8.json](calibration-approvals-2.0.8.json).
+
+The [diagnostic comparison](DIAGNOSTIC-COMPARISON.md) covers 26 development cases
+with three trials per arm. Both candidates gain only 1.5 percentage points on paired
+complete cases, with intervals spanning losses and gains. Keep all prompts frozen
+for the full 200-case evaluation; no diagnostic-driven wording revision is justified.
 
 | Arm | Branch / worktree | Change |
 | --- | --- | --- |
@@ -38,7 +44,7 @@ SOP. Cases, references, labels, actor profiles and application variants are unch
 from 2.0.7.
 Do not weaken this identity gate or copy an approval between calibrations.
 
-Both fresh calibrations require human review before application execution.
+Both matching calibrations have user approval for this bounded local experiment.
 The historical 2.0.3 baseline and 2.0.4 calibration are retained unchanged.
 
 From C's `v2/`, run the offline cross-worktree check:
