@@ -3,8 +3,9 @@
 The [200-case golden corpus](GOLDEN_EVAL_SPEC.md) covers current pricing, annual
 affordability, multi-turn changes, evidence failures, and explicit workflow switches.
 The [review catalog](golden/REVIEW.md) links every case and labeled reference.
-Contract 2.0.5 retains 160 development and 40 reserved cases and requires fresh
-calibration review after the case 16/18/20 evaluator corrections. Ryan approved the
+Local experiment contract 2.0.6 retains 160 development and 40 reserved cases and
+requires fresh calibration review for semantic leniency. Release policy remains
+on pending 2.0.5; this experiment does not qualify a production release. Ryan approved the
 previous 2.0.3
 GPT-6 Luna corpus and calibration for the [first local baseline](evidence/gpt-6-luna/BASELINE.md):
 600 trials attempted, 409 passed, 184 failed, and 7 inconclusive. No qualified

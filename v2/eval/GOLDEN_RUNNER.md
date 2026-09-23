@@ -1,10 +1,17 @@
 # Running the frozen golden corpus
 
-The active corpus and harness are **2.0.5**: **200 cases**, split into **160
+The local experiment corpus and harness are **2.0.6**: **200 cases**, split into **160
 development and 40 reserved cases**, with three fresh trials per case. A complete
 application run has **600 conversations**. Reserved cases are public and
 exposed to their authors; they are excluded from calibration, not claimed to be
 secret or independently authored holdouts.
+
+The 2.0.6 semantic-leniency calibration uses 285 development references, including
+four new positive/negative controls. Run fresh A and B/C calibrations with four
+workers, `--budget-usd 15`, and `--prior-run` chained from the immediately preceding
+experiment run. Include both archived 2.0.5 calibrations ($0.881473 combined) in
+that chain. Application execution still requires exact-evidence human review.
+The frozen 26-case diagnostic subset is unchanged; no release is authorized.
 
 The runner executes the candidate application against frozen pricing evidence.
 Adaptive users provide only their case facts and required follow-ups. No database
@@ -13,9 +20,9 @@ model credentials come from the existing SSM parameter.
 
 ## Calibration and execution
 
-The corpus contains **326 reference examples**. Calibration selects **274
-development examples**: 272 have explicit Outcome, Grounding, and Rules labels
-(816 application labels), and two deliberately invalid actor examples have only
+The corpus contains **337 reference examples**. Calibration selects **285
+development examples**: 283 have explicit Outcome, Grounding, and Rules labels
+(849 application labels), and two deliberately invalid actor examples have only
 an actor-validity label. The 52 reserved examples are excluded. Example names do
 not determine verdicts. Fixed-reference mode judges the supplied user turns and any
 explicit stop records; it does not invent simulator stops for authored transcripts. Reports preserve disagreements and separate criterion

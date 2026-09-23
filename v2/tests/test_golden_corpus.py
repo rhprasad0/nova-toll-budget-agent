@@ -444,3 +444,37 @@ def test_downward_renderings_do_not_invent_money(wording: str) -> None:
     assert "unsupported_money" not in golden.grade_assertions(case, turns)
     turns[-1].response = wording.replace("2.00", "9.99")
     assert "unsupported_money" in golden.grade_assertions(case, turns)
+
+
+def test_semantic_controls_preserve_financial_checks_and_material_failures() -> None:
+    from eval import golden_run
+
+    cases = {c.id: c for c in golden.load_cases()}
+    controls = [
+        e for e in golden_run.development_examples() if e.label.startswith("semantic-")
+    ]
+    assert len(controls) == 4
+    assert (
+        sum(
+            bool(e.expected and all(e.expected.model_dump().values())) for e in controls
+        )
+        == 2
+    )
+    for example in controls:
+        case = cases[example.case_id]
+        assert not case.held_out
+        assert example.actor_validity == "valid"
+        assert golden.grade_assertions(case, example.turns) == []
+        corrupted = deepcopy(example.turns)
+        corrupted[-1].response += " The toll is $9999.99."
+        assert "unsupported_money" in golden.grade_assertions(case, corrupted)
+    closure = next(e for e in controls if e.label == "semantic-closure-paraphrase")
+    assert not closure.turns[-1].calls
+    assert "###" not in closure.turns[-1].response
+    for example in controls:
+        if example.label in {
+            "semantic-closure-fabricated-proof",
+            "semantic-annual-false-tax-entitlement",
+        }:
+            assert example.expected is not None
+            assert not any(example.expected.model_dump().values())
