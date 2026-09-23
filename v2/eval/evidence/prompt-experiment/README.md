@@ -4,7 +4,7 @@ Prepared from `8a82e7399dd435e57464f5cbf18f1597aeb86525`. Local experiment only;
 PR #592 contains the preparation; this comparison is a layer above it.
 No deployment or production qualification. Combined paid-run ceiling: **$15**.
 
-**Calibration 2.0.8 reviewed; diagnostic comparison completed; full runs in progress.** Both runs checked
+**Calibration 2.0.8 reviewed; diagnostic comparison completed; full comparison paused for AWS SSO renewal.** Both runs checked
 286 development references with no measurement failures. A has 5 label disagreements
 and B/C has 9, versus 6 and 10 under 2.0.7. The complete-history coverage-count
 false failures are gone. Both match all five semantic controls and the natural
@@ -22,6 +22,10 @@ The [diagnostic comparison](DIAGNOSTIC-COMPARISON.md) covers 26 development case
 with three trials per arm. Both candidates gain only 1.5 percentage points on paired
 complete cases, with intervals spanning losses and gains. Keep all prompts frozen
 for the full 200-case evaluation; no diagnostic-driven wording revision is justified.
+
+The [current results and recovery instructions](RESULTS.md) retain the completed A
+run and interrupted B/C runs. Total spending is $7.704711 of $15. Renew the
+development AWS SSO session before infrastructure-only recovery; no winner is established.
 
 | Arm | Branch / worktree | Change |
 | --- | --- | --- |

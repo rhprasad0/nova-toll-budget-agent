@@ -77,9 +77,19 @@ def main(stage: str) -> None:
     ]
     for arm, r in reports.items():
         o = r["overall"]
+        rate = "unavailable" if o["pass_at_1"] is None else f"{o['pass_at_1']:.1%}"
         lines.append(
-            f"| {arm.upper()} | {o['scored_trials']} / {o['attempted_trials']} / {o['expected_trials']} | {o['successful_trials']} | {o['pass_at_1']:.1%} | {o['passing_all_three_cases']} / {o['case_count']} | {o['violations']['grounding']['count']} | {o['violations']['rules']['count']} | ${sum(o['cost_usd'].values()):.6f} | {o['latency_seconds']['p50']:.1f}s / {o['latency_seconds']['p95']:.1f}s |"
+            f"| {arm.upper()} | {o['scored_trials']} / {o['attempted_trials']} / {o['expected_trials']} | {o['successful_trials']} | {rate} | {o['passing_all_three_cases']} / {o['case_count']} | {o['violations']['grounding']['count']} | {o['violations']['rules']['count']} | ${sum(o['cost_usd'].values()):.6f} | {o['latency_seconds']['p50']:.1f}s / {o['latency_seconds']['p95']:.1f}s |"
         )
+    if any(
+        a["status"] == "infrastructure"
+        for r in reports.values()
+        for a in r["attempts"]
+    ):
+        lines += [
+            "",
+            "**Incomplete comparison: infrastructure failures are present. Unmeasured trials are not application failures, and incomplete-arm rates cannot establish a winner. Latency and cost per success are affected by the interruption. See the per-arm failure counts and original journals.**",
+        ]
     subsets = {
         "all": {c["id"] for c in cases},
         "development": {c["id"] for c in cases if not c["held_out"]},
