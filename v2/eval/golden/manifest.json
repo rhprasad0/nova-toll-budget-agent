@@ -4,7 +4,7 @@
   "actor_model": "gpt-6-luna",
   "judge_model": "gpt-6-luna",
   "review_status_file": "review.json",
-  "corpus_sha256": "e492b506486aa680393c7c9a6dffeb7ad1c8c43f9248b089136b59d633f76f04",
+  "corpus_sha256": "e8bead0ce120075722ca26d3011922fec210be3530ca921dcc637edcf9e633f3",
   "hashes": {
     "cases.jsonl": "6fa99b0c56b88452234822ea5240f1baa3ea7a57a7d7ee28058b2955a21dfc80",
     "prompt-points.json": "441eef5a8f830f50074bd42df9356cde1e258c445e1fd7e1a5bbf033cf008315",
@@ -184,8 +184,8 @@
     "v2/eval/golden_actor_check.py": "a00790fdab91929213cc720bc68bd7038d8b6743a438fef7a47871d4eff3467d",
     "v2/eval/artifact_agent.py": "cc36d1bebd435a635b820b28bb1b6c9e63c6d7f7c7b928af9a82f779ec6f2fd5",
     "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
-    "v2/agent_tools/current_price_domain.py": "620601d7ed40983c20cd13b58417d46f5519cdae76e699fafffb24ecbec6144e",
-    "v2/agent_tools/get_annual_toll_ballpark.py": "6576b279225160a4275945df56438ce1c4b84e4d1b0654ba2cb56bc088a6e777",
+    "v2/agent_tools/current_price_domain.py": "673fbe6fc57b835347f4074c446a1da154cd03633c4e91185181e8521a8282d9",
+    "v2/agent_tools/get_annual_toll_ballpark.py": "510ced8f159a913d5f49c9f55211be3615aa5c419d3418e6a9571d087544a493",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
   "case_count": 200

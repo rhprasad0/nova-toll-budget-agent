@@ -65,7 +65,7 @@ def test_runtime_spec_and_generated_contract_match_models() -> None:
 
 def test_generated_contract_matches_versioned_digest() -> None:
     manifest = _manifest()["get_current_toll_price"]
-    assert manifest["current"] == "1.5.0"
+    assert manifest["current"] == "1.5.1"
     assert (
         _digest(pricing_tool.TOOL_CONTRACT) == manifest["releases"][manifest["current"]]
     )
@@ -96,7 +96,7 @@ def test_ballpark_runtime_contract_matches_models_and_manifest() -> None:
     }
     assert expected == ballpark_tool.TOOL_CONTRACT
     manifest = _manifest()["get_annual_toll_ballpark"]
-    assert manifest["current"] == "3.0.0"
+    assert manifest["current"] == "3.0.1"
     assert _digest(expected) == manifest["releases"][manifest["current"]]
 
 

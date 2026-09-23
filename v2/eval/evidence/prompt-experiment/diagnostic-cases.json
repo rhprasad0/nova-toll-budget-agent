@@ -1,0 +1,132 @@
+[
+  {
+    "id": "annual-complete-modeled-still-modeled",
+    "family": "annual_evidence",
+    "historical_role": "failure"
+  },
+  {
+    "id": "annual-evaluated-time-not-observation",
+    "family": "annual_evidence",
+    "historical_role": "failure"
+  },
+  {
+    "id": "annual-adversarial-fill-missing",
+    "family": "annual_evidence",
+    "historical_role": "passing_control"
+  },
+  {
+    "id": "annual-average-monthly-label",
+    "family": "annual_finance",
+    "historical_role": "failure"
+  },
+  {
+    "id": "annual-combined-share-label",
+    "family": "annual_finance",
+    "historical_role": "failure"
+  },
+  {
+    "id": "annual-annualized-not-annual-percentiles",
+    "family": "annual_finance",
+    "historical_role": "passing_control"
+  },
+  {
+    "id": "annual-accept-three-day-estimate",
+    "family": "annual_inputs",
+    "historical_role": "failure"
+  },
+  {
+    "id": "annual-adjust-days-up",
+    "family": "annual_inputs",
+    "historical_role": "failure"
+  },
+  {
+    "id": "annual-cancel-day-confirmation",
+    "family": "annual_inputs",
+    "historical_role": "passing_control"
+  },
+  {
+    "id": "annual-alternative-other-choice",
+    "family": "annual_routes",
+    "historical_role": "failure"
+  },
+  {
+    "id": "annual-alternative-retain-return-time",
+    "family": "annual_routes",
+    "historical_role": "failure"
+  },
+  {
+    "id": "annual-alternative-declined",
+    "family": "annual_routes",
+    "historical_role": "passing_control"
+  },
+  {
+    "id": "current-movement-falling",
+    "family": "current_evidence",
+    "historical_role": "failure"
+  },
+  {
+    "id": "current-source-text-injection",
+    "family": "current_evidence",
+    "historical_role": "failure"
+  },
+  {
+    "id": "current-comparison-partial",
+    "family": "current_evidence",
+    "historical_role": "passing_control"
+  },
+  {
+    "id": "current-closed-without-gap",
+    "family": "current_i95",
+    "historical_role": "failure"
+  },
+  {
+    "id": "current-closure-proof",
+    "family": "current_i95",
+    "historical_role": "failure"
+  },
+  {
+    "id": "current-open-southbound-prefix",
+    "family": "current_i95",
+    "historical_role": "passing_control"
+  },
+  {
+    "id": "current-time-switch-consent",
+    "family": "current_state",
+    "historical_role": "failure"
+  },
+  {
+    "id": "current-washington-corridor",
+    "family": "current_state",
+    "historical_role": "failure"
+  },
+  {
+    "id": "current-bare-leesburg",
+    "family": "current_state",
+    "historical_role": "passing_control"
+  },
+  {
+    "id": "current-cash-bypass",
+    "family": "current_unsupported",
+    "historical_role": "failure"
+  },
+  {
+    "id": "current-future-price",
+    "family": "current_unsupported",
+    "historical_role": "failure"
+  },
+  {
+    "id": "unsupported-origin",
+    "family": "current_unsupported",
+    "historical_role": "passing_control"
+  },
+  {
+    "id": "current-then-annual",
+    "family": "mixed",
+    "historical_role": "failure"
+  },
+  {
+    "id": "annual-then-current",
+    "family": "mixed",
+    "historical_role": "passing_control"
+  }
+]
