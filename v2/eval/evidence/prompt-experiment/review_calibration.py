@@ -7,11 +7,11 @@ from pathlib import Path
 def main() -> None:
     root = Path(__file__).resolve().parent
     lines = [
-        "# Prompt experiment calibration review",
+        "# Prompt experiment calibration review — 2.0.6",
         "",
         "**Pending human review. No application trials have run.**",
         "",
-        "Both runs use evaluator semantics 2.0.5. A and B/C have distinct corpus",
+        "Both runs use evaluator semantics 2.0.6. A and B/C have distinct corpus",
         "digests because the existing identity includes the changed tool source files.",
         "Cases, fixtures, labels, grading code, actor/judge prompts and settings are identical.",
         "",
@@ -19,9 +19,12 @@ def main() -> None:
         "A/B/C experiment only; it would not approve production or change any verdict.",
         "",
     ]
-    total = 0.0
+    prior = json.loads((root / "calibration-a-2.0.6/manifest.json").read_text())[
+        "prior_spend_usd"
+    ]
+    total = prior
     reference_runs = []
-    for name in ("calibration-a", "calibration-bc"):
+    for name in ("calibration-a-2.0.6", "calibration-bc-2.0.6"):
         directory = root / name
         report = json.loads((directory / "report.json").read_text())
         events = [
@@ -59,7 +62,30 @@ def main() -> None:
         lines.extend(
             [
                 "",
-                "Application matrices exclude actor-invalid/uncertain references; their actor disagreements remain below.",
+                "Matrices compare judgments with authored labels, not independently adjudicated truth. They exclude actor-invalid/uncertain references; actor disagreements remain below.",
+                "",
+                "### New semantic controls",
+                "",
+                "| Control | Expected application verdicts | Measured application verdicts | Actor validity |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        for row in rows:
+            if row["example"].startswith("semantic-"):
+                expected = "/".join(
+                    str(row["expected"][k]) for k in ("outcome", "grounding", "rules")
+                )
+                actual = "/".join(
+                    str(row["verdicts"][k]["passed"])
+                    for k in ("outcome", "grounding", "rules")
+                )
+                lines.append(
+                    f"| {row['id']} | {expected} | {actual} | {row['actor_validity']['status']} |"
+                )
+        lines.extend(
+            [
+                "",
+                "Verdict order: Outcome / Grounding / Rules. Positive controls preserve meaning; negative controls fabricate official proof or tax entitlement.",
                 "",
             ]
         )
@@ -110,13 +136,13 @@ def main() -> None:
         [
             "## Spending and decision",
             "",
-            f"Total recorded calibration cost: **${total:.6f} of $15**; remaining estimated allowance: **${15 - total:.6f}**.",
+            f"This revision costs **${total - prior:.6f}**; prior experiment spending is **${prior:.6f}**. Cumulative cost: **${total:.6f} of $15**; remaining estimated allowance: **${15 - total:.6f}**.",
             "",
-            "Review both exact evidence digests and disagreements before approving application runs. The runner retains the human-review gate. No labels, grader rules, or historical results were changed to improve agreement.",
+            "Review both exact evidence digests and disagreements before approving application runs. The runner retains the human-review gate. This explicitly revised judging policy accepts semantic equivalence while retaining substantive checks. Existing labels and all historical results remain unchanged; four new development references test the revision. No application-prompt performance conclusion follows from calibration agreement.",
             "",
         ]
     )
-    (root / "CALIBRATION-REVIEW.md").write_text("\n".join(lines))
+    (root / "CALIBRATION-REVIEW-2.0.6.md").write_text("\n".join(lines))
 
 
 if __name__ == "__main__":
