@@ -3252,11 +3252,13 @@ def validate_plan(
     manifest: object,
     identity: object = None,
     package_evidence: dict[str, Any] | None = None,
+    compatibility_review: bytes | None = None,
 ) -> dict[str, Any]:
     """Validate a plan and release manifest, returning only sanitized data."""
     plan = cast(JSON, plan)
     manifest = cast(JSON, manifest)
     identity = cast(JSON, identity)
+    compatibility_details: dict[str, str] = {}
     try:
         if _manifest_has_production_value(manifest) or (
             identity is not None and _has_production_value(identity)
@@ -3345,6 +3347,41 @@ def validate_plan(
                     )
                 except (ValueError, KeyError, TypeError):
                     _reject("shared_package_boundary", address=resource["address"])
+        if compatibility_review is not None:
+            try:
+                inputs = cast(dict[str, Any], manifest)["deployment_inputs"]
+                shared_packages.require(
+                    hashlib.sha256(compatibility_review).hexdigest()
+                    == inputs["v2/scripts/shared-package-compatibility.json"],
+                    "shared_compatibility",
+                )
+                reviewed = json.loads(compatibility_review)
+                previous = cast(dict[str, Any], plan)["prior_state"]["values"][
+                    "outputs"
+                ]["release_state"]["value"]
+                shared_packages.require(
+                    previous["active"] in {"blue", "green"}, "shared_compatibility"
+                )
+                serving = previous["slots"][previous["active"]]["release_id"]
+                for key, value in (
+                    ("reviewed_baseline", reviewed["development_baseline"]),
+                    ("serving_release", serving),
+                ):
+                    if isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value):
+                        compatibility_details[key] = value
+                shared_packages.validate_compatibility(
+                    reviewed,
+                    shared_packages.check_evidence(package_evidence),
+                    serving,
+                    {name: inputs["v2/db/" + name] for name in shared_packages.SCHEMAS},
+                    changing=any(
+                        row["address"] in shared_packages.RESOURCES
+                        and row["change"]["actions"] != ["no-op"]
+                        for row in cast(dict[str, Any], plan)["resource_changes"]
+                    ),
+                )
+            except (ValueError, KeyError, TypeError):
+                _reject("shared_compatibility")
         fingerprint = _fingerprint(
             {
                 "identity": dict(EXPECTED_IDENTITY),
@@ -3361,6 +3398,8 @@ def validate_plan(
         }
     except InvalidPlan as error:
         result: dict[str, Any] = {"status": "rejected", "reason_code": error.reason}
+        if error.reason == "shared_compatibility":
+            result.update(compatibility_details)
         if error.address in CONTRACT:
             result["address"] = error.address
         if error.action in _ACTIONS:
@@ -3391,6 +3430,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("manifest")
     parser.add_argument("--identity", required=True)
     parser.add_argument("--package-evidence")
+    parser.add_argument("--compatibility-review")
     args = parser.parse_args(argv)
     try:
         result = validate_plan(
@@ -3400,9 +3440,14 @@ def main(argv: list[str] | None = None) -> int:
             cast(dict[str, Any], _load_json(args.package_evidence))
             if args.package_evidence
             else None,
+            Path(args.compatibility_review).read_bytes()
+            if args.compatibility_review
+            else None,
         )
         if result["status"] == "accepted" and args.package_evidence is None:
             result = {"status": "rejected", "reason_code": "shared_package_evidence"}
+        if result["status"] == "accepted" and args.compatibility_review is None:
+            result = {"status": "rejected", "reason_code": "shared_compatibility"}
     except Exception:
         result = {"status": "rejected", "reason_code": "malformed_input"}
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))

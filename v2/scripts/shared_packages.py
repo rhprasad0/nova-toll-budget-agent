@@ -26,6 +26,7 @@ CHAT_CODE = (
 )
 RESOURCES = {f"aws_lambda_function.{name}" for name in FUNCTIONS} | {OBJECT}
 PACKAGES = {package for _, package in FUNCTIONS.values()}
+SCHEMAS = {"application-schemas.json", "oracle/schema.sql", "schema.sql"}
 COMPONENTS = {address: address.rsplit(".", 1)[1] for address in RESOURCES}
 COMPONENTS.update(
     {
@@ -344,6 +345,40 @@ def compatibility(
     reviewed = json.loads(
         Path(__file__).with_name("shared-package-compatibility.json").read_text()
     )
+    return validate_compatibility(
+        reviewed,
+        expected,
+        serving_release,
+        {
+            name: hashlib.sha256((bundle / "v2/db" / name).read_bytes()).hexdigest()
+            for name in SCHEMAS
+        },
+        changing=changing,
+    )
+
+
+def validate_compatibility(
+    reviewed: dict[str, Any],
+    expected: dict[str, Any],
+    serving_release: str,
+    schemas: dict[str, str],
+    *,
+    changing: bool,
+) -> dict[str, str]:
+    """Use the same reviewed transition for premerge plans and saved-plan delivery."""
+    check_evidence(expected)
+    require(
+        set(reviewed) == {"baseline", "development_baseline", "packages", "schemas"}
+        and all(
+            isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value)
+            for value in (
+                reviewed["baseline"],
+                reviewed["development_baseline"],
+                serving_release,
+            )
+        ),
+        "shared_compatibility",
+    )
     baseline = (
         reviewed["development_baseline"]
         if expected["environment"] == "development"
@@ -355,12 +390,10 @@ def compatibility(
         == {name: row["sha256"] for name, row in expected["packages"].items()},
         "shared_compatibility",
     )
-    for name, digest in reviewed["schemas"].items():
-        require(
-            hashlib.sha256((bundle / "v2/db" / name).read_bytes()).hexdigest()
-            == digest,
-            "shared_compatibility",
-        )
+    require(
+        set(schemas) == SCHEMAS and reviewed["schemas"] == schemas,
+        "shared_compatibility",
+    )
     return {
         "baseline": serving_release,
         "reviewed_baseline": baseline,
