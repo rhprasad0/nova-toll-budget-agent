@@ -1,6 +1,6 @@
 # Running the frozen golden corpus
 
-The active corpus and harness are **2.0.3**: **200 cases**, split into **160
+The active corpus and harness are **2.0.4**: **200 cases**, split into **160
 development and 40 reserved cases**, with three fresh trials per case. A complete
 application run has **600 conversations**. Reserved cases are public and
 exposed to their authors; they are excluded from calibration, not claimed to be
@@ -175,3 +175,21 @@ The [first GPT-6 Luna local baseline](evidence/gpt-6-luna/BASELINE.md) ran all
 600 slots: 409 passed, 184 failed, and 7 were inconclusive. It remains an
 incomplete scored baseline because of those seven trials; no production
 reference was qualified or published.
+
+## Review corrections calibration (2.0.4)
+
+Ryan authorized one fresh calibration with a $5 total ceiling for review-packet
+cases 16, 18, and 20. Run the full development calibration set without retries;
+retain disagreements and incomplete measurements. This authorizes neither a new
+application run nor production qualification. The actor prevention change is
+covered by offline contract checks and fixed-reference judge examples; calibration
+does not measure fresh live actor reliability.
+
+```bash
+AWS_PROFILE=nova-toll-dev AWS_DEFAULT_REGION=us-east-1 \
+  uv run python -m eval.golden_run calibrate \
+  --output eval/evidence/gpt-6-luna/calibration-2 --budget-usd 5 --workers 4
+```
+
+The output must remain pending human review. The prior calibration and application
+archives must not be overwritten or silently rescored.

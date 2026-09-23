@@ -1,4 +1,4 @@
 {
   "status": "pending",
-  "notes": "Local GPT-6 Luna calibration for contract 2.0.3 is complete and approved by Ryan with the 14 documented disagreements and limitations. See eval/evidence/gpt-6-luna/CALIBRATION.md and calibration-1/review.json. The protected production calibration reference remains pending; local approval does not qualify a production release."
+  "notes": "Contract 2.0.4 requires fresh calibration and human review. Archived contract 2.0.3 calibration-1 remains intact and does not approve this contract or production release."
 }

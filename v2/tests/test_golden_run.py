@@ -646,6 +646,7 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
     [
         (True, "Use $120,000.", "goal_completed", "actor_stop_with_message"),
         (False, None, None, "actor_missing_reply"),
+        (False, "", None, "actor_missing_reply"),
         (False, "   ", None, "actor_missing_reply"),
     ],
 )
@@ -684,6 +685,8 @@ def test_invalid_actor_output_is_inconclusive(
     )
     assert result.failure_class == "actor_validity" and not result.passed
     assert result.actor_replies[0]["message"] == message
+    actor.act.assert_called_once()
+    agent.assert_called_once()
     judge.assert_not_called()
 
 

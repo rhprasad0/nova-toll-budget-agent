@@ -1,4 +1,4 @@
-# TollChat golden evaluation contract 2.0.3
+# TollChat golden evaluation contract 2.0.4
 
 **200 cases: 160 development and 40 reserved.** The [review catalog](golden/REVIEW.md)
 links every prompt, intended behavior, actor brief, fixture, reference answer, and
@@ -171,3 +171,14 @@ GPT-6 Luna token prices. Cases, labels, prompts, reasoning effort, and token
 limits are unchanged. This exact contract requires fresh calibration and human
 review; prior model results and approvals remain historical. The local migration
 run has a $25 cumulative ceiling across calibration and application execution.
+
+## Review corrections (2.0.4)
+
+This revision recognizes explicit signed movement wording such as “down $2.00”,
+accepts truthful current-only scope refusals without tool grounding, and clarifies
+that a finished actor must return JSON null rather than an empty continuation.
+Invalid actor replies remain inconclusive, without retries. Reserved cases remain
+excluded from calibration; the current-only refusal rule is calibrated using a
+development future-price case. Original 2.0.3 evidence and scores are unchanged.
+Fresh calibration and exact-evidence human approval are required before application
+execution; the previous local baseline approval does not transfer.

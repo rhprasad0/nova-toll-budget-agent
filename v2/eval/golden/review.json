@@ -1,7 +1,4 @@
 {
-  "status": "approved",
-  "corpus_sha256": "b24771d6e52d2c774a52fc1b652e28ebdae6fcc8c0311e3ba2d0e7a27ed3ca10",
-  "evidence": "Ryan explicitly approved the exact corpus and calibration, including the 14 documented disagreements and limitations, for the local 600-trial baseline in this conversation: I approve! No production qualification or publication is authorized.",
-  "reviewer": "Ryan",
-  "approved_at": "2026-09-22T19:46:16.889001+00:00"
+  "status": "pending",
+  "evidence": "Contract 2.0.4 implements Ryan\u2019s case 16/18/20 feedback. Fresh calibration and exact-evidence human review are pending; the previous approval applies only to archived 2.0.3 evidence."
 }

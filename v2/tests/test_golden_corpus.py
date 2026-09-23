@@ -392,3 +392,35 @@ def test_origin_correction_actor_names_both_endpoints() -> None:
     rules = " ".join(case.actor.follow_up_rules)
     assert "enter at Battlefield Parkway instead of Leesburg Bypass" in rules
     assert "still going to Route 28" in rules
+
+
+@pytest.mark.parametrize(
+    "text,amounts",
+    [
+        ("Falling, down **$2.00 (47.1%)**; toll $2.25", {"-2.00", "2.25"}),
+        ("decreased by $2.00; increased by $3.00", {"-2.00", "3.00"}),
+        ("a reduction of __$2.00__; up `$3.00`", {"-2.00", "3.00"}),
+        ("dropped $2.00; rose $3.00", {"-2.00", "3.00"}),
+        ("down $-2.00; up \u2212$3.00", {"-2.00", "-3.00"}),
+        ("- $2.00\nDown the road, the toll is $3.00", {"2.00", "3.00"}),
+        ("up $2.00; down $9.99", {"2.00", "-9.99"}),
+    ],
+)
+def test_directional_money_preserves_sign_and_other_amounts(
+    text: str, amounts: set[str]
+) -> None:
+    assert golden.money(text) == {golden.Decimal(a) for a in amounts}
+
+
+def test_reviewed_calibration_controls_and_reserved_boundary() -> None:
+    from eval import golden_run
+
+    cases = {c.id: c for c in golden.load_cases()}
+    examples = golden_run.development_examples()
+    reviewed = [e for e in examples if e.label.startswith("review-")]
+    assert len(reviewed) == 7
+    assert not any(e.case_id == "current-past-price" for e in examples)
+    for example in reviewed:
+        assert golden.grade_assertions(cases[example.case_id], example.turns) == (
+            example.expected_failures
+        )
