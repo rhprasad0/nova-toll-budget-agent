@@ -4,7 +4,75 @@ import json
 import random
 import sys
 from collections import Counter, defaultdict
+from copy import deepcopy
 from pathlib import Path
+
+
+def with_recovery(original: dict, recovery: dict) -> dict:
+    """Resolve authentication-failed slots only; preserve all incurred usage."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from eval import golden, golden_run
+
+    left = original["manifest"]["identity"]
+    right = recovery["manifest"]["identity"]
+    for key in left:
+        if key == "cases":
+            assert all(case in left[key] for case in right[key])
+        elif key in {"prompt_hashes", "actor_configuration"}:
+            assert all(left[key][cid] == value for cid, value in right[key].items())
+        else:
+            assert left[key] == right[key], f"Recovery changed identity: {key}"
+    result = deepcopy(original)
+    rows = {row["id"]: row for row in result["attempts"]}
+    assert len(rows) == len(result["attempts"])
+    assert len({row["id"] for row in recovery["attempts"]}) == len(recovery["attempts"])
+    for row in recovery["attempts"]:
+        prior = rows[row["id"]]
+        assert (
+            prior["status"] == "infrastructure"
+            and prior["error"] == "TokenRetrievalError"
+        ), "Recovery cannot replace a scored or actor-inconclusive trial"
+        assert (prior["case_id"], prior["trial"]) == (row["case_id"], row["trial"])
+        resolved = deepcopy(row)
+        resolved["measurements"] = prior["measurements"] + resolved["measurements"]
+        resolved["seconds"] += prior["seconds"]
+        rows[row["id"]] = resolved
+    result["attempts"] = list(rows.values())
+    attempts = [
+        golden_run.Attempt.model_validate(
+            {k: v for k, v in row.items() if k in golden_run.Attempt.model_fields}
+        )
+        for row in rows.values()
+    ]
+    cases = [
+        golden.GoldenCase.model_validate_json(json.dumps(case))
+        for case in left["cases"]
+    ]
+    result["overall"] = golden_run.summary(attempts, cases)
+    for name in original["subsets"]:
+        subset = [
+            c
+            for c in cases
+            if (
+                not c.held_out
+                if name == "development"
+                else c.held_out
+                if name == "held_out"
+                else c.kind == name
+            )
+        ]
+        ids = {c.id for c in subset}
+        result["subsets"][name] = golden_run.summary(
+            [a for a in attempts if a.case_id in ids], subset
+        )
+    result["recovery"] = {
+        "evidence_sha256": recovery["evidence_sha256"],
+        "recovered_trial_slots": len(recovery["attempts"]),
+        "total_execution_attempts": len(original["attempts"])
+        + len(recovery["attempts"]),
+        "workers": recovery["manifest"]["workers"],
+    }
+    return result
 
 
 def paired(baseline: dict, candidate: dict, ids: set[str]) -> dict:
@@ -65,6 +133,11 @@ def main(stage: str) -> None:
         arm: json.loads((root / f"{stage}-{arm}-2.0.8/report.json").read_text())
         for arm in "abc"
     }
+    if stage == "full":
+        for arm in "bc":
+            path = root / f"full-{arm}-recovery-2.0.8/report.json"
+            if path.exists():
+                reports[arm] = with_recovery(reports[arm], json.loads(path.read_text()))
     cases = reports["a"]["manifest"]["identity"]["cases"]
     assert all(r["manifest"]["identity"]["cases"] == cases for r in reports.values())
     lines = [
@@ -72,7 +145,7 @@ def main(stage: str) -> None:
         "",
         "Frozen prompts and evaluator; three trials per case. Inconclusive trials are retained and excluded from scored rates, not retried. Calibration judgments have known limitations; these are measured outcomes, not independently verified truth.",
         "",
-        "| Arm | Scored / attempted / expected | Passed | Pass rate | Cases passing all 3 | Grounding violations | Rules violations | Cost | Latency p50 / p95 |",
+        "| Arm | Scored / attempted trial slots / expected | Passed | Pass rate | Cases passing all 3 | Grounding violations | Rules violations | Cost | Latency p50 / p95 |",
         "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for arm, r in reports.items():
@@ -81,10 +154,13 @@ def main(stage: str) -> None:
         lines.append(
             f"| {arm.upper()} | {o['scored_trials']} / {o['attempted_trials']} / {o['expected_trials']} | {o['successful_trials']} | {rate} | {o['passing_all_three_cases']} / {o['case_count']} | {o['violations']['grounding']['count']} | {o['violations']['rules']['count']} | ${sum(o['cost_usd'].values()):.6f} | {o['latency_seconds']['p50']:.1f}s / {o['latency_seconds']['p95']:.1f}s |"
         )
+    if any("recovery" in r for r in reports.values()):
+        lines += [
+            "",
+            "Authentication recovery fills only original infrastructure-failed trial slots; scored and actor-inconclusive trials are never replaced. Original reports/journals remain unchanged. Costs and token totals include both original and recovery calls. Latency sums original and recovery execution time for each affected trial, excluding the human login wait. Execution-attempt counts and both evidence digests are listed below.",
+        ]
     if any(
-        a["status"] == "infrastructure"
-        for r in reports.values()
-        for a in r["attempts"]
+        a["status"] == "infrastructure" for r in reports.values() for a in r["attempts"]
     ):
         lines += [
             "",
@@ -157,6 +233,12 @@ def main(stage: str) -> None:
             "",
             f"Cost by role: `{o['cost_usd']}`. Agent cost per success: `{o['agent_cost_per_success_usd']}`. Token usage: `{o['usage']}`.",
         ]
+        if "recovery" in r:
+            rec = r["recovery"]
+            lines += [
+                "",
+                f"[Recovery report](full-{arm}-recovery-2.0.8/report.json): `{rec['evidence_sha256']}`. Recovered trial slots: {rec['recovered_trial_slots']}; total original plus recovery execution attempts: {rec['total_execution_attempts']}; recovery workers: {rec['workers']} (original run: {r['manifest']['workers']}). The statistics above combine these reports without rewriting either one. Concurrency changes limit latency comparisons.",
+            ]
     (root / f"{stage.upper()}-COMPARISON.json").write_text(
         json.dumps(comparisons, indent=2) + "\n"
     )
