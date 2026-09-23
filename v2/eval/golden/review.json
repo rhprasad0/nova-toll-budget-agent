@@ -1,4 +1,4 @@
 {
   "status": "pending",
-  "notes": "Contract 2.0.8 corrects comparison coverage judging to match the unchanged SOP: explicit available/expected counts are required only for incomplete history; full 3/3 history supports typical-price wording without counts. Cases, references, labels and application variants unchanged. Fresh calibration and exact-evidence review required."
+  "notes": "Contract 2.0.8 corrects comparison coverage judging to match the unchanged SOP: explicit available/expected counts are required only for incomplete history; full 3/3 history supports typical-price wording without counts. After the frozen A/B/C comparison, the local runner limit increased to 16 workers (default remains 4). Cases, references, labels and judging semantics are unchanged, but the runner source and corpus hashes changed. Fresh matching calibration and exact-evidence review required; prior approvals do not transfer."
 }

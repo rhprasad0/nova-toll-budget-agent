@@ -21,8 +21,9 @@ from eval import golden_run as run
 
 
 @pytest.mark.parametrize("mode", ["calibrate", "run"])
+@pytest.mark.parametrize("workers", [3, 16])
 def test_cli_runs_independent_work_in_parallel(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, workers: int
 ) -> None:
     barrier = Barrier(3, timeout=5)
     directory = tmp_path / mode
@@ -83,7 +84,7 @@ def test_cli_runs_independent_work_in_parallel(
 
     monkeypatch.setattr(run, "judge", judge)
     monkeypatch.setattr(run, "execute", execute)
-    args = ["golden_run", mode, "--output", str(directory), "--workers", "3"]
+    args = ["golden_run", mode, "--output", str(directory), "--workers", str(workers)]
     if mode == "run":
         args += [
             "--calibration",
@@ -93,7 +94,7 @@ def test_cli_runs_independent_work_in_parallel(
         ]
     monkeypatch.setattr("sys.argv", args)
     run.main()
-    assert json.loads((directory / "manifest.json").read_text())["workers"] == 3
+    assert json.loads((directory / "manifest.json").read_text())["workers"] == workers
     events = [
         json.loads(line)
         for line in (directory / "events.jsonl").read_text().splitlines()
