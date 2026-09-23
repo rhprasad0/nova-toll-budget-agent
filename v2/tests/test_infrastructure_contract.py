@@ -6077,6 +6077,11 @@ def _assert_development_plan_workflow(source: str) -> None:
         'git show "${CANDIDATE_SHA}:infra/development-release-manifest.json"'
         in build_source
     )
+    assert (
+        'git show "${CANDIDATE_SHA}:v2/scripts/shared-package-compatibility.json"'
+        in build_source
+    )
+    assert '>"$EVIDENCE_DIR/shared-package-compatibility.json"' in build_source
     assert "cp -P -- v2/infra/build/DEPLOYMENT_SHA256SUMS" in build_source
     assert (
         source.index("Build reviewed deployment packages")
@@ -6188,6 +6193,11 @@ def _assert_development_plan_workflow(source: str) -> None:
         assert f"-var {variable}_package_path=build/{package}.zip" in plan_source
     assert "development-release-manifest.json" in plan_source
     assert "delivery_plan_validator.py" in plan_source
+    assert (
+        '--compatibility-review "$STAGING/shared-package-compatibility.json"'
+        in plan_source
+    )
+    assert '"$GITHUB_WORKSPACE/trusted/infra/delivery_plan_validator.py"' in plan_source
     assert "GITHUB_STEP_SUMMARY" in plan_source
     assert '"$VALIDATION" | tee -a "$GITHUB_STEP_SUMMARY"' in plan_source
     assert (

@@ -152,6 +152,8 @@ jobs:
           mkdir "$EVIDENCE_DIR"
           git show "${CANDIDATE_SHA}:infra/development-release-manifest.json" \
             >"$EVIDENCE_DIR/development-release-manifest.json"
+          git show "${CANDIDATE_SHA}:v2/scripts/shared-package-compatibility.json" \
+            >"$EVIDENCE_DIR/shared-package-compatibility.json"
           cp -P -- v2/infra/build/DEPLOYMENT_SHA256SUMS "$EVIDENCE_DIR/"
 
       - name: Checkout trusted manifest verifier after candidate build
@@ -421,12 +423,13 @@ jobs:
           test -f "$IDENTITY" && test ! -L "$IDENTITY" && test -r "$IDENTITY" || IDENTITY_VALID=false
           python3 "$GITHUB_WORKSPACE/trusted/infra/delivery_plan_validator.py" \
             "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" \
-            --package-evidence "$STAGING/shared-package-evidence.json" >"$VALIDATION"
+            --package-evidence "$STAGING/shared-package-evidence.json" \
+            --compatibility-review "$STAGING/shared-package-compatibility.json" >"$VALIDATION"
           VALIDATOR_STATUS=$?
           set -e
           jq -e 'type == "object" and (.status == "accepted" or .status == "rejected") and (.reason_code | type == "string")' \
             "$VALIDATION" >/dev/null
-          jq -c '{status, reason_code} + (if has("address") then {address} else {} end) + (if has("action") then {action} else {} end) + (if has("operation_class") then {operation_class} else {} end) + (if has("fingerprint") then {fingerprint} else {} end)' \
+          jq -c '{status, reason_code} + (if has("address") then {address} else {} end) + (if has("action") then {action} else {} end) + (if has("operation_class") then {operation_class} else {} end) + (if has("fingerprint") then {fingerprint} else {} end) + (if has("reviewed_baseline") then {reviewed_baseline} else {} end) + (if has("serving_release") then {serving_release} else {} end)' \
             "$VALIDATION" | tee -a "$GITHUB_STEP_SUMMARY"
           test "$MANIFEST_VALID" = true
           test "$IDENTITY_VALID" = true

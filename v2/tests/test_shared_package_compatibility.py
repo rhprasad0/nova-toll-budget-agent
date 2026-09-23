@@ -107,6 +107,18 @@ def test_compatibility_gate_binds_the_serving_baseline_and_built_packages(
     )
     with pytest.raises(ValueError, match="shared_compatibility"):
         shared_packages.compatibility(tmp_path, expected, "b" * 40)
+    assert (
+        shared_packages.compatibility(tmp_path, expected, "b" * 40, changing=False)[
+            "status"
+        ]
+        == "unchanged"
+    )
+    (tmp_path / "v2/db/schema.sql").write_text("wrong schema")
+    with pytest.raises(ValueError, match="shared_compatibility"):
+        shared_packages.compatibility(tmp_path, expected, baseline)
+    (tmp_path / "v2/db/schema.sql").write_bytes(
+        (ROOT / "v2/db/schema.sql").read_bytes()
+    )
     expected["packages"]["loader.zip"]["sha256"] = "f" * 64
     with pytest.raises(ValueError, match="shared_compatibility"):
         shared_packages.compatibility(tmp_path, expected, baseline)

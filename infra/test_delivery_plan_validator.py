@@ -4824,23 +4824,126 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                     )
                 )
             )
-            result = subprocess.run(
-                [
-                    "python3",
-                    "infra/delivery_plan_validator.py",
-                    str(plan_path),
-                    str(manifest_path),
-                    "--package-evidence",
-                    str(evidence_path),
-                    "--identity",
-                    str(identity_path),
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
+            review: dict[str, JSON] = {
+                "baseline": "c" * 40,
+                "development_baseline": "a" * 40,
+                "packages": dict.fromkeys(shared_packages.PACKAGES, HASH),
+                "schemas": dict.fromkeys(shared_packages.SCHEMAS, HASH),
+            }
+            document = cast(dict[str, JSON], lambda_plan())
+            document["prior_state"] = {
+                "values": {
+                    "outputs": {
+                        "release_state": {
+                            "value": {
+                                "active": "green",
+                                "slots": {"green": {"release_id": "a" * 40}},
+                            }
+                        }
+                    }
+                }
+            }
+            manifest = lambda_manifest()
+            manifest["deployment_inputs"].update(
+                {"v2/db/" + name: HASH for name in shared_packages.SCHEMAS}
             )
-            self.assertEqual(result.returncode, 0)
-            self.assertEqual(json.loads(result.stdout)["status"], "accepted")
+            review_path = root / "compatibility.json"
+            command = [
+                "python3",
+                "infra/delivery_plan_validator.py",
+                str(plan_path),
+                str(manifest_path),
+                "--package-evidence",
+                str(evidence_path),
+                "--identity",
+                str(identity_path),
+            ]
+            for fault in (
+                "valid",
+                "stale",
+                "unchanged",
+                "package",
+                "schema",
+                "schema_missing",
+                "missing_state",
+                "malformed_state",
+                "digest",
+                "malformed",
+                "missing",
+                "omitted",
+            ):
+                with self.subTest(fault=fault):
+                    candidate_review = copy.deepcopy(review)
+                    candidate_plan = copy.deepcopy(document)
+                    if fault in {"stale", "unchanged"}:
+                        candidate_review["development_baseline"] = "b" * 40
+                    if fault == "unchanged":
+                        candidate_plan["resource_changes"] = []
+                    if fault == "package":
+                        cast(dict[str, JSON], candidate_review["packages"])[
+                            "loader.zip"
+                        ] = "f" * 64
+                    if fault == "schema":
+                        cast(dict[str, JSON], candidate_review["schemas"])[
+                            "schema.sql"
+                        ] = "f" * 64
+                    if fault == "schema_missing":
+                        candidate_review["schemas"] = {}
+                    if fault == "missing_state":
+                        candidate_plan.pop("prior_state")
+                    if fault == "malformed_state":
+                        candidate_plan["prior_state"] = {
+                            "values": {
+                                "outputs": {
+                                    "release_state": {
+                                        "value": {"active": "private-value"}
+                                    }
+                                }
+                            }
+                        }
+                    review_bytes = json.dumps(candidate_review).encode()
+                    if fault == "malformed":
+                        review_bytes = b'{"private-value":'
+                    review_path.write_bytes(review_bytes)
+                    manifest["deployment_inputs"][
+                        "v2/scripts/shared-package-compatibility.json"
+                    ] = hashlib.sha256(review_bytes).hexdigest()
+                    if fault == "digest":
+                        review_path.write_bytes(review_bytes + b" ")
+                    if fault == "missing":
+                        review_path.unlink()
+                    plan_path.write_text(json.dumps(candidate_plan))
+                    manifest_path.write_text(json.dumps(manifest, sort_keys=True))
+                    result = subprocess.run(
+                        command
+                        + (
+                            []
+                            if fault == "omitted"
+                            else ["--compatibility-review", str(review_path)]
+                        ),
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    outcome = json.loads(result.stdout)
+                    accepted = fault in {"valid", "unchanged"}
+                    self.assertEqual(
+                        result.returncode, 0 if accepted else 1, result.stdout
+                    )
+                    self.assertEqual(
+                        outcome["status"], "accepted" if accepted else "rejected"
+                    )
+                    if not accepted:
+                        self.assertEqual(
+                            outcome["reason_code"],
+                            "malformed_input"
+                            if fault == "missing"
+                            else "shared_compatibility",
+                        )
+                    if fault == "stale":
+                        self.assertEqual(outcome["reviewed_baseline"], "b" * 40)
+                        self.assertEqual(outcome["serving_release"], "a" * 40)
+                    self.assertNotIn("private-value", result.stdout + result.stderr)
 
             plan_path.write_text(json.dumps(_plan([])), encoding="utf-8")
             result = subprocess.run(
