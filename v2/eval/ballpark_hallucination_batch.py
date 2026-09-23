@@ -39,7 +39,7 @@ from agent import toll_agent  # noqa: E402
 from agent_tools import get_annual_toll_ballpark as ballpark  # noqa: E402
 from eval.run_evaluation import evaluate_annual_turn  # noqa: E402
 
-_MODEL = "gpt-5.6-luna"
+_MODEL = "gpt-6-luna"
 _ENDPOINT = "/v1/responses"
 _SOURCE = "tollchat-v2-ballpark-hallucination"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
@@ -105,7 +105,8 @@ def _sha256(value: str) -> str:
 
 
 def _encoding() -> tiktoken.Encoding:
-    return tiktoken.encoding_for_model(_MODEL)
+    # ponytail: approximate encoding until tiktoken maps GPT-6; queue gates use bytes.
+    return tiktoken.get_encoding("o200k_base")
 
 
 def _model() -> toll_agent._CachedResponsesModel:
@@ -237,7 +238,8 @@ def preflight(packet: str) -> dict[str, Any]:
         "tiktoken_version": tiktoken.__version__,
         "encoding": _encoding().name,
         "tiktoken_tokens": tokens,
-        "guarded_queued_tokens": (tokens * (100 + _GUARD_PERCENT) + 99) // 100,
+        "guarded_queued_tokens": (len(packet.encode()) * (100 + _GUARD_PERCENT) + 99)
+        // 100,
     }
 
 
@@ -249,7 +251,7 @@ def enforce_limits(
         raise ValueError("Batch request count exceeds 50,000")
     if int(report["jsonl_bytes"]) > _FILE_LIMIT:
         raise ValueError("Batch input exceeds 200,000,000 bytes")
-    tokens = int(report["tiktoken_tokens"])
+    tokens = max(int(report["tiktoken_tokens"]), int(report["jsonl_bytes"]))
     guarded = ((tokens + active_queued_tokens) * (100 + _GUARD_PERCENT) + 99) // 100
     if guarded > _QUEUE_LIMIT:
         detail = " including active Luna batches" if active_queued_tokens else ""
@@ -264,7 +266,6 @@ def enforce_limits(
 
 def active_luna_tokens(client: Any) -> int:  # noqa: ANN401
     """Conservatively count complete input files for nonterminal Luna batches."""
-    encoding = _encoding()
     tokens = 0
     for item in client.batches.list(limit=100):
         if getattr(item, "status", "") in _TERMINAL_STATUSES:
@@ -276,7 +277,7 @@ def active_luna_tokens(client: Any) -> int:  # noqa: ANN401
             row = cast(dict[str, Any], json.loads(line))
             body = cast(dict[str, Any], row.get("body") or {})
             if body.get("model") == _MODEL:
-                tokens += len(encoding.encode(f"{line}\n"))
+                tokens += len(f"{line}\n".encode())
     return tokens
 
 

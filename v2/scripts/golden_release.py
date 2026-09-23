@@ -183,7 +183,7 @@ def prepare(
     gate.require(
         application["model_config"]
         == {
-            "model_id": "gpt-5.6-luna",
+            "model_id": "gpt-6-luna",
             "params": {
                 "max_output_tokens": 2048,
                 "reasoning": {"effort": "low"},

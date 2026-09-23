@@ -60,8 +60,10 @@ selection instructions change those facts. Answer questions briefly and naturall
 any stated correction or selection instructions before stopping. Do not invent
 prices, earnings, routes, or requirements. Do not tell the assistant how to use
 its tools or how it will be graded. Never treat the assistant's suggested facts
-as your own unless your profile allows them. Return a short message when a reply
-is needed; otherwise return message=null. The runner derives when to stop.
+as your own unless your profile allows them. Return a nonempty message when a reply
+is needed; otherwise return JSON null for message. Never return an empty or
+whitespace-only string: that means an invalid continuation, not completion.
+The runner derives when to stop.
 A question asking you to choose income, supply schedule facts, or confirm days
 needs your profile's answer delivered as a message BEFORE you can finish.
 A proposed estimate is not yet a completed estimate. Deliver any explicitly
@@ -124,7 +126,7 @@ class ActorReply(Record):
     """One model decision: a message to deliver, or null to finish."""
 
     message: str | None = Field(
-        description="Deliver a necessary clarification or any profile-required correction, choice, cancellation, proof question, or workflow switch. Once those obligations are met, return null after completion, refusal, or unavailability. Do not restate the answer or your goal."
+        description="Deliver a necessary clarification or any profile-required correction, choice, cancellation, proof question, or workflow switch. Once those obligations are met, return JSON null after completion, refusal, or unavailability. Never return an empty or whitespace-only string. Do not restate the answer or your goal."
     )
     stop: SkipJsonSchema[bool] = False
     stop_reason: SkipJsonSchema[str | None] = None
@@ -424,7 +426,7 @@ def make_actor(case: GoldenCase, model: Model) -> ActorSimulator:
         messages=actor.conversation_history,
         callback_handler=None,
         retry_strategy=None,
-        structured_output_prompt="Format YOUR next driver action, not an evaluation of your preceding response. Deliver necessary clarification, choice, confirmation, or a profile-required correction, cancellation, proof question, or workflow switch in message: writing it has NOT delivered it yet. Once the profile's follow-ups are complete, return message=null. Never return thanks or a summary as a stopping message.",
+        structured_output_prompt="Format YOUR next driver action, not an evaluation of your preceding response. Deliver necessary clarification, choice, confirmation, or a profile-required correction, cancellation, proof question, or workflow switch in message: writing it has NOT delivered it yet. Once the profile's follow-ups are complete, return message=null, never an empty or whitespace-only string. Never return thanks or a summary as a stopping message.",
     )
     return actor
 
@@ -521,6 +523,15 @@ def money(text: str) -> set[Decimal]:
     )
     # A Markdown list marker is not a negative currency sign.
     text = re.sub(r"(?m)^[ \t]*-[ \t]+(?=\$)", "", text)
+    # ponytail: recognize only adjacent, explicit movement wording; add new
+    # forms with labeled examples rather than guessing the sign of other amounts.
+    text = re.sub(
+        r"\b(?:down|decreased?|fell|falling|fallen|drop(?:ped)?|reduction)\s+"
+        r"(?:(?:by|of)\s+)?(?:\*{1,2}|_{1,2}|`)?\$(?=\s*\d)",
+        "-$",
+        text,
+        flags=re.IGNORECASE,
+    )
     return {
         _currency_decimal(match)
         * (1000 if text[match.end() : match.end() + 1].lower() == "k" else 1)
@@ -820,11 +831,11 @@ def validate(root: Path = ROOT) -> None:
         raise ValueError("each case needs a labeled good example")
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != "2.0.2"
+        manifest["version"] != "2.0.5"
         or manifest.get("case_count") != 200
         or manifest["trials_per_case"] != 3
-        or manifest["actor_model"] != "gpt-5.6-luna"
-        or manifest["judge_model"] != "gpt-5.6-luna"
+        or manifest["actor_model"] != "gpt-6-luna"
+        or manifest["judge_model"] != "gpt-6-luna"
     ):
         raise ValueError("unsupported corpus configuration")
     actual = hashes(root)

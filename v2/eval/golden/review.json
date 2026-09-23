@@ -1,5 +1,4 @@
 {
   "status": "pending",
-  "corpus_sha256": "282f75094736d9e7cd00520d3f1851c6635187e117e96c3eb4909044d34ae7a7",
-  "evidence": "Contract 2.0.2 corrects one definite legacy Grounding label found in calibration 2 and packaged-agent budget failure attribution. Both raw runs remain archived. The final exact corpus requires fresh authorized calibration and human review; no historical approval is transferred."
+  "evidence": "Contract 2.0.5 extends downward-money wording and emphasis parsing. Exact-contract calibration and human review remain pending. Archived calibration-2 measures 2.0.4 only."
 }

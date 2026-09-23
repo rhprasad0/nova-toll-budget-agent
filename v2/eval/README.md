@@ -3,9 +3,13 @@
 The [200-case golden corpus](GOLDEN_EVAL_SPEC.md) covers current pricing, annual
 affordability, multi-turn changes, evidence failures, and explicit workflow switches.
 The [review catalog](golden/REVIEW.md) links every case and labeled reference.
-Contract 2.0.2 has 160 development and 40 reserved cases; labels and exact-contract
-calibration await human review. No qualified production baseline exists. Earlier
-measurements remain in the [historical evidence archive](results/golden/README.md).
+Contract 2.0.5 retains 160 development and 40 reserved cases and requires fresh
+calibration review after the case 16/18/20 evaluator corrections. Ryan approved the
+previous 2.0.3
+GPT-6 Luna corpus and calibration for the [first local baseline](evidence/gpt-6-luna/BASELINE.md):
+600 trials attempted, 409 passed, 184 failed, and 7 inconclusive. No qualified
+production baseline exists. Earlier measurements remain in the
+[historical evidence archive](results/golden/README.md).
 
 The scheduled Strands suite uses simulated users and model-based judges for six
 current-toll scenarios. The broader code-graded regression catalog retains eight
@@ -48,7 +52,7 @@ before finishing. The simulator has no tools: its structured stop response
 replaces the SDK's default completion tool, which otherwise uses a default
 Bedrock model.
 
-Both simulator and judges use `gpt-5.6-luna` with the existing SSM credential.
+Both simulator and judges use `gpt-6-luna` with the existing SSM credential.
 The application agent's model and prompt are unchanged. All three checks must pass:
 
 - **ToolCallCount:** a deterministic evaluator requires exactly one
@@ -194,6 +198,10 @@ The frozen-evidence Batch evaluation captures one real annual ballpark for a
 PM, then expands five reviewed prompts to 1,000 responses. Generated Batch
 files stay in ignored `eval/private/`; the small canonical fixture is
 `eval/ballpark-hallucination-cases.jsonl`.
+
+GPT-6 Luna is not yet mapped by the pinned tiktoken version. The packet reports
+an approximate `o200k_base` count; queue admission conservatively uses UTF-8
+bytes plus the existing 10% guard until an official mapping is available.
 
 Prepare and inspect the exact packet without calling OpenAI:
 

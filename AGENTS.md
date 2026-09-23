@@ -51,7 +51,7 @@ This reviewer uses `gpt-6-astra` with `high` reasoning effort.
 The Root model and reasoning effort remain selected by the host/user; do not pin
 them in repository config.
 
-TollChat's application agent stays on `gpt-5.6-luna`. Leave its model and prompt
+TollChat's application agent stays on `gpt-6-luna`. Leave its model and prompt
 unchanged unless the user explicitly requests an application-agent change.
 
 # Secrets and delivery

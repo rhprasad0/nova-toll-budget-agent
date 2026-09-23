@@ -181,7 +181,7 @@ def project_report(report: object) -> dict[str, Any]:
                     }
                 )
         turns.append(turn)
-    return {"checks": checks, "turns": turns, "model": "gpt-5.6-luna"}
+    return {"checks": checks, "turns": turns, "model": "gpt-6-luna"}
 
 
 def scenario_id(window: str, scheduled: datetime) -> str:

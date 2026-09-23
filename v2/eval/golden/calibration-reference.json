@@ -1,4 +1,5 @@
 {
   "status": "pending",
-  "notes": "Two authorized runs are archived at eval/evidence/golden-200/CALIBRATION.md. Run 2 measured corpus/harness 2.0.1. The subsequent Grounding-label correction and packaged-agent budget-attribution fix create contract 2.0.2 and require fresh authorized exact-contract calibration and human adjudication before application execution. These runs do not imply approval."
+  "notes": "Archived calibration-2 completed 281 development examples under contract 2.0.4 with seven new controls agreeing and 13 other disagreements. Its evidence remains unchanged and is not calibration for the 2.0.5 parser extension. Fresh exact-contract calibration and human review remain pending; no application run or production release is approved.",
+  "evidence_sha256": "8cb32297a8edd1463a34b7b9a9bbbfe52fceb746b2ed2ebe7c6ded395a8612c0"
 }

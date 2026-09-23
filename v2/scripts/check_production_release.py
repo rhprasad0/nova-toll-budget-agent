@@ -379,7 +379,7 @@ def _development(
         or not re.fullmatch(r"\d{1,4}\.\d{2}", canary["total_usd"])
         or type(canary.get("elapsed_ms")) is not int
         or not 0 <= canary["elapsed_ms"] <= 60_000
-        or canary.get("model") != "gpt-5.6-luna"
+        or canary.get("model") != "gpt-6-luna"
         or canary.get("tool_contract") != "1.5.0"
         or canary.get("prompt_version") != "2.3.7"
         or canary.get("renderer_version") != "1.0.0"

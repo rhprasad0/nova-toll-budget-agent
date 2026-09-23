@@ -281,7 +281,7 @@ def test_actual_delivery_evidence_emits_the_validated_canary_once(
         "call_count": 1,
         "total_usd": "4.25",
         "elapsed_ms": 1,
-        "model": "gpt-5.6-luna",
+        "model": "gpt-6-luna",
         "tool_contract": "1.5.0",
         "prompt_version": "2.3.7",
         "renderer_version": "1.0.0",

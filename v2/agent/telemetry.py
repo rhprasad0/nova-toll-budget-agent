@@ -90,7 +90,7 @@ _RESOURCE_KEYS = {
 _STATIC_VALUES = {
     "openai",
     "aws.bedrock",
-    "gpt-5.6-luna",
+    "gpt-6-luna",
     "chat",
     "invoke_agent",
     "execute_tool",

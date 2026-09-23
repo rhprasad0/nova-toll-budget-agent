@@ -235,7 +235,7 @@ def load_openai_api_key() -> str:
 
 def _build_model() -> _CachedResponsesModel:
     return _CachedResponsesModel(
-        model_id="gpt-5.6-luna",
+        model_id="gpt-6-luna",
         client_args={
             "api_key": load_openai_api_key(),
             "base_url": _OPENAI_BASE_URL,

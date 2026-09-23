@@ -107,7 +107,7 @@ def test_builds_production_shaped_rows_and_counts_exact_packet() -> None:
     assert len({request["custom_id"] for request in requests}) == 10
     assert requests[0]["custom_id"].endswith(":v1:r001")
     body = requests[0]["body"]
-    assert body["model"] == "gpt-5.6-luna"
+    assert body["model"] == "gpt-6-luna"
     assert body["tool_choice"] == "none"
     assert body["store"] is False
     assert "stream" not in body
@@ -122,9 +122,7 @@ def test_builds_production_shaped_rows_and_counts_exact_packet() -> None:
     assert report["request_count"] == 10
     assert report["jsonl_bytes"] == len(packet.encode())
     assert report["jsonl_sha256"] == hashlib.sha256(packet.encode()).hexdigest()
-    assert (
-        report["guarded_queued_tokens"] == (report["tiktoken_tokens"] * 110 + 99) // 100
-    )
+    assert report["guarded_queued_tokens"] == (report["jsonl_bytes"] * 110 + 99) // 100
 
 
 @pytest.mark.parametrize(
@@ -132,6 +130,7 @@ def test_builds_production_shaped_rows_and_counts_exact_packet() -> None:
     [
         ("request_count", 50_001, "50,000"),
         ("jsonl_bytes", 200_000_001, "200,000,000"),
+        ("jsonl_bytes", 36_363_637, "40,000,000"),
         ("tiktoken_tokens", 36_363_637, "40,000,000"),
     ],
 )
@@ -208,7 +207,7 @@ def test_active_queue_counts_only_nonterminal_luna_rows() -> None:
     luna = batch.serialize_requests(
         batch.build_requests(_case(), "developer", repetitions=1)
     )
-    other = luna.replace("gpt-5.6-luna", "gpt-4.1")
+    other = luna.replace("gpt-6-luna", "gpt-4.1")
     batches = [
         SimpleNamespace(status="in_progress", input_file_id="luna"),
         SimpleNamespace(status="completed", input_file_id="done"),
@@ -227,7 +226,7 @@ def test_active_queue_counts_only_nonterminal_luna_rows() -> None:
             def content(file_id: str) -> SimpleNamespace:
                 return SimpleNamespace(text={"luna": luna, "other": other}[file_id])
 
-    assert batch.active_luna_tokens(Client) == batch.preflight(luna)["tiktoken_tokens"]
+    assert batch.active_luna_tokens(Client) == batch.preflight(luna)["jsonl_bytes"]
 
 
 def test_submit_uploads_exact_packet_and_persists_batch_ids(tmp_path: Path) -> None:
@@ -317,7 +316,7 @@ def test_submit_recovers_batch_created_before_manifest_was_persisted(
                         endpoint="/v1/responses",
                         metadata={
                             "source": "tollchat-v2-ballpark-hallucination",
-                            "model": "gpt-5.6-luna",
+                            "model": "gpt-6-luna",
                         },
                         status="validating",
                     )
