@@ -1,6 +1,6 @@
 # Running the frozen golden corpus
 
-The active corpus and harness are **2.0.4**: **200 cases**, split into **160
+The active corpus and harness are **2.0.5**: **200 cases**, split into **160
 development and 40 reserved cases**, with three fresh trials per case. A complete
 application run has **600 conversations**. Reserved cases are public and
 exposed to their authors; they are excluded from calibration, not claimed to be

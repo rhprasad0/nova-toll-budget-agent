@@ -1,5 +1,5 @@
 {
   "status": "pending",
-  "notes": "Contract 2.0.4 calibration-2 completed all 281 development examples within the $5 cap. All seven new controls agree; 13 other examples have disagreements. See eval/evidence/gpt-6-luna/calibration-2/REVIEW.md and review.html. Exact-evidence human review is pending; no application run or production release is approved.",
+  "notes": "Archived calibration-2 completed 281 development examples under contract 2.0.4 with seven new controls agreeing and 13 other disagreements. Its evidence remains unchanged and is not calibration for the 2.0.5 parser extension. Fresh exact-contract calibration and human review remain pending; no application run or production release is approved.",
   "evidence_sha256": "8cb32297a8edd1463a34b7b9a9bbbfe52fceb746b2ed2ebe7c6ded395a8612c0"
 }

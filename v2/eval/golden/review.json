@@ -1,4 +1,4 @@
 {
   "status": "pending",
-  "evidence": "Contract 2.0.4 implements Ryan\u2019s case 16/18/20 feedback. Fresh calibration and exact-evidence human review are pending; the previous approval applies only to archived 2.0.3 evidence."
+  "evidence": "Contract 2.0.5 extends downward-money wording and emphasis parsing. Exact-contract calibration and human review remain pending. Archived calibration-2 measures 2.0.4 only."
 }

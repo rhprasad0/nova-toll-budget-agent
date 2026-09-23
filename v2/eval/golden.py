@@ -526,8 +526,8 @@ def money(text: str) -> set[Decimal]:
     # ponytail: recognize only adjacent, explicit movement wording; add new
     # forms with labeled examples rather than guessing the sign of other amounts.
     text = re.sub(
-        r"\b(?:down|decreased?|fell|fallen|drop(?:ped)?|reduction)\s+"
-        r"(?:(?:by|of)\s+)?(?:\*\*|__|`)?\$(?=\s*\d)",
+        r"\b(?:down|decreased?|fell|falling|fallen|drop(?:ped)?|reduction)\s+"
+        r"(?:(?:by|of)\s+)?(?:\*{1,2}|_{1,2}|`)?\$(?=\s*\d)",
         "-$",
         text,
         flags=re.IGNORECASE,
@@ -831,7 +831,7 @@ def validate(root: Path = ROOT) -> None:
         raise ValueError("each case needs a labeled good example")
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != "2.0.4"
+        manifest["version"] != "2.0.5"
         or manifest.get("case_count") != 200
         or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-6-luna"

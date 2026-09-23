@@ -1,4 +1,4 @@
-# TollChat golden evaluation contract 2.0.4
+# TollChat golden evaluation contract 2.0.5
 
 **200 cases: 160 development and 40 reserved.** The [review catalog](golden/REVIEW.md)
 links every prompt, intended behavior, actor brief, fixture, reference answer, and
@@ -150,7 +150,7 @@ and their trials together. It describes this finite suite, not a population guar
 Failed and inconclusive attempts remain in cost accounting.
 
 The manifest binds exact case, fixture, example, catalog and evaluator source bytes,
-including the standalone actor check, to corpus version 2.0.3. The preserved
+including the standalone actor check, to corpus version 2.0.5. The preserved
 [two calibration runs](evidence/golden-200/CALIBRATION.md) and
 [first correction ledger](evidence/golden-200/corrections.json) explain the reference
 repairs, public catalog and SOP context, and explicit fixed-transcript provenance.
@@ -158,7 +158,7 @@ After run 2, one definite legacy Grounding label was corrected and packaged-agen
 model-budget exhaustion was classified as an application failure. Neither raw
 run qualifies this final exact contract; fresh authorized calibration and human
 review remain required. The pending
-[policy 2.0.3](results/golden/policy-2.0.3.json) binds the migrated contract and preserves
+[policy 2.0.5](results/golden/policy-2.0.5.json) binds the active contract and preserves
 existing numerical limits. No production baseline is promoted, and no historical
 approval is transferred. Historical reports still render under their original
 contract. Baseline and candidate comparisons require the same reviewed contract;
@@ -182,3 +182,12 @@ excluded from calibration; the current-only refusal rule is calibrated using a
 development future-price case. Original 2.0.3 evidence and scores are unchanged.
 Fresh calibration and exact-evidence human approval are required before application
 execution; the previous local baseline approval does not transfer.
+
+## Downward-money renderings (2.0.5)
+
+The bounded movement parser also accepts “falling by $2.00” and single-character
+Markdown emphasis such as “down *$2.00*” or “down _$2.00_”. Regression checks
+verify these renderings against the development fixture and still reject invented
+amounts. Numerical gate limits are unchanged. Retained calibration-2 measures
+2.0.4; it does not qualify this revision. Exact-contract calibration and human
+review remain pending.
