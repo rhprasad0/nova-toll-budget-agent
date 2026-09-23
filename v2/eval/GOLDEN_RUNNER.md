@@ -1,15 +1,15 @@
 # Running the frozen golden corpus
 
-The local experiment corpus and harness are **2.0.6**: **200 cases**, split into **160
+The local experiment corpus and harness are **2.0.7**: **200 cases**, split into **160
 development and 40 reserved cases**, with three fresh trials per case. A complete
 application run has **600 conversations**. Reserved cases are public and
 exposed to their authors; they are excluded from calibration, not claimed to be
 secret or independently authored holdouts.
 
-The 2.0.6 semantic-leniency calibration uses 285 development references, including
-four new positive/negative controls. Run fresh A and B/C calibrations with four
+The 2.0.7 calibration uses 286 development references, including the new overbroad
+closure negative control. Run fresh A and B/C calibrations with four
 workers, `--budget-usd 15`, and `--prior-run` chained from the immediately preceding
-experiment run. Include both archived 2.0.5 calibrations ($0.881473 combined) in
+experiment run. Include the archived 2.0.5 and 2.0.6 calibrations ($1.782191 total) in
 that chain. Application execution still requires exact-evidence human review.
 The frozen 26-case diagnostic subset is unchanged; no release is authorized.
 
@@ -20,9 +20,9 @@ model credentials come from the existing SSM parameter.
 
 ## Calibration and execution
 
-The corpus contains **337 reference examples**. Calibration selects **285
-development examples**: 283 have explicit Outcome, Grounding, and Rules labels
-(849 application labels), and two deliberately invalid actor examples have only
+The corpus contains **338 reference examples**. Calibration selects **286
+development examples**: 284 have explicit Outcome, Grounding, and Rules labels
+(852 application labels), and two deliberately invalid actor examples have only
 an actor-validity label. The 52 reserved examples are excluded. Example names do
 not determine verdicts. Fixed-reference mode judges the supplied user turns and any
 explicit stop records; it does not invent simulator stops for authored transcripts. Reports preserve disagreements and separate criterion

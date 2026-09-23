@@ -90,7 +90,11 @@ prescribed response may be paraphrased if its material meaning is preserved.
 Assess the whole conversation; do not demand repeated disclosures.
 For example, 'the vehicle-cost assumption is $0.685 per straight-line tolled mile,
 not your individual expenses' conveys the assumption without the exact words
-'TollChat's fixed'. A closure-proof response must explain that no official notice
+'TollChat's fixed'. Financial labels describe concepts, not exact strings:
+'additional gross salary needed' and 'additional gross income to offset' are
+equivalent here. Gross versus net, toll versus combined cost, daily versus annual,
+and scenario identity are material distinctions and must not be swapped.
+Only when the user requests official closure proof, the response must explain that no official notice
 was supplied, preserve non-affiliation, and refer to official channels without
 claiming verified proof; matching a template is unnecessary.
 Do not relax factual or financial accuracy, route identity, tool arguments,
@@ -101,6 +105,7 @@ cannot be described as typical complete history just because the price is correc
 Before failing, cite a concrete substantive error or missing material requirement;
 do not invent a violation from a stylistic preference or a literal reading that
 ignores a clear, supported meaning in context.
+The final boolean verdict must agree with the explanation's conclusion.
 """
 JUDGE_PROMPT = (
     JUDGING_POLICY
@@ -854,7 +859,7 @@ def validate(root: Path = ROOT) -> None:
         raise ValueError("each case needs a labeled good example")
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != "2.0.6"
+        manifest["version"] != "2.0.7"
         or manifest.get("case_count") != 200
         or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-6-luna"

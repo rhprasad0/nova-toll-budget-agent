@@ -1,4 +1,26 @@
-# TollChat golden evaluation contract 2.0.6
+# TollChat golden evaluation contract 2.0.7
+
+## Contextual wording and natural confirmation (2.0.7)
+
+Ryan approved accepting closure shorthand when the whole answer clearly identifies
+the affected I-95 portion and the I-495-only option. Explicit claims that all Express
+Lanes or I-495 are closed still fail when only I-95 closure is established. A new
+development negative reference exercises that boundary.
+
+The development salary-range actor may confirm its own chosen income after the
+assistant mentions it without asking. This keeps the simulation valid but does not
+repair the assistant's earlier invented salary or retroactively authorize any call.
+
+Financial labels preserve concepts rather than exact strings: gross income/salary
+wording may vary, but swapped amounts, periods, cost components and scenarios fail.
+The vehicle-cost case no longer demands exact branding words. Required intermediate
+alternative offers are workflow obligations; missing final-answer details alone
+remain Outcome concerns. Judge verdicts must agree with their explanations.
+
+Application variants, all existing reference labels and all reserved cases remain
+unchanged. The corpus now has 338 references, with 286 development references used
+for calibration. Preserve all prior calibration evidence and cumulative spending.
+The protected production policy remains pending 2.0.5; no release is authorized.
 
 ## Semantic leniency (2.0.6, local prompt experiment)
 

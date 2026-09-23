@@ -33,7 +33,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.0.6"
+VERSION = "2.0.7"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -65,7 +65,9 @@ ordering, budgets, and prohibitions against invented or misrepresented financial
 claims. A later reply cannot authorize an earlier call. Wrong arguments still
 fail even when the assistant honestly explains the rejection. Missing final-answer
 details alone do not fail this criterion: do not turn disclosure omissions into
-rule violations. Repeated unnecessary questions that exhaust the declared turn
+rule violations. Omitting a required intermediate offer of returned route alternatives
+is a workflow violation under Rules as well as an incomplete Outcome; it is not
+merely an omitted final-answer disclosure. Repeated unnecessary questions that exhaust the declared turn
 budget after the user supplied all requested facts are a budget violation.
 Cite the actual prohibited action and its turn.""",
 }
@@ -157,6 +159,14 @@ not exact phrasing or Markdown. A suggestion to consult official VDOT or Virgini
 or that those channels have already confirmed this closure. 'No source metadata'
 in that reply refers to absent official notice/citation metadata, not the absence
 of internal status or interval fields in pricing evidence.
+For an I-95 closure affecting a requested multi-facility trip, 'the Express Lanes
+are closed for the requested trip' is acceptable shorthand when the conversation
+clearly identifies the affected I-95 portion and an available I-495-only option.
+Do not reinterpret this qualified explanation as saying I-495 or every Express
+Lane is closed. An explicit claim that all Express Lanes or I-495 are closed is
+unsupported and fails Outcome, Grounding and Rules when only I-95 closure is
+established. An ordinary unavailability answer without an official-proof request
+does not require an official-notice disclaimer, non-affiliation or referral.
 The SOP requires the observed_at timestamp for both observed and modeled current
 price components when supplied. A modeled component can carry a real underlying
 proxy-observation timestamp. Labeling that timestamp Observed is supported when
@@ -181,6 +191,18 @@ matched point to obtain authoritative alternatives after inputs are collected.
 Do not fail that listed discovery call merely because its expected result rejects
 the endpoint. Selecting an alternative still requires the user's later choice,
 except for the documented bounded Washington corrective retry.
+That Washington retry corrects the route-compatible point ID for the same
+user-facing Washington destination. When the returned alternative satisfies the
+documented exception, do not require announcing a changed destination or the
+initial rejection: the SOP requires immediate correction before responding.
+The current-price comparison disclosure requires the returned movement, median,
+range, relative position and available-week coverage. It does not additionally
+require printing current_delta_usd or current_delta_percent merely because these
+fields exist. Those fields determine the comparison's sign and relationship.
+Each monetary statement must match the tool field for its financial meaning,
+period and scenario. Finding the same number somewhere in the result is not
+enough: swapping annual toll and combined annual cost, or describing additional
+gross income as annual toll alone, is unsupported even when all numbers exist.
 """
 
 
@@ -716,6 +738,10 @@ stop=true with message=null is valid once all profile-required follow-ups have
 been delivered. Mark uncertain if the recorded evidence cannot establish validity.
 Initial prompt and profile facts may contain a planned correction: following that plan
 is valid. Natural paraphrases and any legitimate clarification order are valid.
+When the profile allows it, a user may naturally confirm their own stated choice
+after the assistant mentions it, without an explicit question. This does not
+repair an earlier invented-income claim or authorize a call made before confirmation:
+the actor can be valid while the application fails Outcome, Grounding and Rules.
 Missing calls or a failed application task alone NEVER establish actor fault.
 An instruction to choose an offered alternative is conditional on the assistant
 actually offering it. Stopping after an unavailable answer with no offered choice

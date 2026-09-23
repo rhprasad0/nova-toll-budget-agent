@@ -453,7 +453,7 @@ def test_semantic_controls_preserve_financial_checks_and_material_failures() -> 
     controls = [
         e for e in golden_run.development_examples() if e.label.startswith("semantic-")
     ]
-    assert len(controls) == 4
+    assert len(controls) == 5
     assert (
         sum(
             bool(e.expected and all(e.expected.model_dump().values())) for e in controls
@@ -475,6 +475,26 @@ def test_semantic_controls_preserve_financial_checks_and_material_failures() -> 
         if example.label in {
             "semantic-closure-fabricated-proof",
             "semantic-annual-false-tax-entitlement",
+            "semantic-closure-overbroad",
         }:
             assert example.expected is not None
             assert not any(example.expected.model_dump().values())
+
+
+def test_salary_confirmation_keeps_the_prior_application_failure() -> None:
+    from eval import golden_run
+
+    case = next(c for c in golden.load_cases() if c.id == "annual-salary-range")
+    assert not case.held_out
+    assert "confirm" in golden.actor_profile(case).actor_goal
+    example = next(
+        e
+        for e in golden_run.development_examples()
+        if e.case_id == case.id and e.label == "assumed-midpoint"
+    )
+    assert example.actor_validity == "valid"
+    assert example.expected is not None
+    assert not any(example.expected.model_dump().values())
+    assert "without asking" in example.turns[0].response
+    assert example.turns[1].user == "Use $120,000 gross a year."
+    assert golden.grade_assertions(case, example.turns) == example.expected_failures

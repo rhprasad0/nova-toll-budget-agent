@@ -44709,5 +44709,86 @@
         ]
       }
     ]
+  },
+  {
+    "case_id": "current-suffix-decline",
+    "label": "semantic-closure-overbroad",
+    "expected_failures": [],
+    "expected": {
+      "outcome": false,
+      "grounding": false,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "rationale": "Contextual I-95 closure shorthand may pass, but explicitly claiming all Express Lanes and I-495 are closed is unsupported by an I-95-only closure and remains a substantive failure. Later cancellation cannot erase the false closure claim.",
+    "turns": [
+      {
+        "user": "Current toll from Route 267 on I-495 southbound to I-95 near Backlick Road?",
+        "response": "### 🚧 Express Lanes unavailable\n\nThe pricing tool confirms that all Express Lanes, including the I-495 Express Lanes, are closed. No complete toll estimate is available. The omitted I-95 portion would use general-purpose lanes and is not included. Would you like an I-495-only estimate from your original origin to the southbound Express Lanes end at I-95?",
+        "calls": [
+          {
+            "name": "get_current_toll_price",
+            "input": {
+              "origin_point_id": "i495:182SO",
+              "destination_point_id": "i95:205SD",
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              }
+            },
+            "result": {
+              "status": "currently_unavailable",
+              "reason": {
+                "code": "i95_fully_closed",
+                "details": {
+                  "required_i95_directions": [
+                    "SB"
+                  ],
+                  "availability": "closed"
+                }
+              },
+              "point_ids": [
+                "i495:182SO",
+                "i95:205SD"
+              ],
+              "connection_ids": [
+                "i495_to_i95_south"
+              ],
+              "connection_types": [
+                "general_purpose_gap"
+              ],
+              "general_purpose_gaps": [
+                {
+                  "connection_id": "i495_to_i95_south",
+                  "boundary_point_id": "i495:192SD",
+                  "role": "suffix",
+                  "i95_direction": "SB",
+                  "fallback_required": true
+                }
+              ],
+              "i95_evidence": {
+                "availability": "closed",
+                "northbound_corridor_name": "I-95 NB",
+                "northbound_link_status": "CLOSED",
+                "northbound_interval_end_at": "2026-08-27T12:00:00+00:00",
+                "northbound_calculated_at": "2026-08-27T11:59:00+00:00",
+                "southbound_corridor_name": "I-95 SB",
+                "southbound_link_status": "CLOSED",
+                "southbound_interval_end_at": "2026-08-27T12:00:00+00:00",
+                "southbound_calculated_at": "2026-08-27T11:59:00+00:00"
+              },
+              "facility_legs": []
+            },
+            "is_error": false
+          }
+        ]
+      },
+      {
+        "user": "No, I need the whole route. Cancel it.",
+        "response": "**🛣️ Cancelled. No complete trip estimate is available.**",
+        "calls": []
+      }
+    ]
   }
 ]
