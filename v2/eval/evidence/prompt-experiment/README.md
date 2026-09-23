@@ -3,6 +3,12 @@
 Prepared from `8a82e7399dd435e57464f5cbf18f1597aeb86525`. Local experiment only;
 no push, deployment, or production qualification. Combined paid-run ceiling: **$15**.
 
+**Prepared and calibrated; application trials await human review.** Both calibrations
+completed 281 references with no measurement failures, spending $0.881473 combined.
+See [the exact-evidence review packet](CALIBRATION-REVIEW.md) for disagreements,
+judge variability, and evidence digests. Neither calibration has an approval file;
+the existing runner represents that state as pending review.
+
 | Arm | Branch / worktree | Change |
 | --- | --- | --- |
 | A | `experiment/prompt-a` / `.worktrees/prompt-experiment-a` | Original prompt and descriptions |
