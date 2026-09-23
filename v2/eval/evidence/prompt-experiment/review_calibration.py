@@ -7,24 +7,32 @@ from pathlib import Path
 def main() -> None:
     root = Path(__file__).resolve().parent
     lines = [
-        "# Prompt experiment calibration review — 2.0.6",
+        "# Prompt experiment calibration review — 2.0.7",
         "",
         "**Pending human review. No application trials have run.**",
         "",
-        "Both runs use evaluator semantics 2.0.6. A and B/C have distinct corpus",
+        "Both runs use evaluator semantics 2.0.7. A and B/C have distinct corpus",
         "digests because the existing identity includes the changed tool source files.",
         "Cases, fixtures, labels, grading code, actor/judge prompts and settings are identical.",
         "",
         "Approval would accept the recorded calibration limitations for the bounded local",
         "A/B/C experiment only; it would not approve production or change any verdict.",
         "",
+        "## Review findings",
+        "",
+        "Both runs match all five semantic controls and the assumed-midpoint actor/application labels. Contextual closure wording and plain-text vehicle-cost disclosures pass; fabricated proof, tax entitlement and explicit all-lanes closure fail. All Rules labels agree, and neither run passes an authored failing reference across all three criteria.",
+        "",
+        "The remaining disagreements include a concrete evaluator defect: the new DOMAIN_FACTS wording can require comparison coverage counts even with all 3 of 3 weeks available. The application SOP requires those counts only with incomplete history. A has three direct false failures on this point; B/C has four, plus a related rejection of the permitted 'typical recent price' wording. Correct that evaluator wording before treating this revision as ready for application comparisons; no new user preference is needed for this alignment.",
+        "",
+        "Other remaining issues are an exact-emoji false failure, one boolean that contradicts its explanation, differing Grounding classification of wrong/partial routes, a NO_DETERMINATION metadata interpretation, annual paired-day wording, and a missed Outcome error for suggested salary choices (still caught by Rules). These are preserved below, not silently adjudicated or relabeled. The earlier live progress description of a missed Grounding error in the withdrawal case was incorrect: its authored Grounding label is pass, and both runs fail it.",
+        "",
     ]
-    prior = json.loads((root / "calibration-a-2.0.6/manifest.json").read_text())[
+    prior = json.loads((root / "calibration-a-2.0.7/manifest.json").read_text())[
         "prior_spend_usd"
     ]
     total = prior
     reference_runs = []
-    for name in ("calibration-a-2.0.6", "calibration-bc-2.0.6"):
+    for name in ("calibration-a-2.0.7", "calibration-bc-2.0.7"):
         directory = root / name
         report = json.loads((directory / "report.json").read_text())
         events = [
@@ -85,7 +93,7 @@ def main() -> None:
         lines.extend(
             [
                 "",
-                "Verdict order: Outcome / Grounding / Rules. Positive controls preserve meaning; negative controls fabricate official proof or tax entitlement.",
+                "Verdict order: Outcome / Grounding / Rules. Positive controls preserve meaning; negative controls fabricate official proof, broad closure, or tax entitlement.",
                 "",
             ]
         )
@@ -138,11 +146,11 @@ def main() -> None:
             "",
             f"This revision costs **${total - prior:.6f}**; prior experiment spending is **${prior:.6f}**. Cumulative cost: **${total:.6f} of $15**; remaining estimated allowance: **${15 - total:.6f}**.",
             "",
-            "Review both exact evidence digests and disagreements before approving application runs. The runner retains the human-review gate. This explicitly revised judging policy accepts semantic equivalence while retaining substantive checks. Existing labels and all historical results remain unchanged; four new development references test the revision. No application-prompt performance conclusion follows from calibration agreement.",
+            "Review both exact evidence digests and disagreements before approving application runs. The runner retains the human-review gate. This explicitly revised judging policy accepts semantic equivalence while retaining substantive checks. Existing labels and all historical results remain unchanged. Five semantic controls test the revisions; the latest revision adds the broad-closure negative control and permits natural confirmation in one development actor profile. No application-prompt performance conclusion follows from calibration agreement.",
             "",
         ]
     )
-    (root / "CALIBRATION-REVIEW-2.0.6.md").write_text("\n".join(lines))
+    (root / "CALIBRATION-REVIEW-2.0.7.md").write_text("\n".join(lines))
 
 
 if __name__ == "__main__":

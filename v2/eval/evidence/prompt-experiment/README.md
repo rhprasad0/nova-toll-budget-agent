@@ -3,17 +3,19 @@
 Prepared from `8a82e7399dd435e57464f5cbf18f1597aeb86525`. Local experiment only;
 no push, deployment, or production qualification. Combined paid-run ceiling: **$15**.
 
-**Revised and calibrated under semantic judging contract 2.0.6; human review pending.** The first
-two 2.0.5 calibrations completed 281 references each, spending $0.881473 combined;
-their [review packet](CALIBRATION-REVIEW.md) remains historical. New calibration
-completed 285 references per run with no measurement failures. See the
-[2.0.6 review packet](CALIBRATION-REVIEW-2.0.6.md): A has 11 label disagreements
-and B/C has 13. The original closure and vehicle-cost references now pass in both;
-B/C still falsely rejects the new plain-text annual control for missing the exact
-branding phrase. Both runs reject the new fabricated-proof and tax-entitlement
-controls. This is a remaining judge limitation, not a clean calibration pass.
-Cumulative spending is $1.782191 of $15, leaving $13.217809. No application trials
-have run and no calibration approval has been recorded.
+**Calibration 2.0.7 completed; human review remains pending.** Both runs checked
+286 development references with no measurement failures. A has 6 label disagreements
+and B/C has 10, versus 11 and 13 under 2.0.6. Both match all five semantic controls
+and the natural salary-confirmation case. See the
+[2.0.7 review packet](CALIBRATION-REVIEW-2.0.7.md) for exact evidence and remaining
+limitations. One concrete evaluator mismatch remains: comparison counts are being
+required with complete history, although the SOP requires them only for incomplete
+history. Correct this before proceeding to application comparisons.
+
+This round cost $0.911683. Cumulative spending is **$2.693874 of $15**, leaving
+$12.306126. Historical [2.0.5](CALIBRATION-REVIEW.md) and
+[2.0.6](CALIBRATION-REVIEW-2.0.6.md) evidence remains unchanged. No application
+trials have run and no calibration approval has been recorded.
 
 | Arm | Branch / worktree | Change |
 | --- | --- | --- |
@@ -30,9 +32,10 @@ paragraph exactly once. Tool versions advance to current-price 1.5.1 and annual
 The existing corpus identity hashes tool source files. B/C therefore need their
 own matching calibration. Their manifests differ from A only in the two tool-source
 hashes and the resulting corpus digest; all three arms share identical evaluator
-semantics, case requirements, reference labels and fixtures under 2.0.6. The
-revision changes judging policy, clarifies the closure case requirement and adds
-four development references. Application variants and existing labels are unchanged.
+semantics, case requirements, reference labels and fixtures under 2.0.7. The
+latest revision clarifies contextual closure wording, financial labels, and natural
+salary confirmation in one development actor profile, and adds one broad-closure
+negative reference (five semantic controls across the latest two revisions). Application variants and existing labels are unchanged.
 Do not weaken this identity gate or copy an approval between calibrations.
 
 Both fresh calibrations require human review before application execution.
