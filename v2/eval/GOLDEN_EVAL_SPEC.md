@@ -1,4 +1,12 @@
-# TollChat golden evaluation contract 2.0.7
+# TollChat golden evaluation contract 2.0.8
+
+## Complete comparison history (2.0.8)
+
+Align the evaluator with the unchanged SOP: all 3 of 3 comparable weeks support
+typical recent price wording without explicit coverage counts. Incomplete history
+still requires the available and expected counts and appropriately limited wording.
+Cases, references, labels, actor profiles and application variants are unchanged.
+Preserve the 2.0.7 results; repeat calibration under the corrected contract.
 
 ## Contextual wording and natural confirmation (2.0.7)
 

@@ -3,7 +3,7 @@
 The [200-case golden corpus](GOLDEN_EVAL_SPEC.md) covers current pricing, annual
 affordability, multi-turn changes, evidence failures, and explicit workflow switches.
 The [review catalog](golden/REVIEW.md) links every case and labeled reference.
-Local experiment contract 2.0.7 retains 160 development and 40 reserved cases and
+Local experiment contract 2.0.8 retains 160 development and 40 reserved cases and
 requires fresh calibration review for contextual wording and natural confirmation. Release policy remains
 on pending 2.0.5; this experiment does not qualify a production release. Ryan approved the
 previous 2.0.3

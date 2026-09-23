@@ -33,7 +33,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.0.7"
+VERSION = "2.0.8"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -196,7 +196,11 @@ user-facing Washington destination. When the returned alternative satisfies the
 documented exception, do not require announcing a changed destination or the
 initial rejection: the SOP requires immediate correction before responding.
 The current-price comparison disclosure requires the returned movement, median,
-range, relative position and available-week coverage. It does not additionally
+range and relative position. When all 3 of 3 comparable weeks are available,
+calling the median a typical recent price is supported; explicit coverage counts
+are optional. Only incomplete history requires disclosing the available and
+expected counts and avoiding typical-price wording. Do not fail a complete-history
+comparison for omitting counts. It does not additionally
 require printing current_delta_usd or current_delta_percent merely because these
 fields exist. Those fields determine the comparison's sign and relationship.
 Each monetary statement must match the tool field for its financial meaning,

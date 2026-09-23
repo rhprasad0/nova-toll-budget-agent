@@ -1,15 +1,15 @@
 # Running the frozen golden corpus
 
-The local experiment corpus and harness are **2.0.7**: **200 cases**, split into **160
+The local experiment corpus and harness are **2.0.8**: **200 cases**, split into **160
 development and 40 reserved cases**, with three fresh trials per case. A complete
 application run has **600 conversations**. Reserved cases are public and
 exposed to their authors; they are excluded from calibration, not claimed to be
 secret or independently authored holdouts.
 
-The 2.0.7 calibration uses 286 development references, including the new overbroad
-closure negative control. Run fresh A and B/C calibrations with four
+The 2.0.8 calibration uses 286 development references, with unchanged cases
+and labels. Run fresh A and B/C calibrations with four
 workers, `--budget-usd 15`, and `--prior-run` chained from the immediately preceding
-experiment run. Include the archived 2.0.5 and 2.0.6 calibrations ($1.782191 total) in
+experiment run. Include the archived 2.0.5, 2.0.6 and 2.0.7 calibrations ($2.693874 total) in
 that chain. Application execution still requires exact-evidence human review.
 The frozen 26-case diagnostic subset is unchanged; no release is authorized.
 
