@@ -11,6 +11,8 @@ and link their supporting evidence.
 **Decision:** Ryan requested that the main TollChat agent use C's tool/parameter
 descriptions and reordered SOP, and authorized a PR stacked on
 [#592](https://github.com/rhprasad0/nova-toll-budget-agent/pull/592).
+The journal, completed comparison and adoption decision are published in
+[#593](https://github.com/rhprasad0/nova-toll-budget-agent/pull/593), stacked on #592.
 This supersedes the earlier recommendation to retain A pending grounding review;
 it does not change any recorded grade or establish production qualification.
 
