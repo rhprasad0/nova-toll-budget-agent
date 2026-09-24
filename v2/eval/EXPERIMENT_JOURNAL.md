@@ -127,3 +127,19 @@ corpus hashes changed, so future application runs require fresh matching
 calibration and review. No calibration approval transfers automatically and no
 new paid calibration was run. Results were committed in `421bd36`; the expanded
 runner and recovery comparison passed 49 relevant offline tests.
+
+## 2026-09-24 — Retire the active golden corpus
+
+Ryan requested documenting the existing 200 cases (160 development + 40 public
+reserved) before deleting the active set, in a PR stacked on #593. The future
+target is 100 newly authored development cases; another agent will independently
+generate the holdout to preserve integrity. Both generation tasks are out of scope
+for retirement. The [recreation guide](GOLDEN_EVAL_SPEC.md) preserves the design
+and pins the complete original corpus before removal.
+
+The change uses two ordered commits: documentation, then deletion. Preserve the
+harness, this journal, and historical evidence; retain only regression-test inputs
+needed by offline checks. With no active corpus, golden runs and release
+qualification must remain blocked. No old score, reference, or approval becomes
+evidence for the future set, and this decision does not alter the experiment C
+adoption or its recorded results.

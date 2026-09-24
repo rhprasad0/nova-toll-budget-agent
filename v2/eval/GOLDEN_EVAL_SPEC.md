@@ -1,4 +1,89 @@
-# TollChat golden evaluation contract 2.0.8
+# Golden corpus retirement and recreation guide
+
+## Retirement decision — 2026-09-24
+
+The existing **200-case corpus (160 development + 40 public reserved)** is being
+retired in two ordered commits: this documentation first, then active-data removal.
+The replacement target is **100 newly authored development cases**, not a sampled
+subset of the old set. Generation is out of scope for this change. A separate agent
+will generate the new holdout independently to preserve its integrity; its size,
+allocation, and contents are not specified here.
+
+After removal there is no active golden corpus. Calibration, application golden
+runs, and golden production qualification must stop before paid execution. Ordinary
+CI, scheduled live evaluations, and offline harness regression tests remain usable.
+A minimal subset of old inputs may survive only as test data, never as replacement
+evaluation cases or calibration evidence. Old reports and approvals cannot qualify
+the new set. No application model, prompt, or deployed resource changes are needed.
+
+The [complete pre-retirement corpus](https://github.com/rhprasad0/nova-toll-budget-agent/tree/4654b4323edd28a49d696c6af00a8a09e31864c7/v2/eval/golden)
+is pinned to commit `4654b4323edd28a49d696c6af00a8a09e31864c7` (PR #593). It includes
+all 200 definitions, 338 labeled references, tool fixtures, frozen point catalog,
+review pages, manifest hashes, corpus approval, and calibration reference. For
+historical reproduction, use that commit in a separate checkout; do not restore
+its data as the replacement corpus. The permanent [experiment journal](EXPERIMENT_JOURNAL.md),
+[evidence](evidence/prompt-experiment/README.md), and [archived results](results/golden/README.md)
+remain in this checkout. Historical scripts that expect the old active corpus
+must run against their recorded source revision.
+
+## Authoring contract to carry forward
+
+The historical specification below preserves the old coverage design and grading
+semantics. Its exact counts, family quotas, pair minima, versions, and approvals
+are historical facts, **not requirements for the new 100-case allocation**.
+
+| Artifact | Contents and construction |
+| --- | --- |
+| Case JSONL | Stable ID and number; workflow and coverage family/tags; split group and held-out flag; terminal objective; opening prompt; private actor facts, goal, follow-up rules and turn bound; aware frozen timestamp; provenance; criticality; call and minimum-turn bounds; ordered fixture steps; expected behavior. `GoldenCase` in `golden.py` is the executable schema. |
+| Tool fixture JSON | Tool name, schema-valid input/output, error flag, provenance, and unrounded synthetic annual distance when applicable. Build annual responses through the domain builders, then independently reconcile Decimal arithmetic. Match fixture time and request-relative endpoints to the case. |
+| Reference examples | Case ID, label, delivered turns and actual tool evidence, expected deterministic failures, three explicit application verdicts, actor-validity label, rationale, and rejected calls. Invalid actors have no application verdict labels. Include passing references and meaningful negative controls. |
+| Frozen point catalog | Committed Oracle-derived public points, frozen with the corpus; no live database or clock access during replay. |
+| Manifest and reviews | Exact case/fixture/reference/catalog and evaluator-source hashes, version, models and trial configuration; human approval tied to those exact bytes; separately reviewed calibration evidence. Never transfer old approval. |
+
+Keep actor-only facts separate from application-visible conversation. Delivered
+consent, corrections, and withdrawal determine whether a call is authorized; a
+private expected argument never does. Preserve independent current-price and annual
+workflows, supported controls alongside refusals, and meaningful behavioral pairs
+instead of padding with paraphrases. Old reserved cases were public and later
+measured in the prompt experiment; they are not a clean private holdout.
+
+## Recreation checklist (future work)
+
+1. Read the current application SOP, both tool schemas/domain builders, and existing
+   routing/financial regressions. Reconcile changed product behavior before authoring.
+2. Design 100 fresh development cases spanning the two workflows and their material
+   state, evidence, financial, and adversarial boundaries. Decide coverage weights
+   during that work; do not mechanically halve the historical quotas. Keep the
+   independent holdout agent's content outside development authoring and calibration.
+3. Author and review synthetic fixtures, actor briefs, passing references, and
+   negative controls. Validate schema, timing, endpoints, arithmetic, bounded calls,
+   split separation, and actor information boundaries offline.
+4. Replace the legacy 200-case assumptions in `golden.py` (`GoldenCase.number`,
+   coverage/workflow allocations, original-number split rule, pair/tag minima,
+   exact count/numbering, negative-reference minimum, and manifest version/count).
+   Reconcile the protected policy's count, hashes, calibration reference, and report
+   expectations with the separately agreed combined evaluation scope. Test-only
+   fixtures must remain excluded. Do not merely change 200 to 100 everywhere.
+5. Freeze a new version and hashes, then obtain authorization for paid calibration.
+   Inspect raw verdicts and actor validity, retain disagreements and all costs, and
+   record human decisions separately. Calibrate only development references.
+6. Approve the exact new corpus and matching calibration before application runs;
+   restore CI corpus validation and the protected release prerequisites. Requalify
+   baseline/candidate comparisons on the same new contract. Old approval and scores
+   remain historical and cannot establish the new set's performance.
+
+Lessons to retain: judge meaning rather than formatting; preserve strict financial
+values and concepts, route identity, evidence scope, and consent. Inspect signed-money
+false positives, closure scope, complete versus incomplete comparison history, and
+actor confirmations that can otherwise hide an earlier application error. Keep
+actor-invalid trials inconclusive, preserve original failed/interrupted attempts,
+and recover only infrastructure failures in separately linked journals. The
+[2.0.8 review](evidence/prompt-experiment/CALIBRATION-REVIEW-2.0.8.md) and
+[experiment findings](EXPERIMENT_JOURNAL.md) document the actual limitations.
+
+## Historical contract 2.0.8
+
+Everything below describes the retired corpus and its revision history.
 
 ## Complete comparison history (2.0.8)
 
@@ -51,12 +136,12 @@ $15 cumulative ceiling. The release gate remains on pending policy 2.0.5; this
 local experiment does not qualify a production release. Earlier contract history
 and evidence below remain historical.
 
-**200 cases: 160 development and 40 reserved.** The [review catalog](golden/REVIEW.md)
+**200 cases: 160 development and 40 reserved.** The [review catalog](https://github.com/rhprasad0/nova-toll-budget-agent/blob/4654b4323edd28a49d696c6af00a8a09e31864c7/v2/eval/golden/REVIEW.md)
 links every prompt, intended behavior, actor brief, fixture, reference answer, and
 negative example. Original case IDs 1–24 are preserved and classified as development
 because they have already been exposed. Ryan approved this exact corpus and
 calibration, with documented limitations, for the local GPT-6 Luna baseline;
-[review.json](golden/review.json) records that approval separately. The
+[review.json](https://github.com/rhprasad0/nova-toll-budget-agent/blob/4654b4323edd28a49d696c6af00a8a09e31864c7/v2/eval/golden/review.json) records that approval separately. The
 [first baseline report](evidence/gpt-6-luna/BASELINE.md) retains all 600 attempts.
 
 This is a synthetic, task-specific evaluation of two real workflows: current toll

@@ -1,5 +1,11 @@
 # Running the frozen golden corpus
 
+**Retirement notice:** the 200-case active corpus is being removed. Paid golden
+runs are unavailable after removal until a new corpus and matching calibration
+are approved. Commands below describe the retained harness and historical
+procedure; they do not authorize runs. See the [recreation guide](GOLDEN_EVAL_SPEC.md).
+Historical report rendering remains available.
+
 The local experiment corpus and harness are **2.0.8**: **200 cases**, split into **160
 development and 40 reserved cases**, with three fresh trials per case. A complete
 application run has **600 conversations**. Reserved cases are public and

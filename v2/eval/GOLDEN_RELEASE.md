@@ -1,5 +1,11 @@
 # Golden production gate
 
+**Retirement notice:** the 200-case active corpus is being removed. Golden
+qualification is blocked after removal until a new corpus and matching calibration
+are approved. The procedures below remain for future activation and historical
+reproduction; old approvals cannot qualify the replacement. See the
+[recreation guide](GOLDEN_EVAL_SPEC.md).
+
 Production planning requires a successful protected golden evaluation of the
 exact development release bundle. The gate is mandatory. Missing infrastructure,
 an unset production baseline, pending reviews, stale evidence, or a failed run
