@@ -1,7 +1,9 @@
 # Prompt comparison: completed full evaluation
 
-**C is the strongest candidate on this corpus, but retain A pending review of
-grounding failures.** C's paired gain over A is positive; B's is inconclusive.
+**2026-09-24 decision: Ryan selected C for the main TollChat agent.** See the
+permanent [experiment journal](../../EXPERIMENT_JOURNAL.md). This supersedes the
+initial recommendation to retain A pending grounding review; the evidence and
+grades below are unchanged. C's paired gain over A is positive; B's is inconclusive.
 Reserved-case uncertainty and known grading limitations prevent treating C as a
 validated replacement. No prompt was revised after diagnostics or reserved-case
 inspection.
@@ -89,7 +91,7 @@ reports reproduce byte-for-byte and secret scans passed.
 
 ## Next step and worker support
 
-Review C's grounding flags before selecting it over A. Do not tune against the
+Carry the unresolved grounding flags forward with C's adoption. Do not tune against the
 public reserved cases or reinterpret this result as a secret holdout result.
 The signed-money deterministic check also retains known false failures for
 supported positive magnitudes of negative changes; no favorable relabeling or

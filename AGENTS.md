@@ -24,6 +24,9 @@ app if it would actually help.
 
 # Repo rules
 
+- Preserve `v2/eval/EXPERIMENT_JOURNAL.md`: it is important permanent experiment
+  history. Do not delete, truncate, replace, or remove it during cleanup without
+  Ryan's explicit approval; append new results and dated corrections.
 - Do all code and content changes in `.worktrees/`, not on `main`.
 - `main` is protected. Changes ship through a PR that passes CI.
 - Run only tests that are relevant to the task at hand.

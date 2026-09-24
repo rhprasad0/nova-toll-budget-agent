@@ -25,8 +25,9 @@ for the full 200-case evaluation; no diagnostic-driven wording revision was made
 
 The [completed results](RESULTS.md) retain original runs and infrastructure-only
 recovery evidence. A/B/C score 69.1% / 72.5% / 76.3%; C gains 6.4 paired points
-over A (95% interval +2.0 to +11.5). C is promising, but grounding review and
-reserved-case uncertainty remain; retain A pending that review. Total spending
+over A (95% interval +2.0 to +11.5). Ryan selected C for the main agent on
+2026-09-24; grounding flags and reserved-case uncertainty remain documented in the
+permanent [experiment journal](../../EXPERIMENT_JOURNAL.md). Total spending
 is **$9.646136 of $15**. C recovery used eight workers after login renewal; A/B
 used four. The comparison branch subsequently added sixteen-worker support,
 requiring fresh matching calibration before future application runs. The frozen

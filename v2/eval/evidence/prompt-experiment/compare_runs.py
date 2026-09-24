@@ -6,9 +6,10 @@ import sys
 from collections import Counter, defaultdict
 from copy import deepcopy
 from pathlib import Path
+from typing import Any
 
 
-def with_recovery(original: dict, recovery: dict) -> dict:
+def with_recovery(original: dict[str, Any], recovery: dict[str, Any]) -> dict[str, Any]:
     """Resolve authentication-failed slots only; preserve all incurred usage."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
     from eval import golden, golden_run
@@ -75,18 +76,20 @@ def with_recovery(original: dict, recovery: dict) -> dict:
     return result
 
 
-def paired(baseline: dict, candidate: dict, ids: set[str]) -> dict:
+def paired(
+    baseline: dict[str, Any], candidate: dict[str, Any], ids: set[str]
+) -> dict[str, Any]:
     """Pair complete three-trial cases; resample shared scenario groups."""
     cases = {c["id"]: c for c in baseline["manifest"]["identity"]["cases"]}
-    grouped = []
+    grouped: list[dict[str, list[dict[str, Any]]]] = []
     for report in (baseline, candidate):
-        rows = defaultdict(list)
+        rows: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
         for row in report["attempts"]:
             if row["status"] == "scored" and row["actor_validity"]["status"] == "valid":
                 rows[row["case_id"]].append(row)
         grouped.append(rows)
-    differences = {}
-    clusters = defaultdict(list)
+    differences: dict[str, float] = {}
+    clusters: defaultdict[str, list[float]] = defaultdict(list)
     for cid in sorted(ids):
         left, right = (rows[cid] for rows in grouped)
         if {r["trial"] for r in left} != {1, 2, 3} or {r["trial"] for r in right} != {
@@ -105,7 +108,7 @@ def paired(baseline: dict, candidate: dict, ids: set[str]) -> dict:
     if differences:
         rng = random.Random(360)
         groups = list(clusters.values())
-        samples = []
+        samples: list[float] = []
         for _ in range(10000):
             selected = [
                 d for group in rng.choices(groups, k=len(groups)) for d in group
@@ -209,7 +212,7 @@ def main(stage: str) -> None:
     ]
     for family in sorted({c["coverage_family"] for c in cases}):
         ids = {c["id"] for c in cases if c["coverage_family"] == family}
-        values = []
+        values: list[str] = []
         for r in reports.values():
             rows = [
                 a

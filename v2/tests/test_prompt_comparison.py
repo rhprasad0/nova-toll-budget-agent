@@ -4,6 +4,7 @@ import json
 import runpy
 from copy import deepcopy
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,7 +16,7 @@ def test_paired_comparison_excludes_invalid_actor_case() -> None:
             / "eval/evidence/prompt-experiment/compare_runs.py"
         )
     )["paired"]
-    baseline = {
+    baseline: dict[str, Any] = {
         "manifest": {
             "identity": {
                 "cases": [
