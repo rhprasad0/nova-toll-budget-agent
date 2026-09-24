@@ -272,7 +272,7 @@ def test_approved_contract_and_changed_policy(
         gate.policy()
 
 
-def test_active_contract_and_numeric_policy_are_pinned(
+def test_local_contract_cannot_use_pending_release_policy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from eval import golden, golden_baseline
@@ -286,7 +286,10 @@ def test_active_contract_and_numeric_policy_are_pinned(
     identity = run.identity(golden.load_cases())
     active = gate.read(gate.POLICY)["policy"]
     golden_baseline.Policy.model_validate(active)
-    assert active["contract_sha256"] == golden_baseline.contract(identity)
+    # Local 2.0.8 calibration never approved the protected 2.0.5 policy.
+    assert active["contract_sha256"] != golden_baseline.contract(identity)
+    with pytest.raises(ValueError, match="human approval"):
+        gate.policy()
     historical = gate.read(gate.POLICY.with_name("policy-1.0.0.json"))["policy"]
     assert {
         k: v

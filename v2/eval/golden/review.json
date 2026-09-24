@@ -1,4 +1,4 @@
 {
   "status": "pending",
-  "evidence": "Contract 2.0.5 extends downward-money wording and emphasis parsing. Exact-contract calibration and human review remain pending. Archived calibration-2 measures 2.0.4 only."
+  "notes": "Contract 2.0.8 corrects comparison coverage judging to match the unchanged SOP: explicit available/expected counts are required only for incomplete history; full 3/3 history supports typical-price wording without counts. Cases, references, labels and application variants unchanged. Fresh calibration and exact-evidence review required."
 }

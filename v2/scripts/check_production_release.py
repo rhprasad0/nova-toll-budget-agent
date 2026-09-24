@@ -16,6 +16,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.check_development_release import _canary_contract
+
 REPOSITORY = "rhprasad0/nova-toll-budget-agent"
 LISTENER_WORKFLOW = ".github/workflows/v2-production-release.yml"
 DEVELOPMENT_WORKFLOW = ".github/workflows/v2-development-delivery.yml"
@@ -379,10 +384,7 @@ def _development(
         or not re.fullmatch(r"\d{1,4}\.\d{2}", canary["total_usd"])
         or type(canary.get("elapsed_ms")) is not int
         or not 0 <= canary["elapsed_ms"] <= 60_000
-        or canary.get("model") != "gpt-6-luna"
-        or canary.get("tool_contract") != "1.5.0"
-        or canary.get("prompt_version") != "2.3.7"
-        or canary.get("renderer_version") != "1.0.0"
+        or any(canary.get(key) != value for key, value in _canary_contract().items())
         or canary.get("guardrail_blocked") is not True
         or canary.get("address_redacted") is not True
         or canary.get("success") is not True

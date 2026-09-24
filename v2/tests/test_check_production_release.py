@@ -540,6 +540,8 @@ def test_admission_accepts_a_current_full_development_rerun(
         ("runtime_version", "v8"),
         ("prompt_version", "2.0.2"),
         ("prompt_version", "2.3.0"),
+        ("prompt_version", "2.3.7"),
+        ("tool_contract", "1.5.0"),
         ("guardrail_blocked", False),
         ("address_redacted", False),
     ],

@@ -1,4 +1,55 @@
-# TollChat golden evaluation contract 2.0.5
+# TollChat golden evaluation contract 2.0.8
+
+## Complete comparison history (2.0.8)
+
+Align the evaluator with the unchanged SOP: all 3 of 3 comparable weeks support
+typical recent price wording without explicit coverage counts. Incomplete history
+still requires the available and expected counts and appropriately limited wording.
+Cases, references, labels, actor profiles and application variants are unchanged.
+Preserve the 2.0.7 results; repeat calibration under the corrected contract.
+
+## Contextual wording and natural confirmation (2.0.7)
+
+Ryan approved accepting closure shorthand when the whole answer clearly identifies
+the affected I-95 portion and the I-495-only option. Explicit claims that all Express
+Lanes or I-495 are closed still fail when only I-95 closure is established. A new
+development negative reference exercises that boundary.
+
+The development salary-range actor may confirm its own chosen income after the
+assistant mentions it without asking. This keeps the simulation valid but does not
+repair the assistant's earlier invented salary or retroactively authorize any call.
+
+Financial labels preserve concepts rather than exact strings: gross income/salary
+wording may vary, but swapped amounts, periods, cost components and scenarios fail.
+The vehicle-cost case no longer demands exact branding words. Required intermediate
+alternative offers are workflow obligations; missing final-answer details alone
+remain Outcome concerns. Judge verdicts must agree with their explanations.
+
+Application variants, all existing reference labels and all reserved cases remain
+unchanged. The corpus now has 338 references, with 286 development references used
+for calibration. Preserve all prior calibration evidence and cumulative spending.
+The protected production policy remains pending 2.0.5; no release is authorized.
+
+## Semantic leniency (2.0.6, local prompt experiment)
+
+Grade useful meaning and behavior. Equivalent wording, plain text, different
+headings, emoji omission, table versus prose, presentation order and harmless
+verbosity do not fail a case. This overrides presentation-only requirements,
+including exact closure-proof wording. The application SOP remains unchanged.
+
+Keep financial values and labels, route identity, source/coverage disclosures,
+clarification and consent strict. A generic vehicle-cost assumption disclosure
+suffices without the exact words “TollChat’s fixed.” Approved workflow limitations
+and permitted discovery calls are supported context. Conditional actor choices
+require an actual offer; a missing offer remains an application outcome failure.
+
+Four development references contrast closure paraphrases and plain-text annual
+disclosures with fabricated official proof and tax entitlement. Existing labels,
+tool fixtures, actor generation prompts and reserved cases remain unchanged.
+Both A and B/C require fresh calibration and human review within the original
+$15 cumulative ceiling. The release gate remains on pending policy 2.0.5; this
+local experiment does not qualify a production release. Earlier contract history
+and evidence below remain historical.
 
 **200 cases: 160 development and 40 reserved.** The [review catalog](golden/REVIEW.md)
 links every prompt, intended behavior, actor brief, fixture, reference answer, and

@@ -1,5 +1,4 @@
 {
   "status": "pending",
-  "notes": "Archived calibration-2 completed 281 development examples under contract 2.0.4 with seven new controls agreeing and 13 other disagreements. Its evidence remains unchanged and is not calibration for the 2.0.5 parser extension. Fresh exact-contract calibration and human review remain pending; no application run or production release is approved.",
-  "evidence_sha256": "8cb32297a8edd1463a34b7b9a9bbbfe52fceb746b2ed2ebe7c6ded395a8612c0"
+  "notes": "Contract 2.0.8 corrects comparison coverage judging to match the unchanged SOP: explicit available/expected counts are required only for incomplete history; full 3/3 history supports typical-price wording without counts. Cases, references, labels and application variants unchanged. Fresh calibration and exact-evidence review required."
 }

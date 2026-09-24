@@ -103,10 +103,18 @@ def _coverage_percent(complete: int, eligible: int) -> str:
 
 
 class _DirectionRequest(_Model):
-    origin_point_id: str
-    destination_point_id: str
+    origin_point_id: str = Field(
+        description="Canonical origin point ID for this leg; resolve its entry/airport role and direction independently."
+    )
+    destination_point_id: str = Field(
+        description="Canonical destination point ID for this leg; resolve its exit/airport role and direction independently."
+    )
     departure_time: Annotated[
-        str, Field(pattern=r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$")
+        str,
+        Field(
+            pattern=r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$",
+            description="User-supplied departure in America/New_York wall time, HH:MM:SS; return must be later the same day.",
+        ),
     ]
 
     def parsed_time(self) -> time:
@@ -114,17 +122,37 @@ class _DirectionRequest(_Model):
 
 
 class _BallparkRequest(_Model):
-    outbound: _DirectionRequest
-    return_: _DirectionRequest = Field(alias="return")
-    weekdays: Annotated[list[_Weekday], Field(min_length=1, max_length=7)]
-    planned_annual_commute_days: Annotated[int, Field(ge=1, le=366)]
+    outbound: _DirectionRequest = Field(
+        description="Outbound commute leg, using the user-supplied locations and time."
+    )
+    return_: _DirectionRequest = Field(
+        alias="return",
+        description="Independent return leg; preserve an explicit return route, otherwise resolve the reversed locations to their own endpoint IDs.",
+    )
+    weekdays: Annotated[
+        list[_Weekday],
+        Field(
+            min_length=1,
+            max_length=7,
+            description="User-supplied commute weekdays as unique lowercase names.",
+        ),
+    ]
+    planned_annual_commute_days: Annotated[
+        int,
+        Field(
+            ge=1,
+            le=366,
+            description="User-supplied or explicitly confirmed annual commute days; at most 53 times the weekday count. Never silently assume 52 weeks.",
+        ),
+    ]
     gross_annual_income_usd: Annotated[
         str,
         Field(
+            description="One positive user-supplied or user-annualized gross annual USD income, formatted as a two-decimal string without symbols or separators; do not select from a salary range.",
             pattern=(
                 r"^(?:0[.](?:0[1-9]|[1-9][0-9])|"
                 r"[1-9][0-9]{0,8}[.][0-9]{2})$"
-            )
+            ),
         ),
     ]
 
@@ -528,7 +556,16 @@ _OPERATION_ERROR_SCHEMA = _OperationError.model_json_schema(mode="serialization"
 TOOL_SPEC: ToolSpec = {
     "name": "get_annual_toll_ballpark",
     "description": (
-        "Estimate how a validated round-trip tolled commute affects gross annual income."
+        "Estimate the affordability impact of a covered Northern Virginia round-trip "
+        "tolled commute using recent historical daily scenarios, not a forecast or "
+        "current quote. Collect both leg routes and Eastern departure times, weekdays, "
+        "confirmed annual commute days, and positive gross annual income before calling. "
+        "Confirm legs serving different home/work areas as required by the SOP. "
+        "Returns validated route alternatives/unavailability, financial scenarios with "
+        "coverage and source provenance, or baseline-only fields when no complete paired "
+        "days exist. Present returned financial values without recalculating; disclose "
+        "tolled-only scope, tax and vehicle-cost assumptions, coverage, and price sources. "
+        "Follow the SOP consent and bounded Washington correction rules."
     ),
     "inputSchema": {"json": _INPUT_SCHEMA},
     "outputSchema": {"json": _OUTPUT_SCHEMA},

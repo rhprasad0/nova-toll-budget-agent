@@ -112,15 +112,21 @@ type _Usd = Annotated[Decimal, Field(ge=0)]
 
 
 class _PricingProfile(_Model):
-    vehicle_class: str
-    payment_method: str
-    transponder_mode: str
+    vehicle_class: str = Field(description="Supported value: two_axle_passenger.")
+    payment_method: str = Field(description="Supported value: e_zpass.")
+    transponder_mode: str = Field(description="Supported value: toll; not HOV mode.")
 
 
 class _PricingRequest(_Model):
-    origin_point_id: str = Field(description="Stable oracle origin point ID")
-    destination_point_id: str = Field(description="Stable oracle destination point ID")
-    pricing_profile: _PricingProfile
+    origin_point_id: str = Field(
+        description="Canonical origin point ID, normally an entry or airport; follow the SOP for wrong-role validation and returned alternatives."
+    )
+    destination_point_id: str = Field(
+        description="Canonical destination point ID, normally an exit or airport; resolve its direction independently of the origin."
+    )
+    pricing_profile: _PricingProfile = Field(
+        description="Use the supported default only when the user has not requested a different profile."
+    )
 
 
 class _PricingUnavailableResponse(_Model):
@@ -573,7 +579,16 @@ _PROGRESS_SCHEMA = _ProgressEvent.model_json_schema(mode="serialization")
 _OPERATION_ERROR_SCHEMA = _OperationError.model_json_schema(mode="serialization")
 TOOL_SPEC: dict[str, Any] = {
     "name": "get_current_toll_price",
-    "description": "Validate a canonical toll route and get its current price.",
+    "description": (
+        "Validate a covered Northern Virginia route and estimate its current toll only, "
+        "not a past or future price. Requires resolved canonical endpoint IDs and the "
+        "two_axle_passenger/e_zpass/toll profile. Do not call for an explicitly "
+        "unsupported profile or before required clarification or consent. The tool "
+        "resolves route legs and returns either a price with provenance and comparison "
+        "fields, a validated unavailable reason, or route-validation alternatives. "
+        "Follow the SOP for the bounded Washington retry and user-approved alternatives, "
+        "restart, or closure fallback; never invent IDs or treat unavailable prices as zero."
+    ),
     "inputSchema": {"json": _INPUT_SCHEMA},
     "outputSchema": {"json": _OUTPUT_SCHEMA},
 }
