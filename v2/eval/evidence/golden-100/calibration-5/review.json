@@ -1,8 +1,9 @@
 {
   "status": "approved",
-  "corpus_sha256": "596b2f1c7abd0c77087c415da7905b673561011f06c612e9d27a739acad6833f",
+  "evidence_sha256": "6b1931359cacf2d9ffbb1ac9dcf425c44bd3ad56cc6217f70f11d3b547dc4a1b",
   "reviewer": "Ryan",
   "evidence": "Ryan accepted the reported zero-disagreement calibration and instructed: \"Very good. Now run the new baseline with this set.\" Approval is for the current development corpus and calibration as prerequisites to this baseline, not production qualification or approval of unmeasured application results.",
-  "note": "Approved for the requested development baseline using calibration 5. Three fresh application trials per case, 16 workers, five delivered user turns maximum. Earlier calibration measurements remain recorded.",
-  "approved_at": "2026-09-24T19:13:22.042770+00:00"
+  "approved_at": "2026-09-24T19:13:22.042770+00:00",
+  "adjudicated_disagreements": [],
+  "unresolved_findings": []
 }

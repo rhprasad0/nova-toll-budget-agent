@@ -412,3 +412,23 @@ live actor simulation occurred. Corpus and calibration approval remain pending.
 Run ID: `516a6312-f373-49fe-8726-d26e6eda4109`.
 Corpus SHA-256: `596b2f1c7abd0c77087c415da7905b673561011f06c612e9d27a739acad6833f`.
 Evidence SHA-256: `6b1931359cacf2d9ffbb1ac9dcf425c44bd3ad56cc6217f70f11d3b547dc4a1b`.
+
+### 2026-09-24 — Approve current corpus/calibration and authorize baseline
+
+After reviewing the zero-disagreement repeat result, Ryan instructed: "Very good.
+Now run the new baseline with this set." This approves the current development
+corpus 3.0.3 and calibration 5 for the requested application baseline. Exact
+approval is recorded in `golden/review.json` and
+`evidence/golden-100/calibration-5/review.json` before execution. It does not
+approve the application's unmeasured results or qualify production.
+
+The baseline will run **300 fresh conversations**, three per case, with **16
+workers**, the existing five-turn actor maximum, and unchanged application model,
+prompt, evaluator, cases, and fixtures. The existing **$25 cumulative ceiling**
+includes $1.01510851 spent on the five calibrations. The prior-run accounting
+links to calibration 5. No trials will be replaced to improve the result.
+
+The approved calibration is staged in an ignored working copy because the runner
+renders its approval status before execution. The original committed reports,
+events, manifest, and receipt hashes remain unchanged; the new approval is a
+separate record. The corpus validator and exact-evidence approval check passed.
