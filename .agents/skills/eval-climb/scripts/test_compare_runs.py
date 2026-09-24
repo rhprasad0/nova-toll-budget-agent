@@ -1,0 +1,237 @@
+"""Run with: python3 test_compare_runs.py"""
+
+import copy
+import unittest
+
+from compare_runs import IDENTITY_KEYS, compare, digest, violation
+
+
+def report():
+    ids = [f"dev-{n}" for n in range(100)]
+    hashes = {"cases.jsonl": "a" * 64}
+    identity = {key: "fixed" for key in IDENTITY_KEYS}
+    identity.update(
+        corpus={
+            "evaluation_scope": "development",
+            "case_count": 100,
+            "trials_per_case": 3,
+            "actor_model": "gpt-6-luna",
+            "judge_model": "gpt-6-luna",
+            "hashes": hashes,
+            "corpus_sha256": digest(hashes),
+        },
+        cases=[{"id": cid, "held_out": False, "contract_version": 2} for cid in ids],
+        model="gpt-6-luna",
+        prompt_hashes={cid: "a" * 64 for cid in ids},
+        tool_schema_hashes={"tool": "b" * 64},
+    )
+    rows = [
+        {
+            "id": f"{cid}-{trial}",
+            "case_id": cid,
+            "trial": trial,
+            "status": "scored",
+            "turns": [{"response": "done"}],
+            "checks": [],
+            "verdicts": {
+                key: {"passed": key != "outcome", "evidence": "evidence"}
+                for key in ("outcome", "grounding", "rules")
+            },
+            "measurements": [
+                {
+                    "role": "agent",
+                    "input_tokens": 1,
+                    "output_tokens": 1,
+                    "cached_tokens": 0,
+                    "written_tokens": 0,
+                    "seconds": 1.0,
+                    "cost_usd": 0.1,
+                    "complete": True,
+                }
+            ],
+            "actor_validity": {"status": "valid"},
+            "failure_phase": None,
+            "failure_class": None,
+            "error": None,
+            "overall_success": False,
+            "mandatory_checks_passed": True,
+        }
+        for cid in ids
+        for trial in (1, 2, 3)
+    ]
+    result = {"manifest": {"mode": "run", "identity": identity}, "attempts": rows}
+    refresh(result)
+    return result
+
+
+def slot(report, case=0, trial=1):
+    return report["attempts"][case * 3 + trial - 1]
+
+
+def refresh(report):
+    rows = report["attempts"]
+    for row in rows:
+        row["mandatory_checks_passed"] = not row["checks"]
+        row["overall_success"] = (
+            row["status"] == "scored"
+            and not row["checks"]
+            and all(v["passed"] for v in row["verdicts"].values())
+        )
+    scored = [row for row in rows if row["status"] == "scored"]
+    report["overall"] = {
+        "expected_trials": 300,
+        "attempted_trials": 300,
+        "scored_trials": len(scored),
+        "successful_trials": sum(row["overall_success"] for row in scored),
+        "inconclusive_trials": 300 - len(scored),
+        "violations": {
+            key: {
+                "count": sum(violation(row, key) for row in scored),
+                "denominator": len(scored),
+            }
+            for key in ("grounding", "rules")
+        },
+    }
+
+
+class CompareRunsTest(unittest.TestCase):
+    def setUp(self):
+        self.baseline = report()
+        self.candidate = copy.deepcopy(self.baseline)
+
+    def test_improved_and_tie(self):
+        self.assertFalse(compare(self.baseline, self.candidate)["numeric_eligible"])
+        slot(self.candidate)["verdicts"]["outcome"]["passed"] = True
+        refresh(self.candidate)
+        result = compare(self.baseline, self.candidate)
+        self.assertTrue(result["numeric_eligible"])
+        self.assertEqual(result["paired"]["average_delta"], 1 / 300)
+        self.assertIn(
+            "independent SOP-only scope and regression review",
+            result["review_required"],
+        )
+
+    def test_grounding_rules_and_regressions(self):
+        slot(self.baseline, 1)["verdicts"]["outcome"]["passed"] = True
+        slot(self.candidate, 0)["verdicts"]["outcome"]["passed"] = True
+        slot(self.candidate, 2)["verdicts"]["outcome"]["passed"] = True
+        slot(self.candidate, 3)["verdicts"]["grounding"]["passed"] = False
+        slot(self.candidate, 4)["checks"] = ["unsupported_money"]
+        slot(self.candidate, 5)["checks"] = ["missing_call"]
+        refresh(self.baseline)
+        refresh(self.candidate)
+        result = compare(self.baseline, self.candidate)
+        self.assertFalse(result["numeric_eligible"])
+        self.assertEqual(result["regressions"], [{"case_id": "dev-1", "trial": 1}])
+        self.assertEqual(
+            result["violations"]["grounding"]["new"],
+            [{"case_id": "dev-3", "trial": 1}, {"case_id": "dev-4", "trial": 1}],
+        )
+        self.assertEqual(
+            result["violations"]["rules"]["new"], [{"case_id": "dev-5", "trial": 1}]
+        )
+
+    def test_inconclusive_excludes_case_and_count_gate(self):
+        row = slot(self.baseline)
+        row.update(
+            status="inconclusive",
+            actor_validity={"status": "invalid"},
+            failure_phase="judge",
+            failure_class="actor_validity",
+        )
+        refresh(self.baseline)
+        self.candidate = copy.deepcopy(self.baseline)
+        slot(self.candidate, 1)["verdicts"]["outcome"]["passed"] = True
+        refresh(self.candidate)
+        result = compare(self.baseline, self.candidate)
+        self.assertTrue(result["numeric_eligible"])
+        self.assertEqual(result["paired"]["cases"], 99)
+        self.assertEqual(result["paired"]["excluded_cases"], ["dev-0"])
+        self.assertEqual(
+            result["baseline"]["inconclusive_slots"], [{"case_id": "dev-0", "trial": 1}]
+        )
+        row = slot(self.candidate, 2)
+        row.update(
+            status="inconclusive",
+            actor_validity={"status": "uncertain"},
+            failure_phase="judge",
+            failure_class="actor_validity",
+        )
+        row["checks"] = ["unsupported_money"]
+        refresh(self.candidate)
+        result = compare(self.baseline, self.candidate)
+        self.assertFalse(result["criteria"]["inconclusive_not_increased"])
+        self.assertIn(
+            {"case_id": "dev-2", "trial": 1}, result["violations"]["grounding"]["new"]
+        )
+
+    def test_bad_slots(self):
+        for change in (
+            lambda r: r["attempts"].append(copy.deepcopy(slot(r))),
+            lambda r: r["attempts"].pop(),
+            lambda r: slot(r).update(trial=4),
+            lambda r: slot(r).update(case_id="unknown"),
+        ):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                candidate = copy.deepcopy(self.candidate)
+                change(candidate)
+                compare(self.baseline, candidate)
+
+    def test_identity_and_bad_model_or_holdout(self):
+        for change in (
+            lambda r: r["manifest"]["identity"].pop("actor_check_sha256"),
+            lambda r: r["manifest"]["identity"].update(judge_prompt_sha256="changed"),
+            lambda r: r["manifest"]["identity"].update(prompt_version="changed"),
+            lambda r: r["manifest"]["identity"]["tool_schema_hashes"].update(
+                tool="changed"
+            ),
+            lambda r: r["manifest"]["identity"].update(model="other"),
+            lambda r: r["manifest"]["identity"]["cases"][0].update(held_out=True),
+            lambda r: r["manifest"]["identity"]["cases"][0].pop("contract_version"),
+            lambda r: r["manifest"]["identity"]["corpus"].update(
+                evaluation_scope="held_out"
+            ),
+        ):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                candidate = copy.deepcopy(self.candidate)
+                change(candidate)
+                compare(self.baseline, candidate)
+
+    def test_unknown_usage_and_stale_success_flags(self):
+        for change in (
+            lambda r: slot(r)["measurements"][0].update(complete=False),
+            lambda r: slot(r)["measurements"][0].pop("input_tokens"),
+            lambda r: slot(r).update(overall_success=True),
+            lambda r: r["overall"].update(successful_trials=1),
+            lambda r: slot(r).update(status="infrastructure"),
+            lambda r: slot(r).update(failure_phase="harness"),
+        ):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                candidate = copy.deepcopy(self.candidate)
+                change(candidate)
+                compare(self.baseline, candidate)
+
+    def test_known_actor_error_is_observed_without_inventing_verdicts(self):
+        row = slot(self.candidate)
+        row.update(
+            status="inconclusive",
+            actor_validity={"status": "invalid"},
+            failure_phase="actor",
+            failure_class="actor_validity",
+            error="actor_missing_reply",
+            verdicts={},
+            checks=["unsupported_money"],
+        )
+        refresh(self.candidate)
+        result = compare(self.baseline, self.candidate)
+        self.assertEqual(result["paired"]["excluded_cases"], ["dev-0"])
+        self.assertEqual(
+            result["violations"]["grounding"]["new"], [{"case_id": "dev-0", "trial": 1}]
+        )
+        row["error"] = "actor_unknown"
+        with self.assertRaisesRegex(ValueError, "failure"):
+            compare(self.baseline, self.candidate)
+
+
+if __name__ == "__main__":
+    unittest.main()
