@@ -88,11 +88,12 @@ Promotion changes routing to the validated candidate and retains the previous re
 
 ## Evaluation status
 
-**The replacement golden corpus has 100 development cases and a first 300-trial baseline.** Corpus and calibration are approved for this development measurement; actor/result review and an independently authored holdout remain outstanding. The scheduled suite covers six current-toll scenarios with simulated users, a deterministic tool-call count check, and model-based completeness and correctness judges. The reports below are scoped experiments, not whole-agent accuracy or evidence of improvement between agent versions.
+**The replacement golden corpus has 100 development cases and two retained 300-trial baselines.** Corpus and calibration are approved for this development measurement; actor/result review and an independently authored holdout remain outstanding. The scheduled suite covers six current-toll scenarios with simulated users, a deterministic tool-call count check, and model-based completeness and correctness judges. The reports below are scoped experiments, not whole-agent accuracy or evidence of improvement between agent versions.
 
 | Experiment | Recorded result | Scope and limits |
 | --- | --- | --- |
-| [New development baseline, September 24, 2026](v2/eval/evidence/golden-100/BASELINE-1.md) | 156/287 scored trials passed (54.4%); 13 inconclusive out of 300 attempts | Corpus 3.0.3, 16 workers, three trials per case. Four apparent money-check false positives and actor-validity findings need review; original verdicts are retained. |
+| [Corrected baseline, September 24, 2026](v2/eval/evidence/golden-100/BASELINE-2.md) | 176/299 scored trials passed (58.9%); 1 inconclusive out of 300 | Corpus 3.0.4, 16 workers; actor/classification and money-parser fixes, unchanged application. Original results remain intact. |
+| [First development baseline, September 24, 2026](v2/eval/evidence/golden-100/BASELINE-1.md) | 156/287 scored trials passed (54.4%); 13 inconclusive out of 300 attempts | Corpus 3.0.3, 16 workers, three trials per case. Its measurement findings motivated the corrected baseline; original verdicts are retained. |
 | [AI evaluation engineering](v2/eval/GOLDEN_VALIDITY_REVIEW.md) | Judge agreement on 138/138 criterion labels across 46 development examples; simulated users passed 59/60 diagnostic checks | Historical approved contract (1.0.11); development calibration, not current-contract approval or application accuracy. |
 | [Live agent behavior, August 22, 2026](v2/eval/results/README.md) | 9/9 curated current-price and annual-affordability cases passed their code-graded contracts | Small curated set across three recorded runs; not a representative golden benchmark. |
 | [Frozen-fixture quantitative grounding](v2/eval/ballpark-hallucination-report.md) | 996/1,000 strict grounding passes; 999/1,000 without an incorrect quantitative fact; 93.1% conservative end-to-end result | One frozen route fixture, five prompt variants, correlated repetitions, and adjudication of flagged claims. Not an agent-wide hallucination rate. |
@@ -100,7 +101,7 @@ Promotion changes routing to the validated candidate and retains the previous re
 
 The new [`/eval-dashboard`](v2/runbooks/eval-dashboard.md) shows seven days of scheduled results, the latest synthetic conversations, tool evidence, and judge explanations. It distinguishes graded failures from execution errors and missing runs. Publication is enabled for development first; production activation remains pending. Judge accuracy still needs live verdict review.
 
-The [golden recreation guide](v2/eval/GOLDEN_EVAL_SPEC.md) documents the fresh corpus and preserves the retired design. The [baseline review page](v2/eval/evidence/golden-100/baseline-review.html) contains all 300 conversations. [PR #581 measurements](v2/eval/results/golden/CACHING-SUMMARY.md) remain historical evidence for their recorded versions. The development corpus cannot qualify production; no application improvement percentage is claimed here.
+The [golden recreation guide](v2/eval/GOLDEN_EVAL_SPEC.md) documents the fresh corpus and preserves the retired design. The [latest baseline review page](v2/eval/evidence/golden-100/baseline-2-review.html) contains all 300 new conversations; the [first review](v2/eval/evidence/golden-100/baseline-review.html) is preserved. [PR #581 measurements](v2/eval/results/golden/CACHING-SUMMARY.md) remain historical evidence for their recorded versions. The development corpus cannot qualify production; no application improvement percentage is claimed here.
 
 ## Reproduce and inspect
 
