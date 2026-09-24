@@ -88,27 +88,25 @@ Promotion changes routing to the validated candidate and retains the previous re
 
 ## Evaluation status
 
-**The replacement golden corpus has 100 development cases and two retained 300-trial baselines.** Corpus and calibration are approved for this development measurement; actor/result review and an independently authored holdout remain outstanding. The scheduled suite covers six current-toll scenarios with simulated users, a deterministic tool-call count check, and model-based completeness and correctness judges. The reports below are scoped experiments, not whole-agent accuracy or evidence of improvement between agent versions.
+**The golden corpus contains 100 development cases.** The latest baseline
+recorded **206 passed, 93 failed, and one inconclusive** out of 300 trials under
+contract 3.0.5. Calibration 9 on 3.0.6 matched all 396 application labels and
+135 actor labels; no application baseline has run on that revised contract.
+These are development measurements, not production qualification or whole-agent
+accuracy.
 
-| Experiment | Recorded result | Scope and limits |
-| --- | --- | --- |
-| [Corrected baseline, September 24, 2026](v2/eval/evidence/golden-100/BASELINE-2.md) | 176/299 scored trials passed (58.9%); 1 inconclusive out of 300 | Corpus 3.0.4, 16 workers; actor/classification and money-parser fixes, unchanged application. Original results remain intact. |
-| [First development baseline, September 24, 2026](v2/eval/evidence/golden-100/BASELINE-1.md) | 156/287 scored trials passed (54.4%); 13 inconclusive out of 300 attempts | Corpus 3.0.3, 16 workers, three trials per case. Its measurement findings motivated the corrected baseline; original verdicts are retained. |
-| [AI evaluation engineering](v2/eval/GOLDEN_VALIDITY_REVIEW.md) | Judge agreement on 138/138 criterion labels across 46 development examples; simulated users passed 59/60 diagnostic checks | Historical approved contract (1.0.11); development calibration, not current-contract approval or application accuracy. |
-| [Live agent behavior, August 22, 2026](v2/eval/results/README.md) | 9/9 curated current-price and annual-affordability cases passed their code-graded contracts | Small curated set across three recorded runs; not a representative golden benchmark. |
-| [Frozen-fixture quantitative grounding](v2/eval/ballpark-hallucination-report.md) | 996/1,000 strict grounding passes; 999/1,000 without an incorrect quantitative fact; 93.1% conservative end-to-end result | One frozen route fixture, five prompt variants, correlated repetitions, and adjudication of flagged claims. Not an agent-wide hallucination rate. |
-| [Missing-price proxy holdout](v2/eval/results/i95-missing-od-pricing.md) | 1,200 comparisons; $0.106 mean absolute error; 96.1% within $0.50 | Five days of matched data; $8.05 maximum error. Measures a pricing proxy, not improvement to the agent. |
-
-The new [`/eval-dashboard`](v2/runbooks/eval-dashboard.md) shows seven days of scheduled results, the latest synthetic conversations, tool evidence, and judge explanations. It distinguishes graded failures from execution errors and missing runs. Publication is enabled for development first; production activation remains pending. Judge accuracy still needs live verdict review.
-
-The [golden recreation guide](v2/eval/GOLDEN_EVAL_SPEC.md) documents the fresh corpus and preserves the retired design. The [second baseline report](v2/eval/evidence/golden-100/runs/8c5bc3d2a151dce237e9946bbc679bf9d2d0b99cd1777a2c363026664a37306f/report.json) contains all 300 new conversations; the [first baseline report](v2/eval/evidence/golden-100/runs/c5e327a9c0d2cf9ed49838aac40ce2e93d9ac712e5307395427475a928d0c430/report.json) is preserved. [PR #581 measurements](v2/eval/results/golden/CACHING-SUMMARY.md) remain historical evidence for their recorded versions. The development corpus cannot qualify production; no application improvement percentage is claimed here.
+The [experiment journal](v2/eval/EXPERIMENT_JOURNAL.md) records what was tried,
+results, limitations, costs, and decisions. The [evaluation guide](v2/eval/README.md)
+covers current usage. Granular experiment output stays in private storage.
+The [dashboard runbook](v2/runbooks/eval-dashboard.md) covers scheduled operational
+results, which are separate from local experiments.
 
 ## Reproduce and inspect
 
 - [Run the local agent](v2/README.md#local-agent-console) or try the [deployed application](https://tollchat.ai/).
 - Inspect [daily AWS and OpenAI billing](https://tollchat.ai/cost-dashboard) in the cost dashboard; per-answer cost is not yet measured.
 - [Build and validate](v2/README.md#verify-the-build), including disposable database checks.
-- [Run offline evaluation checks](v2/eval/README.md#offline-check) or follow the separately credentialed [live evaluation instructions](v2/eval/README.md#live-run).
+- [Run offline evaluation checks](v2/eval/README.md#frozen-golden-evaluation) or follow the separately credentialed [live evaluation instructions](v2/eval/README.md#scheduled-and-live-checks).
 - Inspect [release operations](v2/RUNBOOK.md), [telemetry verification](v2/runbooks/telemetry-pii-redaction.md), and [shared foundation changes](v2/README.md#shared-foundation-changes).
 
 | Area | Contents |

@@ -541,3 +541,44 @@ The [static review index](evidence/golden-100/index.html) now separates the curr
 Ryan clarified that review-page cleanup means deletion. Removed all **15 generated evaluation HTML pages** across golden-100, golden-360, GPT-6 Luna, and the historical golden results, plus the GPT-6 Luna packet’s build and browser-check scripts. Documentation now links to retained raw reports. Raw transcripts, manifests, event journals, measured verdicts, receipts, approval records, and the corpus contract remain unchanged; no paid run or recalibration was performed.
 
 This permanent journal is preserved verbatim above. Its earlier review-page links are historical and refer to deleted presentation artifacts; the final pre-deletion versions remain in Git commit `5d65f673d9cb19faff3bc1e010e286c2d5651daa`. Current evidence is linked from [the evidence summary](evidence/golden-100/README.md).
+
+### 2026-09-24 — Publish summaries and remove redundant experiment archives
+
+Ryan requested a separate cleanup PR after #596, with this journal as the record
+of what was tried. Removed full golden-100, golden-200, GPT-6 Luna, and prompt
+experiment run archives, duplicate per-round documents, and the generated case
+review catalog. Current usage stays in the short evaluation guides. `AGENTS.md`
+now requires summaries here and private storage for granular output; a temporary
+review request does not authorize committing its page or data.
+
+The journal above is preserved verbatim. Its earlier artifact links are historical;
+all removed files are recoverable at commit
+`19fb7faed8fee2c286bf71d6e2f92f27fe33e352` (merged #596), and local copies remain in
+ignored `eval/private/archived-before-summary-cleanup/`. The original measurements
+have not been rescored. The following older summaries are consolidated here from
+the removed documents; these are not new runs or comparable application gains.
+
+| Historical work | Result and limitation |
+| --- | --- |
+| Initial 24-case demo, corpus 1.0.5 | 27/72 trials passed; 3/24 cases passed all three. Actor and grader problems remained; no production baseline was approved. |
+| Evaluation integrity, September 21 | Calibration matched 138/138 labels across 46 development examples; actor diagnostics passed 59/60. Outcome/Grounding/Rules separation and invalid-actor handling improved measurement; this was not independent accuracy. |
+| Calibrated 24-case baseline, corpus 1.0.11 | 58/71 scored trials passed, one inconclusive out of 72; critical pass³ was 12/17. Below the release thresholds. |
+| Caching/prompt work in #581 | Final actor check 60/60 and calibration 179/180. Final 72-trial run achieved 17/17 critical pass³ once; the requested three-run streak remained unfinished. |
+| Initial 200-case calibration | Two runs each measured 274 development references, with known disagreements and a later reference correction. Those runs did not qualify the revised exact contract. |
+| First GPT-6 Luna 200-case baseline | 409 passed, 184 failed, seven inconclusive out of 600; 68.97% of 593 scored trials. Application run cost $1.720441030. Signed-money checks, actor validity, and judge errors limited interpretation. |
+| Prompt A/B/C comparison and golden-100 rounds | Aggregate results, original limitations, costs, and adoption decisions remain in the earlier journal entries above. |
+
+Only executable corpus inputs, focused regression data, and legacy evidence read
+by existing compatibility tests and the release initializer remain tracked. The
+active 100-case corpus, 135 reference transcripts/labels, fixtures, evaluator
+settings, protected policies, approval records needed by those contracts, and
+initial/production registry identities are unchanged. Golden-100 regression tests
+now use short signed-money examples and hashes of the existing Gallows references;
+comparison recovery tests use six synthetic trial slots instead of a 600-trial
+archive. No paid run, deployment, policy approval, or spending reset is involved.
+
+Cleanup validation: **200 relevant evaluator, comparison, baseline, and gate tests
+passed**, along with corpus validation and repository checks. All 94 current
+documentation links resolve; the journal prefix and retained contract identities
+are unchanged. The cleanup removes 207 files containing about 242 MB of redundant
+experiment material from the working tree.

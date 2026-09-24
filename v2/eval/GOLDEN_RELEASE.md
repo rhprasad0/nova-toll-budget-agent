@@ -7,47 +7,11 @@ pending. Independent holdout scope, a new protected policy, and fresh
 qualification evidence require separate review. See the
 [authoring guide](GOLDEN_EVAL_SPEC.md).
 
-## Historical protected-release procedure
-
-The counts, versions, approvals, and activation steps below are historical; they
-do not authorize production use of the 100-case development corpus.
-
-Production planning requires a successful protected golden evaluation of the
-exact development release bundle. The gate is mandatory. Missing infrastructure,
-an unset production baseline, pending reviews, stale evidence, or a failed run
-blocks planning before production credentials are available.
-
-Production qualification remains **blocked until a production reference passes**.
-The active corpus, harness, and policy are **2.0.3**. They cover **200 cases**:
-160 development and 40 public, authorship-exposed reservations. The new corpus,
-calibration, and policy require exact human review; their approvals are pending.
-The application model and prompt remain unchanged in this expansion.
-
-Two local calibration passes completed within a **combined $25 ceiling**;
-their [raw reports and adjudication proposals](evidence/golden-200/CALIBRATION.md)
-remain pending human review. They measured contracts 2.0.0 and 2.0.1. The final
-2.0.3 GPT-6 Luna migration requires fresh
-authorized exact-contract calibration. No protected application execution,
-production qualification, or policy limit increase is authorized by those runs.
-
-Historical 24-case measurements, including the PR #581 packet's 179/180
-calibration agreement, 60/60 actor checks, and 72/72 application trials, retain
-their original identities and semantics. They are historical evidence, not
-measurements of the expanded corpus. See the
-[historical review packet](results/golden/CACHING-SUMMARY.md).
-
-CI uses the same cached actor/judge factory and judge-prefix construction as the
-manual runner, through scripts.golden_release.execute → eval.golden_run.execute.
-There is no separate CI caching implementation. Cache reads and writes are included
-in its existing journal and shared spending ledger. The gate fingerprints the
-shared cache adapter as well as the evaluator source, so adapter changes invalidate
-receipts and calibration identity. The cached factory lives only in golden_run;
-scheduled checks retain their existing factory. Application calls still execute
-the exact packaged artifact in isolation.
-
-Historical calibration approvals and source-checkout application results remain
-archived. They do not approve this changed evaluator, qualify the current
-production artifact, or establish perfect judge reliability.
+Production planning requires successful protected evaluation of the exact
+release bundle, a matching production reference, reviewed policy and calibration,
+and fresh evidence. Existing numerical thresholds and deployment controls are
+unchanged. Historical experiments are summarized in the
+[experiment journal](EXPERIMENT_JOURNAL.md).
 
 ## Execution and evidence
 
@@ -60,32 +24,18 @@ the trusted parent runs ActorSimulator, the correctness judges, and frozen tool
 replay. The child receives no AWS or GitHub credentials. The application model
 and prompt remain unchanged.
 
-Each execution includes all 200 cases, including the 40 reserved cases, with
-three fresh trials per case: **600 conversations**, using four workers. Every
-model call reserves against one shared $5 run ceiling before starting. The durable ledger also reserves against
-the existing $25 authorization. Missing usage stops further paid calls and
+The retained protected policy expects 200 cases and three trials per case
+(**600 conversations**) using four workers. It does not accept the current
+100-case development corpus. Every model call reserves against one shared $5
+run ceiling before starting. The durable ledger also reserves against the
+existing $25 authorization. Missing usage stops further paid calls and
 blocks subsequent runs until spending is reconciled. Provider retries are off.
 
 The evaluation job has a **90-minute timeout** and requests a **7,200-second
 evaluator session**. The evaluator role alone permits that session length;
-other golden roles retain one hour. The measured capacity estimate is about
-61 minutes before setup and archival, exceeding the previous 45-minute job and
-one-hour credentials. This is execution headroom, not a relaxation of
-the cost or per-trial latency policy. See the
-[timing calculation](evidence/golden-200/CALIBRATION.md#protected-workflow-capacity).
-
-The numerical thresholds from policy 1.0.0 remain unchanged in policy 2.0.3,
-including the **$5 protected-run ceiling**, critical/noncritical pass requirements,
-suite floors, regression limits, and latency limits. Expansion does not establish
-that 600 conversations can meet those limits. Any later policy change requires
-its own review; no limit is silently raised here.
-
-The corpus contains 326 reference examples; calibration selects 274 development
-examples and excludes 52 reserved examples. Application labels are explicit per
-criterion, and invalid actor examples have no application labels. Calibration
-reports include criterion and actor-validity confusion matrices, disagreements,
-and measurement-failure counts. Earlier approvals apply only to their original
-contracts.
+other golden roles retain one hour. These limits provide execution headroom and
+do not relax the protected cost or per-trial latency policy. Calibration must match the exact active contract;
+earlier approvals apply only to their original identities.
 
 The 2.0.x assessment separates application outcome from actor validity. Invalid or
 uncertain simulations and missing judgments are inconclusive. Consent is judged
@@ -117,12 +67,10 @@ migration controls, exact-plan apply, and canary checks still apply.
 
 ## Activation prerequisites
 
-These are the activation and recovery requirements. The existing bucket,
-environments and ledger are initialized. This expansion additionally requires
-applying the reviewed development IAM change that permits the evaluator's
-7,200-second session; this PR does not deploy it. New-contract calibration approval
-and the first qualified production reference remain required. Keep these checks
-for future contract changes and environment recovery.
+These requirements describe protected activation and recovery; they are not
+permission to deploy. Verify actual environment configuration and approvals
+before any authorized activation. The current development corpus still cannot
+qualify production.
 
 1. Provision `infra/golden_eval.tf` in development account `903859731897`. The
    private bucket is encrypted, versioned, protected against destruction, and

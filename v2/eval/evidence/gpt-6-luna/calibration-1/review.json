@@ -1,7 +1,0 @@
-{
-  "status": "approved",
-  "evidence_sha256": "00174bb8948bad6dd4f281090b7a7a89760385ed474a54f15ead58da2b71aa00",
-  "reviewer": "Ryan",
-  "approved_at": "2026-09-22T19:46:16.889001+00:00",
-  "evidence": "Ryan explicitly approved the exact corpus and calibration, including the 14 documented disagreements and limitations, for the local 600-trial baseline in this conversation: I approve! No production qualification or publication is authorized."
-}
