@@ -68,35 +68,49 @@ def test_catalog_and_successful_routes_match_committed_oracle() -> None:
                 ) in connections
 
 
-def test_baseline_below_median_wording_preserves_amount_checks() -> None:
-    root = golden.V2 / "eval/evidence/golden-100"
-    receipt = json.loads((root / "receipt-baseline-1.json").read_text())
-    report = json.loads((root / receipt["archive"] / "report.json").read_text())
-    cases = {c.id: c for c in golden.load_cases()}
-    rows = [
-        a
-        for a in report["attempts"]
-        if a["id"] == "dev3-falling-gallows-quote-2"
-        or a["case_id"] == "dev3-two-comparable-weeks"
-    ]
-    assert len(rows) == 4
-    for row in rows:
-        assert "unsupported_money" in row["checks"]
-        turns = [golden.Turn.model_validate(t) for t in row["turns"]]
-        case = cases[row["case_id"]]
-        assert "unsupported_money" not in golden.grade_assertions(case, turns)
-        turns[-1].response += " It is $999.99 below the median."
-        assert "unsupported_money" in golden.grade_assertions(case, turns)
+@pytest.mark.parametrize(
+    "case_id,response",
+    [
+        (
+            "dev3-falling-gallows-quote",
+            "The toll is **$1.80 (21.8%) below** the three-week median of **$8.25**.",
+        ),
+        (
+            "dev3-two-comparable-weeks",
+            "It is **$0.10 below** the median of the **2 available comparable weeks** ($8.65; expected 3).",
+        ),
+        (
+            "dev3-two-comparable-weeks",
+            "Below the recent median: **$8.65**, by **$0.10 (1.2%)**.",
+        ),
+        (
+            "dev3-two-comparable-weeks",
+            "$8.55 is $0.10 below the median of available comparable weeks ($8.65).",
+        ),
+    ],
+)
+def test_below_median_wording_preserves_amount_checks(
+    case_id: str, response: str
+) -> None:
+    case = next(c for c in golden.load_cases() if c.id == case_id)
+    example = next(
+        e
+        for e in run.development_examples()
+        if e.case_id == case_id and e.label == "good"
+    )
+    turns = [t.model_copy(deep=True) for t in example.turns]
+    turns[-1].response = response
+    assert "unsupported_money" not in golden.grade_assertions(case, turns)
+    turns[-1].response += " It is $999.99 below the median."
+    assert "unsupported_money" in golden.grade_assertions(case, turns)
 
 
 def test_gallows_review_preserves_evidence_and_source_failure() -> None:
-    root = golden.V2 / "eval/evidence/golden-100"
-    receipt = json.loads((root / "receipt-baseline-2.json").read_text())
-    report = json.loads((root / receipt["archive"] / "report.json").read_text())
-    rows = {
-        a["trial"]: a
-        for a in report["attempts"]
-        if a["case_id"] == "dev3-gallows-hybrid-salary"
+    # Pin the three retained reference transcripts without a second run archive.
+    transcript_hashes = {
+        1: "eec624b77b5cfb09d8964d73ab520fa8f5e8388fd36ec8b2de341481ce1aa03f",
+        2: "d1bac1080f13d8073a149572ba31b0769cc622c64fdbc80ca5eea0778ad893d0",
+        3: "7bbec1d4aa61ce6d572a05ed8b4c8454d86d90ef8272e279d7d0543a1e18e437",
     }
     references = [
         e
@@ -107,18 +121,21 @@ def test_gallows_review_preserves_evidence_and_source_failure() -> None:
     assert len(references) == 3
     for example in references:
         trial = int(example.label.rsplit("-", 1)[1])
-        row = rows[trial]
-        assert [t.model_dump(mode="json") for t in example.turns] == row["turns"]
-        assert example.actor_replies == row["actor_replies"]
+        assert (
+            golden.digest(
+                {
+                    "turns": [t.model_dump(mode="json") for t in example.turns],
+                    "actor_replies": example.actor_replies,
+                }
+            )
+            == transcript_hashes[trial]
+        )
         assert example.expected is not None
         assert example.expected.outcome is (trial != 3)
         assert example.expected.grounding is (trial != 3)
         assert example.expected.rules is (trial != 3)
         assert example.actor_validity == "valid"
         assert example.expected_failures == []
-        # New reference expectations never overwrite the measured baseline.
-        assert row["verdicts"]["outcome"]["passed"] is False
-    assert report["overall"]["successful_trials"] == 176
 
 
 @pytest.mark.parametrize(
