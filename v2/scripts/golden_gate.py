@@ -435,6 +435,7 @@ def admit(admission: dict[str, Any]) -> dict[str, Any]:
 
 
 def revalidate(admission: dict[str, Any]) -> None:
+    code_digest()
     binding = obj(admission.get("golden"))
     value = receipt(binding["run_id"])
     require(

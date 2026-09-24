@@ -54,6 +54,11 @@ def test_release_blocks_even_with_historical_approval(
         gate.code_digest()
     with pytest.raises(ValueError, match="No active golden corpus"):
         gate.admit({"candidate": "a" * 40})
+    receipt = Mock(side_effect=AssertionError("must fail before receipt lookup"))
+    monkeypatch.setattr(gate, "receipt", receipt)
+    with pytest.raises(ValueError, match="No active golden corpus"):
+        gate.revalidate({"candidate": "a" * 40, "golden": {"run_id": "old-run"}})
+    receipt.assert_not_called()
     with pytest.raises(ValueError, match="No active golden corpus"):
         release.prepare({}, tmp_path, tmp_path / "prepared")
     account.assert_not_called()
