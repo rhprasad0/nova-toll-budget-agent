@@ -17,7 +17,11 @@ five references. Both revised cases and their negative control match the labels.
 Human approval remains pending; older measurements do not transfer.
 Version 3.0.3 records the approved Outcome/Rules failure for case 65's missing
 adjustment invitation and clarifies judge guidance on road abbreviations, source
-disclosure, and financial labels. Matching calibration is authorized and pending.
+disclosure, and financial labels. Its [matching calibration](evidence/golden-100/CALIBRATION-4.md)
+completed 120/120 references with 16 workers: two disagreements across two
+references, with all five previously disputed references now matching. Cost was
+$0.20658857 ($0.81695531 cumulative); no measurement failures or unknown usage.
+Corpus and calibration approval remain pending.
 No new application run has been performed. A full future run has
 **300 trials**; its holdout subset is empty and has no success rate.
 

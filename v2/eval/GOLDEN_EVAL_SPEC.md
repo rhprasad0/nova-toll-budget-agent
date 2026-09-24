@@ -23,7 +23,11 @@ adjustment invitation fails both Outcome and Rules, despite the correct later
 estimate. Judge guidance clarifies acceptable road abbreviations, disclosure of
 only applicable sources, and Rules failures for false financial labels. Case
 definitions, transcripts, fixtures, and the application remain unchanged.
-Matching calibration is authorized and pending; earlier evidence remains intact.
+The [matching calibration](evidence/golden-100/CALIBRATION-4.md) measured all
+120 references with 16 workers: two disagreements across two references,
+358/360 label agreement, and no measurement failures. All five previously
+disputed references now match. Cost was $0.20658857 ($0.81695531 cumulative).
+Corpus and calibration approval remain pending; earlier evidence remains intact.
 
 Version 3.0.2 makes cases 79/80 more realistic: the morning trip starts at Old
 Keene Mill Road in Springfield and the evening trip returns via nearby Braddock

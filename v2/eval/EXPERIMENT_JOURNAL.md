@@ -344,3 +344,35 @@ replay and independent financial reconciliation. Matching calibration is
 authorized with 16 workers and the existing $25 cumulative ceiling, including
 $0.61036674 already spent; it is pending on this committed source. Corpus and
 calibration approvals remain pending. Prior raw measurements remain intact.
+
+### Matching 3.0.3 calibration
+
+The matching run used source `5b93f0c6d45355039928b45546a816c92ff41b1a`,
+**16 workers**, and the existing $25 cumulative ceiling. All **120 references
+and 360 judge calls completed**, with no measurement failures, unknown usage,
+invalid authored actors, or retries. Cost was **$0.20658857**, bringing cumulative
+spending to **$0.81695531** across four calibrations.
+
+All five references disputed in calibration 3 now match their labels, including
+case 65's approved Outcome/Rules failure. The realistic cases 79/80 and their
+premature-call control still match. **Two disagreements across two other
+references remain** (358/360 agreement, 99.4%). Case 26's negative control is
+incorrectly failed for Grounding as well as its correct Outcome/Rules failures;
+case 99's passing no-history/current-price workflow is incorrectly failed for
+Outcome by demanding unavailable annual scenarios. These are agent assessments
+under the existing criteria, not replacement verdicts. All 20 negative controls
+remain rejected overall; Rules matches all 120 labels. Both remaining references
+matched in the prior run, so this single result does not establish general judge
+reliability.
+
+The [fourth review packet](evidence/golden-100/CALIBRATION-4.md) and updated
+[HTML page](evidence/golden-100/review.html) preserve the complete evidence.
+The raw report reproduces byte-for-byte from its manifest/events; all four
+receipt sets retain their hashes. The page is checked against all 120 exact
+transcripts/verdicts, offline loading, keyboard disclosure, valid links, and
+mobile layout. No application scoring or live actor simulation occurred.
+Corpus and calibration approval remain pending.
+
+Run ID: `e874bb7f-b846-4947-9116-34a07979625d`.
+Corpus SHA-256: `596b2f1c7abd0c77087c415da7905b673561011f06c612e9d27a739acad6833f`.
+Evidence SHA-256: `c73dde3311a04e73dba293764fb9ffd69f730571d7e4c55d302df2b45d2a5aa6`.

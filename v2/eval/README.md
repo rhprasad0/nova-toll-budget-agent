@@ -21,12 +21,17 @@ area. One confirms a client/office workday; the other cancels mixed office optio
 The route fixture and financial totals are updated. Its [matching calibration](evidence/golden-100/CALIBRATION-3.md)
 completed 120/120 references: both revised cases and their negative control match
 the labels, with six disagreements across five other references. Human approval
-remains pending. The [HTML review](evidence/golden-100/review.html) currently shows 3.0.2.
+remains pending.
 
 Version 3.0.3 records Ryan's approved Outcome/Rules failure for the missing
 use-or-adjust invitation in case 65's negative control. Judge guidance clarifies
 acceptable road abbreviations, applicable source disclosure, and false financial
-labels. Matching calibration is authorized and pending.
+labels. Its [matching calibration](evidence/golden-100/CALIBRATION-4.md) completed
+120/120 references with two disagreements across two references; all five
+previously disputed references now match. All 20 negative controls remain
+rejected overall. Cost was $0.20658857 ($0.81695531 cumulative), using 16 workers
+with no measurement failures. The [HTML review](evidence/golden-100/review.html)
+shows the complete 3.0.3 evidence. Corpus and calibration approval remain pending.
 
 Run `uv run python -m eval.golden` from `v2/` to validate the frozen artifacts.
 Application evaluation retains three trials per case (300 planned conversations).

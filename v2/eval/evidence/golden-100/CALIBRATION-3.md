@@ -1,5 +1,10 @@
 # Golden 3.0.2 calibration review
 
+**Historical review.** Ryan subsequently approved the case-65 label change. See
+the [3.0.3 calibration review](CALIBRATION-4.md) for the current results and
+adjudication. This run's recorded labels, verdicts, and original analysis remain
+below; the static HTML page now displays 3.0.3.
+
 **Complete measurement; human approval pending.** This run calibrates the more realistic cases 79 and 80 requested by Ryan. Open the [static review page](review.html) for complete transcripts, tool evidence, labels, and judge explanations.
 
 ## Revised cases

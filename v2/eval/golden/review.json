@@ -3,5 +3,5 @@
   "corpus_sha256": "596b2f1c7abd0c77087c415da7905b673561011f06c612e9d27a739acad6833f",
   "reviewer": null,
   "evidence": null,
-  "note": "Ryan approved failing Outcome and Rules for case 65's omitted use-or-adjust invitation. Judge guidance clarifies road abbreviations, applicable sources, and financial labels. All case definitions, transcripts, fixtures, five-turn actors, and realistic cases 79/80 remain unchanged. Matching 3.0.3 calibration is authorized and pending; corpus/calibration approval remains pending."
+  "note": "Ryan approved failing Outcome and Rules for case 65's omitted use-or-adjust invitation. Matching 3.0.3 calibration is recorded in eval/evidence/golden-100/calibration-4: all five previously disputed references now match, with two disagreements across two other references. Case definitions, transcripts, fixtures, five-turn actors, and realistic cases 79/80 remain unchanged. Corpus/calibration approval remains pending."
 }
