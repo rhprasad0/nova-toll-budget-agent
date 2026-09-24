@@ -174,3 +174,37 @@ Human corpus review and paid calibration remain pending. No paid evaluation was
 run and no historical approval transfers. Application runs require corpus approval;
 production qualification explicitly rejects the development-only corpus before
 AWS access, including when supplied a historical approved policy.
+
+## 2026-09-24 — Calibrate the new 100-case development corpus
+
+Ryan authorized opening [PR #596](https://github.com/rhprasad0/nova-toll-budget-agent/pull/596)
+and then running calibration, specifying **16 parallel workers**. The PR was
+opened ready for review before this run. Calibration used the clean committed
+source `c3c7f3dfbf0fe9cf3e1bf112fe26d21990911df1`, corpus **3.0.0**, the existing
+judge prompts/model, and a $25 spending ceiling. No application trial or holdout
+was executed, and no retry or replacement run was needed.
+
+**All 120 references were measured**, with 360 judge calls, no measurement
+failures, and no unknown usage. Recorded cost was **$0.20523038**. All authored
+actor-validity labels measured valid; this does not test live actor simulation.
+Judges agreed with 347 of 360 authored criterion labels (96.4%), leaving
+**13 disagreements across 12 references**. Ten proposed passing references
+received at least one false verdict; two negative controls had criterion-level
+disagreements. None of the 20 negative controls passed all three judges. These
+are calibration agreements, not application accuracy measurements.
+
+The [review packet](evidence/golden-100/README.md) preserves each disagreement,
+the unmodified raw manifest/events/reports, and a cost/file-hash receipt. Agent
+analysis identifies invented disclosure requirements, missed earlier dialogue,
+a boolean/explanation contradiction, and an annual restart-rule mismatch.
+The divergent-area Grounding judgments and day-adjustment Outcome/Rules split
+need human adjudication. Outcome missed one incorrect financial label that the
+other two judges rejected. No case, fixture, reference label, evaluator prompt,
+or measured verdict was changed in response to these results.
+
+Run ID: `a2326672-12e8-4a66-b1b3-9614aa2e05ce`.
+Corpus SHA-256: `e68d04094648deeb7d1b40c01a9e6d5fe4ec827077c2e1e6d000f889340614be`.
+Evidence SHA-256: `60a97742365f6a987434a1e1ee68d2b8491a83e36b796734a63c5c7bfe3d634c`.
+Corpus and calibration approvals remain **pending human review**. Historical
+approvals do not transfer, no application score is claimed, and the development
+corpus remains ineligible for production qualification.

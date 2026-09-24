@@ -8,9 +8,10 @@ and reordered SOP for the normal TollChat agent through the PR stack on #592.
 The new **3.0.0 golden corpus contains 100 development cases** for ordinary
 passenger-car current pricing and annual commute affordability. Start with the
 [review catalog](golden/REVIEW.md): 100 proposed passing references and 20 negative
-controls are authored and validated offline. Human review and paid calibration
-are pending; no new application score is claimed. All cases are development
-cases; an independent holdout is a separate task and is not included here.
+controls are authored and validated offline. [Calibration](evidence/golden-100/README.md)
+measured all 120 references, with 13 label disagreements across 12 examples;
+human approval remains pending. No new application score is claimed. All cases
+are development cases; an independent holdout is a separate task and is not included here.
 
 Run `uv run python -m eval.golden` from `v2/` to validate the frozen artifacts.
 Application evaluation retains three trials per case (300 planned conversations).

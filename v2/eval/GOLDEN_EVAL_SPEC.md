@@ -25,9 +25,11 @@ leniency and material financial/evidence/consent rules are unchanged.
 
 `manifest.json` binds exact artifacts and evaluator sources and declares
 `evaluation_scope="development"`. Human approval is **pending** and there is no
-calibration reference. Calibration and application measurements require fresh
-authorization/review under the retained runner procedure; old spending approvals
-and scores do not transfer. Three application trials would produce 300 slots.
+approved calibration reference. The authorized [first calibration](evidence/golden-100/README.md)
+measured all 120 references with 16 workers for $0.20523038. Its 13 label
+disagreements across 12 references await human review. Further paid measurements
+require authorization/review under the retained runner procedure; old spending
+approvals and scores do not transfer. Three application trials would produce 300 slots.
 The independent holdout has not been authored or inspected in this work. The
 protected production policy remains unchanged and explicitly rejects this
 development-only corpus, including when a historical policy is supplied.

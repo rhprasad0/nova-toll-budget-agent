@@ -1,6 +1,6 @@
 # Development golden corpus 3.0.0 — review catalog
 
-**Status: proposed; human approval and paid calibration pending.** This is 100 development cases, with 100 passing reference proposals and 20 negative controls. It is not the independently authored holdout and cannot qualify production. No application run or paid model call was made to author this set.
+**Status: proposed; calibration measured, human approval pending.** This is 100 development cases, with 100 passing reference proposals and 20 negative controls. The [first calibration](../evidence/golden-100/README.md) measured all 120 references and recorded 13 label disagreements across 12 examples. It is not the independently authored holdout and cannot qualify production. No application run or paid model call was made to author this set.
 
 Every case uses a two-axle passenger car and E-ZPass in toll mode. Ordinary clarifications, revisions, cancellations, route alternatives, incomplete evidence, and financial interpretation are included. Unusual vehicles, prompt attacks, and obscure boundary probes are excluded.
 

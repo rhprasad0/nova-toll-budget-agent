@@ -1,8 +1,10 @@
 # Running the frozen golden corpus
 
 The active authoring contract is **3.0.0: 100 development cases**, with 100
-proposed passing and 20 negative references. Human review and paid calibration
-are pending. No new application run has been performed. A full future run has
+proposed passing and 20 negative references. The first
+[calibration](evidence/golden-100/README.md) measured all 120 references using
+16 workers for $0.20523038; corpus and calibration approval remain pending.
+No new application run has been performed. A full future run has
 **300 trials**; its holdout subset is empty and has no success rate.
 
 Validate offline from `v2/` with `uv run python -m eval.golden`. Review the
