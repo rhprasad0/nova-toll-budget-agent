@@ -83,6 +83,10 @@ def write(path: Path, value: object) -> None:
 
 
 def code_digest() -> str:
+    require(
+        (ROOT / "v2/eval/golden/manifest.json").is_file(),
+        "No active golden corpus; see eval/GOLDEN_EVAL_SPEC.md",
+    )
     manifest = read(ROOT / "v2/eval/golden/manifest.json")
     require(
         digest(manifest["hashes"]) == manifest["corpus_sha256"],
@@ -405,6 +409,7 @@ def candidate_key(candidate: str, baseline: dict[str, Any]) -> str:
 
 
 def admit(admission: dict[str, Any]) -> dict[str, Any]:
+    code_digest()
     development_account()
     pointer, _ = production_reference()
     body, _ = get_object(candidate_key(admission["candidate"], pointer))

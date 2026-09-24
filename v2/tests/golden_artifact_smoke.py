@@ -22,7 +22,7 @@ def child(bundle: Path) -> None:
 
     original = toll_agent._build_model
     fixture = json.loads(
-        (Path(__file__).parents[1] / "eval/golden/fixtures/greenway.json").read_text()
+        (Path(__file__).parent / "fixtures/golden/fixtures/greenway.json").read_text()
     )
     calls = 0
 
@@ -89,11 +89,14 @@ def main(bundle: Path) -> None:
     from eval import golden
     from eval import golden_run as run
     from eval.artifact_agent import ArtifactAgent
+    from tests.golden_support import ROOT
+    from tests.golden_support import case as golden_case
 
     # Probe unmodified bytes before installing the test-only canned provider.
-    probe = ArtifactAgent(bundle, "offline-no-credential")
-    identity = probe.identity
-    probe.close()
+    with patch.object(golden, "ROOT", ROOT):
+        probe = ArtifactAgent(bundle, "offline-no-credential")
+        identity = probe.identity
+        probe.close()
     popen = subprocess.Popen
 
     def process(args: list[str], **kwargs: Any) -> subprocess.Popen[bytes]:  # noqa: ANN401
@@ -103,13 +106,14 @@ def main(bundle: Path) -> None:
         kwargs["stderr"] = None
         return cast("subprocess.Popen[bytes]", popen([*args, "--child"], **kwargs))
 
-    case = golden.load_cases()[0]
+    case = golden_case(1)
     attempt = run.Attempt(id="smoke", case_id=case.id, trial=1)
     messages = [case.prompt]
     attempt.turns.append(golden.Turn(user=case.prompt, response="pending", calls=[]))
     with (
         tempfile.TemporaryDirectory() as temp,
         patch.object(subprocess, "Popen", process),
+        patch.object(golden, "ROOT", ROOT),
     ):
         journal = run.Journal(Path(temp) / "run", 5)
         agent = ArtifactAgent(

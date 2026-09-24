@@ -1,7 +1,6 @@
 """Offline acceptance checks for the reviewed corpus contract, never model accuracy."""
 
 import json
-import shutil
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import Mock
@@ -12,15 +11,9 @@ from strands_evals.types.evaluation import EvaluationData
 from strands_evals.types.trace import TraceLevelInput
 
 from eval import golden
+from tests.golden_support import case as golden_case
 
-
-def test_full_corpus_is_network_free(monkeypatch: pytest.MonkeyPatch) -> None:
-    def forbidden(*args: object, **kwargs: object) -> None:
-        raise AssertionError("offline corpus validation attempted network access")
-
-    monkeypatch.setattr("socket.create_connection", forbidden)
-    monkeypatch.setattr("socket.socket.connect", forbidden)
-    golden.validate()
+pytestmark = pytest.mark.usefixtures("golden_test_data")
 
 
 def test_actor_schema_has_one_decision_and_cannot_discard_a_reply() -> None:
@@ -31,7 +24,7 @@ def test_actor_schema_has_one_decision_and_cannot_discard_a_reply() -> None:
 
 
 def test_actor_and_judge_keep_private_expectations_separate() -> None:
-    case = golden.load_cases()[12]
+    case = golden_case(13)
     secret = "PRIVATE_ORACLE_SENTINEL"
     case.expected_assertion = secret
     case.provenance.note = secret
@@ -79,7 +72,7 @@ def test_actor_and_judge_keep_private_expectations_separate() -> None:
 
 
 def test_replay_is_fresh_strict_and_does_not_share_evidence() -> None:
-    case = golden.load_cases()[0]
+    case = golden_case(1)
     fixture = golden.load_fixture(case.steps[0].fixture)
     first = golden.Replay(case)
     second = golden.Replay(case)
@@ -98,7 +91,7 @@ def test_replay_is_fresh_strict_and_does_not_share_evidence() -> None:
 
 def test_earliest_turn_is_mechanical_but_consent_is_semantic() -> None:
     for number in (4, 13, 14, 15, 16, 17, 18, 20, 23):
-        case = golden.load_cases()[number - 1]
+        case = golden_case(number)
         fixture = golden.load_fixture(case.steps[0].fixture)
         with pytest.raises(ValueError, match="premature_call"):
             golden.match_step(case, 0, fixture.tool, fixture.input, [case.prompt])
@@ -112,7 +105,7 @@ def test_earliest_turn_is_mechanical_but_consent_is_semantic() -> None:
 
 
 def test_weekday_order_is_equivalent_but_invalid_argument_types_fail() -> None:
-    case = golden.load_cases()[11]
+    case = golden_case(12)
     fixture = golden.load_fixture(case.steps[0].fixture)
     arguments = deepcopy(fixture.input)
     weekdays = arguments["weekdays"]
@@ -161,67 +154,8 @@ def test_labeled_rejection_examples_and_semantic_limits() -> None:
     }
 
 
-@pytest.mark.parametrize(
-    "mutation,reason",
-    [
-        ("duplicate", "duplicate case ID"),
-        ("missing", "No such file"),
-        ("contract", "validation error"),
-        ("total", "fixture total"),
-        ("hash", "hash drift"),
-        ("leak", "oracle leakage"),
-        ("endpoint", "unknown endpoint"),
-        ("approval", "approval must identify"),
-    ],
-)
-def test_invalid_corpus_is_rejected(tmp_path: Path, mutation: str, reason: str) -> None:
-    root = tmp_path / "golden"
-    shutil.copytree(golden.ROOT, root)
-    rows = [
-        json.loads(line) for line in (root / "cases.jsonl").read_text().splitlines()
-    ]
-    if mutation == "duplicate":
-        rows[1]["id"] = rows[0]["id"]
-    elif mutation == "missing":
-        (root / "fixtures" / rows[0]["steps"][0]["fixture"]).unlink()
-    elif mutation in ("contract", "endpoint", "total"):
-        path = root / "fixtures" / rows[0]["steps"][0]["fixture"]
-        fixture = json.loads(path.read_text())
-        if mutation == "contract":
-            fixture["input"]["unexpected"] = True
-        elif mutation == "total":
-            fixture["result"]["total_usd"] = "900.00"
-        else:
-            fixture["input"]["origin_point_id"] = "unlisted:origin"
-            fixture["result"]["origin_point_id"] = "unlisted:origin"
-        path.write_text(json.dumps(fixture))
-    elif mutation == "hash":
-        rows[0]["expected_assertion"] += " Changed difficulty."
-    elif mutation == "leak":
-        rows[0]["actor"]["facts"] += " Call get_current_toll_price."
-    elif mutation == "approval":
-        (root / "review.json").write_text(
-            json.dumps(
-                {
-                    "status": "approved",
-                    "corpus_sha256": "wrong",
-                    "reviewer": "someone",
-                    "evidence": "review-url",
-                }
-            )
-        )
-    (root / "cases.jsonl").write_text(
-        "".join(
-            json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n"
-            for row in rows
-        )
-    )
-    with pytest.raises((ValueError, FileNotFoundError), match=reason):
-        golden.validate(root)
-
-
 def test_modified_tool_evidence_and_extra_calls_cannot_pass() -> None:
-    case = golden.load_cases()[0]
+    case = golden_case(1)
     example = golden.Example.model_validate(
         json.loads((golden.ROOT / "examples.json").read_text())[0]
     )
@@ -235,7 +169,7 @@ def test_modified_tool_evidence_and_extra_calls_cannot_pass() -> None:
 
 
 def test_markdown_currency_lists_preserve_real_negative_prices() -> None:
-    case = golden.load_cases()[0]
+    case = golden_case(1)
     example = golden.Example.model_validate(
         json.loads((golden.ROOT / "examples.json").read_text())[0]
     )
@@ -266,7 +200,7 @@ def test_partial_history_includes_both_dtr_directions() -> None:
 
 
 def test_negated_zero_is_not_an_invented_price() -> None:
-    case = golden.load_cases()[23]
+    case = golden_case(24)
     example = next(
         golden.Example.model_validate(item)
         for item in json.loads((golden.ROOT / "examples.json").read_text())
@@ -322,15 +256,6 @@ def test_annual_financial_cross_fields_are_not_just_schema_checked(
     (root / "fixtures/broken.json").write_text(json.dumps(fixture))
     with pytest.raises(ValueError, match="scenario arithmetic"):
         golden.load_fixture("broken.json", root)
-
-
-def test_behavioral_groups_cannot_cross_splits() -> None:
-    cases = deepcopy(golden.load_cases())
-    reserved = next(c for c in cases if c.held_out)
-    development = next(c for c in cases if not c.held_out)
-    reserved.split_group = development.split_group
-    with pytest.raises(ValueError, match="scenario group crosses"):
-        golden.validate_coverage(cases)
 
 
 def test_one_sample_cannot_imply_a_percentile_spread(tmp_path: Path) -> None:

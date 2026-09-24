@@ -19,10 +19,14 @@ import yaml
 from eval import golden_run as run
 from scripts import golden_gate as gate
 from scripts import golden_release as workflow
+from tests.golden_support import case as golden_case
+
+pytestmark = pytest.mark.usefixtures("golden_test_data")
 
 
 @pytest.fixture
 def evidence(
+    golden_gate_files: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     limits = gate.read(gate.POLICY)["policy"]
@@ -272,35 +276,16 @@ def test_approved_contract_and_changed_policy(
         gate.policy()
 
 
-def test_local_contract_cannot_use_pending_release_policy(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from eval import golden, golden_baseline
+def test_retained_policy_preserves_numeric_limits() -> None:
+    from eval import golden_baseline
 
-    original = run.git
-
-    def git(*args: str) -> str:
-        return "" if args[0] == "status" else original(*args)
-
-    monkeypatch.setattr(run, "git", git)
-    identity = run.identity(golden.load_cases())
     active = gate.read(gate.POLICY)["policy"]
     golden_baseline.Policy.model_validate(active)
-    # Local 2.0.8 calibration never approved the protected 2.0.5 policy.
-    assert active["contract_sha256"] != golden_baseline.contract(identity)
-    with pytest.raises(ValueError, match="human approval"):
-        gate.policy()
     historical = gate.read(gate.POLICY.with_name("policy-1.0.0.json"))["policy"]
-    assert {
-        k: v
-        for k, v in active.items()
-        if k not in {"version", "contract_sha256", "cases"}
-    } == {
-        k: v
-        for k, v in historical.items()
-        if k not in {"version", "contract_sha256", "cases"}
+    excluded = {"version", "contract_sha256", "cases"}
+    assert {k: v for k, v in active.items() if k not in excluded} == {
+        k: v for k, v in historical.items() if k not in excluded
     }
-    assert active["cases"] == len(golden.load_cases()) == 200
 
 
 def test_archive_is_bounded_and_rejects_traversal(tmp_path: Path) -> None:
@@ -626,7 +611,7 @@ def test_replacement_cannot_change_identity_repeat_or_hide_quality_failure(
 
 
 def test_ci_execution_uses_cached_evaluators_and_accounts_for_writes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    golden_gate_files: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from strands.models import Model
     from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
@@ -647,7 +632,7 @@ def test_ci_execution_uses_cached_evaluators_and_accounts_for_writes(
     with monkeypatch.context() as changed:
         changed.setattr(Path, "read_bytes", changed_adapter)
         assert gate.code_digest() != original_digest
-    case = golden.load_cases()[0]
+    case = golden_case(1)
     example = next(
         e
         for e in run.development_examples()

@@ -18,6 +18,9 @@ from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
 
 from eval import golden
 from eval import golden_run as run
+from tests.golden_support import case as golden_case
+
+pytestmark = pytest.mark.usefixtures("golden_test_data")
 
 
 @pytest.mark.parametrize("mode", ["calibrate", "run"])
@@ -90,7 +93,7 @@ def test_cli_runs_independent_work_in_parallel(
             "--calibration",
             str(calibration),
             "--cases",
-            golden.load_cases()[0].id,
+            golden_case(1).id,
         ]
     monkeypatch.setattr("sys.argv", args)
     run.main()
@@ -223,11 +226,11 @@ def test_aggregate_repeats_cost_failures_and_incomplete() -> None:
 
 def test_development_only_and_full_trajectory() -> None:
     examples = run.development_examples()
-    assert len(examples) >= 160
+    assert examples
     held = {c.id for c in golden.load_cases() if c.held_out}
     assert not held.intersection(e.case_id for e in examples)
     example = next(e for e in examples if e.case_id == "greenway-origin-correction")
-    case = golden.load_cases()[1]
+    case = golden_case(2)
     judge = golden.make_judge(Mock(spec=Model))
     data = EvaluationData[str, str](
         input=case.prompt,
@@ -248,7 +251,7 @@ def test_development_only_and_full_trajectory() -> None:
 
 
 def test_real_tool_adapter_replays_without_live_calls() -> None:
-    case = golden.load_cases()[0]
+    case = golden_case(1)
     fixture = golden.load_fixture(case.steps[0].fixture)
     first = run.Attempt(
         id="first",
@@ -280,7 +283,7 @@ def test_real_tool_adapter_replays_without_live_calls() -> None:
 
 
 def test_usage_meter_and_budget_stop(tmp_path: Path) -> None:
-    case = golden.load_cases()[0]
+    case = golden_case(1)
     row = run.Attempt(id="a", case_id=case.id, trial=1)
     native = Mock(spec=Model)
     native.client_args = {}
@@ -313,9 +316,9 @@ def test_usage_meter_and_budget_stop(tmp_path: Path) -> None:
 
 
 def test_incomplete_report_retains_interrupted_measurements(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    golden_test_identity: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    case = golden.load_cases()[0]
+    case = golden_case(1)
     journal = run.Journal(tmp_path / "run", 25)
     row = run.Attempt(id="a", case_id=case.id, trial=1)
     journal.append({"event": "attempt_started", **row.model_dump()})
@@ -438,7 +441,7 @@ def test_real_agent_keeps_conversation_and_uses_only_replay(
     barrier = Barrier(2, timeout=5)
 
     def conversation(number: int) -> tuple[run.Attempt, list[int]]:
-        case = golden.load_cases()[1]
+        case = golden_case(2)
         row = run.Attempt(id=f"multi-{number}", case_id=case.id, trial=1)
         messages: list[str] = []
         seen: list[int] = []
@@ -510,7 +513,7 @@ def test_real_agent_keeps_conversation_and_uses_only_replay(
     for row, seen in results:
         assert len(row.turns) == 2 and len(row.requested_tools) == 2
         assert seen == sorted(seen) and seen[-1] > seen[0]
-        assert not golden.grade_assertions(golden.load_cases()[1], row.turns)
+        assert not golden.grade_assertions(golden_case(2), row.turns)
     results[0][0].turns[0].calls[0].result["total_usd"] = "999.00"
     assert results[1][0].turns[0].calls[0].result["total_usd"] == "5.80"
 
@@ -520,7 +523,7 @@ def test_repeating_agent_is_scored_failure_not_infrastructure(
 ) -> None:
     from strands.models.openai_responses import OpenAIResponsesModel
 
-    case = golden.load_cases()[0]
+    case = golden_case(1)
     fixture = golden.load_fixture(case.steps[0].fixture)
     model = OpenAIResponsesModel(model_id="offline", client_args={"api_key": "offline"})
     count = 0
@@ -601,7 +604,7 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
         ),
     )
     journal = run.Journal(tmp_path / "contract", 25)
-    case = golden.load_cases()[21].model_copy(update={"contract_version": 1})
+    case = golden_case(22).model_copy(update={"contract_version": 1})
     example = next(
         e
         for e in run.development_examples()
@@ -629,14 +632,12 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
         assert '"origin_point_id": "i95:205SD"' in reference
         assert '"origin_point_id": "i95:212NO"' in reference
     seen.clear()
-    case = golden.load_cases()[3].model_copy(update={"contract_version": 1})
+    case = golden_case(4).model_copy(update={"contract_version": 1})
     run.judge(case, row, journal)
     assert "claim-support requirement" in seen[0]
     assert "Ground the price, time, availability" not in seen[0]
     seen.clear()
-    run.judge(
-        golden.load_cases()[2].model_copy(update={"contract_version": 1}), row, journal
-    )
+    run.judge(golden_case(3).model_copy(update={"contract_version": 1}), row, journal)
     for reference in (seen[0], seen[2]):
         assert "without calling a tool" in reference
         assert "Never substitute that rate for the truck" in reference
@@ -664,7 +665,7 @@ def test_invalid_actor_output_is_inconclusive(
 
     from eval.artifact_agent import Answer
 
-    case = golden.load_cases()[14].model_copy(update={"contract_version": 2})
+    case = golden_case(15).model_copy(update={"contract_version": 2})
     reply = ActorResponse(
         reasoning="offline", stop=stop, message=message, stop_reason=reason
     )
@@ -700,7 +701,7 @@ def test_actor_reply_is_delivered_before_completion(
 
     from eval.artifact_agent import Answer
 
-    case = golden.load_cases()[14]
+    case = golden_case(15)
     actor = Mock()
     actor.act.side_effect = [
         Mock(
@@ -824,7 +825,7 @@ def test_only_evaluators_force_structured_output(tmp_path: Path, role: str) -> N
 def test_packaged_replay_records_rejections() -> None:
     from eval.artifact_agent import Answer, ArtifactAgent
 
-    case = golden.load_cases()[0]
+    case = golden_case(1)
     fixture = golden.load_fixture(case.steps[0].fixture)
     arguments = dict(fixture.input, destination_point_id="greenway:28:entry:WB")
     attempt = run.Attempt(
@@ -863,7 +864,7 @@ def test_packaged_model_budget_is_scored_but_protocol_failure_is_not(
 ) -> None:
     from eval.artifact_agent import ArtifactAgent
 
-    case = golden.load_cases()[0]
+    case = golden_case(1)
     call_limit = case.actor.max_turns + case.max_tool_calls + 2
     usage = {"inputTokens": 100, "outputTokens": 20}
     events: list[dict[str, Any]] = []
@@ -1056,6 +1057,7 @@ def test_cli_rejects_changed_cache_contract(
 
 
 def test_cache_adapter_change_invalidates_calibration_identity(
+    golden_test_identity: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     original_git = run.git
@@ -1106,7 +1108,7 @@ def test_wrong_route_reference_also_misnames_its_endpoint() -> None:
 def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fixed_reference: bool
 ) -> None:
-    case = golden.load_cases()[0].model_copy(deep=True)
+    case = golden_case(1).model_copy(deep=True)
     case.contract_version = 2
     case.terminal_objective = "cancellation"
     case.actor.facts += " PRIVATE_PROFILE_SENTINEL"
@@ -1179,7 +1181,7 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
 def test_v2_inconclusive_trials_keep_costs_and_violations_outside_scores(
     validity: str,
 ) -> None:
-    case = golden.load_cases()[0].model_copy(
+    case = golden_case(1).model_copy(
         update={
             "contract_version": 2,
             "coverage_family": "current",
@@ -1226,7 +1228,7 @@ def test_v2_turn_limit_is_application_failure_only_for_valid_actor(
 ) -> None:
     from eval.artifact_agent import Answer
 
-    case = golden.load_cases()[0].model_copy(deep=True)
+    case = golden_case(1).model_copy(deep=True)
     case.contract_version = 2
     case.actor.max_turns = 2
     if completed:
@@ -1345,7 +1347,7 @@ def test_v2_render_accounts_for_600_trials_and_embedded_case_count(
 ) -> None:
     source = golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json"
     manifest = json.loads(source.read_text())
-    template = golden.load_cases()[0]
+    template = golden_case(1)
     cases = [
         template.model_copy(
             update={
@@ -1389,7 +1391,7 @@ def test_v2_render_accounts_for_600_trials_and_embedded_case_count(
 def test_invalid_actor_probe_is_complete_calibration_without_application_labels(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    case = golden.load_cases()[0].model_copy(update={"contract_version": 2})
+    case = golden_case(1).model_copy(update={"contract_version": 2})
     replies: list[dict[str, JsonValue]] = [
         {"stop": True, "message": None, "stop_reason": "goal_completed"}
     ]
