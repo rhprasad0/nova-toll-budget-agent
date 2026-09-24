@@ -7,6 +7,9 @@
 [Live demo](https://tollchat.ai/) · [Engineering evidence](#engineering-evidence) ·
 [Evaluation status](#evaluation-status) · [Technical guide](v2/README.md)
 
+**[Experiment journal: how I test and improve the agent](v2/eval/EXPERIMENT_JOURNAL.md)**
+Follow the hypotheses, baseline comparisons, measured results, costs, limitations, and decisions behind changes to TollChat.
+
 ## For humans
 
 TollChat answers a practical question: **"What would this Northern Virginia commute cost me?"** It turns fragmented toll feeds, operator maps, and rate schedules into current prices and annual commute estimates.
