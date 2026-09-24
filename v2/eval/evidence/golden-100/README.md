@@ -2,6 +2,8 @@
 
 **Complete measurement; human approval pending.** Ryan authorized this calibration after opening [PR #596](https://github.com/rhprasad0/nova-toll-budget-agent/pull/596) and specified 16 parallel workers. This is judge calibration on authored transcripts, not application performance or a live actor-simulation check.
 
+Open the [static HTML review](review.html) in a browser for all 120 reference conversations, tool evidence, expected/measured labels, and judge explanations, with the 12 disputed references first. It works offline without a server.
+
 ## Recorded result
 
 - **120/120 references measured**, 360 judge calls, no missing measurements or unknown usage. All 120 authored actor-validity labels were measured valid.
