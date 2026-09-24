@@ -135,6 +135,7 @@ def prepare(
     from eval.artifact_agent import ArtifactAgent
 
     golden.validate()
+    gate.code_digest()
     gate.development_account()
     limits = gate.policy()
     gate.require(

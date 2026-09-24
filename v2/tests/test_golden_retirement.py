@@ -1,5 +1,6 @@
-"""The retired corpus cannot trigger spending or qualify a production release."""
+"""Retired inputs and the unapproved development set cannot qualify a release."""
 
+import json
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -12,22 +13,27 @@ from scripts import golden_release as release
 from tests.golden_support import ROOT as TEST_DATA
 
 
-def test_no_active_corpus_or_approval() -> None:
-    assert not list(golden.ROOT.glob("**/*.json*"))
-    for root in (golden.ROOT, TEST_DATA):
-        assert not (root / "manifest.json").exists()
-        assert not (root / "review.json").exists()
-        assert not (root / "calibration-reference.json").exists()
+def test_retired_test_data_is_not_an_active_corpus(tmp_path: Path) -> None:
+    for name in ("manifest.json", "review.json", "calibration-reference.json"):
+        assert not (TEST_DATA / name).exists()
     with pytest.raises(ValueError, match="No active golden corpus"):
-        golden.validate()
-    with pytest.raises(ValueError, match="exactly 200"):
+        golden.validate(tmp_path)
+    with pytest.raises(ValueError, match="exactly 100"):
         golden.validate(TEST_DATA)
+
+
+def test_new_corpus_has_no_transferred_approval() -> None:
+    review = json.loads((golden.ROOT / "review.json").read_text())
+    assert review["status"] == "pending"
+    assert not review["reviewer"]
+    assert not (golden.ROOT / "calibration-reference.json").exists()
 
 
 @pytest.mark.parametrize("mode", ["calibrate", "run", "actor-check"])
 def test_paid_entrypoints_stop_before_credentials_or_output(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
+    monkeypatch.setattr(golden, "ROOT", tmp_path / "absent-corpus")
     credentials = Mock(side_effect=AssertionError("must not load credentials"))
     monkeypatch.setattr(run.toll_agent, "load_openai_api_key", credentials)
     output = tmp_path / "paid-run"
@@ -50,16 +56,33 @@ def test_release_blocks_even_with_historical_approval(
     monkeypatch.setattr(gate, "development_account", account)
     monkeypatch.setattr(gate, "POLICY", gate.POLICY.with_name("policy-1.0.2.json"))
     assert gate.policy()  # A real historical approved policy is insufficient.
-    with pytest.raises(ValueError, match="No active golden corpus"):
+    with pytest.raises(ValueError, match="development-only corpus"):
         gate.code_digest()
-    with pytest.raises(ValueError, match="No active golden corpus"):
+    with pytest.raises(ValueError, match="development-only corpus"):
         gate.admit({"candidate": "a" * 40})
     receipt = Mock(side_effect=AssertionError("must fail before receipt lookup"))
     monkeypatch.setattr(gate, "receipt", receipt)
-    with pytest.raises(ValueError, match="No active golden corpus"):
+    with pytest.raises(ValueError, match="development-only corpus"):
         gate.revalidate({"candidate": "a" * 40, "golden": {"run_id": "old-run"}})
     receipt.assert_not_called()
-    with pytest.raises(ValueError, match="No active golden corpus"):
+    with pytest.raises(ValueError, match="development-only corpus"):
         release.prepare({}, tmp_path, tmp_path / "prepared")
     account.assert_not_called()
     assert not (tmp_path / "prepared").exists()
+
+
+def test_application_run_requires_new_corpus_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    identity = Mock(side_effect=AssertionError("must stop before run identity"))
+    credentials = Mock(side_effect=AssertionError("must not load credentials"))
+    monkeypatch.setattr(run, "identity", identity)
+    monkeypatch.setattr(run.toll_agent, "load_openai_api_key", credentials)
+    output = tmp_path / "application"
+    monkeypatch.setattr("sys.argv", ["test", "run", "--output", str(output)])
+    with pytest.raises(SystemExit, match="2"):
+        run.main()
+    assert "corpus review is pending" in capsys.readouterr().err
+    identity.assert_not_called()
+    credentials.assert_not_called()
+    assert not output.exists()

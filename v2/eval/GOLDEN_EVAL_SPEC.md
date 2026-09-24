@@ -1,4 +1,39 @@
-# Golden corpus retirement and recreation guide
+# Golden corpus authoring and retirement guide
+
+## Development corpus 3.0.0 — 2026-09-24
+
+The replacement is authored: **100 development cases, 100 proposed passing
+references, and 20 negative controls**. See the [review catalog](golden/REVIEW.md)
+for allocation, prompts, actor briefs, expected behaviors, fixtures, and references.
+All cases concern ordinary passenger-car use. Unusual vehicle classes,
+adversarial prompts, and obscure boundary probes are excluded. Necessary
+clarifications, corrections, cancellations, route alternatives, unavailable
+prices, and financial/evidence interpretation remain covered.
+
+The corpus uses the current 220-point catalog built from committed Oracle
+sources, not the retired 219-point snapshot. Fixtures are synthetic, use frozen
+timestamps, and require no deployed database or model calls to replay. Annual
+responses use the existing domain builders and independent Decimal reconciliation.
+Stable IDs use the `dev3-` prefix; numbers are 1–100 and every `held_out` flag is
+false. The existing case schema stays at `contract_version=2`; that is the
+information/consent contract, distinct from corpus version 3.0.0.
+
+Validation enforces the new allocation, one passing reference per case, at least
+20 labeled negative controls, and consistent pair groups when declared. The old
+pair/tag quotas and original-number split exception no longer apply. Semantic
+leniency and material financial/evidence/consent rules are unchanged.
+
+`manifest.json` binds exact artifacts and evaluator sources and declares
+`evaluation_scope="development"`. Human approval is **pending** and there is no
+calibration reference. Calibration and application measurements require fresh
+authorization/review under the retained runner procedure; old spending approvals
+and scores do not transfer. Three application trials would produce 300 slots.
+The independent holdout has not been authored or inspected in this work. The
+protected production policy remains unchanged and explicitly rejects this
+development-only corpus, including when a historical policy is supplied.
+
+The sections below preserve the retirement decision and prior design history;
+old allocations, examples, and approvals do not define the new corpus.
 
 ## Retirement decision — 2026-09-24
 

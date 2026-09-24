@@ -1,0 +1,93 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "i66:7:entry:EB",
+    "destination_point_id": "i66:11:exit:EB",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "i66:7:entry:EB",
+    "destination_point_id": "i66:11:exit:EB",
+    "method": "latest_complete_current_facility_prices",
+    "evaluated_at": "2026-09-24T08:18:00-04:00",
+    "maximum_observation_age_minutes": 30,
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    },
+    "source_kind": "observed",
+    "components": [
+      {
+        "route_step_id": "step-1",
+        "facility": "i66",
+        "price_usd": "4.75",
+        "source_kind": "observed",
+        "pricing_method": "source_observation",
+        "component_evaluated_at": "2026-09-24T08:18:00-04:00",
+        "bin_minutes": 6,
+        "bin_start": "2026-09-24T08:12:00-04:00",
+        "bin_end": "2026-09-24T08:18:00-04:00",
+        "interval_end_at": "2026-09-24T08:18:00-04:00",
+        "observed_at": "2026-09-24T08:17:30-04:00",
+        "recent_movement": {
+          "method": "same_facility_leg_three_cycles",
+          "direction": "unchanged",
+          "samples": [
+            {
+              "cycle_offset": -2,
+              "price_usd": "4.75"
+            },
+            {
+              "cycle_offset": -1,
+              "price_usd": "4.75"
+            },
+            {
+              "cycle_offset": 0,
+              "price_usd": "4.75"
+            }
+          ],
+          "net_change_usd": "0.00",
+          "net_change_percent": "0.0"
+        },
+        "prior_week_comparison": {
+          "method": "same_weekday_same_facility_bins",
+          "comparable_period_count": 3,
+          "expected_comparable_period_count": 3,
+          "comparable_prices": [
+            {
+              "week_offset": 1,
+              "price_usd": "4.25"
+            },
+            {
+              "week_offset": 2,
+              "price_usd": "4.75"
+            },
+            {
+              "week_offset": 3,
+              "price_usd": "5.25"
+            }
+          ],
+          "median_usd": "4.75",
+          "minimum_usd": "4.25",
+          "maximum_usd": "5.25",
+          "current_delta_usd": "0.00",
+          "current_delta_percent": "0.0",
+          "position": "within_recent_range",
+          "higher_than_count": 1
+        }
+      }
+    ],
+    "total_usd": "4.75"
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "v2/agent-sops/nova-toll-pricing-assistant.sop.md; v2/oracle/build_oracle_data.py; v2/agent_tools/current_price_domain.py; v2/agent_tools/get_annual_toll_ballpark.py",
+    "note": "Committed direct route; published schedules use current domain calculators. Any dynamic observations and comparison samples are invented. Authored offline for development corpus 3.0.0; not captured traffic or observed road data."
+  }
+}

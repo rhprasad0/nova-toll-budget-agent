@@ -28,6 +28,10 @@ pytestmark = pytest.mark.usefixtures("golden_test_data")
 def test_cli_runs_independent_work_in_parallel(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, workers: int
 ) -> None:
+    root = tmp_path / "corpus"
+    shutil.copytree(golden.ROOT, root)
+    (root / "review.json").write_text(json.dumps({"status": "approved"}))
+    monkeypatch.setattr(golden, "ROOT", root)
     barrier = Barrier(3, timeout=5)
     directory = tmp_path / mode
     calibration = tmp_path / "approved-calibration"
@@ -1014,6 +1018,10 @@ def test_eval_cache_prefix_and_write_accounting(
 def test_cli_rejects_changed_cache_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: str
 ) -> None:
+    root = tmp_path / "corpus"
+    shutil.copytree(golden.ROOT, root)
+    (root / "review.json").write_text(json.dumps({"status": "approved"}))
+    monkeypatch.setattr(golden, "ROOT", root)
     keys = (
         "corpus",
         "judge_prompt_sha256",

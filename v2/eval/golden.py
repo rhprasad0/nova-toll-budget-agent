@@ -28,16 +28,17 @@ from eval.simulated import GroundedCorrectnessEvaluator
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
+CORPUS_VERSION = "3.0.0"
+CASE_COUNT = 100
 COVERAGE = {
-    "current_state": (24, 5),
-    "current_evidence": (24, 5),
-    "current_unsupported": (8, 2),
-    "current_i95": (20, 4),
-    "annual_inputs": (36, 6),
-    "annual_routes": (28, 6),
-    "annual_evidence": (28, 6),
-    "annual_finance": (28, 4),
-    "mixed": (4, 2),
+    "current_complete": 20,
+    "current_state": 10,
+    "current_evidence": 10,
+    "annual_complete": 20,
+    "annual_inputs": 15,
+    "annual_routes": 10,
+    "annual_interpretation": 10,
+    "mixed": 5,
 }
 SOURCE_FILES = (
     "uv.lock",
@@ -186,7 +187,7 @@ class Step(Record):
 
 
 class GoldenCase(Record):
-    number: int = Field(ge=1, le=200)
+    number: int = Field(ge=1)
     id: str = Field(pattern=r"^[a-z0-9-]+$")
     title: str = Field(min_length=1)
     kind: Literal["current", "annual", "mixed"]
@@ -702,23 +703,16 @@ def hashes(root: Path | None = None) -> dict[str, str]:
 
 def validate_coverage(cases: list[GoldenCase]) -> None:
     counts = Counter(c.coverage_family for c in cases)
-    reserved = Counter(c.coverage_family for c in cases if c.held_out)
-    if counts != Counter(
-        {key: value[0] for key, value in COVERAGE.items()}
-    ) or reserved != Counter({key: value[1] for key, value in COVERAGE.items()}):
-        raise ValueError("coverage or reserved allocation changed")
-    if Counter(c.kind for c in cases) != {"current": 76, "annual": 120, "mixed": 4}:
+    if counts != Counter(COVERAGE) or any(c.held_out for c in cases):
+        raise ValueError("expected the 100-case development-only allocation")
+    if Counter(c.kind for c in cases) != {"current": 40, "annual": 55, "mixed": 5}:
         raise ValueError("workflow allocation changed")
     groups: dict[str, bool] = {}
     fixtures: dict[str, bool] = {}
     pairs: dict[str, list[GoldenCase]] = {}
     for case in cases:
-        if (
-            case.contract_version != 2
-            or not case.split_group
-            or (case.number <= 24 and case.held_out)
-        ):
-            raise ValueError("v2 requires explicit groups and newly reserved cases")
+        if case.contract_version != 2 or not case.split_group:
+            raise ValueError("v2 requires explicit scenario groups")
         if groups.setdefault(case.split_group, case.held_out) != case.held_out:
             raise ValueError("scenario group crosses development/reserved split")
         for step in case.steps:
@@ -727,7 +721,6 @@ def validate_coverage(cases: list[GoldenCase]) -> None:
         for tag in case.coverage_tags:
             if tag.startswith("pair:"):
                 pairs.setdefault(tag, []).append(case)
-    pair_types: Counter[str] = Counter()
     for members in pairs.values():
         kinds = {
             tag
@@ -739,31 +732,19 @@ def validate_coverage(cases: list[GoldenCase]) -> None:
             len(members) != 2
             or len({c.split_group for c in members}) != 1
             or len(kinds) != 1
+            or not kinds <= {"pair_type:contrastive", "pair_type:invariance"}
         ):
             raise ValueError("behavioral pairs require two members in one split group")
-        pair_types.update(kinds)
-    if pair_types != {"pair_type:contrastive": 12, "pair_type:invariance": 8}:
-        raise ValueError("expected 12 contrastive and 8 invariance pairs")
-    for tag, minimum in {
-        "stateful": 32,
-        "fact_correction": 12,
-        "cancellation": 8,
-        "workflow_switch": 4,
-        "over_refusal_control": 16,
-        "partial_evidence_or_failure": 20,
-        "adversarial_direct": 4,
-        "adversarial_tool": 4,
-    }.items():
-        if sum(tag in c.coverage_tags for c in cases) < minimum:
-            raise ValueError(f"missing behavioral coverage: {tag}")
 
 
 def validate(root: Path | None = None) -> None:
     root = root if root is not None else ROOT
     cases = load_cases(root)
-    if len(cases) != 200 or {c.number for c in cases} != set(range(1, 201)):
-        raise ValueError("expected exactly 200 numbered cases")
-    if len({c.id for c in cases}) != 200:
+    if len(cases) != CASE_COUNT or {c.number for c in cases} != set(
+        range(1, CASE_COUNT + 1)
+    ):
+        raise ValueError("expected exactly 100 numbered cases")
+    if len({c.id for c in cases}) != CASE_COUNT:
         raise ValueError("duplicate case ID")
     validate_coverage(cases)
     points = parse_prompt_points(json.loads((root / "prompt-points.json").read_text()))
@@ -841,9 +822,9 @@ def validate(root: Path | None = None) -> None:
             e.expected is not None and not all(e.expected.model_dump().values())
             for e in examples
         )
-        < 40
+        < 20
     ):
-        raise ValueError("at least 40 explicitly labeled negative examples required")
+        raise ValueError("at least 20 explicitly labeled negative examples required")
     for example in examples:
         if example.case_id not in by_id:
             raise ValueError("example references unknown case")
@@ -865,8 +846,9 @@ def validate(root: Path | None = None) -> None:
         raise ValueError("each case needs a labeled good example")
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != "2.0.8"
-        or manifest.get("case_count") != 200
+        manifest["version"] != CORPUS_VERSION
+        or manifest.get("case_count") != CASE_COUNT
+        or manifest.get("evaluation_scope") != "development"
         or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-6-luna"
         or manifest["judge_model"] != "gpt-6-luna"
@@ -890,5 +872,5 @@ def validate(root: Path | None = None) -> None:
 if __name__ == "__main__":
     validate()
     print(
-        "golden corpus: 200 cases validated offline; see review.json for approval status"
+        "golden corpus: 100 development cases validated offline; see review.json for approval status"
     )

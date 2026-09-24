@@ -5,14 +5,19 @@ results and adoption decisions. Preserve it during cleanup; removal requires
 Ryan's explicit approval. The latest decision adopts experiment C's descriptions
 and reordered SOP for the normal TollChat agent through the PR stack on #592.
 
-The [golden recreation guide](GOLDEN_EVAL_SPEC.md) documents the old 200 cases
-(160 development + 40 reserved) before removal. The future target is 100 fresh
-development cases, with a separately authored independent holdout; generation is
-out of scope. After removal there is no active golden corpus, and golden runs and
-production qualification are blocked until a new set is reviewed. The harness and
-offline tests remain. Previous measurements and approvals are historical: see the
-[first local baseline](evidence/gpt-6-luna/BASELINE.md),
-[prompt experiment](EXPERIMENT_JOURNAL.md), and [evidence archive](results/golden/README.md).
+The new **3.0.0 golden corpus contains 100 development cases** for ordinary
+passenger-car current pricing and annual commute affordability. Start with the
+[review catalog](golden/REVIEW.md): 100 proposed passing references and 20 negative
+controls are authored and validated offline. Human review and paid calibration
+are pending; no new application score is claimed. All cases are development
+cases; an independent holdout is a separate task and is not included here.
+
+Run `uv run python -m eval.golden` from `v2/` to validate the frozen artifacts.
+Application evaluation retains three trials per case (300 planned conversations).
+The development-only corpus cannot qualify a production release. The old 200
+cases, approvals, and scores remain historical; test-only legacy inputs never
+become calibration data. See the [recreation guide](GOLDEN_EVAL_SPEC.md),
+[runner](GOLDEN_RUNNER.md), and [evidence archive](results/golden/README.md).
 
 The scheduled Strands suite uses simulated users and model-based judges for six
 current-toll scenarios. The broader code-graded regression catalog retains eight

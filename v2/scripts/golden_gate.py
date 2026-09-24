@@ -89,6 +89,10 @@ def code_digest() -> str:
     )
     manifest = read(ROOT / "v2/eval/golden/manifest.json")
     require(
+        manifest.get("evaluation_scope") != "development",
+        "development-only corpus cannot qualify production",
+    )
+    require(
         digest(manifest["hashes"]) == manifest["corpus_sha256"],
         "active corpus manifest changed",
     )

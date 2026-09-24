@@ -1,0 +1,7 @@
+{
+  "status": "pending",
+  "corpus_sha256": "e68d04094648deeb7d1b40c01a9e6d5fe4ec827077c2e1e6d000f889340614be",
+  "reviewer": null,
+  "evidence": null,
+  "note": "100 newly authored development cases, 100 proposed passing references, and 20 labeled negative references. Offline checks are not judge calibration or human approval. Independent holdout and production qualification are excluded."
+}

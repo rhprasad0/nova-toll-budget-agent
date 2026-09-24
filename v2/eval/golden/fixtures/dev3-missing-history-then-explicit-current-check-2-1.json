@@ -1,0 +1,52 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "i495:190NO",
+    "destination_point_id": "i495:185ND",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "i495:190NO",
+    "destination_point_id": "i495:185ND",
+    "method": "latest_complete_current_facility_prices",
+    "evaluated_at": "2026-09-24T08:18:00-04:00",
+    "maximum_observation_age_minutes": 30,
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    },
+    "source_kind": "observed",
+    "components": [
+      {
+        "route_step_id": "step-1",
+        "facility": "i95_i495",
+        "price_usd": "9.85",
+        "source_kind": "observed",
+        "pricing_method": "source_observation",
+        "component_evaluated_at": "2026-09-24T08:18:00-04:00",
+        "bin_minutes": 10,
+        "bin_start": "2026-09-24T08:00:00-04:00",
+        "bin_end": "2026-09-24T08:10:00-04:00",
+        "interval_end_at": "2026-09-24T08:10:00-04:00",
+        "observed_at": "2026-09-24T08:09:30-04:00",
+        "recent_movement": null,
+        "prior_week_comparison": null,
+        "od_pair_id": 1019,
+        "proxy_od_pair_id": null,
+        "source_status": "OPEN"
+      }
+    ],
+    "total_usd": "9.85"
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "v2/agent-sops/nova-toll-pricing-assistant.sop.md; v2/oracle/build_oracle_data.py; v2/agent_tools/current_price_domain.py; v2/agent_tools/get_annual_toll_ballpark.py",
+    "note": "Committed direct route; published schedules use current domain calculators. Any dynamic observations and comparison samples are invented. Authored offline for development corpus 3.0.0; not captured traffic or observed road data."
+  }
+}

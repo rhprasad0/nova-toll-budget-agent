@@ -77,8 +77,10 @@ jobs:
           echo "$RUNNER_TEMP/repository-check-tools" >> "$GITHUB_PATH"
       - name: Check all authored code
         run: python3 scripts/check_repository.py
-      - name: Verify retired golden corpus cannot execute or qualify a release
-        run: uv run pytest -q tests/test_golden_retirement.py
+      - name: Validate development golden corpus and release isolation
+        run: |
+          uv run python -m eval.golden
+          uv run pytest -q tests/test_golden_retirement.py tests/test_golden_development.py
       - run: uv run python scripts/check_tool_contract_versions.py "$TOOL_CONTRACT_BASE_REF"
         env:
           TOOL_CONTRACT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}

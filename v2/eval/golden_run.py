@@ -1877,6 +1877,13 @@ def main() -> None:
         render(args.output)
         return
     cases = golden.load_cases()
+    if args.mode == "run":
+        review_path = golden.ROOT / "review.json"
+        if (
+            not review_path.is_file()
+            or json.loads(review_path.read_text()).get("status") != "approved"
+        ):
+            parser.error("corpus review is pending")
     if args.cases:
         if set(args.cases) - {c.id for c in cases}:
             parser.error("unknown case")

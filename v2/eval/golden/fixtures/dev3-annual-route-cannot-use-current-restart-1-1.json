@@ -1,0 +1,52 @@
+{
+  "tool": "get_annual_toll_ballpark",
+  "input": {
+    "outbound": {
+      "origin_point_id": "i95:203NO",
+      "destination_point_id": "i495:183ND",
+      "departure_time": "07:45:00"
+    },
+    "return": {
+      "origin_point_id": "i495:183SO",
+      "destination_point_id": "i95:205SD",
+      "departure_time": "17:15:00"
+    },
+    "weekdays": [
+      "tuesday",
+      "wednesday",
+      "thursday"
+    ],
+    "planned_annual_commute_days": 141,
+    "gross_annual_income_usd": "132500.00"
+  },
+  "result": {
+    "error": "ballpark_unavailable",
+    "reason": "route_unavailable",
+    "outbound": {
+      "origin_point_id": "i95:203NO",
+      "destination_point_id": "i495:183ND",
+      "status": "invalid_origin",
+      "reason": {
+        "code": "i95_northbound_requires_i495_restart",
+        "details": {
+          "point_id": "i95:203NO",
+          "point_type": "entry",
+          "suggested_restart_point_id": "i495:192NO",
+          "suggested_destination_point_id": "i495:183ND"
+        }
+      }
+    },
+    "return": {
+      "origin_point_id": "i495:183SO",
+      "destination_point_id": "i95:205SD",
+      "status": "valid",
+      "reason": null
+    }
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "v2/agent-sops/nova-toll-pricing-assistant.sop.md; v2/oracle/build_oracle_data.py; v2/agent_tools/current_price_domain.py; v2/agent_tools/get_annual_toll_ballpark.py",
+    "note": "Synthetic annual route failure under the documented I-95 restart limitation. No current-price substitution is authorized. Authored offline for development corpus 3.0.0; not captured traffic or observed road data."
+  }
+}

@@ -143,3 +143,34 @@ needed by offline checks. With no active corpus, golden runs and release
 qualification must remain blocked. No old score, reference, or approval becomes
 evidence for the future set, and this decision does not alter the experiment C
 adoption or its recorded results.
+
+## 2026-09-24 — Author the 100-case development replacement
+
+Ryan requested implementing the replacement plan for ordinary passenger-car use,
+without unusual vehicle classes, adversarial prompts, or obscure boundary probes.
+Corpus **3.0.0** contains 100 newly authored development cases: 40 current-price,
+55 annual-affordability, and five explicit workflow transitions. The
+[review catalog](golden/REVIEW.md) contains the allocation, actor briefs, expected
+behaviors, fixture links, and proposed passing transcripts. Its 107 synthetic
+fixtures support 100 passing reference proposals and 20 labeled negative controls.
+The public point catalog was rebuilt from current committed Oracle sources
+(220 points); the retired test-only snapshot remains unchanged.
+
+The active contract now validates the new allocation and rejects legacy test data
+as an active corpus. Comparison against the pinned retired 200 found no reused IDs
+or identical normalized prompts; the catalog records the limits and manual review
+of that comparison. No independent holdout contents were authored or inspected.
+The application model, prompt, tool implementations, historical results, and
+protected policy are unchanged. A future three-trial run would have 300 slots;
+no new application performance measurement is claimed.
+
+Validation: **180 relevant offline tests passed**, including corpus replay and
+financial reconciliation, retirement isolation, runner/reporting, historical
+baselines, and release-gate checks. Ruff lint/format, strict Pyright on changed
+Python files, Actionlint on the CI workflow, manifest validation, and whitespace
+checks passed. The corpus digest is
+`e68d04094648deeb7d1b40c01a9e6d5fe4ec827077c2e1e6d000f889340614be`.
+Human corpus review and paid calibration remain pending. No paid evaluation was
+run and no historical approval transfers. Application runs require corpus approval;
+production qualification explicitly rejects the development-only corpus before
+AWS access, including when supplied a historical approved policy.

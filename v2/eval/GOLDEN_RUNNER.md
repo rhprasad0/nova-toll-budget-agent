@@ -1,10 +1,23 @@
 # Running the frozen golden corpus
 
-**Retirement notice:** the 200-case active corpus is being removed. Paid golden
-runs are unavailable after removal until a new corpus and matching calibration
-are approved. Commands below describe the retained harness and historical
-procedure; they do not authorize runs. See the [recreation guide](GOLDEN_EVAL_SPEC.md).
-Historical report rendering remains available.
+The active authoring contract is **3.0.0: 100 development cases**, with 100
+proposed passing and 20 negative references. Human review and paid calibration
+are pending. No new application run has been performed. A full future run has
+**300 trials**; its holdout subset is empty and has no success rate.
+
+Validate offline from `v2/` with `uv run python -m eval.golden`. Review the
+[catalog](golden/REVIEW.md) before freezing approval. The unchanged local runner
+requires a clean committed checkout, exact matching calibration, and human
+calibration review before application execution. Any paid calibration needs new
+authorization and its own spend accounting; archived budgets do not transfer.
+The corpus cannot qualify production: independently authored holdout scope and
+protected-policy activation are separate work. Historical report rendering remains
+available under its recorded contract.
+
+## Historical 2.0.8 procedure
+
+The procedures and counts below describe the retired experiment, not permission
+to run or reuse its cases or approvals.
 
 The local experiment corpus and harness are **2.0.8**: **200 cases**, split into **160
 development and 40 reserved cases**, with three fresh trials per case. A complete
