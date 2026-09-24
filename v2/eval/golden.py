@@ -28,7 +28,7 @@ from eval.simulated import GroundedCorrectnessEvaluator
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.0.5"
+CORPUS_VERSION = "3.0.6"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -106,7 +106,8 @@ When annual evidence uses only historical observations, 'recent historical
 samples/scenarios' or equivalent wording identifies that source sufficiently;
 do not require the exact word 'observed'. Modeled prices or current fixed rates
 still need disclosure when actually used. Explicitly denying the actual source
-is a factual contradiction, not an acceptable omission.
+is a factual contradiction, not an acceptable omission; it fails Outcome,
+Grounding, and Rules as an affirmative misrepresentation of the financial evidence.
 For annual affordability, a P50 daily/annual toll summary alongside P25/P50/P90
 combined-cost scenarios is sufficient: separate P25/P90 toll-only amounts are
 optional unless the delivered user explicitly requests that breakdown. Do not
@@ -126,6 +127,9 @@ not your individual expenses' conveys the assumption without the exact words
 'additional gross salary needed' and 'additional gross income to offset' are
 equivalent here. Gross versus net, toll versus combined cost, daily versus annual,
 and scenario identity are material distinctions and must not be swapped.
+Check every affirmative financial claim, including prose appended after a correct
+table. Correct figures elsewhere do not cancel a contradictory amount or label;
+such a contradiction also fails Outcome even when the requested table is complete.
 Only when the user requests official closure proof, the response must explain that no official notice
 was supplied, preserve non-affiliation, and refer to official channels without
 claiming verified proof; matching a template is unnecessary.

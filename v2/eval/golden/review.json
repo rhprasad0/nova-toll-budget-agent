@@ -1,8 +1,8 @@
 {
   "status": "approved",
-  "corpus_sha256": "58b12c628f645c921c6872ea484d01d7ccaa8d9f9f30666dd4a52eedbcf50966",
+  "corpus_sha256": "e51114c340da2addf7f24d5aca038a16c308d8af2edbdf1db38241e6564f7a4d",
   "reviewer": "Ryan",
-  "evidence": "Ryan requested a more lenient Outcome judge for Gallows hybrid salary because the answer already contains too many numbers, then instructed: \"Run the eval suite again after the adjustment has been made\". Codex applied the requested leniency consistently to all annual and mixed cases: separate P25/P90 toll figures are optional unless requested, and historical-source wording is judged semantically. This authorizes the contract revision, fresh calibration and a new development baseline; it does not record human approval of newly measured results.",
-  "note": "Development execution authorized. Three new case-52 regression expectations are proposed under the requested leniency. Matching calibration of 3.0.5 / harness 2.0.12 must precede the new baseline; previous measurements belong to their original contracts.",
-  "approved_at": "2026-09-24T21:04:11.044334+00:00"
+  "evidence": "Ryan instructed: \"Just do the calibration, clean up any review pages, then push our changes.\" This authorizes resolving the four calibration-8 disagreements under the existing rules: correct the false-source Rules reference label and clarify financial contradictions, evidence from unauthorized calls, and annual-route alternatives. It authorizes calibration and publication, not a new application baseline or production qualification, and does not claim human review of newly measured verdicts.",
+  "note": "Contract 3.0.6 / harness 2.0.13 retains 100 cases and 135 reference transcripts. Only the false-source regression Rules label changes. Fresh calibration is authorized; historical measurements retain their original identities and verdicts.",
+  "approved_at": "2026-09-24T21:45:53.273821+00:00"
 }

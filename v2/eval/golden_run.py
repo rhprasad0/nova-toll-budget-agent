@@ -33,7 +33,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.0.12"
+VERSION = "2.0.13"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -54,7 +54,12 @@ this criterion unless they invent financial/schedule facts or unsupported claims
 Calling a wrong route is a Rules violation; falsely naming a destination that
 the result does not cover is also an unsupported route claim under Grounding.
 Do not fail grounding merely because a call was unauthorized. Supplied tool
-results can support reported amounts despite that rule violation. Approved
+results can support reported amounts despite that rule violation. Inspect every result,
+including a successful alternative call after an earlier error in the same turn.
+All calls listed in a turn precede that turn's assistant response. A successful
+quote supports saying that route was priced, even if selecting it violated consent.
+Read catalog roles and direction together: an exit or an opposite-direction entry
+does not establish an entry in the requested direction. Approved
 domain context also supports factual claims. A truthful statement of the
 current-only pricing scope or a refusal to quote a past/future toll needs no
 tool evidence. Still check any accompanying price, route, or timestamp claim.
@@ -71,7 +76,10 @@ details alone do not fail this criterion: do not turn disclosure omissions into
 rule violations. Omitting a required intermediate choice, including returned route
 alternatives or an invitation to use or adjust proposed annual days, is a workflow
 violation under Rules as well as an incomplete Outcome; it is not
-merely an omitted final-answer disclosure. Repeated unnecessary questions that exhaust the declared turn
+merely an omitted final-answer disclosure. Only offer alternatives allowed by the
+active workflow: an annual route error's current-price restart is prohibited as
+an annual substitute, so omitting that restart is correct and needs no user choice.
+Repeated unnecessary questions that exhaust the declared turn
 budget after the user supplied all requested facts are a budget violation.
 Cite the actual prohibited action and its turn.""",
 }

@@ -113,7 +113,7 @@ def test_gallows_review_preserves_evidence_and_source_failure() -> None:
         assert example.expected is not None
         assert example.expected.outcome is (trial != 3)
         assert example.expected.grounding is (trial != 3)
-        assert example.expected.rules
+        assert example.expected.rules is (trial != 3)
         assert example.actor_validity == "valid"
         assert example.expected_failures == []
         # New reference expectations never overwrite the measured baseline.

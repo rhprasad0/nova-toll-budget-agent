@@ -1,4 +1,6 @@
-# Development golden corpus 3.0.5 — review catalog
+# Development golden corpus 3.0.6 — review catalog
+
+**Current revision: calibration pending.** Contract **3.0.6 / harness 2.0.13** resolves the four calibration-8 review findings: check contradictory financial claims even after correct tables, use all available tool evidence when assessing Grounding, exclude prohibited current-price restarts from annual choices, and correct the false-source Gallows reference's Rules label to fail. The 100 cases, 135 reference transcripts, actors, fixtures, and application are unchanged. Ryan authorized calibration, review-page cleanup, and pushing these changes. The measurements below retain their original contracts.
 
 **Status: revised contract measured; application result review remains pending.** Contract 3.0.5 / harness 2.0.12 makes separate P25/P90 toll figures optional unless requested, while retaining the P50 toll summary and combined-cost scenarios. Historical-source descriptions are judged by meaning; contradictory claims still fail. The 100 prompts, actors, tool workflows, and 107 fixtures are unchanged; all 60 annual/mixed assertions use the same relaxed rule. Three Gallows hybrid salary transcripts from baseline 2 are added as proposed regression references, bringing the total to 135. See the [review decision](../evidence/golden-100/ANNUAL-OUTCOME-REVIEW.md).
 

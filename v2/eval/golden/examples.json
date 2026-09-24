@@ -17214,7 +17214,7 @@
     "expected": {
       "outcome": false,
       "grounding": false,
-      "rules": true
+      "rules": false
     },
     "actor_validity": "valid",
     "actor_replies": [
@@ -17225,7 +17225,7 @@
       }
     ],
     "application_stop": null,
-    "rationale": "Exact baseline 2 case 52 trial 3, run f3aaa5b7-8818-413e-afe0-68c1f1d82989; original measured verdicts remain in the archive. The shorter numeric breakdown is allowed, but the answer explicitly denies that the actual historical observations are observed tolls. That source contradiction still fails Outcome and Grounding. The valid actor and permitted tool workflow remain unchanged.",
+    "rationale": "Exact baseline 2 case 52 trial 3, run f3aaa5b7-8818-413e-afe0-68c1f1d82989; original measured verdicts remain in the archive. The shorter numeric breakdown is allowed, but the answer explicitly denies that the actual historical observations are observed tolls. That affirmative misrepresentation of the financial evidence fails Outcome, Grounding, and Rules; the Rules label is corrected in contract 3.0.6 after calibration 8 review. The valid actor and permitted tool workflow remain unchanged.",
     "turns": [
       {
         "user": "Estimate annual I-495 Express commute affordability: Gallows Road to Jones Branch Drive/Route 123 and back, tuesday, wednesday, thursday, leaving at 7:30 AM and returning at 5:15 PM, 136 planned office days per year, gross annual salary $128500.00.",
