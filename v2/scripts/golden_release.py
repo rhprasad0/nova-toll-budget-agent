@@ -134,9 +134,9 @@ def prepare(
     from eval import golden_run as run
     from eval.artifact_agent import ArtifactAgent
 
+    golden.validate()
     gate.development_account()
     limits = gate.policy()
-    golden.validate()
     gate.require(
         gate.read(golden.ROOT / "review.json").get("status") == "approved",
         "corpus review is pending",

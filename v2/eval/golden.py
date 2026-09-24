@@ -267,7 +267,10 @@ def digest(value: object) -> str:
     ).hexdigest()
 
 
-def load_cases(root: Path = ROOT) -> list[GoldenCase]:
+def load_cases(root: Path | None = None) -> list[GoldenCase]:
+    root = root if root is not None else ROOT
+    if not (root / "cases.jsonl").is_file():
+        raise ValueError("No active golden corpus; see eval/GOLDEN_EVAL_SPEC.md")
     return [
         GoldenCase.model_validate_json(line)
         for line in (root / "cases.jsonl").read_text().splitlines()
@@ -275,7 +278,8 @@ def load_cases(root: Path = ROOT) -> list[GoldenCase]:
     ]
 
 
-def load_fixture(name: str, root: Path = ROOT) -> Fixture:
+def load_fixture(name: str, root: Path | None = None) -> Fixture:
+    root = root if root is not None else ROOT
     if not re.fullmatch(r"[a-z0-9_-]+\.json", name):
         raise ValueError("invalid fixture reference")
     fixture = Fixture.model_validate_json((root / "fixtures" / name).read_text())
@@ -477,7 +481,7 @@ def match_step(
     name: str,
     arguments: dict[str, JsonValue],
     user_messages: list[str],
-    root: Path = ROOT,
+    root: Path | None = None,
 ) -> Fixture:
     """Match before returning tool evidence; no permissive fallback or retry."""
     if index >= len(case.steps):
@@ -518,9 +522,9 @@ def match_step(
 class Replay:
     """One instance per trial. Its cursor and returned objects are never shared."""
 
-    def __init__(self, case: GoldenCase, root: Path = ROOT) -> None:
+    def __init__(self, case: GoldenCase, root: Path | None = None) -> None:
         self.case = case
-        self.root = root
+        self.root = root if root is not None else ROOT
         self.index = 0
 
     def call(
@@ -582,7 +586,7 @@ def evidence_money(value: JsonValue) -> set[Decimal]:
 
 
 def grade_assertions(
-    case: GoldenCase, turns: list[Turn], root: Path = ROOT
+    case: GoldenCase, turns: list[Turn], root: Path | None = None
 ) -> list[str]:
     """Mechanical checks only; a clean result still requires the semantic judge."""
     failures: list[str] = []
@@ -679,7 +683,8 @@ def grade_assertions(
     return sorted(set(failures))
 
 
-def hashes(root: Path = ROOT) -> dict[str, str]:
+def hashes(root: Path | None = None) -> dict[str, str]:
+    root = root if root is not None else ROOT
     files = [root / "cases.jsonl", root / "prompt-points.json", root / "examples.json"]
     files.extend(sorted((root / "fixtures").glob("*.json")))
     result = {
@@ -753,7 +758,8 @@ def validate_coverage(cases: list[GoldenCase]) -> None:
             raise ValueError(f"missing behavioral coverage: {tag}")
 
 
-def validate(root: Path = ROOT) -> None:
+def validate(root: Path | None = None) -> None:
+    root = root if root is not None else ROOT
     cases = load_cases(root)
     if len(cases) != 200 or {c.number for c in cases} != set(range(1, 201)):
         raise ValueError("expected exactly 200 numbered cases")

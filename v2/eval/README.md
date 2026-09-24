@@ -5,17 +5,14 @@ results and adoption decisions. Preserve it during cleanup; removal requires
 Ryan's explicit approval. The latest decision adopts experiment C's descriptions
 and reordered SOP for the normal TollChat agent through the PR stack on #592.
 
-The [200-case golden corpus](GOLDEN_EVAL_SPEC.md) covers current pricing, annual
-affordability, multi-turn changes, evidence failures, and explicit workflow switches.
-The [review catalog](golden/REVIEW.md) links every case and labeled reference.
-Local experiment contract 2.0.8 retains 160 development and 40 reserved cases and
-requires fresh calibration review for contextual wording and natural confirmation. Release policy remains
-on pending 2.0.5; this experiment does not qualify a production release. Ryan approved the
-previous 2.0.3
-GPT-6 Luna corpus and calibration for the [first local baseline](evidence/gpt-6-luna/BASELINE.md):
-600 trials attempted, 409 passed, 184 failed, and 7 inconclusive. No qualified
-production baseline exists. Earlier measurements remain in the
-[historical evidence archive](results/golden/README.md).
+The [golden recreation guide](GOLDEN_EVAL_SPEC.md) documents the old 200 cases
+(160 development + 40 reserved) before removal. The future target is 100 fresh
+development cases, with a separately authored independent holdout; generation is
+out of scope. After removal there is no active golden corpus, and golden runs and
+production qualification are blocked until a new set is reviewed. The harness and
+offline tests remain. Previous measurements and approvals are historical: see the
+[first local baseline](evidence/gpt-6-luna/BASELINE.md),
+[prompt experiment](EXPERIMENT_JOURNAL.md), and [evidence archive](results/golden/README.md).
 
 The scheduled Strands suite uses simulated users and model-based judges for six
 current-toll scenarios. The broader code-graded regression catalog retains eight

@@ -13,6 +13,8 @@ from eval import golden
 from eval import golden_baseline as baseline
 from eval import golden_run as run
 
+pytestmark = pytest.mark.usefixtures("golden_test_data")
+
 POLICY = baseline.ROOT / "policy-1.0.0.json"
 EVIDENCE = golden.V2 / "eval/evidence/golden-360"
 NOW = datetime(2026, 9, 20, 20, tzinfo=UTC)

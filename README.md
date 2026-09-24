@@ -33,7 +33,7 @@ Each row links a claim to its implementation and a way to inspect or verify it. 
 | Guardrails check inputs and completed answers | [Runtime checks](v2/agent/agentcore_entrypoint.py) and [versioned guardrail policy](v2/infra/agentcore.tf) | [Input/output blocking and safe-failure tests](v2/tests/test_agentcore_entrypoint.py) and [live release gates](v2/scripts/check_development_release.py) | Configured content, prompt-attack, and credential protections reduce abuse risk; they do not guarantee prevention. |
 | Detected PII is redacted from telemetry before export | [Telemetry exporter](v2/agent/telemetry.py) and [additional masking and alarms](v2/infra/trace_redaction.tf) | [Redaction and failure-path tests](v2/tests/test_telemetry_redaction.py), [observed trace example](#observed-trace-redaction), and [verification runbook](v2/runbooks/telemetry-pii-redaction.md) | Detection can miss information. Redaction failures omit affected content; the screenshot demonstrates one address-redaction example. |
 | Runtime access and credentials have explicit boundaries | [Runtime IAM permissions](v2/infra/agentcore.tf), [database roles](v2/db/roles.sql), and [security policy](SECURITY.md) | [Infrastructure contract tests](v2/tests/test_infrastructure_contract.py) and [database validation instructions](v2/README.md#verify-the-build) | IAM-authenticated database access; deployed credentials live in SSM Parameter Store. |
-| Agent behavior has executable evaluation checks | [Scheduled simulation and judges](v2/eval/simulated.py), [evaluation runner](v2/eval/run_evaluation.py), and [evaluation guide](v2/eval/README.md) | [Simulation contract tests](v2/tests/test_simulated_evaluation.py), [dashboard runbook](v2/runbooks/eval-dashboard.md), and [recorded experiments](#evaluation-status) | Six scheduled current-toll scenarios; development dashboard publication first, production activation pending. Current golden contract pending review; historical calibration retained; production qualification remains outstanding. |
+| Agent behavior has executable evaluation checks | [Scheduled simulation and judges](v2/eval/simulated.py), [evaluation runner](v2/eval/run_evaluation.py), and [evaluation guide](v2/eval/README.md) | [Simulation contract tests](v2/tests/test_simulated_evaluation.py), [dashboard runbook](v2/runbooks/eval-dashboard.md), and [recorded experiments](#evaluation-status) | Six scheduled current-toll scenarios; development dashboard publication first, production activation pending. Golden corpus retirement documented; historical calibration retained; production qualification remains outstanding. |
 
 ## Architecture and safety
 
@@ -88,7 +88,7 @@ Promotion changes routing to the validated candidate and retains the previous re
 
 ## Evaluation status
 
-**The current 24-case golden contract awaits review; historical calibration results are retained, and production qualification remains outstanding.** The scheduled suite covers six current-toll scenarios with simulated users, a deterministic tool-call count check, and model-based completeness and correctness judges. The broader regression catalog checks parameters, clarification, route availability, money, and grounding. The reports below are scoped experiments, not a current whole-agent accuracy score or evidence of improvement between agent versions.
+**The old 200-case golden corpus is being retired. The future target is 100 development cases plus an independently authored holdout; generation and production qualification remain outstanding.** The scheduled suite covers six current-toll scenarios with simulated users, a deterministic tool-call count check, and model-based completeness and correctness judges. The broader regression catalog checks parameters, clarification, route availability, money, and grounding. The reports below are scoped experiments, not a current whole-agent accuracy score or evidence of improvement between agent versions.
 
 | Experiment | Recorded result | Scope and limits |
 | --- | --- | --- |
@@ -99,7 +99,7 @@ Promotion changes routing to the validated candidate and retains the previous re
 
 The new [`/eval-dashboard`](v2/runbooks/eval-dashboard.md) shows seven days of scheduled results, the latest synthetic conversations, tool evidence, and judge explanations. It distinguishes graded failures from execution errors and missing runs. Publication is enabled for development first; production activation remains pending. Judge accuracy still needs live verdict review.
 
-The current [golden contract](v2/eval/GOLDEN_EVAL_SPEC.md) is pending review. [PR #581 measurements](v2/eval/results/golden/CACHING-SUMMARY.md) remain historical evidence for their recorded versions. Fresh reviewed calibration and production qualification must use the updated contract; no application improvement percentage is claimed here.
+The [golden recreation guide](v2/eval/GOLDEN_EVAL_SPEC.md) preserves the retired corpus design. No replacement cases are generated by this change. [PR #581 measurements](v2/eval/results/golden/CACHING-SUMMARY.md) remain historical evidence for their recorded versions. Fresh reviewed calibration and production qualification must use the updated contract; no application improvement percentage is claimed here.
 
 ## Reproduce and inspect
 
