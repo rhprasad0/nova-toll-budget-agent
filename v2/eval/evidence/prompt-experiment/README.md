@@ -1,9 +1,10 @@
 # Prompt experiment: A / B / C
 
 Prepared from `8a82e7399dd435e57464f5cbf18f1597aeb86525`. Local experiment only;
-no push, deployment, or production qualification. Combined paid-run ceiling: **$15**.
+PR #592 contains the preparation; this comparison is a layer above it.
+No deployment or production qualification. Combined paid-run ceiling: **$15**.
 
-**Calibration 2.0.8 completed; human review remains pending.** Both runs checked
+**Calibration 2.0.8 reviewed; diagnostic and full comparisons completed.** Both calibration runs checked
 286 development references with no measurement failures. A has 5 label disagreements
 and B/C has 9, versus 6 and 10 under 2.0.7. The complete-history coverage-count
 false failures are gone. Both match all five semantic controls and the natural
@@ -11,11 +12,26 @@ salary-confirmation case; neither passes an authored failing reference across al
 three criteria. See the [2.0.8 review packet](CALIBRATION-REVIEW-2.0.8.md) for exact
 evidence, transcript-reading errors and remaining interpretation disagreements.
 
-This round cost $0.915263. Cumulative spending is **$3.609137 of $15**, leaving
-$11.390863. Historical [2.0.5](CALIBRATION-REVIEW.md),
+That calibration round cost $0.915263, bringing calibration spending to
+$3.609137. Historical [2.0.5](CALIBRATION-REVIEW.md),
 [2.0.6](CALIBRATION-REVIEW-2.0.6.md) and [2.0.7](CALIBRATION-REVIEW-2.0.7.md)
-evidence remains unchanged. No application trials have run and no calibration
-approval has been recorded.
+evidence remains unchanged. Ryan authorized application comparisons after reviewing
+these results; the exact approvals are in [calibration-approvals-2.0.8.json](calibration-approvals-2.0.8.json).
+
+The [diagnostic comparison](DIAGNOSTIC-COMPARISON.md) covers 26 development cases
+with three trials per arm. Both candidates gain only 1.5 percentage points on paired
+complete cases, with intervals spanning losses and gains. All prompts stayed frozen
+for the full 200-case evaluation; no diagnostic-driven wording revision was made.
+
+The [completed results](RESULTS.md) retain original runs and infrastructure-only
+recovery evidence. A/B/C score 69.1% / 72.5% / 76.3%; C gains 6.4 paired points
+over A (95% interval +2.0 to +11.5). Ryan selected C for the main agent on
+2026-09-24; grounding flags and reserved-case uncertainty remain documented in the
+permanent [experiment journal](../../EXPERIMENT_JOURNAL.md). Total spending
+is **$9.646136 of $15**. C recovery used eight workers after login renewal; A/B
+used four. The comparison branch subsequently added sixteen-worker support,
+requiring fresh matching calibration before future application runs. The frozen
+experiment and its approvals remain unchanged.
 
 | Arm | Branch / worktree | Change |
 | --- | --- | --- |
@@ -38,7 +54,7 @@ SOP. Cases, references, labels, actor profiles and application variants are unch
 from 2.0.7.
 Do not weaken this identity gate or copy an approval between calibrations.
 
-Both fresh calibrations require human review before application execution.
+Both matching calibrations have user approval for this bounded local experiment.
 The historical 2.0.3 baseline and 2.0.4 calibration are retained unchanged.
 
 From C's `v2/`, run the offline cross-worktree check:
@@ -52,13 +68,14 @@ scored failures and one all-three-trials passing control, sorted by case ID;
 remaining development cases fill missing categories. The mixed family has only
 two development cases. Historical grades select diagnostics, not candidate winners.
 
-## Application execution after human calibration review
+## Completed application execution protocol
 
 Run from clean committed checkouts, with `AWS_PROFILE=nova-toll-dev` and
 `AWS_DEFAULT_REGION=us-east-1`. Use the existing `eval.golden_run run` command:
 
 - Diagnostics: A, B, then C, each with the same IDs from `diagnostic-cases.json`.
 - Use `--workers 4 --budget-usd 15` and the matching approved `--calibration`.
+  The user explicitly authorized eight workers for C's infrastructure recovery.
 - Every invocation uses `--prior-run` pointing to the immediately preceding run
   across **both calibrations and every arm**, preserving cumulative spending.
 - Use a fresh ignored `eval/private/prompt-experiment/` output directory per run.

@@ -1,5 +1,10 @@
 # TollChat v2 evaluation
 
+The permanent [experiment journal](EXPERIMENT_JOURNAL.md) records experiments,
+results and adoption decisions. Preserve it during cleanup; removal requires
+Ryan's explicit approval. The latest decision adopts experiment C's descriptions
+and reordered SOP for the normal TollChat agent through the PR stack on #592.
+
 The [200-case golden corpus](GOLDEN_EVAL_SPEC.md) covers current pricing, annual
 affordability, multi-turn changes, evidence failures, and explicit workflow switches.
 The [review catalog](golden/REVIEW.md) links every case and labeled reference.

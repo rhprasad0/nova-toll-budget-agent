@@ -115,11 +115,16 @@ reconcile unknown or interrupted usage before spending again. Recorded prices
 include cache reads and writes and retain their dated provider source.
 
 Four workers are the default and protected scoring policy; `--workers` accepts
-1–8 for diagnostics. Each worker owns its application, actor, model clients, and
+1–16 for local experiments. Each worker owns its application, actor, model clients, and
 replay state. Shared reservations include in-flight calls, and journal writes are
 serialized. Cancellation stops queued work and retains usage from active calls.
 The manual and protected runners use the same cached actor/judge factory. See the
 [historical caching review](results/golden/CACHING-SUMMARY.md).
+
+Changing this runner changes its calibration-pinned source hash. The completed
+2.0.8 prompt comparison used the frozen runner (four workers for A/B, eight for C
+recovery); future application runs using the expanded worker range require a fresh
+matching calibration and review. Existing calibration approval is not transferable.
 
 `manifest.json` identifies the candidate, corpus, labels, evaluator components,
 actor checks, model settings, prompts, tool schemas, prices, and lineage.
