@@ -29,6 +29,8 @@ The first baseline remains unchanged. Changes in scores are not an application i
 
 ## Measurement findings
 
+**Subsequent review:** Ryan requested more lenient annual Outcome grading after reviewing case 52. The [3.0.5 contract revision](ANNUAL-OUTCOME-REVIEW.md) makes separate P25/P90 toll figures optional and accepts semantic historical-source descriptions. Its proposed case-52 Outcome expectations are pass/pass/fail; fresh calibration is pending. The scores and verdicts below remain the original 3.0.4 measurements.
+
 - [Case 59, trial 1](baseline-2-review.html#dev3-one-day-team-meeting-1) is the only inconclusive. The actor judge marked it invalid because the conversation stopped without completing the requested estimate. No execution error occurred.
 
 Case 59 trial 1 is a remaining judge inconsistency: the actor had no more precise Braddock Road fact and stopped after the application explained that limitation, as the actor instructions permit. The actor judge instead treated the unfinished application goal as actor misconduct. The measured inconclusive verdict remains unchanged; reviewer recommendation is actor-valid with failed application Outcome. This is a new finding from baseline 2, not one of the first-baseline fixes.

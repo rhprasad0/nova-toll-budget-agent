@@ -1,7 +1,7 @@
 # Golden production gate
 
 **Current status:** production golden qualification remains blocked. The new
-3.0.4 corpus is development-only and cannot qualify production, even with a
+3.0.5 corpus is development-only and cannot qualify production, even with a
 historical approved policy. Ryan authorized the corrected development baseline; application actor/result review remains
 pending. Independent holdout scope, a new protected policy, and fresh
 qualification evidence require separate review. See the

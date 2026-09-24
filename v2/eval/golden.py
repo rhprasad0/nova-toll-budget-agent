@@ -28,7 +28,7 @@ from eval.simulated import GroundedCorrectnessEvaluator
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.0.4"
+CORPUS_VERSION = "3.0.5"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -102,6 +102,19 @@ Source disclosure means identifying the sources actually used. Historical
 observations alone suffice when that is the only source; no statement that
 modeled prices or fixed rates were absent is required, even when a case lists
 all source kinds to distinguish.
+When annual evidence uses only historical observations, 'recent historical
+samples/scenarios' or equivalent wording identifies that source sufficiently;
+do not require the exact word 'observed'. Modeled prices or current fixed rates
+still need disclosure when actually used. Explicitly denying the actual source
+is a factual contradiction, not an acceptable omission.
+For annual affordability, a P50 daily/annual toll summary alongside P25/P50/P90
+combined-cost scenarios is sufficient: separate P25/P90 toll-only amounts are
+optional unless the delivered user explicitly requests that breakdown. Do not
+fail Outcome merely for omitting those additional figures or copying fewer
+numeric fields than the reference. This overrides exhaustive final-answer
+number lists in the case, reference, or SOP. Preserve the requested annual
+affordability summary, scenario meaning, material assumptions and limitations,
+and accuracy of every amount and label that is given.
 For commute-route clarification, generic home/work-area labels for the user's
 supplied legs are an accepted simplifying assumption. Do not fail that shorthand
 alone when the actual endpoints remain unchanged. This exception does not establish

@@ -1,8 +1,8 @@
 {
   "status": "approved",
-  "corpus_sha256": "f37fc6757e07e427845951228cdb0bc36943221cd63917255905cd4fa09f42d1",
+  "corpus_sha256": "58b12c628f645c921c6872ea484d01d7ccaa8d9f9f30666dd4a52eedbcf50966",
   "reviewer": "Ryan",
-  "evidence": "Ryan instructed: \"Let's proceed with all the suggested fixes and then do another baseline run.\" This authorizes the evaluator fixes, regression references, dependency update and fresh development baseline; the 100 cases and their existing labels are unchanged. Fresh calibration is required before execution.",
-  "note": "Development-only authorization for the corrected evaluation contract; application results remain unreviewed.",
-  "approved_at": "2026-09-24T19:46:21.114319+00:00"
+  "evidence": "Ryan requested a more lenient Outcome judge for Gallows hybrid salary because the answer already contains too many numbers, then instructed: \"Run the eval suite again after the adjustment has been made\". Codex applied the requested leniency consistently to all annual and mixed cases: separate P25/P90 toll figures are optional unless requested, and historical-source wording is judged semantically. This authorizes the contract revision, fresh calibration and a new development baseline; it does not record human approval of newly measured results.",
+  "note": "Development execution authorized. Three new case-52 regression expectations are proposed under the requested leniency. Matching calibration of 3.0.5 / harness 2.0.12 must precede the new baseline; previous measurements belong to their original contracts.",
+  "approved_at": "2026-09-24T21:04:11.044334+00:00"
 }

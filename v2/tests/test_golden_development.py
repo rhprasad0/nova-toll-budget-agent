@@ -18,12 +18,12 @@ def test_complete_development_contract_and_reference_labels() -> None:
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 132
+    assert len(examples) == 135
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 32,
+        False: 35,
     }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 129, "invalid": 3}
+    assert Counter(e.actor_validity for e in examples) == {"valid": 132, "invalid": 3}
     assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5
@@ -87,6 +87,38 @@ def test_baseline_below_median_wording_preserves_amount_checks() -> None:
         assert "unsupported_money" not in golden.grade_assertions(case, turns)
         turns[-1].response += " It is $999.99 below the median."
         assert "unsupported_money" in golden.grade_assertions(case, turns)
+
+
+def test_gallows_review_preserves_evidence_and_source_failure() -> None:
+    root = golden.V2 / "eval/evidence/golden-100"
+    receipt = json.loads((root / "receipt-baseline-2.json").read_text())
+    report = json.loads((root / receipt["archive"] / "report.json").read_text())
+    rows = {
+        a["trial"]: a
+        for a in report["attempts"]
+        if a["case_id"] == "dev3-gallows-hybrid-salary"
+    }
+    references = [
+        e
+        for e in run.development_examples()
+        if e.case_id == "dev3-gallows-hybrid-salary"
+        and e.label.startswith("review-annual-summary-")
+    ]
+    assert len(references) == 3
+    for example in references:
+        trial = int(example.label.rsplit("-", 1)[1])
+        row = rows[trial]
+        assert [t.model_dump(mode="json") for t in example.turns] == row["turns"]
+        assert example.actor_replies == row["actor_replies"]
+        assert example.expected is not None
+        assert example.expected.outcome is (trial != 3)
+        assert example.expected.grounding is (trial != 3)
+        assert example.expected.rules
+        assert example.actor_validity == "valid"
+        assert example.expected_failures == []
+        # New reference expectations never overwrite the measured baseline.
+        assert row["verdicts"]["outcome"]["passed"] is False
+    assert report["overall"]["successful_trials"] == 176
 
 
 @pytest.mark.parametrize(
