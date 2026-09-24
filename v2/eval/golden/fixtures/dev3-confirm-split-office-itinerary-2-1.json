@@ -2,7 +2,7 @@
   "tool": "get_annual_toll_ballpark",
   "input": {
     "outbound": {
-      "origin_point_id": "i95:213NO",
+      "origin_point_id": "i95:203NO",
       "destination_point_id": "i95:223ND",
       "departure_time": "07:45:00"
     },
@@ -95,12 +95,12 @@
       "estimated_after_tax_usd": "101000.00"
     },
     "tolled_distance": {
-      "daily_round_trip_miles": "19.44",
-      "annual_miles": "2643.43"
+      "daily_round_trip_miles": "16.45",
+      "annual_miles": "2237.07"
     },
     "vehicle_cost": {
-      "daily_usd": "13.31",
-      "annual_usd": "1810.75"
+      "daily_usd": "11.27",
+      "annual_usd": "1532.39"
     },
     "sample_status": "complete",
     "available_date_range": {
@@ -111,40 +111,40 @@
       "p25": {
         "daily_toll_usd": "8.65",
         "annual_toll_usd": "1176.40",
-        "daily_total_tolled_commute_cost_usd": "21.96",
-        "average_monthly_tolled_commute_cost_usd": "248.93",
-        "annual_total_tolled_commute_cost_usd": "2987.15",
-        "estimated_annual_income_after_tax_and_tolled_commute_usd": "98012.85",
-        "tolled_commute_share_of_after_tax_income_percent": "3.0",
-        "additional_gross_income_to_offset_usd": "4480.73"
+        "daily_total_tolled_commute_cost_usd": "19.92",
+        "average_monthly_tolled_commute_cost_usd": "225.73",
+        "annual_total_tolled_commute_cost_usd": "2708.79",
+        "estimated_annual_income_after_tax_and_tolled_commute_usd": "98291.21",
+        "tolled_commute_share_of_after_tax_income_percent": "2.7",
+        "additional_gross_income_to_offset_usd": "4063.19"
       },
       "p50": {
         "daily_toll_usd": "12.35",
         "annual_toll_usd": "1679.60",
-        "daily_total_tolled_commute_cost_usd": "25.66",
-        "average_monthly_tolled_commute_cost_usd": "290.86",
-        "annual_total_tolled_commute_cost_usd": "3490.35",
-        "estimated_annual_income_after_tax_and_tolled_commute_usd": "97509.65",
-        "tolled_commute_share_of_after_tax_income_percent": "3.5",
-        "additional_gross_income_to_offset_usd": "5235.53"
+        "daily_total_tolled_commute_cost_usd": "23.62",
+        "average_monthly_tolled_commute_cost_usd": "267.67",
+        "annual_total_tolled_commute_cost_usd": "3211.99",
+        "estimated_annual_income_after_tax_and_tolled_commute_usd": "97788.01",
+        "tolled_commute_share_of_after_tax_income_percent": "3.2",
+        "additional_gross_income_to_offset_usd": "4817.99"
       },
       "p90": {
         "daily_toll_usd": "19.45",
         "annual_toll_usd": "2645.20",
-        "daily_total_tolled_commute_cost_usd": "32.76",
-        "average_monthly_tolled_commute_cost_usd": "371.33",
-        "annual_total_tolled_commute_cost_usd": "4455.95",
-        "estimated_annual_income_after_tax_and_tolled_commute_usd": "96544.05",
-        "tolled_commute_share_of_after_tax_income_percent": "4.4",
-        "additional_gross_income_to_offset_usd": "6683.93"
+        "daily_total_tolled_commute_cost_usd": "30.72",
+        "average_monthly_tolled_commute_cost_usd": "348.13",
+        "annual_total_tolled_commute_cost_usd": "4177.59",
+        "estimated_annual_income_after_tax_and_tolled_commute_usd": "96822.41",
+        "tolled_commute_share_of_after_tax_income_percent": "4.1",
+        "additional_gross_income_to_offset_usd": "6266.39"
       }
     }
   },
   "is_error": false,
-  "synthetic_daily_distance_miles": "19.437",
+  "synthetic_daily_distance_miles": "16.449026",
   "provenance": {
     "kind": "synthetic",
     "source": "v2/agent-sops/nova-toll-pricing-assistant.sop.md; v2/oracle/build_oracle_data.py; v2/agent_tools/current_price_domain.py; v2/agent_tools/get_annual_toll_ballpark.py",
-    "note": "Independent committed outbound/return connections. Synthetic straight-line tolled distance and dynamic historical quantiles; fixed facilities calculated per eligible date from domain schedules. Annual response built with _SummaryRow and _build_ballpark_response; Decimal reconciliation is separate in golden.validate_annual_finances. Authored offline for development corpus 3.0.0; not captured traffic or observed road data."
+    "note": "Revised in corpus 3.0.2 for a Springfield home area: Old Keene Mill Road to Pentagon/Eads, then Westpark Drive to Braddock Road. Both are committed within-facility connections. Home-endpoint separation is about 3.02 straight-line miles. Tolled distance sums haversine distances between committed endpoint coordinates (3958.7613-mile Earth radius), rounded to six decimals. Historical toll quantiles remain synthetic; financial results are rebuilt by the annual domain builder and independently reconciled offline. Midday travel between work sites is outside these two requested commute legs."
   }
 }

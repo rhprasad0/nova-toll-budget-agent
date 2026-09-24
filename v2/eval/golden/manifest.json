@@ -1,14 +1,14 @@
 {
-  "version": "3.0.1",
+  "version": "3.0.2",
   "evaluation_scope": "development",
   "case_count": 100,
   "trials_per_case": 3,
   "actor_model": "gpt-6-luna",
   "judge_model": "gpt-6-luna",
   "hashes": {
-    "cases.jsonl": "15345af25bba60e4c16a35897bc40370bd69a8a2693f3b3903a216de03280dcb",
+    "cases.jsonl": "d751c3150d731953ea4ec3cac49d3b5c51ec01103a93718cce5c36d0835b5465",
     "prompt-points.json": "cb1f986863b82f0d35d843e3568172d8371e6d57007257272a70c1e9a5af3d49",
-    "examples.json": "05701fbc47a5f2dd24b0f5e0c5435a7f902922a16fcf2715456fe6a92ba7129f",
+    "examples.json": "b27a43d6e923336959af394250867f777e493b023a9bd68b9de8aebc06798ad8",
     "fixtures/dev3-accept-three-day-annual-count-2-1.json": "a9d1137b93387b2428cbe33d62b878a69801cf54c64228eaaf0c9e37310515dc",
     "fixtures/dev3-adjust-annual-count-downward-2-1.json": "29bb8094c5eed070ab6efb1fda9912d068013ac1334748bd6cfc8039324583a2",
     "fixtures/dev3-adjust-annual-count-upward-2-1.json": "f6f746eefca62e723eb33c41847df4b81c786c44c58cad911b8280328f69c07e",
@@ -35,7 +35,7 @@
     "fixtures/dev3-collect-salary-before-route-alternatives-3-1.json": "36798eb978209ea4e752a9f568c35248a104961d56731de4748f3104d0c77402",
     "fixtures/dev3-collect-weekdays-then-propose-days-3-1.json": "d5194b26d1be55be1f6faade03ccfea40db11549994cce2b800c2ef9694f7337",
     "fixtures/dev3-combined-cost-percentage-meaning-1-1.json": "dbcc7befe0654c3aab4bed07cddacae6649f609d130e2facf6445219c7219bc9",
-    "fixtures/dev3-confirm-split-office-itinerary-2-1.json": "05d849fa906108051e3432968c1dd562fec5a39529ed28fe72708e34fe349dfc",
+    "fixtures/dev3-confirm-split-office-itinerary-2-1.json": "67ba14d845421d5709a875e9e3e114aa6d618f9bed2f3f879b73f2d867d8927b",
     "fixtures/dev3-correct-dulles-road-entry-1-1.json": "0a7c8090dee3f7f2c4d82215e55b11c74b9bd969f85a043aad80a983383b75a7",
     "fixtures/dev3-correct-dulles-road-entry-2-1.json": "32fdd12673ffe9e5c58054b3e77fc3fd6c7defa56325cea8d7a7edd8e006ac69",
     "fixtures/dev3-current-quote-then-annual-offer-1-1.json": "cb49fc4dc63a77f808c574b0b664177ac8d7f18da8fcb494a802ad8195ca59e0",
@@ -117,7 +117,7 @@
     "fixtures/dev3-wiehle-full-office-week-1-1.json": "2b0ed4945ab14ff68dddbdb916c21a53f78a473e26a82ec35a5e61458504becc",
     "fixtures/dev3-wiehle-to-fairfax-parkway-1-1.json": "1efb885691800bdaa2aae4537ac8b2174b33f9217d7dcece5de4eaaec5499ad2",
     "v2/uv.lock": "9454dd5fb0d1d636f7c974aa33cdf26346705889ea0aab21f8acdaa1e76857fd",
-    "v2/eval/golden.py": "67a0b0b5cbc58610ca7e9d2155a3e30f45c96f84a34f203a7937dc8030888a66",
+    "v2/eval/golden.py": "43542efae91b98bb07a808ab45112bb2e94d906e3186819ff8cd4113e8c7b959",
     "v2/eval/simulated.py": "b3b9c339a9696d0ba9615404717f86cc21de69f9a39e068f26325925404cb3fa",
     "v2/eval/run_evaluation.py": "4a141a87ef4ca6d0cdb40d85f58ce5ace1335d88ccda3d1abb4db14a9b57bf2b",
     "v2/eval/golden_run.py": "3dd361dad3da52df873a88931a0c9b1141de3c1c5ba0fda12d1d75afd642a767",
@@ -128,5 +128,5 @@
     "v2/agent_tools/get_annual_toll_ballpark.py": "510ced8f159a913d5f49c9f55211be3615aa5c419d3418e6a9571d087544a493",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
-  "corpus_sha256": "163df82345afa1e55bd9e398529d7f2f94ba3ddb435d6b9af06f546764d1ade9"
+  "corpus_sha256": "544e5d8f7f8bce4dd92aa706b88468515a60af52598535609408c6b49c35e96f"
 }

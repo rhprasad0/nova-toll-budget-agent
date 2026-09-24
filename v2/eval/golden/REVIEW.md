@@ -1,6 +1,6 @@
-# Development golden corpus 3.0.1 — review catalog
+# Development golden corpus 3.0.2 — review catalog
 
-**Status: proposed; matching calibration measured, human approval pending.** This is 100 development cases, with 100 passing reference proposals and 20 negative controls. The [first calibration](../evidence/golden-100/README.md) measured 3.0.0 and recorded 13 label disagreements across 12 examples. Version 3.0.1 raises the maximum to five delivered user turns and accepts generic home/work-area shorthand for commute clarification. Its [matching calibration](../evidence/golden-100/CALIBRATION-2.md) measured 120/120 references with nine disagreements across eight references. It is not the independently authored holdout and cannot qualify production. No application run or paid model call was made to author this set.
+**Status: proposed; matching calibration and human approval pending.** This is 100 development cases, with 100 passing reference proposals and 20 negative controls. Version 3.0.2 revises cases 79/80 to use nearby Springfield home-side ramps: one confirms a client/office workday and the other cancels mixed office options. Five-turn actors and accepted commute shorthand remain. The prior [3.0.0](../evidence/golden-100/README.md) and [3.0.1](../evidence/golden-100/CALIBRATION-2.md) calibrations retain their original measurements; they do not qualify the revised routes. This is not the independently authored holdout and cannot qualify production. No application run or paid model call was made to author this set.
 
 **Turn counts:** five is the maximum, including the opening user request. A minimum of two requires the planned follow-up; it does not cap the conversation at two. The authored references below show their complete transcripts, which can finish before the maximum. Calibration judges these fixed transcripts without generating live actor turns.
 
@@ -2684,25 +2684,25 @@ Preserve the explicitly supplied Spout Run return entry instead of reversing the
 
 </details>
 
-### 79. Confirm split office itinerary
+### 79. Confirm client and office commute
 
 `dev3-confirm-split-office-itinerary` · annual_routes · objective: answer · frozen: 2026-09-24T08:18:00-04:00
 
 **Opening request**
 
-> Estimate one annual commute budget: morning Prince William Parkway to Pentagon/Eads, then evening Westpark Drive to Braddock Road. Tuesday through Thursday, 7:45 AM and 5:15 PM, 136 days, gross annual pay $151,500.
+> I live in Springfield. Estimate annual commute costs for Old Keene Mill Road to Pentagon/Eads in the morning, and Westpark Drive in Tysons to Braddock Road in the evening. Tuesday through Thursday, leaving at 7:45 AM and 5:15 PM, 136 office days a year, gross annual pay $151,500.
 
 **Driver brief**
 
-You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. The different locations are intentional; you want the supplied legs combined.
+You drive a two-axle passenger car using E-ZPass in toll mode. You live in Springfield; the Old Keene Mill morning entry and Braddock Road evening exit serve your home area. All route, schedule, and income facts in the opening request are intentional unless the follow-up below corrects them. You visit a client near the Pentagon in the morning and work at your Tysons office afterward. You want only the two supplied commute legs priced, not the midday travel between work sites.
 
-Confirm the exact two legs when asked, before expecting a combined estimate.
+When asked to confirm combining the different work locations, explain the morning client visit and afternoon office stop, and confirm pricing only the two supplied commute legs.
 
 Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
-Ask about the different areas before any call; after confirmation preserve both independent legs.
+The two home-side ramps serve the Springfield area, but the work locations differ. Ask before combining them; after confirmation preserve both requested commute legs and exclude unrequested midday travel.
 
 **Ordered fixture evidence**
 
@@ -2711,39 +2711,39 @@ Ask about the different areas before any call; after confirmation preserve both 
 <details>
 <summary>Proposed passing transcript (all three verdicts true)</summary>
 
-**User 1:** Estimate one annual commute budget: morning Prince William Parkway to Pentagon/Eads, then evening Westpark Drive to Braddock Road. Tuesday through Thursday, 7:45 AM and 5:15 PM, 136 days, gross annual pay $151,500.
+**User 1:** I live in Springfield. Estimate annual commute costs for Old Keene Mill Road to Pentagon/Eads in the morning, and Westpark Drive in Tysons to Braddock Road in the evening. Tuesday through Thursday, leaving at 7:45 AM and 5:15 PM, 136 office days a year, gross annual pay $151,500.
 
-**Assistant 1:** The morning and evening legs serve different home and work areas. Should I combine these exact legs into one annual estimate?
+**Assistant 1:** Your morning destination is near the Pentagon, while your evening trip starts in Tysons. Should I combine these two commute legs into one annual estimate?
 
-**User 2:** Yes. I work at both sites; combine those exact legs.
+**User 2:** Yes. I visit a client near the Pentagon in the morning and work at our Tysons office afterward. Price just those two commute legs from and back to the Springfield area.
 
-**Assistant 2:** The annual income remaining after assumed tax and the annualized daily-P50 tolled commute is $97509.65. For 136 planned office days, gross annual income is $151500.00, with $101000.00 after the one-third assumed tax ($50500.00). The straight-line tolled distance is 19.44 miles per office day and 2643.43 miles annually; vehicle cost is $13.31 per office day and $1810.75 annually. P25 daily scenario: toll $8.65 per office day, $1176.40 annualized; combined toll and vehicle cost $21.96 per office day, $248.93 per average month, $2987.15 annually. Remaining annual income $98012.85; additional gross salary needed to offset this combined annual cost $4480.73; combined cost is 3.0% of assumed after-tax income. P50 daily scenario: toll $12.35 per office day, $1679.60 annualized; combined toll and vehicle cost $25.66 per office day, $290.86 per average month, $3490.35 annually. Remaining annual income $97509.65; additional gross salary needed to offset this combined annual cost $5235.53; combined cost is 3.5% of assumed after-tax income. P90 daily scenario: toll $19.45 per office day, $2645.20 annualized; combined toll and vehicle cost $32.76 per office day, $371.33 per average month, $4455.95 annually. Remaining annual income $96544.05; additional gross salary needed to offset this combined annual cost $6683.93; combined cost is 4.4% of assumed after-tax income. P25 is the lower, P50 middle, and P90 higher daily scenario. Annual values scale daily scenarios by planned days, not percentiles of annual outcomes, forecasts, or guarantees. Coverage is 36 of 36 eligible paired dates (100.0%). The scenarios use the returned historical observed toll samples. Only straight-line distances of priced tolled facility legs are included; untolled travel is excluded. One-third tax is an assumption, not your actual tax calculation. Vehicle cost uses a fixed $0.685 per straight-line tolled mile assumption, not your personal expenses.
+**Assistant 2:** The annual income remaining after assumed tax and the annualized daily-P50 tolled commute is $97788.01. For 136 planned office days, gross annual income is $151500.00, with $101000.00 after the one-third assumed tax ($50500.00). The straight-line tolled distance is 16.45 miles per office day and 2237.07 miles annually; vehicle cost is $11.27 per office day and $1532.39 annually. P25 daily scenario: toll $8.65 per office day, $1176.40 annualized; combined toll and vehicle cost $19.92 per office day, $225.73 per average month, $2708.79 annually. Remaining annual income $98291.21; additional gross salary needed to offset this combined annual cost $4063.19; combined cost is 2.7% of assumed after-tax income. P50 daily scenario: toll $12.35 per office day, $1679.60 annualized; combined toll and vehicle cost $23.62 per office day, $267.67 per average month, $3211.99 annually. Remaining annual income $97788.01; additional gross salary needed to offset this combined annual cost $4817.99; combined cost is 3.2% of assumed after-tax income. P90 daily scenario: toll $19.45 per office day, $2645.20 annualized; combined toll and vehicle cost $30.72 per office day, $348.13 per average month, $4177.59 annually. Remaining annual income $96822.41; additional gross salary needed to offset this combined annual cost $6266.39; combined cost is 4.1% of assumed after-tax income. P25 is the lower, P50 middle, and P90 higher daily scenario. Annual values scale daily scenarios by planned days, not percentiles of annual outcomes, forecasts, or guarantees. Coverage is 36 of 36 eligible paired dates (100.0%). The scenarios use the returned historical observed toll samples. Only straight-line distances of priced tolled facility legs are included; untolled travel is excluded. One-third tax is an assumption, not your actual tax calculation. Vehicle cost uses a fixed $0.685 per straight-line tolled mile assumption, not your personal expenses. This covers the two requested commute legs only; travel between the client and office is excluded.
 
 </details>
 
-**Negative control: `combine-areas-before-confirmation` — fail / pass / fail.** Combining different areas requires the delivered confirmation before the call.
+**Negative control: `combine-areas-before-confirmation` — fail / pass / fail.** The annual call combines different work locations before the user confirms. Same-home-area endpoints do not authorize the premature call; later confirmation cannot repair it.
 
 Expected deterministic failures: missing_call, premature_call. Full altered transcript and actual tool evidence are retained in [examples.json](examples.json).
 
-### 80. Decline split office itinerary
+### 80. Cancel mixed office options
 
 `dev3-decline-split-office-itinerary` · annual_routes · objective: cancellation · frozen: 2026-09-24T08:18:00-04:00
 
 **Opening request**
 
-> Estimate one annual commute budget: morning Prince William Parkway to Pentagon/Eads, then evening Westpark Drive to Braddock Road. Tuesday through Thursday, 7:45 AM and 5:15 PM, 136 days, gross annual pay $151,500. I am still sorting out the stops.
+> I live in Springfield. Estimate annual commute costs for Old Keene Mill Road to Pentagon/Eads in the morning, and Westpark Drive in Tysons to Braddock Road in the evening. Tuesday through Thursday, leaving at 7:45 AM and 5:15 PM, 136 office days a year, gross annual pay $151,500. I am comparing office options.
 
 **Driver brief**
 
-You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
+You drive a two-axle passenger car using E-ZPass in toll mode. You live in Springfield; the Old Keene Mill morning entry and Braddock Road evening exit serve your home area. All route, schedule, and income facts in the opening request are intentional unless the follow-up below corrects them. You accidentally combined routes for two possible office locations. You do not want those different office options combined into one daily estimate.
 
-Decline combining the trips and cancel when asked.
+When asked whether to combine the different work locations, explain that you mixed up two office options and cancel the estimate.
 
 Minimum delivered user turns: 2; maximum: 5; permitted calls: 0.
 
 **Case-specific expectation**
 
-Do not combine different areas without confirmation; honor the delivered refusal without any tool call.
+The work locations differ despite returning to the same home area. Ask before combining the legs; honor the correction about mixed office options and cancellation without any tool call.
 
 **Ordered fixture evidence**
 
@@ -2752,11 +2752,11 @@ No tool call is authorized.
 <details>
 <summary>Proposed passing transcript (all three verdicts true)</summary>
 
-**User 1:** Estimate one annual commute budget: morning Prince William Parkway to Pentagon/Eads, then evening Westpark Drive to Braddock Road. Tuesday through Thursday, 7:45 AM and 5:15 PM, 136 days, gross annual pay $151,500. I am still sorting out the stops.
+**User 1:** I live in Springfield. Estimate annual commute costs for Old Keene Mill Road to Pentagon/Eads in the morning, and Westpark Drive in Tysons to Braddock Road in the evening. Tuesday through Thursday, leaving at 7:45 AM and 5:15 PM, 136 office days a year, gross annual pay $151,500. I am comparing office options.
 
-**Assistant 1:** These legs serve different home and work areas. Should I combine them?
+**Assistant 1:** Your morning destination is near the Pentagon, while your evening trip starts in Tysons. Should I combine these two commute legs into one annual estimate?
 
-**User 2:** No, cancel the combined estimate for now.
+**User 2:** No, I mixed up two possible office locations. Please cancel this estimate.
 
 **Assistant 2:** Understood; I will not combine or price those legs.
 

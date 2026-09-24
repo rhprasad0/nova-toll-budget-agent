@@ -265,3 +265,29 @@ reproduction. Corpus and calibration approval remain pending.
 Run ID: `7ca8b992-4b8d-4d0a-a588-733099d1699e`.
 Corpus SHA-256: `163df82345afa1e55bd9e398529d7f2f94ba3ddb435d6b9af06f546764d1ade9`.
 Evidence SHA-256: `46a23c3853563342f889fc74f3cd1e7f6723d9334ac9a4ec93f5ed9164900301`.
+
+## 2026-09-24 — Make cases 79/80 more realistic
+
+Ryan requested more realistic versions of the split-itinerary cases. Corpus
+**3.0.2** moves the morning home-side entry from Prince William Parkway to Old
+Keene Mill Road in Springfield, retaining the evening return via Braddock Road.
+The home-side ramps are about **3.02 straight-line miles apart**, versus 11.19
+before. Both priced legs are committed within-facility Oracle connections.
+
+Case 79 now confirms a plausible morning client visit near the Pentagon followed
+by work at the Tysons office, pricing only the two requested commute legs. Midday
+travel between work sites is explicitly excluded. Case 80 catches accidentally
+mixing routes for two office options and cancels before any pricing call. Both
+retain the five-turn maximum and two-turn minimum; their reference transcripts
+remain two exchanges. The premature-combination negative control follows the
+same revised route but still calls before confirmation.
+
+The one dependent fixture and its two embedded copies were updated. Straight-line
+tolled distance was rebuilt from committed endpoint coordinates (16.449026 miles)
+and the annual domain builder recalculated vehicle costs, combined costs,
+remaining income, and gross salary offsets. The historical toll quantiles remain
+explicitly synthetic. Only these two cases and their three references changed;
+the other 98 cases, judge policy, application prompt/model, and old calibration
+evidence remain unchanged. All **42 relevant corpus/development tests passed**,
+including fixture replay, financial reconciliation, and committed route checks.
+Matching calibration and human approval remain pending for this revision.

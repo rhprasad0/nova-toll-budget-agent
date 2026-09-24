@@ -1,7 +1,7 @@
 {
   "status": "pending",
-  "corpus_sha256": "163df82345afa1e55bd9e398529d7f2f94ba3ddb435d6b9af06f546764d1ade9",
+  "corpus_sha256": "544e5d8f7f8bce4dd92aa706b88468515a60af52598535609408c6b49c35e96f",
   "reviewer": null,
   "evidence": null,
-  "note": "Ryan requested five delivered user turns maximum and accepted generic home/work-area shorthand for commute-route clarification. Matching 3.0.1 calibration is recorded in eval/evidence/golden-100/calibration-2. These specific decisions do not approve the complete corpus or calibration; human review remains pending."
+  "note": "Cases 79/80 now return to the Springfield home area and distinguish a client/office workday from accidentally mixed office options. Five-turn actors and accepted commute shorthand remain. Matching 3.0.2 calibration and human review are pending."
 }

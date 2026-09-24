@@ -1,6 +1,6 @@
 # Golden corpus authoring and retirement guide
 
-## Development corpus 3.0.1 — 2026-09-24
+## Development corpus 3.0.2 — 2026-09-24
 
 The replacement is authored: **100 development cases, 100 proposed passing
 references, and 20 negative controls**. See the [review catalog](golden/REVIEW.md)
@@ -16,7 +16,17 @@ timestamps, and require no deployed database or model calls to replay. Annual
 responses use the existing domain builders and independent Decimal reconciliation.
 Stable IDs use the `dev3-` prefix; numbers are 1–100 and every `held_out` flag is
 false. The existing case schema stays at `contract_version=2`; that is the
-information/consent contract, distinct from corpus version 3.0.1.
+information/consent contract, distinct from corpus version 3.0.2.
+
+Version 3.0.2 makes cases 79/80 more realistic: the morning trip starts at Old
+Keene Mill Road in Springfield and the evening trip returns via nearby Braddock
+Road. Their home-side ramps are about 3.02 straight-line miles apart. Case 79
+confirms a morning client visit near the Pentagon followed by work in Tysons;
+case 80 catches accidentally mixed office options and cancels. The revised
+fixture uses two committed within-facility connections and rebuilds the financial
+totals for 16.449026 straight-line tolled miles. Midday travel between work sites
+is explicitly outside the requested two-leg estimate. The linked premature-call
+negative control uses the same revised route. Other cases and judge rules remain.
 
 Ryan's review revision raises every actor's maximum from four to **five delivered
 user turns, including the opening request**. Minimum required turns remain
@@ -43,6 +53,7 @@ label disagreements across 12 references remain recorded; Ryan accepted the
 home/work simplification for the next contract. The [matching 3.0.1 calibration](evidence/golden-100/CALIBRATION-2.md)
 measured 120/120 references with nine disagreements across eight references;
 both split-itinerary references pass Grounding. Human approval remains pending.
+Those measurements predate the route revision; matching 3.0.2 calibration is pending.
 Further paid measurements
 require authorization/review under the retained runner procedure; old spending
 approvals and scores do not transfer. Three application trials would produce 300 slots.

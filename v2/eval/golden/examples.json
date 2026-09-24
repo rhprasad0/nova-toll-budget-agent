@@ -9541,19 +9541,19 @@
     "label": "good",
     "turns": [
       {
-        "user": "Estimate one annual commute budget: morning Prince William Parkway to Pentagon/Eads, then evening Westpark Drive to Braddock Road. Tuesday through Thursday, 7:45 AM and 5:15 PM, 136 days, gross annual pay $151,500.",
-        "response": "The morning and evening legs serve different home and work areas. Should I combine these exact legs into one annual estimate?",
+        "user": "I live in Springfield. Estimate annual commute costs for Old Keene Mill Road to Pentagon/Eads in the morning, and Westpark Drive in Tysons to Braddock Road in the evening. Tuesday through Thursday, leaving at 7:45 AM and 5:15 PM, 136 office days a year, gross annual pay $151,500.",
+        "response": "Your morning destination is near the Pentagon, while your evening trip starts in Tysons. Should I combine these two commute legs into one annual estimate?",
         "calls": []
       },
       {
-        "user": "Yes. I work at both sites; combine those exact legs.",
-        "response": "The annual income remaining after assumed tax and the annualized daily-P50 tolled commute is $97509.65. For 136 planned office days, gross annual income is $151500.00, with $101000.00 after the one-third assumed tax ($50500.00). The straight-line tolled distance is 19.44 miles per office day and 2643.43 miles annually; vehicle cost is $13.31 per office day and $1810.75 annually. P25 daily scenario: toll $8.65 per office day, $1176.40 annualized; combined toll and vehicle cost $21.96 per office day, $248.93 per average month, $2987.15 annually. Remaining annual income $98012.85; additional gross salary needed to offset this combined annual cost $4480.73; combined cost is 3.0% of assumed after-tax income. P50 daily scenario: toll $12.35 per office day, $1679.60 annualized; combined toll and vehicle cost $25.66 per office day, $290.86 per average month, $3490.35 annually. Remaining annual income $97509.65; additional gross salary needed to offset this combined annual cost $5235.53; combined cost is 3.5% of assumed after-tax income. P90 daily scenario: toll $19.45 per office day, $2645.20 annualized; combined toll and vehicle cost $32.76 per office day, $371.33 per average month, $4455.95 annually. Remaining annual income $96544.05; additional gross salary needed to offset this combined annual cost $6683.93; combined cost is 4.4% of assumed after-tax income. P25 is the lower, P50 middle, and P90 higher daily scenario. Annual values scale daily scenarios by planned days, not percentiles of annual outcomes, forecasts, or guarantees. Coverage is 36 of 36 eligible paired dates (100.0%). The scenarios use the returned historical observed toll samples. Only straight-line distances of priced tolled facility legs are included; untolled travel is excluded. One-third tax is an assumption, not your actual tax calculation. Vehicle cost uses a fixed $0.685 per straight-line tolled mile assumption, not your personal expenses.",
+        "user": "Yes. I visit a client near the Pentagon in the morning and work at our Tysons office afterward. Price just those two commute legs from and back to the Springfield area.",
+        "response": "The annual income remaining after assumed tax and the annualized daily-P50 tolled commute is $97788.01. For 136 planned office days, gross annual income is $151500.00, with $101000.00 after the one-third assumed tax ($50500.00). The straight-line tolled distance is 16.45 miles per office day and 2237.07 miles annually; vehicle cost is $11.27 per office day and $1532.39 annually. P25 daily scenario: toll $8.65 per office day, $1176.40 annualized; combined toll and vehicle cost $19.92 per office day, $225.73 per average month, $2708.79 annually. Remaining annual income $98291.21; additional gross salary needed to offset this combined annual cost $4063.19; combined cost is 2.7% of assumed after-tax income. P50 daily scenario: toll $12.35 per office day, $1679.60 annualized; combined toll and vehicle cost $23.62 per office day, $267.67 per average month, $3211.99 annually. Remaining annual income $97788.01; additional gross salary needed to offset this combined annual cost $4817.99; combined cost is 3.2% of assumed after-tax income. P90 daily scenario: toll $19.45 per office day, $2645.20 annualized; combined toll and vehicle cost $30.72 per office day, $348.13 per average month, $4177.59 annually. Remaining annual income $96822.41; additional gross salary needed to offset this combined annual cost $6266.39; combined cost is 4.1% of assumed after-tax income. P25 is the lower, P50 middle, and P90 higher daily scenario. Annual values scale daily scenarios by planned days, not percentiles of annual outcomes, forecasts, or guarantees. Coverage is 36 of 36 eligible paired dates (100.0%). The scenarios use the returned historical observed toll samples. Only straight-line distances of priced tolled facility legs are included; untolled travel is excluded. One-third tax is an assumption, not your actual tax calculation. Vehicle cost uses a fixed $0.685 per straight-line tolled mile assumption, not your personal expenses. This covers the two requested commute legs only; travel between the client and office is excluded.",
         "calls": [
           {
             "name": "get_annual_toll_ballpark",
             "input": {
               "outbound": {
-                "origin_point_id": "i95:213NO",
+                "origin_point_id": "i95:203NO",
                 "destination_point_id": "i95:223ND",
                 "departure_time": "07:45:00"
               },
@@ -9646,12 +9646,12 @@
                 "estimated_after_tax_usd": "101000.00"
               },
               "tolled_distance": {
-                "daily_round_trip_miles": "19.44",
-                "annual_miles": "2643.43"
+                "daily_round_trip_miles": "16.45",
+                "annual_miles": "2237.07"
               },
               "vehicle_cost": {
-                "daily_usd": "13.31",
-                "annual_usd": "1810.75"
+                "daily_usd": "11.27",
+                "annual_usd": "1532.39"
               },
               "sample_status": "complete",
               "available_date_range": {
@@ -9662,32 +9662,32 @@
                 "p25": {
                   "daily_toll_usd": "8.65",
                   "annual_toll_usd": "1176.40",
-                  "daily_total_tolled_commute_cost_usd": "21.96",
-                  "average_monthly_tolled_commute_cost_usd": "248.93",
-                  "annual_total_tolled_commute_cost_usd": "2987.15",
-                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "98012.85",
-                  "tolled_commute_share_of_after_tax_income_percent": "3.0",
-                  "additional_gross_income_to_offset_usd": "4480.73"
+                  "daily_total_tolled_commute_cost_usd": "19.92",
+                  "average_monthly_tolled_commute_cost_usd": "225.73",
+                  "annual_total_tolled_commute_cost_usd": "2708.79",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "98291.21",
+                  "tolled_commute_share_of_after_tax_income_percent": "2.7",
+                  "additional_gross_income_to_offset_usd": "4063.19"
                 },
                 "p50": {
                   "daily_toll_usd": "12.35",
                   "annual_toll_usd": "1679.60",
-                  "daily_total_tolled_commute_cost_usd": "25.66",
-                  "average_monthly_tolled_commute_cost_usd": "290.86",
-                  "annual_total_tolled_commute_cost_usd": "3490.35",
-                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "97509.65",
-                  "tolled_commute_share_of_after_tax_income_percent": "3.5",
-                  "additional_gross_income_to_offset_usd": "5235.53"
+                  "daily_total_tolled_commute_cost_usd": "23.62",
+                  "average_monthly_tolled_commute_cost_usd": "267.67",
+                  "annual_total_tolled_commute_cost_usd": "3211.99",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "97788.01",
+                  "tolled_commute_share_of_after_tax_income_percent": "3.2",
+                  "additional_gross_income_to_offset_usd": "4817.99"
                 },
                 "p90": {
                   "daily_toll_usd": "19.45",
                   "annual_toll_usd": "2645.20",
-                  "daily_total_tolled_commute_cost_usd": "32.76",
-                  "average_monthly_tolled_commute_cost_usd": "371.33",
-                  "annual_total_tolled_commute_cost_usd": "4455.95",
-                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "96544.05",
-                  "tolled_commute_share_of_after_tax_income_percent": "4.4",
-                  "additional_gross_income_to_offset_usd": "6683.93"
+                  "daily_total_tolled_commute_cost_usd": "30.72",
+                  "average_monthly_tolled_commute_cost_usd": "348.13",
+                  "annual_total_tolled_commute_cost_usd": "4177.59",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "96822.41",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.1",
+                  "additional_gross_income_to_offset_usd": "6266.39"
                 }
               }
             },
@@ -9703,7 +9703,7 @@
       "rules": true
     },
     "actor_validity": "valid",
-    "rationale": "Proposed passing authored transcript: Ask about the different areas before any call; after confirmation preserve both independent legs. Calls follow delivered facts; results and financial labels are grounded. Human and paid judge calibration remain pending.",
+    "rationale": "Proposed passing reference for the revised Springfield client/office commute: confirm the different work locations before pricing the two commute legs.",
     "rejected_tools": []
   },
   {
@@ -9711,12 +9711,12 @@
     "label": "good",
     "turns": [
       {
-        "user": "Estimate one annual commute budget: morning Prince William Parkway to Pentagon/Eads, then evening Westpark Drive to Braddock Road. Tuesday through Thursday, 7:45 AM and 5:15 PM, 136 days, gross annual pay $151,500. I am still sorting out the stops.",
-        "response": "These legs serve different home and work areas. Should I combine them?",
+        "user": "I live in Springfield. Estimate annual commute costs for Old Keene Mill Road to Pentagon/Eads in the morning, and Westpark Drive in Tysons to Braddock Road in the evening. Tuesday through Thursday, leaving at 7:45 AM and 5:15 PM, 136 office days a year, gross annual pay $151,500. I am comparing office options.",
+        "response": "Your morning destination is near the Pentagon, while your evening trip starts in Tysons. Should I combine these two commute legs into one annual estimate?",
         "calls": []
       },
       {
-        "user": "No, cancel the combined estimate for now.",
+        "user": "No, I mixed up two possible office locations. Please cancel this estimate.",
         "response": "Understood; I will not combine or price those legs.",
         "calls": []
       }
@@ -9728,7 +9728,7 @@
       "rules": true
     },
     "actor_validity": "valid",
-    "rationale": "Proposed passing authored transcript: Do not combine different areas without confirmation; honor the delivered refusal without any tool call. Calls follow delivered facts; results and financial labels are grounded. Human and paid judge calibration remain pending.",
+    "rationale": "Proposed passing reference: clarify mixed office locations and honor cancellation without pricing.",
     "rejected_tools": []
   },
   {
@@ -15041,14 +15041,14 @@
     "label": "combine-areas-before-confirmation",
     "turns": [
       {
-        "user": "Estimate one annual commute budget: morning Prince William Parkway to Pentagon/Eads, then evening Westpark Drive to Braddock Road. Tuesday through Thursday, 7:45 AM and 5:15 PM, 136 days, gross annual pay $151,500.",
-        "response": "I already made the pricing call before your reply. The morning and evening legs serve different home and work areas. Should I combine these exact legs into one annual estimate?",
+        "user": "I live in Springfield. Estimate annual commute costs for Old Keene Mill Road to Pentagon/Eads in the morning, and Westpark Drive in Tysons to Braddock Road in the evening. Tuesday through Thursday, leaving at 7:45 AM and 5:15 PM, 136 office days a year, gross annual pay $151,500.",
+        "response": "I already made the pricing call before your reply. Your morning destination is near the Pentagon, while your evening trip starts in Tysons. Should I combine these two commute legs into one annual estimate?",
         "calls": [
           {
             "name": "get_annual_toll_ballpark",
             "input": {
               "outbound": {
-                "origin_point_id": "i95:213NO",
+                "origin_point_id": "i95:203NO",
                 "destination_point_id": "i95:223ND",
                 "departure_time": "07:45:00"
               },
@@ -15141,12 +15141,12 @@
                 "estimated_after_tax_usd": "101000.00"
               },
               "tolled_distance": {
-                "daily_round_trip_miles": "19.44",
-                "annual_miles": "2643.43"
+                "daily_round_trip_miles": "16.45",
+                "annual_miles": "2237.07"
               },
               "vehicle_cost": {
-                "daily_usd": "13.31",
-                "annual_usd": "1810.75"
+                "daily_usd": "11.27",
+                "annual_usd": "1532.39"
               },
               "sample_status": "complete",
               "available_date_range": {
@@ -15157,32 +15157,32 @@
                 "p25": {
                   "daily_toll_usd": "8.65",
                   "annual_toll_usd": "1176.40",
-                  "daily_total_tolled_commute_cost_usd": "21.96",
-                  "average_monthly_tolled_commute_cost_usd": "248.93",
-                  "annual_total_tolled_commute_cost_usd": "2987.15",
-                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "98012.85",
-                  "tolled_commute_share_of_after_tax_income_percent": "3.0",
-                  "additional_gross_income_to_offset_usd": "4480.73"
+                  "daily_total_tolled_commute_cost_usd": "19.92",
+                  "average_monthly_tolled_commute_cost_usd": "225.73",
+                  "annual_total_tolled_commute_cost_usd": "2708.79",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "98291.21",
+                  "tolled_commute_share_of_after_tax_income_percent": "2.7",
+                  "additional_gross_income_to_offset_usd": "4063.19"
                 },
                 "p50": {
                   "daily_toll_usd": "12.35",
                   "annual_toll_usd": "1679.60",
-                  "daily_total_tolled_commute_cost_usd": "25.66",
-                  "average_monthly_tolled_commute_cost_usd": "290.86",
-                  "annual_total_tolled_commute_cost_usd": "3490.35",
-                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "97509.65",
-                  "tolled_commute_share_of_after_tax_income_percent": "3.5",
-                  "additional_gross_income_to_offset_usd": "5235.53"
+                  "daily_total_tolled_commute_cost_usd": "23.62",
+                  "average_monthly_tolled_commute_cost_usd": "267.67",
+                  "annual_total_tolled_commute_cost_usd": "3211.99",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "97788.01",
+                  "tolled_commute_share_of_after_tax_income_percent": "3.2",
+                  "additional_gross_income_to_offset_usd": "4817.99"
                 },
                 "p90": {
                   "daily_toll_usd": "19.45",
                   "annual_toll_usd": "2645.20",
-                  "daily_total_tolled_commute_cost_usd": "32.76",
-                  "average_monthly_tolled_commute_cost_usd": "371.33",
-                  "annual_total_tolled_commute_cost_usd": "4455.95",
-                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "96544.05",
-                  "tolled_commute_share_of_after_tax_income_percent": "4.4",
-                  "additional_gross_income_to_offset_usd": "6683.93"
+                  "daily_total_tolled_commute_cost_usd": "30.72",
+                  "average_monthly_tolled_commute_cost_usd": "348.13",
+                  "annual_total_tolled_commute_cost_usd": "4177.59",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "96822.41",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.1",
+                  "additional_gross_income_to_offset_usd": "6266.39"
                 }
               }
             },
@@ -15191,7 +15191,7 @@
         ]
       },
       {
-        "user": "Yes. I work at both sites; combine those exact legs.",
+        "user": "Yes. I visit a client near the Pentagon in the morning and work at our Tysons office afterward. Price just those two commute legs from and back to the Springfield area.",
         "response": "The check is finished.",
         "calls": []
       }
@@ -15206,7 +15206,7 @@
       "rules": false
     },
     "actor_validity": "valid",
-    "rationale": "Combining different areas requires the delivered confirmation before the call.",
+    "rationale": "The annual call combines different work locations before the user confirms. Same-home-area endpoints do not authorize the premature call; later confirmation cannot repair it.",
     "rejected_tools": []
   },
   {

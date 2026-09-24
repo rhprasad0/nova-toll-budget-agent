@@ -5,7 +5,7 @@ results and adoption decisions. Preserve it during cleanup; removal requires
 Ryan's explicit approval. The latest decision adopts experiment C's descriptions
 and reordered SOP for the normal TollChat agent through the PR stack on #592.
 
-The new **3.0.1 golden corpus contains 100 development cases** for ordinary
+The new **3.0.2 golden corpus contains 100 development cases** for ordinary
 passenger-car current pricing and annual commute affordability. Start with the
 [review catalog](golden/REVIEW.md): 100 proposed passing references and 20 negative
 controls are authored and validated offline. [Calibration](evidence/golden-100/README.md)
@@ -15,6 +15,10 @@ shorthand for commute clarification. Its [matching calibration](evidence/golden-
 measured 120/120 references with nine disagreements across eight references;
 human approval remains pending. No new application score is claimed. All cases
 are development cases; an independent holdout is a separate task and is not included here.
+
+Version 3.0.2 revises cases 79/80 so both commute legs serve a Springfield home
+area. One confirms a client/office workday; the other cancels mixed office options.
+The route fixture and financial totals are updated; matching calibration is pending.
 
 Run `uv run python -m eval.golden` from `v2/` to validate the frozen artifacts.
 Application evaluation retains three trials per case (300 planned conversations).
