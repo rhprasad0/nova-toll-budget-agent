@@ -12,6 +12,11 @@ import time
 from pathlib import Path
 from typing import Any, cast
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.check_development_release import _canary_contract
+
 REPOSITORY = "rhprasad0/nova-toll-budget-agent"
 ENVIRONMENT = "development-release"
 SITE = "https://dev.tollchat.ai"
@@ -193,10 +198,7 @@ def validate_canary(
         or not re.fullmatch(r"\d{1,4}\.\d{2}", record["total_usd"])
         or type(record.get("elapsed_ms")) is not int
         or not 0 <= record["elapsed_ms"] <= 60_000
-        or record.get("model") != "gpt-6-luna"
-        or record.get("tool_contract") != "1.5.0"
-        or record.get("prompt_version") != "2.3.7"
-        or record.get("renderer_version") != "1.0.0"
+        or any(record.get(key) != value for key, value in _canary_contract().items())
         or record.get("guardrail_blocked") is not True
         or record.get("address_redacted") is not True
         or record.get("success") is not True
