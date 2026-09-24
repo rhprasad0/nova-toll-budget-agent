@@ -208,3 +208,30 @@ Evidence SHA-256: `60a97742365f6a987434a1e1ee68d2b8491a83e36b796734a63c5c7bfe3d6
 Corpus and calibration approvals remain **pending human review**. Historical
 approvals do not transfer, no application score is claimed, and the development
 corpus remains ineligible for production qualification.
+
+## 2026-09-24 — Review correction: commute shorthand and five-turn actors
+
+Ryan accepted generic home/work-area labels for the supplied commute legs as a
+useful simplifying assumption, while agreeing that the original Grounding judge
+had identified an assumption. This is a deliberate grading relaxation, not a
+claim that the earlier judge lacked a basis. It does not permit invented personal
+addresses, employers, financial/schedule facts, changed routes, or unconfirmed
+combination of different areas. The cases keep the user's exact requested legs.
+
+Ryan also requested a maximum of **five delivered user turns** for the actor.
+The previous maximum was four in all 100 cases. The value two shown for the
+split-itinerary cases was their minimum dialogue requirement and the length of
+their authored reference transcripts, not a hidden two-turn cap. Calibration
+contained exactly those two exchanges and did not execute a live actor.
+
+Corpus **3.0.1** and harness **2.0.9** implement the requested policy and five-turn
+maximum, including the opening user request. Minimum required turns, tool-call
+budgets, reference labels, reference transcripts, fixtures, and the application
+model/prompt remain unchanged. The existing real-simulator offline test now
+covers both two- and five-turn limits, completion on the final turn, and the
+distinction between actor invalidity and application budget failure.
+
+Original 3.0.0 calibration events and reports remain intact. These specific
+review decisions do not approve the complete corpus or calibration; a fresh
+matching calibration is required for 3.0.1. Case 65's negative-control label
+boundary is unchanged and still requires adjudication.

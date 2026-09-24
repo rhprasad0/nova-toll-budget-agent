@@ -25,6 +25,7 @@ def test_complete_development_contract_and_reference_labels() -> None:
     }
     assert all(example.actor_validity == "valid" for example in examples)
     for case in cases:
+        assert case.actor.max_turns == 5
         assert "three_axle" not in case.model_dump_json()
         assert "adversarial_direct" not in case.coverage_tags
         assert "adversarial_tool" not in case.coverage_tags

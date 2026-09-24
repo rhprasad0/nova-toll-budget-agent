@@ -4,6 +4,8 @@
 
 Open the [static HTML review](review.html) in a browser for all 120 reference conversations, tool evidence, expected/measured labels, and judge explanations, with the 12 disputed references first. It works offline without a server.
 
+**Subsequent review decision, 2026-09-24:** Ryan accepts generic home/work-area labels as a useful simplifying assumption, while recognizing why the original Grounding judge objected. The next contract, 3.0.1, includes this exception and raises actor maximums from four to five delivered user turns. The two-turn transcripts for cases 79/80 are complete authored references, not truncated actor runs. This section records the new decision; the 3.0.0 measurements below remain unchanged and do not calibrate the revised contract.
+
 ## Recorded result
 
 - **120/120 references measured**, 360 judge calls, no missing measurements or unknown usage. All 120 authored actor-validity labels were measured valid.

@@ -1,6 +1,8 @@
-# Development golden corpus 3.0.0 — review catalog
+# Development golden corpus 3.0.1 — review catalog
 
-**Status: proposed; calibration measured, human approval pending.** This is 100 development cases, with 100 passing reference proposals and 20 negative controls. The [first calibration](../evidence/golden-100/README.md) measured all 120 references and recorded 13 label disagreements across 12 examples. It is not the independently authored holdout and cannot qualify production. No application run or paid model call was made to author this set.
+**Status: proposed; matching calibration and human approval pending.** This is 100 development cases, with 100 passing reference proposals and 20 negative controls. The [first calibration](../evidence/golden-100/README.md) measured 3.0.0 and recorded 13 label disagreements across 12 examples. Version 3.0.1 raises the maximum to five delivered user turns and accepts generic home/work-area shorthand for commute clarification. It is not the independently authored holdout and cannot qualify production. No application run or paid model call was made to author this set.
+
+**Turn counts:** five is the maximum, including the opening user request. A minimum of two requires the planned follow-up; it does not cap the conversation at two. The authored references below show their complete transcripts, which can finish before the maximum. Calibration judges these fixed transcripts without generating live actor turns.
 
 Every case uses a two-axle passenger car and E-ZPass in toll mode. Ordinary clarifications, revisions, cancellations, route alternatives, incomplete evidence, and financial interpretation are included. Unusual vehicles, prompt attacks, and obscure boundary probes are excluded.
 
@@ -26,7 +28,7 @@ Every case uses a two-axle passenger car and E-ZPass in toll mode. Ordinary clar
 - The public point catalog is freshly built from current committed Oracle sources. Successful fixture routes are checked against committed directed connections. Prices, historical summaries, and annual distances are synthetic; they do not assert live observations, actual road mileage, or measured database routing decisions.
 - Fixed prices use existing domain schedule calculators. Annual responses use the domain summary/response builders and are separately reconciled with Decimal arithmetic by the validator. Alternative ordering and closure states are explicitly synthetic.
 - Actors receive the opening request and their own facts/follow-up instructions, never fixture JSON, internal endpoint IDs, expected answers, or labels. A fact in the private brief does not authorize an early call.
-- Each case has one proposed passing transcript; the 20 controls below distinguish material errors from harmless formatting. Verdict columns are Outcome / Grounding / Rules. Original policy prompts and the application remain unchanged.
+- Each case has one proposed passing transcript; the 20 controls below distinguish material errors from harmless formatting. Verdict columns are Outcome / Grounding / Rules. The shared judge policy includes Ryan's bounded home/work-area simplification; the application remains unchanged.
 - There are **300 planned application trials** (three per case), **zero measured trials**, and no holdout success rate. The protected policy and historical approvals remain unusable for this development-only corpus.
 
 ## Shared grading expectations
@@ -49,7 +51,7 @@ Equivalent wording, plain prose, table choice, emoji omission, and response orde
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -84,7 +86,7 @@ Expected deterministic failures: missing_call, tool_arguments. Full altered tran
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -115,7 +117,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -146,7 +148,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -177,7 +179,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -208,7 +210,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -239,7 +241,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -270,7 +272,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -301,7 +303,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -336,7 +338,7 @@ Expected deterministic failures: unsupported_money. Full altered transcript and 
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -367,7 +369,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -398,7 +400,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -429,7 +431,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -460,7 +462,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -491,7 +493,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -522,7 +524,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -553,7 +555,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -584,7 +586,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -615,7 +617,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -646,7 +648,7 @@ Answer the complete request without unnecessary clarification.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -679,7 +681,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 If asked for the starting point, say Fairfax County Parkway.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -720,7 +722,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Supply Ox Road when asked for the destination.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -757,7 +759,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Give both endpoints when asked.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -794,7 +796,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Choose Jones Branch/Route 123 when the Tysons exits are offered.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -831,7 +833,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Choose I-66 when asked which Washington corridor.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -868,7 +870,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Deliver the entry correction after the first answer before stopping.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 2.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 2.
 
 **Case-specific expectation**
 
@@ -910,7 +912,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 After the first quote, change only the destination to Loudoun County Parkway.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 2.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 2.
 
 **Case-specific expectation**
 
@@ -948,7 +950,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 After the first answer, request the reverse trip at the current price; do not ask for a future quote.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 2.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 2.
 
 **Case-specific expectation**
 
@@ -986,7 +988,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 When asked for your starting ramp, cancel the check instead.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 0.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 0.
 
 **Case-specific expectation**
 
@@ -1023,7 +1025,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Cancel when asked for the destination.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 0.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 0.
 
 **Case-specific expectation**
 
@@ -1058,7 +1060,7 @@ No tool call is authorized.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1093,7 +1095,7 @@ Expected deterministic failures: none; this requires semantic judgment. Full alt
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1128,7 +1130,7 @@ Expected deterministic failures: none; this requires semantic judgment. Full alt
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1159,7 +1161,7 @@ Report unchanged movement with zero net change and equality to the median.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1190,7 +1192,7 @@ Describe mixed movement even though the net change is positive.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1225,7 +1227,7 @@ Expected deterministic failures: none; this requires semantic judgment. Full alt
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1256,7 +1258,7 @@ Answer the available current quote without inventing a trend or historical media
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1287,7 +1289,7 @@ Explain that the observation is too old to use, preserve its time, and do not qu
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1322,7 +1324,7 @@ Expected deterministic failures: none; this requires semantic judgment. Full alt
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1353,7 +1355,7 @@ Explain the returned I-95 closure with no invented price or unreturned fallback.
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them.  This is a one-way current-price request unless an explicit follow-up below changes the trip.
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1388,7 +1390,7 @@ Expected deterministic failures: none; this requires semantic judgment. Full alt
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1423,7 +1425,7 @@ Expected deterministic failures: unsupported_money. Full altered transcript and 
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1454,7 +1456,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1485,7 +1487,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1516,7 +1518,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1547,7 +1549,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1578,7 +1580,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1613,7 +1615,7 @@ Expected deterministic failures: none; this requires semantic judgment. Full alt
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1644,7 +1646,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1675,7 +1677,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1706,7 +1708,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1737,7 +1739,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1768,7 +1770,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1799,7 +1801,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1830,7 +1832,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1861,7 +1863,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1892,7 +1894,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1923,7 +1925,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1954,7 +1956,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -1985,7 +1987,7 @@ Use all supplied facts as stated, infer the reversed return endpoints, and do no
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2018,7 +2020,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Supply your annual salary when asked.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2055,7 +2057,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Provide both departure times when asked.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2092,7 +2094,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Supply those three weekdays when asked.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2129,7 +2131,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Explicitly accept 156 days when offered the choice to use or adjust it.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2170,7 +2172,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 When offered the 52-week day estimate, choose 134 instead.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2211,7 +2213,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Choose 158 when asked to use or adjust the day estimate.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2248,7 +2250,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 First provide Tuesday and Thursday. After the exact annual estimate is offered, select 92 days.
 
-Minimum delivered user turns: 3; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 3; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2289,7 +2291,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Provide $121,500 when asked for one annual amount. Do not endorse an invented salary.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2330,7 +2332,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Provide $81,200 only when asked for an annual gross estimate.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2367,7 +2369,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Supply the return time when asked.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2404,7 +2406,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Supply Route 28 when asked for the destination.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2441,7 +2443,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 After the first result, change to Tuesday and Thursday and 89 annual days; retain every other input.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 2.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 2.
 
 **Case-specific expectation**
 
@@ -2479,7 +2481,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 After the first estimate, supply the revised $107,500 gross annual salary and ask for an update.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 2.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 2.
 
 **Case-specific expectation**
 
@@ -2517,7 +2519,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Cancel when asked for salary.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 0.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 0.
 
 **Case-specific expectation**
 
@@ -2554,7 +2556,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Say you do not know the income once, then stop after the limitation is explained.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 0.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 0.
 
 **Case-specific expectation**
 
@@ -2591,7 +2593,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Choose Jones Branch/Route 123 when asked.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2628,7 +2630,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Choose I-66 when asked about Washington.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2663,7 +2665,7 @@ Resolve the bare Washington corridor before calling, preserve supplied annual in
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2696,7 +2698,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Confirm the exact two legs when asked, before expecting a combined estimate.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2737,7 +2739,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Decline combining the trips and cancel when asked.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 0.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 0.
 
 **Case-specific expectation**
 
@@ -2774,7 +2776,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Choose Lee Highway/Route 29 only after it is offered.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 2.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 2.
 
 **Case-specific expectation**
 
@@ -2816,7 +2818,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 After alternatives are offered, decline both and cancel.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2853,7 +2855,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Supply income when asked; select Lee Highway only after alternatives are offered.
 
-Minimum delivered user turns: 3; maximum: 4; permitted calls: 2.
+Minimum delivered user turns: 3; maximum: 5; permitted calls: 2.
 
 **Case-specific expectation**
 
@@ -2893,7 +2895,7 @@ Required input collection precedes even wrong-role route validation. Wait again 
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2926,7 +2928,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 After the estimate, change both locations to Wiehle Avenue and Capital Beltway; retain financial and schedule facts.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 2.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 2.
 
 **Case-specific expectation**
 
@@ -2962,7 +2964,7 @@ Re-resolve both outbound and return endpoint roles after the new locations arriv
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -2993,7 +2995,7 @@ Please explain how much historical data supports it. This partial sample is a li
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -3028,7 +3030,7 @@ Expected deterministic failures: none; this requires semantic judgment. Full alt
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -3059,7 +3061,7 @@ Are these actual toll observations for my exact route? Some toll prices are mode
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -3090,7 +3092,7 @@ Are the sampled prices historical observations? The sampled days use current pub
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -3121,7 +3123,7 @@ Explain the additional gross salary figure for my recruiter. Additional gross sa
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -3156,7 +3158,7 @@ Expected deterministic failures: none; this requires semantic judgment. Full alt
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -3187,7 +3189,7 @@ Is the monthly figure an average or an exact monthly bill? The monthly figure is
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -3222,7 +3224,7 @@ Expected deterministic failures: none; this requires semantic judgment. Full alt
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -3253,7 +3255,7 @@ Does this include my local roads and all my actual car costs? No. Untolled trave
 
 You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your opening request are intentional unless a correction below changes them. 
 
-Minimum delivered user turns: 1; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 1; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -3290,7 +3292,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 After receiving the current quote, ask for the annual round trip and supply the schedule and income in the specified follow-up.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 2.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 2.
 
 **Case-specific expectation**
 
@@ -3328,7 +3330,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 After the annual estimate, ask for the separate current outbound price.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 2.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 2.
 
 **Case-specific expectation**
 
@@ -3366,7 +3368,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 When asked for the current destination, switch to the fully specified annual request.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 1.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 1.
 
 **Case-specific expectation**
 
@@ -3403,7 +3405,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 After the no-history explanation, explicitly ask for the current outbound toll as a separate task.
 
-Minimum delivered user turns: 2; maximum: 4; permitted calls: 2.
+Minimum delivered user turns: 2; maximum: 5; permitted calls: 2.
 
 **Case-specific expectation**
 
@@ -3441,7 +3443,7 @@ You drive a two-axle passenger car using E-ZPass in toll mode. All facts in your
 
 Request the annual estimate after the current quote; then supply your income when asked.
 
-Minimum delivered user turns: 3; maximum: 4; permitted calls: 2.
+Minimum delivered user turns: 3; maximum: 5; permitted calls: 2.
 
 **Case-specific expectation**
 

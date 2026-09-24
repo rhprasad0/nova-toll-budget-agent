@@ -1,6 +1,6 @@
 # Golden corpus authoring and retirement guide
 
-## Development corpus 3.0.0 — 2026-09-24
+## Development corpus 3.0.1 — 2026-09-24
 
 The replacement is authored: **100 development cases, 100 proposed passing
 references, and 20 negative controls**. See the [review catalog](golden/REVIEW.md)
@@ -16,18 +16,32 @@ timestamps, and require no deployed database or model calls to replay. Annual
 responses use the existing domain builders and independent Decimal reconciliation.
 Stable IDs use the `dev3-` prefix; numbers are 1–100 and every `held_out` flag is
 false. The existing case schema stays at `contract_version=2`; that is the
-information/consent contract, distinct from corpus version 3.0.0.
+information/consent contract, distinct from corpus version 3.0.1.
+
+Ryan's review revision raises every actor's maximum from four to **five delivered
+user turns, including the opening request**. Minimum required turns remain
+case-specific; a two-turn reference transcript is complete and is not a two-turn
+actor limit. Fixed-reference calibration does not run a live actor.
+
+The shared grading policy accepts generic home/work-area labels for supplied
+commute legs as a useful simplifying assumption. This deliberately relaxes the
+prior Grounding rule; it does not establish personal addresses or employers,
+allow invented financial/schedule facts, change endpoints, or waive confirmation
+before combining different areas. The application model and prompt are unchanged.
 
 Validation enforces the new allocation, one passing reference per case, at least
 20 labeled negative controls, and consistent pair groups when declared. The old
 pair/tag quotas and original-number split exception no longer apply. Semantic
-leniency and material financial/evidence/consent rules are unchanged.
+leniency and material financial/evidence/consent rules remain, with the bounded
+home/work-area exception above.
 
 `manifest.json` binds exact artifacts and evaluator sources and declares
 `evaluation_scope="development"`. Human approval is **pending** and there is no
 approved calibration reference. The authorized [first calibration](evidence/golden-100/README.md)
-measured all 120 references with 16 workers for $0.20523038. Its 13 label
-disagreements across 12 references await human review. Further paid measurements
+measured 3.0.0's 120 references with 16 workers for $0.20523038. Its original 13
+label disagreements across 12 references remain recorded; Ryan accepted the
+home/work simplification for the next contract. A matching 3.0.1 calibration is
+pending. Further paid measurements
 require authorization/review under the retained runner procedure; old spending
 approvals and scores do not transfer. Three application trials would produce 300 slots.
 The independent holdout has not been authored or inspected in this work. The

@@ -1231,14 +1231,19 @@ def test_v2_bootstrap_keeps_paired_cases_in_one_cluster() -> None:
 @pytest.mark.parametrize(
     "validity,completed", [("valid", False), ("invalid", False), ("valid", True)]
 )
+@pytest.mark.parametrize("max_turns", [2, 5])
 def test_v2_turn_limit_is_application_failure_only_for_valid_actor(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, validity: str, completed: bool
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    validity: str,
+    completed: bool,
+    max_turns: int,
 ) -> None:
     from eval.artifact_agent import Answer
 
     case = golden_case(1).model_copy(deep=True)
     case.contract_version = 2
-    case.actor.max_turns = 2
+    case.actor.max_turns = max_turns
     if completed:
         case.steps, case.max_tool_calls = [], 0
     actor = golden.make_actor(case, Mock(spec=Model))
@@ -1248,7 +1253,10 @@ def test_v2_turn_limit_is_application_failure_only_for_valid_actor(
                 structured_output=golden.ActorReply(
                     message="I already provided that route."
                 )
-            ),
+            )
+            for _ in range(max_turns - 1)
+        ]
+        + [
             SimpleNamespace(
                 structured_output=golden.ActorReply(
                     message=None if completed else "I already provided that route."
@@ -1283,7 +1291,8 @@ def test_v2_turn_limit_is_application_failure_only_for_valid_actor(
     row = run.execute(
         case, 1, run.Journal(tmp_path / validity, 25), Mock(return_value=agent)
     )
-    assert len(row.turns) == 2
+    assert len(row.turns) == max_turns
+    assert agent.call_count == actor.agent.call_count == max_turns
     assert ("agent_turn_budget" in row.checks) is (
         validity == "valid" and not completed
     )

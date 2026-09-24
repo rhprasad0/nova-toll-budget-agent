@@ -1,14 +1,22 @@
 # Running the frozen golden corpus
 
-The active authoring contract is **3.0.0: 100 development cases**, with 100
+The active authoring contract is **3.0.1: 100 development cases**, with 100
 proposed passing and 20 negative references. The first
 [calibration](evidence/golden-100/README.md) measured all 120 references using
-16 workers for $0.20523038; corpus and calibration approval remain pending.
+16 workers for $0.20523038 under 3.0.0. Version 3.0.1 raises the actor maximum
+to **five delivered user turns including the opening request** and accepts generic
+home/work-area shorthand during commute clarification. Matching calibration and
+human approval remain pending.
 No new application run has been performed. A full future run has
 **300 trials**; its holdout subset is empty and has no success rate.
 
+An authored calibration transcript can finish in two turns even though the actor
+budget is five. Calibration scores every supplied exchange; it does not generate
+hidden extra turns. Live evaluation may finish early or use the full five-turn
+budget. Minimum required dialogue and the maximum budget are separate fields.
+
 Validate offline from `v2/` with `uv run python -m eval.golden`. Review the
-[catalog](golden/REVIEW.md) before freezing approval. The unchanged local runner
+[catalog](golden/REVIEW.md) before freezing approval. The local runner
 requires a clean committed checkout, exact matching calibration, and human
 calibration review before application execution. Any paid calibration needs new
 authorization and its own spend accounting; archived budgets do not transfer.

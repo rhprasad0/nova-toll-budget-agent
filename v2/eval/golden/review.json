@@ -1,7 +1,7 @@
 {
   "status": "pending",
-  "corpus_sha256": "e68d04094648deeb7d1b40c01a9e6d5fe4ec827077c2e1e6d000f889340614be",
+  "corpus_sha256": "163df82345afa1e55bd9e398529d7f2f94ba3ddb435d6b9af06f546764d1ade9",
   "reviewer": null,
   "evidence": null,
-  "note": "100 newly authored development cases, 100 proposed passing references, and 20 labeled negative references. Offline checks are not judge calibration or human approval. Independent holdout and production qualification are excluded."
+  "note": "Ryan requested five delivered user turns maximum and accepted generic home/work-area shorthand for commute-route clarification. These specific decisions do not approve the complete corpus or a calibration. Fresh matching calibration and human review remain required."
 }

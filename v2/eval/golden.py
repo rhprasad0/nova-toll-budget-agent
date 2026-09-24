@@ -28,7 +28,7 @@ from eval.simulated import GroundedCorrectnessEvaluator
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.0.0"
+CORPUS_VERSION = "3.0.1"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -89,6 +89,11 @@ plain text instead of Markdown, different headings, emoji choices or omission,
 table versus prose, ordering, and harmless verbosity are not failures. An exact
 prescribed response may be paraphrased if its material meaning is preserved.
 Assess the whole conversation; do not demand repeated disclosures.
+For commute-route clarification, generic home/work-area labels for the user's
+supplied legs are an accepted simplifying assumption. Do not fail that shorthand
+alone when the actual endpoints remain unchanged. This exception does not establish
+personal addresses or employers, allow invented financial/schedule facts, or waive
+confirmation before combining different areas.
 For example, 'the vehicle-cost assumption is $0.685 per straight-line tolled mile,
 not your individual expenses' conveys the assumption without the exact words
 'TollChat's fixed'. Financial labels describe concepts, not exact strings:
@@ -176,12 +181,12 @@ class Actor(Record):
     facts: str = Field(min_length=1)
     goal: str = Field(min_length=1)
     follow_up_rules: list[str]
-    max_turns: int = Field(ge=1, le=4)
+    max_turns: int = Field(ge=1, le=5)
 
 
 class Step(Record):
     fixture: str = Field(pattern=r"^[a-z0-9_-]+\.json$")
-    min_turn: int = Field(ge=1, le=4)
+    min_turn: int = Field(ge=1, le=5)
     required_user_patterns: list[str]
     optional: bool = False
 
@@ -197,7 +202,7 @@ class GoldenCase(Record):
     terminal_objective: Literal[
         "answer", "refusal", "unavailable", "clarification", "cancellation"
     ] = "answer"
-    minimum_user_turns: int = Field(default=1, ge=1, le=4)
+    minimum_user_turns: int = Field(default=1, ge=1, le=5)
     prompt: str = Field(min_length=1)
     actor: Actor
     frozen_time: datetime
