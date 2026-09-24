@@ -376,3 +376,39 @@ Corpus and calibration approval remain pending.
 Run ID: `e874bb7f-b846-4947-9116-34a07979625d`.
 Corpus SHA-256: `596b2f1c7abd0c77087c415da7905b673561011f06c612e9d27a739acad6833f`.
 Evidence SHA-256: `c73dde3311a04e73dba293764fb9ffd69f730571d7e4c55d302df2b45d2a5aa6`.
+
+### 2026-09-24 — Authorized repeat of unchanged 3.0.3 calibration
+
+Ryan requested another round of judge calibration. This repeat used source
+`1e11b362549f401166e4b7ea1dd8c06131b3f39d`, **16 workers**, and the existing
+$25 cumulative ceiling. Corpus, labels, transcripts, fixtures, prompts, model
+settings, and evaluator sources match calibration 4. Only the source commit and
+complete-checkout hash differ, because earlier evidence and review documentation
+were committed between runs. Corpus **3.0.3** and harness **2.0.10** are unchanged.
+
+All **120 references and 360 judge calls completed**, with **zero disagreements**,
+no measurement failures or unknown usage, and valid authored actor assessments.
+All 100 passing references pass all three criteria; all 20 negative controls
+remain rejected, with every criterion matching its expected label. Exactly two
+boolean verdicts changed from calibration 4: case 26's negative control now
+passes Grounding, and case 99's no-history/current-price reference now passes
+Outcome. No labels, transcripts, or judge instructions were changed to obtain
+this result. The approved case-65 control and realistic cases 79/80 still match.
+
+Cost was **$0.19815320**, bringing cumulative spending across five runs to
+**$1.01510851**. There were no per-reference retries or replacement verdicts in
+this run. The previous run's two disagreements remain recorded; a clean repeat
+does not establish perfectly reliable judges or application accuracy.
+
+The [fifth review packet](evidence/golden-100/CALIBRATION-5.md) and updated
+[HTML page](evidence/golden-100/review.html) preserve the complete latest evidence.
+The corpus validator passed, the report reproduces byte-for-byte, and all five
+receipt sets retain their hashes. HTML checks cover all exact transcripts and
+verdicts, zero disagreements, offline loading, keyboard access, links, and mobile
+layout. The 92 tests previously passed for this unchanged evaluator revision;
+this repeat changes only evidence and documentation. No application scoring or
+live actor simulation occurred. Corpus and calibration approval remain pending.
+
+Run ID: `516a6312-f373-49fe-8726-d26e6eda4109`.
+Corpus SHA-256: `596b2f1c7abd0c77087c415da7905b673561011f06c612e9d27a739acad6833f`.
+Evidence SHA-256: `6b1931359cacf2d9ffbb1ac9dcf425c44bd3ad56cc6217f70f11d3b547dc4a1b`.

@@ -22,6 +22,10 @@ completed 120/120 references with 16 workers: two disagreements across two
 references, with all five previously disputed references now matching. Cost was
 $0.20658857 ($0.81695531 cumulative); no measurement failures or unknown usage.
 Corpus and calibration approval remain pending.
+A separately authorized [repeat on unchanged 3.0.3](evidence/golden-100/CALIBRATION-5.md)
+matched all 360 labels across 120 references using 16 workers, with no measurement
+failures. Cost was $0.19815320 ($1.01510851 cumulative). The preceding run's two
+disagreements remain recorded; no corpus or calibration approval is implied.
 No new application run has been performed. A full future run has
 **300 trials**; its holdout subset is empty and has no success rate.
 

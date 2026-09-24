@@ -29,6 +29,11 @@ The [matching calibration](evidence/golden-100/CALIBRATION-4.md) measured all
 disputed references now match. Cost was $0.20658857 ($0.81695531 cumulative).
 Corpus and calibration approval remain pending; earlier evidence remains intact.
 
+A separately authorized [repeat calibration](evidence/golden-100/CALIBRATION-5.md)
+on the unchanged 3.0.3 contract matched all 360 labels across 120 references,
+using 16 workers for $0.19815320 ($1.01510851 cumulative). Both runs are retained;
+the repeat does not erase the preceding two disagreements or approve the corpus.
+
 Version 3.0.2 makes cases 79/80 more realistic: the morning trip starts at Old
 Keene Mill Road in Springfield and the evening trip returns via nearby Braddock
 Road. Their home-side ramps are about 3.02 straight-line miles apart. Case 79

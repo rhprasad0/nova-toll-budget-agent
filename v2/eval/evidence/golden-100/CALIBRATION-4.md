@@ -1,5 +1,10 @@
 # Golden 3.0.3 calibration review
 
+**Earlier run of the current contract.** A separately authorized
+[repeat calibration](CALIBRATION-5.md) matched all 360 labels with unchanged
+corpus and judge guidance. This run's two disagreements and raw evidence remain
+recorded below; the static HTML page now displays the repeat.
+
 **Complete measurement; corpus and calibration approval pending.** All five previously disputed references now match their labels. Two disagreements remain across two other references. Open the [static review page](review.html) for all 120 complete transcripts, tool evidence, expected labels, and judge explanations.
 
 ## Approved adjudication and changes

@@ -31,7 +31,11 @@ labels. Its [matching calibration](evidence/golden-100/CALIBRATION-4.md) complet
 previously disputed references now match. All 20 negative controls remain
 rejected overall. Cost was $0.20658857 ($0.81695531 cumulative), using 16 workers
 with no measurement failures. The [HTML review](evidence/golden-100/review.html)
-shows the complete 3.0.3 evidence. Corpus and calibration approval remain pending.
+shows the latest complete 3.0.3 evidence. A separately authorized
+[repeat calibration](evidence/golden-100/CALIBRATION-5.md), with unchanged corpus
+and judge guidance, matched all 360 labels across 120 references using 16 workers.
+Cost was $0.19815320 ($1.01510851 cumulative). The earlier two disagreements remain
+recorded. Corpus and calibration approval remain pending.
 
 Run `uv run python -m eval.golden` from `v2/` to validate the frozen artifacts.
 Application evaluation retains three trials per case (300 planned conversations).
