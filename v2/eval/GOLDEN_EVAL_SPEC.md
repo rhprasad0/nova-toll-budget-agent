@@ -1,4 +1,91 @@
-# Golden corpus retirement and recreation guide
+# Golden corpus authoring and retirement guide
+
+The [second baseline](evidence/golden-100/BASELINE-2.md) on corrected contract **3.0.4 / harness 2.0.11** finished with **176 passed, 123 failed, and 1 inconclusive out of 300 trials**; scored-trial success is **58.9% (176/299)**. Its [raw report](evidence/golden-100/runs/8c5bc3d2a151dce237e9946bbc679bf9d2d0b99cd1777a2c363026664a37306f/report.json) contains all 300 conversations. The actor preflight passed 9/9 checks; [calibration 6](evidence/golden-100/CALIBRATION-6.md) matched 386/387 application labels and 132/132 actor labels, retaining one known Grounding disagreement. The 100 cases, fixtures, and application model/prompt are unchanged. Cost was $0.92992747 for this baseline, $3.09280985 cumulative. Original results remain intact; changed evaluation rules and sampling mean score differences do not establish application improvement. Application result review remains pending.
+
+## Initial development corpus 3.0.3 — 2026-09-24
+
+The replacement is authored: **100 development cases, 100 proposed passing
+references, and 20 negative controls**. See the [review catalog](golden/REVIEW.md)
+for allocation, prompts, actor briefs, expected behaviors, fixtures, and references.
+All cases concern ordinary passenger-car use. Unusual vehicle classes,
+adversarial prompts, and obscure boundary probes are excluded. Necessary
+clarifications, corrections, cancellations, route alternatives, unavailable
+prices, and financial/evidence interpretation remain covered.
+
+The corpus uses the current 220-point catalog built from committed Oracle
+sources, not the retired 219-point snapshot. Fixtures are synthetic, use frozen
+timestamps, and require no deployed database or model calls to replay. Annual
+responses use the existing domain builders and independent Decimal reconciliation.
+Stable IDs use the `dev3-` prefix; numbers are 1–100 and every `held_out` flag is
+false. The existing case schema stays at `contract_version=2`; that is the
+information/consent contract, distinct from corpus version 3.0.3.
+
+Version 3.0.3 records Ryan's approved adjudication: case 65's missing annual-day
+adjustment invitation fails both Outcome and Rules, despite the correct later
+estimate. Judge guidance clarifies acceptable road abbreviations, disclosure of
+only applicable sources, and Rules failures for false financial labels. Case
+definitions, transcripts, fixtures, and the application remain unchanged.
+The [matching calibration](evidence/golden-100/CALIBRATION-4.md) measured all
+120 references with 16 workers: two disagreements across two references,
+358/360 label agreement, and no measurement failures. All five previously
+disputed references now match. Cost was $0.20658857 ($0.81695531 cumulative).
+Earlier evidence remains intact.
+
+A separately authorized [repeat calibration](evidence/golden-100/CALIBRATION-5.md)
+on the unchanged 3.0.3 contract matched all 360 labels across 120 references,
+using 16 workers for $0.19815320 ($1.01510851 cumulative). Both runs are retained;
+the repeat does not erase the preceding two disagreements. Ryan subsequently
+approved this exact corpus and calibration for the [first application baseline](evidence/golden-100/BASELINE-1.md):
+300 trials, 156 passes, 131 failures, and 13 inconclusive results. Scored-trial
+success is 54.4% (156/287); actor/result review remains pending.
+
+Version 3.0.2 makes cases 79/80 more realistic: the morning trip starts at Old
+Keene Mill Road in Springfield and the evening trip returns via nearby Braddock
+Road. Their home-side ramps are about 3.02 straight-line miles apart. Case 79
+confirms a morning client visit near the Pentagon followed by work in Tysons;
+case 80 catches accidentally mixed office options and cancels. The revised
+fixture uses two committed within-facility connections and rebuilds the financial
+totals for 16.449026 straight-line tolled miles. Midday travel between work sites
+is explicitly outside the requested two-leg estimate. The linked premature-call
+negative control uses the same revised route. Other cases were unchanged.
+
+Ryan's review revision raises every actor's maximum from four to **five delivered
+user turns, including the opening request**. Minimum required turns remain
+case-specific; a two-turn reference transcript is complete and is not a two-turn
+actor limit. Fixed-reference calibration does not run a live actor.
+
+The shared grading policy accepts generic home/work-area labels for supplied
+commute legs as a useful simplifying assumption. This deliberately relaxes the
+prior Grounding rule; it does not establish personal addresses or employers,
+allow invented financial/schedule facts, change endpoints, or waive confirmation
+before combining different areas. The application model and prompt are unchanged.
+
+Validation enforces the new allocation, one passing reference per case, at least
+20 labeled negative controls, and consistent pair groups when declared. The old
+pair/tag quotas and original-number split exception no longer apply. Semantic
+leniency and material financial/evidence/consent rules remain, with the bounded
+home/work-area exception above.
+
+`manifest.json` binds exact artifacts and evaluator sources and declares
+`evaluation_scope="development"`. Exact corpus and calibration-5 approval are
+recorded before baseline execution. The authorized [first calibration](evidence/golden-100/README.md)
+measured 3.0.0's 120 references with 16 workers for $0.20523038. Its original 13
+label disagreements across 12 references remain recorded; Ryan accepted the
+home/work simplification for the next contract. The [matching 3.0.1 calibration](evidence/golden-100/CALIBRATION-2.md)
+measured 120/120 references with nine disagreements across eight references;
+both split-itinerary references pass Grounding. That earlier contract is historical.
+Those measurements predate the route revision. The [matching 3.0.2 calibration](evidence/golden-100/CALIBRATION-3.md)
+measured all 120 references with six disagreements across five references. Both
+revised passing cases and their premature-call control match their authored labels.
+Further paid measurements
+require authorization/review under the retained runner procedure; old spending
+approvals and scores do not transfer. The first baseline attempted all 300 slots.
+The independent holdout has not been authored or inspected in this work. The
+protected production policy remains unchanged and explicitly rejects this
+development-only corpus, including when a historical policy is supplied.
+
+The sections below preserve the retirement decision and prior design history;
+old allocations, examples, and approvals do not define the new corpus.
 
 ## Retirement decision — 2026-09-24
 

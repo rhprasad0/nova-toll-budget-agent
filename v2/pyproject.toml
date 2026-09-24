@@ -20,7 +20,7 @@ dev = [
     "pytest",
     "pyyaml>=6.0.3",
     "ruff",
-    "strands-agents-evals==1.1.0",
+    "strands-agents-evals==1.4.0",
     "tiktoken==0.14.0",
     "types-boto3[bedrock-agentcore,bedrock-runtime,ce,cloudwatch,events,iam,logs,rds,s3,ssm,sts]==1.43.72",
 ]

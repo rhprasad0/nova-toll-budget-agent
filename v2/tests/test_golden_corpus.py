@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+from pydantic import ValidationError
 from strands.models import Model
 from strands_evals.types.evaluation import EvaluationData
 from strands_evals.types.trace import TraceLevelInput
@@ -21,6 +22,9 @@ def test_actor_schema_has_one_decision_and_cannot_discard_a_reply() -> None:
     assert not golden.ActorReply(message="Use 240 days.").stop
     assert golden.ActorReply(message=None).stop
     assert not golden.ActorReply(message="Use 240 days.", stop=True).stop
+    for blank in ("", " ", "\n\t"):
+        with pytest.raises(ValidationError):
+            golden.ActorReply(message=blank)
 
 
 def test_actor_and_judge_keep_private_expectations_separate() -> None:
@@ -332,6 +336,15 @@ def test_origin_correction_actor_names_both_endpoints() -> None:
         ("down $-2.00; up \u2212$3.00", {"-2.00", "-3.00"}),
         ("- $2.00\nDown the road, the toll is $3.00", {"2.00", "3.00"}),
         ("up $2.00; down $9.99", {"2.00", "-9.99"}),
+        ("$1.80 below the median; price $3.40", {"-1.80", "3.40"}),
+        ("**$0.10** lower than the average", {"-0.10"}),
+        (
+            "**$1.80 (21.8%) below** the three-week median of **$8.25**",
+            {"-1.80", "8.25"},
+        ),
+        ("$0.10 above the median; $9.99 less than the mean", {"0.10", "-9.99"}),
+        ("toll $0.10; below the median", {"0.10"}),
+        ("below the recent median: **$8.65**, by **$0.10 (1.2%)**", {"8.65", "-0.10"}),
     ],
 )
 def test_directional_money_preserves_sign_and_other_amounts(

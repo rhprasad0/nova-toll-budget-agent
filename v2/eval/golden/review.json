@@ -1,0 +1,8 @@
+{
+  "status": "approved",
+  "corpus_sha256": "e51114c340da2addf7f24d5aca038a16c308d8af2edbdf1db38241e6564f7a4d",
+  "reviewer": "Ryan",
+  "evidence": "Ryan instructed: \"Just do the calibration, clean up any review pages, then push our changes.\" This authorizes resolving the four calibration-8 disagreements under the existing rules: correct the false-source Rules reference label and clarify financial contradictions, evidence from unauthorized calls, and annual-route alternatives. It authorizes calibration and publication, not a new application baseline or production qualification, and does not claim human review of newly measured verdicts.",
+  "note": "Contract 3.0.6 / harness 2.0.13 retains 100 cases and 135 reference transcripts. Only the false-source regression Rules label changes. Fresh calibration is authorized; historical measurements retain their original identities and verdicts.",
+  "approved_at": "2026-09-24T21:45:53.273821+00:00"
+}

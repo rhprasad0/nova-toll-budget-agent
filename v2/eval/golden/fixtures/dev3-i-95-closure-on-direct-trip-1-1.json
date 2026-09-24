@@ -1,0 +1,53 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "i95:214NO",
+    "destination_point_id": "i95:223ND",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "status": "currently_unavailable",
+    "reason": {
+      "code": "i95_fully_closed",
+      "details": {
+        "required_i95_directions": [
+          "NB"
+        ],
+        "availability": "closed"
+      }
+    },
+    "point_ids": [
+      "i95:214NO",
+      "i95:223ND"
+    ],
+    "connection_ids": [
+      "source:i95_shared:Northbound:214NO:223ND"
+    ],
+    "connection_types": [
+      "within_facility"
+    ],
+    "general_purpose_gaps": [],
+    "i95_evidence": {
+      "availability": "closed",
+      "northbound_corridor_name": "I-95 Northbound",
+      "northbound_link_status": "CLOSED",
+      "northbound_interval_end_at": "2026-09-24T08:15:00-04:00",
+      "northbound_calculated_at": "2026-09-24T08:15:00-04:00",
+      "southbound_corridor_name": "I-95 Southbound",
+      "southbound_link_status": "CLOSED",
+      "southbound_interval_end_at": "2026-09-24T08:15:00-04:00",
+      "southbound_calculated_at": "2026-09-24T08:15:00-04:00"
+    },
+    "facility_legs": []
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "v2/agent-sops/nova-toll-pricing-assistant.sop.md; v2/oracle/build_oracle_data.py; v2/agent_tools/current_price_domain.py; v2/agent_tools/get_annual_toll_ballpark.py",
+    "note": "Synthetic closure on a committed direct I-95 route; no partial-route offer is supplied. Authored offline for development corpus 3.0.0; not captured traffic or observed road data."
+  }
+}

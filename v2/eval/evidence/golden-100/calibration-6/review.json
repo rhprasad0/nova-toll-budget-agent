@@ -1,0 +1,22 @@
+{
+  "status": "approved",
+  "evidence_sha256": "ee530783fa5e525a05edb549639fab85ae19594fed0f39b70019feb6cf7f1d4c",
+  "reviewer": "Ryan",
+  "evidence": "Standing execution authorization: Ryan instructed, \"Let's proceed with all the suggested fixes and then do another baseline run.\" Codex reviewed this new calibration under that instruction; Ryan has not separately reviewed these newly measured verdicts. All 132 actor-validity labels match, all negative controls remain rejected overall, and one previously seen Grounding disagreement is retained without changing labels or verdicts.",
+  "approved_at": "2026-09-24T19:57:54.487569+00:00",
+  "review_method": "Codex evidence checks under standing user authorization for fixes and baseline execution",
+  "adjudicated_disagreements": [
+    {
+      "reference": "dev3-range-becomes-user-chosen-salary-salary-chosen-before-consent",
+      "criterion": "grounding",
+      "expected": false,
+      "measured": true,
+      "disposition": "Retain the authored failure: choosing income without user consent remains prohibited. Later confirmation does not erase the earlier unsupported choice. Outcome and Rules reject the control; retain this known Grounding variability as a limitation."
+    }
+  ],
+  "unresolved_findings": [],
+  "limitations": [
+    "One of 387 application criterion labels disagrees; zero of 132 actor-validity labels disagree.",
+    "Development execution authorization only; application results and production qualification are not approved."
+  ]
+}

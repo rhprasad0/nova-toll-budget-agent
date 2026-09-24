@@ -1,0 +1,97 @@
+{
+  "tool": "get_annual_toll_ballpark",
+  "input": {
+    "outbound": {
+      "origin_point_id": "i495:189SD",
+      "destination_point_id": "i495:190SD",
+      "departure_time": "07:45:00"
+    },
+    "return": {
+      "origin_point_id": "i495:190NO",
+      "destination_point_id": "i495:188ND",
+      "departure_time": "17:15:00"
+    },
+    "weekdays": [
+      "tuesday",
+      "wednesday",
+      "thursday"
+    ],
+    "planned_annual_commute_days": 144,
+    "gross_annual_income_usd": "118500.00"
+  },
+  "result": {
+    "error": "ballpark_unavailable",
+    "reason": "route_unavailable",
+    "outbound": {
+      "origin_point_id": "i495:189SD",
+      "destination_point_id": "i495:190SD",
+      "status": "invalid_origin",
+      "reason": {
+        "code": "origin_not_entry",
+        "details": {
+          "point_id": "i495:189SD",
+          "point_type": "exit",
+          "allowed_point_types": [
+            "entry",
+            "airport"
+          ],
+          "alternatives": [
+            {
+              "point_id": "i495:188SO",
+              "network_id": "i495",
+              "source_node_id": "188SO",
+              "point_type": "entry",
+              "direction": "SB",
+              "label": "Lee Highway (Route 29)",
+              "aliases": [
+                "Lee Highway",
+                "Route 29",
+                "Idylwood",
+                "Merrifield"
+              ],
+              "location": {
+                "type": "Point",
+                "coordinates": [
+                  -77.22081457672118,
+                  38.87578329502197
+                ]
+              }
+            },
+            {
+              "point_id": "i495:187SO",
+              "network_id": "i495",
+              "source_node_id": "187SO",
+              "point_type": "entry",
+              "direction": "SB",
+              "label": "Interstate 66",
+              "aliases": [
+                "I-66",
+                "Idylwood",
+                "Dunn Loring"
+              ],
+              "location": {
+                "type": "Point",
+                "coordinates": [
+                  -77.22206903572085,
+                  38.88630856637025
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "return": {
+      "origin_point_id": "i495:190NO",
+      "destination_point_id": "i495:188ND",
+      "status": "valid",
+      "reason": null
+    }
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "v2/agent-sops/nova-toll-pricing-assistant.sop.md; v2/oracle/build_oracle_data.py; v2/agent_tools/current_price_domain.py; v2/agent_tools/get_annual_toll_ballpark.py",
+    "note": "Synthetic authoritative alternative response for a real wrong-role point; both offered entries have committed direct connections to Braddock Road. Alternative ordering is synthetic, not a claim about current database ranking. Authored offline for development corpus 3.0.0; not captured traffic or observed road data."
+  }
+}

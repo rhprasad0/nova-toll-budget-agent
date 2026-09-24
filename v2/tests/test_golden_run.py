@@ -28,6 +28,10 @@ pytestmark = pytest.mark.usefixtures("golden_test_data")
 def test_cli_runs_independent_work_in_parallel(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, workers: int
 ) -> None:
+    root = tmp_path / "corpus"
+    shutil.copytree(golden.ROOT, root)
+    (root / "review.json").write_text(json.dumps({"status": "approved"}))
+    monkeypatch.setattr(golden, "ROOT", root)
     barrier = Barrier(3, timeout=5)
     directory = tmp_path / mode
     calibration = tmp_path / "approved-calibration"
@@ -577,6 +581,8 @@ def test_repeating_agent_is_scored_failure_not_infrastructure(
     result = run.execute(case, 1, run.Journal(tmp_path / "loop", 25))
     assert result.status == "scored" and result.failure_class == "budget"
     assert "tool_budget" in result.checks
+    assert result.application_stop == "tool_budget"
+    cast(Mock, golden.make_actor).return_value.act.assert_not_called()
     assert len(result.requested_tools) == 2
     assert count == 2 and not result.passed
 
@@ -1014,6 +1020,10 @@ def test_eval_cache_prefix_and_write_accounting(
 def test_cli_rejects_changed_cache_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: str
 ) -> None:
+    root = tmp_path / "corpus"
+    shutil.copytree(golden.ROOT, root)
+    (root / "review.json").write_text(json.dumps({"status": "approved"}))
+    monkeypatch.setattr(golden, "ROOT", root)
     keys = (
         "corpus",
         "judge_prompt_sha256",
@@ -1177,6 +1187,49 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
     assert row.status == "inconclusive" and not row.passed
 
 
+@pytest.mark.parametrize("stopped", [False, True])
+@pytest.mark.parametrize("generated_reply", [False, True])
+def test_application_stop_only_exempts_an_actor_that_never_ran(
+    monkeypatch: pytest.MonkeyPatch, stopped: bool, generated_reply: bool
+) -> None:
+    case = golden_case(1)
+    row = run.Attempt(
+        id="stopped",
+        case_id=case.id,
+        trial=1,
+        application_stop="tool_arguments" if stopped else None,
+        turns=[
+            golden.Turn(user=case.prompt, response="[No completed response]", calls=[])
+        ],
+        actor_replies=[{"message": "An invented route", "stop": False}]
+        if generated_reply
+        else [],
+    )
+    if generated_reply:
+        row.turns.append(
+            golden.Turn(
+                user="An invented route", response="[No completed response]", calls=[]
+            )
+        )
+    response = SimpleNamespace(
+        structured_output=run.OutcomeAssessment(
+            outcome=run.Verdict(passed=False, evidence="Application failed."),
+            actor_validity=run.ActorAssessment(
+                status="invalid", evidence="Observed contradiction."
+            ),
+        )
+    )
+    evaluator = Mock(return_value=response)
+    monkeypatch.setattr(run, "Agent", Mock(return_value=evaluator))
+    run.assess_outcome(case, row, Mock(spec=Model), "contract", "conversation")
+    assert row.actor_validity is not None
+    assert row.actor_validity.status == (
+        "valid" if stopped and not generated_reply else "invalid"
+    )
+    assert not row.verdicts["outcome"].passed
+    assert "APPLICATION STOP" in evaluator.call_args.args[0]
+
+
 @pytest.mark.parametrize("validity", ["invalid", "uncertain"])
 def test_v2_inconclusive_trials_keep_costs_and_violations_outside_scores(
     validity: str,
@@ -1223,14 +1276,19 @@ def test_v2_bootstrap_keeps_paired_cases_in_one_cluster() -> None:
 @pytest.mark.parametrize(
     "validity,completed", [("valid", False), ("invalid", False), ("valid", True)]
 )
+@pytest.mark.parametrize("max_turns", [2, 5])
 def test_v2_turn_limit_is_application_failure_only_for_valid_actor(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, validity: str, completed: bool
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    validity: str,
+    completed: bool,
+    max_turns: int,
 ) -> None:
     from eval.artifact_agent import Answer
 
     case = golden_case(1).model_copy(deep=True)
     case.contract_version = 2
-    case.actor.max_turns = 2
+    case.actor.max_turns = max_turns
     if completed:
         case.steps, case.max_tool_calls = [], 0
     actor = golden.make_actor(case, Mock(spec=Model))
@@ -1240,7 +1298,10 @@ def test_v2_turn_limit_is_application_failure_only_for_valid_actor(
                 structured_output=golden.ActorReply(
                     message="I already provided that route."
                 )
-            ),
+            )
+            for _ in range(max_turns - 1)
+        ]
+        + [
             SimpleNamespace(
                 structured_output=golden.ActorReply(
                     message=None if completed else "I already provided that route."
@@ -1275,7 +1336,8 @@ def test_v2_turn_limit_is_application_failure_only_for_valid_actor(
     row = run.execute(
         case, 1, run.Journal(tmp_path / validity, 25), Mock(return_value=agent)
     )
-    assert len(row.turns) == 2
+    assert len(row.turns) == max_turns
+    assert agent.call_count == actor.agent.call_count == max_turns
     assert ("agent_turn_budget" in row.checks) is (
         validity == "valid" and not completed
     )

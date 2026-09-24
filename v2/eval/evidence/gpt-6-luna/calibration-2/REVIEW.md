@@ -3,7 +3,7 @@
 **All 281 development examples completed. All seven new case-16/18/20 controls matched their labels.**
 There are 13 disagreement examples elsewhere in the retained calibration set and no incomplete measurements.
 
-[Open the HTML review packet](review.html). [Full report](report.json).
+[Full report](report.json).
 
 - Estimated model cost: **$0.440764625 of the $5 cap** across 843 fully accounted model calls. No automatic reruns.
 - Offline validation: 80 relevant tests passed; targeted Ruff and Pyright checks passed.
@@ -37,4 +37,4 @@ The original 2.0.3 calibration and 600-trial application archive remain unchange
 | annual-vehicle-rate-not-tax-rule-good | outcome |
 | annual-personal-vehicle-rate-good | grounding |
 
-Inspect the actual conversations and judge explanations in the HTML packet before adjudicating. No verdicts were changed to obtain agreement.
+Inspect the actual conversations and judge explanations in the raw report before adjudicating. No verdicts were changed to obtain agreement.

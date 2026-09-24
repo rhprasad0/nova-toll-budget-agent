@@ -8,7 +8,7 @@ Demo cost: $0.3888863. Calibration plus demo: $0.724959. All attempts and measur
 
 ## Assistant inspection; human review pending
 
-The HTML page shows trial 1 for eight selected behaviors, including passing and failing trials. The held-out divergent-leg sample was inspected only after the complete run. Do not use it for tuning without reclassification.
+The removed HTML page showed trial 1 for eight selected behaviors, including passing and failing trials. The held-out divergent-leg sample was inspected only after the complete run. Do not use it for tuning without reclassification.
 
 - `greenway-current-1`: Review concern: the actor repeatedly demanded an official quote. The judge rejected estimate wording despite a supported amount. Review this interaction before attributing the failure to the application.
 

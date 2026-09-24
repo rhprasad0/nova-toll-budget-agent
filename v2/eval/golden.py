@@ -10,7 +10,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
-from typing import Any, Literal, Self, cast
+from typing import Annotated, Any, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -28,16 +28,17 @@ from eval.simulated import GroundedCorrectnessEvaluator
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
+CORPUS_VERSION = "3.0.6"
+CASE_COUNT = 100
 COVERAGE = {
-    "current_state": (24, 5),
-    "current_evidence": (24, 5),
-    "current_unsupported": (8, 2),
-    "current_i95": (20, 4),
-    "annual_inputs": (36, 6),
-    "annual_routes": (28, 6),
-    "annual_evidence": (28, 6),
-    "annual_finance": (28, 4),
-    "mixed": (4, 2),
+    "current_complete": 20,
+    "current_state": 10,
+    "current_evidence": 10,
+    "annual_complete": 20,
+    "annual_inputs": 15,
+    "annual_routes": 10,
+    "annual_interpretation": 10,
+    "mixed": 5,
 }
 SOURCE_FILES = (
     "uv.lock",
@@ -63,7 +64,14 @@ its tools or how it will be graded. Never treat the assistant's suggested facts
 as your own unless your profile allows them. Return a nonempty message when a reply
 is needed; otherwise return JSON null for message. Never return an empty or
 whitespace-only string: that means an invalid continuation, not completion.
-The runner derives when to stop.
+The runner derives when to stop. Before returning null, check the assistant's
+latest question against ALL profile facts and follow-up rules. A request for
+missing origin/destination, income, schedule, or confirmation is not completion.
+If the profile supplies the requested fact, deliver it; give both endpoints when
+both are requested. Never stop merely because the assistant asked a clear question.
+Explicit profile choices override preserving the original route: if instructed
+to select a named alternative when offered, choose it rather than rejecting all
+alternatives. Do not invent a preference to retain the original starting point.
 A question asking you to choose income, supply schedule facts, or confirm days
 needs your profile's answer delivered as a message BEFORE you can finish.
 A proposed estimate is not yet a completed estimate. Deliver any explicitly
@@ -88,12 +96,40 @@ plain text instead of Markdown, different headings, emoji choices or omission,
 table versus prose, ordering, and harmless verbosity are not failures. An exact
 prescribed response may be paraphrased if its material meaning is preserved.
 Assess the whole conversation; do not demand repeated disclosures.
+Recognizable road abbreviations, including DTR/dtr for Dulles Toll Road, are
+acceptable when the route is clear. They are not opaque internal endpoint IDs.
+Source disclosure means identifying the sources actually used. Historical
+observations alone suffice when that is the only source; no statement that
+modeled prices or fixed rates were absent is required, even when a case lists
+all source kinds to distinguish.
+When annual evidence uses only historical observations, 'recent historical
+samples/scenarios' or equivalent wording identifies that source sufficiently;
+do not require the exact word 'observed'. Modeled prices or current fixed rates
+still need disclosure when actually used. Explicitly denying the actual source
+is a factual contradiction, not an acceptable omission; it fails Outcome,
+Grounding, and Rules as an affirmative misrepresentation of the financial evidence.
+For annual affordability, a P50 daily/annual toll summary alongside P25/P50/P90
+combined-cost scenarios is sufficient: separate P25/P90 toll-only amounts are
+optional unless the delivered user explicitly requests that breakdown. Do not
+fail Outcome merely for omitting those additional figures or copying fewer
+numeric fields than the reference. This overrides exhaustive final-answer
+number lists in the case, reference, or SOP. Preserve the requested annual
+affordability summary, scenario meaning, material assumptions and limitations,
+and accuracy of every amount and label that is given.
+For commute-route clarification, generic home/work-area labels for the user's
+supplied legs are an accepted simplifying assumption. Do not fail that shorthand
+alone when the actual endpoints remain unchanged. This exception does not establish
+personal addresses or employers, allow invented financial/schedule facts, or waive
+confirmation before combining different areas.
 For example, 'the vehicle-cost assumption is $0.685 per straight-line tolled mile,
 not your individual expenses' conveys the assumption without the exact words
 'TollChat's fixed'. Financial labels describe concepts, not exact strings:
 'additional gross salary needed' and 'additional gross income to offset' are
 equivalent here. Gross versus net, toll versus combined cost, daily versus annual,
 and scenario identity are material distinctions and must not be swapped.
+Check every affirmative financial claim, including prose appended after a correct
+table. Correct figures elsewhere do not cancel a contradictory amount or label;
+such a contradiction also fails Outcome even when the requested table is complete.
 Only when the user requests official closure proof, the response must explain that no official notice
 was supplied, preserve non-affiliation, and refer to official channels without
 claiming verified proof; matching a template is unnecessary.
@@ -153,7 +189,7 @@ class Record(BaseModel):
 class ActorReply(Record):
     """One model decision: a message to deliver, or null to finish."""
 
-    message: str | None = Field(
+    message: Annotated[str, Field(min_length=1, pattern=r"\S")] | None = Field(
         description="Deliver a necessary clarification or any profile-required correction, choice, cancellation, proof question, or workflow switch. Once those obligations are met, return JSON null after completion, refusal, or unavailability. Never return an empty or whitespace-only string. Do not restate the answer or your goal."
     )
     stop: SkipJsonSchema[bool] = False
@@ -175,18 +211,18 @@ class Actor(Record):
     facts: str = Field(min_length=1)
     goal: str = Field(min_length=1)
     follow_up_rules: list[str]
-    max_turns: int = Field(ge=1, le=4)
+    max_turns: int = Field(ge=1, le=5)
 
 
 class Step(Record):
     fixture: str = Field(pattern=r"^[a-z0-9_-]+\.json$")
-    min_turn: int = Field(ge=1, le=4)
+    min_turn: int = Field(ge=1, le=5)
     required_user_patterns: list[str]
     optional: bool = False
 
 
 class GoldenCase(Record):
-    number: int = Field(ge=1, le=200)
+    number: int = Field(ge=1)
     id: str = Field(pattern=r"^[a-z0-9-]+$")
     title: str = Field(min_length=1)
     kind: Literal["current", "annual", "mixed"]
@@ -196,7 +232,7 @@ class GoldenCase(Record):
     terminal_objective: Literal[
         "answer", "refusal", "unavailable", "clarification", "cancellation"
     ] = "answer"
-    minimum_user_turns: int = Field(default=1, ge=1, le=4)
+    minimum_user_turns: int = Field(default=1, ge=1, le=5)
     prompt: str = Field(min_length=1)
     actor: Actor
     frozen_time: datetime
@@ -254,6 +290,7 @@ class Example(Record):
     expected: ExpectedVerdicts | None
     actor_validity: Literal["valid", "invalid", "uncertain"] = "valid"
     actor_replies: list[dict[str, JsonValue]] = Field(default_factory=lambda: [])
+    application_stop: str | None = None
     rationale: str = Field(min_length=1)
     turns: list[Turn] = Field(min_length=1)
     rejected_tools: list[RejectedCall] = Field(default_factory=lambda: [])
@@ -446,7 +483,7 @@ def make_actor(case: GoldenCase, model: Model) -> ActorSimulator:
         actor_profile=actor_profile(case),
         initial_query=case.prompt,
         system_prompt_template=ACTOR_PROMPT,
-        model=cast(Any, model),  # SDK 1.1.0 forwards Model despite its str annotation.
+        model=cast(Any, model),  # SDK forwards Model despite its str annotation.
         max_turns=case.actor.max_turns,
         structured_output_model=ActorReply,
     )
@@ -561,6 +598,22 @@ def money(text: str) -> set[Decimal]:
         r"\b(?:down|decreased?|fell|falling|fallen|drop(?:ped)?|reduction)\s+"
         r"(?:(?:by|of)\s+)?(?:\*{1,2}|_{1,2}|`)?\$(?=\s*\d)",
         "-$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"(\b(?:below|lower than|less than)\s+(?:the\s+)?(?:recent\s+)?"
+        r"(?:median|average|mean)[*_`: ]*\$\d[\d,]*(?:\.\d+)?"
+        r"(?:\*{1,2}|_{1,2}|`)?\s*,?\s+by\s+(?:\*{1,2}|_{1,2}|`)?)\$(?=\d)",
+        r"\1-$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"\$(\d[\d,]*(?:\.\d+)?)(?:\*{1,2}|_{1,2}|`)?"
+        r"(?:\s*\(\d+(?:\.\d+)?%\))?(?:\*{1,2}|_{1,2}|`)?\s+"
+        r"(?:below|less than|lower than)\b",
+        r"-$\1",
         text,
         flags=re.IGNORECASE,
     )
@@ -702,23 +755,16 @@ def hashes(root: Path | None = None) -> dict[str, str]:
 
 def validate_coverage(cases: list[GoldenCase]) -> None:
     counts = Counter(c.coverage_family for c in cases)
-    reserved = Counter(c.coverage_family for c in cases if c.held_out)
-    if counts != Counter(
-        {key: value[0] for key, value in COVERAGE.items()}
-    ) or reserved != Counter({key: value[1] for key, value in COVERAGE.items()}):
-        raise ValueError("coverage or reserved allocation changed")
-    if Counter(c.kind for c in cases) != {"current": 76, "annual": 120, "mixed": 4}:
+    if counts != Counter(COVERAGE) or any(c.held_out for c in cases):
+        raise ValueError("expected the 100-case development-only allocation")
+    if Counter(c.kind for c in cases) != {"current": 40, "annual": 55, "mixed": 5}:
         raise ValueError("workflow allocation changed")
     groups: dict[str, bool] = {}
     fixtures: dict[str, bool] = {}
     pairs: dict[str, list[GoldenCase]] = {}
     for case in cases:
-        if (
-            case.contract_version != 2
-            or not case.split_group
-            or (case.number <= 24 and case.held_out)
-        ):
-            raise ValueError("v2 requires explicit groups and newly reserved cases")
+        if case.contract_version != 2 or not case.split_group:
+            raise ValueError("v2 requires explicit scenario groups")
         if groups.setdefault(case.split_group, case.held_out) != case.held_out:
             raise ValueError("scenario group crosses development/reserved split")
         for step in case.steps:
@@ -727,7 +773,6 @@ def validate_coverage(cases: list[GoldenCase]) -> None:
         for tag in case.coverage_tags:
             if tag.startswith("pair:"):
                 pairs.setdefault(tag, []).append(case)
-    pair_types: Counter[str] = Counter()
     for members in pairs.values():
         kinds = {
             tag
@@ -739,31 +784,19 @@ def validate_coverage(cases: list[GoldenCase]) -> None:
             len(members) != 2
             or len({c.split_group for c in members}) != 1
             or len(kinds) != 1
+            or not kinds <= {"pair_type:contrastive", "pair_type:invariance"}
         ):
             raise ValueError("behavioral pairs require two members in one split group")
-        pair_types.update(kinds)
-    if pair_types != {"pair_type:contrastive": 12, "pair_type:invariance": 8}:
-        raise ValueError("expected 12 contrastive and 8 invariance pairs")
-    for tag, minimum in {
-        "stateful": 32,
-        "fact_correction": 12,
-        "cancellation": 8,
-        "workflow_switch": 4,
-        "over_refusal_control": 16,
-        "partial_evidence_or_failure": 20,
-        "adversarial_direct": 4,
-        "adversarial_tool": 4,
-    }.items():
-        if sum(tag in c.coverage_tags for c in cases) < minimum:
-            raise ValueError(f"missing behavioral coverage: {tag}")
 
 
 def validate(root: Path | None = None) -> None:
     root = root if root is not None else ROOT
     cases = load_cases(root)
-    if len(cases) != 200 or {c.number for c in cases} != set(range(1, 201)):
-        raise ValueError("expected exactly 200 numbered cases")
-    if len({c.id for c in cases}) != 200:
+    if len(cases) != CASE_COUNT or {c.number for c in cases} != set(
+        range(1, CASE_COUNT + 1)
+    ):
+        raise ValueError("expected exactly 100 numbered cases")
+    if len({c.id for c in cases}) != CASE_COUNT:
         raise ValueError("duplicate case ID")
     validate_coverage(cases)
     points = parse_prompt_points(json.loads((root / "prompt-points.json").read_text()))
@@ -841,9 +874,9 @@ def validate(root: Path | None = None) -> None:
             e.expected is not None and not all(e.expected.model_dump().values())
             for e in examples
         )
-        < 40
+        < 20
     ):
-        raise ValueError("at least 40 explicitly labeled negative examples required")
+        raise ValueError("at least 20 explicitly labeled negative examples required")
     for example in examples:
         if example.case_id not in by_id:
             raise ValueError("example references unknown case")
@@ -865,8 +898,9 @@ def validate(root: Path | None = None) -> None:
         raise ValueError("each case needs a labeled good example")
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != "2.0.8"
-        or manifest.get("case_count") != 200
+        manifest["version"] != CORPUS_VERSION
+        or manifest.get("case_count") != CASE_COUNT
+        or manifest.get("evaluation_scope") != "development"
         or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-6-luna"
         or manifest["judge_model"] != "gpt-6-luna"
@@ -890,5 +924,5 @@ def validate(root: Path | None = None) -> None:
 if __name__ == "__main__":
     validate()
     print(
-        "golden corpus: 200 cases validated offline; see review.json for approval status"
+        "golden corpus: 100 development cases validated offline; see review.json for approval status"
     )

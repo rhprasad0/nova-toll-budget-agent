@@ -9,9 +9,7 @@ historical 24-case results and cannot be compared directly with the expanded set
 All 72 trials were attempted, with one actor-invalid trial inconclusive.
 This is a provisional source-checkout reference, not a qualified production baseline.
 
-[Open the static review page](review.html). It works offline and shows case
-failures before aggregate results, followed by eight transcript samples and
-the approved policy.
+[The raw report](runs/1db86636e1e6e1b25b2f393708a3e0f393f6aae0f5ec1bf7555bda746edf1e47/report.json) retains every trial, transcript, verdict, and aggregate result. Generated review pages were removed at Ryan’s request.
 
 **The initial measurement is retained. The production reference is unset.**
 The first run completed 72 trials: 27 passed (37.5%), and 3 of 24 cases passed
@@ -71,7 +69,7 @@ closed. There is no automatic threshold adjustment.
 ## What remains before #362 can close
 
 1. Human-adjudicate the two grounding disagreements in
-   [calibration 7](../../evidence/golden-360/calibration-7/review.html). Its outcome
+   [calibration 7 report](../../evidence/golden-360/calibration-7/report.md). Its outcome
    labels agree on 34/34 examples; grounding agrees on 32/34. Approved outcome
    labels remain unchanged. No calibration approval is implied by this PR.
 2. Review critical failures and actor validity. The initial report used corpus
@@ -107,15 +105,13 @@ populate the real production reference.
 | Pentagon/Eads Street maps to two frozen IDs | Unresolved catalog ambiguity; review exact-ID failures before attributing them to the agent |
 
 The [original demo review](../../evidence/golden-360/DEMO_REVIEW.md) records eight
-earlier inspected samples. The static page here selects another deterministic
-sample: first a held-out, failing, and passing trial when available, then sorted
-remaining trial IDs until eight are selected. All cases are visible in aggregate;
-all transcripts remain in the raw report. Every critical failure needs human
-review, even when it falls outside the eight displayed samples.
+earlier inspected samples. The removed static page selected eight additional
+trials deterministically. All transcripts remain in the raw report; every
+critical failure needs human review, including trials outside that sample.
 
 Held-out cases were visible during authorship. Case 23 also had prior regression
-exposure; its demo transcript was inspected after the full run. Rendering this
-page exposes its selected held-out transcript as well. Do not use exposed
+exposure; its demo transcript was inspected after the full run. The removed review
+page also exposed its selected held-out transcript. Do not use exposed
 held-out examples for tuning while continuing to call them untouched holdouts;
 reclassify or replace them and requalify the changed suite. Existing exposed
 reports remain historical evidence.
@@ -131,7 +127,7 @@ From `v2/`:
 
 ```bash
 uv run python -m eval.golden_baseline capture --run eval/evidence/golden-360/demo-1
-uv run python -m eval.golden_baseline review --run eval/evidence/golden-360/demo-1 --output eval/results/golden/review.html
+uv run python -m eval.golden_baseline review --run eval/evidence/golden-360/demo-1 --output eval/private/golden-review.html
 uv run python -m eval.golden_baseline qualify --run RUN --review HUMAN_REVIEW.json --calibration CALIBRATION --baseline PRODUCTION_RUN --baseline-review PRODUCTION_REVIEW.json
 uv run pytest -q tests/test_golden_baseline.py tests/test_development_deployment_status.py
 ```

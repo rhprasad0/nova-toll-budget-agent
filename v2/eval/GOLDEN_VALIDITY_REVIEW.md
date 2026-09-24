@@ -45,7 +45,7 @@ regression testing, and CI/CD gates that bind approval to the evaluated contract
 
 ## Supporting records
 
-[Approved calibration](evidence/golden-360/calibration-15/review.html) and
+[Approved calibration report](evidence/golden-360/calibration-15/report.json) and
 [human decisions](evidence/golden-validity/HUMAN_ADJUDICATIONS.md) support these
 claims. The repository retains the active gate evidence and required regression
 fixtures. Superseded experiment logs are recoverable from Git commit `0336ddf`;

@@ -1,0 +1,33 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "i495:185SO",
+    "destination_point_id": "i495:190SD",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "i495:185SO",
+    "destination_point_id": "i495:190SD",
+    "error": "pricing_unavailable",
+    "reason": "incomplete_route_price",
+    "unavailable_components": [
+      {
+        "route_step_id": "step-1",
+        "reason": "stale_observation",
+        "component_evaluated_at": "2026-09-24T17:18:00-04:00",
+        "interval_end_at": "2026-09-24T15:10:00-04:00",
+        "observed_at": "2026-09-24T15:09:30-04:00"
+      }
+    ]
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "v2/agent-sops/nova-toll-pricing-assistant.sop.md; v2/oracle/build_oracle_data.py; v2/agent_tools/current_price_domain.py; v2/agent_tools/get_annual_toll_ballpark.py",
+    "note": "Invented missing/stale pricing observation on a committed route. Authored offline for development corpus 3.0.0; not captured traffic or observed road data."
+  }
+}

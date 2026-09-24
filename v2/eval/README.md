@@ -1,18 +1,62 @@
 # TollChat v2 evaluation
 
+**Current contract: 3.0.6 / harness 2.0.13.** [Calibration 9](evidence/golden-100/CALIBRATION-9.md) matches **396/396 application labels and 135/135 actor labels**, with **zero disagreements** across 135 references and no measurement failures. The four calibration-8 findings are addressed in shared judge guidance and one corrected false-source Rules reference label. Start at the [evidence summary](evidence/golden-100/README.md). The latest application measurement remains baseline 3 under 3.0.5; no new application baseline was run.
+
+**Previous contract: 3.0.5 / harness 2.0.12.** After Ryan requested [more lenient annual Outcome grading](evidence/golden-100/ANNUAL-OUTCOME-REVIEW.md), [baseline 3](evidence/golden-100/BASELINE-3.md) finished with **206 passed, 93 failed, 1 inconclusive** (68.9% of scored trials). [Calibration 7](evidence/golden-100/CALIBRATION-7.md) matched 389/396 application labels; the requested [unchanged repeat, calibration 8](evidence/golden-100/CALIBRATION-8.md), matched **392/396**, with four disagreements and 135/135 actor labels matching. Earlier results below retain their original contracts and verdicts.
+
+The [second baseline](evidence/golden-100/BASELINE-2.md) on corrected contract **3.0.4 / harness 2.0.11** finished with **176 passed, 123 failed, and 1 inconclusive out of 300 trials**; scored-trial success is **58.9% (176/299)**. Its [raw report](evidence/golden-100/runs/8c5bc3d2a151dce237e9946bbc679bf9d2d0b99cd1777a2c363026664a37306f/report.json) contains all 300 conversations. The actor preflight passed 9/9 checks; [calibration 6](evidence/golden-100/CALIBRATION-6.md) matched 386/387 application labels and 132/132 actor labels, retaining one known Grounding disagreement. The 100 cases, fixtures, and application model/prompt are unchanged. Cost was $0.92992747 for this baseline, $3.09280985 cumulative. Original results remain intact; changed evaluation rules and sampling mean score differences do not establish application improvement. Application result review remains pending.
+
 The permanent [experiment journal](EXPERIMENT_JOURNAL.md) records experiments,
 results and adoption decisions. Preserve it during cleanup; removal requires
 Ryan's explicit approval. The latest decision adopts experiment C's descriptions
 and reordered SOP for the normal TollChat agent through the PR stack on #592.
 
-The [golden recreation guide](GOLDEN_EVAL_SPEC.md) documents the old 200 cases
-(160 development + 40 reserved) before removal. The future target is 100 fresh
-development cases, with a separately authored independent holdout; generation is
-out of scope. After removal there is no active golden corpus, and golden runs and
-production qualification are blocked until a new set is reviewed. The harness and
-offline tests remain. Previous measurements and approvals are historical: see the
-[first local baseline](evidence/gpt-6-luna/BASELINE.md),
-[prompt experiment](EXPERIMENT_JOURNAL.md), and [evidence archive](results/golden/README.md).
+The initial **3.0.3 golden corpus contains 100 development cases** for ordinary
+passenger-car current pricing and annual commute affordability. Start with the
+[review catalog](golden/REVIEW.md): 100 proposed passing references and 20 negative
+controls are authored and validated offline. [Calibration](evidence/golden-100/README.md)
+measured 3.0.0's 120 references, with 13 label disagreements across 12 examples.
+The 3.0.1 review revision allows five user turns and generic home/work-area
+shorthand for commute clarification. Its [matching calibration](evidence/golden-100/CALIBRATION-2.md)
+measured 120/120 references with nine disagreements across eight references;
+those measurements remain historical. All cases
+are development cases; an independent holdout is a separate task and is not included here.
+
+Version 3.0.2 revises cases 79/80 so both commute legs serve a Springfield home
+area. One confirms a client/office workday; the other cancels mixed office options.
+The route fixture and financial totals are updated. Its [matching calibration](evidence/golden-100/CALIBRATION-3.md)
+completed 120/120 references: both revised cases and their negative control match
+the labels, with six disagreements across five other references. That earlier
+contract remains historical.
+
+Version 3.0.3 records Ryan's approved Outcome/Rules failure for the missing
+use-or-adjust invitation in case 65's negative control. Judge guidance clarifies
+acceptable road abbreviations, applicable source disclosure, and false financial
+labels. Its [matching calibration](evidence/golden-100/CALIBRATION-4.md) completed
+120/120 references with two disagreements across two references; all five
+previously disputed references now match. All 20 negative controls remain
+rejected overall. Cost was $0.20658857 ($0.81695531 cumulative), using 16 workers
+with no measurement failures. The [raw report](evidence/golden-100/calibration-5/report.json)
+shows the latest complete 3.0.3 evidence. A separately authorized
+[repeat calibration](evidence/golden-100/CALIBRATION-5.md), with unchanged corpus
+and judge guidance, matched all 360 labels across 120 references using 16 workers.
+Cost was $0.19815320 ($1.01510851 cumulative). The earlier two disagreements remain
+recorded. Ryan subsequently approved the exact corpus and calibration 5 for
+the [first development baseline](evidence/golden-100/BASELINE-1.md).
+
+All **300 application trials** finished: **156 passed, 131 failed, and 13 were
+inconclusive**. Scored-trial success is **54.4% (156/287)**. The
+[raw report](evidence/golden-100/runs/c5e327a9c0d2cf9ed49838aac40ce2e93d9ac712e5307395427475a928d0c430/report.json) contains every
+conversation. Actor/result review remains pending, including four apparent
+money-check false positives; original verdicts are retained. The baseline cost
+$0.91475671 ($1.92986522 cumulative), using 16 workers with all usage known.
+
+Run `uv run python -m eval.golden` from `v2/` to validate the frozen artifacts.
+Application evaluation retains three trials per case (300 measured conversations).
+The development-only corpus cannot qualify a production release. The old 200
+cases, approvals, and scores remain historical; test-only legacy inputs never
+become calibration data. See the [recreation guide](GOLDEN_EVAL_SPEC.md),
+[runner](GOLDEN_RUNNER.md), and [evidence archive](results/golden/README.md).
 
 The scheduled Strands suite uses simulated users and model-based judges for six
 current-toll scenarios. The broader code-graded regression catalog retains eight

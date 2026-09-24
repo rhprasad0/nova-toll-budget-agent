@@ -769,7 +769,7 @@ def test_ci_execution_uses_cached_evaluators_and_accounts_for_writes(
         assert request["input"][0]["content"][0]["prompt_cache_breakpoint"] == {
             "mode": "explicit"
         }
-    assert sum(r["reasoning"] == {"effort": "medium"} for r in requests) == 9
+    assert sum(r["reasoning"] == {"effort": "medium"} for r in requests) == 12
     directory = tmp_path / "packet/run"
     assert gate.read(directory / "manifest.json")["workers"] == 4
     events = [

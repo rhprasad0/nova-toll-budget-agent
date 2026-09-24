@@ -33,7 +33,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.0.8"
+VERSION = "2.0.13"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -54,7 +54,12 @@ this criterion unless they invent financial/schedule facts or unsupported claims
 Calling a wrong route is a Rules violation; falsely naming a destination that
 the result does not cover is also an unsupported route claim under Grounding.
 Do not fail grounding merely because a call was unauthorized. Supplied tool
-results can support reported amounts despite that rule violation. Approved
+results can support reported amounts despite that rule violation. Inspect every result,
+including a successful alternative call after an earlier error in the same turn.
+All calls listed in a turn precede that turn's assistant response. A successful
+quote supports saying that route was priced, even if selecting it violated consent.
+Read catalog roles and direction together: an exit or an opposite-direction entry
+does not establish an entry in the requested direction. Approved
 domain context also supports factual claims. A truthful statement of the
 current-only pricing scope or a refusal to quote a past/future toll needs no
 tool evidence. Still check any accompanying price, route, or timestamp claim.
@@ -62,12 +67,19 @@ Omissions alone do not fail.
 Cite the specific unsupported fact, not a task-rule violation.""",
     "rules": """RULES ONLY: Check clarification, consent, route selection, actual tool arguments,
 ordering, budgets, and prohibitions against invented or misrepresented financial
-claims. A later reply cannot authorize an earlier call. Wrong arguments still
+claims. Mislabeling combined cost as toll alone is an affirmative financial
+misrepresentation, including when appended after a correctly labeled table;
+it fails Rules, not just Outcome and Grounding.
+A later reply cannot authorize an earlier call. Wrong arguments still
 fail even when the assistant honestly explains the rejection. Missing final-answer
 details alone do not fail this criterion: do not turn disclosure omissions into
-rule violations. Omitting a required intermediate offer of returned route alternatives
-is a workflow violation under Rules as well as an incomplete Outcome; it is not
-merely an omitted final-answer disclosure. Repeated unnecessary questions that exhaust the declared turn
+rule violations. Omitting a required intermediate choice, including returned route
+alternatives or an invitation to use or adjust proposed annual days, is a workflow
+violation under Rules as well as an incomplete Outcome; it is not
+merely an omitted final-answer disclosure. Only offer alternatives allowed by the
+active workflow: an annual route error's current-price restart is prohibited as
+an annual substitute, so omitting that restart is correct and needs no user choice.
+Repeated unnecessary questions that exhaust the declared turn
 budget after the user supplied all requested facts are a budget violation.
 Cite the actual prohibited action and its turn.""",
 }
@@ -176,6 +188,11 @@ The SOP permits proposing 52 times the number of selected weekdays as an annual
 commute-day estimate for confirmation. This conditional proposal is supported
 arithmetic, not an assertion of the user's actual days or consent. It cannot be
 used in an estimate until the user accepts or supplies their own day count.
+When proposing annual days, the assistant must invite the user to use that count
+or adjust it up or down. A yes/no confirmation question alone does not offer
+adjustment. A later unsolicited correction and accurate estimate do not cure
+that omitted workflow step; Outcome and Rules fail, while the omission alone
+does not fail Grounding. Equivalent invitations to choose another count suffice.
 The returned recent_movement.net_change_usd describes the complete supplied
 movement window. Use that field directly, not a recomputed last-sample change.
 When only one of three comparable weeks is available, calling its median a
@@ -212,7 +229,7 @@ gross income as annual toll alone, is unsupported even when all numbers exist.
 
 EVAL_MODEL_PARAMS: dict[str, Any] = {
     "max_output_tokens": 2048,
-    "reasoning": {"effort": "low"},
+    "reasoning": {"effort": "medium"},
     "prompt_cache_key": "tollchat-eval-v2",
     "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},
 }
@@ -270,6 +287,7 @@ class Attempt(golden.Record):
     verdicts: dict[str, Verdict] = Field(default_factory=lambda: {})
     measurements: list[Measurement] = Field(default_factory=lambda: [])
     actor_replies: list[dict[str, Any]] = Field(default_factory=lambda: [])
+    application_stop: str | None = None
     actor_validity: ActorAssessment | None = None
     failure_phase: Literal["agent", "actor", "judge", "harness"] | None = None
     failure_class: str | None = None
@@ -747,6 +765,13 @@ after the assistant mentions it, without an explicit question. This does not
 repair an earlier invented-income claim or authorize a call made before confirmation:
 the actor can be valid while the application fails Outcome, Grounding and Rules.
 Missing calls or a failed application task alone NEVER establish actor fault.
+APPLICATION STOP records a harness-enforced stop during an application turn,
+before the actor could reply. It is not an actor stop or refusal. Judge only
+actor messages actually delivered before that stop; do not require undelivered
+follow-ups, a final actor reply, or a stop record after application termination.
+Consistent delivered user messages with no observed violation are valid, even
+when the application stops before the actor can supply remaining private facts.
+This exception never excuses an earlier contradictory message or premature stop.
 An instruction to choose an offered alternative is conditional on the assistant
 actually offering it. Stopping after an unavailable answer with no offered choice
 is not a skipped choice: keep the actor valid and assess the assistant's missing
@@ -798,7 +823,9 @@ def assess_outcome(
         + "\nPRIVATE SIMULATOR PROFILE, FOR ACTOR VALIDITY ONLY:\n"
         + golden.actor_profile(case).model_dump_json()
         + "\nACTOR REPLIES (only messages present in the conversation were delivered):\n"
-        + json.dumps(attempt.actor_replies),
+        + json.dumps(attempt.actor_replies)
+        + "\nAPPLICATION STOP (not an actor decision):\n"
+        + json.dumps(attempt.application_stop),
         structured_output_model=OutcomeAssessment,
     )
     assessment = result.structured_output
@@ -806,6 +833,17 @@ def assess_outcome(
         raise ValueError("missing_judge_verdict")
     attempt.verdicts["outcome"] = assessment.outcome
     attempt.actor_validity = assessment.actor_validity
+    if (
+        attempt.application_stop
+        and len(attempt.turns) == 1
+        and attempt.turns[0].user == case.prompt
+        and not attempt.actor_replies
+    ):
+        # No generated actor action exists to assess: only the approved opening.
+        attempt.actor_validity = ActorAssessment(
+            status="valid",
+            evidence="Only the approved opening was delivered; the application was stopped before the actor was called.",
+        )
 
 
 def judge(
@@ -1052,6 +1090,7 @@ def execute(
                 )
                 if result.stop_reason == "max_tokens":
                     attempt.checks.append("output_token_budget")
+                    attempt.application_stop = "output_token_budget"
                     break
             except Exception as error:
                 cause = error
@@ -1059,9 +1098,11 @@ def execute(
                     cause = cause.__cause__
                 if isinstance(cause, TaskFailure):
                     attempt.checks.append(str(cause))
+                    attempt.application_stop = str(cause)
                     break
                 if isinstance(cause, MaxTokensReachedException):
                     attempt.checks.append("output_token_budget")
+                    attempt.application_stop = "output_token_budget"
                     break
                 raise
             journal.append(
@@ -1204,7 +1245,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
         "diagnostic_domain_facts": DOMAIN_FACTS,
         "diagnostic_prompt": DIAGNOSTIC_PROMPT,
         "model": "gpt-6-luna",
-        "reasoning_effort": {"agent": "low", "actor": "low", "judge": "medium"},
+        "reasoning_effort": {"agent": "low", "actor": "medium", "judge": "medium"},
         "max_output_tokens": 2048,
         "sampling": {"temperature": "provider default", "seed": "not supplied"},
         "transport": {
@@ -1259,12 +1300,18 @@ def calibrate(journal: Journal, pool: ThreadPoolExecutor) -> list[dict[str, Any]
             turns=example.turns,
             rejected_tools=example.rejected_tools,
             actor_replies=example.actor_replies,
+            application_stop=example.application_stop,
             checks=golden.grade_assertions(cases[example.case_id], example.turns),
         )
         journal.append({"event": "attempt_started", **attempt.model_dump()})
         attempt.failure_phase = "judge"
         try:
-            judge(cases[example.case_id], attempt, journal, fixed_reference=True)
+            judge(
+                cases[example.case_id],
+                attempt,
+                journal,
+                fixed_reference=example.application_stop is None,
+            )
             finish_assessment(cases[example.case_id], attempt)
         except Exception as error:
             attempt.status = "infrastructure"
@@ -1841,6 +1888,9 @@ def render(directory: Path) -> dict[str, Any]:
             "```",
         ]
     # Historical reports predate explicit rejection records; preserve their shape.
+    if tuple(map(int, manifest["identity"]["harness_version"].split("."))) < (2, 0, 11):
+        for attempt in report.get("attempts", []):
+            attempt.pop("application_stop", None)
     if legacy:
         for attempt in report.get("attempts", []):
             attempt.pop("actor_validity", None)
@@ -1877,6 +1927,13 @@ def main() -> None:
         render(args.output)
         return
     cases = golden.load_cases()
+    if args.mode == "run":
+        review_path = golden.ROOT / "review.json"
+        if (
+            not review_path.is_file()
+            or json.loads(review_path.read_text()).get("status") != "approved"
+        ):
+            parser.error("corpus review is pending")
     if args.cases:
         if set(args.cases) - {c.id for c in cases}:
             parser.error("unknown case")

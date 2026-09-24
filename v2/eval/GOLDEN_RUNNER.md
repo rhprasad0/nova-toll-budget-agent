@@ -1,10 +1,57 @@
 # Running the frozen golden corpus
 
-**Retirement notice:** the 200-case active corpus is being removed. Paid golden
-runs are unavailable after removal until a new corpus and matching calibration
-are approved. Commands below describe the retained harness and historical
-procedure; they do not authorize runs. See the [recreation guide](GOLDEN_EVAL_SPEC.md).
-Historical report rendering remains available.
+The [second baseline](evidence/golden-100/BASELINE-2.md) on corrected contract **3.0.4 / harness 2.0.11** finished with **176 passed, 123 failed, and 1 inconclusive out of 300 trials**; scored-trial success is **58.9% (176/299)**. Its [raw report](evidence/golden-100/runs/8c5bc3d2a151dce237e9946bbc679bf9d2d0b99cd1777a2c363026664a37306f/report.json) contains all 300 conversations. The actor preflight passed 9/9 checks; [calibration 6](evidence/golden-100/CALIBRATION-6.md) matched 386/387 application labels and 132/132 actor labels, retaining one known Grounding disagreement. The 100 cases, fixtures, and application model/prompt are unchanged. Cost was $0.92992747 for this baseline, $3.09280985 cumulative. Original results remain intact; changed evaluation rules and sampling mean score differences do not establish application improvement. Application result review remains pending.
+
+The initial baseline contract was **3.0.3: 100 development cases**, with 100
+proposed passing and 20 negative references. The first
+[calibration](evidence/golden-100/README.md) measured all 120 references using
+16 workers for $0.20523038 under 3.0.0. Version 3.0.1 raises the actor maximum
+to **five delivered user turns including the opening request** and accepts generic
+home/work-area shorthand during commute clarification. Its
+[matching calibration](evidence/golden-100/CALIBRATION-2.md) measured all 120
+references for $0.20711386 ($0.41234424 cumulative), with nine label disagreements
+across eight references. That earlier contract remains historical.
+Version 3.0.2 revises cases 79/80 to return near the same Springfield home area,
+with client/office confirmation and mixed-office cancellation. Its
+[matching calibration](evidence/golden-100/CALIBRATION-3.md) completed all 120
+references for $0.19802250 ($0.61036674 cumulative), with six disagreements across
+five references. Both revised cases and their negative control match the labels.
+Older measurements and approvals do not transfer.
+Version 3.0.3 records the approved Outcome/Rules failure for case 65's missing
+adjustment invitation and clarifies judge guidance on road abbreviations, source
+disclosure, and financial labels. Its [matching calibration](evidence/golden-100/CALIBRATION-4.md)
+completed 120/120 references with 16 workers: two disagreements across two
+references, with all five previously disputed references now matching. Cost was
+$0.20658857 ($0.81695531 cumulative); no measurement failures or unknown usage.
+This first 3.0.3 calibration retains its two disagreements.
+A separately authorized [repeat on unchanged 3.0.3](evidence/golden-100/CALIBRATION-5.md)
+matched all 360 labels across 120 references using 16 workers, with no measurement
+failures. Cost was $0.19815320 ($1.01510851 cumulative). The preceding run's two
+disagreements remain recorded. Ryan then approved the exact corpus and
+calibration 5 for the [first development baseline](evidence/golden-100/BASELINE-1.md).
+All **300 trials** finished: 156 passed, 131 failed, and 13 were inconclusive,
+for 54.4% success among 287 scored trials. Its holdout subset is empty and has no
+success rate. Actor/result review remains pending. The run used 16 workers for
+$0.91475671 ($1.92986522 cumulative), with no unknown usage or replacement trials.
+
+An authored calibration transcript can finish in two turns even though the actor
+budget is five. Calibration scores every supplied exchange; it does not generate
+hidden extra turns. Live evaluation may finish early or use the full five-turn
+budget. Minimum required dialogue and the maximum budget are separate fields.
+
+Validate offline from `v2/` with `uv run python -m eval.golden`. Review the
+[catalog](golden/REVIEW.md) before freezing approval. The local runner
+requires a clean committed checkout, exact matching calibration, and human
+calibration review before application execution. Any paid calibration needs new
+authorization and its own spend accounting; archived budgets do not transfer.
+The corpus cannot qualify production: independently authored holdout scope and
+protected-policy activation are separate work. Historical report rendering remains
+available under its recorded contract.
+
+## Historical 2.0.8 procedure
+
+The procedures and counts below describe the retired experiment, not permission
+to run or reuse its cases or approvals.
 
 The local experiment corpus and harness are **2.0.8**: **200 cases**, split into **160
 development and 40 reserved cases**, with three fresh trials per case. A complete

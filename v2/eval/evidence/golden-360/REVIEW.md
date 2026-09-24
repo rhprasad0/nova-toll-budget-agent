@@ -2,7 +2,7 @@
 
 Start with the [engineering summary](../../GOLDEN_VALIDITY_REVIEW.md).
 
-- [Calibration 15](calibration-15/review.html): approved active evidence, with
+- [Calibration 15 report](calibration-15/report.json): approved active evidence, with
   138/138 criterion agreement across 46 development examples. Its raw files and
   exact approval are required by the release gate.
 - `calibration-7/` and `demo-1/`: historical regression fixtures used by the

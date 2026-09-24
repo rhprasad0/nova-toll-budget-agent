@@ -2908,7 +2908,7 @@ openai = [
 
 [[package]]
 name = "strands-agents-evals"
-version = "1.1.0"
+version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3" },
@@ -2916,15 +2916,16 @@ dependencies = [
     { name = "opentelemetry-instrumentation-threading" },
     { name = "opentelemetry-sdk" },
     { name = "pydantic" },
+    { name = "pyyaml" },
     { name = "rich" },
     { name = "strands-agents" },
     { name = "strands-agents-tools" },
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ff/52/a2d0b449bbcee64b1001f43ef84000874b66df646c55f35034eb052cba7f/strands_agents_evals-1.1.0.tar.gz", hash = "sha256:9cc7de1243018613611fb46ad6d7d4e051de32a1db42ae9996333d44f0f1ad0f", size = 502700, upload-time = "2026-08-07T18:08:31.772Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/78/8f/faad18452289cf63272d9f346a207b79c4113a6befc66feecdf3f875ed7c/strands_agents_evals-1.4.0.tar.gz", hash = "sha256:4c7d3e82d65d594aa1b062a3ee39d2c4acb7d9aeb2220b5ae9dffa31679aac3f", size = 633459, upload-time = "2026-09-22T19:56:56.515Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1d/88/c9ff2db9d6a60f374f3c0a610ce5952d22be542dfae57fa939da59d69a29/strands_agents_evals-1.1.0-py3-none-any.whl", hash = "sha256:889141af4c3d4d937306bc2e661d651c742cfcd5346f7bd086e85dc5751fff82", size = 364962, upload-time = "2026-08-07T18:08:29.963Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/26/f3c381009958642ebd300ef89aeebcd98e37960145b7d3a21a413c74ba1f/strands_agents_evals-1.4.0-py3-none-any.whl", hash = "sha256:b25123798f148d581a0cdda557607e079e328905ccb0621d1be9f28b6680b76b", size = 425121, upload-time = "2026-09-22T19:56:55Z" },
 ]
 
 [[package]]
@@ -3069,7 +3070,7 @@ dev = [
     { name = "pytest" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ruff" },
-    { name = "strands-agents-evals", specifier = "==1.1.0" },
+    { name = "strands-agents-evals", specifier = "==1.4.0" },
     { name = "tiktoken", specifier = "==0.14.0" },
     { name = "types-boto3", extras = ["bedrock-agentcore", "bedrock-runtime", "ce", "cloudwatch", "events", "iam", "logs", "rds", "s3", "ssm", "sts"], specifier = "==1.43.72" },
 ]
