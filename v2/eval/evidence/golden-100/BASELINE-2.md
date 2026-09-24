@@ -2,6 +2,8 @@
 
 **300/300 trials finished: 176 passed, 123 failed, and 1 inconclusive.** Scored-trial success is **58.9% (176/299)**. Open the [static review](baseline-2-review.html) for every conversation and judge explanation.
 
+For a shorter review, open the [10-case sample](baseline-2-sample-review.html): 30 complete trials with selection notes, tool evidence, and the original verdicts. It covers successes, failures, and evaluation inconsistencies; it is not a random statistical sample.
+
 This run uses corpus 3.0.4 / harness 2.0.11 after the [measurement fixes](FIXES-BASELINE-2.md), the 9/9 actor preflight, and [calibration 6](CALIBRATION-6.md). All 100 cases and 107 fixtures are unchanged. Application model and prompt are unchanged. There are three fresh trials per case, 16 workers, and at most five delivered user turns. No trial was retried or replaced.
 
 | Metric | First baseline | Second baseline |
