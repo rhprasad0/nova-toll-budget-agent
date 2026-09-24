@@ -5,22 +5,25 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
+from typing import Any, cast
 
 
 def without_descriptions(value: object) -> object:
     if isinstance(value, dict):
         return {
-            k: without_descriptions(v) for k, v in value.items() if k != "description"
+            k: without_descriptions(v)
+            for k, v in cast(dict[str, Any], value).items()
+            if k != "description"
         }
     if isinstance(value, list):
-        return [without_descriptions(v) for v in value]
+        return [without_descriptions(v) for v in cast(list[Any], value)]
     return value
 
 
 def check() -> None:
     worktrees = Path(__file__).resolve().parents[5]
     roots = [worktrees / f"prompt-experiment-{arm}" / "v2" for arm in "abc"]
-    specs = []
+    specs: list[Any] = []
     for root in roots:
         result = subprocess.check_output(
             [

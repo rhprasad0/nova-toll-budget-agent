@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 
 def main() -> None:
@@ -31,7 +32,7 @@ def main() -> None:
         "prior_spend_usd"
     ]
     total = prior
-    reference_runs = []
+    reference_runs: list[dict[str, Any]] = []
     for name in ("calibration-a-2.0.8", "calibration-bc-2.0.8"):
         directory = root / name
         report = json.loads((directory / "report.json").read_text())
