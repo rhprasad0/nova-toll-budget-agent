@@ -1,6 +1,6 @@
 # TollChat v2 evaluation
 
-**Current contract: 3.0.6 / harness 2.0.13; calibration pending.** The four calibration-8 findings are addressed in shared judge guidance and one corrected false-source Rules reference label. Ryan authorized calibration with 16 workers, review-page cleanup, and publication. No new application baseline is requested; the results below retain their original contract identities.
+**Current contract: 3.0.6 / harness 2.0.13.** [Calibration 9](evidence/golden-100/CALIBRATION-9.md) matches **396/396 application labels and 135/135 actor labels**, with **zero disagreements** across 135 references and no measurement failures. The four calibration-8 findings are addressed in shared judge guidance and one corrected false-source Rules reference label. Start at the [static review index](evidence/golden-100/index.html). The latest application measurement remains baseline 3 under 3.0.5; no new application baseline was run.
 
 **Previous contract: 3.0.5 / harness 2.0.12.** After Ryan requested [more lenient annual Outcome grading](evidence/golden-100/ANNUAL-OUTCOME-REVIEW.md), [baseline 3](evidence/golden-100/BASELINE-3.md) finished with **206 passed, 93 failed, 1 inconclusive** (68.9% of scored trials). [Calibration 7](evidence/golden-100/CALIBRATION-7.md) matched 389/396 application labels; the requested [unchanged repeat, calibration 8](evidence/golden-100/CALIBRATION-8.md), matched **392/396**, with four disagreements and 135/135 actor labels matching. Earlier results below retain their original contracts and verdicts.
 

@@ -1,6 +1,8 @@
 # Golden 3.0.0 calibration review
 
-**Current application evidence:** the [first 3.0.3 baseline](BASELINE-1.md) and
+**Current review:** start at the [static review index](index.html). [Calibration 9](CALIBRATION-9.md), on contract **3.0.6 / harness 2.0.13**, matches **396/396 application labels and 135/135 actor labels**, with zero disagreements. The latest application measurement remains [baseline 3](BASELINE-3.md): **206 passed / 93 failed / 1 inconclusive**, under contract 3.0.5. The original calibration history below retains its historical status and results.
+
+**First application evidence:** the [first 3.0.3 baseline](BASELINE-1.md) and
 [baseline HTML review](baseline-review.html) contain all 300 live application
 conversations against frozen fixtures: 156 passed, 131 failed, 13 inconclusive.
 The current corpus and calibration 5 were approved before that run. This page

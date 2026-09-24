@@ -2,6 +2,8 @@
 
 **Subsequent correction, 24 September 2026:** Ryan authorized resolving the four calibration-8 findings and another calibration. Contract **3.0.6 / harness 2.0.13** corrects case 52 trial 3's authored Rules label to **fail**: explicitly denying the actual price source is an affirmative misrepresentation, even though the tool workflow is permitted. Its Outcome and Grounding expectations remain fail; trials 1 and 2 remain pass on all criteria. The 135 transcripts and historical results are unchanged. The original 3.0.5 proposal and measurements below are retained as history.
 
+[Calibration 9](CALIBRATION-9.md) matches all **396 application labels and 135 actor labels**, including all three corrected Gallows regression expectations. There are no remaining disagreements in this round. See the [current review index](index.html).
+
 Ryan requested a more lenient Outcome judge after reviewing **Gallows hybrid salary (case 52)**: the answers already contain substantial numerical detail.
 
 Contract **3.0.5 / harness 2.0.12** applies this rule consistently to all 60 annual and mixed cases:
