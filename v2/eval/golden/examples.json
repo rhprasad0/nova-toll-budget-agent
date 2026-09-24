@@ -16078,5 +16078,787 @@
     "actor_validity": "valid",
     "rationale": "The fixed tax assumption is not an actual individualized tax calculation.",
     "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-ryan-road-afternoon-return",
+    "label": "baseline-1-3-application-stop",
+    "expected_failures": [
+      "missing_call"
+    ],
+    "expected": {
+      "outcome": false,
+      "grounding": true,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "actor_replies": [],
+    "application_stop": "tool_arguments",
+    "rationale": "The harness stopped the application before any generated actor reply; score the wrong call as application failure, not actor uncertainty.",
+    "turns": [
+      {
+        "user": "I am at Route 28 heading to Ryan Road on the Greenway. What is the current toll?",
+        "response": "[No completed response]",
+        "calls": []
+      }
+    ],
+    "rejected_tools": [
+      {
+        "turn": 1,
+        "name": "get_current_toll_price",
+        "input": {
+          "origin_point_id": "greenway:28:entry:EB",
+          "destination_point_id": "greenway:6:exit:EB",
+          "pricing_profile": {
+            "vehicle_class": "two_axle_passenger",
+            "payment_method": "e_zpass",
+            "transponder_mode": "toll"
+          }
+        },
+        "result": {
+          "status": "error",
+          "content": [
+            {
+              "text": "Frozen replay rejected this call."
+            }
+          ]
+        },
+        "reason": "tool_arguments"
+      }
+    ]
+  },
+  {
+    "case_id": "dev3-gallows-to-jones-branch",
+    "label": "baseline-1-1-application-stop",
+    "expected_failures": [
+      "missing_call"
+    ],
+    "expected": {
+      "outcome": false,
+      "grounding": true,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "actor_replies": [],
+    "application_stop": "tool_arguments",
+    "rationale": "The harness stopped the application before any generated actor reply; score the wrong call as application failure, not actor uncertainty.",
+    "turns": [
+      {
+        "user": "What are the current I-495 Express tolls from Gallows Road to Jones Branch Drive?",
+        "response": "[No completed response]",
+        "calls": []
+      }
+    ],
+    "rejected_tools": [
+      {
+        "turn": 1,
+        "name": "get_current_toll_price",
+        "input": {
+          "origin_point_id": "i495:189NO",
+          "destination_point_id": "i495:1839ND",
+          "pricing_profile": {
+            "vehicle_class": "two_axle_passenger",
+            "payment_method": "e_zpass",
+            "transponder_mode": "toll"
+          }
+        },
+        "result": {
+          "status": "error",
+          "content": [
+            {
+              "text": "Frozen replay rejected this call."
+            }
+          ]
+        },
+        "reason": "tool_arguments"
+      }
+    ]
+  },
+  {
+    "case_id": "dev3-beltway-endpoints-together",
+    "label": "baseline-1-2-actor-invalid",
+    "expected_failures": [
+      "incomplete_dialogue",
+      "missing_call"
+    ],
+    "expected": null,
+    "actor_validity": "invalid",
+    "actor_replies": [
+      {
+        "stop": true,
+        "message": null,
+        "stop_reason": "goal_completed"
+      }
+    ],
+    "application_stop": null,
+    "rationale": "The assistant clearly asked for origin and destination, and the profile says the actor should provide both; instead the actor stopped with no message, leaving the required follow-up unanswered.",
+    "turns": [
+      {
+        "user": "Can you check my current I-495 Express toll?",
+        "response": "**\ud83d\udee3\ufe0f What are your origin and destination on the I-495 Express Lanes?**",
+        "calls": []
+      }
+    ],
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-rising-braddock-quote",
+    "label": "baseline-1-1-application-stop",
+    "expected_failures": [
+      "missing_call"
+    ],
+    "expected": {
+      "outcome": false,
+      "grounding": true,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "actor_replies": [],
+    "application_stop": "tool_arguments",
+    "rationale": "The harness stopped the application before any generated actor reply; score the wrong call as application failure, not actor uncertainty.",
+    "turns": [
+      {
+        "user": "Current I-495 Express toll from Braddock Road to Jones Branch, and has it risen recently?",
+        "response": "[No completed response]",
+        "calls": []
+      }
+    ],
+    "rejected_tools": [
+      {
+        "turn": 1,
+        "name": "get_current_toll_price",
+        "input": {
+          "origin_point_id": "i495:190NO",
+          "destination_point_id": "i495:1839ND",
+          "pricing_profile": {
+            "vehicle_class": "two_axle_passenger",
+            "payment_method": "e_zpass",
+            "transponder_mode": "toll"
+          }
+        },
+        "result": {
+          "status": "error",
+          "content": [
+            {
+              "text": "Frozen replay rejected this call."
+            }
+          ]
+        },
+        "reason": "tool_arguments"
+      }
+    ]
+  },
+  {
+    "case_id": "dev3-rising-braddock-quote",
+    "label": "baseline-1-2-application-stop",
+    "expected_failures": [
+      "missing_call"
+    ],
+    "expected": {
+      "outcome": false,
+      "grounding": true,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "actor_replies": [],
+    "application_stop": "tool_arguments",
+    "rationale": "The harness stopped the application before any generated actor reply; score the wrong call as application failure, not actor uncertainty.",
+    "turns": [
+      {
+        "user": "Current I-495 Express toll from Braddock Road to Jones Branch, and has it risen recently?",
+        "response": "[No completed response]",
+        "calls": []
+      }
+    ],
+    "rejected_tools": [
+      {
+        "turn": 1,
+        "name": "get_current_toll_price",
+        "input": {
+          "origin_point_id": "i495:190NO",
+          "destination_point_id": "i495:1839ND",
+          "pricing_profile": {
+            "vehicle_class": "two_axle_passenger",
+            "payment_method": "e_zpass",
+            "transponder_mode": "toll"
+          }
+        },
+        "result": {
+          "status": "error",
+          "content": [
+            {
+              "text": "Frozen replay rejected this call."
+            }
+          ]
+        },
+        "reason": "tool_arguments"
+      }
+    ]
+  },
+  {
+    "case_id": "dev3-i-95-closure-on-direct-trip",
+    "label": "baseline-1-1-application-stop",
+    "expected_failures": [
+      "missing_call"
+    ],
+    "expected": {
+      "outcome": false,
+      "grounding": true,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "actor_replies": [],
+    "application_stop": "tool_arguments",
+    "rationale": "The harness stopped the application before any generated actor reply; score the wrong call as application failure, not actor uncertainty.",
+    "turns": [
+      {
+        "user": "What is the current I-95 Express toll from Opitz Boulevard to Pentagon/Eads?",
+        "response": "[No completed response]",
+        "calls": []
+      }
+    ],
+    "rejected_tools": [
+      {
+        "turn": 1,
+        "name": "get_current_toll_price",
+        "input": {
+          "origin_point_id": "i95:214NO",
+          "destination_point_id": "i95:2239ND",
+          "pricing_profile": {
+            "vehicle_class": "two_axle_passenger",
+            "payment_method": "e_zpass",
+            "transponder_mode": "toll"
+          }
+        },
+        "result": {
+          "status": "error",
+          "content": [
+            {
+              "text": "Frozen replay rejected this call."
+            }
+          ]
+        },
+        "reason": "tool_arguments"
+      }
+    ]
+  },
+  {
+    "case_id": "dev3-sunday-healthcare-commute",
+    "label": "baseline-1-2-actor-invalid",
+    "expected_failures": [],
+    "expected": null,
+    "actor_validity": "invalid",
+    "actor_replies": [
+      {
+        "stop": false,
+        "message": "",
+        "stop_reason": null
+      }
+    ],
+    "application_stop": null,
+    "rationale": "actor_missing_reply",
+    "turns": [
+      {
+        "user": "Estimate annual costs for my weekend healthcare shifts: Exit 12 - SR 602 (Reston Pkwy) to Exit 17 - SR 684 (Spring Hill Rd) and back, saturday, sunday, leaving at 7:00 AM and returning at 7:00 PM, 96 planned office days per year, gross annual salary $108000.00.",
+        "response": "### \ud83d\udcbc Weekend commute affordability\n\n**Under the middle daily (P50) scenario, estimated annual income after the tax assumption and tolled commute is $69,185.82.**\n\n- \ud83d\udcb5 Gross annual income: **$108,000.00**; estimated income after the one-third tax assumption: **$72,000.00**.\n- \ud83d\ude97 Tolled-segment vehicle cost: **$13.31 per office day** and **$1,278.18 annually**.\n- \ud83d\udee3\ufe0f Annualized daily-P50 toll scenario: **$16.00 per office day** and **$1,536.00 annually**.\n- \ud83d\udcca Total annual tolled-commute cost under P50, including tolls and vehicle cost: **$2,814.18**. This is **3.9% of estimated after-tax income**.\n- \ud83d\udcbc Additional gross salary needed to offset that cost: **$4,221.27**.\n\n**Annualized daily scenarios**\n\n| Scenario | Per office day | Average monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| Daily P25 \u2014 lower | $29.31 | $234.52 | $2,814.18 | $69,185.82 |\n| Daily P50 \u2014 middle | $29.31 | $234.52 | $2,814.18 | $69,185.82 |\n| Daily P90 \u2014 higher | $29.31 | $234.52 | $2,814.18 | $69,185.82 |\n\nAnnual amounts scale daily scenarios by your **96 planned commute days**; these are annualized daily scenarios, not percentiles of annual outcomes.\n\n\u26a0\ufe0f **Assumptions and scope:** This estimate covers only straight-line distance between endpoints of validated priced toll-facility legs, excluding untolled portions. It assumes one-third of gross income goes to taxes; it is not an actual tax calculation. Vehicle cost uses TollChat\u2019s fixed **$0.685 per straight-line tolled mile** assumption, not your individualized vehicle expense. The sample was complete: **24 of 24** eligible weekend dates, covering **7/4/2026\u20139/20/2026**. Sampled days use current published fixed rates\u2014not historically observed tolls. Values were evaluated **9/24/2026 8:18 AM EDT**. Toll figures are estimates, not operator quotes; TollChat is independent and not affiliated with VDOT, Virginia 511, or any toll operator.\n\nTo refine the estimate, you could confirm your fixed office days, share whether arrival or departure times are flexible, or indicate whether you expect direct toll reimbursement.",
+        "calls": [
+          {
+            "name": "get_annual_toll_ballpark",
+            "input": {
+              "outbound": {
+                "origin_point_id": "dtr:12:entry:EB",
+                "destination_point_id": "dtr:17:exit:EB",
+                "departure_time": "07:00:00"
+              },
+              "return": {
+                "origin_point_id": "dtr:17:entry:WB",
+                "destination_point_id": "dtr:12:exit:WB",
+                "departure_time": "19:00:00"
+              },
+              "weekdays": [
+                "saturday",
+                "sunday"
+              ],
+              "planned_annual_commute_days": 96,
+              "gross_annual_income_usd": "108000.00"
+            },
+            "result": {
+              "method": "recent_complete_same_date_round_trips",
+              "evaluated_at": "2026-09-24T08:18:00-04:00",
+              "timezone": "America/New_York",
+              "target_window": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23",
+                "date_count": 84
+              },
+              "weekdays": [
+                "saturday",
+                "sunday"
+              ],
+              "planned_annual_commute_days": 96,
+              "coverage": {
+                "eligible_date_count": 24,
+                "complete_pair_count": 24,
+                "coverage_percent": "100.0",
+                "by_weekday": [
+                  {
+                    "weekday": "saturday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  },
+                  {
+                    "weekday": "sunday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  }
+                ]
+              },
+              "uses_modeled": false,
+              "uses_current_fixed_rates": true,
+              "facilities": [
+                {
+                  "facility": "dtr",
+                  "sample_count": 24,
+                  "uses_modeled": false,
+                  "uses_current_fixed_rates": true,
+                  "scenarios": {
+                    "p25": {
+                      "daily_toll_usd": "16.00",
+                      "annual_toll_usd": "1536.00"
+                    },
+                    "p50": {
+                      "daily_toll_usd": "16.00",
+                      "annual_toll_usd": "1536.00"
+                    },
+                    "p90": {
+                      "daily_toll_usd": "16.00",
+                      "annual_toll_usd": "1536.00"
+                    }
+                  }
+                }
+              ],
+              "assumptions": {
+                "estimated_tax_fraction": "1/3",
+                "vehicle_cost_per_mile_usd": "0.685",
+                "distance_method": "straight_line_priced_facility_legs",
+                "scope": "tolled_portions_only"
+              },
+              "income": {
+                "gross_annual_usd": "108000.00",
+                "estimated_tax_usd": "36000.00",
+                "estimated_after_tax_usd": "72000.00"
+              },
+              "tolled_distance": {
+                "daily_round_trip_miles": "19.44",
+                "annual_miles": "1865.95"
+              },
+              "vehicle_cost": {
+                "daily_usd": "13.31",
+                "annual_usd": "1278.18"
+              },
+              "sample_status": "complete",
+              "available_date_range": {
+                "start_date": "2026-07-04",
+                "end_date": "2026-09-20"
+              },
+              "scenarios": {
+                "p25": {
+                  "daily_toll_usd": "16.00",
+                  "annual_toll_usd": "1536.00",
+                  "daily_total_tolled_commute_cost_usd": "29.31",
+                  "average_monthly_tolled_commute_cost_usd": "234.52",
+                  "annual_total_tolled_commute_cost_usd": "2814.18",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "69185.82",
+                  "tolled_commute_share_of_after_tax_income_percent": "3.9",
+                  "additional_gross_income_to_offset_usd": "4221.27"
+                },
+                "p50": {
+                  "daily_toll_usd": "16.00",
+                  "annual_toll_usd": "1536.00",
+                  "daily_total_tolled_commute_cost_usd": "29.31",
+                  "average_monthly_tolled_commute_cost_usd": "234.52",
+                  "annual_total_tolled_commute_cost_usd": "2814.18",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "69185.82",
+                  "tolled_commute_share_of_after_tax_income_percent": "3.9",
+                  "additional_gross_income_to_offset_usd": "4221.27"
+                },
+                "p90": {
+                  "daily_toll_usd": "16.00",
+                  "annual_toll_usd": "1536.00",
+                  "daily_total_tolled_commute_cost_usd": "29.31",
+                  "average_monthly_tolled_commute_cost_usd": "234.52",
+                  "annual_total_tolled_commute_cost_usd": "2814.18",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "69185.82",
+                  "tolled_commute_share_of_after_tax_income_percent": "3.9",
+                  "additional_gross_income_to_offset_usd": "4221.27"
+                }
+              }
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-annual-washington-corridor",
+    "label": "baseline-1-2-application-stop",
+    "expected_failures": [
+      "incomplete_dialogue",
+      "missing_call"
+    ],
+    "expected": {
+      "outcome": false,
+      "grounding": true,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "actor_replies": [],
+    "application_stop": "premature_call",
+    "rationale": "The harness stopped the application before any generated actor reply; score the wrong call as application failure, not actor uncertainty.",
+    "turns": [
+      {
+        "user": "Estimate annual affordability from Sycamore Street to Washington and back: Tuesday through Thursday, 7:45 AM outbound and 5:15 PM return, 137 office days, gross annual income $143,500.",
+        "response": "[No completed response]",
+        "calls": []
+      }
+    ],
+    "rejected_tools": [
+      {
+        "turn": 1,
+        "name": "get_annual_toll_ballpark",
+        "input": {
+          "outbound": {
+            "origin_point_id": "i66:8:entry:EB",
+            "destination_point_id": "i66:16:exit:EB",
+            "departure_time": "07:45:00"
+          },
+          "return": {
+            "origin_point_id": "i66:16:entry:WB",
+            "destination_point_id": "i66:8:exit:WB",
+            "departure_time": "17:15:00"
+          },
+          "weekdays": [
+            "tuesday",
+            "wednesday",
+            "thursday"
+          ],
+          "planned_annual_commute_days": 137,
+          "gross_annual_income_usd": "143500.00"
+        },
+        "result": {
+          "status": "error",
+          "content": [
+            {
+              "text": "Frozen replay rejected this call."
+            }
+          ]
+        },
+        "reason": "premature_call"
+      }
+    ]
+  },
+  {
+    "case_id": "dev3-annual-route-cannot-use-current-restart",
+    "label": "baseline-1-1-application-stop",
+    "expected_failures": [
+      "missing_call"
+    ],
+    "expected": {
+      "outcome": false,
+      "grounding": true,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "actor_replies": [],
+    "application_stop": "tool_arguments",
+    "rationale": "The harness stopped the application before any generated actor reply; score the wrong call as application failure, not actor uncertainty.",
+    "turns": [
+      {
+        "user": "Estimate annual affordability for morning Old Keene Mill Road to Jones Branch Drive, returning from Jones Branch to Backlick Road. Those separate home ramps are intentional. Tuesday through Thursday, 7:45 AM and 5:15 PM, 141 days, gross annual salary $132,500.",
+        "response": "[No completed response]",
+        "calls": []
+      }
+    ],
+    "rejected_tools": [
+      {
+        "turn": 1,
+        "name": "get_annual_toll_ballpark",
+        "input": {
+          "outbound": {
+            "origin_point_id": "i95:203NO",
+            "destination_point_id": "i495:1839ND",
+            "departure_time": "07:45:00"
+          },
+          "return": {
+            "origin_point_id": "i495:183SO",
+            "destination_point_id": "i95:205SD",
+            "departure_time": "17:15:00"
+          },
+          "weekdays": [
+            "tuesday",
+            "wednesday",
+            "thursday"
+          ],
+          "planned_annual_commute_days": 141,
+          "gross_annual_income_usd": "132500.00"
+        },
+        "result": {
+          "status": "error",
+          "content": [
+            {
+              "text": "Frozen replay rejected this call."
+            }
+          ]
+        },
+        "reason": "tool_arguments"
+      }
+    ]
+  },
+  {
+    "case_id": "dev3-partial-annual-history",
+    "label": "baseline-1-3-application-stop",
+    "expected_failures": [
+      "missing_call"
+    ],
+    "expected": {
+      "outcome": false,
+      "grounding": true,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "actor_replies": [],
+    "application_stop": "tool_arguments",
+    "rationale": "The harness stopped the application before any generated actor reply; score the wrong call as application failure, not actor uncertainty.",
+    "turns": [
+      {
+        "user": "Estimate annual affordability: Gallows Road to Jones Branch Drive/Route 123 and back, tuesday, wednesday, thursday, leaving at 7:45 AM and returning at 5:15 PM, 132 planned office days per year, gross annual salary $109000.00. Please explain how much historical data supports it.",
+        "response": "[No completed response]",
+        "calls": []
+      }
+    ],
+    "rejected_tools": [
+      {
+        "turn": 1,
+        "name": "get_annual_toll_ballpark",
+        "input": {
+          "outbound": {
+            "origin_point_id": "i495:189NO",
+            "destination_point_id": "i495:1839ND",
+            "departure_time": "07:45:00"
+          },
+          "return": {
+            "origin_point_id": "i495:183SO",
+            "destination_point_id": "i495:189SD",
+            "departure_time": "17:15:00"
+          },
+          "weekdays": [
+            "tuesday",
+            "wednesday",
+            "thursday"
+          ],
+          "planned_annual_commute_days": 132,
+          "gross_annual_income_usd": "109000.00"
+        },
+        "result": {
+          "status": "error",
+          "content": [
+            {
+              "text": "Frozen replay rejected this call."
+            }
+          ]
+        },
+        "reason": "tool_arguments"
+      }
+    ]
+  },
+  {
+    "case_id": "dev3-collect-salary-before-route-alternatives",
+    "label": "baseline-1-2-actor-invalid",
+    "expected_failures": [
+      "missing_call"
+    ],
+    "expected": null,
+    "actor_validity": "invalid",
+    "actor_replies": [
+      {
+        "stop": false,
+        "message": "My gross annual income is $123,500.",
+        "stop_reason": null
+      },
+      {
+        "stop": false,
+        "message": "I don\u2019t want to change my outbound starting point from Gallows Road to either alternative. Please keep that requested leg if possible.",
+        "stop_reason": null
+      },
+      {
+        "stop": true,
+        "message": null,
+        "stop_reason": "goal_completed"
+      }
+    ],
+    "application_stop": null,
+    "rationale": "The profile explicitly required selecting Lee Highway/Route 29 after it was offered. After the assistant offered it, the actor instead rejected both alternatives and then stopped, contrary to that required follow-up.",
+    "turns": [
+      {
+        "user": "Estimate annual I-495 Express costs: Gallows Road south to Braddock Road in the morning; Braddock Road north to Lee Highway/Route 29 in the evening. These legs are intentional. Tuesday through Thursday, 7:45 AM and 5:15 PM, 143 days.",
+        "response": "### \ud83d\udcb0 Annual toll estimate\n\nI have the intentional routes and schedule: Gallows Road south to Braddock Road at 7:45 AM, then Braddock Road north to Lee Highway/Route 29 at 5:15 PM, Tuesday through Thursday, for 143 commute days.\n\n**What is your positive gross annual income in U.S. dollars?**",
+        "calls": []
+      },
+      {
+        "user": "My gross annual income is $123,500.",
+        "response": "### \ud83d\udee3\ufe0f Outbound route needs a point choice\n\nThe requested southbound Gallows Road starting point wasn\u2019t accepted as an entry. The route validator returned these alternatives:\n\n- Lee Highway (Route 29)\n- Interstate 66\n\n**Which returned alternative, if either, would you like to use as the outbound starting point?** I\u2019ll keep your evening route, times, weekdays, 143 days, and income unchanged.",
+        "calls": [
+          {
+            "name": "get_annual_toll_ballpark",
+            "input": {
+              "outbound": {
+                "origin_point_id": "i495:189SD",
+                "destination_point_id": "i495:190SD",
+                "departure_time": "07:45:00"
+              },
+              "return": {
+                "origin_point_id": "i495:190NO",
+                "destination_point_id": "i495:188ND",
+                "departure_time": "17:15:00"
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 143,
+              "gross_annual_income_usd": "123500.00"
+            },
+            "result": {
+              "error": "ballpark_unavailable",
+              "reason": "route_unavailable",
+              "outbound": {
+                "origin_point_id": "i495:189SD",
+                "destination_point_id": "i495:190SD",
+                "status": "invalid_origin",
+                "reason": {
+                  "code": "origin_not_entry",
+                  "details": {
+                    "point_id": "i495:189SD",
+                    "point_type": "exit",
+                    "allowed_point_types": [
+                      "entry",
+                      "airport"
+                    ],
+                    "alternatives": [
+                      {
+                        "point_id": "i495:188SO",
+                        "network_id": "i495",
+                        "source_node_id": "188SO",
+                        "point_type": "entry",
+                        "direction": "SB",
+                        "label": "Lee Highway (Route 29)",
+                        "aliases": [
+                          "Lee Highway",
+                          "Route 29",
+                          "Idylwood",
+                          "Merrifield"
+                        ],
+                        "location": {
+                          "type": "Point",
+                          "coordinates": [
+                            -77.22081457672118,
+                            38.87578329502197
+                          ]
+                        }
+                      },
+                      {
+                        "point_id": "i495:187SO",
+                        "network_id": "i495",
+                        "source_node_id": "187SO",
+                        "point_type": "entry",
+                        "direction": "SB",
+                        "label": "Interstate 66",
+                        "aliases": [
+                          "I-66",
+                          "Idylwood",
+                          "Dunn Loring"
+                        ],
+                        "location": {
+                          "type": "Point",
+                          "coordinates": [
+                            -77.22206903572085,
+                            38.88630856637025
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "return": {
+                "origin_point_id": "i495:190NO",
+                "destination_point_id": "i495:188ND",
+                "status": "valid",
+                "reason": null
+              }
+            },
+            "is_error": false
+          }
+        ]
+      },
+      {
+        "user": "I don\u2019t want to change my outbound starting point from Gallows Road to either alternative. Please keep that requested leg if possible.",
+        "response": "### \ud83d\udee3\ufe0f Outbound route unavailable\n\nI\u2019ll keep your requested Gallows Road-to-Braddock Road morning leg. The route validator did not accept Gallows Road as a valid starting point and returned only Lee Highway (Route 29) and Interstate 66 as alternatives. I can\u2019t estimate the complete annual toll cost without changing the outbound starting point.\n\nYour evening leg and the rest of your commute details remain unchanged if you want to revisit the estimate.",
+        "calls": []
+      }
+    ],
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-annual-switch-still-needs-salary",
+    "label": "baseline-1-2-application-stop",
+    "expected_failures": [
+      "incomplete_dialogue",
+      "missing_call"
+    ],
+    "expected": {
+      "outcome": false,
+      "grounding": true,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "actor_replies": [],
+    "application_stop": "tool_arguments",
+    "rationale": "The harness stopped the application before any generated actor reply; score the wrong call as application failure, not actor uncertainty.",
+    "turns": [
+      {
+        "user": "Current toll from Hunter Mill Road to Spring Hill Road on the Dulles Toll Road?",
+        "response": "[No completed response]",
+        "calls": []
+      }
+    ],
+    "rejected_tools": [
+      {
+        "turn": 1,
+        "name": "get_current_toll_price",
+        "input": {
+          "origin_point_id": "dtr:14:entry:WB",
+          "destination_point_id": "dtr:17:exit:WB",
+          "pricing_profile": {
+            "vehicle_class": "two_axle_passenger",
+            "payment_method": "e_zpass",
+            "transponder_mode": "toll"
+          }
+        },
+        "result": {
+          "status": "error",
+          "content": [
+            {
+              "text": "Frozen replay rejected this call."
+            }
+          ]
+        },
+        "reason": "tool_arguments"
+      }
+    ]
   }
 ]

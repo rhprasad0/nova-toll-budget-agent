@@ -18,12 +18,13 @@ def test_complete_development_contract_and_reference_labels() -> None:
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 120
+    assert len(examples) == 132
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 20,
+        False: 32,
     }
-    assert all(example.actor_validity == "valid" for example in examples)
+    assert Counter(e.actor_validity for e in examples) == {"valid": 129, "invalid": 3}
+    assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5
         assert "three_axle" not in case.model_dump_json()
@@ -65,6 +66,27 @@ def test_catalog_and_successful_routes_match_committed_oracle() -> None:
                     direction["origin_point_id"],
                     direction["destination_point_id"],
                 ) in connections
+
+
+def test_baseline_below_median_wording_preserves_amount_checks() -> None:
+    root = golden.V2 / "eval/evidence/golden-100"
+    receipt = json.loads((root / "receipt-baseline-1.json").read_text())
+    report = json.loads((root / receipt["archive"] / "report.json").read_text())
+    cases = {c.id: c for c in golden.load_cases()}
+    rows = [
+        a
+        for a in report["attempts"]
+        if a["id"] == "dev3-falling-gallows-quote-2"
+        or a["case_id"] == "dev3-two-comparable-weeks"
+    ]
+    assert len(rows) == 4
+    for row in rows:
+        assert "unsupported_money" in row["checks"]
+        turns = [golden.Turn.model_validate(t) for t in row["turns"]]
+        case = cases[row["case_id"]]
+        assert "unsupported_money" not in golden.grade_assertions(case, turns)
+        turns[-1].response += " It is $999.99 below the median."
+        assert "unsupported_money" in golden.grade_assertions(case, turns)
 
 
 @pytest.mark.parametrize(

@@ -581,6 +581,8 @@ def test_repeating_agent_is_scored_failure_not_infrastructure(
     result = run.execute(case, 1, run.Journal(tmp_path / "loop", 25))
     assert result.status == "scored" and result.failure_class == "budget"
     assert "tool_budget" in result.checks
+    assert result.application_stop == "tool_budget"
+    cast(Mock, golden.make_actor).return_value.act.assert_not_called()
     assert len(result.requested_tools) == 2
     assert count == 2 and not result.passed
 
@@ -1183,6 +1185,49 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
     row.measurements.append(measurement())
     run.finish_assessment(case, row)
     assert row.status == "inconclusive" and not row.passed
+
+
+@pytest.mark.parametrize("stopped", [False, True])
+@pytest.mark.parametrize("generated_reply", [False, True])
+def test_application_stop_only_exempts_an_actor_that_never_ran(
+    monkeypatch: pytest.MonkeyPatch, stopped: bool, generated_reply: bool
+) -> None:
+    case = golden_case(1)
+    row = run.Attempt(
+        id="stopped",
+        case_id=case.id,
+        trial=1,
+        application_stop="tool_arguments" if stopped else None,
+        turns=[
+            golden.Turn(user=case.prompt, response="[No completed response]", calls=[])
+        ],
+        actor_replies=[{"message": "An invented route", "stop": False}]
+        if generated_reply
+        else [],
+    )
+    if generated_reply:
+        row.turns.append(
+            golden.Turn(
+                user="An invented route", response="[No completed response]", calls=[]
+            )
+        )
+    response = SimpleNamespace(
+        structured_output=run.OutcomeAssessment(
+            outcome=run.Verdict(passed=False, evidence="Application failed."),
+            actor_validity=run.ActorAssessment(
+                status="invalid", evidence="Observed contradiction."
+            ),
+        )
+    )
+    evaluator = Mock(return_value=response)
+    monkeypatch.setattr(run, "Agent", Mock(return_value=evaluator))
+    run.assess_outcome(case, row, Mock(spec=Model), "contract", "conversation")
+    assert row.actor_validity is not None
+    assert row.actor_validity.status == (
+        "valid" if stopped and not generated_reply else "invalid"
+    )
+    assert not row.verdicts["outcome"].passed
+    assert "APPLICATION STOP" in evaluator.call_args.args[0]
 
 
 @pytest.mark.parametrize("validity", ["invalid", "uncertain"])

@@ -10,7 +10,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
-from typing import Any, Literal, Self, cast
+from typing import Annotated, Any, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -28,7 +28,7 @@ from eval.simulated import GroundedCorrectnessEvaluator
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.0.3"
+CORPUS_VERSION = "3.0.4"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -64,7 +64,14 @@ its tools or how it will be graded. Never treat the assistant's suggested facts
 as your own unless your profile allows them. Return a nonempty message when a reply
 is needed; otherwise return JSON null for message. Never return an empty or
 whitespace-only string: that means an invalid continuation, not completion.
-The runner derives when to stop.
+The runner derives when to stop. Before returning null, check the assistant's
+latest question against ALL profile facts and follow-up rules. A request for
+missing origin/destination, income, schedule, or confirmation is not completion.
+If the profile supplies the requested fact, deliver it; give both endpoints when
+both are requested. Never stop merely because the assistant asked a clear question.
+Explicit profile choices override preserving the original route: if instructed
+to select a named alternative when offered, choose it rather than rejecting all
+alternatives. Do not invent a preference to retain the original starting point.
 A question asking you to choose income, supply schedule facts, or confirm days
 needs your profile's answer delivered as a message BEFORE you can finish.
 A proposed estimate is not yet a completed estimate. Deliver any explicitly
@@ -165,7 +172,7 @@ class Record(BaseModel):
 class ActorReply(Record):
     """One model decision: a message to deliver, or null to finish."""
 
-    message: str | None = Field(
+    message: Annotated[str, Field(min_length=1, pattern=r"\S")] | None = Field(
         description="Deliver a necessary clarification or any profile-required correction, choice, cancellation, proof question, or workflow switch. Once those obligations are met, return JSON null after completion, refusal, or unavailability. Never return an empty or whitespace-only string. Do not restate the answer or your goal."
     )
     stop: SkipJsonSchema[bool] = False
@@ -266,6 +273,7 @@ class Example(Record):
     expected: ExpectedVerdicts | None
     actor_validity: Literal["valid", "invalid", "uncertain"] = "valid"
     actor_replies: list[dict[str, JsonValue]] = Field(default_factory=lambda: [])
+    application_stop: str | None = None
     rationale: str = Field(min_length=1)
     turns: list[Turn] = Field(min_length=1)
     rejected_tools: list[RejectedCall] = Field(default_factory=lambda: [])
@@ -458,7 +466,7 @@ def make_actor(case: GoldenCase, model: Model) -> ActorSimulator:
         actor_profile=actor_profile(case),
         initial_query=case.prompt,
         system_prompt_template=ACTOR_PROMPT,
-        model=cast(Any, model),  # SDK 1.1.0 forwards Model despite its str annotation.
+        model=cast(Any, model),  # SDK forwards Model despite its str annotation.
         max_turns=case.actor.max_turns,
         structured_output_model=ActorReply,
     )
@@ -573,6 +581,22 @@ def money(text: str) -> set[Decimal]:
         r"\b(?:down|decreased?|fell|falling|fallen|drop(?:ped)?|reduction)\s+"
         r"(?:(?:by|of)\s+)?(?:\*{1,2}|_{1,2}|`)?\$(?=\s*\d)",
         "-$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"(\b(?:below|lower than|less than)\s+(?:the\s+)?(?:recent\s+)?"
+        r"(?:median|average|mean)[*_`: ]*\$\d[\d,]*(?:\.\d+)?"
+        r"(?:\*{1,2}|_{1,2}|`)?\s*,?\s+by\s+(?:\*{1,2}|_{1,2}|`)?)\$(?=\d)",
+        r"\1-$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"\$(\d[\d,]*(?:\.\d+)?)(?:\*{1,2}|_{1,2}|`)?"
+        r"(?:\s*\(\d+(?:\.\d+)?%\))?(?:\*{1,2}|_{1,2}|`)?\s+"
+        r"(?:below|less than|lower than)\b",
+        r"-$\1",
         text,
         flags=re.IGNORECASE,
     )

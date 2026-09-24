@@ -1,8 +1,8 @@
 {
   "status": "approved",
-  "corpus_sha256": "596b2f1c7abd0c77087c415da7905b673561011f06c612e9d27a739acad6833f",
+  "corpus_sha256": "f37fc6757e07e427845951228cdb0bc36943221cd63917255905cd4fa09f42d1",
   "reviewer": "Ryan",
-  "evidence": "Ryan accepted the reported zero-disagreement calibration and instructed: \"Very good. Now run the new baseline with this set.\" Approval is for the current development corpus and calibration as prerequisites to this baseline, not production qualification or approval of unmeasured application results.",
-  "note": "Approved for the requested development baseline using calibration 5. Three fresh application trials per case, 16 workers, five delivered user turns maximum. Earlier calibration measurements remain recorded.",
-  "approved_at": "2026-09-24T19:13:22.042770+00:00"
+  "evidence": "Ryan instructed: \"Let's proceed with all the suggested fixes and then do another baseline run.\" This authorizes the evaluator fixes, regression references, dependency update and fresh development baseline; the 100 cases and their existing labels are unchanged. Fresh calibration is required before execution.",
+  "note": "Development-only authorization for the corrected evaluation contract; application results remain unreviewed.",
+  "approved_at": "2026-09-24T19:46:21.114319+00:00"
 }

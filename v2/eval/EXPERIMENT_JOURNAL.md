@@ -483,3 +483,9 @@ policy and registry are unchanged.
 Run ID: `ed281384-fc39-47a7-88e3-43aa7f947b9c`.
 Evidence SHA-256: `53bee6705115716ab80a09766f08c467194871145328502da9af871d110bcf48`.
 Archive SHA-256: `c5e327a9c0d2cf9ed49838aac40ce2e93d9ac712e5307395427475a928d0c430`.
+
+## 2026-09-24 — Correct measurement defects before a second golden-100 baseline
+
+Ryan authorized all suggested evaluator fixes and a fresh baseline. Contract 3.0.4 / harness 2.0.11 preserves the 100 development cases, 107 fixtures, and original 120 reference labels. Strands Evals is updated to 1.4.0; its simulator is unchanged upstream. The evaluator now records application termination separately, establishes actor validity when only the approved opening was delivered, rejects blank actor replies, strengthens required clarification/selection instructions, and uses medium actor reasoning. The money parser recognizes below-median deltas, including an intervening percentage and Markdown.
+
+Twelve additional regression references preserve nine application-stop transcripts and three distinct invalid actor behaviors from baseline 1. The resulting 132-reference calibration includes 129 application-labeled references and three actor-only controls. First-baseline verdicts and artifacts remain untouched. Targeted live actor checks and fresh calibration precede the requested new 300-trial baseline; costs will be chained from baseline 1 under the existing $25 ceiling. Application model/prompt and production policy remain unchanged. See `evidence/golden-100/FIXES-BASELINE-2.md` for the correction scope and forthcoming run evidence.

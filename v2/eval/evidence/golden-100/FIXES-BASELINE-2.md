@@ -1,0 +1,11 @@
+# Corrected measurement for the second development baseline
+
+Ryan authorized all suggested evaluator fixes and another baseline on September 24, 2026. Contract **3.0.4 / harness 2.0.11** preserves all 100 cases, 107 fixtures, and the 120 existing reference labels. The application stays on the same model and prompt. First-baseline evidence and verdicts remain unchanged.
+
+- Upgrade `strands-agents-evals` from 1.1.0 to 1.4.0. Upstream simulator code is unchanged; this is dependency maintenance, not the actor fix.
+- Record application termination separately from actor decisions. When the application fails before the first actor call, the approved opening deterministically establishes actor validity. For later termination, the judge still checks delivered actor messages for contradictions; missing future replies alone are not actor fault.
+- Reject empty and whitespace-only actor messages in the structured schema. Null remains the only completion signal. Clarify that supplied endpoints must be delivered when requested and explicit alternative-selection instructions override retaining the original route. Increase actor reasoning from low to medium; the model and five-delivered-turn maximum stay unchanged.
+- Recognize adjacent monetary comparisons such as `$1.80 below the median` as negative deltas, while retaining checks for unsupported amounts and incorrect signs.
+- Add **12 regression references**: nine application-stop failures and three distinct invalid actor behaviors from the first baseline. There are now **132 calibration references**, including 129 with application labels and three with actor-only labels. Calibration exercises application-stop references with live termination semantics, rather than the fixed-reference missing-record exemption.
+
+Validation and new run results will be linked here after execution. These are development measurements, not production qualification. The earlier baseline is retained for comparison; changes in scores cannot by themselves establish application improvement because the evaluation contract changed.
