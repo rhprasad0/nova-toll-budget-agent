@@ -1,5 +1,11 @@
 # Golden 3.0.0 calibration review
 
+**Current application evidence:** the [first 3.0.3 baseline](BASELINE-1.md) and
+[baseline HTML review](baseline-review.html) contain all 300 live application
+conversations against frozen fixtures: 156 passed, 131 failed, 13 inconclusive.
+The current corpus and calibration 5 were approved before that run. This page
+preserves the original calibration history below.
+
 **Complete measurement; human approval pending.** Ryan authorized this calibration after opening [PR #596](https://github.com/rhprasad0/nova-toll-budget-agent/pull/596) and specified 16 parallel workers. This is judge calibration on authored transcripts, not application performance or a live actor-simulation check.
 
 The [latest 3.0.3 repeat calibration](CALIBRATION-5.md) and [static HTML review](review.html) include Ryan's case-65 adjudication, clarified judge criteria, realistic Springfield-based cases 79/80, the accepted commute simplification, and five-turn actors. The repeat matched all 360 labels; the preceding run's two disagreements remain recorded. The HTML works offline and shows all 120 reference conversations, tool evidence, and judge explanations. This document preserves the original 3.0.0 review and its 12 disputed references below.

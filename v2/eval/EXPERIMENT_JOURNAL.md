@@ -432,3 +432,54 @@ The approved calibration is staged in an ignored working copy because the runner
 renders its approval status before execution. The original committed reports,
 events, manifest, and receipt hashes remain unchanged; the new approval is a
 separate record. The corpus validator and exact-evidence approval check passed.
+
+### First application baseline on 3.0.3
+
+The authorized baseline completed **all 300 attempts**, three per case, using
+source `545d66314b31806e2ec5b09c9a32c65add76d823`, corpus **3.0.3**, harness
+**2.0.10**, approved calibration 5, and **16 workers**. Application model/prompt,
+judge guidance, cases, fixtures, and the five-turn actor maximum were unchanged.
+Actual trials used one turn in 190 conversations, two in 96, and three in 14.
+
+Recorded results: **156 passed, 131 failed, and 13 inconclusive**; **54.4%**
+success among **287 scored trials**. Thirty-three of 100 cases pass all three
+trials; the renderer's pass³ is **33/89 (37.1%)** among fully scored cases.
+The 13 inconclusive trials prevent a complete scored measurement and confidence
+interval. Current pricing passes 87/113 scored trials (77.0%); annual affordability
+62/160 (38.8%); mixed workflows 7/14 (50.0%). Primary failure counts are Outcome
+81, tool use 39, Grounding 9, clarification 2, and actor validity 13.
+
+The four invalid actor assessments comprise two premature stops, one missing
+reply, and one refusal to follow a required route selection. Nine uncertain
+assessments occur when no actor reply/stop follows an application rejection;
+these deserve review under the rule that application failure is not actor fault.
+Four scored failures also appear to be deterministic false positives: case 32,
+trial 2, and all case-35 trials report a positive magnitude "below" a median,
+while the tool stores a negative delta. All three semantic judges pass them,
+but the money parser raises `unsupported_money`. No recorded verdict was changed.
+
+Annual Outcome findings commonly concern missing daily toll amounts for each
+scenario, price-source disclosure, and forecast/guarantee caveats; some caveat
+findings merit semantic-leniency review. Incorrect route direction and timestamp
+conversion also occur. Case 80 passes cancellation 3/3; case 79 confirms correctly
+in all trials but passes overall 1/3 because of explanation omissions.
+
+The run used **1,964 model calls**, with all starts/finishes and usage reconciled.
+There are no infrastructure-status trials or unknown costs. Cost was
+**$0.91475671**, bringing cumulative spending to **$1.92986522 of $25**. Median
+and p95 full-trial latency were **24.86s / 43.98s**. No failed or inconclusive
+trial was retried or replaced.
+
+The existing archive helper preserved all four raw files byte-for-byte after
+report reproduction checks. All prior calibration receipt hashes remain intact.
+The [baseline report](evidence/golden-100/BASELINE-1.md) and
+[static HTML page](evidence/golden-100/baseline-review.html) expose all 300 exact
+transcripts, tool evidence, actor records, checks, and judge explanations. Browser
+checks cover all transcripts/statuses, all 100 case rows, offline loading,
+keyboard access, anchors, and mobile layout. The corpus validator and repository
+static checks passed. Human actor/result review remains pending; the production
+policy and registry are unchanged.
+
+Run ID: `ed281384-fc39-47a7-88e3-43aa7f947b9c`.
+Evidence SHA-256: `53bee6705115716ab80a09766f08c467194871145328502da9af871d110bcf48`.
+Archive SHA-256: `c5e327a9c0d2cf9ed49838aac40ce2e93d9ac712e5307395427475a928d0c430`.

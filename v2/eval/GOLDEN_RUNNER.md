@@ -8,26 +8,29 @@ to **five delivered user turns including the opening request** and accepts gener
 home/work-area shorthand during commute clarification. Its
 [matching calibration](evidence/golden-100/CALIBRATION-2.md) measured all 120
 references for $0.20711386 ($0.41234424 cumulative), with nine label disagreements
-across eight references. Human approval remains pending.
+across eight references. That earlier contract remains historical.
 Version 3.0.2 revises cases 79/80 to return near the same Springfield home area,
 with client/office confirmation and mixed-office cancellation. Its
 [matching calibration](evidence/golden-100/CALIBRATION-3.md) completed all 120
 references for $0.19802250 ($0.61036674 cumulative), with six disagreements across
 five references. Both revised cases and their negative control match the labels.
-Human approval remains pending; older measurements do not transfer.
+Older measurements and approvals do not transfer.
 Version 3.0.3 records the approved Outcome/Rules failure for case 65's missing
 adjustment invitation and clarifies judge guidance on road abbreviations, source
 disclosure, and financial labels. Its [matching calibration](evidence/golden-100/CALIBRATION-4.md)
 completed 120/120 references with 16 workers: two disagreements across two
 references, with all five previously disputed references now matching. Cost was
 $0.20658857 ($0.81695531 cumulative); no measurement failures or unknown usage.
-Corpus and calibration approval remain pending.
+This first 3.0.3 calibration retains its two disagreements.
 A separately authorized [repeat on unchanged 3.0.3](evidence/golden-100/CALIBRATION-5.md)
 matched all 360 labels across 120 references using 16 workers, with no measurement
 failures. Cost was $0.19815320 ($1.01510851 cumulative). The preceding run's two
-disagreements remain recorded; no corpus or calibration approval is implied.
-No new application run has been performed. A full future run has
-**300 trials**; its holdout subset is empty and has no success rate.
+disagreements remain recorded. Ryan then approved the exact corpus and
+calibration 5 for the [first development baseline](evidence/golden-100/BASELINE-1.md).
+All **300 trials** finished: 156 passed, 131 failed, and 13 were inconclusive,
+for 54.4% success among 287 scored trials. Its holdout subset is empty and has no
+success rate. Actor/result review remains pending. The run used 16 workers for
+$0.91475671 ($1.92986522 cumulative), with no unknown usage or replacement trials.
 
 An authored calibration transcript can finish in two turns even though the actor
 budget is five. Calibration scores every supplied exchange; it does not generate

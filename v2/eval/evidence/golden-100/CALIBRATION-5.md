@@ -1,6 +1,6 @@
 # Golden 3.0.3 repeat calibration review
 
-**120/120 references match all 360 expected judge labels.** This separately authorized repeat used 16 workers on the unchanged 3.0.3 corpus and judge guidance. Open the [static review page](review.html) for every complete transcript, tool result, expected label, and measured explanation. Corpus and calibration approval remain pending.
+**120/120 references match all 360 expected judge labels.** This separately authorized repeat used 16 workers on the unchanged 3.0.3 corpus and judge guidance. Open the [static review page](review.html) for every complete transcript, tool result, expected label, and measured explanation. Ryan subsequently approved the exact corpus and this calibration for the [first development baseline](BASELINE-1.md); see the [approval record](calibration-5/review.json). Raw reports and receipts retain their original pre-approval status and file hashes.
 
 ## Recorded result
 
@@ -36,4 +36,4 @@ The offline corpus validator passed. The raw report reproduces byte-for-byte fro
 - Evidence SHA-256: `6b1931359cacf2d9ffbb1ac9dcf425c44bd3ad56cc6217f70f11d3b547dc4a1b`.
 - [Raw report](calibration-5/report.json), [reference checklist](calibration-5/report.md), [events](calibration-5/events.jsonl), [manifest](calibration-5/manifest.json), and [receipt](receipt-5.json).
 
-Earlier [3.0.0](README.md), [3.0.1](CALIBRATION-2.md), [3.0.2](CALIBRATION-3.md), and [first 3.0.3](CALIBRATION-4.md) evidence is preserved. This measurement does not approve the corpus, authorize application scoring, or qualify a release.
+Earlier [3.0.0](README.md), [3.0.1](CALIBRATION-2.md), [3.0.2](CALIBRATION-3.md), and [first 3.0.3](CALIBRATION-4.md) evidence is preserved. Approval for the development baseline is recorded separately; no production release is qualified.

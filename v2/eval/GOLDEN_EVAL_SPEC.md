@@ -27,12 +27,15 @@ The [matching calibration](evidence/golden-100/CALIBRATION-4.md) measured all
 120 references with 16 workers: two disagreements across two references,
 358/360 label agreement, and no measurement failures. All five previously
 disputed references now match. Cost was $0.20658857 ($0.81695531 cumulative).
-Corpus and calibration approval remain pending; earlier evidence remains intact.
+Earlier evidence remains intact.
 
 A separately authorized [repeat calibration](evidence/golden-100/CALIBRATION-5.md)
 on the unchanged 3.0.3 contract matched all 360 labels across 120 references,
 using 16 workers for $0.19815320 ($1.01510851 cumulative). Both runs are retained;
-the repeat does not erase the preceding two disagreements or approve the corpus.
+the repeat does not erase the preceding two disagreements. Ryan subsequently
+approved this exact corpus and calibration for the [first application baseline](evidence/golden-100/BASELINE-1.md):
+300 trials, 156 passes, 131 failures, and 13 inconclusive results. Scored-trial
+success is 54.4% (156/287); actor/result review remains pending.
 
 Version 3.0.2 makes cases 79/80 more realistic: the morning trip starts at Old
 Keene Mill Road in Springfield and the evening trip returns via nearby Braddock
@@ -62,19 +65,19 @@ leniency and material financial/evidence/consent rules remain, with the bounded
 home/work-area exception above.
 
 `manifest.json` binds exact artifacts and evaluator sources and declares
-`evaluation_scope="development"`. Human approval is **pending** and there is no
-approved calibration reference. The authorized [first calibration](evidence/golden-100/README.md)
+`evaluation_scope="development"`. Exact corpus and calibration-5 approval are
+recorded before baseline execution. The authorized [first calibration](evidence/golden-100/README.md)
 measured 3.0.0's 120 references with 16 workers for $0.20523038. Its original 13
 label disagreements across 12 references remain recorded; Ryan accepted the
 home/work simplification for the next contract. The [matching 3.0.1 calibration](evidence/golden-100/CALIBRATION-2.md)
 measured 120/120 references with nine disagreements across eight references;
-both split-itinerary references pass Grounding. Human approval remains pending.
+both split-itinerary references pass Grounding. That earlier contract is historical.
 Those measurements predate the route revision. The [matching 3.0.2 calibration](evidence/golden-100/CALIBRATION-3.md)
 measured all 120 references with six disagreements across five references. Both
 revised passing cases and their premature-call control match their authored labels.
 Further paid measurements
 require authorization/review under the retained runner procedure; old spending
-approvals and scores do not transfer. Three application trials would produce 300 slots.
+approvals and scores do not transfer. The first baseline attempted all 300 slots.
 The independent holdout has not been authored or inspected in this work. The
 protected production policy remains unchanged and explicitly rejects this
 development-only corpus, including when a historical policy is supplied.

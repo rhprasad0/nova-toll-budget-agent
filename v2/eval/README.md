@@ -13,15 +13,15 @@ measured 3.0.0's 120 references, with 13 label disagreements across 12 examples.
 The 3.0.1 review revision allows five user turns and generic home/work-area
 shorthand for commute clarification. Its [matching calibration](evidence/golden-100/CALIBRATION-2.md)
 measured 120/120 references with nine disagreements across eight references;
-human approval remains pending. No new application score is claimed. All cases
+those measurements remain historical. All cases
 are development cases; an independent holdout is a separate task and is not included here.
 
 Version 3.0.2 revises cases 79/80 so both commute legs serve a Springfield home
 area. One confirms a client/office workday; the other cancels mixed office options.
 The route fixture and financial totals are updated. Its [matching calibration](evidence/golden-100/CALIBRATION-3.md)
 completed 120/120 references: both revised cases and their negative control match
-the labels, with six disagreements across five other references. Human approval
-remains pending.
+the labels, with six disagreements across five other references. That earlier
+contract remains historical.
 
 Version 3.0.3 records Ryan's approved Outcome/Rules failure for the missing
 use-or-adjust invitation in case 65's negative control. Judge guidance clarifies
@@ -35,10 +35,18 @@ shows the latest complete 3.0.3 evidence. A separately authorized
 [repeat calibration](evidence/golden-100/CALIBRATION-5.md), with unchanged corpus
 and judge guidance, matched all 360 labels across 120 references using 16 workers.
 Cost was $0.19815320 ($1.01510851 cumulative). The earlier two disagreements remain
-recorded. Corpus and calibration approval remain pending.
+recorded. Ryan subsequently approved the exact corpus and calibration 5 for
+the [first development baseline](evidence/golden-100/BASELINE-1.md).
+
+All **300 application trials** finished: **156 passed, 131 failed, and 13 were
+inconclusive**. Scored-trial success is **54.4% (156/287)**. The
+[baseline HTML review](evidence/golden-100/baseline-review.html) contains every
+conversation. Actor/result review remains pending, including four apparent
+money-check false positives; original verdicts are retained. The baseline cost
+$0.91475671 ($1.92986522 cumulative), using 16 workers with all usage known.
 
 Run `uv run python -m eval.golden` from `v2/` to validate the frozen artifacts.
-Application evaluation retains three trials per case (300 planned conversations).
+Application evaluation retains three trials per case (300 measured conversations).
 The development-only corpus cannot qualify a production release. The old 200
 cases, approvals, and scores remain historical; test-only legacy inputs never
 become calibration data. See the [recreation guide](GOLDEN_EVAL_SPEC.md),

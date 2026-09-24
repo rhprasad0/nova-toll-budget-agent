@@ -2,8 +2,9 @@
 
 **Current status:** production golden qualification remains blocked. The new
 3.0.3 corpus is development-only and cannot qualify production, even with a
-historical approved policy. It has no approved calibration reference or human
-corpus approval. Independent holdout scope, a new protected policy, and fresh
+historical approved policy. Ryan approved the exact development corpus and
+calibration 5 for its first baseline; application actor/result review remains
+pending. Independent holdout scope, a new protected policy, and fresh
 qualification evidence require separate review. See the
 [authoring guide](GOLDEN_EVAL_SPEC.md).
 
