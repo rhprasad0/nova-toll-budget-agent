@@ -159,7 +159,7 @@
     "v2/lambdas/publisher/costs.py": "51e63c19127d6bf12d24ac39b1f75671a2f3860d58665e994cbf339ce2433956",
     "v2/lambdas/publisher/handler.py": "b9ab86a487bf3bb753ebf3b3b6a5c701ead1b70df6f76839ccbfc7f62fd9f14a",
     "v2/lambdas/timed_checks/handler.py": "b7f952df617bddccc03d4e34245a40b49fdb66f4af74e4f1ed884540221ae3ea",
-    "v2/pyproject.toml": "78c346eb329ad584e70c14344e1fa06aa7673bbed75ef9f955d44e3446a593c4",
+    "v2/pyproject.toml": "47dae07426c0d6bb77a03b30b339553143328c40c0a0ebede09ec01e2ecad0f1",
     "v2/scripts/adopt_production_baseline.py": "eb4e85b5a6d92f11906c3a53a4adfe304bf136f386cb8791a5b9fd814e36db4f",
     "v2/scripts/blue_green.py": "e793de22fefddbdfdb240f076f10ddd48ab0c0430ef5b7dbbe753ea716a50bbd",
     "v2/scripts/build_agentcore_zips.sh": "f05f2a40a4579600fa13e2a731a052325a2985eacf866e6fa920924c4d91eacc",
