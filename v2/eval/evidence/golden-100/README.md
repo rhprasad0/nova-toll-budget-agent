@@ -1,16 +1,18 @@
 # Golden 3.0.0 calibration review
 
-**Current review:** start at the [static review index](index.html). [Calibration 9](CALIBRATION-9.md), on contract **3.0.6 / harness 2.0.13**, matches **396/396 application labels and 135/135 actor labels**, with zero disagreements. The latest application measurement remains [baseline 3](BASELINE-3.md): **206 passed / 93 failed / 1 inconclusive**, under contract 3.0.5. The original calibration history below retains its historical status and results.
+Generated HTML review packets were deleted at Ryan’s request on 24 September 2026. Written findings, raw transcripts, receipts, and approval records remain below.
+
+**Current evidence:** [Calibration 9](CALIBRATION-9.md), on contract **3.0.6 / harness 2.0.13**, matches **396/396 application labels and 135/135 actor labels**, with zero disagreements. The latest application measurement remains [baseline 3](BASELINE-3.md): **206 passed / 93 failed / 1 inconclusive**, under contract 3.0.5. The original calibration history below retains its historical status and results.
 
 **First application evidence:** the [first 3.0.3 baseline](BASELINE-1.md) and
-[baseline HTML review](baseline-review.html) contain all 300 live application
+[raw report](runs/c5e327a9c0d2cf9ed49838aac40ce2e93d9ac712e5307395427475a928d0c430/report.json) contain all 300 live application
 conversations against frozen fixtures: 156 passed, 131 failed, 13 inconclusive.
 The current corpus and calibration 5 were approved before that run. This page
 preserves the original calibration history below.
 
 **Complete measurement; human approval pending.** Ryan authorized this calibration after opening [PR #596](https://github.com/rhprasad0/nova-toll-budget-agent/pull/596) and specified 16 parallel workers. This is judge calibration on authored transcripts, not application performance or a live actor-simulation check.
 
-The [latest 3.0.3 repeat calibration](CALIBRATION-5.md) and [static HTML review](review.html) include Ryan's case-65 adjudication, clarified judge criteria, realistic Springfield-based cases 79/80, the accepted commute simplification, and five-turn actors. The repeat matched all 360 labels; the preceding run's two disagreements remain recorded. The HTML works offline and shows all 120 reference conversations, tool evidence, and judge explanations. This document preserves the original 3.0.0 review and its 12 disputed references below.
+The [latest 3.0.3 repeat calibration](CALIBRATION-5.md) and [raw report](calibration-5/report.json) include Ryan's case-65 adjudication, clarified judge criteria, realistic Springfield-based cases 79/80, the accepted commute simplification, and five-turn actors. The repeat matched all 360 labels; the preceding run's two disagreements remain recorded. The raw report contains all 120 reference conversations, tool evidence, and judge explanations. This document preserves the original 3.0.0 review and its 12 disputed references below.
 
 **Subsequent review decision, 2026-09-24:** Ryan accepts generic home/work-area labels as a useful simplifying assumption, while recognizing why the original Grounding judge objected. The next contract, 3.0.1, includes this exception and raises actor maximums from four to five delivered user turns. The two-turn transcripts for cases 79/80 are complete authored references, not truncated actor runs. This section records the new decision; the 3.0.0 measurements below remain unchanged and do not calibrate the revised contract.
 

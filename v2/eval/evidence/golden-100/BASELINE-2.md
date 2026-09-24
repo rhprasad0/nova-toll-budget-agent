@@ -1,8 +1,6 @@
 # Second development baseline with corrected measurement
 
-**300/300 trials finished: 176 passed, 123 failed, and 1 inconclusive.** Scored-trial success is **58.9% (176/299)**. Open the [static review](baseline-2-review.html) for every conversation and judge explanation.
-
-For a shorter review, open the [10-case sample](baseline-2-sample-review.html): 30 complete trials with selection notes, tool evidence, and the original verdicts. It covers successes, failures, and evaluation inconsistencies; it is not a random statistical sample.
+**300/300 trials finished: 176 passed, 123 failed, and 1 inconclusive.** Scored-trial success is **58.9% (176/299)**. Open the [raw report](runs/8c5bc3d2a151dce237e9946bbc679bf9d2d0b99cd1777a2c363026664a37306f/report.json) for every conversation and judge explanation.
 
 This run uses corpus 3.0.4 / harness 2.0.11 after the [measurement fixes](FIXES-BASELINE-2.md), the 9/9 actor preflight, and [calibration 6](CALIBRATION-6.md). All 100 cases and 107 fixtures are unchanged. Application model and prompt are unchanged. There are three fresh trials per case, 16 workers, and at most five delivered user turns. No trial was retried or replaced.
 
@@ -31,7 +29,7 @@ The first baseline remains unchanged. Changes in scores are not an application i
 
 **Subsequent review:** Ryan requested more lenient annual Outcome grading after reviewing case 52. The [3.0.5 contract revision](ANNUAL-OUTCOME-REVIEW.md) makes separate P25/P90 toll figures optional and accepts semantic historical-source descriptions. [Calibration 8](CALIBRATION-8.md) matches the revised case-52 Outcome expectations of pass/pass/fail; [baseline 3](BASELINE-3.md) records the fresh application run. The scores and verdicts below remain the original 3.0.4 measurements.
 
-- [Case 59, trial 1](baseline-2-review.html#dev3-one-day-team-meeting-1) is the only inconclusive. The actor judge marked it invalid because the conversation stopped without completing the requested estimate. No execution error occurred.
+- [Case 59, trial 1](runs/8c5bc3d2a151dce237e9946bbc679bf9d2d0b99cd1777a2c363026664a37306f/report.json) is the only inconclusive. The actor judge marked it invalid because the conversation stopped without completing the requested estimate. No execution error occurred.
 
 Case 59 trial 1 is a remaining judge inconsistency: the actor had no more precise Braddock Road fact and stopped after the application explained that limitation, as the actor instructions permit. The actor judge instead treated the unfinished application goal as actor misconduct. The measured inconclusive verdict remains unchanged; reviewer recommendation is actor-valid with failed application Outcome. This is a new finding from baseline 2, not one of the first-baseline fixes.
 

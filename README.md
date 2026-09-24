@@ -101,7 +101,7 @@ Promotion changes routing to the validated candidate and retains the previous re
 
 The new [`/eval-dashboard`](v2/runbooks/eval-dashboard.md) shows seven days of scheduled results, the latest synthetic conversations, tool evidence, and judge explanations. It distinguishes graded failures from execution errors and missing runs. Publication is enabled for development first; production activation remains pending. Judge accuracy still needs live verdict review.
 
-The [golden recreation guide](v2/eval/GOLDEN_EVAL_SPEC.md) documents the fresh corpus and preserves the retired design. The [latest baseline review page](v2/eval/evidence/golden-100/baseline-2-review.html) contains all 300 new conversations; the [first review](v2/eval/evidence/golden-100/baseline-review.html) is preserved. [PR #581 measurements](v2/eval/results/golden/CACHING-SUMMARY.md) remain historical evidence for their recorded versions. The development corpus cannot qualify production; no application improvement percentage is claimed here.
+The [golden recreation guide](v2/eval/GOLDEN_EVAL_SPEC.md) documents the fresh corpus and preserves the retired design. The [second baseline report](v2/eval/evidence/golden-100/runs/8c5bc3d2a151dce237e9946bbc679bf9d2d0b99cd1777a2c363026664a37306f/report.json) contains all 300 new conversations; the [first baseline report](v2/eval/evidence/golden-100/runs/c5e327a9c0d2cf9ed49838aac40ce2e93d9ac712e5307395427475a928d0c430/report.json) is preserved. [PR #581 measurements](v2/eval/results/golden/CACHING-SUMMARY.md) remain historical evidence for their recorded versions. The development corpus cannot qualify production; no application improvement percentage is claimed here.
 
 ## Reproduce and inspect
 

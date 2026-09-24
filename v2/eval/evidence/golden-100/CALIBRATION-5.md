@@ -1,6 +1,6 @@
 # Golden 3.0.3 repeat calibration review
 
-**120/120 references match all 360 expected judge labels.** This separately authorized repeat used 16 workers on the unchanged 3.0.3 corpus and judge guidance. Open the [static review page](review.html) for every complete transcript, tool result, expected label, and measured explanation. Ryan subsequently approved the exact corpus and this calibration for the [first development baseline](BASELINE-1.md); see the [approval record](calibration-5/review.json). Raw reports and receipts retain their original pre-approval status and file hashes.
+**120/120 references match all 360 expected judge labels.** This separately authorized repeat used 16 workers on the unchanged 3.0.3 corpus and judge guidance. Open the [raw report](calibration-5/report.json) for every complete transcript, tool result, expected label, and measured explanation. Ryan subsequently approved the exact corpus and this calibration for the [first development baseline](BASELINE-1.md); see the [approval record](calibration-5/review.json). Raw reports and receipts retain their original pre-approval status and file hashes.
 
 ## Recorded result
 
@@ -28,7 +28,7 @@ Both runs remain recorded in full. A clean repeat does not erase the earlier err
 
 ## Validation and provenance
 
-The offline corpus validator passed. The raw report reproduces byte-for-byte from its manifest and events; usage and cost reconcile, all five receipt sets retain their hashes, and all 120 transcripts and expected labels match the preceding run. The HTML page is checked against the exact report, including zero disagreements, offline loading, keyboard disclosure, links, and mobile layout. The existing 92 corpus/development/runner tests passed for this unchanged judge revision; this repeat changes evidence and documentation only.
+The offline corpus validator passed. The raw report reproduces byte-for-byte from its manifest and events; usage and cost reconcile, all five receipt sets retain their hashes, and all 120 transcripts and expected labels match the preceding run. The removed HTML page was checked against the exact report, including zero disagreements, offline loading, keyboard disclosure, links, and mobile layout. The existing 92 corpus/development/runner tests passed for this unchanged judge revision; this repeat changes evidence and documentation only.
 
 - Source commit: `1e11b362549f401166e4b7ea1dd8c06131b3f39d`.
 - Run ID: `516a6312-f373-49fe-8726-d26e6eda4109`; prior run: `e874bb7f-b846-4947-9116-34a07979625d`.

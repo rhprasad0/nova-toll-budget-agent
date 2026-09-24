@@ -4,7 +4,7 @@
 
 Contract **3.0.6 / harness 2.0.13** clarifies financial contradictions, available tool evidence, and permitted annual alternatives. The false-source Gallows reference now expects Rules to fail. All 135 transcripts, cases, actors, fixtures, and the application remain unchanged; the annual Outcome leniency remains in effect.
 
-[Full static review](calibration-9-review.html) · [Raw report](calibration-9/report.json) · [Receipt](receipt-9.json)
+[Raw report](calibration-9/report.json) · [Receipt](receipt-9.json)
 
 ## Gallows hybrid salary regression references
 
@@ -35,4 +35,4 @@ Ryan authorized resolving the four calibration-8 findings, another calibration, 
 | 81, premature alternative | Grounding passes; Outcome and Rules fail | The successful Lee Highway call supports saying it was priced, and Gallows is not a southbound entry. Selecting the alternative before the driver remains unauthorized. |
 | 84 | Rules passes | The annual workflow correctly stops after the route rejection and omits the prohibited current-price restart. |
 
-The [review index](index.html) separates this calibration from the unchanged application baseline and earlier measurements. Raw reports reproduce exactly from the journal; receipt hashes and original evidence are preserved.
+The generated review pages were removed at Ryan’s request; the [evidence summary](README.md) links to the retained measurements. Raw reports reproduce exactly from the journal; receipt hashes and original evidence are preserved.

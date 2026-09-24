@@ -2,7 +2,7 @@
 
 **Subsequent correction, 24 September 2026:** Ryan authorized resolving the four calibration-8 findings and another calibration. Contract **3.0.6 / harness 2.0.13** corrects case 52 trial 3's authored Rules label to **fail**: explicitly denying the actual price source is an affirmative misrepresentation, even though the tool workflow is permitted. Its Outcome and Grounding expectations remain fail; trials 1 and 2 remain pass on all criteria. The 135 transcripts and historical results are unchanged. The original 3.0.5 proposal and measurements below are retained as history.
 
-[Calibration 9](CALIBRATION-9.md) matches all **396 application labels and 135 actor labels**, including all three corrected Gallows regression expectations. There are no remaining disagreements in this round. See the [current review index](index.html).
+[Calibration 9](CALIBRATION-9.md) matches all **396 application labels and 135 actor labels**, including all three corrected Gallows regression expectations. There are no remaining disagreements in this round. See the [evidence summary](README.md).
 
 Ryan requested a more lenient Outcome judge after reviewing **Gallows hybrid salary (case 52)**: the answers already contain substantial numerical detail.
 
@@ -26,4 +26,4 @@ Offline validation checks all 100 cases and 135 references, preserves the three 
 
 The fresh [baseline 3](BASELINE-3.md) recorded **206 passed / 93 failed / 1 inconclusive** (68.9% of 299 scored trials). Gallows has two passing trials; the third fails for a wrong route argument. No old baseline was rescored. The revised grading contract and model sampling prevent interpreting the score change as application improvement.
 
-The [baseline 2 report](BASELINE-2.md), [full static review](baseline-2-review.html), [10-case review](baseline-2-sample-review.html#case-52), raw evidence, and receipts retain the measured **176 passed / 123 failed / 1 inconclusive**. These measurements belong to contract 3.0.4 / harness 2.0.11.
+The [baseline 2 report](BASELINE-2.md), [raw report](runs/8c5bc3d2a151dce237e9946bbc679bf9d2d0b99cd1777a2c363026664a37306f/report.json), raw evidence, and receipts retain the measured **176 passed / 123 failed / 1 inconclusive**. These measurements belong to contract 3.0.4 / harness 2.0.11.

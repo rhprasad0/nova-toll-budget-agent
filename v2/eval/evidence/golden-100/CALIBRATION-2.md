@@ -4,7 +4,7 @@
 
 The subsequent [3.0.2 calibration](CALIBRATION-3.md) measures the more realistic routes requested for cases 79/80. This document and its raw files preserve the earlier 3.0.1 evidence.
 
-Open the [static HTML review](review.html) for all 120 complete transcripts, tool evidence, judge explanations, and explicit authored/minimum/maximum turn counts. The [first calibration](README.md) and all of its raw evidence remain preserved.
+Open the [raw report](calibration-2/report.json) for all 120 complete transcripts, tool evidence, judge explanations, and explicit authored/minimum/maximum turn counts. The [first calibration](README.md) and all of its raw evidence remain preserved.
 
 ## Recorded result
 

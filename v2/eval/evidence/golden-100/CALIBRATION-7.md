@@ -4,7 +4,7 @@
 
 Contract **3.0.5 / harness 2.0.12** retains the same application, actor, fixtures, and 135 references. Separate P25/P90 toll figures are optional unless explicitly requested; actual source contradictions remain failures.
 
-[Full static review](calibration-7-review.html) · [Raw report](calibration-7/report.json) · [Receipt](receipt-7.json)
+[Raw report](calibration-7/report.json) · [Receipt](receipt-7.json)
 
 ## Gallows hybrid salary regression references
 

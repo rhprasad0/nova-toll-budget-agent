@@ -3,9 +3,9 @@
 **Earlier run of the current contract.** A separately authorized
 [repeat calibration](CALIBRATION-5.md) matched all 360 labels with unchanged
 corpus and judge guidance. This run's two disagreements and raw evidence remain
-recorded below; the static HTML page now displays the repeat.
+recorded below; its raw report remains archived.
 
-**Complete measurement; corpus and calibration approval pending.** All five previously disputed references now match their labels. Two disagreements remain across two other references. Open the [static review page](review.html) for all 120 complete transcripts, tool evidence, expected labels, and judge explanations.
+**Complete measurement; corpus and calibration approval pending.** All five previously disputed references now match their labels. Two disagreements remain across two other references. Open the [raw report](calibration-4/report.json) for all 120 complete transcripts, tool evidence, expected labels, and judge explanations.
 
 ## Approved adjudication and changes
 
@@ -52,7 +52,7 @@ Case 99 correctly explains missing annual history, supplies the available income
 
 ## Validation and provenance
 
-**92 relevant corpus/development/runner tests passed**, including reference replay and independent financial reconciliation. Repository static checks passed. The raw report reproduces byte-for-byte from its manifest and events. All usage is known, the corpus matches its frozen digest, and all four receipt sets retain their file hashes. The HTML page embeds the exact transcripts and measured verdicts and is checked for offline loading, keyboard access, valid links, and mobile layout.
+**92 relevant corpus/development/runner tests passed**, including reference replay and independent financial reconciliation. Repository static checks passed. The raw report reproduces byte-for-byte from its manifest and events. All usage is known, the corpus matches its frozen digest, and all four receipt sets retain their file hashes. The removed HTML page embedded the exact transcripts and measured verdicts and was checked for offline loading, keyboard access, valid links, and mobile layout.
 
 - Source commit: `5b93f0c6d45355039928b45546a816c92ff41b1a`; corpus `3.0.3`; harness `2.0.10`.
 - Run ID: `e874bb7f-b846-4947-9116-34a07979625d`; prior run: `3d9aa3b8-953d-4244-a540-9d9e21a8b8db`.

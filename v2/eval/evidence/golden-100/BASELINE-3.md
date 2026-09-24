@@ -1,6 +1,6 @@
 # Third development baseline — relaxed annual Outcome grading
 
-**300/300 trials finished: 206 passed, 93 failed, and 1 inconclusive.** Scored-trial success: **68.9% (206/299)**. [Open all 300 conversations and verdicts](baseline-3-review.html).
+**300/300 trials finished: 206 passed, 93 failed, and 1 inconclusive.** Scored-trial success: **68.9% (206/299)**. [raw report](runs/b3767839406c4bef925cda88f7d9b9ffbae17d05442d23fefe00844642d1f1d9/report.json).
 
 Contract **3.0.5 / harness 2.0.12** accepts the P50 toll summary and combined-cost scenarios without requiring separate P25/P90 toll figures, and grades historical-source descriptions semantically. All 100 prompts, actor profiles, tool workflows, 107 fixtures, and the application model/prompt are unchanged. Three fresh trials per case; 16 workers; at most five delivered user turns. No trial was retried, replaced, or rescored.
 
@@ -27,9 +27,9 @@ Ryan requested another calibration after this baseline started. [Calibration 8](
 
 | Trial | Outcome | Grounding | Rules | Overall |
 | --- | --- | --- | --- | --- |
-| [Trial 1](baseline-3-review.html#dev3-gallows-hybrid-salary-1) | Fail | Pass | Fail | Fail |
-| [Trial 2](baseline-3-review.html#dev3-gallows-hybrid-salary-2) | Pass | Pass | Pass | Pass |
-| [Trial 3](baseline-3-review.html#dev3-gallows-hybrid-salary-3) | Pass | Pass | Pass | Pass |
+| [Trial 1](runs/b3767839406c4bef925cda88f7d9b9ffbae17d05442d23fefe00844642d1f1d9/report.json) | Fail | Pass | Fail | Fail |
+| [Trial 2](runs/b3767839406c4bef925cda88f7d9b9ffbae17d05442d23fefe00844642d1f1d9/report.json) | Pass | Pass | Pass | Pass |
+| [Trial 3](runs/b3767839406c4bef925cda88f7d9b9ffbae17d05442d23fefe00844642d1f1d9/report.json) | Pass | Pass | Pass | Pass |
 
 ## Primary failure categories
 
@@ -50,6 +50,6 @@ Ryan requested another calibration after this baseline started. [Calibration 8](
 - Run `fec06c4c-cc57-42b0-b0a6-81c7138fadfb`; source commit `36a320ee400bf75528ad3febced342ba7739c34c`.
 - [Raw report](runs/b3767839406c4bef925cda88f7d9b9ffbae17d05442d23fefe00844642d1f1d9/report.json) · [Event journal](runs/b3767839406c4bef925cda88f7d9b9ffbae17d05442d23fefe00844642d1f1d9/events.jsonl) · [Receipt](receipt-baseline-3.json).
 
-**[Case 92, trial 2](baseline-3-review.html#dev3-monthly-versus-daily-budget-2): inconclusive.** The actor judge marked the final stop premature because the annual estimate was unfinished. Three user turns were delivered; the conversation remained on facility clarification. The assistant answered the monthly-average question but made no price call or annual estimate. No execution error occurred. The original actor verdict remains recorded for review.
+**[Case 92, trial 2](runs/b3767839406c4bef925cda88f7d9b9ffbae17d05442d23fefe00844642d1f1d9/report.json): inconclusive.** The actor judge marked the final stop premature because the annual estimate was unfinished. Three user turns were delivered; the conversation remained on facility clarification. The assistant answered the monthly-average question but made no price call or annual estimate. No execution error occurred. The original actor verdict remains recorded for review.
 
 Human review of application/actor results remains pending. The execution review does not approve these newly measured application results.

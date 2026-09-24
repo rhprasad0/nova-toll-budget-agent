@@ -1,10 +1,10 @@
 # TollChat v2 evaluation
 
-**Current contract: 3.0.6 / harness 2.0.13.** [Calibration 9](evidence/golden-100/CALIBRATION-9.md) matches **396/396 application labels and 135/135 actor labels**, with **zero disagreements** across 135 references and no measurement failures. The four calibration-8 findings are addressed in shared judge guidance and one corrected false-source Rules reference label. Start at the [static review index](evidence/golden-100/index.html). The latest application measurement remains baseline 3 under 3.0.5; no new application baseline was run.
+**Current contract: 3.0.6 / harness 2.0.13.** [Calibration 9](evidence/golden-100/CALIBRATION-9.md) matches **396/396 application labels and 135/135 actor labels**, with **zero disagreements** across 135 references and no measurement failures. The four calibration-8 findings are addressed in shared judge guidance and one corrected false-source Rules reference label. Start at the [evidence summary](evidence/golden-100/README.md). The latest application measurement remains baseline 3 under 3.0.5; no new application baseline was run.
 
 **Previous contract: 3.0.5 / harness 2.0.12.** After Ryan requested [more lenient annual Outcome grading](evidence/golden-100/ANNUAL-OUTCOME-REVIEW.md), [baseline 3](evidence/golden-100/BASELINE-3.md) finished with **206 passed, 93 failed, 1 inconclusive** (68.9% of scored trials). [Calibration 7](evidence/golden-100/CALIBRATION-7.md) matched 389/396 application labels; the requested [unchanged repeat, calibration 8](evidence/golden-100/CALIBRATION-8.md), matched **392/396**, with four disagreements and 135/135 actor labels matching. Earlier results below retain their original contracts and verdicts.
 
-The [second baseline](evidence/golden-100/BASELINE-2.md) on corrected contract **3.0.4 / harness 2.0.11** finished with **176 passed, 123 failed, and 1 inconclusive out of 300 trials**; scored-trial success is **58.9% (176/299)**. Its [static review](evidence/golden-100/baseline-2-review.html) contains all 300 conversations. The actor preflight passed 9/9 checks; [calibration 6](evidence/golden-100/CALIBRATION-6.md) matched 386/387 application labels and 132/132 actor labels, retaining one known Grounding disagreement. The 100 cases, fixtures, and application model/prompt are unchanged. Cost was $0.92992747 for this baseline, $3.09280985 cumulative. Original results remain intact; changed evaluation rules and sampling mean score differences do not establish application improvement. Application result review remains pending.
+The [second baseline](evidence/golden-100/BASELINE-2.md) on corrected contract **3.0.4 / harness 2.0.11** finished with **176 passed, 123 failed, and 1 inconclusive out of 300 trials**; scored-trial success is **58.9% (176/299)**. Its [raw report](evidence/golden-100/runs/8c5bc3d2a151dce237e9946bbc679bf9d2d0b99cd1777a2c363026664a37306f/report.json) contains all 300 conversations. The actor preflight passed 9/9 checks; [calibration 6](evidence/golden-100/CALIBRATION-6.md) matched 386/387 application labels and 132/132 actor labels, retaining one known Grounding disagreement. The 100 cases, fixtures, and application model/prompt are unchanged. Cost was $0.92992747 for this baseline, $3.09280985 cumulative. Original results remain intact; changed evaluation rules and sampling mean score differences do not establish application improvement. Application result review remains pending.
 
 The permanent [experiment journal](EXPERIMENT_JOURNAL.md) records experiments,
 results and adoption decisions. Preserve it during cleanup; removal requires
@@ -36,7 +36,7 @@ labels. Its [matching calibration](evidence/golden-100/CALIBRATION-4.md) complet
 120/120 references with two disagreements across two references; all five
 previously disputed references now match. All 20 negative controls remain
 rejected overall. Cost was $0.20658857 ($0.81695531 cumulative), using 16 workers
-with no measurement failures. The [HTML review](evidence/golden-100/review.html)
+with no measurement failures. The [raw report](evidence/golden-100/calibration-5/report.json)
 shows the latest complete 3.0.3 evidence. A separately authorized
 [repeat calibration](evidence/golden-100/CALIBRATION-5.md), with unchanged corpus
 and judge guidance, matched all 360 labels across 120 references using 16 workers.
@@ -46,7 +46,7 @@ the [first development baseline](evidence/golden-100/BASELINE-1.md).
 
 All **300 application trials** finished: **156 passed, 131 failed, and 13 were
 inconclusive**. Scored-trial success is **54.4% (156/287)**. The
-[baseline HTML review](evidence/golden-100/baseline-review.html) contains every
+[raw report](evidence/golden-100/runs/c5e327a9c0d2cf9ed49838aac40ce2e93d9ac712e5307395427475a928d0c430/report.json) contains every
 conversation. Actor/result review remains pending, including four apparent
 money-check false positives; original verdicts are retained. The baseline cost
 $0.91475671 ($1.92986522 cumulative), using 16 workers with all usage known.
