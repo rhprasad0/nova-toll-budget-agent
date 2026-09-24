@@ -3,5 +3,5 @@
   "corpus_sha256": "544e5d8f7f8bce4dd92aa706b88468515a60af52598535609408c6b49c35e96f",
   "reviewer": null,
   "evidence": null,
-  "note": "Cases 79/80 now return to the Springfield home area and distinguish a client/office workday from accidentally mixed office options. Five-turn actors and accepted commute shorthand remain. Matching 3.0.2 calibration and human review are pending."
+  "note": "Cases 79/80 now return to the Springfield home area and distinguish a client/office workday from accidentally mixed office options. Five-turn actors and accepted commute shorthand remain. Matching 3.0.2 calibration is recorded in eval/evidence/golden-100/calibration-3; human review remains pending."
 }

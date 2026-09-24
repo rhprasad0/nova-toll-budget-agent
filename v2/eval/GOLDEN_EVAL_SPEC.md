@@ -53,7 +53,9 @@ label disagreements across 12 references remain recorded; Ryan accepted the
 home/work simplification for the next contract. The [matching 3.0.1 calibration](evidence/golden-100/CALIBRATION-2.md)
 measured 120/120 references with nine disagreements across eight references;
 both split-itinerary references pass Grounding. Human approval remains pending.
-Those measurements predate the route revision; matching 3.0.2 calibration is pending.
+Those measurements predate the route revision. The [matching 3.0.2 calibration](evidence/golden-100/CALIBRATION-3.md)
+measured all 120 references with six disagreements across five references. Both
+revised passing cases and their premature-call control match their authored labels.
 Further paid measurements
 require authorization/review under the retained runner procedure; old spending
 approvals and scores do not transfer. Three application trials would produce 300 slots.

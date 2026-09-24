@@ -2,6 +2,8 @@
 
 **Complete measurement; corpus and calibration approval pending.** This run measures the review changes requested by Ryan: five delivered user turns maximum and acceptance of generic home/work-area shorthand during commute clarification.
 
+The subsequent [3.0.2 calibration](CALIBRATION-3.md) measures the more realistic routes requested for cases 79/80. This document and its raw files preserve the earlier 3.0.1 evidence.
+
 Open the [static HTML review](review.html) for all 120 complete transcripts, tool evidence, judge explanations, and explicit authored/minimum/maximum turn counts. The [first calibration](README.md) and all of its raw evidence remain preserved.
 
 ## Recorded result

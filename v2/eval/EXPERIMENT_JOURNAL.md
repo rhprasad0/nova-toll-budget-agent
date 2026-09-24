@@ -291,3 +291,31 @@ the other 98 cases, judge policy, application prompt/model, and old calibration
 evidence remain unchanged. All **42 relevant corpus/development tests passed**,
 including fixture replay, financial reconciliation, and committed route checks.
 Matching calibration and human approval remain pending for this revision.
+
+### Matching 3.0.2 calibration
+
+The matching run used source `257050f4871dee06382111f8e2b7931c986c5bff`,
+**16 workers**, and the existing $25 cumulative ceiling. All **120 references
+and 360 judge calls completed**, with no measurement failures, unknown usage,
+or retries. Cost was **$0.19802250**, bringing cumulative spending to
+**$0.61036674** across the three contract calibrations.
+
+Both revised passing references pass all three criteria; the linked premature-call
+control fails Outcome and Rules while passing Grounding, exactly as labeled.
+There are **six disagreements across five other references** (354/360 agreement
+with authored labels, 98.3%). None of the 20 negative controls passes all three
+judges. The other verdict changes occur on unchanged references and are not
+evidence of a general improvement. Remaining disputes concern DTR abbreviation,
+unused-source disclosures, a missed false financial label, and the unadjudicated
+day-adjustment negative control.
+
+The [third review packet](evidence/golden-100/CALIBRATION-3.md) and
+[HTML page](evidence/golden-100/review.html) include complete revised transcripts,
+financial evidence, and remaining disagreements. Raw prior runs are retained.
+Evidence copies, receipt hashes, known usage, corpus identity, and byte-for-byte
+report reproduction were verified. No application scoring or live actor run was
+performed; corpus and calibration approval remain pending.
+
+Run ID: `3d9aa3b8-953d-4244-a540-9d9e21a8b8db`.
+Corpus SHA-256: `544e5d8f7f8bce4dd92aa706b88468515a60af52598535609408c6b49c35e96f`.
+Evidence SHA-256: `a541bec759faa64ddb193351e0162ca40389f12da6876f3e0d02231441938fd2`.

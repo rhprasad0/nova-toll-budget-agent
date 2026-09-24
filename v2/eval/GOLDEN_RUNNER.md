@@ -10,8 +10,11 @@ home/work-area shorthand during commute clarification. Its
 references for $0.20711386 ($0.41234424 cumulative), with nine label disagreements
 across eight references. Human approval remains pending.
 Version 3.0.2 revises cases 79/80 to return near the same Springfield home area,
-with client/office confirmation and mixed-office cancellation. Matching
-calibration for this route revision is pending; older measurements do not transfer.
+with client/office confirmation and mixed-office cancellation. Its
+[matching calibration](evidence/golden-100/CALIBRATION-3.md) completed all 120
+references for $0.19802250 ($0.61036674 cumulative), with six disagreements across
+five references. Both revised cases and their negative control match the labels.
+Human approval remains pending; older measurements do not transfer.
 No new application run has been performed. A full future run has
 **300 trials**; its holdout subset is empty and has no success rate.
 

@@ -2,7 +2,7 @@
 
 **Complete measurement; human approval pending.** Ryan authorized this calibration after opening [PR #596](https://github.com/rhprasad0/nova-toll-budget-agent/pull/596) and specified 16 parallel workers. This is judge calibration on authored transcripts, not application performance or a live actor-simulation check.
 
-The [latest 3.0.1 calibration](CALIBRATION-2.md) and [static HTML review](review.html) include the accepted commute simplification and five-turn actor budget. The HTML works offline and shows all 120 reference conversations, tool evidence, and judge explanations. This document preserves the original 3.0.0 review and its 12 disputed references below.
+The [latest 3.0.2 calibration](CALIBRATION-3.md) and [static HTML review](review.html) include more realistic Springfield-based cases 79/80, the accepted commute simplification, and five-turn actors. The HTML works offline and shows all 120 reference conversations, tool evidence, and judge explanations. This document preserves the original 3.0.0 review and its 12 disputed references below.
 
 **Subsequent review decision, 2026-09-24:** Ryan accepts generic home/work-area labels as a useful simplifying assumption, while recognizing why the original Grounding judge objected. The next contract, 3.0.1, includes this exception and raises actor maximums from four to five delivered user turns. The two-turn transcripts for cases 79/80 are complete authored references, not truncated actor runs. This section records the new decision; the 3.0.0 measurements below remain unchanged and do not calibrate the revised contract.
 

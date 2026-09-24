@@ -18,7 +18,10 @@ are development cases; an independent holdout is a separate task and is not incl
 
 Version 3.0.2 revises cases 79/80 so both commute legs serve a Springfield home
 area. One confirms a client/office workday; the other cancels mixed office options.
-The route fixture and financial totals are updated; matching calibration is pending.
+The route fixture and financial totals are updated. Its [matching calibration](evidence/golden-100/CALIBRATION-3.md)
+completed 120/120 references: both revised cases and their negative control match
+the labels, with six disagreements across five other references. Human approval
+remains pending. The [HTML review](evidence/golden-100/review.html) shows the revised cases.
 
 Run `uv run python -m eval.golden` from `v2/` to validate the frozen artifacts.
 Application evaluation retains three trials per case (300 planned conversations).
