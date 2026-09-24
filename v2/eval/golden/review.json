@@ -3,5 +3,5 @@
   "corpus_sha256": "163df82345afa1e55bd9e398529d7f2f94ba3ddb435d6b9af06f546764d1ade9",
   "reviewer": null,
   "evidence": null,
-  "note": "Ryan requested five delivered user turns maximum and accepted generic home/work-area shorthand for commute-route clarification. These specific decisions do not approve the complete corpus or a calibration. Fresh matching calibration and human review remain required."
+  "note": "Ryan requested five delivered user turns maximum and accepted generic home/work-area shorthand for commute-route clarification. Matching 3.0.1 calibration is recorded in eval/evidence/golden-100/calibration-2. These specific decisions do not approve the complete corpus or calibration; human review remains pending."
 }

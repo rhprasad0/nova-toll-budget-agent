@@ -5,8 +5,10 @@ proposed passing and 20 negative references. The first
 [calibration](evidence/golden-100/README.md) measured all 120 references using
 16 workers for $0.20523038 under 3.0.0. Version 3.0.1 raises the actor maximum
 to **five delivered user turns including the opening request** and accepts generic
-home/work-area shorthand during commute clarification. Matching calibration and
-human approval remain pending.
+home/work-area shorthand during commute clarification. Its
+[matching calibration](evidence/golden-100/CALIBRATION-2.md) measured all 120
+references for $0.20711386 ($0.41234424 cumulative), with nine label disagreements
+across eight references. Human approval remains pending.
 No new application run has been performed. A full future run has
 **300 trials**; its holdout subset is empty and has no success rate.
 

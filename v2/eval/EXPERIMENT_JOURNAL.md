@@ -235,3 +235,33 @@ Original 3.0.0 calibration events and reports remain intact. These specific
 review decisions do not approve the complete corpus or calibration; a fresh
 matching calibration is required for 3.0.1. Case 65's negative-control label
 boundary is unchanged and still requires adjudication.
+
+### Matching 3.0.1 calibration
+
+Following the requested review changes and the earlier instruction to calibrate
+the new corpus, the matching run used **16 workers**, source
+`893f990896541b166d434bcfbf50c55ff23bf38e`, and the existing $25 cumulative ceiling.
+All **120 references and 360 judge calls completed**, with no measurement errors,
+unknown usage, or retries. Cost: **$0.20711386**, bringing cumulative calibration
+spending to **$0.41234424**. All authored actor-validity judgments were valid.
+
+There are **nine label disagreements across eight references** (351/360 agreement
+against authored labels, 97.5%). Both split-itinerary references now pass
+Grounding. None of the 20 negative controls passes all three judges. Changes in
+the other verdicts include variation on unchanged references and are not a
+controlled estimate of general evaluator improvement. Remaining disputes concern
+invented disclosure/repetition requirements, the prohibited annual restart offer,
+and the still-unadjudicated day-adjustment negative control.
+
+The [second review packet](evidence/golden-100/CALIBRATION-2.md) preserves the exact
+new evidence; the [static page](evidence/golden-100/review.html) displays complete
+reference transcripts and separates their length from the minimum and maximum
+turn counts. The original calibration is retained. No application or live actor
+run was performed; the five-turn limit was verified offline with the real actor
+simulator and stubbed model responses. **183 relevant offline tests passed**, as
+did repository static checks, usage/hash reconciliation, and byte-for-byte report
+reproduction. Corpus and calibration approval remain pending.
+
+Run ID: `7ca8b992-4b8d-4d0a-a588-733099d1699e`.
+Corpus SHA-256: `163df82345afa1e55bd9e398529d7f2f94ba3ddb435d6b9af06f546764d1ade9`.
+Evidence SHA-256: `46a23c3853563342f889fc74f3cd1e7f6723d9334ac9a4ec93f5ed9164900301`.

@@ -40,8 +40,10 @@ home/work-area exception above.
 approved calibration reference. The authorized [first calibration](evidence/golden-100/README.md)
 measured 3.0.0's 120 references with 16 workers for $0.20523038. Its original 13
 label disagreements across 12 references remain recorded; Ryan accepted the
-home/work simplification for the next contract. A matching 3.0.1 calibration is
-pending. Further paid measurements
+home/work simplification for the next contract. The [matching 3.0.1 calibration](evidence/golden-100/CALIBRATION-2.md)
+measured 120/120 references with nine disagreements across eight references;
+both split-itinerary references pass Grounding. Human approval remains pending.
+Further paid measurements
 require authorization/review under the retained runner procedure; old spending
 approvals and scores do not transfer. Three application trials would produce 300 slots.
 The independent holdout has not been authored or inspected in this work. The

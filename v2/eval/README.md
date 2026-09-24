@@ -11,8 +11,9 @@ passenger-car current pricing and annual commute affordability. Start with the
 controls are authored and validated offline. [Calibration](evidence/golden-100/README.md)
 measured 3.0.0's 120 references, with 13 label disagreements across 12 examples.
 The 3.0.1 review revision allows five user turns and generic home/work-area
-shorthand for commute clarification; matching calibration and human approval
-remain pending. No new application score is claimed. All cases
+shorthand for commute clarification. Its [matching calibration](evidence/golden-100/CALIBRATION-2.md)
+measured 120/120 references with nine disagreements across eight references;
+human approval remains pending. No new application score is claimed. All cases
 are development cases; an independent holdout is a separate task and is not included here.
 
 Run `uv run python -m eval.golden` from `v2/` to validate the frozen artifacts.
