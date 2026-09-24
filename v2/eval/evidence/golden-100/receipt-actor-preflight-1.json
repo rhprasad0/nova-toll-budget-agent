@@ -1,0 +1,19 @@
+{
+  "run_id": "d3c0feba-c09b-4aa9-9dc5-7ee69474724f",
+  "source_commit": "0bf8c7ebcab9dd8248dfe748cc7103e90b83848c",
+  "corpus_sha256": "f37fc6757e07e427845951228cdb0bc36943221cd63917255905cd4fa09f42d1",
+  "evidence_sha256": "08903aae194c69aaa7bb642756e9a55eefc50d9b53631031aa27ca85eb44ffdb",
+  "workers": 16,
+  "budget_usd": 25,
+  "recorded_cost_usd": "0.01129344",
+  "prior_cost_usd": "1.92986521",
+  "cumulative_cost_usd": "1.94115865",
+  "model_calls": 27,
+  "unknown_usage_calls": 0,
+  "prior_run_id": "ed281384-fc39-47a7-88e3-43aa7f947b9c",
+  "files": {
+    "manifest.json": "46689fb5cc3ee44f4c94134d6fc98d6c56bbdc9ed1d02d6fa9282f3b38060fc3",
+    "events.jsonl": "2affbeaf7f4895e7e7684e1c1e3046297a6cfac514e800223e84255235d5725c",
+    "report.json": "dfdd3a275f771a480bf35f8d0e0d3382925888bbaf518e0aca716b4e5a1c519d"
+  }
+}

@@ -1,6 +1,7 @@
-"""Retired inputs and the unapproved development set cannot qualify a release."""
+"""Retired inputs and a development-only approval cannot qualify a release."""
 
 import json
+import shutil
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -22,10 +23,13 @@ def test_retired_test_data_is_not_an_active_corpus(tmp_path: Path) -> None:
         golden.validate(TEST_DATA)
 
 
-def test_new_corpus_has_no_transferred_approval() -> None:
+def test_new_corpus_approval_identifies_its_own_contract() -> None:
     review = json.loads((golden.ROOT / "review.json").read_text())
-    assert review["status"] == "pending"
-    assert not review["reviewer"]
+    manifest = json.loads((golden.ROOT / "manifest.json").read_text())
+    assert review["status"] == "approved"
+    assert review["reviewer"] == "Ryan"
+    assert review["corpus_sha256"] == manifest["corpus_sha256"]
+    assert manifest["evaluation_scope"] == "development"
     assert not (golden.ROOT / "calibration-reference.json").exists()
 
 
@@ -74,6 +78,10 @@ def test_release_blocks_even_with_historical_approval(
 def test_application_run_requires_new_corpus_approval(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    root = tmp_path / "pending-corpus"
+    shutil.copytree(golden.ROOT, root)
+    (root / "review.json").write_text(json.dumps({"status": "pending"}))
+    monkeypatch.setattr(golden, "ROOT", root)
     identity = Mock(side_effect=AssertionError("must stop before run identity"))
     credentials = Mock(side_effect=AssertionError("must not load credentials"))
     monkeypatch.setattr(run, "identity", identity)
