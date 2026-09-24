@@ -2,14 +2,16 @@
 
 import copy
 import unittest
+from collections.abc import Callable
+from typing import Any
 
 from compare_runs import IDENTITY_KEYS, compare, digest, violation
 
 
-def report():
+def report() -> dict[str, Any]:
     ids = [f"dev-{n}" for n in range(100)]
     hashes = {"cases.jsonl": "a" * 64}
-    identity = {key: "fixed" for key in IDENTITY_KEYS}
+    identity: dict[str, Any] = {key: "fixed" for key in IDENTITY_KEYS}
     identity.update(
         corpus={
             "evaluation_scope": "development",
@@ -25,7 +27,7 @@ def report():
         prompt_hashes={cid: "a" * 64 for cid in ids},
         tool_schema_hashes={"tool": "b" * 64},
     )
-    rows = [
+    rows: list[dict[str, Any]] = [
         {
             "id": f"{cid}-{trial}",
             "case_id": cid,
@@ -59,16 +61,19 @@ def report():
         for cid in ids
         for trial in (1, 2, 3)
     ]
-    result = {"manifest": {"mode": "run", "identity": identity}, "attempts": rows}
+    result: dict[str, Any] = {
+        "manifest": {"mode": "run", "identity": identity},
+        "attempts": rows,
+    }
     refresh(result)
     return result
 
 
-def slot(report, case=0, trial=1):
+def slot(report: dict[str, Any], case: int = 0, trial: int = 1) -> dict[str, Any]:
     return report["attempts"][case * 3 + trial - 1]
 
 
-def refresh(report):
+def refresh(report: dict[str, Any]) -> None:
     rows = report["attempts"]
     for row in rows:
         row["mandatory_checks_passed"] = not row["checks"]
@@ -95,11 +100,11 @@ def refresh(report):
 
 
 class CompareRunsTest(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.baseline = report()
         self.candidate = copy.deepcopy(self.baseline)
 
-    def test_improved_and_tie(self):
+    def test_improved_and_tie(self) -> None:
         self.assertFalse(compare(self.baseline, self.candidate)["numeric_eligible"])
         slot(self.candidate)["verdicts"]["outcome"]["passed"] = True
         refresh(self.candidate)
@@ -111,7 +116,7 @@ class CompareRunsTest(unittest.TestCase):
             result["review_required"],
         )
 
-    def test_grounding_rules_and_regressions(self):
+    def test_grounding_rules_and_regressions(self) -> None:
         slot(self.baseline, 1)["verdicts"]["outcome"]["passed"] = True
         slot(self.candidate, 0)["verdicts"]["outcome"]["passed"] = True
         slot(self.candidate, 2)["verdicts"]["outcome"]["passed"] = True
@@ -131,7 +136,7 @@ class CompareRunsTest(unittest.TestCase):
             result["violations"]["rules"]["new"], [{"case_id": "dev-5", "trial": 1}]
         )
 
-    def test_inconclusive_excludes_case_and_count_gate(self):
+    def test_inconclusive_excludes_case_and_count_gate(self) -> None:
         row = slot(self.baseline)
         row.update(
             status="inconclusive",
@@ -165,20 +170,21 @@ class CompareRunsTest(unittest.TestCase):
             {"case_id": "dev-2", "trial": 1}, result["violations"]["grounding"]["new"]
         )
 
-    def test_bad_slots(self):
-        for change in (
+    def test_bad_slots(self) -> None:
+        changes: tuple[Callable[[dict[str, Any]], object], ...] = (
             lambda r: r["attempts"].append(copy.deepcopy(slot(r))),
             lambda r: r["attempts"].pop(),
             lambda r: slot(r).update(trial=4),
             lambda r: slot(r).update(case_id="unknown"),
-        ):
+        )
+        for change in changes:
             with self.subTest(change=change), self.assertRaises(ValueError):
                 candidate = copy.deepcopy(self.candidate)
                 change(candidate)
                 compare(self.baseline, candidate)
 
-    def test_identity_and_bad_model_or_holdout(self):
-        for change in (
+    def test_identity_and_bad_model_or_holdout(self) -> None:
+        changes: tuple[Callable[[dict[str, Any]], object], ...] = (
             lambda r: r["manifest"]["identity"].pop("actor_check_sha256"),
             lambda r: r["manifest"]["identity"].update(judge_prompt_sha256="changed"),
             lambda r: r["manifest"]["identity"].update(prompt_version="changed"),
@@ -191,27 +197,29 @@ class CompareRunsTest(unittest.TestCase):
             lambda r: r["manifest"]["identity"]["corpus"].update(
                 evaluation_scope="held_out"
             ),
-        ):
+        )
+        for change in changes:
             with self.subTest(change=change), self.assertRaises(ValueError):
                 candidate = copy.deepcopy(self.candidate)
                 change(candidate)
                 compare(self.baseline, candidate)
 
-    def test_unknown_usage_and_stale_success_flags(self):
-        for change in (
+    def test_unknown_usage_and_stale_success_flags(self) -> None:
+        changes: tuple[Callable[[dict[str, Any]], object], ...] = (
             lambda r: slot(r)["measurements"][0].update(complete=False),
             lambda r: slot(r)["measurements"][0].pop("input_tokens"),
             lambda r: slot(r).update(overall_success=True),
             lambda r: r["overall"].update(successful_trials=1),
             lambda r: slot(r).update(status="infrastructure"),
             lambda r: slot(r).update(failure_phase="harness"),
-        ):
+        )
+        for change in changes:
             with self.subTest(change=change), self.assertRaises(ValueError):
                 candidate = copy.deepcopy(self.candidate)
                 change(candidate)
                 compare(self.baseline, candidate)
 
-    def test_known_actor_error_is_observed_without_inventing_verdicts(self):
+    def test_known_actor_error_is_observed_without_inventing_verdicts(self) -> None:
         row = slot(self.candidate)
         row.update(
             status="inconclusive",

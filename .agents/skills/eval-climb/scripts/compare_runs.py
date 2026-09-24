@@ -5,6 +5,7 @@ import json
 import math
 import sys
 from pathlib import Path
+from typing import Any, TypeGuard, cast
 
 IDENTITY_KEYS = {
     "harness_version",
@@ -49,12 +50,20 @@ ACTOR_ERRORS = {
 }
 
 
-def require(ok, message):
+def require(ok: object, message: str) -> None:
     if not ok:
         raise ValueError(message)
 
 
-def digest(value):
+def is_record(value: object) -> TypeGuard[dict[str, Any]]:
+    return isinstance(value, dict)
+
+
+def is_array(value: object) -> TypeGuard[list[Any]]:
+    return isinstance(value, list)
+
+
+def digest(value: object) -> str:
     return hashlib.sha256(
         json.dumps(
             value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
@@ -62,19 +71,19 @@ def digest(value):
     ).hexdigest()
 
 
-def identity(report, name):
+def identity(report: dict[str, Any], name: str) -> tuple[dict[str, Any], set[str]]:
     require(
-        isinstance(report, dict) and "recovery" not in report,
+        is_record(report) and "recovery" not in report,
         f"{name}: invalid or merged report",
     )
-    manifest = report.get("manifest")
+    manifest = cast(dict[str, Any], report.get("manifest"))
     require(
-        isinstance(manifest, dict) and manifest.get("mode") == "run",
+        is_record(manifest) and manifest.get("mode") == "run",
         f"{name}: expected run manifest",
     )
-    value = manifest.get("identity")
+    value = cast(dict[str, Any], manifest.get("identity"))
     require(
-        isinstance(value, dict) and IDENTITY_KEYS <= value.keys(),
+        is_record(value) and value.keys() >= IDENTITY_KEYS,
         f"{name}: missing contract identity",
     )
     require(
@@ -83,14 +92,14 @@ def identity(report, name):
     )
     corpus = value["corpus"]
     require(
-        isinstance(corpus, dict)
+        is_record(corpus)
         and corpus.get("evaluation_scope") == "development"
         and corpus.get("case_count") == 100
         and corpus.get("trials_per_case") == 3,
         f"{name}: expected 100 development cases with three trials",
     )
     require(
-        isinstance(corpus.get("hashes"), dict)
+        is_record(corpus.get("hashes"))
         and corpus.get("corpus_sha256") == digest(corpus["hashes"]),
         f"{name}: invalid corpus identity",
     )
@@ -101,10 +110,8 @@ def identity(report, name):
         f"{name}: wrong model",
     )
     cases = value["cases"]
-    require(
-        isinstance(cases, list) and len(cases) == 100, f"{name}: expected 100 cases"
-    )
-    ids = [c.get("id") for c in cases if isinstance(c, dict)]
+    require(is_array(cases) and len(cases) == 100, f"{name}: expected 100 cases")
+    ids = [c.get("id") for c in cases if is_record(c)]
     require(
         len(ids) == 100
         and all(isinstance(cid, str) and cid for cid in ids)
@@ -118,34 +125,36 @@ def identity(report, name):
         f"{name}: duplicate, held-out, or missing case contract",
     )
     require(
-        isinstance(value["prompt_hashes"], dict)
+        is_record(value["prompt_hashes"])
         and set(value["prompt_hashes"]) == set(ids)
-        and isinstance(value["tool_schema_hashes"], dict)
+        and is_record(value["tool_schema_hashes"])
         and value["tool_schema_hashes"],
         f"{name}: missing prompt or tool identity",
     )
-    return value, set(ids)
+    return value, set(cast(list[str], ids))
 
 
-def violation(row, key):
+def violation(row: dict[str, Any], key: str) -> bool:
     checks = set(row["checks"])
     mandatory = GROUNDING_CHECKS if key == "grounding" else checks - GROUNDING_CHECKS
     verdict = row["verdicts"].get(key)
     return bool(checks & mandatory) or (verdict is not None and not verdict["passed"])
 
 
-def attempts(report, ids, name):
-    rows = report.get("attempts")
-    require(isinstance(rows, list), f"{name}: missing attempts")
-    by_slot = {}
+def attempts(
+    report: dict[str, Any], ids: set[str], name: str
+) -> tuple[dict[tuple[str, int], dict[str, Any]], dict[str, Any]]:
+    rows = cast(list[dict[str, Any]], report.get("attempts"))
+    require(is_array(rows), f"{name}: missing attempts")
+    by_slot: dict[tuple[str, int], dict[str, Any]] = {}
     for row in rows:
-        require(isinstance(row, dict), f"{name}: malformed attempt")
+        require(is_record(row), f"{name}: malformed attempt")
         cid, trial = row.get("case_id"), row.get("trial")
         require(
             cid in ids and type(trial) is int and trial in (1, 2, 3),
             f"{name}: unexpected trial {cid}/{trial}",
         )
-        slot = cid, trial
+        slot = cast(str, cid), cast(int, trial)
         require(slot not in by_slot, f"{name}: duplicate trial {cid}/{trial}")
         require(
             row.get("id") == f"{cid}-{trial}",
@@ -157,7 +166,7 @@ def attempts(report, ids, name):
             f"{name}: infrastructure or unfinished trial {cid}/{trial}",
         )
         actor = row.get("actor_validity")
-        actor_status = actor.get("status") if isinstance(actor, dict) else None
+        actor_status = actor.get("status") if is_record(actor) else None
         require(
             actor_status in ("valid", "invalid", "uncertain")
             and ((status == "scored") == (actor_status == "valid")),
@@ -176,21 +185,23 @@ def attempts(report, ids, name):
                 row.get("failure_phase") not in ("harness", "agent", "actor")
                 and (
                     row.get("failure_phase") != "judge"
-                    or status == "inconclusive"
-                    and row.get("failure_class") == "actor_validity"
+                    or (
+                        status == "inconclusive"
+                        and row.get("failure_class") == "actor_validity"
+                    )
                 )
                 and not row.get("error")
             ),
             f"{name}: infrastructure, judge, or harness failure {cid}/{trial}",
         )
-        measurements = row.get("measurements")
+        measurements = cast(list[dict[str, Any]], row.get("measurements"))
         require(
-            isinstance(measurements, list) and measurements,
+            is_array(measurements) and measurements,
             f"{name}: missing usage {cid}/{trial}",
         )
         for measurement in measurements:
             require(
-                isinstance(measurement, dict)
+                is_record(measurement)
                 and measurement.get("complete") is True
                 and measurement.get("role") in ("agent", "actor", "judge")
                 and all(
@@ -210,14 +221,14 @@ def attempts(report, ids, name):
                 ),
                 f"{name}: incomplete or unknown usage {cid}/{trial}",
             )
-        verdicts = row.get("verdicts")
+        verdicts = cast(dict[str, Any], row.get("verdicts"))
         require(
-            isinstance(verdicts, dict)
+            is_record(verdicts)
             and (
                 set(verdicts) <= VERDICTS if actor_error else set(verdicts) == VERDICTS
             )
             and all(
-                isinstance(verdicts[k], dict)
+                is_record(verdicts[k])
                 and type(verdicts[k].get("passed")) is bool
                 and isinstance(verdicts[k].get("evidence"), str)
                 and verdicts[k]["evidence"]
@@ -227,11 +238,11 @@ def attempts(report, ids, name):
         )
         checks = row.get("checks")
         require(
-            isinstance(checks, list) and all(isinstance(c, str) for c in checks),
+            is_array(checks) and all(isinstance(c, str) for c in checks),
             f"{name}: invalid checks {cid}/{trial}",
         )
         turns = row.get("turns")
-        require(isinstance(turns, list), f"{name}: invalid turns {cid}/{trial}")
+        require(is_array(turns), f"{name}: invalid turns {cid}/{trial}")
         passed = (
             status == "scored"
             and bool(turns)
@@ -255,9 +266,9 @@ def attempts(report, ids, name):
     )
     scored = sum(row["scored"] for row in by_slot.values())
     successful = sum(row["passed"] for row in by_slot.values())
-    overall = report.get("overall")
+    overall = cast(dict[str, Any], report.get("overall"))
     require(
-        isinstance(overall, dict)
+        is_record(overall)
         and overall.get("expected_trials") == 300
         and overall.get("attempted_trials") == 300
         and overall.get("scored_trials") == scored
@@ -284,7 +295,7 @@ def attempts(report, ids, name):
     }
 
 
-def compare(baseline, candidate):
+def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
     left_identity, ids = identity(baseline, "baseline")
     right_identity, candidate_ids = identity(candidate, "candidate")
     require(
@@ -318,7 +329,7 @@ def compare(baseline, candidate):
         for cid, trial in sorted(left)
         if left[cid, trial]["passed"] and not right[cid, trial]["passed"]
     ]
-    violations = {}
+    violations: dict[str, dict[str, Any]] = {}
     for key in ("grounding", "rules"):
         baseline_count = sum(left[slot]["violations"][key] for slot in common)
         candidate_count = sum(right[slot]["violations"][key] for slot in common)
@@ -365,7 +376,7 @@ def compare(baseline, candidate):
     }
 
 
-def main(argv):
+def main(argv: list[str]) -> None:
     if len(argv) != 3:
         raise ValueError("usage: compare_runs.py BASELINE_REPORT CANDIDATE_REPORT")
     baseline, candidate = (json.loads(Path(path).read_text()) for path in argv[1:])
