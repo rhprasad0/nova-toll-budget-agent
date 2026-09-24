@@ -14856,12 +14856,12 @@
     ],
     "expected_failures": [],
     "expected": {
-      "outcome": true,
+      "outcome": false,
       "grounding": true,
       "rules": false
     },
     "actor_validity": "valid",
-    "rationale": "The eventual estimate uses the user-selected days, but the initial proposal omitted the required option to adjust up or down.",
+    "rationale": "The initial annual-day proposal omitted the required invitation to use or adjust the count. This fails both Outcome and Rules even though the later estimate correctly uses the user-selected 134 days; the omission alone does not fail Grounding.",
     "rejected_tools": []
   },
   {

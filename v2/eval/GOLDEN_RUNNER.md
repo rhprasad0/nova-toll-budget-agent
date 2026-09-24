@@ -1,6 +1,6 @@
 # Running the frozen golden corpus
 
-The active authoring contract is **3.0.2: 100 development cases**, with 100
+The active authoring contract is **3.0.3: 100 development cases**, with 100
 proposed passing and 20 negative references. The first
 [calibration](evidence/golden-100/README.md) measured all 120 references using
 16 workers for $0.20523038 under 3.0.0. Version 3.0.1 raises the actor maximum
@@ -15,6 +15,9 @@ with client/office confirmation and mixed-office cancellation. Its
 references for $0.19802250 ($0.61036674 cumulative), with six disagreements across
 five references. Both revised cases and their negative control match the labels.
 Human approval remains pending; older measurements do not transfer.
+Version 3.0.3 records the approved Outcome/Rules failure for case 65's missing
+adjustment invitation and clarifies judge guidance on road abbreviations, source
+disclosure, and financial labels. Matching calibration is authorized and pending.
 No new application run has been performed. A full future run has
 **300 trials**; its holdout subset is empty and has no success rate.
 

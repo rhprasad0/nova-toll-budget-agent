@@ -28,7 +28,7 @@ from eval.simulated import GroundedCorrectnessEvaluator
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.0.2"
+CORPUS_VERSION = "3.0.3"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -89,6 +89,12 @@ plain text instead of Markdown, different headings, emoji choices or omission,
 table versus prose, ordering, and harmless verbosity are not failures. An exact
 prescribed response may be paraphrased if its material meaning is preserved.
 Assess the whole conversation; do not demand repeated disclosures.
+Recognizable road abbreviations, including DTR/dtr for Dulles Toll Road, are
+acceptable when the route is clear. They are not opaque internal endpoint IDs.
+Source disclosure means identifying the sources actually used. Historical
+observations alone suffice when that is the only source; no statement that
+modeled prices or fixed rates were absent is required, even when a case lists
+all source kinds to distinguish.
 For commute-route clarification, generic home/work-area labels for the user's
 supplied legs are an accepted simplifying assumption. Do not fail that shorthand
 alone when the actual endpoints remain unchanged. This exception does not establish

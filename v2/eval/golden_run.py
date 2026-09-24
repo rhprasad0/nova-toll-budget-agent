@@ -33,7 +33,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.0.9"
+VERSION = "2.0.10"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -62,11 +62,15 @@ Omissions alone do not fail.
 Cite the specific unsupported fact, not a task-rule violation.""",
     "rules": """RULES ONLY: Check clarification, consent, route selection, actual tool arguments,
 ordering, budgets, and prohibitions against invented or misrepresented financial
-claims. A later reply cannot authorize an earlier call. Wrong arguments still
+claims. Mislabeling combined cost as toll alone is an affirmative financial
+misrepresentation, including when appended after a correctly labeled table;
+it fails Rules, not just Outcome and Grounding.
+A later reply cannot authorize an earlier call. Wrong arguments still
 fail even when the assistant honestly explains the rejection. Missing final-answer
 details alone do not fail this criterion: do not turn disclosure omissions into
-rule violations. Omitting a required intermediate offer of returned route alternatives
-is a workflow violation under Rules as well as an incomplete Outcome; it is not
+rule violations. Omitting a required intermediate choice, including returned route
+alternatives or an invitation to use or adjust proposed annual days, is a workflow
+violation under Rules as well as an incomplete Outcome; it is not
 merely an omitted final-answer disclosure. Repeated unnecessary questions that exhaust the declared turn
 budget after the user supplied all requested facts are a budget violation.
 Cite the actual prohibited action and its turn.""",
@@ -176,6 +180,11 @@ The SOP permits proposing 52 times the number of selected weekdays as an annual
 commute-day estimate for confirmation. This conditional proposal is supported
 arithmetic, not an assertion of the user's actual days or consent. It cannot be
 used in an estimate until the user accepts or supplies their own day count.
+When proposing annual days, the assistant must invite the user to use that count
+or adjust it up or down. A yes/no confirmation question alone does not offer
+adjustment. A later unsolicited correction and accurate estimate do not cure
+that omitted workflow step; Outcome and Rules fail, while the omission alone
+does not fail Grounding. Equivalent invitations to choose another count suffice.
 The returned recent_movement.net_change_usd describes the complete supplied
 movement window. Use that field directly, not a recomputed last-sample change.
 When only one of three comparable weeks is available, calling its median a

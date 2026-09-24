@@ -5,7 +5,7 @@ results and adoption decisions. Preserve it during cleanup; removal requires
 Ryan's explicit approval. The latest decision adopts experiment C's descriptions
 and reordered SOP for the normal TollChat agent through the PR stack on #592.
 
-The new **3.0.2 golden corpus contains 100 development cases** for ordinary
+The new **3.0.3 golden corpus contains 100 development cases** for ordinary
 passenger-car current pricing and annual commute affordability. Start with the
 [review catalog](golden/REVIEW.md): 100 proposed passing references and 20 negative
 controls are authored and validated offline. [Calibration](evidence/golden-100/README.md)
@@ -21,7 +21,12 @@ area. One confirms a client/office workday; the other cancels mixed office optio
 The route fixture and financial totals are updated. Its [matching calibration](evidence/golden-100/CALIBRATION-3.md)
 completed 120/120 references: both revised cases and their negative control match
 the labels, with six disagreements across five other references. Human approval
-remains pending. The [HTML review](evidence/golden-100/review.html) shows the revised cases.
+remains pending. The [HTML review](evidence/golden-100/review.html) currently shows 3.0.2.
+
+Version 3.0.3 records Ryan's approved Outcome/Rules failure for the missing
+use-or-adjust invitation in case 65's negative control. Judge guidance clarifies
+acceptable road abbreviations, applicable source disclosure, and false financial
+labels. Matching calibration is authorized and pending.
 
 Run `uv run python -m eval.golden` from `v2/` to validate the frozen artifacts.
 Application evaluation retains three trials per case (300 planned conversations).

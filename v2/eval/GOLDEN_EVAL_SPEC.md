@@ -1,6 +1,6 @@
 # Golden corpus authoring and retirement guide
 
-## Development corpus 3.0.2 — 2026-09-24
+## Development corpus 3.0.3 — 2026-09-24
 
 The replacement is authored: **100 development cases, 100 proposed passing
 references, and 20 negative controls**. See the [review catalog](golden/REVIEW.md)
@@ -16,7 +16,14 @@ timestamps, and require no deployed database or model calls to replay. Annual
 responses use the existing domain builders and independent Decimal reconciliation.
 Stable IDs use the `dev3-` prefix; numbers are 1–100 and every `held_out` flag is
 false. The existing case schema stays at `contract_version=2`; that is the
-information/consent contract, distinct from corpus version 3.0.2.
+information/consent contract, distinct from corpus version 3.0.3.
+
+Version 3.0.3 records Ryan's approved adjudication: case 65's missing annual-day
+adjustment invitation fails both Outcome and Rules, despite the correct later
+estimate. Judge guidance clarifies acceptable road abbreviations, disclosure of
+only applicable sources, and Rules failures for false financial labels. Case
+definitions, transcripts, fixtures, and the application remain unchanged.
+Matching calibration is authorized and pending; earlier evidence remains intact.
 
 Version 3.0.2 makes cases 79/80 more realistic: the morning trip starts at Old
 Keene Mill Road in Springfield and the evening trip returns via nearby Braddock
@@ -26,7 +33,7 @@ case 80 catches accidentally mixed office options and cancels. The revised
 fixture uses two committed within-facility connections and rebuilds the financial
 totals for 16.449026 straight-line tolled miles. Midday travel between work sites
 is explicitly outside the requested two-leg estimate. The linked premature-call
-negative control uses the same revised route. Other cases and judge rules remain.
+negative control uses the same revised route. Other cases were unchanged.
 
 Ryan's review revision raises every actor's maximum from four to **five delivered
 user turns, including the opening request**. Minimum required turns remain

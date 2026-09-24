@@ -319,3 +319,28 @@ performed; corpus and calibration approval remain pending.
 Run ID: `3d9aa3b8-953d-4244-a540-9d9e21a8b8db`.
 Corpus SHA-256: `544e5d8f7f8bce4dd92aa706b88468515a60af52598535609408c6b49c35e96f`.
 Evidence SHA-256: `a541bec759faa64ddb193351e0162ca40389f12da6876f3e0d02231441938fd2`.
+
+## 2026-09-24 — Adjudicate case 65 and clarify judge criteria
+
+Ryan accepted the recommendation to fail both **Outcome and Rules** for case
+65's `no-day-adjustment-choice` negative control. A yes/no question about using
+156 days omits the required invitation to adjust that proposal. Correctly using
+the user's later unsolicited 134-day correction does not cure the missing step;
+the omission alone leaves Grounding passing. Only this reference's Outcome label
+and rationale changed. All 100 case definitions, 120 reference transcripts, and
+107 fixtures remain unchanged from 3.0.2.
+
+Corpus **3.0.3**, harness **2.0.10**, clarifies shared judge guidance: recognizable
+road abbreviations such as DTR are acceptable when the route is clear; source
+disclosure covers sources actually used, not absent flags; and an appended false
+financial label violates Rules even after a correct table. The required annual-day
+adjustment invitation is explicitly distinguished from final-answer disclosure.
+These changes resolve the prior adjudication without replacing any recorded
+verdict. The application model/prompt, realistic cases 79/80, and five-turn actor
+maximum remain unchanged.
+
+All **92 relevant corpus/development/runner tests passed**, including reference
+replay and independent financial reconciliation. Matching calibration is
+authorized with 16 workers and the existing $25 cumulative ceiling, including
+$0.61036674 already spent; it is pending on this committed source. Corpus and
+calibration approvals remain pending. Prior raw measurements remain intact.

@@ -1,7 +1,7 @@
 {
   "status": "pending",
-  "corpus_sha256": "544e5d8f7f8bce4dd92aa706b88468515a60af52598535609408c6b49c35e96f",
+  "corpus_sha256": "596b2f1c7abd0c77087c415da7905b673561011f06c612e9d27a739acad6833f",
   "reviewer": null,
   "evidence": null,
-  "note": "Cases 79/80 now return to the Springfield home area and distinguish a client/office workday from accidentally mixed office options. Five-turn actors and accepted commute shorthand remain. Matching 3.0.2 calibration is recorded in eval/evidence/golden-100/calibration-3; human review remains pending."
+  "note": "Ryan approved failing Outcome and Rules for case 65's omitted use-or-adjust invitation. Judge guidance clarifies road abbreviations, applicable sources, and financial labels. All case definitions, transcripts, fixtures, five-turn actors, and realistic cases 79/80 remain unchanged. Matching 3.0.3 calibration is authorized and pending; corpus/calibration approval remains pending."
 }

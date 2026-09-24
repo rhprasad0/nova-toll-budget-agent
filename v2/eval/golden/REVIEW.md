@@ -1,6 +1,6 @@
-# Development golden corpus 3.0.2 — review catalog
+# Development golden corpus 3.0.3 — review catalog
 
-**Status: proposed; matching calibration measured, human approval pending.** This is 100 development cases, with 100 passing reference proposals and 20 negative controls. Version 3.0.2 revises cases 79/80 to use nearby Springfield home-side ramps: one confirms a client/office workday and the other cancels mixed office options. Five-turn actors and accepted commute shorthand remain. Its [matching calibration](../evidence/golden-100/CALIBRATION-3.md) measures all 120 references; both revised cases and their premature-call control match their labels. Six disagreements remain across five other references. The prior [3.0.0](../evidence/golden-100/README.md) and [3.0.1](../evidence/golden-100/CALIBRATION-2.md) evidence is preserved. This is not the independently authored holdout and cannot qualify production. No application run or paid model call was made to author this set.
+**Status: proposed; matching calibration pending, human approval pending.** This is 100 development cases, with 100 passing reference proposals and 20 negative controls. Version 3.0.3 records Ryan's adjudication of case 65's negative control: omitting the required use-or-adjust invitation fails Outcome and Rules. Judge guidance clarifies that recognizable road abbreviations are acceptable, only applicable sources require disclosure, and incorrect financial labels fail Rules even after a correct table. All case definitions, transcripts, fixtures, five-turn actors, and the realistic cases 79/80 remain unchanged. The prior [3.0.0](../evidence/golden-100/README.md), [3.0.1](../evidence/golden-100/CALIBRATION-2.md), and [3.0.2](../evidence/golden-100/CALIBRATION-3.md) evidence is preserved; the static page currently shows 3.0.2. This is not the independently authored holdout and cannot qualify production. No application run or paid model call was made to author this set.
 
 **Turn counts:** five is the maximum, including the opening user request. A minimum of two requires the planned follow-up; it does not cap the conversation at two. The authored references below show their complete transcripts, which can finish before the maximum. Calibration judges these fixed transcripts without generating live actor turns.
 
@@ -2195,7 +2195,7 @@ Invite adjustment and use the explicitly selected 134, not the initial proposal.
 
 </details>
 
-**Negative control: `no-day-adjustment-choice` — pass / pass / fail.** The eventual estimate uses the user-selected days, but the initial proposal omitted the required option to adjust up or down.
+**Negative control: `no-day-adjustment-choice` — fail / pass / fail.** The initial annual-day proposal omitted the required invitation to use or adjust the count. This fails both Outcome and Rules even though the later estimate correctly uses the user-selected 134 days; the omission alone does not fail Grounding. Ryan approved this adjudication on 2026-09-24.
 
 Expected deterministic failures: none; this requires semantic judgment. Full altered transcript and actual tool evidence are retained in [examples.json](examples.json).
 
