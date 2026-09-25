@@ -1655,3 +1655,74 @@ records and arithmetic support from turn-local support for actual user inputs.
 Existing instructions already cover these rules; this run does not establish
 that additional wording alone will fix them. Raw evidence, costs, and independent
 review remain private. No application improvement or deployed change is claimed.
+
+## 2026-09-25 — delivered-turn/input-support repair; calibration repeatability stop
+
+Ryan authorized proceeding with the remaining fixes and calibration, retaining
+uncapped spending and all non-budget stop rules. The preparation repair is
+`c84859b6bce422d2af6648cdf88f3816432dc23d`; both fresh calibrations measured
+`468e576fef8b8a86e8ca09829d081aa47cacf6be`, corpus **3.3.4** / harness **2.3.4**.
+Actor assessment now receives the exact delivered user turns separately from the
+optional simulator control log. Grounding checks financial and schedule inputs
+independently of output support, and the old-route exception no longer contains
+a broad answer-only restriction. Successful execution, echoed inputs and correct
+arithmetic cannot establish an unaccepted user fact. The recorded-call heading
+now describes execution without implying correctness.
+
+Independent preparation review found no material defect. All 146 reference
+payloads and labels, 100 cases, fixtures, application, actor generation, models,
+settings, schemas and verdict derivation remain unchanged. Offline checks covered
+142 focused tests, seven release-isolation checks, 11 comparison checks, corpus
+validation, lint, formatting, types and skill validation. The review-required
+check initially failed while the new contract review was pending, then passed
+after that independent review was recorded; the assertion was not weakened.
+
+The predetermined pair ran on identical application/evaluation identities with
+16 workers, an estimated $0.43 per complete calibration, and a continuous ledger
+starting at $12.849787605. Neither run regenerated application conversations.
+
+| Calibration measure | First | Predetermined repeat |
+| --- | ---: | ---: |
+| Complete references | 146 / 146 | 146 / 146 |
+| Started and finished calls, all usage known | 438 / 438 | 438 / 438 |
+| Measurement failures | 0 | 0 |
+| Outcome agreement on valid references | 143 / 143 | 140 / 143 |
+| Grounding agreement on valid references | 143 / 143 | 142 / 143 |
+| Rules agreement on valid references | 143 / 143 | 143 / 143 |
+| Actor-validity agreement | 146 / 146 | 146 / 146 |
+| Run cost | $0.272038170 | $0.263131380 |
+| Cumulative accounted eval cost | $13.121825775 | $13.384957155 |
+
+Both prior failures—the missed delivered correction and unaccepted annual-day
+input—were correctly explained in both runs. All 876 stored criterion booleans
+match unmet-list emptiness. The first independent review inspected all 94
+nonempty assessments and found no material scoring error; two limited citation
+or auxiliary-rationale errors were preserved without changing labels. That
+review supported the planned repeat, not application improvement or human
+trajectory adjudication.
+
+The unchanged repeat changed four scored criterion decisions across four
+references: three Outcome passes became false failures, and one Grounding
+failure became a false pass. Independent review confirmed all four as material
+judge errors. Outcome invented extra disclosure requirements for comparison
+provenance, an available historical date range, and a field-by-field enumeration
+of unavailable annual results. Grounding missed a final statement labeling the
+combined annual cost as toll alone after an otherwise correct financial answer.
+Rules and actor validity had no decision changes. These are judging variation,
+not changes in application quality or proof that the repair caused regressions.
+
+**Decision: stop; the calibration pair is unapproved for application execution.**
+The first run's repeat-admission approval was retained privately as history and
+removed from active calibration readiness after the repeat failed. No third
+calibration, scripted actor check, application baseline, candidate search or
+confirmation was admitted. The pair cost **$0.535169550**; cumulative known eval
+spend is **$13.384957155**. A further repair needs independent review of requirement
+applicability and contradictory financial claims before new paid admission;
+another unchanged-contract retry is not justified. No labels or historical
+measurements were altered. Raw reports and review evidence remain private.
+
+The protected development delivery for merged `fbe65eb404eab8546d6bfe638e8c90a66b19bc2d`
+completed successfully in workflow run `36148909062`, including its registered
+migration step. Deployed catalog parity remains unverified and is still required
+before a future climb. No database query, manual migration or deployment was
+performed during this repair.
