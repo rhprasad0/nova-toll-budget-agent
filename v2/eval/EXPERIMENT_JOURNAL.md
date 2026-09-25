@@ -962,3 +962,97 @@ do not reuse prior approval or overwrite this failed attempt. Detailed review,
 schemas, identity, accounting, and raw calibration evidence remain ignored and
 private. This session performed no push, PR, merge, deployment, production access,
 or release qualification.
+
+
+## 2026-09-25 — Authenticated description-climb continuation: calibration blocked
+
+Ryan's explicit “Authed” response resolved the development credential blocker
+and directed one new calibration attempt under the same cumulative **$20 eval
+cap**. This was a user-directed resumption, not an automatic retry. The existing
+development AWS/SSM retrieval succeeded without printing or saving credentials.
+The preceding zero-cost failed calibration remains immutable and is the direct
+prior run of this attempt. Both preceding blocker/resolution entries remain
+unchanged. Outer session owns publication through ready PR602 stacked on PR600;
+this continuation performs local work and commits only.
+
+Measured starting commit: `abfb039bfa00e9161bb7fa48d12fe037332572f6`.
+The corrected contract remains `3.1.1`, harness `2.1.1`, and
+`literal-input-prose-v1`, from prerequisite
+`657ef7b48cfa5cf299e2a733585900d68b6708f8`; authorization-bound corpus review and
+lifecycle checks remain at `292fe0943810cbfbf4f3a7f08fe87626d4999173`.
+Corpus digest: `f64dcd1bc2fb6b68a434df1f7424df64618655591338996b235a77a177fa661a`.
+Application SOP version `2.3.8`, renderer `1.0.0`, all tool wording and schemas,
+cases, fixtures, labels, judges, and models remain unchanged. Application, actor,
+and judges use `gpt-6-luna`, with reasoning efforts low/medium/medium and the
+existing 2,048-token ceiling. The shared `_PricingProfile` and all output
+descriptions remain frozen. No prior-contract score or approval was transferred.
+
+The fresh calibration used 16 workers and cumulative ceiling **$17**, retaining
+at least **$3** for a possible final confirmation. All 135 references completed;
+405 model calls started and finished with known usage, zero missing references,
+and zero measurement errors. Actor validity matched 135/135 labels: 132 valid
+and three invalid. The invalid references have no application labels.
+
+| Calibration criterion | Agreement | Disagreement |
+| --- | ---: | ---: |
+| Outcome, actor-valid references | 132/132 | 0 |
+| Grounding, actor-valid references | 130/132 | 2 |
+| Rules, actor-valid references | 132/132 | 0 |
+| Actor validity, all references | 135/135 | 0 |
+
+Fresh independent `eval_reviewer` (`gpt-6-astra`, high) reproduced the evidence
+identity, raw-event/report agreement, complete generated schema hashes, and usage
+accounting, then returned **STOP**. The parent accepts that recommendation.
+A reference uses a derived annual day count in a tool call before user acceptance.
+Its label expects Grounding to pass, while the judge fails the unsupported
+schedule argument under the fixed rubric. The deterministic workflow checks do
+not override Grounding in that reference, so the disagreement changes the
+required Grounding violation metric. Its unchanged overall failure does not
+resolve this material calibration ambiguity.
+
+The second disagreement concerns affirmative salary selection interpreted as a
+conditional midpoint proposal. The semantic judge passes Grounding against a
+failing label, but the existing `unsupported_money` check still makes effective
+Grounding fail. This is a bounded judge-boundary concern; it does not neutralize
+the first disagreement. Neither verdict nor label was altered. No calibration
+approval was written, and no human transcript inspection is claimed: this was
+Codex offline review under Ryan's direction.
+
+| New-contract application phase | Completed slots | Pass^3 / 100 | Successful slots / 300 | Inconclusive slots |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline | 0 | Not measured | Not measured | Not measured |
+| Candidate rounds | 0 | Not measured | Not measured | Not measured |
+| Confirmation pair | 0 | Not measured | Not measured | Not measured |
+
+**Decision: retain the original application; no confirmed improvement.** Search
+stopped before its first baseline/round because calibration has an unresolved
+material disagreement. There was no application regression comparison and no
+unnecessary confirmation. The requested pass^3-first objective and fixed 100-case,
+three-slot denominator were preserved but could not be measured. Endpoint-direction
+and opaque-ID description ideas remain untested hypotheses, not admitted patches.
+
+| Eval spending | USD |
+| --- | ---: |
+| Carried seven full runs / 2,100 attempts | 6.555343780 |
+| Preserved credential-failed calibration | 0.000000000 |
+| New authenticated calibration | 0.233439065 |
+| Cumulative charged eval usage | **6.788782845** |
+| Remaining original authorization | **13.211217155** |
+
+All amounts were reconciled from raw token usage and pinned prices; usage is
+known. Historical calibration/pilot and Codex usage remain excluded as originally
+authorized. The separate stopped pilot was not accessed or resumed. The latest
+accounted run is the authenticated calibration and must precede any later
+separately directed paid run in the spending chain.
+
+Its evidence digest is
+`389c373ec36e4f41fc4ff1aa3fe9380e383b2986b908184a8d2288d33cd6e7c0`;
+the preserved credential-failed calibration digest is
+`3ad5980dc4f929c4d76f867a74684f7364ce832c788c24e20c6bfb6ac99716f3`.
+Raw runs, accounting, and the independent review remain in ignored private
+storage. Any correction to the annual-days label/rubric boundary or salary judge
+boundary needs separately authorized measurement-contract work and matching
+calibration; those changes are outside this frozen application search. No retry,
+judge/label edit, application patch, remote write, merge, deployment, or production
+qualification occurred. These exposed development references establish neither
+application improvement nor generalization.
