@@ -1,10 +1,10 @@
 # TollChat evaluation
 
-**Current contract: 3.0.6 / harness 2.0.13.** Calibration 9 matched all **396
-application labels and 135 actor labels**, with zero disagreements. The latest
-application baseline remains the 3.0.5 measurement: **206 passed, 93 failed, one
-inconclusive** out of 300 trials (68.9% of 299 scored trials). No baseline has run
-on 3.0.6. This exposed development corpus cannot qualify production.
+**Current contract: 3.0.7 / harness 2.0.14.** Offline authoring checks now serve
+both development and private authoring. Development approval is pending and
+matching calibration is required before new paid work. Historical calibration
+and application measurements retain their original identities; see the journal.
+The exposed development corpus cannot qualify production.
 
 The [experiment journal](EXPERIMENT_JOURNAL.md) is the record of what was tried,
 results, limitations, costs, and decisions. Publish summaries there; keep granular
@@ -14,6 +14,8 @@ output in ignored `eval/private/` or the existing private workflow store.
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
   135 labeled references, 107 synthetic fixtures, and five-turn actors.
+- [Private authoring kit](HOLDOUT_AUTHORING.md): public instructions and an offline
+  validator for independently authored private cases; no held-out data is included.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, three-trial application
   baselines, complete cost accounting, and offline report reproduction.
 - [Production gate](GOLDEN_RELEASE.md): 100 independently authored private cases,

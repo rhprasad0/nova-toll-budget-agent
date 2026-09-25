@@ -23,11 +23,13 @@ def test_retired_test_data_is_not_an_active_corpus(tmp_path: Path) -> None:
         golden.validate(TEST_DATA)
 
 
-def test_new_corpus_approval_identifies_its_own_contract() -> None:
+def test_refactored_corpus_requires_fresh_approval() -> None:
     review = json.loads((golden.ROOT / "review.json").read_text())
     manifest = json.loads((golden.ROOT / "manifest.json").read_text())
-    assert review["status"] == "approved"
-    assert review["reviewer"] == "Ryan"
+    assert review["status"] == "pending"
+    assert review["reviewer"] is None
+    assert review["approved_at"] is None
+    assert review["evidence"] is None
     assert review["corpus_sha256"] == manifest["corpus_sha256"]
     assert manifest["evaluation_scope"] == "development"
     assert not (golden.ROOT / "calibration-reference.json").exists()

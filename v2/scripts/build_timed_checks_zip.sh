@@ -18,7 +18,7 @@ mkdir -p "$STAGE/agent" "$STAGE/agent_tools" "$STAGE/eval" "$STAGE/agent-sops"
 
 cp -- "$V2_ROOT/lambdas/timed_checks/handler.py" "$STAGE/handler.py"
 cp -- "$V2_ROOT/timed_checks.py" "$STAGE/timed_checks.py"
-cp -- "$V2_ROOT/eval/run_evaluation.py" "$V2_ROOT/eval/simulated.py" "$V2_ROOT/eval/dashboard.py" "$V2_ROOT/eval/test-cases.jsonl" "$STAGE/eval/"
+cp -- "$V2_ROOT/eval/run_evaluation.py" "$V2_ROOT/eval/currency.py" "$V2_ROOT/eval/simulated.py" "$V2_ROOT/eval/dashboard.py" "$V2_ROOT/eval/test-cases.jsonl" "$STAGE/eval/"
 cp -- "$V2_ROOT/agent/__init__.py" "$V2_ROOT/agent/toll_agent.py" "$STAGE/agent/"
 cp -- "$V2_ROOT/agent_tools/"*.py "$STAGE/agent_tools/"
 cp -- "$V2_ROOT/agent-sops/nova-toll-pricing-assistant.sop.md" "$STAGE/agent-sops/"
