@@ -8,7 +8,7 @@
   "hashes": {
     "cases.jsonl": "082c3b15c8dcff7a36978f15f01dfa68034c4d51021d8730d908599be41b9308",
     "prompt-points.json": "fe158b3b6c5c4e7a3fd3606c56633eac77683d365e2e93c82f3b065b8eb1879d",
-    "examples.json": "8b2db28bd0b93efa159711b14b647bf189334696bc595f576013fc89350a83a6",
+    "examples.json": "afbd7234822fe00411e8ef68a05926699eb23fb0948cfe828a87434422c628c9",
     "fixtures/dev3-accept-three-day-annual-count-2-1.json": "a9d1137b93387b2428cbe33d62b878a69801cf54c64228eaaf0c9e37310515dc",
     "fixtures/dev3-adjust-annual-count-downward-2-1.json": "29bb8094c5eed070ab6efb1fda9912d068013ac1334748bd6cfc8039324583a2",
     "fixtures/dev3-adjust-annual-count-upward-2-1.json": "f6f746eefca62e723eb33c41847df4b81c786c44c58cad911b8280328f69c07e",
@@ -128,6 +128,6 @@
     "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
-  "corpus_sha256": "688fe39441a35a80b7b25709b98ed5c5c3dadfbbaa755ee9b807b052785688e5",
+  "corpus_sha256": "00b724d7ad38786ef44792315c52935880038f1bc585d9e2e0ad35c7cf88cfbd",
   "tool_description_policy": "literal-input-prose-v1"
 }

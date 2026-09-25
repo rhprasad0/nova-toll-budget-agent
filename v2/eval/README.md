@@ -19,7 +19,7 @@ output in ignored `eval/private/` or the existing private workflow store.
 ## Frozen golden evaluation
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
-  145 labeled references, 107 synthetic fixtures, and five-turn actors.
+  146 labeled references, 107 synthetic fixtures, and five-turn actors.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, three-trial application
   baselines, complete cost accounting, and offline report reproduction.
 - [Production gate](GOLDEN_RELEASE.md): exact-artifact qualification and protected

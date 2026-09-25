@@ -1,6 +1,6 @@
 # Running the frozen golden corpus
 
-The current development corpus has **100 cases and 145 calibration references**.
+The current development corpus has **100 cases and 146 calibration references**.
 Application baselines run three trials per case. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
