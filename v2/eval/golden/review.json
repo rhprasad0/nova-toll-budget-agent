@@ -1,5 +1,10 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "f64dcd1bc2fb6b68a434df1f7424df64618655591338996b235a77a177fa661a",
-  "note": "Contract 3.1.1 / harness 2.1.1 excludes the shared input/output _PricingProfile descriptions from candidate edits. All output descriptions, other tool source syntax, cases, fixtures, reference labels, and application wording remain fixed. Fresh contract review and matching calibration are required before application evaluation."
+  "reviewer": "Codex supervisor with independent eval_reviewer gpt-6-astra/high review, under Ryan authorization",
+  "reviewed_at": "2026-09-25T10:21:07.066877+00:00",
+  "contract_commit": "657ef7b48cfa5cf299e2a733585900d68b6708f8",
+  "authorization": "Ryan explicitly authorized the description-edit continuation on PR600 and its necessary corrected contract review and calibration under the same cumulative $20 cap.",
+  "human_trajectory_adjudication": false,
+  "evidence": "Fresh offline review of contract3.1.1/harness2.1.1/literal-input-prose-v1. Independent reviewer verified all13 admitted description edits preserve normalized source and complete output schemas; all3 shared _PricingProfile descriptions now invalidate source identity when changed. Cases, fixtures, reference labels, application wording, model settings and scoring remain unchanged; 121 related files and actual tool schemas compared against prior commits. Corpus digest recomputed;100 cases validated;82 focused tests and8 comparison checks passed. Prior blocker resolved by explicit prerequisite657ef7b before any new paid run. This is Codex review under Ryan authorization, not personal human trajectory adjudication, calibration approval, or release qualification. Fresh matching calibration is still required."
 }
