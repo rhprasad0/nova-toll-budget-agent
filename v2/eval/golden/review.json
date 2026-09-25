@@ -1,10 +1,7 @@
 {
-  "status": "approved",
-  "corpus_sha256": "907a6501c6bd6e2de12428001337d065652426714f495364d8bea69784ec9633",
+  "status": "pending",
+  "corpus_sha256": "ac24836d559a3b994c5a8193e7e8d2f0046dffd893d90c8f3a82dc156f38baec",
   "human_trajectory_adjudication": false,
-  "reviewer": "Codex independent eval_reviewer preparation review",
-  "evidence": "Independent review of the full 13-file preparation diff found no material defect. Eight focused offline tests, eleven comparison checks and corpus validation passed independently. SDK requests confirm application Luna low/2048, actor Luna medium/2048, and both golden judge paths Luna high/8192. Role-specific reservation and identity are consistent; prompt bytes, reference payloads and labels, generated schemas, application and actor generation remain unchanged. This approves the preparation contract for fresh calibration only; it does not approve calibration reliability, imply human trajectory adjudication, or grant candidate eligibility.",
-  "authorization": "Ryan explicitly authorized moving Luna judges to high reasoning and proceeding with calibration without a comparison arm; uncapped evaluation spending remains authorized.",
-  "reviewed_at": "2026-09-25T16:26:46.444016+00:00",
-  "contract_commit": "a7174ddfd140bb120a5193844ffbd1732e03d225"
+  "reviewer": "",
+  "evidence": ""
 }

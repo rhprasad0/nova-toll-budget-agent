@@ -1,5 +1,5 @@
 {
-  "version": "3.3.6",
+  "version": "3.3.7",
   "evaluation_scope": "development",
   "case_count": 100,
   "trials_per_case": 3,
@@ -117,10 +117,10 @@
     "fixtures/dev3-wiehle-full-office-week-1-1.json": "2b0ed4945ab14ff68dddbdb916c21a53f78a473e26a82ec35a5e61458504becc",
     "fixtures/dev3-wiehle-to-fairfax-parkway-1-1.json": "1efb885691800bdaa2aae4537ac8b2174b33f9217d7dcece5de4eaaec5499ad2",
     "v2/uv.lock": "071ad13fcb49045309c63222c75e56ee5d40484cee25c0e4db36663ea4e16225",
-    "v2/eval/golden.py": "cecb530356c9a3304f81961e1375f851b94a5b72711cecb1ef265184b6d359f4",
+    "v2/eval/golden.py": "1289f8361802ce26372c6383f9c8ac4bbcd3a21c50020bc6a75e9a83530fb2a1",
     "v2/eval/simulated.py": "b3b9c339a9696d0ba9615404717f86cc21de69f9a39e068f26325925404cb3fa",
     "v2/eval/run_evaluation.py": "4a141a87ef4ca6d0cdb40d85f58ce5ace1335d88ccda3d1abb4db14a9b57bf2b",
-    "v2/eval/golden_run.py": "554a792cc0a93af90cfeaa1262c8eb81e6e280106ac4279260119bbab955156c",
+    "v2/eval/golden_run.py": "53e6a0e69f90f172ccb956a2b474490b2cb7c66e4b5392d77de4fa11f8c18213",
     "v2/eval/golden_actor_check.py": "a869303b4a201e291b1568fc2baa8f49f7b35269aaa741387075b08e86e62a58",
     "v2/eval/artifact_agent.py": "cc36d1bebd435a635b820b28bb1b6c9e63c6d7f7c7b928af9a82f779ec6f2fd5",
     "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
@@ -128,6 +128,6 @@
     "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
-  "corpus_sha256": "907a6501c6bd6e2de12428001337d065652426714f495364d8bea69784ec9633",
+  "corpus_sha256": "ac24836d559a3b994c5a8193e7e8d2f0046dffd893d90c8f3a82dc156f38baec",
   "tool_description_policy": "literal-input-prose-v1"
 }

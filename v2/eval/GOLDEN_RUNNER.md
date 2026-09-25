@@ -14,7 +14,7 @@ scheduled evaluation settings are separate from this golden contract.
 
 ## Description-edit contract
 
-Contract 3.3.6 / harness 2.3.6 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.7 / harness 2.3.7 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including

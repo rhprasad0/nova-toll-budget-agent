@@ -308,6 +308,7 @@ def attempts(
         "2.3.4",
         "2.3.5",
         "2.3.6",
+        "2.3.7",
     }
     denominator = (
         100
@@ -321,7 +322,16 @@ def attempts(
             and overall.get("pass_cubed_case_denominator") == 100,
             f"{name}: inconsistent fixed-denominator pass cubed",
         )
-    if version in {"2.3.0", "2.3.1", "2.3.2", "2.3.3", "2.3.4", "2.3.5", "2.3.6"}:
+    if version in {
+        "2.3.0",
+        "2.3.1",
+        "2.3.2",
+        "2.3.3",
+        "2.3.4",
+        "2.3.5",
+        "2.3.6",
+        "2.3.7",
+    }:
         require(
             overall.get("overall_pass_rate") == successful / 300,
             f"{name}: inconsistent fixed-denominator overall pass rate",
@@ -430,6 +440,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "2.3.4",
         "2.3.5",
         "2.3.6",
+        "2.3.7",
     }:
         del criteria["paired_delta_positive"]
     return {

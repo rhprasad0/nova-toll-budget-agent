@@ -29,7 +29,7 @@ from eval.simulated import GroundedCorrectnessEvaluator
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.6"
+CORPUS_VERSION = "3.3.7"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -67,25 +67,34 @@ ACTOR_PROMPT = """Speak as the driver described below, in first person.
 Use your initial request and supplied profile facts together. Profile omissions
 do not retract facts from your initial request. Only explicit correction or
 selection instructions change those facts. Answer questions briefly and naturally. Follow
-any stated correction or selection instructions before stopping. Do not invent
+any stated correction or selection instructions before stopping. When one assistant
+turn triggers multiple profile-required actions, deliver all of them together in
+your next message. Do not defer part of that response to another reply or perform
+actions whose trigger has not occurred. Do not invent
 prices, earnings, routes, or requirements. Do not tell the assistant how to use
 its tools or how it will be graded. Never treat the assistant's suggested facts
 as your own unless your profile allows them. Return a nonempty message when a reply
 is needed; otherwise return JSON null for message. Never return an empty or
 whitespace-only string: that means an invalid continuation, not completion.
 The runner derives when to stop. Before returning null, check the assistant's
-latest question against ALL profile facts and follow-up rules. A request for
-missing origin/destination, income, schedule, or confirmation is not completion.
-If a necessary question is repeated or still unanswered, supply the existing
-profile fact again, even if you already stated it. Never invent endpoint IDs;
+latest question against ALL profile facts and follow-up rules. If a needed fact
+is genuinely unavailable, say so once. After the assistant explains it cannot
+proceed without that fact, return message=null unless another explicit profile
+follow-up is due. An invitation to return when the fact becomes available is
+closure, not a request to repeat its unavailability. This stopping rule takes
+precedence over repeating unanswered facts.
+When your initial request or profile supplies a usable answer, a request for
+origin/destination, income, schedule, or confirmation requires that answer.
+If that necessary question is repeated or still unanswered, supply the existing
+fact again, even if you already stated it. Never invent endpoint IDs;
 answer with the place names and corridor facts supplied in your profile.
 If the profile supplies the requested fact, deliver it; give both endpoints when
 both are requested. Never stop merely because the assistant asked a clear question.
 Explicit profile choices override preserving the original route: if instructed
 to select a named alternative when offered, choose it rather than rejecting all
 alternatives. Do not invent a preference to retain the original starting point.
-A question asking you to choose income, supply schedule facts, or confirm days
-needs your profile's answer delivered as a message BEFORE you can finish.
+Deliver your profile's available facts, choices, and confirmations as a message
+BEFORE you can finish.
 A proposed estimate is not yet a completed estimate. Deliver any explicitly
 profile-required correction, choice, cancellation, proof question, or workflow
 switch before stopping, including after an answer or unavailable result.
@@ -95,9 +104,7 @@ Accept supported schedule-based estimates; do not demand live observations or
 extra verification after the requested price has been explained.
 Do not send thanks, summaries, or repeated facts after a completed answer.
 Send a message only to answer a necessary clarification or deliver a follow-up
-explicitly required by your profile. If a needed fact is genuinely unavailable,
-say so once and stop after the assistant explains that limitation. Otherwise
-return null after completion. An invitation to choose
+explicitly required by your profile. Return null after completion. An invitation to choose
 an unrelated trip is not a necessary clarification of your requested trip.
 When formatting structured output, preserve YOUR next user message. Never grade
 your own previous message or mistake writing it for delivering it to the assistant.
