@@ -1,14 +1,15 @@
 # TollChat evaluation
 
-**Current contract: 3.1.2 / harness 2.1.2.** Corpus review and fresh matching
-calibration are approved under Ryan-authorized Codex review. The annual-day
-Grounding boundary is resolved; one bounded raw salary disagreement remains
-visible and is caught by the existing deterministic check.
+**Current contract: 3.3.0 / harness 2.3.0.** Future development climbs optimize
+overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
+three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
+never count as success. The separate 80% blind-holdout production standard does
+not make a development score production qualification.
+Fresh corpus review and matching calibration are required before application runs.
+See `golden/review.json` for the exact review status.
 
-**The original application remains retained.** The climb stopped after two
-consecutive rounds without an eligible improvement. No confirmation pair was
-needed; the private ledger and evidence preserve the completed search.
-Shared `_PricingProfile` and output descriptions remain frozen under
+TollChat remains on `gpt-6-luna`. Preparation changes are separate from prompt
+search. Shared `_PricingProfile` and output descriptions remain frozen under
 `literal-input-prose-v1`. This development corpus cannot qualify production.
 
 The [experiment journal](EXPERIMENT_JOURNAL.md) is the record of what was tried,
@@ -18,7 +19,7 @@ output in ignored `eval/private/` or the existing private workflow store.
 ## Frozen golden evaluation
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
-  135 labeled references, 107 synthetic fixtures, and five-turn actors.
+  143 labeled references, 107 synthetic fixtures, and five-turn actors.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, three-trial application
   baselines, complete cost accounting, and offline report reproduction.
 - [Production gate](GOLDEN_RELEASE.md): exact-artifact qualification and protected

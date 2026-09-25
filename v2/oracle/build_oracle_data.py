@@ -86,6 +86,34 @@ WASHINGTON_POINT_LABELS = {
     ),
 }
 
+# Same-place exits have distinct incoming route-graph approaches.
+APPROACH_LABELS = {
+    "i495:1819ND": "from I-95/I-395 southbound",
+    "i495:181ND": "from I-495 northbound or I-95/I-395 northbound",
+    "i495:1829ND": "from I-95/I-395 southbound",
+    "i495:182ND": "from I-495 northbound or I-95/I-395 northbound",
+    "i495:1839ND": "from I-95/I-395 southbound",
+    "i495:183ND": "from I-495 northbound or I-95/I-395 northbound",
+    "i495:1859ND": "from I-95/I-395 southbound",
+    "i495:185ND": "from I-495 northbound or I-95/I-395 northbound",
+    "i495:1869ND": "from I-95/I-395 southbound",
+    "i495:186ND": "from I-495 northbound or I-95/I-395 northbound",
+    "i495:1879ND": "from I-95/I-395 southbound",
+    "i495:187ND": "from I-495 northbound or I-95/I-395 northbound",
+    "i495:1889ND": "from I-95/I-395 southbound",
+    "i495:188ND": "from I-495 northbound or I-95/I-395 northbound",
+    "i495:1919ND": "from I-95/I-395 southbound",
+    "i495:191ND": "from I-495 northbound or I-95/I-395 northbound",
+    "i95:2229ND": "from I-495 southbound",
+    "i95:222ND": "from I-95/I-395 northbound or I-495 northbound",
+    "i95:22329ND": "from I-495 southbound",
+    "i95:2232ND": "from I-95/I-395 northbound or I-495 northbound",
+    "i95:2239ND": "from I-495 southbound",
+    "i95:223ND": "from I-95/I-395 northbound or I-495 northbound",
+    "i95:201SD": "from I-495 southbound",
+    "i95:227SD": "from I-95/I-395 southbound",
+}
+
 I95_REPORT_CONTEXT = {
     "495 Express Lanes End/George Wash. Mem. Pkwy.": (
         "McLean",
@@ -619,6 +647,9 @@ def build_points() -> dict[str, Point]:
             }
         if point_id in WASHINGTON_POINT_LABELS:
             label, aliases = WASHINGTON_POINT_LABELS[point_id]
+        if point_id in APPROACH_LABELS:
+            aliases = (*aliases, label)
+            label = f"{label} ({APPROACH_LABELS[point_id]})"
         place_name = I95_REPORT_POINT_PLACES.get(point_id, place_name)
         region = I95_REPORT_POINT_REGIONS.get(point_id, region)
         aliases = tuple(dict.fromkeys((*aliases, *place_aliases)))

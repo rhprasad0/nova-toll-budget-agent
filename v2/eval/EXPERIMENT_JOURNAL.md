@@ -1304,3 +1304,138 @@ final handoff remain in ignored `v2/eval/private/eval-climb/descriptions-20/`.
 Only this append-only summary and concise current usage status are committed.
 No push, PR update, merge, or deployment was performed; the outer session owns
 ready PR602 stacked on PR600. There is no application patch to publish.
+
+
+## 2026-09-25 — pass³ preparation; calibration stop
+
+Prepared a separate change on PR #602 at `240512570aa7b1debe8295ea3ce1f7f45a80115a`.
+The paid calibration used clean prepared commit
+`f0dc64e2375d77ff8652263bcc97933a3a775c6a`: application `gpt-6-luna`, SOP
+2.3.9, corpus 3.2.0, harness 2.2.0, and canonical Oracle 1.15.1. This is
+preparation, with no candidate search or claimed application improvement.
+
+The runner and comparison now use successful three-trial cases divided by all
+100 cases. Inconclusives cannot succeed; promotion requires strict pass³
+improvement, inconclusive nonincrease, comparable Grounding/Rules nonworsening,
+and independent material-regression review. Historical recorded contracts retain
+their original scoring and cannot be compared across contracts. Successful-trial
+count and paired delta are diagnostics under the new contract. The bounded A/B
+search, application model, stopping rules, and final confirmation pair remain.
+
+The preparation adds cited unmet requirements with derived judge decisions,
+signed-money wording checks, eight calibration contrasts, actor clarification
+instructions, and shared cumulative accounting for actor checks. Original
+references remain unchanged. The canonical catalog qualifies 24 endpoint labels
+across 12 duplicate-metadata groups and retains original names as aliases.
+Endpoint IDs, coordinates, directions, connections, prices, and public schemas
+remain unchanged; wrong-ID replay still fails for current and annual calls.
+Migration 034 registers the transactional, predecessor-checked, idempotent Oracle
+1.15.0 → 1.15.1 metadata upgrade. The SOP explains approach-qualified labels.
+
+Offline verification passed focused scoring, monetary/consent, actor/judge,
+endpoint/replay, contract, compatibility, lint/type, skill, and corpus checks.
+Disposable database checks passed upgrade and repeat application, predecessor
+rejection, canonical bootstrap equivalence, and retained/current route, pricing,
+report, and security contracts. The full database command initially failed only
+at its final production-adoption test because that historical fixture used the
+new development Oracle version. After pinning its Oracle fixture to the reviewed
+historical source, that final test passed separately. Archived migrations and
+release entries were not rewritten. Retained behavioral SQL receives narrowly
+checked metadata substitutions only in temporary test copies.
+
+The predetermined paid sequence was two fresh full-reference calibrations,
+one full scripted actor check, and two identical 100-case × 3-trial application
+runs with 16 workers. Application run two was to become the next baseline by
+position, never by score. Only the first calibration was admitted: its complete
+cost estimate was $0.39 and it ran all 143 references with 16 workers.
+
+| First calibration measure | Result |
+| --- | ---: |
+| Complete references | 143 / 143 |
+| Actor-validity agreement | 143 / 143 |
+| Outcome agreement on actor-valid references | 137 / 140 |
+| Grounding agreement on actor-valid references | 139 / 140 |
+| Rules agreement on actor-valid references | 140 / 140 |
+| Added contrast agreement | 8 / 8 |
+| Calls with known usage | 429 / 429 |
+| Calibration cost | $0.257945655 |
+| Carried cumulative spend | $11.779920875 |
+| New cumulative spend | $12.037866530 |
+| Remaining preparation allowance ($15 ceiling) | $2.962133470 |
+| Remaining total authorization ($20 cap) | $7.962133470 |
+
+Independent Codex review identified material grading errors: Outcome rejected
+correct answers by inventing disclosure/repetition requirements, and one unmet
+requirement list cited evidence that explicitly described the requirements as
+satisfied. Grounding also accepted one reference labeled as choosing a salary
+before consent; the independent deterministic money check still detects that
+violation. The structured decision interface prevents independently
+generated boolean disagreement but does not itself guarantee semantic judgment.
+No stored verdict or explanation was relabeled to erase these disagreements.
+
+**Decision: stop paid validation on unresolved material grading ambiguity.**
+The fresh calibration remains unapproved; no human trajectory adjudication is
+claimed. Calibration two, the scripted actor check, and both application runs
+were not started. There is no repeatability estimate, case-level application
+comparison, or replacement incumbent baseline. No retry-until-pass or candidate
+search occurred. Raw reports, transcripts, accounting, and review evidence remain
+in ignored `v2/eval/private/preparation/`; only this summary is published.
+
+The preparation implementation is available for human review, with the grading
+blocker explicit. A future climb requires resolving that blocker under a freshly
+reviewed contract and completing the remaining bounded validation with suitable
+budget. It also requires human-reviewed merge and successful protected
+development migration plus deployed catalog parity before any climb. This work
+does not merge, deploy, or manually migrate a deployed database. GEPA-style
+candidate pools, larger models, new runtime agents, and general workflow redesign
+remain deferred.
+
+Post-calibration CI correction: restored explicit authorization and reviewed-commit
+provenance in the fresh corpus review record, updated the retired-input test to
+supply the actor CLI budget, and regenerated package/shared-compatibility hashes
+for the prepared SOP and Oracle schema. These delivery/test metadata corrections
+do not change the measured application, grading code, or corpus payload. The
+stopped calibration remains unapproved and no paid run was repeated.
+
+The read-only PR plan then reported development serving release
+`a5338c913f3c99b2eb895619bc287ba4d24e3aa0`, newer than the registered development
+compatibility pin. Independent review verified its database, tool, shared-package,
+SOP, agent, and database-contract sources are identical to the preparation parent
+already validated. Only the development compatibility pin advances to that exact
+serving release; the production pin stays unchanged. All 120 shared-package tests
+passed, with exact-release acceptance and unrelated-release rejection checked.
+
+
+### 2026-09-25 — user-directed overall-pass objective
+
+Ryan subsequently requested alignment with the separate production gate work:
+80% overall success on a blind holdout, and explicitly chose to update PR #603
+now. The next development climb therefore optimizes successful trials divided by
+all 300 expected trials. Pass³ remains a fixed-denominator reliability diagnostic;
+a candidate can improve overall success while reducing pass³. Candidate selection
+requires strict overall improvement and retains inconclusive nonincrease,
+comparable Grounding/Rules nonworsening, independent material-regression review,
+bounded A/B search, and the final confirmation pair. Eligible candidates rank by
+overall rate, fewer changed lines, then A; an incumbent tie retains the incumbent.
+
+This publishes corpus 3.3.0 / harness 2.3.0. Harness 2.2.0 keeps its recorded pass³
+promotion semantics; earlier report fields/shapes remain unchanged, and
+cross-contract comparisons remain rejected. Cases, fixtures, calibration
+references, actor/judge prompts, and application behavior are unchanged by this
+objective adjustment. The first calibration above remains a stopped 3.2.0/2.2.0
+measurement, not a calibration of this new contract.
+
+The production policy under separate development requires 240/300 successes
+with valid simulations and complete measurements. Only its public policy and
+usage contract were consulted; no blind cases or holdout feedback were accessed.
+An 80% exposed-development score cannot qualify production and is not a new
+search stopping rule. Production gate implementation stays in its own worktree.
+The $20 cumulative development authorization and $15 preparation ceiling remain
+unchanged. No further paid calls were made; material grading defects still block
+calibration approval and continuation.
+
+Fresh independent Codex review accepted the exact revised corpus/contract, with
+no human adjudication claimed. All 85 focused runner/development tests and 11
+comparison tests passed, including archived report reproduction, along with
+lint/type, corpus and skill validation. The review explicitly leaves calibration
+unapproved and paid continuation stopped.

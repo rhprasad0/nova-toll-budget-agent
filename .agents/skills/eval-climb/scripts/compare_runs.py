@@ -297,7 +297,31 @@ def attempts(
             aggregate.get("count") == count and aggregate.get("denominator") == scored,
             f"{name}: inconsistent {key} total",
         )
+    triples = sum(all(by_slot[cid, n]["passed"] for n in (1, 2, 3)) for cid in ids)
+    version = report["manifest"]["identity"]["harness_version"]
+    fixed = version in {"2.2.0", "2.3.0"}
+    denominator = (
+        100
+        if fixed
+        else sum(all(by_slot[cid, n]["scored"] for n in (1, 2, 3)) for cid in ids)
+    )
+    if fixed:
+        require(
+            overall.get("pass_cubed") == triples / 100
+            and overall.get("passing_all_three_cases") == triples
+            and overall.get("pass_cubed_case_denominator") == 100,
+            f"{name}: inconsistent fixed-denominator pass cubed",
+        )
+    if version == "2.3.0":
+        require(
+            overall.get("overall_pass_rate") == successful / 300,
+            f"{name}: inconsistent fixed-denominator overall pass rate",
+        )
     return by_slot, {
+        "overall_pass_rate": successful / 300,
+        "pass_cubed": triples / denominator if denominator else None,
+        "passing_all_three_cases": triples,
+        "pass_cubed_case_denominator": denominator,
         "successful_trials": successful,
         "scored_trials": scored,
         "inconclusive_trials": 300 - scored,
@@ -383,7 +407,18 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         and violations["rules"]["candidate_count"]
         <= violations["rules"]["baseline_count"],
     }
+    if left_identity["harness_version"] == "2.2.0":
+        del criteria["successful_trials_increased"]
+        del criteria["paired_delta_positive"]
+        criteria["pass_cubed_increased"] = (
+            right_totals["pass_cubed"] > left_totals["pass_cubed"]
+        )
+    elif left_identity["harness_version"] == "2.3.0":
+        del criteria["paired_delta_positive"]
     return {
+        "primary_metric": "pass_cubed"
+        if left_identity["harness_version"] == "2.2.0"
+        else "overall_pass_rate",
         "numeric_eligible": all(criteria.values()),
         "reasons": [key for key, passed in criteria.items() if not passed],
         "criteria": criteria,

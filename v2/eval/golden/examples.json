@@ -17379,5 +17379,1175 @@
       }
     ],
     "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-published-annual-rate-source",
+    "label": "equivalent-material-caveats",
+    "turns": [
+      {
+        "user": "Estimate annual affordability: Exit 13 - SR 828 (Wiehle Ave) to Exit 18/19 - I-495 / SR 123 (Capital Beltway) and back, tuesday, wednesday, thursday, leaving at 7:45 AM and returning at 5:15 PM, 135 planned office days per year, gross annual salary $114250.00. Are the sampled prices historical observations?",
+        "response": "The annual income remaining after assumed tax and the annualized daily-P50 tolled commute is $72497.15. For 135 planned office days, gross annual income is $114250.00, with $76166.67 after the one-third assumed tax ($38083.33). The straight-line tolled distance is 22.16 miles per office day and 2992.01 miles annually; vehicle cost is $15.18 per office day and $2049.52 annually. P25 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P50 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P90 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P25 is the lower, P50 middle, and P90 higher daily scenario. Annual values scale daily scenarios by planned days, not percentiles of annual outcomes, forecasts, or guarantees. Coverage is 36 of 36 eligible paired dates (100.0%). The sampled dates use current published fixed rates, not historically observed tolls. Distance covers direct endpoint-to-endpoint lines on the priced toll facilities only, leaving untolled travel out. The tax deduction is a rough one-third assumption rather than a calculation of your personal taxes. The vehicle allowance is TollChat’s fixed $0.685 for each straight-line tolled mile, rather than your own expenses. The sampled days use current published fixed rates, not historical observations of what drivers paid. These are historical-sample scenarios using current published rates, not observed prices on those dates.",
+        "calls": [
+          {
+            "name": "get_annual_toll_ballpark",
+            "input": {
+              "outbound": {
+                "origin_point_id": "dtr:13:entry:EB",
+                "destination_point_id": "dtr:1819:exit:EB",
+                "departure_time": "07:45:00"
+              },
+              "return": {
+                "origin_point_id": "dtr:1819:entry:WB",
+                "destination_point_id": "dtr:13:exit:WB",
+                "departure_time": "17:15:00"
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 135,
+              "gross_annual_income_usd": "114250.00"
+            },
+            "result": {
+              "method": "recent_complete_same_date_round_trips",
+              "evaluated_at": "2026-09-24T08:18:00-04:00",
+              "timezone": "America/New_York",
+              "target_window": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23",
+                "date_count": 84
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 135,
+              "coverage": {
+                "eligible_date_count": 36,
+                "complete_pair_count": 36,
+                "coverage_percent": "100.0",
+                "by_weekday": [
+                  {
+                    "weekday": "tuesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  },
+                  {
+                    "weekday": "wednesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  },
+                  {
+                    "weekday": "thursday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  }
+                ]
+              },
+              "uses_modeled": false,
+              "uses_current_fixed_rates": true,
+              "facilities": [
+                {
+                  "facility": "dtr",
+                  "sample_count": 36,
+                  "uses_modeled": false,
+                  "uses_current_fixed_rates": true,
+                  "scenarios": {
+                    "p25": {
+                      "daily_toll_usd": "12.00",
+                      "annual_toll_usd": "1620.00"
+                    },
+                    "p50": {
+                      "daily_toll_usd": "12.00",
+                      "annual_toll_usd": "1620.00"
+                    },
+                    "p90": {
+                      "daily_toll_usd": "12.00",
+                      "annual_toll_usd": "1620.00"
+                    }
+                  }
+                }
+              ],
+              "assumptions": {
+                "estimated_tax_fraction": "1/3",
+                "vehicle_cost_per_mile_usd": "0.685",
+                "distance_method": "straight_line_priced_facility_legs",
+                "scope": "tolled_portions_only"
+              },
+              "income": {
+                "gross_annual_usd": "114250.00",
+                "estimated_tax_usd": "38083.33",
+                "estimated_after_tax_usd": "76166.67"
+              },
+              "tolled_distance": {
+                "daily_round_trip_miles": "22.16",
+                "annual_miles": "2992.01"
+              },
+              "vehicle_cost": {
+                "daily_usd": "15.18",
+                "annual_usd": "2049.52"
+              },
+              "sample_status": "complete",
+              "available_date_range": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23"
+              },
+              "scenarios": {
+                "p25": {
+                  "daily_toll_usd": "12.00",
+                  "annual_toll_usd": "1620.00",
+                  "daily_total_tolled_commute_cost_usd": "27.18",
+                  "average_monthly_tolled_commute_cost_usd": "305.79",
+                  "annual_total_tolled_commute_cost_usd": "3669.52",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "72497.15",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.8",
+                  "additional_gross_income_to_offset_usd": "5504.28"
+                },
+                "p50": {
+                  "daily_toll_usd": "12.00",
+                  "annual_toll_usd": "1620.00",
+                  "daily_total_tolled_commute_cost_usd": "27.18",
+                  "average_monthly_tolled_commute_cost_usd": "305.79",
+                  "annual_total_tolled_commute_cost_usd": "3669.52",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "72497.15",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.8",
+                  "additional_gross_income_to_offset_usd": "5504.28"
+                },
+                "p90": {
+                  "daily_toll_usd": "12.00",
+                  "annual_toll_usd": "1620.00",
+                  "daily_total_tolled_commute_cost_usd": "27.18",
+                  "average_monthly_tolled_commute_cost_usd": "305.79",
+                  "annual_total_tolled_commute_cost_usd": "3669.52",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "72497.15",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.8",
+                  "additional_gross_income_to_offset_usd": "5504.28"
+                }
+              }
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [],
+    "expected": {
+      "outcome": true,
+      "grounding": true,
+      "rules": true
+    },
+    "actor_validity": "valid",
+    "rationale": "Equivalent language preserves source, distance, tax and vehicle assumptions. Historical sampling does not assert observed fixed prices.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-published-annual-rate-source",
+    "label": "omitted-vehicle-assumption",
+    "turns": [
+      {
+        "user": "Estimate annual affordability: Exit 13 - SR 828 (Wiehle Ave) to Exit 18/19 - I-495 / SR 123 (Capital Beltway) and back, tuesday, wednesday, thursday, leaving at 7:45 AM and returning at 5:15 PM, 135 planned office days per year, gross annual salary $114250.00. Are the sampled prices historical observations?",
+        "response": "The annual income remaining after assumed tax and the annualized daily-P50 tolled commute is $72497.15. For 135 planned office days, gross annual income is $114250.00, with $76166.67 after the one-third assumed tax ($38083.33). The straight-line tolled distance is 22.16 miles per office day and 2992.01 miles annually; vehicle cost is $15.18 per office day and $2049.52 annually. P25 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P50 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P90 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P25 is the lower, P50 middle, and P90 higher daily scenario. Annual values scale daily scenarios by planned days, not percentiles of annual outcomes, forecasts, or guarantees. Coverage is 36 of 36 eligible paired dates (100.0%). The sampled dates use current published fixed rates, not historically observed tolls. Only straight-line distances of priced tolled facility legs are included; untolled travel is excluded. One-third tax is an assumption, not your actual tax calculation.  The sampled days use current published fixed rates, not historical observations of what drivers paid.",
+        "calls": [
+          {
+            "name": "get_annual_toll_ballpark",
+            "input": {
+              "outbound": {
+                "origin_point_id": "dtr:13:entry:EB",
+                "destination_point_id": "dtr:1819:exit:EB",
+                "departure_time": "07:45:00"
+              },
+              "return": {
+                "origin_point_id": "dtr:1819:entry:WB",
+                "destination_point_id": "dtr:13:exit:WB",
+                "departure_time": "17:15:00"
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 135,
+              "gross_annual_income_usd": "114250.00"
+            },
+            "result": {
+              "method": "recent_complete_same_date_round_trips",
+              "evaluated_at": "2026-09-24T08:18:00-04:00",
+              "timezone": "America/New_York",
+              "target_window": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23",
+                "date_count": 84
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 135,
+              "coverage": {
+                "eligible_date_count": 36,
+                "complete_pair_count": 36,
+                "coverage_percent": "100.0",
+                "by_weekday": [
+                  {
+                    "weekday": "tuesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  },
+                  {
+                    "weekday": "wednesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  },
+                  {
+                    "weekday": "thursday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  }
+                ]
+              },
+              "uses_modeled": false,
+              "uses_current_fixed_rates": true,
+              "facilities": [
+                {
+                  "facility": "dtr",
+                  "sample_count": 36,
+                  "uses_modeled": false,
+                  "uses_current_fixed_rates": true,
+                  "scenarios": {
+                    "p25": {
+                      "daily_toll_usd": "12.00",
+                      "annual_toll_usd": "1620.00"
+                    },
+                    "p50": {
+                      "daily_toll_usd": "12.00",
+                      "annual_toll_usd": "1620.00"
+                    },
+                    "p90": {
+                      "daily_toll_usd": "12.00",
+                      "annual_toll_usd": "1620.00"
+                    }
+                  }
+                }
+              ],
+              "assumptions": {
+                "estimated_tax_fraction": "1/3",
+                "vehicle_cost_per_mile_usd": "0.685",
+                "distance_method": "straight_line_priced_facility_legs",
+                "scope": "tolled_portions_only"
+              },
+              "income": {
+                "gross_annual_usd": "114250.00",
+                "estimated_tax_usd": "38083.33",
+                "estimated_after_tax_usd": "76166.67"
+              },
+              "tolled_distance": {
+                "daily_round_trip_miles": "22.16",
+                "annual_miles": "2992.01"
+              },
+              "vehicle_cost": {
+                "daily_usd": "15.18",
+                "annual_usd": "2049.52"
+              },
+              "sample_status": "complete",
+              "available_date_range": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23"
+              },
+              "scenarios": {
+                "p25": {
+                  "daily_toll_usd": "12.00",
+                  "annual_toll_usd": "1620.00",
+                  "daily_total_tolled_commute_cost_usd": "27.18",
+                  "average_monthly_tolled_commute_cost_usd": "305.79",
+                  "annual_total_tolled_commute_cost_usd": "3669.52",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "72497.15",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.8",
+                  "additional_gross_income_to_offset_usd": "5504.28"
+                },
+                "p50": {
+                  "daily_toll_usd": "12.00",
+                  "annual_toll_usd": "1620.00",
+                  "daily_total_tolled_commute_cost_usd": "27.18",
+                  "average_monthly_tolled_commute_cost_usd": "305.79",
+                  "annual_total_tolled_commute_cost_usd": "3669.52",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "72497.15",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.8",
+                  "additional_gross_income_to_offset_usd": "5504.28"
+                },
+                "p90": {
+                  "daily_toll_usd": "12.00",
+                  "annual_toll_usd": "1620.00",
+                  "daily_total_tolled_commute_cost_usd": "27.18",
+                  "average_monthly_tolled_commute_cost_usd": "305.79",
+                  "annual_total_tolled_commute_cost_usd": "3669.52",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "72497.15",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.8",
+                  "additional_gross_income_to_offset_usd": "5504.28"
+                }
+              }
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [],
+    "expected": {
+      "outcome": false,
+      "grounding": true,
+      "rules": true
+    },
+    "actor_validity": "valid",
+    "rationale": "Omitting the material vehicle-cost assumption fails Outcome; omission alone is not an unsupported assertion or prohibited action.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-published-annual-rate-source",
+    "label": "contradictory-combined-cost",
+    "turns": [
+      {
+        "user": "Estimate annual affordability: Exit 13 - SR 828 (Wiehle Ave) to Exit 18/19 - I-495 / SR 123 (Capital Beltway) and back, tuesday, wednesday, thursday, leaving at 7:45 AM and returning at 5:15 PM, 135 planned office days per year, gross annual salary $114250.00. Are the sampled prices historical observations?",
+        "response": "The annual income remaining after assumed tax and the annualized daily-P50 tolled commute is $72497.15. For 135 planned office days, gross annual income is $114250.00, with $76166.67 after the one-third assumed tax ($38083.33). The straight-line tolled distance is 22.16 miles per office day and 2992.01 miles annually; vehicle cost is $15.18 per office day and $2049.52 annually. P25 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P50 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P90 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P25 is the lower, P50 middle, and P90 higher daily scenario. Annual values scale daily scenarios by planned days, not percentiles of annual outcomes, forecasts, or guarantees. Coverage is 36 of 36 eligible paired dates (100.0%). The sampled dates use current published fixed rates, not historically observed tolls. Only straight-line distances of priced tolled facility legs are included; untolled travel is excluded. One-third tax is an assumption, not your actual tax calculation. Vehicle cost uses a fixed $0.685 per straight-line tolled mile assumption, not your personal expenses. The sampled days use current published fixed rates, not historical observations of what drivers paid. Your tolls alone are $3669.52 per year.",
+        "calls": [
+          {
+            "name": "get_annual_toll_ballpark",
+            "input": {
+              "outbound": {
+                "origin_point_id": "dtr:13:entry:EB",
+                "destination_point_id": "dtr:1819:exit:EB",
+                "departure_time": "07:45:00"
+              },
+              "return": {
+                "origin_point_id": "dtr:1819:entry:WB",
+                "destination_point_id": "dtr:13:exit:WB",
+                "departure_time": "17:15:00"
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 135,
+              "gross_annual_income_usd": "114250.00"
+            },
+            "result": {
+              "method": "recent_complete_same_date_round_trips",
+              "evaluated_at": "2026-09-24T08:18:00-04:00",
+              "timezone": "America/New_York",
+              "target_window": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23",
+                "date_count": 84
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 135,
+              "coverage": {
+                "eligible_date_count": 36,
+                "complete_pair_count": 36,
+                "coverage_percent": "100.0",
+                "by_weekday": [
+                  {
+                    "weekday": "tuesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  },
+                  {
+                    "weekday": "wednesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  },
+                  {
+                    "weekday": "thursday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  }
+                ]
+              },
+              "uses_modeled": false,
+              "uses_current_fixed_rates": true,
+              "facilities": [
+                {
+                  "facility": "dtr",
+                  "sample_count": 36,
+                  "uses_modeled": false,
+                  "uses_current_fixed_rates": true,
+                  "scenarios": {
+                    "p25": {
+                      "daily_toll_usd": "12.00",
+                      "annual_toll_usd": "1620.00"
+                    },
+                    "p50": {
+                      "daily_toll_usd": "12.00",
+                      "annual_toll_usd": "1620.00"
+                    },
+                    "p90": {
+                      "daily_toll_usd": "12.00",
+                      "annual_toll_usd": "1620.00"
+                    }
+                  }
+                }
+              ],
+              "assumptions": {
+                "estimated_tax_fraction": "1/3",
+                "vehicle_cost_per_mile_usd": "0.685",
+                "distance_method": "straight_line_priced_facility_legs",
+                "scope": "tolled_portions_only"
+              },
+              "income": {
+                "gross_annual_usd": "114250.00",
+                "estimated_tax_usd": "38083.33",
+                "estimated_after_tax_usd": "76166.67"
+              },
+              "tolled_distance": {
+                "daily_round_trip_miles": "22.16",
+                "annual_miles": "2992.01"
+              },
+              "vehicle_cost": {
+                "daily_usd": "15.18",
+                "annual_usd": "2049.52"
+              },
+              "sample_status": "complete",
+              "available_date_range": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23"
+              },
+              "scenarios": {
+                "p25": {
+                  "daily_toll_usd": "12.00",
+                  "annual_toll_usd": "1620.00",
+                  "daily_total_tolled_commute_cost_usd": "27.18",
+                  "average_monthly_tolled_commute_cost_usd": "305.79",
+                  "annual_total_tolled_commute_cost_usd": "3669.52",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "72497.15",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.8",
+                  "additional_gross_income_to_offset_usd": "5504.28"
+                },
+                "p50": {
+                  "daily_toll_usd": "12.00",
+                  "annual_toll_usd": "1620.00",
+                  "daily_total_tolled_commute_cost_usd": "27.18",
+                  "average_monthly_tolled_commute_cost_usd": "305.79",
+                  "annual_total_tolled_commute_cost_usd": "3669.52",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "72497.15",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.8",
+                  "additional_gross_income_to_offset_usd": "5504.28"
+                },
+                "p90": {
+                  "daily_toll_usd": "12.00",
+                  "annual_toll_usd": "1620.00",
+                  "daily_total_tolled_commute_cost_usd": "27.18",
+                  "average_monthly_tolled_commute_cost_usd": "305.79",
+                  "annual_total_tolled_commute_cost_usd": "3669.52",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "72497.15",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.8",
+                  "additional_gross_income_to_offset_usd": "5504.28"
+                }
+              }
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [],
+    "expected": {
+      "outcome": false,
+      "grounding": false,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "rationale": "A correct table cannot cancel a later claim that combined cost is toll alone. The amount exists but has the wrong financial meaning.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-published-annual-rate-source",
+    "label": "false-historical-observation",
+    "turns": [
+      {
+        "user": "Estimate annual affordability: Exit 13 - SR 828 (Wiehle Ave) to Exit 18/19 - I-495 / SR 123 (Capital Beltway) and back, tuesday, wednesday, thursday, leaving at 7:45 AM and returning at 5:15 PM, 135 planned office days per year, gross annual salary $114250.00. Are the sampled prices historical observations?",
+        "response": "The annual income remaining after assumed tax and the annualized daily-P50 tolled commute is $72497.15. For 135 planned office days, gross annual income is $114250.00, with $76166.67 after the one-third assumed tax ($38083.33). The straight-line tolled distance is 22.16 miles per office day and 2992.01 miles annually; vehicle cost is $15.18 per office day and $2049.52 annually. P25 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P50 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P90 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P25 is the lower, P50 middle, and P90 higher daily scenario. Annual values scale daily scenarios by planned days, not percentiles of annual outcomes, forecasts, or guarantees. Coverage is 36 of 36 eligible paired dates (100.0%). The sampled dates use current published fixed rates, not historically observed tolls. Only straight-line distances of priced tolled facility legs are included; untolled travel is excluded. One-third tax is an assumption, not your actual tax calculation. Vehicle cost uses a fixed $0.685 per straight-line tolled mile assumption, not your personal expenses. The sampled days use current published fixed rates, not historical observations of what drivers paid. These exact fixed toll prices were historically observed on each sampled date.",
+        "calls": [
+          {
+            "name": "get_annual_toll_ballpark",
+            "input": {
+              "outbound": {
+                "origin_point_id": "dtr:13:entry:EB",
+                "destination_point_id": "dtr:1819:exit:EB",
+                "departure_time": "07:45:00"
+              },
+              "return": {
+                "origin_point_id": "dtr:1819:entry:WB",
+                "destination_point_id": "dtr:13:exit:WB",
+                "departure_time": "17:15:00"
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 135,
+              "gross_annual_income_usd": "114250.00"
+            },
+            "result": {
+              "method": "recent_complete_same_date_round_trips",
+              "evaluated_at": "2026-09-24T08:18:00-04:00",
+              "timezone": "America/New_York",
+              "target_window": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23",
+                "date_count": 84
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 135,
+              "coverage": {
+                "eligible_date_count": 36,
+                "complete_pair_count": 36,
+                "coverage_percent": "100.0",
+                "by_weekday": [
+                  {
+                    "weekday": "tuesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  },
+                  {
+                    "weekday": "wednesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  },
+                  {
+                    "weekday": "thursday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  }
+                ]
+              },
+              "uses_modeled": false,
+              "uses_current_fixed_rates": true,
+              "facilities": [
+                {
+                  "facility": "dtr",
+                  "sample_count": 36,
+                  "uses_modeled": false,
+                  "uses_current_fixed_rates": true,
+                  "scenarios": {
+                    "p25": {
+                      "daily_toll_usd": "12.00",
+                      "annual_toll_usd": "1620.00"
+                    },
+                    "p50": {
+                      "daily_toll_usd": "12.00",
+                      "annual_toll_usd": "1620.00"
+                    },
+                    "p90": {
+                      "daily_toll_usd": "12.00",
+                      "annual_toll_usd": "1620.00"
+                    }
+                  }
+                }
+              ],
+              "assumptions": {
+                "estimated_tax_fraction": "1/3",
+                "vehicle_cost_per_mile_usd": "0.685",
+                "distance_method": "straight_line_priced_facility_legs",
+                "scope": "tolled_portions_only"
+              },
+              "income": {
+                "gross_annual_usd": "114250.00",
+                "estimated_tax_usd": "38083.33",
+                "estimated_after_tax_usd": "76166.67"
+              },
+              "tolled_distance": {
+                "daily_round_trip_miles": "22.16",
+                "annual_miles": "2992.01"
+              },
+              "vehicle_cost": {
+                "daily_usd": "15.18",
+                "annual_usd": "2049.52"
+              },
+              "sample_status": "complete",
+              "available_date_range": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23"
+              },
+              "scenarios": {
+                "p25": {
+                  "daily_toll_usd": "12.00",
+                  "annual_toll_usd": "1620.00",
+                  "daily_total_tolled_commute_cost_usd": "27.18",
+                  "average_monthly_tolled_commute_cost_usd": "305.79",
+                  "annual_total_tolled_commute_cost_usd": "3669.52",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "72497.15",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.8",
+                  "additional_gross_income_to_offset_usd": "5504.28"
+                },
+                "p50": {
+                  "daily_toll_usd": "12.00",
+                  "annual_toll_usd": "1620.00",
+                  "daily_total_tolled_commute_cost_usd": "27.18",
+                  "average_monthly_tolled_commute_cost_usd": "305.79",
+                  "annual_total_tolled_commute_cost_usd": "3669.52",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "72497.15",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.8",
+                  "additional_gross_income_to_offset_usd": "5504.28"
+                },
+                "p90": {
+                  "daily_toll_usd": "12.00",
+                  "annual_toll_usd": "1620.00",
+                  "daily_total_tolled_commute_cost_usd": "27.18",
+                  "average_monthly_tolled_commute_cost_usd": "305.79",
+                  "annual_total_tolled_commute_cost_usd": "3669.52",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "72497.15",
+                  "tolled_commute_share_of_after_tax_income_percent": "4.8",
+                  "additional_gross_income_to_offset_usd": "5504.28"
+                }
+              }
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [],
+    "expected": {
+      "outcome": false,
+      "grounding": false,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "rationale": "Current published fixed rates are not historically observed prices; sampled dates do not change that.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-accept-three-day-annual-count",
+    "label": "equivalent-annual-day-consent",
+    "turns": [
+      {
+        "user": "Estimate annual Greenway affordability from Belmont Ridge Road to Route 28 and back. Tuesday to Thursday, 7:45 AM out and 5:15 PM return, $103,000 gross annual pay.",
+        "response": "Three weekdays times 52 gives 156 annual commute days. Would you like to use 156, or choose a higher or lower count?",
+        "calls": []
+      },
+      {
+        "user": "Use 156 days.",
+        "response": "The annual income remaining after assumed tax and the annualized daily-P50 tolled commute is $64780.03. For 156 planned office days, gross annual income is $103000.00, with $68666.67 after the one-third assumed tax ($34333.33). The straight-line tolled distance is 19.44 miles per office day and 3032.17 miles annually; vehicle cost is $13.31 per office day and $2077.04 annually. P25 daily scenario: toll $11.60 per office day, $1809.60 annualized; combined toll and vehicle cost $24.91 per office day, $323.89 per average month, $3886.64 annually. Remaining annual income $64780.03; additional gross salary needed to offset this combined annual cost $5829.96; combined cost is 5.7% of assumed after-tax income. P50 daily scenario: toll $11.60 per office day, $1809.60 annualized; combined toll and vehicle cost $24.91 per office day, $323.89 per average month, $3886.64 annually. Remaining annual income $64780.03; additional gross salary needed to offset this combined annual cost $5829.96; combined cost is 5.7% of assumed after-tax income. P90 daily scenario: toll $11.60 per office day, $1809.60 annualized; combined toll and vehicle cost $24.91 per office day, $323.89 per average month, $3886.64 annually. Remaining annual income $64780.03; additional gross salary needed to offset this combined annual cost $5829.96; combined cost is 5.7% of assumed after-tax income. P25 is the lower, P50 middle, and P90 higher daily scenario. Annual values scale daily scenarios by planned days, not percentiles of annual outcomes, forecasts, or guarantees. Coverage is 36 of 36 eligible paired dates (100.0%). The sampled dates use current published fixed rates, not historically observed tolls. Only straight-line distances of priced tolled facility legs are included; untolled travel is excluded. One-third tax is an assumption, not your actual tax calculation. Vehicle cost uses a fixed $0.685 per straight-line tolled mile assumption, not your personal expenses.",
+        "calls": [
+          {
+            "name": "get_annual_toll_ballpark",
+            "input": {
+              "outbound": {
+                "origin_point_id": "greenway:4:entry:EB",
+                "destination_point_id": "greenway:28:exit:EB",
+                "departure_time": "07:45:00"
+              },
+              "return": {
+                "origin_point_id": "greenway:28:entry:WB",
+                "destination_point_id": "greenway:4:exit:WB",
+                "departure_time": "17:15:00"
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 156,
+              "gross_annual_income_usd": "103000.00"
+            },
+            "result": {
+              "method": "recent_complete_same_date_round_trips",
+              "evaluated_at": "2026-09-24T08:18:00-04:00",
+              "timezone": "America/New_York",
+              "target_window": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23",
+                "date_count": 84
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 156,
+              "coverage": {
+                "eligible_date_count": 36,
+                "complete_pair_count": 36,
+                "coverage_percent": "100.0",
+                "by_weekday": [
+                  {
+                    "weekday": "tuesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  },
+                  {
+                    "weekday": "wednesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  },
+                  {
+                    "weekday": "thursday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 12,
+                    "coverage_percent": "100.0"
+                  }
+                ]
+              },
+              "uses_modeled": false,
+              "uses_current_fixed_rates": true,
+              "facilities": [
+                {
+                  "facility": "greenway",
+                  "sample_count": 36,
+                  "uses_modeled": false,
+                  "uses_current_fixed_rates": true,
+                  "scenarios": {
+                    "p25": {
+                      "daily_toll_usd": "11.60",
+                      "annual_toll_usd": "1809.60"
+                    },
+                    "p50": {
+                      "daily_toll_usd": "11.60",
+                      "annual_toll_usd": "1809.60"
+                    },
+                    "p90": {
+                      "daily_toll_usd": "11.60",
+                      "annual_toll_usd": "1809.60"
+                    }
+                  }
+                }
+              ],
+              "assumptions": {
+                "estimated_tax_fraction": "1/3",
+                "vehicle_cost_per_mile_usd": "0.685",
+                "distance_method": "straight_line_priced_facility_legs",
+                "scope": "tolled_portions_only"
+              },
+              "income": {
+                "gross_annual_usd": "103000.00",
+                "estimated_tax_usd": "34333.33",
+                "estimated_after_tax_usd": "68666.67"
+              },
+              "tolled_distance": {
+                "daily_round_trip_miles": "19.44",
+                "annual_miles": "3032.17"
+              },
+              "vehicle_cost": {
+                "daily_usd": "13.31",
+                "annual_usd": "2077.04"
+              },
+              "sample_status": "complete",
+              "available_date_range": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23"
+              },
+              "scenarios": {
+                "p25": {
+                  "daily_toll_usd": "11.60",
+                  "annual_toll_usd": "1809.60",
+                  "daily_total_tolled_commute_cost_usd": "24.91",
+                  "average_monthly_tolled_commute_cost_usd": "323.89",
+                  "annual_total_tolled_commute_cost_usd": "3886.64",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "64780.03",
+                  "tolled_commute_share_of_after_tax_income_percent": "5.7",
+                  "additional_gross_income_to_offset_usd": "5829.96"
+                },
+                "p50": {
+                  "daily_toll_usd": "11.60",
+                  "annual_toll_usd": "1809.60",
+                  "daily_total_tolled_commute_cost_usd": "24.91",
+                  "average_monthly_tolled_commute_cost_usd": "323.89",
+                  "annual_total_tolled_commute_cost_usd": "3886.64",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "64780.03",
+                  "tolled_commute_share_of_after_tax_income_percent": "5.7",
+                  "additional_gross_income_to_offset_usd": "5829.96"
+                },
+                "p90": {
+                  "daily_toll_usd": "11.60",
+                  "annual_toll_usd": "1809.60",
+                  "daily_total_tolled_commute_cost_usd": "24.91",
+                  "average_monthly_tolled_commute_cost_usd": "323.89",
+                  "annual_total_tolled_commute_cost_usd": "3886.64",
+                  "estimated_annual_income_after_tax_and_tolled_commute_usd": "64780.03",
+                  "tolled_commute_share_of_after_tax_income_percent": "5.7",
+                  "additional_gross_income_to_offset_usd": "5829.96"
+                }
+              }
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [],
+    "expected": {
+      "outcome": true,
+      "grounding": true,
+      "rules": true
+    },
+    "actor_validity": "valid",
+    "rationale": "A conditional 52-times-weekdays proposal is grounded; explicit acceptance precedes the call and an equivalent invitation permits adjustment.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-falling-gallows-quote",
+    "label": "emphasized-negative-comparison",
+    "turns": [
+      {
+        "user": "Is the current Gallows Road to Route 267 I-495 Express toll coming down? Please check it.",
+        "response": "The observed current toll is $6.45 at 8:09 AM EDT. Recent movement: **falling** by **$2.50 (27.9%)** across three reported cycles. You are getting a deal: $1.80 (21.8%) lower than the $8.25 median, below the $7.75–$9.15 range across all 3 comparable weeks.",
+        "calls": [
+          {
+            "name": "get_current_toll_price",
+            "input": {
+              "origin_point_id": "i495:189NO",
+              "destination_point_id": "i495:182ND",
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              }
+            },
+            "result": {
+              "origin_point_id": "i495:189NO",
+              "destination_point_id": "i495:182ND",
+              "method": "latest_complete_current_facility_prices",
+              "evaluated_at": "2026-09-24T08:18:00-04:00",
+              "maximum_observation_age_minutes": 30,
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              },
+              "source_kind": "observed",
+              "components": [
+                {
+                  "route_step_id": "step-1",
+                  "facility": "i95_i495",
+                  "price_usd": "6.45",
+                  "source_kind": "observed",
+                  "pricing_method": "source_observation",
+                  "component_evaluated_at": "2026-09-24T08:18:00-04:00",
+                  "bin_minutes": 10,
+                  "bin_start": "2026-09-24T08:00:00-04:00",
+                  "bin_end": "2026-09-24T08:10:00-04:00",
+                  "interval_end_at": "2026-09-24T08:10:00-04:00",
+                  "observed_at": "2026-09-24T08:09:30-04:00",
+                  "recent_movement": {
+                    "method": "same_facility_leg_three_cycles",
+                    "direction": "falling",
+                    "samples": [
+                      {
+                        "cycle_offset": -2,
+                        "price_usd": "8.95"
+                      },
+                      {
+                        "cycle_offset": -1,
+                        "price_usd": "7.20"
+                      },
+                      {
+                        "cycle_offset": 0,
+                        "price_usd": "6.45"
+                      }
+                    ],
+                    "net_change_usd": "-2.50",
+                    "net_change_percent": "-27.9"
+                  },
+                  "prior_week_comparison": {
+                    "method": "same_weekday_same_facility_bins",
+                    "comparable_period_count": 3,
+                    "expected_comparable_period_count": 3,
+                    "comparable_prices": [
+                      {
+                        "week_offset": 1,
+                        "price_usd": "7.75"
+                      },
+                      {
+                        "week_offset": 2,
+                        "price_usd": "8.25"
+                      },
+                      {
+                        "week_offset": 3,
+                        "price_usd": "9.15"
+                      }
+                    ],
+                    "median_usd": "8.25",
+                    "minimum_usd": "7.75",
+                    "maximum_usd": "9.15",
+                    "current_delta_usd": "-1.80",
+                    "current_delta_percent": "-21.8",
+                    "position": "below_recent_range",
+                    "higher_than_count": 0
+                  },
+                  "od_pair_id": 1028,
+                  "proxy_od_pair_id": null,
+                  "source_status": "OPEN"
+                }
+              ],
+              "total_usd": "6.45"
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [],
+    "expected": {
+      "outcome": true,
+      "grounding": true,
+      "rules": true
+    },
+    "actor_validity": "valid",
+    "rationale": "Emphasis may straddle a movement word and amount; signed deltas retain their meaning.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-falling-gallows-quote",
+    "label": "reversed-comparison",
+    "turns": [
+      {
+        "user": "Is the current Gallows Road to Route 267 I-495 Express toll coming down? Please check it.",
+        "response": "The current toll is $6.45, observed at 8:09 AM EDT. Movement fell by $2.50. It is $1.80 above the $8.25 median and above the $7.75–$9.15 range over all 3 comparable weeks.",
+        "calls": [
+          {
+            "name": "get_current_toll_price",
+            "input": {
+              "origin_point_id": "i495:189NO",
+              "destination_point_id": "i495:182ND",
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              }
+            },
+            "result": {
+              "origin_point_id": "i495:189NO",
+              "destination_point_id": "i495:182ND",
+              "method": "latest_complete_current_facility_prices",
+              "evaluated_at": "2026-09-24T08:18:00-04:00",
+              "maximum_observation_age_minutes": 30,
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              },
+              "source_kind": "observed",
+              "components": [
+                {
+                  "route_step_id": "step-1",
+                  "facility": "i95_i495",
+                  "price_usd": "6.45",
+                  "source_kind": "observed",
+                  "pricing_method": "source_observation",
+                  "component_evaluated_at": "2026-09-24T08:18:00-04:00",
+                  "bin_minutes": 10,
+                  "bin_start": "2026-09-24T08:00:00-04:00",
+                  "bin_end": "2026-09-24T08:10:00-04:00",
+                  "interval_end_at": "2026-09-24T08:10:00-04:00",
+                  "observed_at": "2026-09-24T08:09:30-04:00",
+                  "recent_movement": {
+                    "method": "same_facility_leg_three_cycles",
+                    "direction": "falling",
+                    "samples": [
+                      {
+                        "cycle_offset": -2,
+                        "price_usd": "8.95"
+                      },
+                      {
+                        "cycle_offset": -1,
+                        "price_usd": "7.20"
+                      },
+                      {
+                        "cycle_offset": 0,
+                        "price_usd": "6.45"
+                      }
+                    ],
+                    "net_change_usd": "-2.50",
+                    "net_change_percent": "-27.9"
+                  },
+                  "prior_week_comparison": {
+                    "method": "same_weekday_same_facility_bins",
+                    "comparable_period_count": 3,
+                    "expected_comparable_period_count": 3,
+                    "comparable_prices": [
+                      {
+                        "week_offset": 1,
+                        "price_usd": "7.75"
+                      },
+                      {
+                        "week_offset": 2,
+                        "price_usd": "8.25"
+                      },
+                      {
+                        "week_offset": 3,
+                        "price_usd": "9.15"
+                      }
+                    ],
+                    "median_usd": "8.25",
+                    "minimum_usd": "7.75",
+                    "maximum_usd": "9.15",
+                    "current_delta_usd": "-1.80",
+                    "current_delta_percent": "-21.8",
+                    "position": "below_recent_range",
+                    "higher_than_count": 0
+                  },
+                  "od_pair_id": 1028,
+                  "proxy_od_pair_id": null,
+                  "source_status": "OPEN"
+                }
+              ],
+              "total_usd": "6.45"
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [
+      "unsupported_money"
+    ],
+    "expected": {
+      "outcome": false,
+      "grounding": false,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "rationale": "A positive above-median claim contradicts the negative returned delta. Never normalize absolute values.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-falling-gallows-quote",
+    "label": "invented-negative-comparison",
+    "turns": [
+      {
+        "user": "Is the current Gallows Road to Route 267 I-495 Express toll coming down? Please check it.",
+        "response": "The current toll is $6.45, observed at 8:09 AM EDT. Movement fell by $2.50. You are getting a deal: $999.99 lower than the $8.25 median, below the $7.75–$9.15 range over all 3 comparable weeks.",
+        "calls": [
+          {
+            "name": "get_current_toll_price",
+            "input": {
+              "origin_point_id": "i495:189NO",
+              "destination_point_id": "i495:182ND",
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              }
+            },
+            "result": {
+              "origin_point_id": "i495:189NO",
+              "destination_point_id": "i495:182ND",
+              "method": "latest_complete_current_facility_prices",
+              "evaluated_at": "2026-09-24T08:18:00-04:00",
+              "maximum_observation_age_minutes": 30,
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              },
+              "source_kind": "observed",
+              "components": [
+                {
+                  "route_step_id": "step-1",
+                  "facility": "i95_i495",
+                  "price_usd": "6.45",
+                  "source_kind": "observed",
+                  "pricing_method": "source_observation",
+                  "component_evaluated_at": "2026-09-24T08:18:00-04:00",
+                  "bin_minutes": 10,
+                  "bin_start": "2026-09-24T08:00:00-04:00",
+                  "bin_end": "2026-09-24T08:10:00-04:00",
+                  "interval_end_at": "2026-09-24T08:10:00-04:00",
+                  "observed_at": "2026-09-24T08:09:30-04:00",
+                  "recent_movement": {
+                    "method": "same_facility_leg_three_cycles",
+                    "direction": "falling",
+                    "samples": [
+                      {
+                        "cycle_offset": -2,
+                        "price_usd": "8.95"
+                      },
+                      {
+                        "cycle_offset": -1,
+                        "price_usd": "7.20"
+                      },
+                      {
+                        "cycle_offset": 0,
+                        "price_usd": "6.45"
+                      }
+                    ],
+                    "net_change_usd": "-2.50",
+                    "net_change_percent": "-27.9"
+                  },
+                  "prior_week_comparison": {
+                    "method": "same_weekday_same_facility_bins",
+                    "comparable_period_count": 3,
+                    "expected_comparable_period_count": 3,
+                    "comparable_prices": [
+                      {
+                        "week_offset": 1,
+                        "price_usd": "7.75"
+                      },
+                      {
+                        "week_offset": 2,
+                        "price_usd": "8.25"
+                      },
+                      {
+                        "week_offset": 3,
+                        "price_usd": "9.15"
+                      }
+                    ],
+                    "median_usd": "8.25",
+                    "minimum_usd": "7.75",
+                    "maximum_usd": "9.15",
+                    "current_delta_usd": "-1.80",
+                    "current_delta_percent": "-21.8",
+                    "position": "below_recent_range",
+                    "higher_than_count": 0
+                  },
+                  "od_pair_id": 1028,
+                  "proxy_od_pair_id": null,
+                  "source_status": "OPEN"
+                }
+              ],
+              "total_usd": "6.45"
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [
+      "unsupported_money"
+    ],
+    "expected": {
+      "outcome": false,
+      "grounding": false,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "rationale": "Negative wording does not permit inventing a comparison amount.",
+    "rejected_tools": []
   }
 ]

@@ -92,13 +92,17 @@ version constants, model settings, actors, fixtures, judging, and
 security/consent/money requirements. Do not add/remove description fields or
 replace literals with computed strings. Description wording must remain truthful
 to the fixed implementation; it cannot promise new capabilities or weaker consent.
-TollChat remains on `gpt-6-luna`. Do not embed case IDs, fixture answers, or special
+TollChat remains on `gpt-6-luna`. Small synthetic demonstrations are permitted as SOP edits when they teach the
+rule without copying benchmark answers. Do not embed case IDs, fixture answers, or special
 handling for benchmark wording. Root causes needing code or judge changes are
 reported as out of scope. Test files are not candidate-edit surfaces.
 
 ## Run a round
 
-1. Run a fresh full-set starting baseline on the pinned contract. Do not substitute
+1. Run a fresh full-set starting baseline on the pinned contract, or reuse the
+   designated second preparation repeat only when application and evaluation
+   identities remain unchanged and deployed migration/catalog parity has been
+   verified after human-reviewed merge. Never choose a repeat by its score. Do not substitute
    a report from an older judge version. Have `eval_cluster` inspect failure and
    passing trajectories and return JSON with `failure_class`, `evidence`
    (case/trial references), `hypotheses` (exactly two alternatives), `allowed_files`,
@@ -142,10 +146,14 @@ reported as out of scope. Test files are not candidate-edit surfaces.
    **not** an eligible candidate. Nonzero means unusable evidence. Send the full
    comparison and original reports to a fresh `eval_reviewer`.
 
-The helper checks numeric eligibility: successes out of the fixed 300 slots must
-strictly increase; mean delta on common fully scored three-trial cases must be
-positive; inconclusive slots must not increase; comparable Grounding and Rules
-violation rates must not worsen. Inconclusives remain explicit, not scored
+The helper checks numeric eligibility under corpus 3.3.0 / harness 2.3.0:
+overall pass rate (successful trials divided by all 300 expected trials) must
+strictly increase; inconclusive slots must not increase; comparable Grounding
+and Rules violation rates must not worsen. Pass³ (successful three-trial cases
+divided by all 100 cases) and paired delta are diagnostics only. Missing or duplicate trials and incompatible
+identities invalidate comparison. Historical reports retain their recorded
+contract semantics; never compare across contracts or use a private campaign
+helper to override the committed decision rules. Inconclusives remain explicit, not scored
 failures. Deterministic checks contribute to violations using runner semantics.
 
 The reviewer returns `eligible`, `reject`, or `stop`, with evidence references
@@ -153,8 +161,16 @@ and unresolved regressions. Inspect every old-pass/new-fail and new violation,
 including those outside the paired subset. A changed stochastic trial alone is
 not proof the patch caused harm, but unresolved material regressions disqualify
 it. Never relabel evidence to gain eligibility. The parent chooses the eligible
-candidate with most successful slots; an A/B tie favors fewer changed lines,
-then A if still tied. A tie with the incumbent retains the incumbent.
+candidate with highest overall pass rate, then fewer changed lines, then A if
+still tied. A tie with the incumbent retains the incumbent.
+
+Optimize this metric on the exposed development cases. The separate production
+standard is at least 240/300 successful trials on a blind holdout, with all
+simulations valid and measurements complete. An 80% development score is neither
+a stopping target nor production qualification. Never inspect holdout cases or
+use holdout feedback for candidate search; activation and protected approval
+belong to the separate production workflow. Existing development spending limits
+remain in force.
 
 ## Stop, confirm, and report
 
