@@ -1396,3 +1396,11 @@ supply the actor CLI budget, and regenerated package/shared-compatibility hashes
 for the prepared SOP and Oracle schema. These delivery/test metadata corrections
 do not change the measured application, grading code, or corpus payload. The
 stopped calibration remains unapproved and no paid run was repeated.
+
+The read-only PR plan then reported development serving release
+`a5338c913f3c99b2eb895619bc287ba4d24e3aa0`, newer than the registered development
+compatibility pin. Independent review verified its database, tool, shared-package,
+SOP, agent, and database-contract sources are identical to the preparation parent
+already validated. Only the development compatibility pin advances to that exact
+serving release; the production pin stays unchanged. All 120 shared-package tests
+passed, with exact-release acceptance and unrelated-release rejection checked.
