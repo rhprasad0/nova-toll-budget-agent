@@ -1589,3 +1589,69 @@ correction boundary under a newly reviewed contract. Existing source and consent
 labels must not be weakened to obtain agreement. Raw evidence and independent
 review remain private. Migration and deployed catalog parity remain prerequisites
 before any future climb; this repair performs no deployed mutation.
+
+
+## 2026-09-25 — source completeness calibration; actor/input-grounding stop
+
+Ryan authorized proceeding with calibration after the remaining grading fixes.
+The fresh reviewed contract is corpus **3.3.3** / harness **2.3.3**, measured at
+`7e4f69bf0f984d228f5f64daa60475644994f1e1`. Outcome now checks completion,
+required disclosures, and factual accuracy separately; Grounding explicitly
+checks source denials and distinguishes openly keeping an old route from falsely
+claiming its quote prices a corrected route. The generic positive formatting
+example no longer suggests that a correct amount alone completes all requirements.
+Evidence-first output, verdict derivation, all 146 reference payloads and labels,
+100 cases, application, actor generation, models, tool schemas and fixtures are
+unchanged. No old evidence was relabeled or rescored.
+
+Fresh independent preparation review found no material code/contract defect.
+All 140 focused tests, seven release-isolation checks, 11 comparison checks,
+corpus validation, lint/type/format checks and skill validation passed. Corpus
+approval reflects that review only, with no human trajectory or calibration
+approval claimed.
+
+One full calibration ran with 16 workers and a $0.42 complete-run estimate,
+continuing the uncapped ledger from $12.578573085.
+
+| Calibration measure | Result |
+| --- | ---: |
+| Complete references | 146 / 146 |
+| Started and finished calls, all usage known | 438 / 438 |
+| Measurement failures | 0 |
+| Outcome agreement among expected-valid references judged valid | 142 / 142 |
+| Grounding agreement among expected-valid references judged valid | 141 / 142 |
+| Rules agreement among expected-valid references judged valid | 142 / 142 |
+| Actor-validity agreement | 145 / 146 |
+| Calibration cost | $0.271214520 |
+| Cumulative accounted eval cost | $12.849787605 |
+
+The application-criterion denominator is 142 because one of the 143 valid
+references was wrongly classified actor-invalid and excluded as inconclusive.
+Those criterion fractions therefore do not imply all valid references were
+correctly measured. Independent review checked all 93 nonempty assessments and
+found no recurrence of satisfied requirements listed as unmet. All three prior
+disagreements now agree with their labels; changed draws and prompts prevent
+causal attribution or a repeatability claim.
+
+Two clear material errors remain. Actor validity denies a correction visibly
+delivered in the canonical second user turn, even though the same combined
+assessment's Outcome explanation recognizes that correction. Confusion with the
+empty auxiliary actor-reply log is a possible mechanism, not an established
+internal cause. Grounding also accepts a derived annual-day count in a tool call
+before user consent, treating valid arithmetic and successful execution as support
+for an unaccepted user input. Outcome and Rules correctly reject that premature
+call, but they do not replace Grounding's independent assessment.
+
+Review also preserved observations outside labeled application metrics: a
+correctly actor-invalid reference has a defensible Outcome disclosure concern,
+and another retains a failed Outcome with an auxiliary rationale that confuses a
+private required actor choice with the assistant's delivered workflow. These
+observations were not used to change labels or assert extra confirmed defects.
+
+**Decision: stop; calibration is unapproved.** No repeat calibration, actor check,
+application baseline, candidate search, or confirmation was admitted. A further
+repair must distinguish canonical delivered user messages from optional actor
+records and arithmetic support from turn-local support for actual user inputs.
+Existing instructions already cover these rules; this run does not establish
+that additional wording alone will fix them. Raw evidence, costs, and independent
+review remain private. No application improvement or deployed change is claimed.
