@@ -1439,3 +1439,85 @@ no human adjudication claimed. All 85 focused runner/development tests and 11
 comparison tests passed, including archived report reproduction, along with
 lint/type, corpus and skill validation. The review explicitly leaves calibration
 unapproved and paid continuation stopped.
+
+
+## 2026-09-25 — uncapped overall-pass preparation; fresh calibration stop
+
+Ryan authorized repairing the remaining grading defects and then attempting a
+bounded three-round A/B climb on the exposed 100-case development set, optimizing
+successful trials out of all 300 expected trials. This authorization explicitly
+removes the prior $20 total and $15 preparation ceilings; it does not remove
+usage accounting, measurement gates, or the search and confirmation stopping
+rules. The preserved spending chain continues from $12.037866530.
+
+Preparation starts from merged `fbe65eb404eab8546d6bfe638e8c90a66b19bc2d`.
+The measured preparation commit is
+`6e76aaffdba87fbaada1bb41546ca6bb6747d4cd`, with corpus **3.3.1**, harness
+**2.3.1**, application **gpt-6-luna**, unchanged SOP **2.3.9**, and unchanged
+Oracle **1.15.1** catalog. All original 143 reference objects and all 100 cases
+remain unchanged; three focused contrasts cover equivalent versus omitted
+published-schedule provenance and conditional income suggestion versus unilateral
+adoption. No application prompt candidate was produced.
+
+The runner and actor-check CLI accept explicit `--no-budget-limit`, mutually
+exclusive with `--budget-usd`. Uncapped manifests record a null ceiling while
+retaining cumulative prior spend, reservations, known-usage checks, call bounds,
+and worker bounds. Capped behavior and historical comparison semantics remain.
+General grading instructions distinguish actual violations from compliance,
+preserved user inputs from mandatory prose repetition, optional schedule metadata
+from required provenance, and conditional income suggestions from adoption.
+Stored judgments still derive pass/fail from cited unmet requirements; no regex
+relabeling or post-hoc verdict correction is introduced.
+
+Fresh independent Codex review found the preparation code and all three new
+reference labels acceptable before paid execution. Corpus approval identifies
+that actual review and makes no claim of human trajectory adjudication or
+calibration approval. Focused runner/corpus/development tests, 36 historical
+compatibility tests, seven release-isolation tests, 11 comparison checks, corpus
+validation, lint/type checks, and skill validation passed. Later tests covered
+the added conditional-income contrast. No application model or runtime behavior
+changed.
+
+The predetermined sequence remains two full-reference calibrations, one full
+scripted actor check, and two identical application runs, with the second
+application run designated as baseline by position. Only calibration one was
+admitted, estimated at $0.40 and run with 16 workers.
+
+| Calibration measure | Result |
+| --- | ---: |
+| Complete references | 146 / 146 |
+| Started and finished calls, all usage known | 438 / 438 |
+| Measurement failures | 0 |
+| Outcome label agreement on actor-valid references | 136 / 143 |
+| Grounding label agreement on actor-valid references | 142 / 143 |
+| Rules label agreement on actor-valid references | 142 / 143 |
+| Actor-validity agreement | 145 / 146 |
+| Prior four disagreement references now matching labels | 4 / 4 |
+| Added contrast references matching labels | 3 / 3 |
+| Calibration cost | $0.268293010 |
+| Cumulative accounted eval cost | $12.306159540 |
+
+Independent review confirmed material grading errors. Multiple nonempty unmet
+lists explicitly describe compliant behavior and conclude there is no violation.
+Other judgments invent disclosure or question-format requirements, misinterpret
+modeled provenance, confuse an annual return destination with its origin, and
+accept an explicit actor stop before required endpoint facts are supplied.
+Two additional wording-sensitive findings do not alter the stop decision because
+multiple unambiguous errors independently invalidate grading readiness.
+
+**Decision: stop; the fresh calibration remains unapproved.** The four earlier
+disagreements now agree, but that does not establish a reliable repair: the same
+failure mechanism recurs elsewhere. Different stochastic draws and changed
+instructions prevent causal attribution of new disagreements to this patch.
+No second calibration, actor check, application repeat, candidate search, or
+confirmation ran. No training-set improvement or replacement baseline is claimed.
+All raw verdicts, references, and accounting remain preserved privately.
+
+Protected development delivery for the merged stack was still in progress at
+this stop; migration completion and deployed catalog parity were not yet
+verified. No manual migration or deployment was performed. Those checks remain
+required before a future climb. A separately authorized grading repair must
+resolve the structured-decision and actor-validity failures under a newly pinned
+contract and fresh evidence. Runtime/tool changes, larger models, larger candidate
+pools, and workflow redesign were not tested. Raw evidence stays in the ignored
+preparation worktree; this journal is the only published experiment summary.
