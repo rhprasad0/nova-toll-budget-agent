@@ -1,6 +1,6 @@
 ### Timed-check Scheduler bootstrap and verification (#345)
 
-Each invocation runs one of the [six scheduled simulated cases](../eval/README.md#minimal-scheduled-suite),
+Each invocation runs one of the [six scheduled simulated cases](../eval/README.md#scheduled-and-live-checks),
 with tool-count, completeness, and correctness checks. The 28 weekly schedule
 slots remain; direct route and annual preflight checks are no longer part of the
 timed path. Legacy regression cases are available only through explicit runs.

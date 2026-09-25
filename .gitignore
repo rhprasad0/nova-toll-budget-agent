@@ -35,3 +35,6 @@ test-results/
 !v2/infra/production.tfvars
 !v2/infra/development.tfvars
 /v2/eval/private/
+# Experiment output belongs in private storage; publish journal summaries only.
+/v2/eval/evidence/
+/v2/eval/results/golden/runs/
