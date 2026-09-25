@@ -1,7 +1,10 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "790d8a14b88bef4babb49ec81353f1bd1db41e528739bcf7f1fdc37a585c47e0",
   "human_trajectory_adjudication": false,
-  "reviewer": "",
-  "evidence": ""
+  "reviewer": "Codex independent eval_reviewer preparation review",
+  "evidence": "Independent review of the normal-status materiality repair and the supplemental permitted-discovery clarification found no material defect. The final review covered the complete supplemental delta, generated identity and actor schema, surrounding Outcome instructions, six focused offline tests and corpus identity validation. The clarifications retain actual restrictions, explicit status requests, unauthorized-argument and premature-call failures, and all other applicable obligations. Application, actor prompt, model settings, schemas, references, labels and tool hashes remain unchanged. This approves preparation for the first fresh full calibration only; subsequent calibration, actor check and baseline admission require their own evidence and reviews. No human trajectory adjudication is claimed.",
+  "authorization": "Ryan explicitly authorized continued fixes and runs until ready for a new application baseline, then a ready-for-review PR; uncapped evaluation spending remains authorized.",
+  "reviewed_at": "2026-09-25T17:25:58.382684+00:00",
+  "contract_commit": "70aabfe222e2dbec9c99180bdd82b4c9b9280f05"
 }
