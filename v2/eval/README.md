@@ -1,8 +1,11 @@
 # TollChat evaluation
 
 **Current contract: 3.1.0 / harness 2.1.0.** SOP and model-facing tool-description
-climbs are supported. Corpus review and fresh calibration are **pending** for this
-contract; prior approvals and scores do not transfer. Cases, reference labels,
+climbs require corpus review and fresh calibration. Approval remains **pending**:
+review found that editable `_PricingProfile` descriptions also appear in the
+protected output schema without changing the normalized tool hash. Calibration
+and climbs are blocked until this contract defect is corrected and reviewed.
+Prior approvals and scores do not transfer. Cases, reference labels,
 fixtures, and application/tool wording are unchanged. This exposed development
 corpus cannot qualify production.
 

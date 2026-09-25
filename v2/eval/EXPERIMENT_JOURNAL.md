@@ -833,3 +833,61 @@ worktrees, reviews, hashes and progress remain private and preserved. These
 exposed-development findings do not establish generalization or release
 qualification. No push, PR, merge, deployment or production access occurred in
 this supervisor session.
+
+## 2026-09-25 — Description-only continuation on PR600 blocked at contract review
+
+Ryan authorized a new local description-only climb stacked on unmerged PR600,
+including fresh contract review and calibration under the existing cumulative
+$20 eval ceiling. The objective remained strict improvement in pass^3 over a
+fixed 100 development cases, with all three slots successful and inconclusives
+never successful. Prior scores could inform diagnosis only; a fresh baseline
+was required for contract 3.1.0 / harness 2.1.0 / `literal-input-prose-v1`.
+The exact starting commit was `97688142558f313887bd8e92b7b5ae516dc0a985`.
+
+The fresh named `eval_reviewer` (gpt-6-astra/high, isolated handoff, no child
+delegation) rejected prerequisite contract approval. `_PricingProfile` is an
+allowlisted input model but is also embedded in `_CurrentPriceResponse`.
+Changing one of its existing literal field descriptions leaves the normalized
+tool-source hash unchanged while changing the generated output description.
+The reviewer reproduced this in memory. The comparison helper permits different
+full schema hashes under this policy and cannot detect that output change.
+Existing synthetic normalization checks use a separate output class and miss
+this shared-model case. Full generated-schema review could reject an affected
+candidate, but the reviewer found the exact contract insufficient to justify
+approval of its stated output-preservation boundary. No approval was fabricated
+or transferred, and Ryan was not represented as having inspected trajectories.
+
+| Phase | Completed attempts / references | Pass^3 | Eval cost |
+| --- | ---: | ---: | ---: |
+| Carried prior campaign, seven full runs | 2,100 attempts | Not comparable across contracts | $6.555343780 |
+| Fresh offline contract review | No paid calls | Not measured | $0.000000000 |
+| New calibration, baseline, search, confirmation | Not started | Not measured | $0.000000000 |
+| Cumulative authorized accounting | 2,100 prior attempts | No new result | **$6.555343780 / $20** |
+
+The supervisor reconciled all seven prior raw journals, their immediate-prior
+run links, complete 300-slot coverage per run, and known model usage against the
+prior ledger. Decimal recomputation from token usage confirmed the carried cost;
+remaining authorization is $13.444656220. Historical calibration/pilot and Codex
+agent usage remain excluded under the original authorization. The separate
+stopped pilot was neither inspected nor resumed. No historical paid trial was
+repeated. The first future paid call in this chain must still use prior `r3b`.
+
+Offline validation passed for all 100 development cases, 82 relevant
+development/retirement/runner tests, eight comparison-helper checks, and the
+private fixed-denominator pass^3 self-check. The reviewer independently verified
+114 corpus/application files byte-identical across PR600 and its parent and ran
+focused checks. Passing tests did not override the demonstrated contract defect.
+Raw review evidence and accounting remain in the ignored campaign directory.
+
+Decision and stop reason: stop before calibration for the independently rejected
+measurement contract. Retain the original application and pending corpus review;
+no lifecycle assertion, source manifest, judge, cases, fixtures, labels, model,
+SOP, tool wording, or runtime changes were made. No candidate was implemented,
+measured, promoted, or confirmed. The required correction is to exclude shared
+output-model descriptions from the editable contract or otherwise enforce exact
+output-schema preservation, with a focused shared-model regression and fresh
+review before freezing. Such a harness/manifest repair is outside the permitted
+continuation edits and was deferred to the outer session. After a valid contract
+review, fresh calibration and baseline are still required under the same cap.
+There is no performance or generalization claim, production qualification,
+push, PR creation, merge, or deployment from this local run.
