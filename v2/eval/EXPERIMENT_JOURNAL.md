@@ -611,3 +611,75 @@ edits would invalidate the frozen corpus/calibration, so this was not tested.
 The pilot also exposed that custom roles require a fresh session and that the
 skill explicitly selected four workers; its default is being changed to 16
 for future runs in response to Ryan's follow-up.
+
+### 2026-09-24 — Pass³-first $20 campaign blocked during review
+
+Ryan authorized a new $20 hard eval ceiling, excluding Codex usage and the
+stopped pilot. Promotion required strictly greater pass³ over all 100 development
+cases (all three slots successful; inconclusives never count), even if total
+successful slots decreased. Inconclusive, Grounding, Rules and independent
+material-regression safeguards remained required. The comparison helper validated
+evidence; its success-count and paired-delta gates were diagnostics only.
+
+Starting commit: `a5338c913f3c99b2eb895619bc287ba4d24e3aa0`. Corpus 3.0.6,
+harness 2.0.13, application/actor/judges `gpt-6-luna`, tools, schemas, evaluator
+and version constants stayed frozen. All three named Codex roles were verified
+before paid work. A fresh authorized Codex offline review verified Calibration
+9's exact digest, 135 complete references, 405 known-usage calls and all 14 runner
+identity keys. Agreement covered 396 application labels and 135 actor labels;
+negative controls and actual explanations were inspected. This was not Ryan's
+personal transcript adjudication. Three invalid-actor references and no
+uncertain-actor references limit the calibration.
+
+All five new runs used 16 workers and completed 300 slots, chained consecutively
+from a fresh baseline. Each enforced a $17 cumulative search ceiling, reserving
+$3 for two final runs with at least 25% headroom over measured full-run costs.
+
+| Run / local commit | Pass³ / 100 | Successful / 300 | Inconclusive | Eval cost | Decision |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Original baseline | 47 | 212 | 1 | $0.955475225 | Incumbent retained |
+| Round 1A `ee6e1be` | 54 | 222 | 0 | $0.932931080 | Rejected |
+| Round 1B `c9b1f4a` | 58 | 235 | 0 | $0.921556700 | Rejected |
+| Round 2A `e5129a4` | 52 | 225 | 0 | $0.939550450 | Rejected after review |
+| Round 2B `4080040` | 50 | 220 | 1 | $0.934852150 | Numeric gates pass; review blocked |
+
+Round 1 tested two placements for the annual forecast/guaranteed-budget
+qualification. Over 299 common scored slots, A increased Grounding violations
+9 to 10 and Rules 55 to 70; B reduced Grounding to 6 but increased Rules to 58.
+Independent reviewers also found unresolved material route and source-disclosure
+regressions. Neither candidate was promoted.
+
+Round 2 tested joint endpoint-direction resolution and a separate pre-call
+direction check, both from the original incumbent. A passed numeric safeguards
+(Grounding 9 to 4, Rules 55 to 43 over 299 common slots), but independent review
+rejected repeated southbound selection, alternative-discovery and duplicate
+endpoint regressions. B passed numeric safeguards (Grounding 9 to 3, Rules 55
+to 55 over 298 common slots); its independent review remains incomplete.
+Sampling limits causal attribution. Reviewers separately recorded suspected
+judge contradictions and inconsistent disclosure judgments without relabeling,
+retrying or excluding trials.
+
+Stop reason: the required fresh named reviewer could not start because
+`agent thread limit reached` persisted after the preceding review finished and
+a supported interruption attempt. Activation of the unused readiness-only
+reviewer also failed; no close-thread operation was exposed. The parent did not
+substitute a reviewer or promote the unreviewed candidate. Round 2 remains
+incomplete; this is not a two-unsuccessful-round stop. No confirmation pair ran
+because no independently eligible improved incumbent was established.
+**No confirmed patch is recommended.** The original SOP remains in the campaign
+checkout; candidate commits are preserved in separate local worktrees.
+
+Total recorded new eval spend: **$4.684365605**. All model calls have complete
+usage and all evidence/accounting chains reconcile. Prior calibration spending
+and the stopped pilot were excluded; the pilot's unknown usage remains historical
+and unresolved. Semantic prompt, development-corpus and comparison checks passed.
+Candidate SOP edits necessarily fail the old versioned prompt-hash assertion
+while manifests and versions are frozen; that limitation was not patched around.
+
+Deferred unmeasured idea: clarify direction relationships in current-price and
+annual endpoint descriptions. Repeated eastbound/westbound argument reversals
+support investigation, but tool-file edits invalidate the frozen
+corpus/calibration and were not tested. Raw evidence, reviews, hashes, progress
+and blocker details stay ignored. Findings apply only to the exposed development
+set. No push, PR, holdout evaluation, production database access, release or
+deployment occurred.
