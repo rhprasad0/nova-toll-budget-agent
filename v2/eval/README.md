@@ -1,6 +1,6 @@
 # TollChat evaluation
 
-**Current contract: 3.3.2 / harness 2.3.2.** Future development climbs optimize
+**Current contract: 3.3.3 / harness 2.3.3.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does

@@ -1,10 +1,6 @@
 {
-  "status": "approved",
-  "corpus_sha256": "7cc2f454a94241419ce6faf69ea0076e77576b7ef9d2790084968208b420cd96",
+  "status": "pending",
+  "corpus_sha256": "94ba29c9998ac358a96dd852aac5f5281b5c962ec2c35875a403bdaeee61a275",
   "human_trajectory_adjudication": false,
-  "evidence": "Fresh independent review of cfe7182..8590758: evidence-first order verified in actual SDK schemas, with unchanged field types, requiredness and constraints; no material defect in shared grading or actor-stop guidance. All146 reference payloads/labels,100cases,application,models,actors,tool schemas and fixtures unchanged. No post-hoc relabeling. Preparation ready for first fresh calibration; this approval covers corpus/code only and is not calibration approval.",
-  "reviewer": "Codex supervisor with independent eval_reviewer (gpt-6-astra, high) under user authorization",
-  "reviewed_at": "2026-09-25T15:16:56.669899+00:00",
-  "authorization": "Ryan explicitly authorized proceeding with further grading fixes and fresh validation; uncapped spending remains authorized.",
-  "contract_commit": "8590758174a8cc8bc6e422e11cad2074f066c73e"
+  "evidence": "Source completeness and claim coverage repair awaiting independent review; no approval inherited."
 }
