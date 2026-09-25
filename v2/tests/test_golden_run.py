@@ -1703,6 +1703,51 @@ def test_actor_check_uncapped_cli_preserves_prior_spend(
     assert manifest["prior_run_id"] == "prior"
 
 
+@pytest.mark.parametrize("pending_reply", [False, True])
+def test_actor_judge_delivered_turns_do_not_depend_on_control_log(
+    monkeypatch: pytest.MonkeyPatch, pending_reply: bool
+) -> None:
+    case = golden_case(1)
+    row = run.Attempt(
+        id="delivered-evidence",
+        case_id=case.id,
+        trial=1,
+        turns=[
+            golden.Turn(user="Initial request", response="First answer", calls=[]),
+            golden.Turn(
+                user="Correction delivered", response="Second answer", calls=[]
+            ),
+        ],
+        actor_replies=[{"message": "Undelivered pending reply", "stop": True}]
+        if pending_reply
+        else [],
+    )
+    evaluator = Mock(
+        return_value=SimpleNamespace(
+            structured_output=run.OutcomeAssessment(
+                outcome=run.RequirementAssessment(
+                    evidence="Offline", unmet_requirements=[]
+                ),
+                actor_validity=run.ActorAssessment(evidence="Offline", status="valid"),
+            )
+        )
+    )
+    monkeypatch.setattr(run, "Agent", Mock(return_value=evaluator))
+    run.assess_outcome(case, row, Mock(spec=Model), "contract", "conversation")
+    prompt = evaluator.call_args.args[0]
+    delivered = prompt.split("DELIVERED USER TURNS", 1)[1].split(
+        "SIMULATOR CONTROL LOG", 1
+    )[0]
+    assert json.loads(delivered.split(":\n", 1)[1]) == [
+        {"turn": 1, "user": "Initial request"},
+        {"turn": 2, "user": "Correction delivered"},
+    ]
+    control_log = prompt.split("SIMULATOR CONTROL LOG", 1)[1].split(
+        "APPLICATION STOP", 1
+    )[0]
+    assert json.loads(control_log.split(":\n", 1)[1]) == row.actor_replies
+
+
 def test_judge_tool_schemas_emit_evidence_before_decisions() -> None:
     from strands.tools.structured_output.structured_output_utils import (
         convert_pydantic_to_tool_spec,
