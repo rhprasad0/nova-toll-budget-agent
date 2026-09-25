@@ -350,6 +350,11 @@ def test_incomplete_report_retains_interrupted_measurements(
     assert report["attempts"][0]["error"] == "interrupted"
     assert not report["full_corpus_complete"]
     bad = report["manifest"]["identity"]
+    assert bad["tool_description_policy"] == golden.TOOL_DESCRIPTION_POLICY
+    policy = bad.pop("tool_description_policy")
+    with pytest.raises(ValueError, match="missing tool description policy"):
+        run.validate_identity(bad)
+    bad["tool_description_policy"] = policy
     del bad["prompt_hashes"]
     with pytest.raises(ValueError, match="missing run identity"):
         run.validate_identity(bad)
@@ -935,7 +940,7 @@ def test_packaged_model_budget_is_scored_but_protocol_failure_is_not(
         manifest = json.loads(
             (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
         )
-        manifest["identity"]["harness_version"] = run.VERSION
+        manifest["identity"]["harness_version"] = "2.0.13"
         manifest["identity"]["corpus"]["case_count"] = 1
         manifest["identity"]["cases"] = [case.model_dump(mode="json")]
         (journal.directory / "manifest.json").write_text(json.dumps(manifest))
@@ -1016,7 +1021,9 @@ def test_eval_cache_prefix_and_write_accounting(
         assert run.cost(usage) == pytest.approx(expected)
 
 
-@pytest.mark.parametrize("changed", ["judge_prompt_sha256", "transport"])
+@pytest.mark.parametrize(
+    "changed", ["judge_prompt_sha256", "transport", "tool_description_policy"]
+)
 def test_cli_rejects_changed_cache_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: str
 ) -> None:
@@ -1034,6 +1041,7 @@ def test_cli_rejects_changed_cache_contract(
         "reasoning_effort",
         "max_output_tokens",
         "transport",
+        "tool_description_policy",
     )
     pinned = dict.fromkeys(keys, "current")
     previous = {**pinned, changed: "old"}
@@ -1089,6 +1097,23 @@ def test_cache_adapter_change_invalidates_calibration_identity(
     assert before["corpus"] == after["corpus"]
 
 
+def test_tool_wording_remains_in_full_run_identity(
+    golden_test_identity: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_git = run.git
+
+    def clean_git(*args: str) -> str:
+        return "" if args[0] == "status" else original_git(*args)
+
+    monkeypatch.setattr(run, "git", clean_git)
+    before = run.identity(golden.load_cases())
+    monkeypatch.setitem(golden.annual.TOOL_SPEC, "description", "Candidate wording")
+    after = run.identity(golden.load_cases())
+    assert before["tool_schema_hashes"] != after["tool_schema_hashes"]
+    assert before["corpus"] == after["corpus"]
+    assert before["evaluator_sources_sha256"] == after["evaluator_sources_sha256"]
+
+
 def test_wrong_route_reference_also_misnames_its_endpoint() -> None:
     example = next(
         e
@@ -1138,7 +1163,9 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
         assert kwargs["structured_output_model"] is run.OutcomeAssessment
         return SimpleNamespace(
             structured_output=run.OutcomeAssessment(
-                outcome=run.Verdict(passed=True, evidence="Cancellation acknowledged."),
+                outcome=run.RequirementAssessment(
+                    unmet_requirements=[], evidence="Cancellation acknowledged."
+                ),
                 actor_validity=run.ActorAssessment(
                     status="invalid", evidence="Cancellation contradicts this profile."
                 ),
@@ -1213,7 +1240,14 @@ def test_application_stop_only_exempts_an_actor_that_never_ran(
         )
     response = SimpleNamespace(
         structured_output=run.OutcomeAssessment(
-            outcome=run.Verdict(passed=False, evidence="Application failed."),
+            outcome=run.RequirementAssessment(
+                unmet_requirements=[
+                    run.UnmetRequirement(
+                        requirement="Complete task", evidence="Turn 1 has no answer"
+                    )
+                ],
+                evidence="Application failed.",
+            ),
             actor_validity=run.ActorAssessment(
                 status="invalid", evidence="Observed contradiction."
             ),
@@ -1251,8 +1285,8 @@ def test_v2_inconclusive_trials_keep_costs_and_violations_outside_scores(
     assert result["scored_trials"] == result["successful_trials"] == 2
     assert result["inconclusive_trials"] == 1
     assert result["pass_at_1"] == 1
-    assert result["pass_cubed"] is None
-    assert result["pass_cubed_case_denominator"] == 0
+    assert result["pass_cubed"] == 0
+    assert result["pass_cubed_case_denominator"] == 1
     assert result["families"]["current"]["scored_trials"] == 2
     assert result["observed_violations"]["grounding"] == 1
     assert result["cost_usd"]["agent"] == pytest.approx(0.03)
@@ -1424,7 +1458,7 @@ def test_v2_render_accounts_for_600_trials_and_embedded_case_count(
         )
         for number in range(1, 201)
     ]
-    manifest["identity"]["harness_version"] = run.VERSION
+    manifest["identity"]["harness_version"] = "2.0.13"
     manifest["identity"]["corpus"]["case_count"] = 200
     manifest["identity"]["cases"] = [case.model_dump(mode="json") for case in cases]
     directory = tmp_path / "accounting"
@@ -1499,7 +1533,7 @@ def test_invalid_actor_probe_is_complete_calibration_without_application_labels(
         (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
     )
     manifest["mode"] = "calibrate"
-    manifest["identity"]["harness_version"] = run.VERSION
+    manifest["identity"]["harness_version"] = "2.0.13"
     manifest["identity"]["calibration_labels"] = {"example_ids": [rows[0]["id"]]}
     (directory / "manifest.json").write_text(json.dumps(manifest))
     report = run.render(directory)
@@ -1517,7 +1551,7 @@ def test_interrupted_calibration_counts_missing_rows_without_judge_disagreements
         (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
     )
     manifest["mode"] = "calibrate"
-    manifest["identity"]["harness_version"] = run.VERSION
+    manifest["identity"]["harness_version"] = "2.0.13"
     manifest["identity"]["calibration_labels"] = {"example_ids": ["started", "queued"]}
     journal = run.Journal(tmp_path / "interrupted-calibration", 25)
     (journal.directory / "manifest.json").write_text(json.dumps(manifest))
@@ -1538,3 +1572,59 @@ def test_interrupted_calibration_counts_missing_rows_without_judge_disagreements
     assert (journal.directory / "report.md").read_text().count(
         "MISSING | Not assessed"
     ) == 2
+
+
+def test_requirement_assessment_derives_verdict_without_relabeling() -> None:
+    decision = run.RequirementAssessment(
+        unmet_requirements=[], evidence="Turn 1 answers all requirements."
+    )
+    assert decision.verdict().passed
+    decision.unmet_requirements.append(
+        run.UnmetRequirement(
+            requirement="Disclose scope", evidence="Turn 1 omits scope"
+        )
+    )
+    decision.evidence = "Therefore pass."
+    assert not decision.verdict().passed
+    assert "Turn 1 omits scope" in decision.verdict().evidence
+    assert "passed" not in run.RequirementAssessment.model_json_schema()["properties"]
+
+
+def test_fixed_pass_cubed_preserves_historical_denominator() -> None:
+    cases = golden.load_cases()[:2]
+    rows = [attempt(c, n) for c in cases for n in (1, 2, 3)]
+    rows[-1].status = "inconclusive"
+    rows[-1].actor_validity = run.ActorAssessment(
+        status="invalid", evidence="Stopped early"
+    )
+    current = run.summary(rows, cases)
+    historical = run.summary(rows, cases, fixed_denominator=False)
+    assert current["pass_cubed"] == 0.5
+    assert current["overall_pass_rate"] == 5 / 6
+    assert current["pass_cubed_case_denominator"] == 2
+    assert historical["pass_cubed"] == 1
+    assert historical["pass_cubed_case_denominator"] == 1
+    assert run.summary(rows[:-1], cases)["pass_cubed"] == 0.5
+    assert run.summary(rows[:-1], cases)["overall_pass_rate"] == 5 / 6
+    with pytest.raises(ValueError, match="duplicate"):
+        run.summary([*rows, rows[0]], cases)
+
+
+def test_prior_accounting_rejects_unknown_usage(tmp_path: Path) -> None:
+    (tmp_path / "manifest.json").write_text(
+        json.dumps({"run_id": "previous", "prior_spend_usd": 11.0})
+    )
+    events: list[dict[str, Any]] = [
+        {"event": "model_started"},
+        {"event": "model_finished", "complete": True, "cost_usd": 0.25},
+    ]
+    path = tmp_path / "events.jsonl"
+    path.write_text("\n".join(map(json.dumps, events)))
+    assert run.prior_accounting(tmp_path)[1] == 11.25
+    events[-1]["complete"] = False
+    path.write_text("\n".join(map(json.dumps, events)))
+    with pytest.raises(ValueError, match="unknown usage"):
+        run.prior_accounting(tmp_path)
+    path.write_text(json.dumps(events[0]))
+    with pytest.raises(ValueError, match="unknown usage"):
+        run.prior_accounting(tmp_path)

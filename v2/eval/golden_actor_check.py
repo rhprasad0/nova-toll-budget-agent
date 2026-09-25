@@ -105,6 +105,9 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
                     status="invalid", evidence=row.error or "actor_invalid"
                 )
         row.failure_class = run.failure_class(row)
+        if row.status == "infrastructure":
+            with journal.lock:
+                journal.stop_requested = True
     journal.append({"event": "actor_check", **row.model_dump()})
     print(f"{row.id}: {row.error or 'valid scripted exchange'}", flush=True)
     return row
@@ -113,7 +116,9 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--prior-spend-usd", type=float, required=True)
+    parser.add_argument("--budget-usd", type=float, required=True)
+    parser.add_argument("--prior-run", type=Path)
+    parser.add_argument("--workers", type=int, choices=range(1, 17), default=16)
     args = parser.parse_args()
     cases = golden.load_cases()
     identity = run.identity(cases)
@@ -126,18 +131,20 @@ def main() -> None:
         ):
             passing.setdefault(example.case_id, example)
     examples = list(passing.values())
-    journal = run.Journal(args.output, 25, args.prior_spend_usd)
+    prior, spent = run.prior_accounting(args.prior_run)
+    journal = run.Journal(args.output, args.budget_usd, spent)
     manifest = {
         "mode": "actor-check",
         "run_id": str(uuid.uuid4()),
         "created_at": datetime.now(UTC).isoformat(),
         "identity": identity,
-        "prior_spend_usd": args.prior_spend_usd,
+        "prior_run_id": prior["run_id"] if prior else None,
+        "prior_spend_usd": spent,
         "budget_usd": journal.limit,
-        "workers": 4,
+        "workers": args.workers,
     }
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = [
             pool.submit(check, example, trial, journal)
             for example in examples
@@ -153,7 +160,7 @@ def main() -> None:
         "expected_trials": len(examples) * 3,
         "valid_trials": sum(r.status == "scored" for r in rows),
         "rows": [r.model_dump() for r in rows],
-        "cost_usd": journal.spent - args.prior_spend_usd,
+        "cost_usd": journal.spent - spent,
         "unknown_usage": journal.unknown_usage,
         "evidence_sha256": golden.digest({"manifest": manifest, "events": events}),
     }

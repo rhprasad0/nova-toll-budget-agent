@@ -41,6 +41,7 @@ ALLOWED_CHANGES = {
     "artifact_sha256",
     "prompt_hashes",
 }
+TOOL_DESCRIPTION_POLICY = "literal-input-prose-v1"
 VERDICTS = {"outcome", "grounding", "rules"}
 GROUNDING_CHECKS = {"unsupported_money", "tool_evidence"}
 ACTOR_ERRORS = {
@@ -103,6 +104,19 @@ def identity(report: dict[str, Any], name: str) -> tuple[dict[str, Any], set[str
         and corpus.get("corpus_sha256") == digest(corpus["hashes"]),
         f"{name}: invalid corpus identity",
     )
+    if "tool_description_policy" in value or "tool_description_policy" in corpus:
+        require(
+            value.get("tool_description_policy") == TOOL_DESCRIPTION_POLICY
+            and corpus.get("tool_description_policy") == TOOL_DESCRIPTION_POLICY
+            and all(
+                len(corpus["hashes"].get(path, "")) == 64
+                for path in (
+                    "v2/agent_tools/current_price_domain.py",
+                    "v2/agent_tools/get_annual_toll_ballpark.py",
+                )
+            ),
+            f"{name}: unsupported tool description policy",
+        )
     require(
         value["model"] == "gpt-6-luna"
         and corpus.get("actor_model") == "gpt-6-luna"
@@ -283,7 +297,31 @@ def attempts(
             aggregate.get("count") == count and aggregate.get("denominator") == scored,
             f"{name}: inconsistent {key} total",
         )
+    triples = sum(all(by_slot[cid, n]["passed"] for n in (1, 2, 3)) for cid in ids)
+    version = report["manifest"]["identity"]["harness_version"]
+    fixed = version in {"2.2.0", "2.3.0"}
+    denominator = (
+        100
+        if fixed
+        else sum(all(by_slot[cid, n]["scored"] for n in (1, 2, 3)) for cid in ids)
+    )
+    if fixed:
+        require(
+            overall.get("pass_cubed") == triples / 100
+            and overall.get("passing_all_three_cases") == triples
+            and overall.get("pass_cubed_case_denominator") == 100,
+            f"{name}: inconsistent fixed-denominator pass cubed",
+        )
+    if version == "2.3.0":
+        require(
+            overall.get("overall_pass_rate") == successful / 300,
+            f"{name}: inconsistent fixed-denominator overall pass rate",
+        )
     return by_slot, {
+        "overall_pass_rate": successful / 300,
+        "pass_cubed": triples / denominator if denominator else None,
+        "passing_all_three_cases": triples,
+        "pass_cubed_case_denominator": denominator,
         "successful_trials": successful,
         "scored_trials": scored,
         "inconclusive_trials": 300 - scored,
@@ -303,6 +341,16 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "incompatible evaluation identity",
     )
     for key in left_identity:
+        if (
+            key == "tool_schema_hashes"
+            and left_identity.get("tool_description_policy") == TOOL_DESCRIPTION_POLICY
+        ):
+            # The equal corpus pins tool ASTs with only literal descriptions masked.
+            require(
+                left_identity[key].keys() == right_identity[key].keys(),
+                "incompatible tool names",
+            )
+            continue
         if key not in ALLOWED_CHANGES:
             require(
                 left_identity[key] == right_identity[key],
@@ -359,7 +407,18 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         and violations["rules"]["candidate_count"]
         <= violations["rules"]["baseline_count"],
     }
+    if left_identity["harness_version"] == "2.2.0":
+        del criteria["successful_trials_increased"]
+        del criteria["paired_delta_positive"]
+        criteria["pass_cubed_increased"] = (
+            right_totals["pass_cubed"] > left_totals["pass_cubed"]
+        )
+    elif left_identity["harness_version"] == "2.3.0":
+        del criteria["paired_delta_positive"]
     return {
+        "primary_metric": "pass_cubed"
+        if left_identity["harness_version"] == "2.2.0"
+        else "overall_pass_rate",
         "numeric_eligible": all(criteria.values()),
         "reasons": [key for key, passed in criteria.items() if not passed],
         "criteria": criteria,
@@ -372,7 +431,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         },
         "regressions": regressions,
         "violations": violations,
-        "review_required": "Numeric eligibility still requires independent SOP-only scope and regression review.",
+        "review_required": "Numeric eligibility still requires independent SOP/description scope and regression review.",
     }
 
 

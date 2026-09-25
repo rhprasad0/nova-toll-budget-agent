@@ -12,24 +12,135 @@ from eval import golden_run as run
 from oracle.build_oracle_data import build_connections, build_points
 
 
+@pytest.mark.parametrize(
+    "name,model",
+    [
+        (name, model)
+        for name, models in golden.TOOL_INPUT_MODELS.items()
+        for model in sorted(models)
+    ],
+)
+def test_tool_digest_allows_only_literal_input_prose(name: str, model: str) -> None:
+    source = f"""
+class {model}(BaseModel):
+    amount: Annotated[int, Field(ge=1, description="input prose")] = 1
+    route: str = Field(alias="route_id", description="route prose")
+    def validate(self):
+        return self.amount > 0
+class Output(BaseModel):
+    amount: int = Field(description="output prose")
+TOOL_SPEC: dict = {{"name": "tool", "description": "tool prose", "inputSchema": {model}.model_json_schema()}}
+"""
+    expected = golden.tool_source_digest(name, source)
+    for before in ("input prose", "route prose", "tool prose"):
+        changed = source.replace(before, "clearer wording")
+        assert golden.tool_source_digest(name, changed) == expected
+        assert (
+            golden.hashlib.sha256(changed.encode()).digest()
+            != golden.hashlib.sha256(source.encode()).digest()
+        )
+    for before, after in (
+        ("ge=1", "ge=0"),
+        ("Annotated[int", "Annotated[str"),
+        ("] = 1", "] = 2"),
+        ('alias="route_id"', 'alias="other"'),
+        ("return self.amount > 0", "return True"),
+        ("output prose", "changed output prose"),
+        ('"name": "tool"', '"name": "other"'),
+        (', description="input prose"', ""),
+        ("ge=1,", "le=10, ge=1,"),
+    ):
+        assert (
+            golden.tool_source_digest(name, source.replace(before, after)) != expected
+        )
+    for expression in ("build_description()", '"input " + "prose"', 'f"input {value}"'):
+        with pytest.raises(ValueError, match="literal strings"):
+            golden.tool_source_digest(name, source.replace('"input prose"', expression))
+
+
+def test_shared_input_output_descriptions_remain_frozen() -> None:
+    for name, tool in (
+        ("agent_tools/current_price_domain.py", golden.current),
+        ("agent_tools/get_annual_toll_ballpark.py", golden.annual),
+    ):
+        output_definitions = tool.TOOL_SPEC["outputSchema"]["json"]["$defs"]
+        assert golden.TOOL_INPUT_MODELS[name].isdisjoint(output_definitions)
+    name = "agent_tools/current_price_domain.py"
+    source = (golden.V2 / name).read_text()
+    changed = source.replace(
+        "Supported value: two_axle_passenger.", "Changed profile wording."
+    )
+    assert changed != source
+    assert golden.tool_source_digest(name, source) != golden.tool_source_digest(
+        name, changed
+    )
+
+
+def test_tool_prose_keeps_pinned_corpus_but_runtime_changes_do_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    name = "agent_tools/get_annual_toll_ballpark.py"
+    source = (golden.V2 / name).read_text()
+    target = tmp_path / name
+    target.parent.mkdir(parents=True)
+    monkeypatch.setattr(golden, "V2", tmp_path)
+    monkeypatch.setattr(golden, "SOURCE_FILES", (name,))
+    target.write_text(source)
+    original = golden.hashes()
+    description = "Canonical origin point ID for this leg; resolve its entry/airport role and direction independently."
+    assert description in source
+    target.write_text(source.replace(description, "Use the resolved origin point ID."))
+    assert golden.hashes() == original
+    target.write_text(source + "\nUNAUTHORIZED_CHANGE = True\n")
+    assert golden.hashes() != original
+
+
 def test_complete_development_contract_and_reference_labels() -> None:
     golden.validate()
     cases = golden.load_cases()
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 135
+    assert len(examples) == 143
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 35,
+        False: 43,
     }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 132, "invalid": 3}
+    assert Counter(e.actor_validity for e in examples) == {"valid": 140, "invalid": 3}
     assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5
         assert "three_axle" not in case.model_dump_json()
         assert "adversarial_direct" not in case.coverage_tags
         assert "adversarial_tool" not in case.coverage_tags
+
+
+def test_annual_day_proposal_is_grounded_but_premature_use_is_not() -> None:
+    examples = {
+        e.label: e
+        for e in run.development_examples()
+        if e.case_id == "dev3-accept-three-day-annual-count"
+    }
+    good = examples["good"]
+    premature = examples["annual-call-before-day-acceptance"]
+    assert good.expected is not None and all(good.expected.model_dump().values())
+    assert premature.expected is not None
+    assert premature.expected.model_dump() == {
+        "outcome": False,
+        "grounding": False,
+        "rules": False,
+    }
+    # Identical conditional arithmetic and later acceptance; only call timing differs.
+    assert good.turns[0].response in premature.turns[0].response
+    assert not good.turns[0].calls
+    assert good.turns[1].user == premature.turns[1].user == "Use 156 days."
+    assert good.turns[1].calls[0].input == premature.turns[0].calls[0].input
+    assert premature.turns[0].calls[0].input["planned_annual_commute_days"] == 156
+    prompt = " ".join(run.judge_prompt("grounding").split())
+    assert "conditional annual-day question is grounded arithmetic" in prompt
+    assert "before user acceptance fails Grounding as well as Rules" in prompt
+    assert "even if proposed in the same assistant turn or accepted later" in prompt
+    assert "Supplied tool results can support reported amounts" in prompt
 
 
 def test_catalog_and_successful_routes_match_committed_oracle() -> None:
@@ -182,10 +293,53 @@ def test_planned_trials_and_empty_holdout_have_no_success_rate() -> None:
     assert development["expected_trials"] == 300
     assert development["attempted_trials"] == 0
     assert development["pass_at_1"] is None
-    assert development["pass_cubed"] is None
+    assert development["pass_cubed"] == 0
+    assert development["pass_cubed_case_denominator"] == 100
     assert not development["complete"]
     holdout = run.summary([], [case for case in cases if case.held_out])
     assert holdout["case_count"] == holdout["expected_trials"] == 0
     assert holdout["pass_at_1"] is None
     assert holdout["pass_cubed"] is None
     assert holdout["success_ci95"] is None
+
+
+@pytest.mark.parametrize(
+    "wording",
+    [
+        "Recent movement: **falling** by **$2.50 (27.9%)**.",
+        "The current toll is **$2.50 (27.9%)** lower.",
+        "It is $2.50 lower than the median.",
+        "It is $2.50 (27.9%) below the median.",
+    ],
+)
+def test_signed_comparison_does_not_match_absolute_value(wording: str) -> None:
+    from decimal import Decimal
+
+    assert golden.money(wording) == {Decimal("-2.50")}
+    assert golden.money("$2.50 above the median") == {Decimal("2.50")}
+    assert golden.money("The toll is $2.50, below the median") == {Decimal("2.50")}
+    assert golden.money("The range is $2.50\u2013$3.50") == {
+        Decimal("2.50"),
+        Decimal("3.50"),
+    }
+
+
+@pytest.mark.parametrize(
+    "case_id", ["dev3-two-comparable-weeks", "dev3-gallows-hybrid-salary"]
+)
+def test_approach_labels_do_not_make_duplicate_ids_interchangeable(
+    case_id: str,
+) -> None:
+    from copy import deepcopy
+
+    case = next(c for c in golden.load_cases() if c.id == case_id)
+    fixture = golden.load_fixture(case.steps[0].fixture)
+    golden.Replay(case).call(fixture.tool, fixture.input, [case.prompt])
+    wrong = deepcopy(fixture.input)
+    leg = wrong if fixture.tool == "get_current_toll_price" else wrong["outbound"]
+    assert isinstance(leg, dict)
+    endpoint = str(leg["destination_point_id"])
+    assert endpoint.endswith("ND") and not endpoint.endswith("9ND")
+    leg["destination_point_id"] = endpoint[:-2] + "9ND"
+    with pytest.raises(ValueError, match="tool_arguments"):
+        golden.Replay(case).call(fixture.tool, wrong, [case.prompt])

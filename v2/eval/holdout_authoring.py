@@ -14,7 +14,7 @@ from typing import Any
 from eval import golden
 
 V2 = Path(__file__).resolve().parents[1]
-KIT_VERSION = "1.0.0"
+KIT_VERSION = "1.0.1"
 # Explicit files, never a directory copy: development data and agent prompts
 # must not enter the independent authoring session.
 EXPORT_FILES = (

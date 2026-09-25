@@ -30,6 +30,7 @@ def test_refactored_corpus_requires_fresh_approval() -> None:
     assert review["reviewer"] is None
     assert review["approved_at"] is None
     assert review["evidence"] is None
+    assert manifest["tool_description_policy"] == golden.TOOL_DESCRIPTION_POLICY
     assert review["corpus_sha256"] == manifest["corpus_sha256"]
     assert manifest["evaluation_scope"] == "development"
     assert not (golden.ROOT / "calibration-reference.json").exists()
@@ -45,7 +46,7 @@ def test_paid_entrypoints_stop_before_credentials_or_output(
     output = tmp_path / "paid-run"
     args = ["test", "--output", str(output)]
     if mode == "actor-check":
-        args += ["--prior-spend-usd", "0"]
+        args += ["--budget-usd", "15"]
     else:
         args.insert(1, mode)
     monkeypatch.setattr("sys.argv", args)

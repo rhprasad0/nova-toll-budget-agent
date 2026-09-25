@@ -53,10 +53,20 @@ def test_mixed_loader_publisher_timed_and_cost_contracts(
     costs = "v2/lambdas/publisher/costs.py"
     assert retained(costs, baseline) == (ROOT / costs).read_bytes()
     for name, digest in REVIEW["schemas"].items():
-        assert hashlib.sha256(retained("v2/db/" + name, baseline)).hexdigest() == digest
-        assert (
-            hashlib.sha256((ROOT / "v2/db" / name).read_bytes()).hexdigest() == digest
-        )
+        previous = retained("v2/db/" + name, baseline)
+        current = (ROOT / "v2/db" / name).read_bytes()
+        if name == "oracle/schema.sql":
+            # The reviewed 1.15.1 label migration changes only these schema markers.
+            for marker in (
+                b"-- oracle schema version: 1.15.0\n",
+                b"INSERT INTO oracle.schema_version (version) VALUES ('1.15.0');",
+            ):
+                assert previous.count(marker) == 1
+                previous = previous.replace(
+                    marker, marker.replace(b"1.15.0", b"1.15.1")
+                )
+        assert previous == current
+        assert hashlib.sha256(current).hexdigest() == digest
     for environment in shared_packages.ACCOUNTS:
         monkeypatch.setenv("TOLLCHAT_ENVIRONMENT", environment)
         for loader, publisher, timed in itertools.product(*modules.values()):

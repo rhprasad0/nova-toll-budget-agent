@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.0.7"
+CORPUS_VERSION = "3.3.1"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -56,6 +57,14 @@ SOURCE_FILES = (
     "agent_tools/get_annual_toll_ballpark.py",
     "agent_tools/validate_toll_route.py",
 )
+TOOL_DESCRIPTION_POLICY = "literal-input-prose-v1"
+TOOL_INPUT_MODELS = {
+    "agent_tools/current_price_domain.py": {"_PricingRequest"},
+    "agent_tools/get_annual_toll_ballpark.py": {
+        "_DirectionRequest",
+        "_BallparkRequest",
+    },
+}
 ACTOR_PROMPT = """Speak as the driver described below, in first person.
 {actor_profile}
 Use your initial request and supplied profile facts together. Profile omissions
@@ -70,6 +79,9 @@ whitespace-only string: that means an invalid continuation, not completion.
 The runner derives when to stop. Before returning null, check the assistant's
 latest question against ALL profile facts and follow-up rules. A request for
 missing origin/destination, income, schedule, or confirmation is not completion.
+If a necessary question is repeated or still unanswered, supply the existing
+profile fact again, even if you already stated it. Never invent endpoint IDs;
+answer with the place names and corridor facts supplied in your profile.
 If the profile supplies the requested fact, deliver it; give both endpoints when
 both are requested. Never stop merely because the assistant asked a clear question.
 Explicit profile choices override preserving the original route: if instructed
@@ -592,6 +604,8 @@ class Replay:
 
 
 def money(text: str) -> set[Decimal]:
+    # Emphasis can straddle the movement word and amount.
+    text = re.sub(r"[*_`]", "", text)
     # Reuse signed currency parsing; also accept common salary shorthand.
     text = re.sub(r"\bUSD\s+", "$", text, flags=re.IGNORECASE)
     text = re.sub(
@@ -619,7 +633,7 @@ def money(text: str) -> set[Decimal]:
     text = re.sub(
         r"\$(\d[\d,]*(?:\.\d+)?)(?:\*{1,2}|_{1,2}|`)?"
         r"(?:\s*\(\d+(?:\.\d+)?%\))?(?:\*{1,2}|_{1,2}|`)?\s+"
-        r"(?:below|less than|lower than)\b",
+        r"(?:below|less than|lower(?: than)?)\b",
         r"-$\1",
         text,
         flags=re.IGNORECASE,
@@ -743,6 +757,44 @@ def grade_assertions(
     return sorted(set(failures))
 
 
+def tool_source_digest(name: str, source: str) -> str:
+    """Freeze tool code except existing literal model-facing description values."""
+    tree = ast.parse(source)
+
+    def mask(value: ast.expr) -> ast.Constant:
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+            raise ValueError("tool descriptions must be literal strings")
+        return ast.Constant(value="[tool description]")
+
+    for statement in tree.body:
+        if (
+            isinstance(statement, ast.AnnAssign)
+            and isinstance(statement.target, ast.Name)
+            and statement.target.id == "TOOL_SPEC"
+            and isinstance(statement.value, ast.Dict)
+        ):
+            for index, key in enumerate(statement.value.keys):
+                if isinstance(key, ast.Constant) and key.value == "description":
+                    statement.value.values[index] = mask(statement.value.values[index])
+        if (
+            isinstance(statement, ast.ClassDef)
+            and statement.name in TOOL_INPUT_MODELS[name]
+        ):
+            for field in statement.body:
+                if not isinstance(field, ast.AnnAssign):
+                    continue
+                for node in ast.walk(field):
+                    if (
+                        isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Name)
+                        and node.func.id == "Field"
+                    ):
+                        for keyword in node.keywords:
+                            if keyword.arg == "description":
+                                keyword.value = mask(keyword.value)
+    return hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
+
+
 def hashes(root: Path | None = None) -> dict[str, str]:
     root = root if root is not None else ROOT
     files = [root / "cases.jsonl", root / "prompt-points.json", root / "examples.json"]
@@ -753,7 +805,11 @@ def hashes(root: Path | None = None) -> dict[str, str]:
     }
     result.update(
         {
-            "v2/" + name: hashlib.sha256((V2 / name).read_bytes()).hexdigest()
+            "v2/" + name: (
+                tool_source_digest(name, (V2 / name).read_text())
+                if name in TOOL_INPUT_MODELS
+                else hashlib.sha256((V2 / name).read_bytes()).hexdigest()
+            )
             for name in SOURCE_FILES
         }
     )
@@ -919,6 +975,7 @@ def validate(root: Path | None = None) -> None:
         or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-6-luna"
         or manifest["judge_model"] != "gpt-6-luna"
+        or manifest.get("tool_description_policy") != TOOL_DESCRIPTION_POLICY
     ):
         raise ValueError("unsupported corpus configuration")
     actual = hashes(root)

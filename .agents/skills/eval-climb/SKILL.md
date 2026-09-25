@@ -1,6 +1,6 @@
 ---
 name: eval-climb
-description: Improve TollChat SOP instructions through a bounded, evidence-driven subagent search on the 100-case development eval set. Use for prompt hill climbing, not tool changes, corpus authoring, judge calibration changes, or release qualification.
+description: Improve TollChat SOP instructions and model-facing tool descriptions through a bounded, evidence-driven subagent search on the 100-case development eval set. Use for prompt hill climbing, not tool implementation or schema changes, corpus authoring, judge calibration changes, or release qualification.
 ---
 
 # TollChat eval climb
@@ -56,8 +56,8 @@ comparison, without implementer conclusions.
    approvals. Do not access, generate, or evaluate a holdout.
 2. Record the exact starting application, corpus, actor, evaluator, and model
    identities and matching approved calibration evidence. Freeze them for the
-   campaign except the application SOP changes below. A changed
-   judging contract requires a new campaign and matching calibration, not a
+   campaign except the application SOP and description text changes below. A
+   changed judging contract requires a new campaign and matching calibration, not a
    silent baseline comparison. The baseline is unchanged TollChat, not Astra.
 3. Require a user-authorized cumulative **eval-dollar** ceiling and a reviewed
    calibration path. Three rounds is the default and maximum; fewer may be
@@ -69,40 +69,48 @@ comparison, without implementer conclusions.
    and raw evidence under the campaign's ignored `v2/eval/private/eval-climb/`.
    Use absolute paths across worktrees; do not overwrite output directories.
 
-The only candidate-edit surface is
-`v2/agent-sops/nova-toll-pricing-assistant.sop.md`: instructions and organization.
+Candidate edits may change admitted text in:
 
-**Tool descriptions are excluded.** The incoming 100-case harness includes both
-tool modules in `golden.SOURCE_FILES`, hashes their full bytes into the corpus,
-and compares that corpus with approved calibration. Even description edits would
-invalidate it. Supporting them requires a separately reviewed harness/calibration
-change; do not update manifests or recalibrate candidates to bypass this boundary.
+- `v2/agent-sops/nova-toll-pricing-assistant.sop.md`.
+- Existing literal `TOOL_SPEC["description"]` values in
+  `v2/agent_tools/current_price_domain.py` and
+  `v2/agent_tools/get_annual_toll_ballpark.py`.
+- Existing literal `Field(description=...)` values in their input models:
+  `_PricingRequest`, `_DirectionRequest`, and `_BallparkRequest`.
+  `_PricingProfile` is shared with the output schema, so its descriptions stay frozen.
 
-When the analyst identifies a promising tool-description improvement, notify the
-user at that round's update: name the description, cite the failure evidence,
-explain the proposed benefit, and say it was **deferred because tool-file changes
-invalidate the frozen corpus/calibration**. Record it in the session ledger and
-final report under deferred improvements; do not silently drop it or apply it.
-Report it even if no in-scope SOP candidate is justified. It is a hypothesis,
-not a measured gain; no need to repeat unchanged deferrals every round.
+Description edits require the `literal-input-prose-v1` contract and matching
+approved calibration. The corpus pins each tool's parsed Python source with only
+those literal strings masked; every other syntax node remains frozen. Full tool
+schema hashes and artifact hashes still record the exact wording evaluated.
+Legacy reports require identical tool hashes; never compare across contracts.
+Do not update manifests or recalibrate individual candidates to bypass a boundary.
 
-Preserve all tool descriptions and schemas, validation, runtime logic, version constants,
-model settings, actors, fixtures, judging, and security/consent/money requirements.
-TollChat remains on `gpt-6-luna`. Do not embed case IDs, fixture answers, or special
+Preserve tool names, input/output schemas (including types, defaults, aliases,
+constraints, and required fields), output descriptions, validation, runtime logic,
+version constants, model settings, actors, fixtures, judging, and
+security/consent/money requirements. Do not add/remove description fields or
+replace literals with computed strings. Description wording must remain truthful
+to the fixed implementation; it cannot promise new capabilities or weaker consent.
+TollChat remains on `gpt-6-luna`. Small synthetic demonstrations are permitted as SOP edits when they teach the
+rule without copying benchmark answers. Do not embed case IDs, fixture answers, or special
 handling for benchmark wording. Root causes needing code or judge changes are
 reported as out of scope. Test files are not candidate-edit surfaces.
 
 ## Run a round
 
-1. Run a fresh full-set starting baseline on the pinned contract. Do not substitute
+1. Run a fresh full-set starting baseline on the pinned contract, or reuse the
+   designated second preparation repeat only when application and evaluation
+   identities remain unchanged and deployed migration/catalog parity has been
+   verified after human-reviewed merge. Never choose a repeat by its score. Do not substitute
    a report from an older judge version. Have `eval_cluster` inspect failure and
    passing trajectories and return JSON with `failure_class`, `evidence`
    (case/trial references), `hypotheses` (exactly two alternatives), `allowed_files`,
-   `permitted_edits`, `invariants`, `checks`, and `deferred_tool_descriptions`
-   (evidence-backed ideas, description location, proposed benefit, and reason
-   deferred). Both executable hypotheses must be SOP-only. Separate application causes from
-   actor/judge/harness problems. Return `stop` with a reason if no bounded prompt
-   fix is justified.
+   `permitted_edits`, `invariants`, `checks`, and `deferred_improvements`
+   (evidence-backed ideas, location, proposed benefit, and reason deferred). Both
+   executable hypotheses must fit the SOP/description text surfaces above.
+   Separate application causes from actor/judge/harness problems. Return `stop`
+   with a reason if no bounded prompt fix is justified.
 2. Admit exactly one failure mechanism and a concrete plan. Send each editor one
    alternative from the **same incumbent** in a separately owned worktree.
    Require the editor to inspect callers, apply only the admitted text changes,
@@ -110,9 +118,14 @@ reported as out of scope. Test files are not candidate-edit surfaces.
    check results, and limitations. Do not blend A and B without measuring that
    combined patch as a new candidate in a later round.
 3. Inspect scope before spending: compare each diff with its parent; only the
-   admitted SOP text may change. Tool files and schema hashes must match exactly.
-   Run relevant existing prompt checks; never rewrite a test to accept a
-   candidate. Reject a scope breach before evaluation.
+   admitted SOP or description text may change. Run `uv run python -m eval.golden`
+   from each candidate's `v2/`: the pinned corpus must validate unchanged. Review
+   the full diff and generated schemas to confirm only admitted description values
+   changed. Full schema hashes may differ only under the description policy.
+   Run relevant existing offline checks; never rewrite tests, contract snapshots,
+   or version metadata to accept a candidate. Record expected wording snapshot
+   mismatches explicitly; stop on unexplained failures. Reject a scope breach
+   before evaluation.
 4. Evaluate A and then B, using the existing runner with 16 workers by default
    for baseline, candidate, and confirmation runs. The parent
    is the only paid-run owner. From each clean candidate's `v2/`, use
@@ -133,10 +146,14 @@ reported as out of scope. Test files are not candidate-edit surfaces.
    **not** an eligible candidate. Nonzero means unusable evidence. Send the full
    comparison and original reports to a fresh `eval_reviewer`.
 
-The helper checks numeric eligibility: successes out of the fixed 300 slots must
-strictly increase; mean delta on common fully scored three-trial cases must be
-positive; inconclusive slots must not increase; comparable Grounding and Rules
-violation rates must not worsen. Inconclusives remain explicit, not scored
+The helper checks numeric eligibility under corpus 3.3.0 / harness 2.3.0:
+overall pass rate (successful trials divided by all 300 expected trials) must
+strictly increase; inconclusive slots must not increase; comparable Grounding
+and Rules violation rates must not worsen. Pass³ (successful three-trial cases
+divided by all 100 cases) and paired delta are diagnostics only. Missing or duplicate trials and incompatible
+identities invalidate comparison. Historical reports retain their recorded
+contract semantics; never compare across contracts or use a private campaign
+helper to override the committed decision rules. Inconclusives remain explicit, not scored
 failures. Deterministic checks contribute to violations using runner semantics.
 
 The reviewer returns `eligible`, `reject`, or `stop`, with evidence references
@@ -144,8 +161,16 @@ and unresolved regressions. Inspect every old-pass/new-fail and new violation,
 including those outside the paired subset. A changed stochastic trial alone is
 not proof the patch caused harm, but unresolved material regressions disqualify
 it. Never relabel evidence to gain eligibility. The parent chooses the eligible
-candidate with most successful slots; an A/B tie favors fewer changed lines,
-then A if still tied. A tie with the incumbent retains the incumbent.
+candidate with highest overall pass rate, then fewer changed lines, then A if
+still tied. A tie with the incumbent retains the incumbent.
+
+Optimize this metric on the exposed development cases. The separate production
+standard is at least 240/300 successful trials on a blind holdout, with all
+simulations valid and measurements complete. An 80% development score is neither
+a stopping target nor production qualification. Never inspect holdout cases or
+use holdout feedback for candidate search; activation and protected approval
+belong to the separate production workflow. Existing development spending limits
+remain in force.
 
 ## Stop, confirm, and report
 
@@ -174,7 +199,9 @@ Append a sanitized dated entry to
 preserving every prior entry. Commit this summary only after paid runs so it does
 not dirty candidate checkouts. Return the confirmed local patch (or no confirmed
 improvement), exact commits/evidence, coverage and regressions, spending, and stop
-reason, plus deferred tool-description ideas and why they were not tested.
+reason, plus deferred improvements and why they were not tested. Notify the user
+when evidence-backed improvements require implementation/schema changes; do not
+silently drop them or claim unmeasured gains.
 Raw artifacts stay ignored unless separately reviewed for publication.
 No push, PR, merge, release qualification, or deployment is authorized by a climb.
 All gains describe this exposed development set, not generalization.

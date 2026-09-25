@@ -421,3 +421,36 @@ def test_importer_rejects_cross_row_semantic_errors() -> None:
 
     with pytest.raises(ValueError, match="invalid toll handoff"):
         validate(points, broken_connections)
+
+
+def test_approach_labels_preserve_original_places_and_graph() -> None:
+    import hashlib
+    from dataclasses import asdict
+
+    points = build_points()
+    assert len(oracle_builder.APPROACH_LABELS) == 24
+    for point_id in oracle_builder.APPROACH_LABELS:
+        point = points[point_id]
+        assert point.source_metadata["source_node"]["label"] in point.aliases
+        assert "(from " in point.label
+    groups: dict[tuple[str, str, str | None, str], list[str]] = defaultdict(list)
+    for point in points.values():
+        groups[
+            (point.network_id, point.point_type, point.direction, point.label)
+        ].append(point.point_id)
+    assert all(len(ids) == 1 for ids in groups.values())
+    unchanged = {
+        "points": {
+            key: {
+                k: v for k, v in asdict(point).items() if k not in {"label", "aliases"}
+            }
+            for key, point in points.items()
+        },
+        "connections": {key: asdict(c) for key, c in build_connections(points).items()},
+    }
+    assert (
+        hashlib.sha256(
+            json.dumps(unchanged, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        == "4d759de30b4167912ded0667c801e5847fc0dc3c9d47b716ce79a3998e1cfd36"
+    )
