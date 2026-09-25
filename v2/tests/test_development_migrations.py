@@ -340,6 +340,10 @@ def test_production_preflight_recognizes_each_immutable_oracle_baseline() -> Non
             "1.15.0",
             "75376bd53bee64f93ddc152eba702c6391b1c9e97bc01b127f75e9f7ea1cbc35",
         ),
+        (
+            "1.15.1",
+            "1621ea63f991455952723e7b39544dbf928bdcf976efbab793054f7867d44ac3",
+        ),
     }
     assert all(baseline.source_sha256 in sql for baseline in baselines)
 

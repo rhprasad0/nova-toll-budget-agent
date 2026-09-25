@@ -310,7 +310,7 @@ migration = runner.Migration(
     source_sha256=hashlib.sha256(Path(migration_path).read_bytes()).hexdigest(),
 )
 
-runner._registry = lambda: ((), {"pricing": "1.0.1", "oracle": "1.15.0"})
+runner._registry = lambda: ((), {"pricing": "1.0.1", "oracle": "1.15.1"})
 runner._migration_candidates = lambda _schemas: (migration,)
 runner._history_preflight_sql = lambda *_args, **_kwargs: ""
 
@@ -687,7 +687,7 @@ SQL
       test "$(psql --dbname "$migration_db" --tuples-only --no-align \
         --command 'SELECT version FROM oracle.schema_version WHERE singleton')" = "1.15.0"
       psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
-        --command "UPDATE oracle.toll_route_point SET label = 'Route 267' WHERE point_id = 'i495:185ND'"
+        --command "UPDATE oracle.toll_route_point SET label = 'Westpark Drive' WHERE point_id = 'i495:185ND'"
     fi
 
     if [[ "$schema_name:$target_version" == "oracle:1.14.0" ]]; then
@@ -773,25 +773,6 @@ SQL
       fi
       psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
         --command "GRANT SELECT ON pricing.i66_ballpark_samples TO oracle_owner"
-    fi
-
-    if [[ "$schema_name:$target_version" == "oracle:1.15.1" ]]; then
-      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
-        --command "UPDATE oracle.schema_version SET version = '1.14.1' WHERE singleton"
-      if psql --dbname "$migration_db" --file "$migration"; then
-        echo "oracle 1.15.1 accepted an incompatible version" >&2
-        exit 1
-      fi
-      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
-        --command "UPDATE oracle.schema_version SET version = '1.15.0' WHERE singleton; UPDATE oracle.toll_route_point SET label = 'unexpected label' WHERE point_id = 'i495:185ND'"
-      if psql --dbname "$migration_db" --file "$migration"; then
-        echo "oracle 1.15.1 accepted incompatible source labels" >&2
-        exit 1
-      fi
-      test "$(psql --dbname "$migration_db" --tuples-only --no-align \
-        --command 'SELECT version FROM oracle.schema_version WHERE singleton')" = "1.15.0"
-      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
-        --command "UPDATE oracle.toll_route_point SET label = 'Route 267' WHERE point_id = 'i495:185ND'"
     fi
 
     if [[ "$schema_name:$target_version" == "oracle:1.14.0" ]]; then

@@ -39,16 +39,17 @@ Judges return cited unmet requirements; an empty list determines success.
 The stored `passed`/`evidence` interface remains stable. Calibration must still
 check semantic errors; explanations are never regex-relabelled.
 
-The authorized preparation sequence is two full-reference calibrations with
+For a preparation repeatability check, the sequence is two full-reference calibrations with
 independent review, one full scripted actor check, then two identical application
 runs (100 cases × 3 trials, 16 workers). Compare repeatability and criterion
 variation; designate the second application run by position as the next baseline,
 never by score. Reuse only with unchanged application/evaluation identities and
 verified development migration/catalog parity after human-reviewed merge.
 
-The cumulative preparation ceiling is $15 within the $20 authorization, starting
-at $11.779920875 from the last accounted run. Admit each complete run only when its
-estimate with headroom fits; keep at least $5 for later search and confirmation.
+Chain preparation from the last accounted run using the user-authorized cumulative
+ceiling. Admit each complete run only when its estimate with headroom fits, reserving
+the agreed search and confirmation budget. Record amounts and decisions in the
+private ledger and append-only experiment journal.
 Stop on unknown usage, infrastructure failure, unresolved material grading
 ambiguity or insufficient budget. Do not repeat runs to obtain passing results. Candidate
 search belongs in a separate PR and starts only after the deployment parity gate.
