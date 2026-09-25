@@ -33,7 +33,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.0.13"
+VERSION = "2.1.0"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -1217,6 +1217,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
             s["name"]: golden.digest(s)
             for s in (golden.current.TOOL_SPEC, golden.annual.TOOL_SPEC)
         },
+        "tool_description_policy": golden.TOOL_DESCRIPTION_POLICY,
         "actor_prompt_sha256": golden.digest(golden.ACTOR_PROMPT),
         "judge_prompt_sha256": golden.digest(
             {
@@ -1589,6 +1590,12 @@ def validate_identity(value: dict[str, Any]) -> None:
     }
     if required - value.keys() or any(not value[key] for key in required):
         raise ValueError("missing run identity")
+    if tuple(map(int, value["harness_version"].split("."))) >= (2, 1, 0) and (
+        value.get("tool_description_policy") != golden.TOOL_DESCRIPTION_POLICY
+        or value["corpus"].get("tool_description_policy")
+        != golden.TOOL_DESCRIPTION_POLICY
+    ):
+        raise ValueError("missing tool description policy")
     for key in (
         "artifact_sha256",
         "harness_sha256",
@@ -1962,6 +1969,7 @@ def main() -> None:
             "reasoning_effort",
             "max_output_tokens",
             "transport",
+            "tool_description_policy",
         ):
             if previous_identity.get(key) != pinned.get(key):
                 parser.error("judge or corpus changed; recalibration required")

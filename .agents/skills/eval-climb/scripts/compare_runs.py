@@ -41,6 +41,7 @@ ALLOWED_CHANGES = {
     "artifact_sha256",
     "prompt_hashes",
 }
+TOOL_DESCRIPTION_POLICY = "literal-input-prose-v1"
 VERDICTS = {"outcome", "grounding", "rules"}
 GROUNDING_CHECKS = {"unsupported_money", "tool_evidence"}
 ACTOR_ERRORS = {
@@ -103,6 +104,19 @@ def identity(report: dict[str, Any], name: str) -> tuple[dict[str, Any], set[str
         and corpus.get("corpus_sha256") == digest(corpus["hashes"]),
         f"{name}: invalid corpus identity",
     )
+    if "tool_description_policy" in value or "tool_description_policy" in corpus:
+        require(
+            value.get("tool_description_policy") == TOOL_DESCRIPTION_POLICY
+            and corpus.get("tool_description_policy") == TOOL_DESCRIPTION_POLICY
+            and all(
+                len(corpus["hashes"].get(path, "")) == 64
+                for path in (
+                    "v2/agent_tools/current_price_domain.py",
+                    "v2/agent_tools/get_annual_toll_ballpark.py",
+                )
+            ),
+            f"{name}: unsupported tool description policy",
+        )
     require(
         value["model"] == "gpt-6-luna"
         and corpus.get("actor_model") == "gpt-6-luna"
@@ -303,6 +317,16 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "incompatible evaluation identity",
     )
     for key in left_identity:
+        if (
+            key == "tool_schema_hashes"
+            and left_identity.get("tool_description_policy") == TOOL_DESCRIPTION_POLICY
+        ):
+            # The equal corpus pins tool ASTs with only literal descriptions masked.
+            require(
+                left_identity[key].keys() == right_identity[key].keys(),
+                "incompatible tool names",
+            )
+            continue
         if key not in ALLOWED_CHANGES:
             require(
                 left_identity[key] == right_identity[key],
@@ -372,7 +396,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         },
         "regressions": regressions,
         "violations": violations,
-        "review_required": "Numeric eligibility still requires independent SOP-only scope and regression review.",
+        "review_required": "Numeric eligibility still requires independent SOP/description scope and regression review.",
     }
 
 

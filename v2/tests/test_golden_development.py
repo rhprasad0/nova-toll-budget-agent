@@ -12,6 +12,71 @@ from eval import golden_run as run
 from oracle.build_oracle_data import build_connections, build_points
 
 
+@pytest.mark.parametrize(
+    "name,model",
+    [
+        (name, model)
+        for name, models in golden.TOOL_INPUT_MODELS.items()
+        for model in sorted(models)
+    ],
+)
+def test_tool_digest_allows_only_literal_input_prose(name: str, model: str) -> None:
+    source = f"""
+class {model}(BaseModel):
+    amount: Annotated[int, Field(ge=1, description="input prose")] = 1
+    route: str = Field(alias="route_id", description="route prose")
+    def validate(self):
+        return self.amount > 0
+class Output(BaseModel):
+    amount: int = Field(description="output prose")
+TOOL_SPEC: dict = {{"name": "tool", "description": "tool prose", "inputSchema": {model}.model_json_schema()}}
+"""
+    expected = golden.tool_source_digest(name, source)
+    for before in ("input prose", "route prose", "tool prose"):
+        changed = source.replace(before, "clearer wording")
+        assert golden.tool_source_digest(name, changed) == expected
+        assert (
+            golden.hashlib.sha256(changed.encode()).digest()
+            != golden.hashlib.sha256(source.encode()).digest()
+        )
+    for before, after in (
+        ("ge=1", "ge=0"),
+        ("Annotated[int", "Annotated[str"),
+        ("] = 1", "] = 2"),
+        ('alias="route_id"', 'alias="other"'),
+        ("return self.amount > 0", "return True"),
+        ("output prose", "changed output prose"),
+        ('"name": "tool"', '"name": "other"'),
+        (', description="input prose"', ""),
+        ("ge=1,", "le=10, ge=1,"),
+    ):
+        assert (
+            golden.tool_source_digest(name, source.replace(before, after)) != expected
+        )
+    for expression in ("build_description()", '"input " + "prose"', 'f"input {value}"'):
+        with pytest.raises(ValueError, match="literal strings"):
+            golden.tool_source_digest(name, source.replace('"input prose"', expression))
+
+
+def test_tool_prose_keeps_pinned_corpus_but_runtime_changes_do_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    name = "agent_tools/get_annual_toll_ballpark.py"
+    source = (golden.V2 / name).read_text()
+    target = tmp_path / name
+    target.parent.mkdir(parents=True)
+    monkeypatch.setattr(golden, "V2", tmp_path)
+    monkeypatch.setattr(golden, "SOURCE_FILES", (name,))
+    target.write_text(source)
+    original = golden.hashes()
+    description = "Canonical origin point ID for this leg; resolve its entry/airport role and direction independently."
+    assert description in source
+    target.write_text(source.replace(description, "Use the resolved origin point ID."))
+    assert golden.hashes() == original
+    target.write_text(source + "\nUNAUTHORIZED_CHANGE = True\n")
+    assert golden.hashes() != original
+
+
 def test_complete_development_contract_and_reference_labels() -> None:
     golden.validate()
     cases = golden.load_cases()
