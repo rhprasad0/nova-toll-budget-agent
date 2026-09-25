@@ -37,8 +37,8 @@ _V2_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_V2_ROOT))
 
 from agent.toll_agent import build_agent  # noqa: E402
-from eval.currency import CURRENCY_PATTERN as _CURRENCY_PATTERN  # noqa: E402
-from eval.currency import currency_decimal as _currency_decimal  # noqa: E402
+from agent_tools.currency import CURRENCY_PATTERN as _CURRENCY_PATTERN  # noqa: E402
+from agent_tools.currency import currency_decimal as _currency_decimal  # noqa: E402
 
 type JSON = str | int | float | bool | list[JSON] | dict[str, JSON] | None
 

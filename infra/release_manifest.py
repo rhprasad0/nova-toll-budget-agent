@@ -58,7 +58,6 @@ PACKAGES = LEGACY_PACKAGES
 TIMED_INPUTS = frozenset(
     {
         "v2/eval/run_evaluation.py",
-        "v2/eval/currency.py",
         "v2/eval/test-cases.jsonl",
         "v2/infra/timed_checks.tf",
         "v2/lambdas/timed_checks/handler.py",
@@ -116,7 +115,6 @@ EXACT_INPUTS = {
     "v2/scripts/timed-checks-requirements.txt",
     "v2/timed_checks.py",
     "v2/eval/run_evaluation.py",
-    "v2/eval/currency.py",
     "v2/eval/test-cases.jsonl",
     "v2/uv.lock",
 }

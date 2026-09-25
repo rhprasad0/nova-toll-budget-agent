@@ -6252,7 +6252,7 @@ def test_development_delivery_selected_input_digests_match_reviewed_manifest() -
         "infra/iam.tf",
         "infra/release_manifest.py",
         "v2/scripts/development_deployment_status.py",
-        "v2/eval/currency.py",
+        "v2/agent_tools/currency.py",
         "v2/eval/run_evaluation.py",
         "v2/scripts/build_timed_checks_zip.sh",
     ):

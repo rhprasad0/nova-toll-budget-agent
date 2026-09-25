@@ -24,7 +24,7 @@ EXPORT_FILES = (
     "eval/holdout_authoring.py",
     "eval/holdout_teaching.py",
     "eval/golden.py",
-    "eval/currency.py",
+    "agent_tools/currency.py",
     "agent_tools/current_price_domain.py",
     "agent_tools/get_annual_toll_ballpark.py",
     "agent_tools/validate_toll_route.py",

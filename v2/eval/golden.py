@@ -18,7 +18,7 @@ from pydantic.json_schema import SkipJsonSchema
 from agent_tools import current_price_domain as current
 from agent_tools import get_annual_toll_ballpark as annual
 from agent_tools import validate_toll_route as routes
-from eval.currency import CURRENCY_PATTERN, currency_decimal
+from agent_tools.currency import CURRENCY_PATTERN, currency_decimal
 
 if TYPE_CHECKING:
     from strands.models import Model
@@ -45,7 +45,7 @@ COVERAGE = {
 SOURCE_FILES = (
     "uv.lock",
     "eval/golden.py",
-    "eval/currency.py",
+    "agent_tools/currency.py",
     "eval/simulated.py",
     "eval/run_evaluation.py",
     "eval/golden_run.py",

@@ -1235,7 +1235,6 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
                 ).hexdigest()
                 for name in (
                     "golden.py",
-                    "currency.py",
                     "golden_run.py",
                     "golden_actor_check.py",
                     "simulated.py",
