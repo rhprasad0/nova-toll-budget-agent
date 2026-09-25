@@ -22,8 +22,10 @@ output in ignored `eval/private/` or the existing private workflow store.
   143 labeled references, 107 synthetic fixtures, and five-turn actors.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, three-trial application
   baselines, complete cost accounting, and offline report reproduction.
-- [Production gate](GOLDEN_RELEASE.md): exact-artifact qualification and protected
-  reviews; historical scores and development approvals do not qualify production.
+- [Production gate](GOLDEN_RELEASE.md): 100 independently authored private cases,
+  three trials each, and an 80% admission floor. Signed aggregate evidence and
+  protected review bind the exact artifact. Activation awaits the external evaluator;
+  development scores and historical approvals cannot qualify production.
 
 From `v2/`, validate without model calls:
 

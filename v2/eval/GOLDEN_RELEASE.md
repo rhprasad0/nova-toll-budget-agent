@@ -1,161 +1,207 @@
-# Golden production gate
+# Private production qualification
 
-**Current status:** production golden qualification remains blocked. The active
-3.3.0 corpus is development-only and cannot qualify production, even with a
-historical approved policy. Current corpus and calibration requirements are in
-the [evaluation guide](README.md). Independent holdout scope, a new protected
-policy, and fresh qualification evidence require separate review. See the
-[authoring guide](GOLDEN_EVAL_SPEC.md).
+**Status: awaiting independent evaluator activation.** The receiving gate is
+implemented; no private cases, signing key, approved holdout identity, or new
+qualification results are supplied by this repository. The exposed development
+corpus and historical receipts cannot qualify production.
 
-Production planning requires successful protected evaluation of the exact
-release bundle, a matching production reference, reviewed policy and calibration,
-and fresh evidence. Existing numerical thresholds and deployment controls are
-unchanged. Historical experiments are summarized in the
-[experiment journal](EXPERIMENT_JOURNAL.md).
+## Admission standard
 
-## Execution and evidence
+The private benchmark contains **100 independently authored scenarios**, each run
+three times against the exact delivered application artifact. A candidate needs
+**at least 240 successful trials out of 300 (80%)** and protected human approval.
+Every trial needs a valid simulation and complete judgments. Agent-caused errors
+are failures; invalid simulations and missing measurements are inconclusive and
+block admission. The grading rubric is unchanged.
 
-`v2-golden-evaluation` runs only from main. Select `candidate` and the successful
-development delivery run ID. The resolver verifies development provenance and
-selects its immutable artifact ID, digest, and commit. The evaluator downloads
-and verifies that bundle without rebuilding it. An ARM64 Python 3.13 child
-imports the packaged application and dependencies with isolated Python startup;
-the trusted parent runs ActorSimulator, the correctness judges, and frozen tool
-replay. The child receives no AWS or GitHub credentials. The application model
-and prompt remain unchanged.
+There is no per-case veto, consistency floor, automatic regression veto, or
+latency/cost-per-success quality threshold. Report those measurements honestly.
+Twenty cases failing all three trials can meet the chosen overall floor; reviewers
+see that consistency distribution. The 80% floor is a chosen admission standard
+for a reference implementation, not a claim of real-world accuracy.
 
-The retained protected policy expects 200 cases and three trials per case
-(**600 conversations**) using four workers. It does not accept the current
-100-case development corpus. Every model call reserves against one shared $5
-run ceiling before starting. The durable ledger also reserves against the
-existing $25 authorization. Missing usage stops further paid calls and
-blocks subsequent runs until spending is reconciled. Provider retries are off.
+Spending remains bounded by **$5 per execution and $25 cumulative authorization**,
+including evaluator overhead and retained failed/replacement runs. Unknown usage
+must be reconciled. Changing this authorization requires a reviewed policy change;
+the importer does not start paid work or reset spending. Evidence expires **24
+hours after completion** and is rechecked before migration and promotion.
 
-The evaluation job has a **90-minute timeout** and requests a **7,200-second
-evaluator session**. The evaluator role alone permits that session length;
-other golden roles retain one hour. These limits provide execution headroom and
-do not relax the protected cost or per-trial latency policy. Calibration must match the exact active contract;
-earlier approvals apply only to their original identities.
+A production baseline is optional. A candidate can qualify without evaluating the
+currently deployed application. The former mandatory baseline workflow is retired;
+historical policies, records, and storage versions remain intact.
 
-The 2.0.x assessment separates application outcome from actor validity. Invalid or
-uncertain simulations and missing judgments are inconclusive. Consent is judged
-from the latest messages delivered before each call; private actor facts and
-later approval cannot authorize earlier action. Honest agent-caused errors and
-unfinished clarifications receive no blanket Outcome exception. Family reports
-retain scored and inconclusive denominators, and uncertainty resamples whole
-scenario groups. Full qualification still requires all 600 valid scored trial
-slots; missing measurements cannot produce a pass.
+## Privacy and independent execution
 
-After machine qualification, inspect the `golden-evidence-RUN-1` artifact:
-`review.html`, `decision.json` (including per-case baseline deltas), and the
-packet's report, journal, calibration, identities, and execution declaration.
-Review the eight selected transcripts, actor validity, critical failures,
-held-out exposure, resource totals, and unresolved findings. Approving the
-`golden-review` environment attests that this review is complete and no findings
-remain unresolved. It cannot override a failed machine decision.
+The independent evaluator runs outside the access available to this repository's
+coding agent. An ignored directory, another branch, or a protected job executing
+repo-controlled evaluation code is not that boundary. Keep cases, expected answers,
+fixtures, transcripts, per-case results, grading review, and the private signing
+key out of this checkout, GitHub artifacts, repository-accessible storage, logs,
+and model traces accessible to the coding agent.
 
-The resulting receipt binds the actual GitHub approval, completed trusted
-workflow, evaluator source hashes, candidate artifact, policy, baseline,
-report, model/settings, prompts, tool schemas, and actor/judge contract.
-Candidate evidence expires after 24 hours; production reference evidence after
-30 days. Changed configuration or identity requires qualification again.
+The evaluator must independently review its runner, verify and execute the exact
+immutable development release bundle without rebuilding it, isolate candidate code
+from cases/labels other than the delivered conversation and tool responses, and
+prevent candidate-controlled telemetry or network access from exporting cases.
+Application/model calls necessarily receive their delivered inputs; their credentials
+and retained telemetry must belong to the independent evaluation boundary. Do not
+execute arbitrary evaluation scripts from the candidate checkout.
 
-Production admission reads the versioned S3 reference under a development-only
-reader role. Planning, preparation, and promotion retain the same receipt in
-the saved plan and revalidate it. Existing production approval, cutover approval,
-migration controls, exact-plan apply, and canary checks still apply.
+Only a signed aggregate summary crosses this boundary. The external signer attests:
 
-## Activation prerequisites
+- Independent authorship and no tuning exposure of the holdout; reviewed fixed
+  rubric, actor validity assessment, judges, and exact calibration identity.
+- Exact artifact execution, complete trial accounting, and a private review resolving
+  measurement issues. Quality failures remain reported; human acceptance is not a
+  relabeling of those failures.
+- Pre-call spending reservations against the existing authorization, complete usage
+  reconciliation, and cumulative spending including previous work and calibration.
+- Complete release-only attempt history. One original execution per unchanged
+  artifact/holdout, with no quality-only reruns. At most one fresh replacement is
+  allowed for an incomplete infrastructure run or invalid actor simulation after
+  independent human authorization. Original measurements remain in the summary.
 
-These requirements describe protected activation and recovery; they are not
-permission to deploy. Verify actual environment configuration and approvals
-before any authorized activation. The current development corpus still cannot
-qualify production.
+The verifier authenticates these attestations; aggregate data cannot independently
+prove how private execution happened. Activation therefore requires reviewing the
+external evaluator and its access controls, not just supplying a public key.
 
-1. Provision `infra/golden_eval.tf` in development account `903859731897`. The
-   private bucket is encrypted, versioned, protected against destruction, and
-   has no lifecycle expiry. Workflow roles cannot delete evidence. Evaluator,
-   reviewer, reader, and publisher have separate write scopes; only the
-   evaluator can read the fixed development OpenAI parameter. They have no
-   production role, database permission, or network path to a database. Before
-   activating this workflow, apply and verify the evaluator role's
-   `max_session_duration = 7200`; the workflow requests that duration so SSM
-   reads, final spending settlement and evidence archival can finish.
-2. Create `golden-evaluation`, `golden-review`, `golden-read`, and
-   `golden-baseline` environments. Each must allow only the `main` branch with
-   administrator bypass disabled. Require Ryan's approval on the first two;
-   the latter two perform bounded automated reads/publication. With a sole
-   maintainer, allow that reviewer to approve their own dispatch. Keep the
-   existing repository-ID-bound OIDC subject template. Require the new
-   `golden-artifact-smoke` CI check alongside existing checks.
-3. Once, under a reviewed development administrative session, run
-   `uv run python -m scripts.golden_release initialize --directory /tmp/golden-init`
-   from `v2/`. Conditional writes retain the original archive, initialize an
-   unset production reference, and seed known spending at **$0.87191346**.
-   Repeating initialization cannot reset the ledger or replace a baseline.
-4. Calibrate the new contract using the existing runner and explicit reference
-   labels. Review the labels, actor-validity judgments, measurement failures, and
-   disagreements, then approve the exact evidence and update
-   `golden/calibration-reference.json`, approve `golden/review.json` against
-   the current corpus digest, and approve the active policy selected by scripts/golden_gate.py against
-   its exact digest. Those approvals must precede a candidate run. Reconcile any separate
-   calibration spend into the versioned ledger before protected execution;
-   retain provider usage and the prior ledger version, never reduce known spend
-   or clear unknown usage without accounting for the interrupted calls.
-5. Bootstrap by dispatching `v2-golden-evaluation` with purpose
-   `production-reference` and development run `0`. It resolves the currently
-   successful production deployment, then its development-proven bundle.
-   It takes no arbitrary candidate input and cannot approve a candidate release.
-   After review, dispatch `v2-golden-baseline` with that evaluation run and the
-   corresponding successful production plan run. Deployment and canary evidence
-   must still be available. This also provides the bounded refresh path.
+Reuse is allowed for release candidates, with cumulative execution count disclosed.
+Only the first execution is called first-use holdout evaluation; later measurements
+are a **reused private benchmark**. Do not tune against case-level feedback or
+select the best of repeated runs.
 
-Only then evaluate a new candidate and create its release. The gate deliberately
-has no bypass flag. If the currently deployed agent cannot meet the absolute
-floors, qualification stays blocked until separately approved application work
-addresses it.
+## Signed interface
 
-## Failures and recovery
+The input is one UTF-8 JSON envelope containing exactly `summary_base64` and
+`signature_base64`. The first is the base64 encoding of the exact UTF-8 summary
+bytes; the second is a detached Ed25519 signature over those bytes. The verifier
+uses the reviewed PEM public key with OpenSSL, rejects duplicate/unknown fields,
+and limits the envelope and summary to 16 KiB. No private data or arbitrary
+failure text is accepted. Do not include private content even in rejected inputs:
+the inbox is accessible to repository roles.
 
-Claims allow one original execution per exact artifact, policy, evaluator, and
-baseline. GitHub reruns (`run_attempt > 1`) are rejected. A failed original may
-have one replacement: supply `superseded_run` and reason `infrastructure` or
-`actor_validity`. The pre-spend `golden-evaluation` approval attests to that reason
-after inspecting retained original evidence. Infrastructure replacements require
-an incomplete original; actor replacements explicitly record invalid actor
-behavior. Identity must match, all trials are fresh, and both runs are retained.
-Quality-only retries and second replacements are rejected. A crash without
-retained evidence stays blocked; it cannot authorize a speculative retry.
+The executable contract is `validate_summary` in `scripts/golden_gate.py`; the
+synthetic `summary` fixture in `tests/test_golden_gate.py` demonstrates its complete
+shape without representing any real held-out case. Required summary fields:
 
-After successful production approval, deployment, and matching canary,
-`v2-golden-baseline` automatically archives promotion provenance and conditionally
-advances the current reference. The original baseline and all previous object
-versions remain available. Failed deployment cannot advance it. Concurrent or
-out-of-order publication fails without overwriting the pointer.
+| Fields | Meaning |
+| --- | --- |
+| `schema_version`, `evaluation_scope` | Integer `1`, literal `private-held-out` |
+| `candidate`, `bundle_id`, `bundle_digest` | Exact commit, immutable artifact ID, `sha256:` artifact digest |
+| `development_run`, `development_attempt`, `development_deployment` | Successful development-delivery provenance |
+| `policy_sha256` | SHA-256 of canonical active policy JSON |
+| `holdout_sha256`, `evaluator_sha256`, `calibration_sha256` | Opaque digests pinned by the reviewed policy; evaluator digest includes runner, actor/judge prompts, settings and rubric; no case-level hashes |
+| `cases`, `trials` | Integers `100` and `3` |
+| `holdout_attempts` | Total executions across all candidates using this holdout, including failed/replacement runs |
+| `cumulative_cost_usd`, `unknown_usage` | All spending under the authorization and whether reconciliation is incomplete |
+| `private_review_complete` | Independent review/authorization attestation described above |
+| `attempts` | One original record, or that record followed by one replacement |
 
-If deployment succeeds but publication fails, the reference no longer matches
-production and the next release blocks. Recover by dispatching
-`v2-golden-baseline` with the completed production run ID and evaluation run `0`
-(read the receipt from that run). This rechecks provenance and canary and retries
-publication idempotently; it never redeploys. Evidence must still satisfy the
-30-day reference limit. A reference refresh uses its explicit approved evaluation
-run instead. GitHub packets are retained for 90 days; immutable S3 evidence and
-baseline history remain durable. Refresh before GitHub provenance expires.
+Each attempt has exactly these fields:
 
-## Offline demonstration
+| Fields | Meaning |
+| --- | --- |
+| `started_at`, `completed_at` | Timezone-aware ISO timestamps, ordered and not in the future; policy approval precedes execution |
+| `replacement_reason` | `none` for original; `infrastructure` or `actor_validity` for replacement |
+| `passed`, `failed`, `inconclusive`, `unmeasured` | Nonnegative integer counts summing to 300 |
+| `case_pass_counts` | Four integer counts for cases with 0/1/2/3 successful trials; sum 100, weighted sum equals `passed` |
+| `success_interval` | Exactly `method: case-bootstrap-95`, `lower`, `upper`; 95% interval resampling whole scenarios, not independent trials |
+| `latency_p50_seconds`, `latency_p95_seconds` | End-to-end application conversation latency, excluding actor/judge time; both null only when unavailable, which blocks qualification |
+| `agent_cost_usd`, `total_cost_usd` | Application calls versus all measured calls for that execution |
 
-From `v2/`, run:
+For uncertainty, resample 100 scenario groups with replacement, retaining all three
+trials within each group; use 10,000 bootstrap samples with fixed seed 0 and the
+2.5th/97.5th percentiles of successful-trial fractions. Use the fixed denominator
+300; count inconclusive/unmeasured slots separately and never drop them. An
+incomplete original still reports its aggregate consistency counts, treating
+unmeasured slots as nonsuccesses, without labeling them failed answers.
+
+Policy digests use UTF-8 JSON with sorted keys, compact separators, and no NaN or
+Infinity (`golden_gate.canonical`). The signature covers the actual summary bytes,
+not a reserialized version. No signing utility or real private key lives here.
+
+## Activation and operation
+
+These are prerequisites, not authorization to deploy infrastructure or run an eval.
+
+1. Independently provision and review the evaluator, its private storage, model
+   credentials, network/telemetry isolation, attempt ledger, and signing key.
+   Transfer only its public PEM key to
+   `eval/results/golden/evaluator-public.pem`. Never generate its real key here.
+2. Review the private 100-case contract and calibration externally. Populate the
+   four currently unset digests in `policy-3.0.0.json` (including the SHA-256 of the
+   exact public PEM bytes). Set the policy approval status, reviewer, approval time,
+   evidence reference, and exact policy digest through human-reviewed changes.
+   All executions must follow that approval. Historical approvals do not apply.
+3. Apply and verify the reviewed `infra/golden_eval.tf` changes separately. Existing
+   encrypted/versioned storage and deletion protections are retained. Repo roles
+   read only `aggregates/*` and `candidates/private/*`; the importer writes aggregate
+   reports, outcome claims, and finalized accounting records. The reviewer writes
+   versioned candidate indexes with conditional writes. They have no model,
+   database, or production credentials. Remove the former baseline publisher role.
+4. Verify the `golden-evaluation` and `golden-review` environments require Ryan's
+   approval, permit only `main`, and disable administrator bypass. `golden-read`
+   remains the bounded automated read environment. No private evaluator credential
+   is added to any repository environment.
+5. The external operator publishes **only** the envelope to the existing development
+   evidence bucket, key `aggregates/inbox/<envelope-sha256>.json`, using an immutable
+   conditional write. This operator needs a separately provisioned inbox-only
+   publishing identity; no repository role can upload an input. Record its S3
+   version ID. Preserve existing historical objects and reconcile the prior
+   spending ledger externally; do not initialize a fresh zero balance.
+6. Dispatch `v2-golden-evaluation` on main with the successful `development_run`,
+   `summary_sha256`, and exact `summary_version`. The workflow resolves development
+   provenance, verifies the signature/contract, retains aggregate failures as well
+   as passes, and requests human review only after machine qualification.
+7. Review `review.md`, `decision.json`, and the signed summary. Approve `golden-review`
+   to accept the reported limitations for this artifact. The receipt binds the
+   actual approval, completed workflow, importer code, policy, holdout, and exact
+   artifact. It carries the signed envelope so later stages can reverify it without
+   development AWS credentials. Normal production approval, saved-plan verification, migration gates,
+   and canary checks still apply.
+
+Malformed or unauthenticated input is rejected without copying it to logs/artifacts.
+Valid aggregate evidence that misses qualification remains archived. A corrected
+transport/import attempt may reimport identical signed measurements; it is not
+permission for a new evaluator execution. GitHub workflow reruns are rejected.
+If receipt upload fails after index publication, dispatch a new import of the same
+signed summary. After fresh human approval, a newer trusted import may conditionally
+replace the index only if the prior import has completed and the summary digest is
+identical. This also permits reapproval after importer maintenance. Both successful
+and failed prior imports are eligible; evidence changes, active prior runs,
+out-of-order publication, and concurrent-write conflicts block. S3 versioning keeps
+the earlier pointer. No new evaluation or rescoring is authorized by this recovery.
+
+An import with unknown usage retains its signed report but cannot qualify. Its
+outcomes, timing, and consistency/uncertainty measurements are immutable; provisional
+costs are excluded from that outcome claim. The external evaluator may sign a
+reconciled summary with unchanged outcomes and corrected costs. The first summary
+with `unknown_usage: false` freezes each attempt's application and total cost in an
+immutable accounting record. Further cost changes or outcome changes are rejected.
+Both provisional and reconciled reports remain archived; all spending limits still
+apply to qualification. This is accounting reconciliation, not a replacement run.
+
+For an optional aggregate comparison using two compatible signed envelopes:
 
 ```bash
-uv run pytest tests/test_golden_gate.py tests/test_golden_baseline.py
-uv run pytest tests/test_check_production_release.py tests/test_production_plan_workflow.py tests/test_production_migration_workflow.py
+python3 -m scripts.golden_release compare --directory /tmp/current-review \
+  --previous /tmp/previous-summary-envelope.json
 ```
 
-These synthetic checks demonstrate valid admission and rejection of missing,
-partial, critical-failure, regression, infrastructure, stale, identity-mismatched,
-and untrusted evidence, plus failed and successful baseline publication. They do
-not claim that a real candidate passed. PR CI also builds an ARM64 package and
-runs `tests.golden_artifact_smoke`: real packaged agent/SDK, canned provider,
-frozen replay, retained conversation state, measured calls, and forbidden network
-connections. Existing scheduled live checks and the canary remain separate from
-frozen quality evaluation.
+`/tmp/current-review/summary-envelope.json` is the current packet. Both must match
+the active contract and have complete measurements; the previous result need not
+satisfy candidate freshness. The resulting deltas are informational and never an
+admission requirement. Publish aggregate experiment summaries in the
+[experiment journal](EXPERIMENT_JOURNAL.md), not per-run review packets.
+
+## Offline verification
+
+```bash
+uv run pytest tests/test_golden_gate.py tests/test_golden_retirement.py
+uv run pytest tests/test_check_production_release.py tests/test_production_plan_workflow.py \
+  tests/test_production_migration_workflow.py tests/test_development_migrations.py
+```
+
+These checks generate temporary test-only signing keys and synthetic summaries.
+They do not run models, access private cases, qualify a real candidate, or deploy.
+Existing development-corpus tests and packaged-agent smoke checks remain separate.
