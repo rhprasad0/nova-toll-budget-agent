@@ -29,7 +29,7 @@ from eval.simulated import GroundedCorrectnessEvaluator
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.2.0"
+CORPUS_VERSION = "3.3.0"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,

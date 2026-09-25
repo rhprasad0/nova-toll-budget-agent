@@ -8,7 +8,7 @@ are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract 
 
 ## Description-edit contract
 
-Contract 3.2.0 / harness 2.2.0 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.0 / harness 2.3.0 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -30,10 +30,18 @@ never transfer prior approvals or regenerate a candidate's corpus manifest.
 Pass³ is successful three-trial cases divided by **all 100 cases**. Missing,
 failed, and inconclusive trials cannot make a case successful. Historical report
 rendering follows the recorded harness version; cross-contract comparisons fail.
-Promotion requires strict pass³ improvement, inconclusive nonincrease, comparable
-Grounding/Rules nonworsening, and independent material-regression review.
-Successful trials and paired deltas are diagnostics. Rank eligible candidates by
-pass³, successful trials, fewer changed lines, then A.
+Development promotion requires strict overall-pass-rate improvement: successful
+trials divided by all **300 expected trials**, including inconclusives in the
+denominator. Keep inconclusive nonincrease, comparable Grounding/Rules
+nonworsening, and independent material-regression review. Pass³ and paired deltas
+are diagnostics. Rank eligible candidates by overall pass rate, fewer changed
+lines, then A. Harness 2.2.0 retains its historical pass³ promotion rule.
+
+Optimize using development cases only. The separate blind production standard is
+at least 240/300 successful trials, with valid simulations and complete judgments;
+80% on this exposed set cannot qualify production. Keep holdout cases and feedback
+out of candidate search. The separate gate work does not increase the development
+spending authorization.
 
 Judges return cited unmet requirements; an empty list determines success.
 The stored `passed`/`evidence` interface remains stable. Calibration must still

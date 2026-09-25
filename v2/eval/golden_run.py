@@ -32,7 +32,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -1416,6 +1416,7 @@ def summary(
     *,
     legacy: bool | None = None,
     fixed_denominator: bool = True,
+    overall_rate: bool = True,
 ) -> dict[str, Any]:
     if legacy is None:
         legacy = all(c.contract_version < 2 for c in cases)
@@ -1540,6 +1541,8 @@ def summary(
             if next(c for c in cases if c.id == a.case_id).critical
         ),
     }
+    if overall_rate:
+        result["overall_pass_rate"] = passed / len(expected) if expected else None
     if not legacy:
         complete_cases = sum(len(group) == 3 for group in groups)
         result.update(
@@ -1672,6 +1675,9 @@ def render(directory: Path) -> dict[str, Any]:
     fixed_denominator = tuple(
         map(int, manifest["identity"]["harness_version"].split("."))
     ) >= (2, 2, 0)
+    overall_rate = tuple(
+        map(int, manifest["identity"]["harness_version"].split("."))
+    ) >= (2, 3, 0)
     events = [
         json.loads(line)
         for line in (directory / "events.jsonl").read_text().splitlines()
@@ -1873,7 +1879,11 @@ def render(directory: Path) -> dict[str, Any]:
         report = {
             "manifest": manifest,
             "overall": summary(
-                attempts, cases, legacy=legacy, fixed_denominator=fixed_denominator
+                attempts,
+                cases,
+                legacy=legacy,
+                fixed_denominator=fixed_denominator,
+                overall_rate=overall_rate,
             ),
             "subsets": {},
             "attempts": [a.model_dump() for a in attempts],
@@ -1916,6 +1926,7 @@ def render(directory: Path) -> dict[str, Any]:
                 subset,
                 legacy=legacy,
                 fixed_denominator=fixed_denominator,
+                overall_rate=overall_rate,
             )
         lines = [
             "# Golden conversation report",

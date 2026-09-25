@@ -1600,10 +1600,12 @@ def test_fixed_pass_cubed_preserves_historical_denominator() -> None:
     current = run.summary(rows, cases)
     historical = run.summary(rows, cases, fixed_denominator=False)
     assert current["pass_cubed"] == 0.5
+    assert current["overall_pass_rate"] == 5 / 6
     assert current["pass_cubed_case_denominator"] == 2
     assert historical["pass_cubed"] == 1
     assert historical["pass_cubed_case_denominator"] == 1
     assert run.summary(rows[:-1], cases)["pass_cubed"] == 0.5
+    assert run.summary(rows[:-1], cases)["overall_pass_rate"] == 5 / 6
     with pytest.raises(ValueError, match="duplicate"):
         run.summary([*rows, rows[0]], cases)
 

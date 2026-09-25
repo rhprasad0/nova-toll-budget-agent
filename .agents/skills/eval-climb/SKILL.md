@@ -146,11 +146,11 @@ reported as out of scope. Test files are not candidate-edit surfaces.
    **not** an eligible candidate. Nonzero means unusable evidence. Send the full
    comparison and original reports to a fresh `eval_reviewer`.
 
-The helper checks numeric eligibility under corpus 3.2.0 / harness 2.2.0:
-pass³ (cases succeeding in all three trials divided by all 100 cases) must
+The helper checks numeric eligibility under corpus 3.3.0 / harness 2.3.0:
+overall pass rate (successful trials divided by all 300 expected trials) must
 strictly increase; inconclusive slots must not increase; comparable Grounding
-and Rules violation rates must not worsen. Successful-trial count and paired
-delta are diagnostics only. Missing or duplicate trials and incompatible
+and Rules violation rates must not worsen. Pass³ (successful three-trial cases
+divided by all 100 cases) and paired delta are diagnostics only. Missing or duplicate trials and incompatible
 identities invalidate comparison. Historical reports retain their recorded
 contract semantics; never compare across contracts or use a private campaign
 helper to override the committed decision rules. Inconclusives remain explicit, not scored
@@ -161,8 +161,16 @@ and unresolved regressions. Inspect every old-pass/new-fail and new violation,
 including those outside the paired subset. A changed stochastic trial alone is
 not proof the patch caused harm, but unresolved material regressions disqualify
 it. Never relabel evidence to gain eligibility. The parent chooses the eligible
-candidate with highest pass³, then most successful trials, then fewer changed
-lines, then A if still tied. A tie with the incumbent retains the incumbent.
+candidate with highest overall pass rate, then fewer changed lines, then A if
+still tied. A tie with the incumbent retains the incumbent.
+
+Optimize this metric on the exposed development cases. The separate production
+standard is at least 240/300 successful trials on a blind holdout, with all
+simulations valid and measurements complete. An 80% development score is neither
+a stopping target nor production qualification. Never inspect holdout cases or
+use holdout feedback for candidate search; activation and protected approval
+belong to the separate production workflow. Existing development spending limits
+remain in force.
 
 ## Stop, confirm, and report
 

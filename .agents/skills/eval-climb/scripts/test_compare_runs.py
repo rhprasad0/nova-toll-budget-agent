@@ -94,6 +94,7 @@ def refresh(report: dict[str, Any]) -> None:
         "attempted_trials": 300,
         "scored_trials": len(scored),
         "successful_trials": sum(row["overall_success"] for row in scored),
+        "overall_pass_rate": sum(row["overall_success"] for row in scored) / 300,
         "inconclusive_trials": 300 - len(scored),
         "violations": {
             key: {
@@ -338,6 +339,42 @@ class FixedPassCubedTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "fixed-denominator"):
             compare(left, right)
         right["manifest"]["identity"]["harness_version"] = "2.1.2"
+        with self.assertRaisesRegex(ValueError, "incompatible"):
+            compare(left, right)
+
+    def test_overall_gain_can_reduce_pass_cubed(self) -> None:
+        left = self.current()
+        right = self.current()
+        for value in (left, right):
+            value["manifest"]["identity"]["harness_version"] = "2.3.0"
+        for trial in (1, 2, 3):
+            slot(left, 0, trial)["verdicts"]["outcome"]["passed"] = True
+        for case in range(4):
+            slot(right, case)["verdicts"]["outcome"]["passed"] = True
+        self.update(left)
+        self.update(right)
+        result = compare(left, right)
+        self.assertTrue(result["numeric_eligible"])
+        self.assertEqual(result["primary_metric"], "overall_pass_rate")
+        self.assertEqual(result["candidate"]["overall_pass_rate"], 4 / 300)
+        self.assertLess(
+            result["candidate"]["pass_cubed"], result["baseline"]["pass_cubed"]
+        )
+        self.assertFalse(compare(right, right)["numeric_eligible"])
+        self.assertFalse(compare(right, left)["numeric_eligible"])
+        row = slot(right, 6)
+        row.update(status="inconclusive", actor_validity={"status": "uncertain"})
+        self.update(right)
+        result = compare(left, right)
+        self.assertFalse(result["numeric_eligible"])
+        self.assertEqual(result["candidate"]["overall_pass_rate"], 4 / 300)
+        row.update(status="scored", actor_validity={"status": "valid"})
+        self.update(right)
+        right["overall"]["overall_pass_rate"] = 1
+        with self.assertRaisesRegex(ValueError, "overall pass rate"):
+            compare(left, right)
+        self.update(right)
+        right["manifest"]["identity"]["harness_version"] = "2.2.0"
         with self.assertRaisesRegex(ValueError, "incompatible"):
             compare(left, right)
 

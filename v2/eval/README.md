@@ -1,7 +1,10 @@
 # TollChat evaluation
 
-**Current contract: 3.2.0 / harness 2.2.0.** Pass³ counts cases with
-three successful trials out of all 100 cases; inconclusives never count as success.
+**Current contract: 3.3.0 / harness 2.3.0.** Future development climbs optimize
+overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
+three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
+never count as success. The separate 80% blind-holdout production standard does
+not make a development score production qualification.
 Fresh corpus review and matching calibration are required before application runs.
 See `golden/review.json` for the exact review status.
 

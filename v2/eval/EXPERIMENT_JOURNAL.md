@@ -1404,3 +1404,38 @@ SOP, agent, and database-contract sources are identical to the preparation paren
 already validated. Only the development compatibility pin advances to that exact
 serving release; the production pin stays unchanged. All 120 shared-package tests
 passed, with exact-release acceptance and unrelated-release rejection checked.
+
+
+### 2026-09-25 — user-directed overall-pass objective
+
+Ryan subsequently requested alignment with the separate production gate work:
+80% overall success on a blind holdout, and explicitly chose to update PR #603
+now. The next development climb therefore optimizes successful trials divided by
+all 300 expected trials. Pass³ remains a fixed-denominator reliability diagnostic;
+a candidate can improve overall success while reducing pass³. Candidate selection
+requires strict overall improvement and retains inconclusive nonincrease,
+comparable Grounding/Rules nonworsening, independent material-regression review,
+bounded A/B search, and the final confirmation pair. Eligible candidates rank by
+overall rate, fewer changed lines, then A; an incumbent tie retains the incumbent.
+
+This publishes corpus 3.3.0 / harness 2.3.0. Harness 2.2.0 keeps its recorded pass³
+promotion semantics; earlier report fields/shapes remain unchanged, and
+cross-contract comparisons remain rejected. Cases, fixtures, calibration
+references, actor/judge prompts, and application behavior are unchanged by this
+objective adjustment. The first calibration above remains a stopped 3.2.0/2.2.0
+measurement, not a calibration of this new contract.
+
+The production policy under separate development requires 240/300 successes
+with valid simulations and complete measurements. Only its public policy and
+usage contract were consulted; no blind cases or holdout feedback were accessed.
+An 80% exposed-development score cannot qualify production and is not a new
+search stopping rule. Production gate implementation stays in its own worktree.
+The $20 cumulative development authorization and $15 preparation ceiling remain
+unchanged. No further paid calls were made; material grading defects still block
+calibration approval and continuation.
+
+Fresh independent Codex review accepted the exact revised corpus/contract, with
+no human adjudication claimed. All 85 focused runner/development tests and 11
+comparison tests passed, including archived report reproduction, along with
+lint/type, corpus and skill validation. The review explicitly leaves calibration
+unapproved and paid continuation stopped.

@@ -298,7 +298,8 @@ def attempts(
             f"{name}: inconsistent {key} total",
         )
     triples = sum(all(by_slot[cid, n]["passed"] for n in (1, 2, 3)) for cid in ids)
-    fixed = report["manifest"]["identity"]["harness_version"] == "2.2.0"
+    version = report["manifest"]["identity"]["harness_version"]
+    fixed = version in {"2.2.0", "2.3.0"}
     denominator = (
         100
         if fixed
@@ -311,7 +312,13 @@ def attempts(
             and overall.get("pass_cubed_case_denominator") == 100,
             f"{name}: inconsistent fixed-denominator pass cubed",
         )
+    if version == "2.3.0":
+        require(
+            overall.get("overall_pass_rate") == successful / 300,
+            f"{name}: inconsistent fixed-denominator overall pass rate",
+        )
     return by_slot, {
+        "overall_pass_rate": successful / 300,
         "pass_cubed": triples / denominator if denominator else None,
         "passing_all_three_cases": triples,
         "pass_cubed_case_denominator": denominator,
@@ -406,7 +413,12 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         criteria["pass_cubed_increased"] = (
             right_totals["pass_cubed"] > left_totals["pass_cubed"]
         )
+    elif left_identity["harness_version"] == "2.3.0":
+        del criteria["paired_delta_positive"]
     return {
+        "primary_metric": "pass_cubed"
+        if left_identity["harness_version"] == "2.2.0"
+        else "overall_pass_rate",
         "numeric_eligible": all(criteria.values()),
         "reasons": [key for key, passed in criteria.items() if not passed],
         "criteria": criteria,
