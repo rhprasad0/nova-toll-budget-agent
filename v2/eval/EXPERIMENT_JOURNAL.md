@@ -1726,3 +1726,66 @@ completed successfully in workflow run `36148909062`, including its registered
 migration step. Deployed catalog parity remains unverified and is still required
 before a future climb. No database query, manual migration or deployment was
 performed during this repair.
+
+## 2026-09-25 — requirement applicability calibration; Outcome reliability stop
+
+Ryan explicitly requested another calibration round after the repeatability stop.
+The separately reviewed preparation at
+`102eb91a2a78e3de6907170a58e486ba983e803a` moved unchanged domain/catalog context
+before criterion policy and consolidated the decision guidance. Outcome now
+checks a requirement's applicability and policy exceptions before declaring an
+omission, including expected unavailability within a multi-request answer.
+Grounding separately checks call inputs and all output claims, including final
+prose and financial labels. These are general judging instructions, not changes
+to the application, actor generation, models, schemas, references or labels.
+
+Independent preparation review found no material defect. The 142 focused tests,
+seven release-isolation checks, 11 comparison checks, corpus validation, skill
+validation and lint/type/format checks passed. Captured requests verify that
+policy follows supporting context for all three criteria; assessment schemas
+and list-derived verdict conversion remain unchanged. The new contract is
+corpus **3.3.5** / harness **2.3.5**, measured at `76f4006`.
+
+One fresh full calibration ran with 16 workers, a $0.45 complete-run estimate,
+and uncapped accounting chained from $13.384957155. No application conversations
+were regenerated.
+
+| Calibration measure | Result |
+| --- | ---: |
+| Complete references | 146 / 146 |
+| Started and finished calls, all usage known | 438 / 438 |
+| Measurement failures | 0 |
+| Outcome agreement on valid references | 134 / 143 |
+| Grounding agreement on valid references | 143 / 143 |
+| Rules agreement on valid references | 143 / 143 |
+| Actor-validity agreement | 146 / 146 |
+| Calibration cost | $0.271813360 |
+| Cumulative accounted eval cost | $13.656770515 |
+
+Independent review confirmed all nine disagreements as material Outcome errors:
+seven false failures and two false passes. The false failures demand optional
+rate-period wording, reject a correct two-component breakdown, add historical
+source wording to a fixed-rate disclosure, misread three correctly labeled
+remaining-income statements as financial contradictions, and reject a supported
+missing-history explanation. The false passes overlook the required invitation
+to adjust proposed annual days and the omitted vehicle-cost assumption.
+All 98 nonempty assessments were inspected. Three financial-label failures cite
+semantically matching claims as contradictions, despite correct structured
+conversion; the semantic defect cannot be fixed by changing boolean derivation.
+
+The three actor-invalid exclusions remain supported. A changed Outcome decision
+on an excluded route-decline trajectory is defensible for the delivered facts
+and has no expected application label; it is not counted as another judge error.
+Different prompts and draws prevent causal attribution of the additional errors
+to context reordering. Matching Grounding/Rules/actor labels in this run does not
+establish repeatable judge correctness or an application improvement.
+
+**Decision: stop; calibration remains unapproved.** No second calibration,
+scripted actor check, application baseline, candidate search or confirmation was
+admitted. The available evidence does not justify another wording-only paid
+round: the current judge still invents requirements, misses explicit requirements
+and misreads equivalent financial statements. Revisit the grading approach under
+a separately reviewed, authorized plan before further calibration; do not weaken
+labels, select a favorable prior run, or retry the unchanged contract. All raw
+evidence and review details remain private. Deployed catalog parity remains a
+separate prerequisite before a future climb; no deployed mutation occurred.
