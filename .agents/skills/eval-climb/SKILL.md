@@ -59,8 +59,8 @@ comparison, without implementer conclusions.
    campaign except the application SOP and description text changes below. A
    changed judging contract requires a new campaign and matching calibration, not a
    silent baseline comparison. The baseline is unchanged TollChat, not Astra.
-3. Require a user-authorized cumulative **eval-dollar** ceiling and a reviewed
-   calibration path. Three rounds is the default and maximum; fewer may be
+3. Require a user-authorized cumulative **eval-dollar** ceiling or explicit
+   uncapped authorization, and a reviewed calibration path. Three rounds is the default and maximum; fewer may be
    requested. Existing historical budgets do not transfer. Codex agent usage
    is separate from runner spending. Missing authorization permits preparation
    and offline analysis only; never fabricate calibration approval.
@@ -130,7 +130,8 @@ reported as out of scope. Test files are not candidate-edit surfaces.
    for baseline, candidate, and confirmation runs. The parent
    is the only paid-run owner. From each clean candidate's `v2/`, use
    `uv run python -m eval.golden_run run --output ABS_NEW_RUN_DIR --calibration
-   ABS_APPROVED_CALIBRATION --budget-usd CUMULATIVE_LIMIT --workers 16`, adding
+   ABS_APPROVED_CALIBRATION --budget-usd CUMULATIVE_LIMIT --workers 16`, or
+   substitute `--no-budget-limit` only with explicit uncapped authorization, adding
    `--prior-run ABS_PREVIOUS_RUN_DIR` after the first campaign run. Do not use
    `--cases`: these are full-set comparisons. Use the existing development AWS/SSM
    credential path, not local secrets or a deployed pricing database.
@@ -146,7 +147,7 @@ reported as out of scope. Test files are not candidate-edit surfaces.
    **not** an eligible candidate. Nonzero means unusable evidence. Send the full
    comparison and original reports to a fresh `eval_reviewer`.
 
-The helper checks numeric eligibility under corpus 3.3.0 / harness 2.3.0:
+The helper checks numeric eligibility under corpus 3.3.1 / harness 2.3.1:
 overall pass rate (successful trials divided by all 300 expected trials) must
 strictly increase; inconclusive slots must not increase; comparable Grounding
 and Rules violation rates must not worsen. Pass³ (successful three-trial cases
@@ -169,8 +170,8 @@ standard is at least 240/300 successful trials on a blind holdout, with all
 simulations valid and measurements complete. An 80% development score is neither
 a stopping target nor production qualification. Never inspect holdout cases or
 use holdout feedback for candidate search; activation and protected approval
-belong to the separate production workflow. Existing development spending limits
-remain in force.
+belong to the separate production workflow. Existing development spending limits remain in force unless the user explicitly
+replaces them with a new ceiling or uncapped authorization.
 
 ## Stop, confirm, and report
 
@@ -179,13 +180,15 @@ insufficient budget, invalid measurement contract, or unknown usage. A narrowed
 proposal consumes another round; it is not a free retry. Preserve rejected
 candidates and reports without destructive resets.
 
-Before each search run, reserve enough budget for two final full-set runs, using
+For capped campaigns, before each search run reserve enough budget for two final full-set runs, using
 the latest full-set cost with headroom; a partial run can never establish a winner.
 Enforce the reserve by lowering the search phase's cumulative `--budget-usd`
 ceiling by that reserve, then restore only the original authorized ceiling for
 confirmation. If the runner's supported ceiling or remaining authorization cannot
 cover this, stop rather than changing its accounting. A $0.91 historical full run
-is context, not a price guarantee or spending permission.
+is context, not a price guarantee or spending permission. Uncapped campaigns
+retain estimates, complete cumulative accounting, every non-budget stop rule, and
+the three-round maximum; record their ceiling as JSON null.
 
 If an improved incumbent exists, perform **one** fresh full-set comparison of
 the original starting application and final candidate, under the same pinned

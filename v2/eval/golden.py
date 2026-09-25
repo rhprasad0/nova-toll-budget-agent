@@ -29,7 +29,7 @@ from eval.simulated import GroundedCorrectnessEvaluator
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.0"
+CORPUS_VERSION = "3.3.1"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -174,11 +174,17 @@ specific evidence or unmet requirement in a short explanation.
 
 Apply only requirements actually stated in the reference. Requirements may be
 satisfied anywhere in the conversation; do not require the final answer to repeat
-earlier routes, vehicle profiles, clarifications, or explanations. Using exact
-route/profile arguments satisfies a requirement to use them. Do not invent a
+earlier routes, vehicle profiles, clarifications, or explanations. Retaining
+user-supplied routes, times, weekdays, and profiles means preserving those inputs
+in the workflow and actual call arguments. It does not require an assistant-prose
+recap unless the contract explicitly requests one. Using exact route/profile
+arguments satisfies a requirement to use them. Do not invent a
 requirement to print source URLs, retrieval dates, observation-age limits, or
 historical date ranges. Disclose only applicable sources, not every false source
-flag. A fixed published toll may vary by time of day: fixed distinguishes a
+flag. Tool metadata is evidence, not an additional disclosure checklist. A
+schedule period name is optional unless requested or necessary to explain an
+actual availability restriction. Still require material availability qualifications
+and accurate published-versus-observed provenance. A fixed published toll may vary by time of day: fixed distinguishes a
 published schedule from a dynamically observed price. For a fixed-only annual
 estimate, published fixed-rate disclosure is sufficient; do not claim the fixed
 amount itself was historically observed. No-history cases need the available

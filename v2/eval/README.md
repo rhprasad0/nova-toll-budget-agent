@@ -1,6 +1,6 @@
 # TollChat evaluation
 
-**Current contract: 3.3.0 / harness 2.3.0.** Future development climbs optimize
+**Current contract: 3.3.1 / harness 2.3.1.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
@@ -19,7 +19,7 @@ output in ignored `eval/private/` or the existing private workflow store.
 ## Frozen golden evaluation
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
-  143 labeled references, 107 synthetic fixtures, and five-turn actors.
+  145 labeled references, 107 synthetic fixtures, and five-turn actors.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, three-trial application
   baselines, complete cost accounting, and offline report reproduction.
 - [Production gate](GOLDEN_RELEASE.md): exact-artifact qualification and protected

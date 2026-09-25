@@ -17386,7 +17386,7 @@
     "turns": [
       {
         "user": "Estimate annual affordability: Exit 13 - SR 828 (Wiehle Ave) to Exit 18/19 - I-495 / SR 123 (Capital Beltway) and back, tuesday, wednesday, thursday, leaving at 7:45 AM and returning at 5:15 PM, 135 planned office days per year, gross annual salary $114250.00. Are the sampled prices historical observations?",
-        "response": "The annual income remaining after assumed tax and the annualized daily-P50 tolled commute is $72497.15. For 135 planned office days, gross annual income is $114250.00, with $76166.67 after the one-third assumed tax ($38083.33). The straight-line tolled distance is 22.16 miles per office day and 2992.01 miles annually; vehicle cost is $15.18 per office day and $2049.52 annually. P25 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P50 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P90 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P25 is the lower, P50 middle, and P90 higher daily scenario. Annual values scale daily scenarios by planned days, not percentiles of annual outcomes, forecasts, or guarantees. Coverage is 36 of 36 eligible paired dates (100.0%). The sampled dates use current published fixed rates, not historically observed tolls. Distance covers direct endpoint-to-endpoint lines on the priced toll facilities only, leaving untolled travel out. The tax deduction is a rough one-third assumption rather than a calculation of your personal taxes. The vehicle allowance is TollChat’s fixed $0.685 for each straight-line tolled mile, rather than your own expenses. The sampled days use current published fixed rates, not historical observations of what drivers paid. These are historical-sample scenarios using current published rates, not observed prices on those dates.",
+        "response": "The annual income remaining after assumed tax and the annualized daily-P50 tolled commute is $72497.15. For 135 planned office days, gross annual income is $114250.00, with $76166.67 after the one-third assumed tax ($38083.33). The straight-line tolled distance is 22.16 miles per office day and 2992.01 miles annually; vehicle cost is $15.18 per office day and $2049.52 annually. P25 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P50 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P90 daily scenario: toll $12.00 per office day, $1620.00 annualized; combined toll and vehicle cost $27.18 per office day, $305.79 per average month, $3669.52 annually. Remaining annual income $72497.15; additional gross salary needed to offset this combined annual cost $5504.28; combined cost is 4.8% of assumed after-tax income. P25 is the lower, P50 middle, and P90 higher daily scenario. Annual values scale daily scenarios by planned days, not percentiles of annual outcomes, forecasts, or guarantees. Coverage is 36 of 36 eligible paired dates (100.0%). The sampled dates use current published fixed rates, not historically observed tolls. Distance covers direct endpoint-to-endpoint lines on the priced toll facilities only, leaving untolled travel out. The tax deduction is a rough one-third assumption rather than a calculation of your personal taxes. The vehicle allowance is TollChat\u2019s fixed $0.685 for each straight-line tolled mile, rather than your own expenses. The sampled days use current published fixed rates, not historical observations of what drivers paid. These are historical-sample scenarios using current published rates, not observed prices on those dates.",
         "calls": [
           {
             "name": "get_annual_toll_ballpark",
@@ -18216,7 +18216,7 @@
     "turns": [
       {
         "user": "Is the current Gallows Road to Route 267 I-495 Express toll coming down? Please check it.",
-        "response": "The observed current toll is $6.45 at 8:09 AM EDT. Recent movement: **falling** by **$2.50 (27.9%)** across three reported cycles. You are getting a deal: $1.80 (21.8%) lower than the $8.25 median, below the $7.75–$9.15 range across all 3 comparable weeks.",
+        "response": "The observed current toll is $6.45 at 8:09 AM EDT. Recent movement: **falling** by **$2.50 (27.9%)** across three reported cycles. You are getting a deal: $1.80 (21.8%) lower than the $8.25 median, below the $7.75\u2013$9.15 range across all 3 comparable weeks.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -18328,7 +18328,7 @@
     "turns": [
       {
         "user": "Is the current Gallows Road to Route 267 I-495 Express toll coming down? Please check it.",
-        "response": "The current toll is $6.45, observed at 8:09 AM EDT. Movement fell by $2.50. It is $1.80 above the $8.25 median and above the $7.75–$9.15 range over all 3 comparable weeks.",
+        "response": "The current toll is $6.45, observed at 8:09 AM EDT. Movement fell by $2.50. It is $1.80 above the $8.25 median and above the $7.75\u2013$9.15 range over all 3 comparable weeks.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -18442,7 +18442,7 @@
     "turns": [
       {
         "user": "Is the current Gallows Road to Route 267 I-495 Express toll coming down? Please check it.",
-        "response": "The current toll is $6.45, observed at 8:09 AM EDT. Movement fell by $2.50. You are getting a deal: $999.99 lower than the $8.25 median, below the $7.75–$9.15 range over all 3 comparable weeks.",
+        "response": "The current toll is $6.45, observed at 8:09 AM EDT. Movement fell by $2.50. You are getting a deal: $999.99 lower than the $8.25 median, below the $7.75\u2013$9.15 range over all 3 comparable weeks.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -18548,6 +18548,136 @@
     },
     "actor_validity": "valid",
     "rationale": "Negative wording does not permit inventing a comparison amount.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-belmont-afternoon-eastbound",
+    "label": "schedule-source-paraphrase",
+    "turns": [
+      {
+        "user": "What is the toll now from Belmont Ridge Road east to Route 28 on the Greenway?",
+        "response": "Belmont Ridge Road east to Route 28 costs $5.25 using the published rate schedule. Evaluated September 24, 2026 at 5:18 PM EDT.",
+        "calls": [
+          {
+            "name": "get_current_toll_price",
+            "input": {
+              "origin_point_id": "greenway:4:entry:EB",
+              "destination_point_id": "greenway:28:exit:EB",
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              }
+            },
+            "result": {
+              "origin_point_id": "greenway:4:entry:EB",
+              "destination_point_id": "greenway:28:exit:EB",
+              "method": "latest_complete_current_facility_prices",
+              "evaluated_at": "2026-09-24T17:18:00-04:00",
+              "maximum_observation_age_minutes": 30,
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              },
+              "source_kind": "schedule_derived",
+              "components": [
+                {
+                  "route_step_id": "step-1",
+                  "price_usd": "5.25",
+                  "source_kind": "schedule_derived",
+                  "pricing_method": "published_schedule",
+                  "facility": "greenway",
+                  "component_evaluated_at": "2026-09-24T17:18:00-04:00",
+                  "rate_period": "off_peak",
+                  "published_schedule": {
+                    "schedule_id": "dulles_greenway_toll_calculator_2026-08-04",
+                    "rate_name": "mainline_plaza",
+                    "source_url": "https://www.dullesgreenway.com/toll-calculator/",
+                    "retrieved_at": "2026-08-04"
+                  }
+                }
+              ],
+              "total_usd": "5.25"
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [],
+    "expected": {
+      "outcome": true,
+      "grounding": true,
+      "rules": true
+    },
+    "actor_validity": "valid",
+    "rationale": "Published-rate wording conveys the actual source; the rate-period metadata is not an additional disclosure requirement.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-belmont-afternoon-eastbound",
+    "label": "schedule-source-omitted",
+    "turns": [
+      {
+        "user": "What is the toll now from Belmont Ridge Road east to Route 28 on the Greenway?",
+        "response": "Belmont Ridge Road east to Route 28 costs $5.25. Evaluated September 24, 2026 at 5:18 PM EDT.",
+        "calls": [
+          {
+            "name": "get_current_toll_price",
+            "input": {
+              "origin_point_id": "greenway:4:entry:EB",
+              "destination_point_id": "greenway:28:exit:EB",
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              }
+            },
+            "result": {
+              "origin_point_id": "greenway:4:entry:EB",
+              "destination_point_id": "greenway:28:exit:EB",
+              "method": "latest_complete_current_facility_prices",
+              "evaluated_at": "2026-09-24T17:18:00-04:00",
+              "maximum_observation_age_minutes": 30,
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              },
+              "source_kind": "schedule_derived",
+              "components": [
+                {
+                  "route_step_id": "step-1",
+                  "price_usd": "5.25",
+                  "source_kind": "schedule_derived",
+                  "pricing_method": "published_schedule",
+                  "facility": "greenway",
+                  "component_evaluated_at": "2026-09-24T17:18:00-04:00",
+                  "rate_period": "off_peak",
+                  "published_schedule": {
+                    "schedule_id": "dulles_greenway_toll_calculator_2026-08-04",
+                    "rate_name": "mainline_plaza",
+                    "source_url": "https://www.dullesgreenway.com/toll-calculator/",
+                    "retrieved_at": "2026-08-04"
+                  }
+                }
+              ],
+              "total_usd": "5.25"
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [],
+    "expected": {
+      "outcome": false,
+      "grounding": true,
+      "rules": true
+    },
+    "actor_validity": "valid",
+    "rationale": "The price and time are supported, but the required published-schedule provenance is omitted throughout the conversation. This is an Outcome omission, not an affirmative Grounding or Rules violation.",
     "rejected_tools": []
   }
 ]

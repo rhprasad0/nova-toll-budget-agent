@@ -25,8 +25,13 @@ pytestmark = pytest.mark.usefixtures("golden_test_data")
 
 @pytest.mark.parametrize("mode", ["calibrate", "run"])
 @pytest.mark.parametrize("workers", [3, 16])
+@pytest.mark.parametrize("uncapped", [False, True])
 def test_cli_runs_independent_work_in_parallel(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, workers: int
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    workers: int,
+    uncapped: bool,
 ) -> None:
     root = tmp_path / "corpus"
     shutil.copytree(golden.ROOT, root)
@@ -92,6 +97,8 @@ def test_cli_runs_independent_work_in_parallel(
     monkeypatch.setattr(run, "judge", judge)
     monkeypatch.setattr(run, "execute", execute)
     args = ["golden_run", mode, "--output", str(directory), "--workers", str(workers)]
+    if uncapped:
+        args += ["--no-budget-limit"]
     if mode == "run":
         args += [
             "--calibration",
@@ -101,7 +108,9 @@ def test_cli_runs_independent_work_in_parallel(
         ]
     monkeypatch.setattr("sys.argv", args)
     run.main()
-    assert json.loads((directory / "manifest.json").read_text())["workers"] == workers
+    manifest = json.loads((directory / "manifest.json").read_text())
+    assert manifest["workers"] == workers
+    assert manifest["budget_usd"] == (None if uncapped else 25)
     events = [
         json.loads(line)
         for line in (directory / "events.jsonl").read_text().splitlines()
@@ -1628,3 +1637,66 @@ def test_prior_accounting_rejects_unknown_usage(tmp_path: Path) -> None:
     path.write_text(json.dumps(events[0]))
     with pytest.raises(ValueError, match="unknown usage"):
         run.prior_accounting(tmp_path)
+
+
+@pytest.mark.parametrize("limit", [0, -1, 26, float("inf"), float("nan")])
+def test_invalid_spend_ceiling_is_rejected(tmp_path: Path, limit: float) -> None:
+    with pytest.raises(ValueError, match="invalid spend ceiling"):
+        run.Journal(tmp_path / "invalid", limit)
+    assert not (tmp_path / "invalid").exists()
+
+
+def test_uncapped_accounting_still_stops_on_unknown_usage(tmp_path: Path) -> None:
+    journal = run.Journal(tmp_path / "uncapped", None, prior_spend=30)
+    row = run.Attempt(id="uncapped", case_id="synthetic", trial=1)
+    reserve = journal.reserve(row, "judge", 1000)
+    journal.finish(row, "judge", reserve, {"inputTokens": 100, "outputTokens": 20}, 1)
+    assert journal.spent == 30 + run.cost({"inputTokens": 100, "outputTokens": 20})
+    reserve = journal.reserve(row, "judge", 1000)
+    journal.finish(row, "judge", reserve, None, 1)
+    assert journal.unknown_usage
+    with pytest.raises(run.StopRun, match="unknown_usage"):
+        journal.reserve(row, "judge", 1000)
+
+
+@pytest.mark.parametrize("actor_check", [False, True])
+def test_budget_cli_flags_are_exclusive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, actor_check: bool
+) -> None:
+    from eval import golden_actor_check
+
+    args = ["runner"] + ([] if actor_check else ["calibrate"])
+    args += [
+        "--output",
+        str(tmp_path / "run"),
+        "--budget-usd",
+        "20",
+        "--no-budget-limit",
+    ]
+    monkeypatch.setattr("sys.argv", args)
+    with pytest.raises(SystemExit) as error:
+        (golden_actor_check.main if actor_check else run.main)()
+    assert error.value.code == 2
+    assert not (tmp_path / "run").exists()
+
+
+def test_actor_check_uncapped_cli_preserves_prior_spend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from eval import golden_actor_check
+
+    output = tmp_path / "actor-check"
+    monkeypatch.setattr(
+        "sys.argv",
+        ["actor-check", "--output", str(output), "--no-budget-limit", "--workers", "1"],
+    )
+    monkeypatch.setattr(run, "identity", Mock(return_value={}))
+    monkeypatch.setattr(run, "development_examples", Mock(return_value=[]))
+    monkeypatch.setattr(
+        run, "prior_accounting", Mock(return_value=({"run_id": "prior"}, 30))
+    )
+    golden_actor_check.main()
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["budget_usd"] is None
+    assert manifest["prior_spend_usd"] == 30
+    assert manifest["prior_run_id"] == "prior"

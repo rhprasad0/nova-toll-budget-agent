@@ -116,7 +116,15 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--budget-usd", type=float, required=True)
+    budget = parser.add_mutually_exclusive_group(required=True)
+    budget.add_argument("--budget-usd", type=float)
+    budget.add_argument(
+        "--no-budget-limit",
+        dest="budget_usd",
+        action="store_const",
+        const=None,
+        help="Explicitly authorized uncapped spending; usage accounting remains required.",
+    )
     parser.add_argument("--prior-run", type=Path)
     parser.add_argument("--workers", type=int, choices=range(1, 17), default=16)
     args = parser.parse_args()

@@ -101,12 +101,12 @@ def test_complete_development_contract_and_reference_labels() -> None:
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 143
+    assert len(examples) == 145
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 43,
+        False: 45,
     }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 140, "invalid": 3}
+    assert Counter(e.actor_validity for e in examples) == {"valid": 142, "invalid": 3}
     assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5
@@ -343,3 +343,22 @@ def test_approach_labels_do_not_make_duplicate_ids_interchangeable(
     leg["destination_point_id"] = endpoint[:-2] + "9ND"
     with pytest.raises(ValueError, match="tool_arguments"):
         golden.Replay(case).call(fixture.tool, wrong, [case.prompt])
+
+
+def test_schedule_provenance_contrast_preserves_price_and_calls() -> None:
+    references = {
+        e.label: e
+        for e in run.development_examples()
+        if e.case_id == "dev3-belmont-afternoon-eastbound"
+    }
+    passing = references["schedule-source-paraphrase"]
+    omitted = references["schedule-source-omitted"]
+    assert passing.turns[0].calls == omitted.turns[0].calls
+    assert passing.expected is not None and all(passing.expected.model_dump().values())
+    assert omitted.expected is not None
+    assert omitted.expected.model_dump() == {
+        "outcome": False,
+        "grounding": True,
+        "rules": True,
+    }
+    assert passing.expected_failures == omitted.expected_failures == []
