@@ -1,18 +1,13 @@
 # TollChat evaluation
 
-**Current contract: 3.1.1 / harness 2.1.1.** SOP and model-facing tool-description
-climbs require corpus review and fresh calibration. **Corpus review is approved**
-under Ryan-authorized Codex review. Development authentication is restored.
-Fresh calibration is **not approved**: an independently reviewed Grounding
-disagreement affects the required violation metric. Application search remains
-blocked pending separately authorized resolution of that measurement boundary
-and matching calibration. Preserve both accounted calibration attempts when
-continuing the spending chain.
-Shared `_PricingProfile` descriptions stay frozen because they also appear in
-the output schema; only input-only model descriptions and tool summaries may vary.
-Prior approvals and scores do not transfer. Cases, reference labels,
-fixtures, and application/tool wording are unchanged. This exposed development
-corpus cannot qualify production.
+**Current contract: 3.1.2 / harness 2.1.2.** The authorized annual-day scoring
+correction is awaiting independent corpus review and fresh matching calibration.
+Using an unaccepted derived day count in a tool argument fails both Grounding
+and Rules; a conditional proposal alone remains grounded arithmetic.
+Application search has not started under this contract. Shared `_PricingProfile`
+and output descriptions remain frozen under `literal-input-prose-v1`.
+Prior approvals and scores do not transfer. This exposed development corpus
+cannot qualify production.
 
 The [experiment journal](EXPERIMENT_JOURNAL.md) is the record of what was tried,
 results, limitations, costs, and decisions. Publish summaries there; keep granular

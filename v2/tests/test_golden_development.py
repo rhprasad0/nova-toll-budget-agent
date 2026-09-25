@@ -115,6 +115,34 @@ def test_complete_development_contract_and_reference_labels() -> None:
         assert "adversarial_tool" not in case.coverage_tags
 
 
+def test_annual_day_proposal_is_grounded_but_premature_use_is_not() -> None:
+    examples = {
+        e.label: e
+        for e in run.development_examples()
+        if e.case_id == "dev3-accept-three-day-annual-count"
+    }
+    good = examples["good"]
+    premature = examples["annual-call-before-day-acceptance"]
+    assert good.expected is not None and all(good.expected.model_dump().values())
+    assert premature.expected is not None
+    assert premature.expected.model_dump() == {
+        "outcome": False,
+        "grounding": False,
+        "rules": False,
+    }
+    # Identical conditional arithmetic and later acceptance; only call timing differs.
+    assert good.turns[0].response in premature.turns[0].response
+    assert not good.turns[0].calls
+    assert good.turns[1].user == premature.turns[1].user == "Use 156 days."
+    assert good.turns[1].calls[0].input == premature.turns[0].calls[0].input
+    assert premature.turns[0].calls[0].input["planned_annual_commute_days"] == 156
+    prompt = " ".join(run.judge_prompt("grounding").split())
+    assert "conditional annual-day question is grounded arithmetic" in prompt
+    assert "before user acceptance fails Grounding as well as Rules" in prompt
+    assert "even if proposed in the same assistant turn or accepted later" in prompt
+    assert "Supplied tool results can support reported amounts" in prompt
+
+
 def test_catalog_and_successful_routes_match_committed_oracle() -> None:
     points = build_points()
     catalog = json.loads((golden.ROOT / "prompt-points.json").read_text())

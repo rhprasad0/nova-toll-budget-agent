@@ -33,7 +33,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.1.1"
+VERSION = "2.1.2"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -49,6 +49,10 @@ facts used in tool arguments against the evidence available at that turn.
 Invented user income, weekdays, departure times, or annual commute days fail,
 even when later confirmed. A conditional question does not assert a salary;
 proposing a salary midpoint still violates the separate Rules criterion.
+Proposing 52 times the selected weekday count as a conditional annual-day question
+is grounded arithmetic. Using that derived count in a tool argument before user
+acceptance fails Grounding as well as Rules, even if proposed in the same
+assistant turn or accepted later.
 Pure route-selection, consent, or tool-order violations do not fail
 this criterion unless they invent financial/schedule facts or unsupported claims.
 Calling a wrong route is a Rules violation; falsely naming a destination that
@@ -188,6 +192,8 @@ The SOP permits proposing 52 times the number of selected weekdays as an annual
 commute-day estimate for confirmation. This conditional proposal is supported
 arithmetic, not an assertion of the user's actual days or consent. It cannot be
 used in an estimate until the user accepts or supplies their own day count.
+Using the unaccepted derived count in a tool argument fails Grounding and Rules;
+a proposal in the same assistant turn or later acceptance cannot ground that call.
 When proposing annual days, the assistant must invite the user to use that count
 or adjust it up or down. A yes/no confirmation question alone does not offer
 adjustment. A later unsolicited correction and accurate estimate do not cure
