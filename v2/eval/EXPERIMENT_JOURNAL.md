@@ -2118,3 +2118,65 @@ detailed reviews remain private.
 This calibration cost **$0.291537200**, bringing cumulative accounted evaluation
 spending to **$15.675228375**. Explicit uncapped authorization remained in effect;
 the stop is for grading reliability, not budget.
+
+
+### 2026-09-25 — Luna xhigh calibration preparation completed
+
+Ryan authorized increasing only the golden judge reasoning effort from high to
+**xhigh**, retaining `gpt-6-luna` and the 8,192-token output ceiling. Application
+generation remains low/2,048 and actor generation medium/2,048. Prompts, grading
+policy, reference trajectories and labels, fixtures, tool schemas and application
+behavior remained frozen. Corpus **3.3.9** / harness **2.3.9** records the changed
+measurement contract; comparison tooling admits the new version while retaining
+historical semantics. No earlier approval or failed verdict was transferred.
+
+Independent preparation review cleared `9b1d1d2`. The predetermined sequence ran
+at the unchanged measurement commit `a8415ef`, with 16 workers and independent
+review before each dependent admission. An expired SSO login was resolved before
+any model call. Existing uncapped authorization and cumulative accounting
+continued from the prior stopped calibration.
+
+| Measure | Calibration 1 | Calibration 2 | Scripted actor check |
+| --- | ---: | ---: | ---: |
+| Complete references/trials | 146/146 | 146/146 | 300/300 |
+| Application label agreement | 429/429 | 429/429 | Not scored |
+| Actor labels / valid actor trials | 146/146 | 146/146 | 300/300 |
+| Complete calls, all usage known | 438 | 438 | 723 |
+| Cost | $0.331475370 | $0.319100040 | $0.320316600 |
+
+Both calibrations have zero disagreements or measurement failures. All verdicts
+agree across the two runs, including the three actor-invalid exclusions. The
+previous road-abbreviation false Outcome failure passes in both. Independent
+reviews inspected all 93 nonempty assessments per run, negative controls, 29
+historically problematic references, additional passing contrasts and all actor
+exclusions, alongside frozen-input integrity, evidence digests and accounting.
+No material grading error was found.
+
+The reviews retained nonmaterial explanation defects: some Grounding rationales
+use incorrect direction or overly broad route-match wording, also present in the
+first run. Those labels remain justified under the Grounding boundary, while
+Outcome and Rules correctly reject the erroneous routes. The previously recorded
+caveat ambiguity in an excluded actor-invalid reference remains unlabeled. No
+verdict was rewritten. Fixed exposed references and two stochastic draws do not
+establish causal improvement or unseen-trajectory accuracy.
+
+Independent actor review inspected all 114 staged trials across 38 profiles and
+verified explicit completion without an undelivered message in the remaining
+186 trials. Scripted responses and tool payloads match the fixed references. All
+300 judge and 423 actor calls completed. These scripts do not exercise arbitrary
+live application trajectories or repeated-question loops; no universal actor
+reliability or human trajectory adjudication is claimed.
+
+**Decision: calibration preparation is complete.** Both calibrations have fresh
+reviews bound to their evidence digests, and the matching actor check is reviewed.
+The offline actual admission path accepts the matching calibration but was stopped
+before run creation, credentials or model calls; the changed-effort regression
+rejects stale approval. All 151 relevant runner, corpus, development and retirement
+tests passed, together with 11 comparison checks, corpus validation, lint/format/
+type checks, skill validation and tool/agent/schema contract checks.
+
+The sequence cost **$0.970892010**, bringing cumulative accounted evaluation
+spending to **$16.646120385**. Raw evidence and detailed reviews remain private.
+No application baseline, candidate search, holdout evaluation, merge, migration
+or deployment occurred. Human-reviewed merge and verified development
+migration/catalog parity remain prerequisites for a later baseline.
