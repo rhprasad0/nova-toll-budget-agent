@@ -1870,3 +1870,117 @@ accounted evaluation spending to **$14.518594175**. Raw evidence and reviews
 remain private. No application improvement, release qualification or deployment
 is claimed. Deployed catalog parity remains unverified and required before a
 future climb; no deployed mutation occurred.
+
+## 2026-09-25 — Private production qualification policy 3.0.0
+
+Ryan selected an **80% overall admission floor** for a future independently
+authored **100-case private holdout**, with three trials per case: at least
+**240 successful trials out of 300**, all valid and fully judged. Per-case pass
+requirements, the consistency floor, automatic regression veto, and latency and
+cost-per-success quality cutoffs are removed. Complete measurements, spending
+limits, exact-artifact provenance, fresh evidence, and human release review remain
+required. An evaluated production baseline is no longer a prerequisite.
+
+The repository now imports externally signed aggregate summaries rather than
+executing production holdout cases. Cases, expected answers, fixtures, transcripts,
+case-level outcomes, and the real signing key remain outside coding-agent access.
+Ed25519 verification binds aggregate evidence to the reviewed policy, private
+holdout/evaluator/calibration identities, and exact development artifact. Repeated
+use is disclosed as a reused private benchmark; the signed attempt history retains
+an original and at most one independently authorized infrastructure/actor-validity
+replacement. Quality-only reruns are prohibited. Aggregate reports show failures,
+inconclusives, fixed denominators, consistency, uncertainty, latency, cost, and
+attempt count instead of presenting admission as a claim of real-world accuracy.
+
+**No agent performance was measured and no paid calls were made for this change
+($0 evaluation cost).** The application model/prompt, grading rubric, development
+corpus, and historical scores are unchanged. Synthetic signing/admission checks
+exercise the new integration without private cases. The active policy remains
+pending: real holdout authoring, external evaluator provisioning and review, the
+public key and contract pins, exact policy approval, aggregate-only IAM activation,
+and fresh signed qualification evidence are still required. No deployment or
+production qualification is claimed. Current operation and activation requirements
+are documented in [the production gate guide](GOLDEN_RELEASE.md).
+
+Validation: the broader release/migration regression suite passed **328 tests**
+with **two skipped**; the final focused private-gate suite passed **41 tests**.
+Historical baseline compatibility tests also passed. Ruff, strict Pyright,
+workflow/ShellCheck checks, and backend-disabled Terraform validation passed.
+Deployment-input hashes were updated for the aggregate-only IAM and migration
+receipt bindings. Later production stages verify the signed envelope carried in
+the receipt without needing development-storage credentials.
+
+### 2026-09-25 — Adversarial review corrections before private-gate activation
+
+The local adversarial review reproduced two recovery failures: publishing the
+candidate index before a failed receipt upload prevented a new import of identical
+evidence, and freezing provisional costs prevented signed usage reconciliation.
+The receiving workflow now allows a newer, human-approved import to conditionally
+replace the index of a completed prior import only for the identical summary digest.
+S3 versioning preserves prior pointers; changed evidence, active/untrusted prior
+runs, older imports, and concurrent writes remain blocked.
+
+Outcome claims now exclude provisional costs. Full signed reports remain immutable,
+and the first usage-complete summary freezes per-attempt accounting separately.
+Reconciliation may correct costs while outcomes remain unchanged; finalized costs
+cannot subsequently change. No extra evaluation, quality retry, or rescoring is
+authorized. Synthetic regressions exercise both failures and the rejection paths.
+The external evaluator, private corpus, key, and policy approval remain pending;
+these fixes made no paid model calls and do not qualify or deploy an application.
+
+Post-correction validation passed **339 relevant tests**, with **two skipped**,
+plus repository static checks, secret scanning, and Terraform validation. The
+focused gate/retirement set includes 56 passing checks, including recovery of
+identical evidence, rejected pointer races, and one-time cost reconciliation.
+
+## 2026-09-25 — Public private-holdout authoring kit
+
+Purpose: prepare independent authoring without exposing any held-out scenario to
+the repository coding agent. Added an allowlisted public packet, schemas, three
+disposable teaching cases, and a credential-free offline validator with distinct
+draft and final modes. Final validation requires 100 distinct scenario groups,
+the 40/55/5 workflow allocation, complete good-reference coverage and at least 20
+negative references. It freezes a private manifest; semantic review remains
+pending and separate.
+
+Versions: authoring kit 1.0.0; development contract 3.0.7 / harness 2.0.14. Shared
+payload validation and currency parsing retain the development cases and labels.
+Evaluator source identities changed, so development approval is reset to pending;
+old calibration and application results keep their original identities. The
+application model, SOP and production gate thresholds are unchanged.
+
+Validation: synthetic draft/final rehearsal in an exported directory, with
+credentials absent and socket access rejected; malformed inputs, arithmetic
+errors, actor leakage, missing references, unsafe paths, kit drift and frozen
+corpus drift are rejected. Focused development, evaluator and release inventory
+checks run offline. The scheduled-eval package includes the extracted currency
+helper and passes its deterministic build/import check. These are software
+contract checks, not measurements of agent quality.
+
+Cost: $0 in model evaluation spending. No real holdout cases were authored,
+viewed or run. No signing key, paid calibration, infrastructure activation or
+deployment was performed. Decision: ship the public preparation kit; actual
+authorship, semantic review, isolation verification and evaluator activation
+remain within the independent private boundary.
+
+### 2026-09-25 — Authoring-kit integration correction
+
+PR #605 review found an omitted development release-manifest refresh. Reconciled
+the stack with current main, retaining its 143 references, rubric fixes and
+overall-pass scoring. Kit 1.0.1 now uses contract 3.3.1 / harness 2.3.1 with
+development review pending. The shared currency parser lives in the existing
+trusted tool-package inventory, so no new verifier allowlist is needed. Rebuilt
+the affected agent and scheduled-eval packages and refreshed source/package
+digests. The trusted main verifier accepts the inventory; 173 focused tests and
+three subtests pass. No model calls or private holdout data were involved.
+
+The subsequent read-only development plan found that the shared-package review
+still named an older serving release. Reviewed the transition against the
+reported serving release `fbe65eb404eab8546d6bfe638e8c90a66b19bc2d`: loader,
+publisher, timed-check handler, SQL and schemas are unchanged; scheduled-eval
+currency parsing is extracted without changing behavior. Bound the development
+review to that release and the rebuilt timed-checks digest, retaining the
+production baseline. Updated the mixed-version test to accept an already-current
+schema as well as the reviewed production schema-label migration. All 78 focused
+compatibility, scheduled-evaluation and bundle tests pass; CI remains the merge
+gate. No deployment or model evaluation was performed.

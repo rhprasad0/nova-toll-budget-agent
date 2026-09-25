@@ -1,0 +1,23 @@
+{
+  "policy": {
+    "version": "3.0.0",
+    "evaluation_scope": "private-held-out",
+    "cases": 100,
+    "trials": 3,
+    "successes_min": 240,
+    "candidate_max_age_hours": 24,
+    "run_cost_max_usd": 5.0,
+    "authorized_cost_max_usd": 25.0,
+    "holdout_sha256": null,
+    "evaluator_sha256": null,
+    "calibration_sha256": null,
+    "public_key_sha256": null
+  },
+  "approval": {
+    "status": "pending",
+    "evidence_sha256": null,
+    "reviewer": null,
+    "approved_at": null,
+    "evidence": "80% admission standard agreed with Ryan on 2026-09-25. Exact private holdout, evaluator, calibration and public key await independent provisioning and review. No production qualification is authorized."
+  }
+}

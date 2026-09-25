@@ -8,7 +8,8 @@ live in [golden.py](golden.py); the inputs live in [golden/](golden/).
 Use the [experiment journal](EXPERIMENT_JOURNAL.md) for prior attempts, measured
 results, and decisions. The retired 200 cases must not be reused as fresh cases.
 This exposed development set is not an independent holdout and cannot qualify
-production. Independent holdout creation and activation require separate work.
+production. Use the [private authoring kit](HOLDOUT_AUTHORING.md) for independent holdout
+authoring. Activation still requires the external evaluator.
 
 ## Required artifacts
 

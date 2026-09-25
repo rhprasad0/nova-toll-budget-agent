@@ -11,20 +11,22 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
-from typing import Annotated, Any, Literal, Self, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from pydantic.json_schema import SkipJsonSchema
-from strands import Agent
-from strands.models import Model
-from strands_evals import ActorSimulator, Case
-from strands_evals.types.simulation import ActorProfile
 
-from agent.toll_agent import parse_prompt_points
 from agent_tools import current_price_domain as current
 from agent_tools import get_annual_toll_ballpark as annual
 from agent_tools import validate_toll_route as routes
-from eval.simulated import GroundedCorrectnessEvaluator
+from agent_tools.currency import CURRENCY_PATTERN, currency_decimal
+
+if TYPE_CHECKING:
+    from strands.models import Model
+    from strands_evals import ActorSimulator, Case
+    from strands_evals.types.simulation import ActorProfile
+
+    from eval.simulated import GroundedCorrectnessEvaluator
 
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
@@ -44,6 +46,7 @@ COVERAGE = {
 SOURCE_FILES = (
     "uv.lock",
     "eval/golden.py",
+    "agent_tools/currency.py",
     "eval/simulated.py",
     "eval/run_evaluation.py",
     "eval/golden_run.py",
@@ -508,6 +511,8 @@ def validate_annual_finances(
 
 def actor_profile(case: GoldenCase) -> ActorProfile:
     """Allowlist user facts; never serialize the complete case into actor context."""
+    from strands_evals.types.simulation import ActorProfile
+
     return ActorProfile(
         traits={"communication_style": "brief, natural"},
         context=f"Initial user request: {case.prompt}\nAdditional driver facts: {case.actor.facts}",
@@ -516,6 +521,9 @@ def actor_profile(case: GoldenCase) -> ActorProfile:
 
 
 def make_actor(case: GoldenCase, model: Model) -> ActorSimulator:
+    from strands import Agent
+    from strands_evals import ActorSimulator
+
     actor = ActorSimulator(
         actor_profile=actor_profile(case),
         initial_query=case.prompt,
@@ -538,12 +546,16 @@ def make_actor(case: GoldenCase, model: Model) -> ActorSimulator:
 
 
 def judge_case(case: GoldenCase) -> Case[str, str]:
+    from strands_evals import Case
+
     return Case[str, str](
         name=case.id, input=case.prompt, expected_assertion=case.expected_assertion
     )
 
 
 def make_judge(model: Model) -> GroundedCorrectnessEvaluator:
+    from eval.simulated import GroundedCorrectnessEvaluator
+
     return GroundedCorrectnessEvaluator(
         model=model, name="Correctness", reference_system_prompt=JUDGE_PROMPT
     )
@@ -617,11 +629,6 @@ class Replay:
 
 
 def money(text: str) -> set[Decimal]:
-    from eval.run_evaluation import (
-        _CURRENCY_PATTERN,  # pyright: ignore[reportPrivateUsage]
-        _currency_decimal,  # pyright: ignore[reportPrivateUsage]
-    )
-
     # Emphasis can straddle the movement word and amount.
     text = re.sub(r"[*_`]", "", text)
     # Reuse signed currency parsing; also accept common salary shorthand.
@@ -657,9 +664,9 @@ def money(text: str) -> set[Decimal]:
         flags=re.IGNORECASE,
     )
     return {
-        _currency_decimal(match)
+        currency_decimal(match)
         * (1000 if text[match.end() : match.end() + 1].lower() == "k" else 1)
-        for match in _CURRENCY_PATTERN.finditer(text)
+        for match in CURRENCY_PATTERN.finditer(text)
     }
 
 
@@ -870,18 +877,10 @@ def validate_coverage(cases: list[GoldenCase]) -> None:
             raise ValueError("behavioral pairs require two members in one split group")
 
 
-def validate(root: Path | None = None) -> None:
-    root = root if root is not None else ROOT
-    cases = load_cases(root)
-    if len(cases) != CASE_COUNT or {c.number for c in cases} != set(
-        range(1, CASE_COUNT + 1)
-    ):
-        raise ValueError("expected exactly 100 numbered cases")
-    if len({c.id for c in cases}) != CASE_COUNT:
-        raise ValueError("duplicate case ID")
-    validate_coverage(cases)
-    points = parse_prompt_points(json.loads((root / "prompt-points.json").read_text()))
-    point_ids = {p.point_id for p in points}
+def validate_payload(
+    cases: list[GoldenCase], root: Path, point_ids: set[str], *, complete: bool = True
+) -> None:
+    """Shared offline evidence checks; no approval, execution, or model calls."""
     referenced: set[str] = set()
     fixture_splits: dict[str, bool] = {}
     for case in cases:
@@ -892,7 +891,7 @@ def validate(root: Path | None = None) -> None:
         if case.minimum_user_turns > case.actor.max_turns:
             raise ValueError("unreachable required dialogue")
         # Actor prose may name public roads, never internal tool IDs or labels.
-        public = case.prompt + actor_profile(case).model_dump_json()
+        public = case.prompt + case.actor.model_dump_json()
         if re.search(
             r"(?:i95|i495|greenway|i66|dtr):|get_current_toll_price|get_annual_toll_ballpark|expected_assertion|CORRECT|INCORRECT",
             public,
@@ -950,7 +949,7 @@ def validate(root: Path | None = None) -> None:
     by_id = {c.id: c for c in cases}
     if len({(e.case_id, e.label) for e in examples}) != len(examples):
         raise ValueError("duplicate calibration example")
-    if (
+    if complete and (
         sum(
             e.expected is not None and not all(e.expected.model_dump().values())
             for e in examples
@@ -968,7 +967,7 @@ def validate(root: Path | None = None) -> None:
         observed = grade_assertions(by_id[example.case_id], example.turns, root)
         if observed != sorted(example.expected_failures):
             raise ValueError(f"example {example.label}: {observed}")
-    if {
+    if complete and {
         e.case_id
         for e in examples
         if e.expected is not None
@@ -977,6 +976,22 @@ def validate(root: Path | None = None) -> None:
         and not e.expected_failures
     } != set(by_id):
         raise ValueError("each case needs a labeled good example")
+
+
+def validate(root: Path | None = None) -> None:
+    root = root if root is not None else ROOT
+    cases = load_cases(root)
+    if len(cases) != CASE_COUNT or {c.number for c in cases} != set(
+        range(1, CASE_COUNT + 1)
+    ):
+        raise ValueError("expected exactly 100 numbered cases")
+    if len({c.id for c in cases}) != CASE_COUNT:
+        raise ValueError("duplicate case ID")
+    validate_coverage(cases)
+    from agent.toll_agent import parse_prompt_points
+
+    points = parse_prompt_points(json.loads((root / "prompt-points.json").read_text()))
+    validate_payload(cases, root, {p.point_id for p in points})
     manifest = json.loads((root / "manifest.json").read_text())
     if (
         manifest["version"] != CORPUS_VERSION

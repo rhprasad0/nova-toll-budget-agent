@@ -5,7 +5,8 @@ overall pass rate: successful trials out of all 300 expected trials. Pass³ coun
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
 not make a development score production qualification.
-Fresh corpus review and matching calibration are required before application runs.
+Shared authoring checks changed evaluator identities. Development review is pending;
+fresh review and matching calibration are required before application runs.
 See `golden/review.json` for the exact review status.
 
 TollChat remains on `gpt-6-luna`. Preparation changes are separate from prompt
@@ -20,10 +21,14 @@ output in ignored `eval/private/` or the existing private workflow store.
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
   146 labeled references, 107 synthetic fixtures, and five-turn actors.
+- [Private authoring kit](HOLDOUT_AUTHORING.md): public instructions and an offline
+  validator for independently authored private cases; no held-out data is included.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, three-trial application
   baselines, complete cost accounting, and offline report reproduction.
-- [Production gate](GOLDEN_RELEASE.md): exact-artifact qualification and protected
-  reviews; historical scores and development approvals do not qualify production.
+- [Production gate](GOLDEN_RELEASE.md): 100 independently authored private cases,
+  three trials each, and an 80% admission floor. Signed aggregate evidence and
+  protected review bind the exact artifact. Activation awaits the external evaluator;
+  development scores and historical approvals cannot qualify production.
 
 From `v2/`, validate without model calls:
 

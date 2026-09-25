@@ -1103,7 +1103,8 @@ rollback.
 ## Golden evaluation gate
 
 Production planning requires the exact development artifact to pass the
-[protected golden evaluation workflow](eval/GOLDEN_RELEASE.md). The initial
-state is blocked pending infrastructure activation, new-contract calibration,
-and a qualified production reference. That guide covers review, baseline
-bootstrap/refresh, and publication recovery without redeployment.
+[protected golden evaluation workflow](eval/GOLDEN_RELEASE.md). The private gate requires 240 successful trials out of 300 across 100 independently
+authored cases, a signed aggregate summary, and human review. Activation awaits
+an external evaluator, reviewed public key/holdout/calibration identities, and
+the aggregate-only storage permissions. No production baseline is required;
+existing migration, saved-plan, cutover, and canary controls still apply.

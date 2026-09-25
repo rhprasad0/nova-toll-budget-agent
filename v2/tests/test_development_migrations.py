@@ -115,7 +115,7 @@ def test_production_migration_gate_matches_cap() -> None:
             "run_id": 1,
             "receipt_sha256": "c" * 64,
             "policy_sha256": "d" * 64,
-            "baseline_sha256": "e" * 64,
+            "holdout_sha256": "e" * 64,
             "report_sha256": "f" * 64,
             "created_at": "2026-09-20T20:00:00+00:00",
         },

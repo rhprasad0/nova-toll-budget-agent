@@ -23,14 +23,13 @@ def test_retired_test_data_is_not_an_active_corpus(tmp_path: Path) -> None:
         golden.validate(TEST_DATA)
 
 
-def test_development_contract_has_fresh_bound_review() -> None:
+def test_refactored_corpus_requires_fresh_approval() -> None:
     review = json.loads((golden.ROOT / "review.json").read_text())
     manifest = json.loads((golden.ROOT / "manifest.json").read_text())
-    assert review["status"] == "approved"
-    assert review["reviewer"].startswith("Codex")
-    assert review["authorization"].startswith("Ryan explicitly authorized")
-    assert review["human_trajectory_adjudication"] is False
-    assert review["contract_commit"] and review["reviewed_at"] and review["evidence"]
+    assert review["status"] == "pending"
+    assert review["reviewer"] is None
+    assert review["approved_at"] is None
+    assert review["evidence"] is None
     assert manifest["tool_description_policy"] == golden.TOOL_DESCRIPTION_POLICY
     assert review["corpus_sha256"] == manifest["corpus_sha256"]
     assert manifest["evaluation_scope"] == "development"
@@ -63,18 +62,17 @@ def test_release_blocks_even_with_historical_approval(
     account = Mock(side_effect=AssertionError("must fail before AWS access"))
     monkeypatch.setattr(gate, "development_account", account)
     monkeypatch.setattr(gate, "POLICY", gate.POLICY.with_name("policy-1.0.2.json"))
-    assert gate.policy()  # A real historical approved policy is insufficient.
-    with pytest.raises(ValueError, match="development-only corpus"):
-        gate.code_digest()
-    with pytest.raises(ValueError, match="development-only corpus"):
+    with pytest.raises(ValueError, match="unsupported private"):
+        gate.policy()
+    with pytest.raises(ValueError, match="unsupported private"):
         gate.admit({"candidate": "a" * 40})
     receipt = Mock(side_effect=AssertionError("must fail before receipt lookup"))
     monkeypatch.setattr(gate, "receipt", receipt)
-    with pytest.raises(ValueError, match="development-only corpus"):
+    with pytest.raises(ValueError, match="unsupported private"):
         gate.revalidate({"candidate": "a" * 40, "golden": {"run_id": "old-run"}})
     receipt.assert_not_called()
-    with pytest.raises(ValueError, match="development-only corpus"):
-        release.prepare({}, tmp_path, tmp_path / "prepared")
+    with pytest.raises(ValueError, match="unsupported private"):
+        release.import_summary({}, "0" * 64, "v1", tmp_path / "prepared")
     account.assert_not_called()
     assert not (tmp_path / "prepared").exists()
 
