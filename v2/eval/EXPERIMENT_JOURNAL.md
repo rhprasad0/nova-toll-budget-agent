@@ -1542,3 +1542,14 @@ trusted tool-package inventory, so no new verifier allowlist is needed. Rebuilt
 the affected agent and scheduled-eval packages and refreshed source/package
 digests. The trusted main verifier accepts the inventory; 173 focused tests and
 three subtests pass. No model calls or private holdout data were involved.
+
+The subsequent read-only development plan found that the shared-package review
+still named an older serving release. Reviewed the transition against the
+reported serving release `fbe65eb404eab8546d6bfe638e8c90a66b19bc2d`: loader,
+publisher, timed-check handler, SQL and schemas are unchanged; scheduled-eval
+currency parsing is extracted without changing behavior. Bound the development
+review to that release and the rebuilt timed-checks digest, retaining the
+production baseline. Updated the mixed-version test to accept an already-current
+schema as well as the reviewed production schema-label migration. All 78 focused
+compatibility, scheduled-evaluation and bundle tests pass; CI remains the merge
+gate. No deployment or model evaluation was performed.
