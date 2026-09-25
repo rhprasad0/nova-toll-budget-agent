@@ -113,10 +113,11 @@ reported as out of scope. Test files are not candidate-edit surfaces.
    admitted SOP text may change. Tool files and schema hashes must match exactly.
    Run relevant existing prompt checks; never rewrite a test to accept a
    candidate. Reject a scope breach before evaluation.
-4. Evaluate A and then B, using the existing runner with four workers. The parent
+4. Evaluate A and then B, using the existing runner with 16 workers by default
+   for baseline, candidate, and confirmation runs. The parent
    is the only paid-run owner. From each clean candidate's `v2/`, use
    `uv run python -m eval.golden_run run --output ABS_NEW_RUN_DIR --calibration
-   ABS_APPROVED_CALIBRATION --budget-usd CUMULATIVE_LIMIT --workers 4`, adding
+   ABS_APPROVED_CALIBRATION --budget-usd CUMULATIVE_LIMIT --workers 16`, adding
    `--prior-run ABS_PREVIOUS_RUN_DIR` after the first campaign run. Do not use
    `--cases`: these are full-set comparisons. Use the existing development AWS/SSM
    credential path, not local secrets or a deployed pricing database.
