@@ -1056,3 +1056,144 @@ calibration; those changes are outside this frozen application search. No retry,
 judge/label edit, application patch, remote write, merge, deployment, or production
 qualification occurred. These exposed development references establish neither
 application improvement nor generalization.
+
+
+## 2026-09-25 — Authorized annual-day grounding correction and first description-climb round
+
+**Decision: retain the original application; resume at admitted round 2 in a fresh
+supervisor session.** The scoring prerequisite is resolved and fresh calibration
+is approved. Both round-1 candidates were independently rejected. The host then
+refused both required editor followups and a fresh named editor spawn with
+`agent thread limit reached`. No round-2 implementation or paid evaluation began.
+This is a session-capacity blocker, not completion of the three-round search or
+the two-consecutive-no-improvement stopping condition; the current streak is one.
+
+### Authorization, versions, and evidence boundary
+
+Ryan explicitly selected **both Grounding and Rules** for using a derived annual
+day count as a tool argument before acceptance. Before any new-contract baseline
+or candidate evaluation, prerequisite commit
+`04451e0eb4fa36d068f4e5017cfbba0c98f60c6c` changed only the existing premature
+annual-day reference's expected Grounding from true to false, leaving Outcome and
+Rules false. The rubric/domain clarification preserves conditional 52-times-
+weekday proposals as grounded arithmetic, while actual unaccepted tool arguments
+fail both criteria even with a same-turn proposal or later acceptance. All
+transcripts, cases, fixtures, other labels, deterministic checks, application/SOP
+and tool wording remained unchanged at this boundary. Original labels and review
+remain in Git at `abd3ad390bcc71839cbdbe5bf2bbbb379e1c1314`.
+
+The new frozen contract is **corpus 3.1.2 / harness 2.1.2 /
+`literal-input-prose-v1`**, corpus digest
+`1fdd433f4871ba2b317facee126075a712c476e40ccd98a60508103faa6a9386`.
+Independent `eval_reviewer` (`gpt-6-astra`, high) assessed the targeted correction
+as acceptable with no substantive defect. Corpus approval was freshly bound in
+`f218fe47563a4dbc27a597b7730b6b977f71b99c`, the original application and baseline
+commit. This was authorized Codex review of the specific rule and evidence, not
+a claim that Ryan personally inspected all trajectories. The existing
+`human_trajectory_adjudication=false` lifecycle remains intact. The previously
+accepted shared `_PricingProfile` output-schema guard was preserved.
+
+### Fresh calibration and measurement
+
+One fresh matching calibration completed **135/135 references, 405/405 known
+model calls, and zero measurement errors**. Outcome and Rules each matched
+132/132 applicable labels; actor validity matched 135/135. Raw Grounding matched
+131/132. The corrected annual-day reference now matches, and the conditional
+proposal control still passes. The sole raw disagreement is the unchanged salary
+selection reference: `unsupported_money` independently forces effective Grounding
+to fail. Independent assessment verified effective Grounding and Rules each match
+132/132, with no material baseline blocker. The supervisor then bound fresh
+calibration approval to evidence digest
+`3ca8d9bbc3be08c67ebb27bfeed591da5beab4275a364466d4633f190da5fae9`.
+The raw disagreement and pre-approval report snapshot remain private; no reference
+was retried, relabeled, or dropped to obtain agreement.
+
+The prior zero-call credential-failed calibration and the prior authenticated
+calibration with two raw Grounding disagreements remain preserved and accounted.
+Their earlier blocked decisions stand as historical measurements; this explicit
+user adjudication resolved the annual-day ambiguity before the new search.
+
+### Full development measurements and independent decisions
+
+All application runs used the frozen 100-case development set, three trials per
+case, and 16 workers. Every run completed all 300 slots with known usage, no
+infrastructure errors, and no inconclusives. No holdout was accessed. Application,
+actor, and judge models remained `gpt-6-luna` with their pinned settings. The
+user's pass³-first override requires all three slots to succeed on each of the
+fixed 100 cases, while retaining violation, inconclusive, evidence-validity, and
+independent material-regression gates. Success-count and paired-delta improvements
+remain diagnostic rather than additional promotion requirements.
+
+| Application | Pass³ / 100 | Success / 300 | Inconclusive | Grounding / 300 | Rules / 300 | Decision |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Original `f218fe4` | 44 | 204 | 0 | 11 | 57 | Retained |
+| R1A SOP `87751cc` | 56 | 238 | 0 | 5 | 56 | Reject: unresolved material regressions |
+| R1B annual summary `d9f9504` | 65 | 253 | 0 | 12 | 35 | Reject: Grounding worsens; provenance concerns |
+
+The required `eval_cluster` (`gpt-6-luna`, high) diagnosed repeated omission of the
+annual forecast/guaranteed-budget caveat from fresh baseline trajectories and
+passing siblings. Separate `eval_implementer` agents (`gpt-6-sol`, xhigh) produced
+alternative SOP and annual-tool-summary text patches from the same incumbent.
+The parent checked full diffs, normalized source identity, and complete generated
+schemas before spending. B's initial offline wording was corrected by its editor
+to preserve all original unconditional disclosure duties before its sole paid run.
+The parent did not implement candidate patches.
+
+Fresh independent reviewers assessed each candidate without implementer
+conclusions. A's reviewer inspected all 39 distinct affected slots: numeric gates
+passed, but repeated route-direction failures and modeled-route clarification
+failures remained material and unresolved. B's reviewer inspected all 30 affected
+slots: Grounding increased from 11 to 12, and repeated denial of actual historical
+source evidence was a substantive concern. All lost successes and new violations
+were considered; neither comparison excluded cases. Individual stochastic flips
+do not establish patch causality, and neither review claimed they do.
+
+Round 2 was admitted from the retained original: two separate Greenway direction
+alternatives, one in the existing SOP paragraph and one in the current-price tool
+summary. The hypothesis uses baseline failures and passing controls for travel
+toward/away from Route 28, without imposing a global same-direction rule on other
+facilities. Both clean worktrees start at `f218fe4`. Required editor handoffs were
+blocked by host capacity before any edit. No role/model substitution occurred.
+No eligible incumbent exists, so no confirmation pair was warranted or run.
+
+### Accounting, checks, and limitations
+
+| Accounted work | Cost USD |
+| --- | ---: |
+| Carried seven older full runs | 6.555343780 |
+| Prior credential-failed calibration | 0.000000000 |
+| Prior authenticated calibration | 0.233439065 |
+| New matching calibration | 0.241132560 |
+| Fresh baseline | 0.933435640 |
+| R1A | 0.933457100 |
+| R1B | 0.980073850 |
+| **Cumulative** | **9.876881995** |
+
+This resumption incurred **$3.088099150** above its carried **$6.788782845**.
+The remaining hard-$20 authorization is **$10.123118005**. Historical excluded
+calibration/pilot and Codex usage remain excluded; the separate stopped pilot was
+not accessed. Every paid run chains directly through the previous accounted run,
+including rejects. The next paid run must use the private `grounding-r1b` directory
+as `--prior-run`. The $3 confirmation reserve remains intact under the $17 search
+ceiling; recheck the complete-next-run fit using the latest full cost before
+continuing. A shell invocation from the repository root failed to import the
+runner before creating any run or making calls; its log is preserved, and the sole
+actual baseline launched from `v2/`.
+
+Validation: 83 relevant prerequisite/lifecycle/runner tests passed, eight
+comparison-helper checks and the private pass³ self-check passed, and the complete
+corpus validated offline. Each initial candidate check had 67 passes and one
+expected versioned wording-digest mismatch; snapshots and version contracts were
+not rewritten. B's final offline wording correction revalidated corpus/source and
+full contract identity. Both comparison reports were independently reproduced.
+
+Deferred findings include catalog IDs with identical metadata rejected by strict
+fixtures, signed-delta and rounded-money wording sensitivity, inconsistent
+cancellation/provenance/financial-label judging, and separate I-495 direction
+guidance. These need separate measurement-contract work or a distinct admitted
+mechanism; they do not authorize rescoring or retries here. These exposed-set
+measurements establish neither generalization nor production qualification.
+Raw evidence, plans, reviews, accounting, and the exact continuation handoff stay
+in ignored `v2/eval/private/eval-climb/descriptions-20/`. Only this sanitized
+summary and current usage status are published locally. No push, PR update,
+merge, or deployment was performed; the outer session owns ready PR602 on PR600.

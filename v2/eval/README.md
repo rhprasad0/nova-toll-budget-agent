@@ -1,14 +1,15 @@
 # TollChat evaluation
 
-**Current contract: 3.1.2 / harness 2.1.2.** The authorized annual-day scoring
-correction has independent assessment and approved corpus review; fresh matching
-calibration is still required.
-Using an unaccepted derived day count in a tool argument fails both Grounding
-and Rules; a conditional proposal alone remains grounded arithmetic.
-Application search has not started under this contract. Shared `_PricingProfile`
-and output descriptions remain frozen under `literal-input-prose-v1`.
-Prior approvals and scores do not transfer. This exposed development corpus
-cannot qualify production.
+**Current contract: 3.1.2 / harness 2.1.2.** Corpus review and fresh matching
+calibration are approved under Ryan-authorized Codex review. The annual-day
+Grounding boundary is resolved; one bounded raw salary disagreement remains
+visible and is caught by the existing deterministic check.
+
+**The original application remains retained.** The climb is blocked at admitted
+round 2 by host capacity for required agent roles. Resume with the existing private
+ledger, frozen contract, and last accounted run; do not repeat completed work.
+Shared `_PricingProfile` and output descriptions remain frozen under
+`literal-input-prose-v1`. This development corpus cannot qualify production.
 
 The [experiment journal](EXPERIMENT_JOURNAL.md) is the record of what was tried,
 results, limitations, costs, and decisions. Publish summaries there; keep granular
