@@ -683,3 +683,59 @@ corpus/calibration and were not tested. Raw evidence, reviews, hashes, progress
 and blocker details stay ignored. Findings apply only to the exposed development
 set. No push, PR, holdout evaluation, production database access, release or
 deployment occurred.
+
+## 2026-09-25 UTC — Pass³-first campaign continuation and final decision
+
+This continues the same authorized $20 campaign and corrects the preceding
+provisional review-blocked status. A new supervisor session resolved the agent
+thread-capacity limit and obtained a fresh independent `eval_reviewer`
+(`gpt-6-astra`, high) review of Round 2B `4080040`. The original application
+incumbent remains `a5338c9`; journal-only commit `1c326ed` did not change it.
+No campaign, round, budget, calibration approval or paid trial was restarted.
+
+All five original run journals, report/evidence hashes, complete usage and the
+baseline → R1A → R1B → R2A → R2B spending chain reconciled. The original results
+above are unchanged: 1,500 completed attempts across five full development runs,
+100 cases × three trials each, with 16 workers. Calibration 9, harness 2.0.13,
+corpus 3.0.6, application/actor/judge model `gpt-6-luna`, and the remaining
+measurement contract stayed fixed. Pass³ uses the fixed 100-case denominator;
+successful-slot growth and paired delta remain diagnostics, with the retained
+inconclusive, comparable Grounding/Rules and independent regression safeguards.
+
+**Round 2B is rejected.** Its 50/100 Pass³, 220/300 successful slots and one
+inconclusive pass the numeric gates against baseline 47/100, 212/300 and one
+inconclusive. Over 298 common scored slots, Grounding violations fall from 9 to 3
+and Rules remain 55. Scope passes: only eight SOP lines were added. The reviewer
+inspected all 46 distinct adverse slots (43 lost successes, three new Grounding
+and 27 new Rules flags, with overlap), plus all 12 attempts across the two
+excluded cases, using original trajectories and source evidence.
+
+The disqualifying finding is repeated mixed-direction routing: two previously
+three-of-three successful routes become one-of-three, pairing northbound entries
+with southbound exits. Catalog direction fields and coordinates corroborate the
+inconsistency; rejected calls leave the requests unanswered. Other findings
+include incorrect source disclosures. Small unseeded samples do not prove that
+the patch caused each changed trial, but the repeated material deterioration
+remains unresolved. Duplicate endpoint identifiers, actor-dependent branches and
+inconsistent judge labels were recorded separately without relabeling, excluding
+or retrying attempts. Actor-invalid inconclusives remain explicit.
+
+Round 2 is now complete and is the **second consecutive round without an
+independently eligible improvement**. The campaign stops under that rule; there
+is no Round 3 or confirmation pair because no improved incumbent was eligible.
+**No confirmed patch is recommended; retain the original SOP.** Candidate commits
+and private evidence remain preserved. Total campaign eval spend is unchanged at
+**$4.684365605**, with **$0 additional eval spend** in this continuation. Codex
+usage, prior calibration costs and the separate stopped pilot remain excluded;
+the historical unknown pilot usage was not resumed.
+
+The existing unmeasured tool-description direction-clarity idea remains deferred
+because tool-file changes invalidate the frozen corpus/calibration; no tool
+changes were tested. Semantic/corpus checks from the measured candidates remain
+valid, and the expected original-version prompt-hash assertion mismatch remains
+documented without changing tests, manifests or versions. Continuation checks
+reproduced all four original comparison outputs and verified the complete
+accounting chain. All prior journal bytes are preserved. Raw reviews, coverage
+inventories and continuation state remain ignored. These are exposed-development
+findings, with no generalization or production qualification claim. No push, PR,
+merge, deployment or production access occurred.
