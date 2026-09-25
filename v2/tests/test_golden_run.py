@@ -1215,6 +1215,13 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
     for prompt in [prefix, *diagnostic_prompts]:
         assert "greenway:2A:entry:EB" in prompt and "Battlefield Pkwy" in prompt
         assert '"coordinates"' in prompt
+        assert (
+            prompt.index(run.DOMAIN_FACTS)
+            < prompt.index("Frozen public location catalog")
+            < prompt.index("GRADING POLICY")
+            < prompt.index(golden.JUDGING_POLICY)
+            < prompt.index(run.ASSESSMENT_INSTRUCTIONS)
+        )
     assert all("Recorded sequence" in prompt for prompt in diagnostic_prompts)
     assert "Permitted tool sequence" not in diagnostic_prompts[0]
     assert row.verdicts["outcome"].passed

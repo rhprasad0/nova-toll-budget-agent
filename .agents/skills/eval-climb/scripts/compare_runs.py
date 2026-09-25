@@ -299,7 +299,7 @@ def attempts(
         )
     triples = sum(all(by_slot[cid, n]["passed"] for n in (1, 2, 3)) for cid in ids)
     version = report["manifest"]["identity"]["harness_version"]
-    fixed = version in {"2.2.0", "2.3.0", "2.3.1", "2.3.2", "2.3.3", "2.3.4"}
+    fixed = version in {"2.2.0", "2.3.0", "2.3.1", "2.3.2", "2.3.3", "2.3.4", "2.3.5"}
     denominator = (
         100
         if fixed
@@ -312,7 +312,7 @@ def attempts(
             and overall.get("pass_cubed_case_denominator") == 100,
             f"{name}: inconsistent fixed-denominator pass cubed",
         )
-    if version in {"2.3.0", "2.3.1", "2.3.2", "2.3.3", "2.3.4"}:
+    if version in {"2.3.0", "2.3.1", "2.3.2", "2.3.3", "2.3.4", "2.3.5"}:
         require(
             overall.get("overall_pass_rate") == successful / 300,
             f"{name}: inconsistent fixed-denominator overall pass rate",
@@ -419,6 +419,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "2.3.2",
         "2.3.3",
         "2.3.4",
+        "2.3.5",
     }:
         del criteria["paired_delta_positive"]
     return {
