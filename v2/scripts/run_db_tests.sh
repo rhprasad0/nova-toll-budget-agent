@@ -272,7 +272,7 @@ assert set(result) == {
 }
 assert result["database"] == "nova_toll_development"
 assert result["user"] == "schema_migrator_development"
-assert result["before"] == result["after"] == {"pricing": "1.4.0", "oracle": "1.15.0"}
+assert result["before"] == result["after"] == {"pricing": "1.4.0", "oracle": "1.15.1"}
 assert result["applied"] == []
 assert re.fullmatch(r"[0-9a-f]{40}", result["commit"])
 assert re.fullmatch(
@@ -671,6 +671,25 @@ SQL
       done
     fi
 
+    if [[ "$schema_name:$target_version" == "oracle:1.15.1" ]]; then
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "UPDATE oracle.schema_version SET version = '1.14.1' WHERE singleton"
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.15.1 accepted an incompatible version" >&2
+        exit 1
+      fi
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "UPDATE oracle.schema_version SET version = '1.15.0' WHERE singleton; UPDATE oracle.toll_route_point SET label = 'unexpected label' WHERE point_id = 'i495:185ND'"
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.15.1 accepted incompatible source labels" >&2
+        exit 1
+      fi
+      test "$(psql --dbname "$migration_db" --tuples-only --no-align \
+        --command 'SELECT version FROM oracle.schema_version WHERE singleton')" = "1.15.0"
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "UPDATE oracle.toll_route_point SET label = 'Route 267' WHERE point_id = 'i495:185ND'"
+    fi
+
     if [[ "$schema_name:$target_version" == "oracle:1.14.0" ]]; then
       psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
         --command "UPDATE oracle.schema_version SET version = '1.13.0' WHERE singleton"
@@ -754,6 +773,25 @@ SQL
       fi
       psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
         --command "GRANT SELECT ON pricing.i66_ballpark_samples TO oracle_owner"
+    fi
+
+    if [[ "$schema_name:$target_version" == "oracle:1.15.1" ]]; then
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "UPDATE oracle.schema_version SET version = '1.14.1' WHERE singleton"
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.15.1 accepted an incompatible version" >&2
+        exit 1
+      fi
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "UPDATE oracle.schema_version SET version = '1.15.0' WHERE singleton; UPDATE oracle.toll_route_point SET label = 'unexpected label' WHERE point_id = 'i495:185ND'"
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.15.1 accepted incompatible source labels" >&2
+        exit 1
+      fi
+      test "$(psql --dbname "$migration_db" --tuples-only --no-align \
+        --command 'SELECT version FROM oracle.schema_version WHERE singleton')" = "1.15.0"
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "UPDATE oracle.toll_route_point SET label = 'Route 267' WHERE point_id = 'i495:185ND'"
     fi
 
     if [[ "$schema_name:$target_version" == "oracle:1.14.0" ]]; then

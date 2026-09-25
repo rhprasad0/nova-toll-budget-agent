@@ -284,5 +284,63 @@ class CompareRunsTest(unittest.TestCase):
             compare(self.baseline, self.candidate)
 
 
+class FixedPassCubedTest(unittest.TestCase):
+    def current(self) -> dict[str, Any]:
+        value = report()
+        value["manifest"]["identity"]["harness_version"] = "2.2.0"
+        self.update(value)
+        return value
+
+    def update(self, value: dict[str, Any]) -> None:
+        refresh(value)
+        triples = sum(
+            all(slot(value, case, trial)["overall_success"] for trial in (1, 2, 3))
+            for case in range(100)
+        )
+        value["overall"].update(
+            pass_cubed=triples / 100,
+            passing_all_three_cases=triples,
+            pass_cubed_case_denominator=100,
+        )
+
+    def test_successful_trials_are_diagnostic_and_ties_retain_incumbent(self) -> None:
+        left = self.current()
+        right = copy.deepcopy(left)
+        slot(right)["verdicts"]["outcome"]["passed"] = True
+        self.update(right)
+        self.assertFalse(compare(left, right)["numeric_eligible"])
+        for trial in (2, 3):
+            slot(right, 0, trial)["verdicts"]["outcome"]["passed"] = True
+        self.update(right)
+        self.assertTrue(compare(left, right)["numeric_eligible"])
+        # Spread more successful trials over separate cases in the incumbent.
+        for case in range(1, 6):
+            slot(left, case)["verdicts"]["outcome"]["passed"] = True
+        self.update(left)
+        result = compare(left, right)
+        self.assertTrue(result["numeric_eligible"])
+        self.assertLess(result["paired"]["average_delta"], 0)
+        self.assertFalse(compare(right, right)["numeric_eligible"])
+
+    def test_inconclusive_denominator_and_incompatible_contract(self) -> None:
+        left = self.current()
+        right = copy.deepcopy(left)
+        for trial in (1, 2, 3):
+            slot(right, 0, trial)["verdicts"]["outcome"]["passed"] = True
+        row = slot(right, 1)
+        row["status"] = "inconclusive"
+        row["actor_validity"]["status"] = "uncertain"
+        self.update(right)
+        result = compare(left, right)
+        self.assertEqual(result["candidate"]["pass_cubed"], 0.01)
+        self.assertFalse(result["numeric_eligible"])
+        right["overall"]["pass_cubed_case_denominator"] = 99
+        with self.assertRaisesRegex(ValueError, "fixed-denominator"):
+            compare(left, right)
+        right["manifest"]["identity"]["harness_version"] = "2.1.2"
+        with self.assertRaisesRegex(ValueError, "incompatible"):
+            compare(left, right)
+
+
 if __name__ == "__main__":
     unittest.main()

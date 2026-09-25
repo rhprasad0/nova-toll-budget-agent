@@ -29,7 +29,7 @@ from eval.simulated import GroundedCorrectnessEvaluator
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.1.2"
+CORPUS_VERSION = "3.2.0"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -76,6 +76,9 @@ whitespace-only string: that means an invalid continuation, not completion.
 The runner derives when to stop. Before returning null, check the assistant's
 latest question against ALL profile facts and follow-up rules. A request for
 missing origin/destination, income, schedule, or confirmation is not completion.
+If a necessary question is repeated or still unanswered, supply the existing
+profile fact again, even if you already stated it. Never invent endpoint IDs;
+answer with the place names and corridor facts supplied in your profile.
 If the profile supplies the requested fact, deliver it; give both endpoints when
 both are requested. Never stop merely because the assistant asked a clear question.
 Explicit profile choices override preserving the original route: if instructed
@@ -594,6 +597,8 @@ def money(text: str) -> set[Decimal]:
         _currency_decimal,  # pyright: ignore[reportPrivateUsage]
     )
 
+    # Emphasis can straddle the movement word and amount.
+    text = re.sub(r"[*_`]", "", text)
     # Reuse signed currency parsing; also accept common salary shorthand.
     text = re.sub(r"\bUSD\s+", "$", text, flags=re.IGNORECASE)
     text = re.sub(
@@ -621,7 +626,7 @@ def money(text: str) -> set[Decimal]:
     text = re.sub(
         r"\$(\d[\d,]*(?:\.\d+)?)(?:\*{1,2}|_{1,2}|`)?"
         r"(?:\s*\(\d+(?:\.\d+)?%\))?(?:\*{1,2}|_{1,2}|`)?\s+"
-        r"(?:below|less than|lower than)\b",
+        r"(?:below|less than|lower(?: than)?)\b",
         r"-$\1",
         text,
         flags=re.IGNORECASE,

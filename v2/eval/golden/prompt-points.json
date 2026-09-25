@@ -1362,8 +1362,9 @@
     "source_node_id": "1819ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "495 Express Lanes End/George Wash. Mem. Pkwy.",
+    "label": "495 Express Lanes End/George Wash. Mem. Pkwy. (from I-95/I-395 southbound)",
     "aliases": [
+      "495 Express Lanes End/George Wash. Mem. Pkwy.",
       "George Washington Memorial Parkway",
       "GW Parkway",
       "McLean"
@@ -1382,8 +1383,9 @@
     "source_node_id": "181ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "495 Express Lanes End/George Wash. Mem. Pkwy.",
+    "label": "495 Express Lanes End/George Wash. Mem. Pkwy. (from I-495 northbound or I-95/I-395 northbound)",
     "aliases": [
+      "495 Express Lanes End/George Wash. Mem. Pkwy.",
       "George Washington Memorial Parkway",
       "GW Parkway",
       "McLean"
@@ -1402,8 +1404,9 @@
     "source_node_id": "1829ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Route 267",
+    "label": "Route 267 (from I-95/I-395 southbound)",
     "aliases": [
+      "Route 267",
       "Dulles Toll Road",
       "Dulles Access Road",
       "Tysons Corner"
@@ -1422,8 +1425,9 @@
     "source_node_id": "182ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Route 267",
+    "label": "Route 267 (from I-495 northbound or I-95/I-395 northbound)",
     "aliases": [
+      "Route 267",
       "Dulles Toll Road",
       "Dulles Access Road",
       "Tysons Corner"
@@ -1502,8 +1506,9 @@
     "source_node_id": "1839ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Jones Branch Drive/Route 123",
+    "label": "Jones Branch Drive/Route 123 (from I-95/I-395 southbound)",
     "aliases": [
+      "Jones Branch Drive/Route 123",
       "Jones Branch Drive",
       "Route 123",
       "Tysons Corner"
@@ -1522,8 +1527,9 @@
     "source_node_id": "183ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Jones Branch Drive/Route 123",
+    "label": "Jones Branch Drive/Route 123 (from I-495 northbound or I-95/I-395 northbound)",
     "aliases": [
+      "Jones Branch Drive/Route 123",
       "Jones Branch Drive",
       "Route 123",
       "Tysons Corner"
@@ -1602,7 +1608,7 @@
     "source_node_id": "1859ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Westpark Drive",
+    "label": "Westpark Drive (from I-95/I-395 southbound)",
     "aliases": [
       "Westpark Drive",
       "Tysons Corner"
@@ -1621,7 +1627,7 @@
     "source_node_id": "185ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Westpark Drive",
+    "label": "Westpark Drive (from I-495 northbound or I-95/I-395 northbound)",
     "aliases": [
       "Westpark Drive",
       "Tysons Corner"
@@ -1697,8 +1703,9 @@
     "source_node_id": "1869ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Route 7 (Leesburg Pike)",
+    "label": "Route 7 (Leesburg Pike) (from I-95/I-395 southbound)",
     "aliases": [
+      "Route 7 (Leesburg Pike)",
       "Route 7",
       "Leesburg Pike",
       "Tysons Corner"
@@ -1717,8 +1724,9 @@
     "source_node_id": "186ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Route 7 (Leesburg Pike)",
+    "label": "Route 7 (Leesburg Pike) (from I-495 northbound or I-95/I-395 northbound)",
     "aliases": [
+      "Route 7 (Leesburg Pike)",
       "Route 7",
       "Leesburg Pike",
       "Tysons Corner"
@@ -1757,8 +1765,9 @@
     "source_node_id": "1879ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Interstate 66",
+    "label": "Interstate 66 (from I-95/I-395 southbound)",
     "aliases": [
+      "Interstate 66",
       "I-66",
       "Idylwood",
       "Dunn Loring"
@@ -1777,8 +1786,9 @@
     "source_node_id": "187ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Interstate 66",
+    "label": "Interstate 66 (from I-495 northbound or I-95/I-395 northbound)",
     "aliases": [
+      "Interstate 66",
       "I-66",
       "Idylwood",
       "Dunn Loring"
@@ -1857,8 +1867,9 @@
     "source_node_id": "1889ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Lee Highway (Route 29)",
+    "label": "Lee Highway (Route 29) (from I-95/I-395 southbound)",
     "aliases": [
+      "Lee Highway (Route 29)",
       "Lee Highway",
       "Route 29",
       "Idylwood",
@@ -1878,8 +1889,9 @@
     "source_node_id": "188ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Lee Highway (Route 29)",
+    "label": "Lee Highway (Route 29) (from I-495 northbound or I-95/I-395 northbound)",
     "aliases": [
+      "Lee Highway (Route 29)",
       "Lee Highway",
       "Route 29",
       "Idylwood",
@@ -2000,8 +2012,9 @@
     "source_node_id": "1919ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "I-495 Near Braddock Road",
+    "label": "I-495 Near Braddock Road (from I-95/I-395 southbound)",
     "aliases": [
+      "I-495 Near Braddock Road",
       "Braddock Road",
       "North Springfield",
       "Annandale"
@@ -2020,8 +2033,9 @@
     "source_node_id": "191ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "I-495 Near Braddock Road",
+    "label": "I-495 Near Braddock Road (from I-495 northbound or I-95/I-395 northbound)",
     "aliases": [
+      "I-495 Near Braddock Road",
       "Braddock Road",
       "North Springfield",
       "Annandale"
@@ -2670,8 +2684,9 @@
     "source_node_id": "201SD",
     "point_type": "exit",
     "direction": "SB",
-    "label": "I-395 Near Edsall Road",
+    "label": "I-395 Near Edsall Road (from I-495 southbound)",
     "aliases": [
+      "I-395 Near Edsall Road",
       "Edsall Road",
       "Lincolnia",
       "Alexandria"
@@ -3475,7 +3490,7 @@
     "source_node_id": "2229ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Seminary Road",
+    "label": "Seminary Road (from I-495 southbound)",
     "aliases": [
       "Seminary Road",
       "Alexandria"
@@ -3494,7 +3509,7 @@
     "source_node_id": "222ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Seminary Road",
+    "label": "Seminary Road (from I-95/I-395 northbound or I-495 northbound)",
     "aliases": [
       "Seminary Road",
       "Alexandria"
@@ -3532,8 +3547,9 @@
     "source_node_id": "22329ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Washington Boulevard/Route 27",
+    "label": "Washington Boulevard/Route 27 (from I-495 southbound)",
     "aliases": [
+      "Washington Boulevard/Route 27",
       "Washington Boulevard",
       "Route 27",
       "Pentagon"
@@ -3552,8 +3568,9 @@
     "source_node_id": "2232ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Washington Boulevard/Route 27",
+    "label": "Washington Boulevard/Route 27 (from I-95/I-395 northbound or I-495 northbound)",
     "aliases": [
+      "Washington Boulevard/Route 27",
       "Washington Boulevard",
       "Route 27",
       "Pentagon"
@@ -3613,8 +3630,9 @@
     "source_node_id": "2239ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Pentagon/Eads Street",
+    "label": "Pentagon/Eads Street (from I-495 southbound)",
     "aliases": [
+      "Pentagon/Eads Street",
       "Pentagon",
       "Pentagon City",
       "Crystal City",
@@ -3634,8 +3652,9 @@
     "source_node_id": "223ND",
     "point_type": "exit",
     "direction": "NB",
-    "label": "Pentagon/Eads Street",
+    "label": "Pentagon/Eads Street (from I-95/I-395 northbound or I-495 northbound)",
     "aliases": [
+      "Pentagon/Eads Street",
       "Pentagon",
       "Pentagon City",
       "Crystal City",
@@ -3814,8 +3833,9 @@
     "source_node_id": "227SD",
     "point_type": "exit",
     "direction": "SB",
-    "label": "I-395 Near Edsall Road",
+    "label": "I-395 Near Edsall Road (from I-95/I-395 southbound)",
     "aliases": [
+      "I-395 Near Edsall Road",
       "Edsall Road",
       "Lincolnia",
       "Alexandria"

@@ -1,6 +1,6 @@
 # Running the frozen golden corpus
 
-The current development corpus has **100 cases and 135 calibration references**.
+The current development corpus has **100 cases and 143 calibration references**.
 Application baselines run three trials per case. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
@@ -8,7 +8,7 @@ are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract 
 
 ## Description-edit contract
 
-Contract 3.1.2 / harness 2.1.2 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.2.0 / harness 2.2.0 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -24,6 +24,34 @@ hashes only with the supported policy and identical pinned corpus. Old-contract
 reports retain their original hash rules and cannot be compared with this contract.
 Corpus review and fresh matching calibration are required before the next climb;
 never transfer prior approvals or regenerate a candidate's corpus manifest.
+
+## Scoring and preparation
+
+Pass³ is successful three-trial cases divided by **all 100 cases**. Missing,
+failed, and inconclusive trials cannot make a case successful. Historical report
+rendering follows the recorded harness version; cross-contract comparisons fail.
+Promotion requires strict pass³ improvement, inconclusive nonincrease, comparable
+Grounding/Rules nonworsening, and independent material-regression review.
+Successful trials and paired deltas are diagnostics. Rank eligible candidates by
+pass³, successful trials, fewer changed lines, then A.
+
+Judges return cited unmet requirements; an empty list determines success.
+The stored `passed`/`evidence` interface remains stable. Calibration must still
+check semantic errors; explanations are never regex-relabelled.
+
+The authorized preparation sequence is two full-reference calibrations with
+independent review, one full scripted actor check, then two identical application
+runs (100 cases × 3 trials, 16 workers). Compare repeatability and criterion
+variation; designate the second application run by position as the next baseline,
+never by score. Reuse only with unchanged application/evaluation identities and
+verified development migration/catalog parity after human-reviewed merge.
+
+The cumulative preparation ceiling is $15 within the $20 authorization, starting
+at $11.779920875 from the last accounted run. Admit each complete run only when its
+estimate with headroom fits; keep at least $5 for later search and confirmation.
+Stop on unknown usage, infrastructure failure, unresolved material grading
+ambiguity or insufficient budget. Do not repeat runs to obtain passing results. Candidate
+search belongs in a separate PR and starts only after the deployment parity gate.
 
 ## Execution
 
@@ -63,6 +91,15 @@ The calibration must match the execution contract. `--cases` selects a partial
 application diagnostic, which cannot represent a full baseline. Actor-invalid
 or uncertain attempts remain inconclusive. Do not retry failures to improve a
 score, erase interrupted attempts, or silently relabel an old report.
+
+The scripted actor check uses the same journal accounting and accepts explicit
+worker and cumulative budget controls:
+
+```bash
+uv run python -m eval.golden_actor_check \
+  --output eval/private/actor-check-N --budget-usd 15 --workers 16 \
+  --prior-run eval/private/previous-run
+```
 
 ## Evidence and reporting
 

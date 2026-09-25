@@ -101,12 +101,12 @@ def test_complete_development_contract_and_reference_labels() -> None:
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 135
+    assert len(examples) == 143
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 35,
+        False: 43,
     }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 132, "invalid": 3}
+    assert Counter(e.actor_validity for e in examples) == {"valid": 140, "invalid": 3}
     assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5
@@ -293,10 +293,32 @@ def test_planned_trials_and_empty_holdout_have_no_success_rate() -> None:
     assert development["expected_trials"] == 300
     assert development["attempted_trials"] == 0
     assert development["pass_at_1"] is None
-    assert development["pass_cubed"] is None
+    assert development["pass_cubed"] == 0
+    assert development["pass_cubed_case_denominator"] == 100
     assert not development["complete"]
     holdout = run.summary([], [case for case in cases if case.held_out])
     assert holdout["case_count"] == holdout["expected_trials"] == 0
     assert holdout["pass_at_1"] is None
     assert holdout["pass_cubed"] is None
     assert holdout["success_ci95"] is None
+
+
+@pytest.mark.parametrize(
+    "wording",
+    [
+        "Recent movement: **falling** by **$2.50 (27.9%)**.",
+        "The current toll is **$2.50 (27.9%)** lower.",
+        "It is $2.50 lower than the median.",
+        "It is $2.50 (27.9%) below the median.",
+    ],
+)
+def test_signed_comparison_does_not_match_absolute_value(wording: str) -> None:
+    from decimal import Decimal
+
+    assert golden.money(wording) == {Decimal("-2.50")}
+    assert golden.money("$2.50 above the median") == {Decimal("2.50")}
+    assert golden.money("The toll is $2.50, below the median") == {Decimal("2.50")}
+    assert golden.money("The range is $2.50\u2013$3.50") == {
+        Decimal("2.50"),
+        Decimal("3.50"),
+    }

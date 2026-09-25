@@ -1082,14 +1082,14 @@
         {
           "point_id": "i495:1889ND",
           "facility": "i495",
-          "label": "Lee Highway (Route 29)",
+          "label": "Lee Highway (Route 29) (from I-95/I-395 southbound)",
           "direction": "NB",
           "role": "exit"
         },
         {
           "point_id": "i495:188ND",
           "facility": "i495",
-          "label": "Lee Highway (Route 29)",
+          "label": "Lee Highway (Route 29) (from I-495 northbound or I-95/I-395 northbound)",
           "direction": "NB",
           "role": "exit"
         }
@@ -1119,14 +1119,14 @@
         {
           "point_id": "i495:1879ND",
           "facility": "i495",
-          "label": "Interstate 66",
+          "label": "Interstate 66 (from I-95/I-395 southbound)",
           "direction": "NB",
           "role": "exit"
         },
         {
           "point_id": "i495:187ND",
           "facility": "i495",
-          "label": "Interstate 66",
+          "label": "Interstate 66 (from I-495 northbound or I-95/I-395 northbound)",
           "direction": "NB",
           "role": "exit"
         },
@@ -1258,14 +1258,14 @@
         {
           "point_id": "i495:1869ND",
           "facility": "i495",
-          "label": "Route 7 (Leesburg Pike)",
+          "label": "Route 7 (Leesburg Pike) (from I-95/I-395 southbound)",
           "direction": "NB",
           "role": "exit"
         },
         {
           "point_id": "i495:186ND",
           "facility": "i495",
-          "label": "Route 7 (Leesburg Pike)",
+          "label": "Route 7 (Leesburg Pike) (from I-495 northbound or I-95/I-395 northbound)",
           "direction": "NB",
           "role": "exit"
         }
@@ -1302,14 +1302,14 @@
         {
           "point_id": "i495:1859ND",
           "facility": "i495",
-          "label": "Westpark Drive",
+          "label": "Westpark Drive (from I-95/I-395 southbound)",
           "direction": "NB",
           "role": "exit"
         },
         {
           "point_id": "i495:185ND",
           "facility": "i495",
-          "label": "Westpark Drive",
+          "label": "Westpark Drive (from I-495 northbound or I-95/I-395 northbound)",
           "direction": "NB",
           "role": "exit"
         },
@@ -1404,14 +1404,14 @@
         {
           "point_id": "i495:1839ND",
           "facility": "i495",
-          "label": "Jones Branch Drive/Route 123",
+          "label": "Jones Branch Drive/Route 123 (from I-95/I-395 southbound)",
           "direction": "NB",
           "role": "exit"
         },
         {
           "point_id": "i495:183ND",
           "facility": "i495",
-          "label": "Jones Branch Drive/Route 123",
+          "label": "Jones Branch Drive/Route 123 (from I-495 northbound or I-95/I-395 northbound)",
           "direction": "NB",
           "role": "exit"
         },
@@ -1440,14 +1440,14 @@
         {
           "point_id": "i495:1829ND",
           "facility": "i495",
-          "label": "Route 267",
+          "label": "Route 267 (from I-95/I-395 southbound)",
           "direction": "NB",
           "role": "exit"
         },
         {
           "point_id": "i495:182ND",
           "facility": "i495",
-          "label": "Route 267",
+          "label": "Route 267 (from I-495 northbound or I-95/I-395 northbound)",
           "direction": "NB",
           "role": "exit"
         },
@@ -1469,14 +1469,14 @@
         {
           "point_id": "i495:1919ND",
           "facility": "i495",
-          "label": "I-495 Near Braddock Road",
+          "label": "I-495 Near Braddock Road (from I-95/I-395 southbound)",
           "direction": "NB",
           "role": "exit"
         },
         {
           "point_id": "i495:191ND",
           "facility": "i495",
-          "label": "I-495 Near Braddock Road",
+          "label": "I-495 Near Braddock Road (from I-495 northbound or I-95/I-395 northbound)",
           "direction": "NB",
           "role": "exit"
         },
@@ -1711,14 +1711,14 @@
         {
           "point_id": "i495:1819ND",
           "facility": "i495",
-          "label": "495 Express Lanes End/George Wash. Mem. Pkwy.",
+          "label": "495 Express Lanes End/George Wash. Mem. Pkwy. (from I-95/I-395 southbound)",
           "direction": "NB",
           "role": "exit"
         },
         {
           "point_id": "i495:181ND",
           "facility": "i495",
-          "label": "495 Express Lanes End/George Wash. Mem. Pkwy.",
+          "label": "495 Express Lanes End/George Wash. Mem. Pkwy. (from I-495 northbound or I-95/I-395 northbound)",
           "direction": "NB",
           "role": "exit"
         }
@@ -2021,7 +2021,7 @@
         {
           "point_id": "i95:201SD",
           "facility": "i95",
-          "label": "I-395 Near Edsall Road",
+          "label": "I-395 Near Edsall Road (from I-495 southbound)",
           "direction": "SB",
           "role": "exit"
         },
@@ -2035,7 +2035,7 @@
         {
           "point_id": "i95:227SD",
           "facility": "i95",
-          "label": "I-395 Near Edsall Road",
+          "label": "I-395 Near Edsall Road (from I-95/I-395 southbound)",
           "direction": "SB",
           "role": "exit"
         }
@@ -2072,14 +2072,14 @@
         {
           "point_id": "i95:2229ND",
           "facility": "i95",
-          "label": "Seminary Road",
+          "label": "Seminary Road (from I-495 southbound)",
           "direction": "NB",
           "role": "exit"
         },
         {
           "point_id": "i95:222ND",
           "facility": "i95",
-          "label": "Seminary Road",
+          "label": "Seminary Road (from I-95/I-395 northbound or I-495 northbound)",
           "direction": "NB",
           "role": "exit"
         },
@@ -2219,14 +2219,14 @@
         {
           "point_id": "i95:22329ND",
           "facility": "i95",
-          "label": "Washington Boulevard/Route 27",
+          "label": "Washington Boulevard/Route 27 (from I-495 southbound)",
           "direction": "NB",
           "role": "exit"
         },
         {
           "point_id": "i95:2232ND",
           "facility": "i95",
-          "label": "Washington Boulevard/Route 27",
+          "label": "Washington Boulevard/Route 27 (from I-95/I-395 northbound or I-495 northbound)",
           "direction": "NB",
           "role": "exit"
         },
@@ -2277,14 +2277,14 @@
         {
           "point_id": "i95:2239ND",
           "facility": "i95",
-          "label": "Pentagon/Eads Street",
+          "label": "Pentagon/Eads Street (from I-495 southbound)",
           "direction": "NB",
           "role": "exit"
         },
         {
           "point_id": "i95:223ND",
           "facility": "i95",
-          "label": "Pentagon/Eads Street",
+          "label": "Pentagon/Eads Street (from I-95/I-395 northbound or I-495 northbound)",
           "direction": "NB",
           "role": "exit"
         }

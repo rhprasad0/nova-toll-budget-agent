@@ -88,7 +88,7 @@
     "v2/analytics/agent_registry.ndjson": "1e3f6acf2afa3e887a6baa0631837dec28e6384d6026cb1f3d111413426c48ec",
     "v2/db/analysis.sql": "bc348c18e81ac9015f919efa731c6edb85b7cc15e85d335aac3bcb56ba0849ca",
     "v2/db/application-schemas.json": "7db6fcb374162aaa157116b4107dab3160854ffeb5603557771043faf0dce85d",
-    "v2/db/migration-baselines.json": "4d58207cee5b79cf27f42185ecf3e45210f164f49b91d3b3e5dcbd12c2c2326b",
+    "v2/db/migration-baselines.json": "ec6d65e6cd790f962663c2357cba8cd175d7267f0e196327c4e158177a1dcd73",
     "v2/db/migrations/001_create_pricing_schema.sql": "4642bf10230c094ec050080ddc499d78b309af6cae4aa7c933e589fea69fb0f7",
     "v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql": "35770ff6324463c527fbda292c6b7d3d10bdf950c02d41445861e896b98158b4",
     "v2/db/migrations/003_create_oracle_schema.rollback.sql": "92a2258941372a12777d09a629ff41f411698d70a20af71a1dc3a6dc14c7479c",
