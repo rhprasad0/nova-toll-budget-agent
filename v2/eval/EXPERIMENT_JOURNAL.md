@@ -739,3 +739,97 @@ accounting chain. All prior journal bytes are preserved. Raw reviews, coverage
 inventories and continuation state remain ignored. These are exposed-development
 findings, with no generalization or production qualification claim. No push, PR,
 merge, deployment or production access occurred.
+
+
+## 2026-09-25 UTC — Explicit one-round continuation: Round 3
+
+Ryan explicitly requested “Do another round, keep the cap, open a PR.” This
+superseded the preceding two-consecutive-no-improvement stop for exactly one
+additional round. It did not reset the cumulative $20 eval budget, change the
+scoring or safety contract, authorize a fourth round, or authorize paid
+recalibration. The outer session owns any push and ready-for-review PR; this
+supervisor performed local work only. Journal-only HEAD `e2b99b7` was not an
+application incumbent: both new alternatives started from original `a5338c9`.
+All 56,432 preceding journal bytes and both prior summary commits are preserved.
+
+Before reactivation, the five existing run journals, hashes, 1,500 completed
+attempts, known usage and $4.684365605 spending chain were reconciled. The
+existing fresh campaign Calibration 9 review remained valid and pinned. No new
+baseline, calibration, old pilot approval or pilot spending was substituted.
+The frozen contract remains development corpus 3.0.6, harness 2.0.13, and
+application/actor/judge model `gpt-6-luna`. Fresh named analyst, implementer and
+independent reviewer roles used their prescribed models and effort levels,
+with one child scheduled at a time and no child delegation.
+
+Round 3 addressed a distinct source-disclosure mechanism. Several original
+annual answers denied historical observations even when the successful tool
+result supplied historical paired-day samples and neither modeled nor current
+fixed-rate prices. Passing examples correctly described the same source.
+Alternative A appended a narrow successful-result condition to the Section 6
+provenance bullet; B replaced that bullet with per-facility classification and
+mixed-source wording. No prior rejected patch was combined with either change.
+Only the SOP changed: tools, descriptions, schemas, runtime, versions, models,
+evaluator, corpus, fixtures, tests and domain requirements remained frozen.
+
+| Application / local commit | Pass³ / 100 | Successful slots / 300 | Inconclusive | Eval cost | Decision |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Original `a5338c9` (existing baseline) | 47 | 212 | 1 | $0.955475225 already accounted | Retain |
+| R3A `5c8acda` | 52 | 228 | 1 | $0.934252335 | Reject independently |
+| R3B `0c4a4df` | 55 | 234 | 1 | $0.936725840 | Reject independently |
+
+Each new run used all 100 development cases, three trials and 16 workers.
+R3A chained directly after R2B; R3B chained after R3A. The cumulative search
+ceiling stayed $17, reserving $3, which exceeded two latest full-run costs with
+25% headroom before each run. Pass³ used the fixed 100-case denominator with
+all three slots successful; inconclusives never succeeded. Total-success and
+paired-delta criteria remained diagnostic only. Both candidates passed strict
+Pass³ improvement, inconclusive nonincrease, and comparable Grounding/Rules
+nonworsening. All original results remain unchanged.
+
+Independent review disqualified both candidates despite those numeric gains.
+A's reviewer inspected 39 distinct adverse slots, including 35 lost successes,
+three new Grounding and 24 new Rules flags with overlap, plus both excluded
+cases. Two previously three-of-three current routes became one-of-three through
+repeated wrong-direction calls. Two related annual trips also substituted a
+different toll facility. B's reviewer inspected 42 distinct adverse slots,
+including 32 lost successes, five new Grounding and 31 new Rules flags with
+overlap, plus both excluded cases. A modeled-current scenario fell from
+three-of-three to zero-of-three: two wrong-endpoint calls failed, and the one
+completed answer omitted the returned proxy observation time.
+
+These concentrated material regressions remained unresolved. The reviewers
+explicitly distinguished repeated losses from isolated stochastic flips,
+existing failures redistributed across trials, and grading ambiguities. They
+did not claim that these small samples prove patch causation or require every
+individual trial to remain successful. Date-anchor, cancellation, annual-day
+wording and deterministic-money inconsistencies were retained as separate
+diagnostic findings; no scores or actor-validity labels were rewritten and no
+trials were retried or replaced. Each new run's single inconclusive was
+actor-invalid, with all 300 attempts complete and all usage known.
+
+**Retain the original SOP; no confirmed patch is recommended.** The authorized
+additional Round 3 is complete and no fourth round is authorized. Neither
+candidate was independently eligible, so no confirmation pair was run. New
+Round 3 eval spend was **$1.870978175**, for a cumulative **$6.555343780** under
+the same $20 cap. All 2,100 attempts across seven runs match the raw finished
+records and the full spending chain reconciles. Codex usage, prior calibration
+costs and the separate stopped pilot remain excluded.
+
+Existing corpus validation, 16 comparison/development checks and seven semantic
+prompt checks passed for each candidate. Parent scope and frozen-identity checks
+and independent tool-schema checks passed. The expected original-version
+prompt-hash assertion failed for both changed SOPs and remains explicit; no
+test, manifest or version was changed to bypass it. The original application's
+eight prompt checks passed during continuation preflight.
+
+A new unmeasured tool-description idea concerns duplicate endpoint rows with
+identical visible metadata but different accepted identifiers. The current-price
+and annual endpoint descriptions could clarify opaque-ID copying and the
+canonical-ID contract; identical metadata may require more than wording alone.
+This joins the existing direction-description idea. Both remain deferred
+because tool-file changes invalidate the frozen corpus/calibration. No tool
+change or recalibration was tested. All detailed evidence, rejected candidate
+worktrees, reviews, hashes and progress remain private and preserved. These
+exposed-development findings do not establish generalization or release
+qualification. No push, PR, merge, deployment or production access occurred in
+this supervisor session.
