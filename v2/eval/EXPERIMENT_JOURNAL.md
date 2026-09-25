@@ -1521,3 +1521,71 @@ resolve the structured-decision and actor-validity failures under a newly pinned
 contract and fresh evidence. Runtime/tool changes, larger models, larger candidate
 pools, and workflow redesign were not tested. Raw evidence stays in the ignored
 preparation worktree; this journal is the only published experiment summary.
+
+
+## 2026-09-25 — evidence-first grading repair; remaining source errors
+
+Ryan explicitly authorized further grading fixes after the preceding stop.
+The uncapped authorization and cumulative accounting continue; the failed
+calibrations remain preserved and no prior verdict or label was rewritten.
+The new measured commit is `565ff8d279d2465a623af37345ed4118d9073f44`, using
+corpus **3.3.2** / harness **2.3.2**. All 146 reference payloads and labels,
+100 application cases, fixtures, application SOP, models, actor generation,
+tools, and catalog remain unchanged.
+
+The judge schema now presents concise cited evidence before the unmet-requirement
+list and before actor-validity status. Shared first-call instructions include
+small generic supported/contradicted financial-claim examples. Actor grading
+explicitly checks whether a supplied profile fact was requested and left
+undelivered by an explicit goal-completed stop, distinguishing actual application
+termination and forced max-turn stops. Compact context guidance addresses road
+abbreviations, financial wording, missing-input clarification, and endpoint roles
+within each leg. Pass/fail still derives only from list emptiness; there is no
+regex relabeling, extra verifier call, or model substitution.
+
+Independent offline review verified the actual SDK-converted field order and
+unchanged field names, types, requiredness, constraints, and enum values. Field
+order is a plausible repair mechanism, not a proven causal explanation; stored
+JSON is reserialized and cannot establish the original generation order. All
+140 focused tests, 36 historical compatibility tests, seven release-isolation
+tests, 11 comparison checks, corpus validation, lint/type checks, and skill
+validation passed. Fresh corpus approval reflects that independent code review
+and does not imply calibration or human trajectory approval.
+
+One new full-reference calibration ran with 16 workers, estimated at $0.42,
+chained from the previous $12.306159540 cumulative spend.
+
+| Calibration measure | Result |
+| --- | ---: |
+| Complete references | 146 / 146 |
+| Started and finished calls, all usage known | 438 / 438 |
+| Measurement failures | 0 |
+| Outcome label agreement on actor-valid references | 142 / 143 |
+| Grounding label agreement on actor-valid references | 141 / 143 |
+| Rules label agreement on actor-valid references | 143 / 143 |
+| Actor-validity agreement | 146 / 146 |
+| Calibration cost | $0.272413545 |
+| Cumulative accounted eval cost | $12.578573085 |
+
+Independent review inspected all nonempty unmet lists and found no recurrence of
+satisfied requirements being listed as unmet. All ten preceding disagreement
+references now match their labels with appropriate explanations, including the
+premature actor stop. These are observations from one fresh draw under changed
+instructions, not proof of causality or established judge repeatability.
+
+Three disagreements remain. Two are clear material false passes: Outcome accepts
+an answer missing explicitly required price-source disclosure, and Grounding
+misses a false denial of the historical-observation source after otherwise correct
+financial figures. The third involves criterion-boundary ambiguity: explicitly
+keeping the old route after a correction clearly fails Outcome and Rules, but
+does not necessarily claim that the old quote prices the corrected route.
+
+**Decision: stop; calibration remains unapproved.** The repeat calibration,
+scripted actor check, application baselines, candidate search, and confirmation
+were not admitted. No application improvement is claimed. Further repair must
+separate required-disclosure completeness from affirmative-claim accuracy,
+check provenance denials alongside financial amounts, and clarify the route
+correction boundary under a newly reviewed contract. Existing source and consent
+labels must not be weakened to obtain agreement. Raw evidence and independent
+review remain private. Migration and deployed catalog parity remain prerequisites
+before any future climb; this repair performs no deployed mutation.
