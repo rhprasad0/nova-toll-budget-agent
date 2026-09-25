@@ -380,6 +380,5 @@ class FixedPassCubedTest(unittest.TestCase):
                 compare(left, right)
 
 
-
 if __name__ == "__main__":
     unittest.main()
