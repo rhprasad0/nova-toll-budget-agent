@@ -5,9 +5,9 @@ overall pass rate: successful trials out of all 300 expected trials. Pass³ coun
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
 not make a development score production qualification.
-Shared authoring checks changed evaluator identities. Development review is pending;
-fresh review and matching calibration are required before application runs.
-See `golden/review.json` for the exact review status.
+Development corpus preparation is approved in `golden/review.json`. Matching
+calibration remains unapproved, so application runs are blocked. See the
+[experiment journal](EXPERIMENT_JOURNAL.md) for the validation results and limits.
 
 TollChat remains on `gpt-6-luna`. Preparation changes are separate from prompt
 search. Shared `_PricingProfile` and output descriptions remain frozen under
