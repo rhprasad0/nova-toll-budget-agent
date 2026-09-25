@@ -1,13 +1,14 @@
 # TollChat evaluation
 
-**Current contract: 3.3.1 / harness 2.3.1.** Future development climbs optimize
+**Current contract: 3.3.9 / harness 2.3.9.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
 not make a development score production qualification.
-Shared authoring checks changed evaluator identities. Development review is pending;
-fresh review and matching calibration are required before application runs.
-See `golden/review.json` for the exact review status.
+Development corpus preparation, two matching calibrations and the scripted actor
+check have independent Codex review. A new application baseline still requires
+human-reviewed merge and verified development migration/catalog parity. See the
+[experiment journal](EXPERIMENT_JOURNAL.md) for the validation results and limits.
 
 TollChat remains on `gpt-6-luna`. Preparation changes are separate from prompt
 search. Shared `_PricingProfile` and output descriptions remain frozen under
@@ -20,7 +21,7 @@ output in ignored `eval/private/` or the existing private workflow store.
 ## Frozen golden evaluation
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
-  143 labeled references, 107 synthetic fixtures, and five-turn actors.
+  146 labeled references, 107 synthetic fixtures, and five-turn actors.
 - [Private authoring kit](HOLDOUT_AUTHORING.md): public instructions and an offline
   validator for independently authored private cases; no held-out data is included.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, three-trial application

@@ -81,6 +81,7 @@ jobs:
         run: |
           uv run python -m eval.golden
           uv run pytest -q tests/test_golden_retirement.py tests/test_golden_development.py
+          uv run python ../.agents/skills/eval-climb/scripts/test_compare_runs.py
       - run: uv run python scripts/check_tool_contract_versions.py "$TOOL_CONTRACT_BASE_REF"
         env:
           TOOL_CONTRACT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}

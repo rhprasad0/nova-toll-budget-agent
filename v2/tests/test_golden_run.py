@@ -25,8 +25,13 @@ pytestmark = pytest.mark.usefixtures("golden_test_data")
 
 @pytest.mark.parametrize("mode", ["calibrate", "run"])
 @pytest.mark.parametrize("workers", [3, 16])
+@pytest.mark.parametrize("uncapped", [False, True])
 def test_cli_runs_independent_work_in_parallel(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, workers: int
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    workers: int,
+    uncapped: bool,
 ) -> None:
     root = tmp_path / "corpus"
     shutil.copytree(golden.ROOT, root)
@@ -92,6 +97,8 @@ def test_cli_runs_independent_work_in_parallel(
     monkeypatch.setattr(run, "judge", judge)
     monkeypatch.setattr(run, "execute", execute)
     args = ["golden_run", mode, "--output", str(directory), "--workers", str(workers)]
+    if uncapped:
+        args += ["--no-budget-limit"]
     if mode == "run":
         args += [
             "--calibration",
@@ -101,7 +108,9 @@ def test_cli_runs_independent_work_in_parallel(
         ]
     monkeypatch.setattr("sys.argv", args)
     run.main()
-    assert json.loads((directory / "manifest.json").read_text())["workers"] == workers
+    manifest = json.loads((directory / "manifest.json").read_text())
+    assert manifest["workers"] == workers
+    assert manifest["budget_usd"] == (None if uncapped else 25)
     events = [
         json.loads(line)
         for line in (directory / "events.jsonl").read_text().splitlines()
@@ -159,6 +168,7 @@ def test_parallel_calls_reserve_shared_budget_before_provider_calls(
             # Two reservations fit, but a third must stop before any call finishes.
             assert next(as_completed(futures, timeout=5)).result() is False
             with journal.lock:
+                assert journal.limit is not None
                 assert journal.spent == 0 and 0 < journal.reserved <= journal.limit
         finally:
             release.set()
@@ -400,7 +410,11 @@ def test_real_sdk_transport_has_no_retries_and_bounded_timeout(
     monkeypatch.setattr(run.toll_agent, "load_openai_api_key", lambda: "offline")
     monkeypatch.setattr(simulated, "load_openai_api_key", lambda: "offline")
     native = (
-        run.toll_agent._build_model() if role == "agent" else run.build_eval_model()
+        run.toll_agent._build_model()
+        if role == "agent"
+        else run.build_judge_model()
+        if role == "judge"
+        else run.build_eval_model()
     )
     requests: list[httpx.Request] = []
     clients: list[openai.AsyncOpenAI] = []
@@ -437,6 +451,18 @@ def test_real_sdk_transport_has_no_retries_and_bounded_timeout(
         asyncio.run(consume())
     assert len(clients) == len(requests) == len(row.measurements) == 1
     assert journal.unknown_usage and not row.measurements[0].complete
+    request = json.loads(requests[0].content)
+    assert request["model"] == "gpt-6-luna"
+    assert (
+        request["reasoning"]["effort"]
+        == {"agent": "low", "actor": "medium", "judge": "xhigh"}[role]
+    )
+    expected_cap = 8192 if role == "judge" else 2048
+    assert request["max_output_tokens"] == expected_cap
+    started = json.loads(
+        (journal.directory / "events.jsonl").read_text().splitlines()[0]
+    )
+    assert started["reserved_usd"] >= expected_cap * 0.75 / 1_000_000
 
 
 def test_real_agent_keeps_conversation_and_uses_only_replay(
@@ -796,9 +822,7 @@ def test_judges_receive_rejected_calls_without_pricing_evidence(
         rejected_tools=example.rejected_tools,
     )
     run.judge(case, attempt, run.Journal(tmp_path / "judge", 25))
-    native.update_config.assert_called_once_with(
-        params={**run.EVAL_MODEL_PARAMS, "reasoning": {"effort": "medium"}}
-    )
+    native.update_config.assert_called_once_with(params=run.JUDGE_MODEL_PARAMS)
     assert len(seen) == 3
     assert "GROUNDING ONLY" in prompts[1] and "RULES ONLY" not in prompts[1]
     assert "RULES ONLY" in prompts[2] and "GROUNDING ONLY" not in prompts[2]
@@ -967,7 +991,8 @@ def test_eval_cache_prefix_and_write_accounting(
             system_prompt=self.reference_system_prompt,
         )
         requests.append(request)
-        assert request["reasoning"] == {"effort": "medium"}
+        assert request["reasoning"] == {"effort": "xhigh"}
+        assert request["max_output_tokens"] == 8192
         assert request["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
         assert request["prompt_cache_key"] == "tollchat-eval-v2"
         assert request["store"] is False
@@ -1022,7 +1047,8 @@ def test_eval_cache_prefix_and_write_accounting(
 
 
 @pytest.mark.parametrize(
-    "changed", ["judge_prompt_sha256", "transport", "tool_description_policy"]
+    "changed",
+    ["judge_prompt_sha256", "transport", "tool_description_policy", "reasoning_effort"],
 )
 def test_cli_rejects_changed_cache_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: str
@@ -1205,6 +1231,13 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
     for prompt in [prefix, *diagnostic_prompts]:
         assert "greenway:2A:entry:EB" in prompt and "Battlefield Pkwy" in prompt
         assert '"coordinates"' in prompt
+        assert (
+            prompt.index(run.DOMAIN_FACTS)
+            < prompt.index("Frozen public location catalog")
+            < prompt.index("GRADING POLICY")
+            < prompt.index(golden.JUDGING_POLICY)
+            < prompt.index(run.ASSESSMENT_INSTRUCTIONS)
+        )
     assert all("Recorded sequence" in prompt for prompt in diagnostic_prompts)
     assert "Permitted tool sequence" not in diagnostic_prompts[0]
     assert row.verdicts["outcome"].passed
@@ -1628,3 +1661,183 @@ def test_prior_accounting_rejects_unknown_usage(tmp_path: Path) -> None:
     path.write_text(json.dumps(events[0]))
     with pytest.raises(ValueError, match="unknown usage"):
         run.prior_accounting(tmp_path)
+
+
+@pytest.mark.parametrize("limit", [0, -1, 26, float("inf"), float("nan")])
+def test_invalid_spend_ceiling_is_rejected(tmp_path: Path, limit: float) -> None:
+    with pytest.raises(ValueError, match="invalid spend ceiling"):
+        run.Journal(tmp_path / "invalid", limit)
+    assert not (tmp_path / "invalid").exists()
+
+
+def test_uncapped_accounting_still_stops_on_unknown_usage(tmp_path: Path) -> None:
+    journal = run.Journal(tmp_path / "uncapped", None, prior_spend=30)
+    row = run.Attempt(id="uncapped", case_id="synthetic", trial=1)
+    reserve = journal.reserve(row, "judge", 1000)
+    assert reserve == pytest.approx((1000 * 0.25 + 8192 * 0.75) / 1_000_000)
+    journal.finish(row, "judge", reserve, {"inputTokens": 100, "outputTokens": 20}, 1)
+    assert journal.spent == 30 + run.cost({"inputTokens": 100, "outputTokens": 20})
+    reserve = journal.reserve(row, "judge", 1000)
+    journal.finish(row, "judge", reserve, None, 1)
+    assert journal.unknown_usage
+    with pytest.raises(run.StopRun, match="unknown_usage"):
+        journal.reserve(row, "judge", 1000)
+
+
+@pytest.mark.parametrize("actor_check", [False, True])
+def test_budget_cli_flags_are_exclusive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, actor_check: bool
+) -> None:
+    from eval import golden_actor_check
+
+    args = ["runner"] + ([] if actor_check else ["calibrate"])
+    args += [
+        "--output",
+        str(tmp_path / "run"),
+        "--budget-usd",
+        "20",
+        "--no-budget-limit",
+    ]
+    monkeypatch.setattr("sys.argv", args)
+    with pytest.raises(SystemExit) as error:
+        (golden_actor_check.main if actor_check else run.main)()
+    assert error.value.code == 2
+    assert not (tmp_path / "run").exists()
+
+
+def test_actor_check_uses_high_judge_and_medium_actor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from eval import golden_actor_check
+
+    example = next(
+        e for e in run.development_examples() if e.label == "good" and len(e.turns) == 1
+    )
+    actor_model, judge_model = Mock(), Mock()
+    factory = Mock(side_effect=[actor_model, judge_model])
+    monkeypatch.setattr(run, "build_eval_model", factory)
+    actor = Mock()
+    actor.act.return_value.structured_output = SimpleNamespace(
+        stop=True, message=None, stop_reason="goal_completed"
+    )
+    monkeypatch.setattr(golden, "make_actor", Mock(return_value=actor))
+    journal = run.Journal(tmp_path / "actor-check", None)
+
+    def measured(model: Model, role: str, row: run.Attempt, maximum: int) -> Model:
+        assert model is (actor_model if role == "actor" else judge_model)
+        row.measurements.append(measurement())
+        return model
+
+    def assess(*args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+        args[1].actor_validity = run.ActorAssessment(status="valid", evidence="Offline")
+
+    monkeypatch.setattr(journal, "model", measured)
+    monkeypatch.setattr(run, "assess_outcome", assess)
+    row = golden_actor_check.check(example, 1, journal)
+    assert row.status == "scored"
+    actor_model.update_config.assert_not_called()
+    judge_model.update_config.assert_called_once_with(params=run.JUDGE_MODEL_PARAMS)
+    assert factory.call_count == 2
+
+
+def test_actor_check_uncapped_cli_preserves_prior_spend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from eval import golden_actor_check
+
+    output = tmp_path / "actor-check"
+    monkeypatch.setattr(
+        "sys.argv",
+        ["actor-check", "--output", str(output), "--no-budget-limit", "--workers", "1"],
+    )
+    monkeypatch.setattr(run, "identity", Mock(return_value={}))
+    monkeypatch.setattr(run, "development_examples", Mock(return_value=[]))
+    monkeypatch.setattr(
+        run, "prior_accounting", Mock(return_value=({"run_id": "prior"}, 30))
+    )
+    golden_actor_check.main()
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["budget_usd"] is None
+    assert manifest["prior_spend_usd"] == 30
+    assert manifest["prior_run_id"] == "prior"
+
+
+@pytest.mark.parametrize("pending_reply", [False, True])
+def test_actor_judge_delivered_turns_do_not_depend_on_control_log(
+    monkeypatch: pytest.MonkeyPatch, pending_reply: bool
+) -> None:
+    case = golden_case(1)
+    row = run.Attempt(
+        id="delivered-evidence",
+        case_id=case.id,
+        trial=1,
+        turns=[
+            golden.Turn(user="Initial request", response="First answer", calls=[]),
+            golden.Turn(
+                user="Correction delivered", response="Second answer", calls=[]
+            ),
+        ],
+        actor_replies=[{"message": "Undelivered pending reply", "stop": True}]
+        if pending_reply
+        else [],
+    )
+    evaluator = Mock(
+        return_value=SimpleNamespace(
+            structured_output=run.OutcomeAssessment(
+                outcome=run.RequirementAssessment(
+                    evidence="Offline", unmet_requirements=[]
+                ),
+                actor_validity=run.ActorAssessment(evidence="Offline", status="valid"),
+            )
+        )
+    )
+    monkeypatch.setattr(run, "Agent", Mock(return_value=evaluator))
+    run.assess_outcome(case, row, Mock(spec=Model), "contract", "conversation")
+    prompt = evaluator.call_args.args[0]
+    delivered = prompt.split("DELIVERED USER TURNS", 1)[1].split(
+        "SIMULATOR CONTROL LOG", 1
+    )[0]
+    assert json.loads(delivered.split(":\n", 1)[1]) == [
+        {"turn": 1, "user": "Initial request"},
+        {"turn": 2, "user": "Correction delivered"},
+    ]
+    control_log = prompt.split("SIMULATOR CONTROL LOG", 1)[1].split(
+        "APPLICATION STOP", 1
+    )[0]
+    assert json.loads(control_log.split(":\n", 1)[1]) == row.actor_replies
+
+
+def test_judge_tool_schemas_emit_evidence_before_decisions() -> None:
+    from strands.tools.structured_output.structured_output_utils import (
+        convert_pydantic_to_tool_spec,
+    )
+
+    schema = cast(
+        dict[str, Any],
+        convert_pydantic_to_tool_spec(run.OutcomeAssessment)["inputSchema"]["json"],
+    )
+    outcome = schema["properties"]["outcome"]
+    actor = schema["properties"]["actor_validity"]
+    assert list(outcome["properties"]) == ["evidence", "unmet_requirements"]
+    assert set(outcome["required"]) == {"evidence", "unmet_requirements"}
+    assert list(actor["properties"]) == ["evidence", "status"]
+    assert set(actor["required"]) == {"evidence", "status"}
+    assert actor["properties"]["status"]["enum"] == ["valid", "invalid", "uncertain"]
+    assert outcome["properties"]["evidence"]["minLength"] == 1
+    standalone = cast(
+        dict[str, Any],
+        convert_pydantic_to_tool_spec(run.RequirementAssessment)["inputSchema"]["json"],
+    )
+    assert list(standalone["properties"]) == ["evidence", "unmet_requirements"]
+    assert standalone["properties"] == outcome["properties"]
+    assert standalone["required"] == outcome["required"]
+    # Contradictory output remains a calibration defect, never a regex relabel.
+    contradictory = run.RequirementAssessment(
+        evidence="This is supported; no violation.",
+        unmet_requirements=[
+            run.UnmetRequirement(
+                requirement="Use evidence", evidence="The answer is supported."
+            )
+        ],
+    )
+    assert not contradictory.verdict().passed

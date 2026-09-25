@@ -343,40 +343,52 @@ class FixedPassCubedTest(unittest.TestCase):
             compare(left, right)
 
     def test_overall_gain_can_reduce_pass_cubed(self) -> None:
-        left = self.current()
-        right = self.current()
-        for value in (left, right):
-            value["manifest"]["identity"]["harness_version"] = "2.3.0"
-        for trial in (1, 2, 3):
-            slot(left, 0, trial)["verdicts"]["outcome"]["passed"] = True
-        for case in range(4):
-            slot(right, case)["verdicts"]["outcome"]["passed"] = True
-        self.update(left)
-        self.update(right)
-        result = compare(left, right)
-        self.assertTrue(result["numeric_eligible"])
-        self.assertEqual(result["primary_metric"], "overall_pass_rate")
-        self.assertEqual(result["candidate"]["overall_pass_rate"], 4 / 300)
-        self.assertLess(
-            result["candidate"]["pass_cubed"], result["baseline"]["pass_cubed"]
-        )
-        self.assertFalse(compare(right, right)["numeric_eligible"])
-        self.assertFalse(compare(right, left)["numeric_eligible"])
-        row = slot(right, 6)
-        row.update(status="inconclusive", actor_validity={"status": "uncertain"})
-        self.update(right)
-        result = compare(left, right)
-        self.assertFalse(result["numeric_eligible"])
-        self.assertEqual(result["candidate"]["overall_pass_rate"], 4 / 300)
-        row.update(status="scored", actor_validity={"status": "valid"})
-        self.update(right)
-        right["overall"]["overall_pass_rate"] = 1
-        with self.assertRaisesRegex(ValueError, "overall pass rate"):
-            compare(left, right)
-        self.update(right)
-        right["manifest"]["identity"]["harness_version"] = "2.2.0"
-        with self.assertRaisesRegex(ValueError, "incompatible"):
-            compare(left, right)
+        for version in (
+            "2.3.0",
+            "2.3.1",
+            "2.3.2",
+            "2.3.3",
+            "2.3.4",
+            "2.3.5",
+            "2.3.6",
+            "2.3.7",
+            "2.3.8",
+            "2.3.9",
+        ):
+            left = self.current()
+            right = self.current()
+            for value in (left, right):
+                value["manifest"]["identity"]["harness_version"] = version
+            for trial in (1, 2, 3):
+                slot(left, 0, trial)["verdicts"]["outcome"]["passed"] = True
+            for case in range(4):
+                slot(right, case)["verdicts"]["outcome"]["passed"] = True
+            self.update(left)
+            self.update(right)
+            result = compare(left, right)
+            self.assertTrue(result["numeric_eligible"])
+            self.assertEqual(result["primary_metric"], "overall_pass_rate")
+            self.assertEqual(result["candidate"]["overall_pass_rate"], 4 / 300)
+            self.assertLess(
+                result["candidate"]["pass_cubed"], result["baseline"]["pass_cubed"]
+            )
+            self.assertFalse(compare(right, right)["numeric_eligible"])
+            self.assertFalse(compare(right, left)["numeric_eligible"])
+            row = slot(right, 6)
+            row.update(status="inconclusive", actor_validity={"status": "uncertain"})
+            self.update(right)
+            result = compare(left, right)
+            self.assertFalse(result["numeric_eligible"])
+            self.assertEqual(result["candidate"]["overall_pass_rate"], 4 / 300)
+            row.update(status="scored", actor_validity={"status": "valid"})
+            self.update(right)
+            right["overall"]["overall_pass_rate"] = 1
+            with self.assertRaisesRegex(ValueError, "overall pass rate"):
+                compare(left, right)
+            self.update(right)
+            right["manifest"]["identity"]["harness_version"] = "2.2.0"
+            with self.assertRaisesRegex(ValueError, "incompatible"):
+                compare(left, right)
 
 
 if __name__ == "__main__":

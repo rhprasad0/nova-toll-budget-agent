@@ -1,5 +1,5 @@
 {
-  "version": "3.3.1",
+  "version": "3.3.9",
   "evaluation_scope": "development",
   "case_count": 100,
   "trials_per_case": 3,
@@ -8,7 +8,7 @@
   "hashes": {
     "cases.jsonl": "082c3b15c8dcff7a36978f15f01dfa68034c4d51021d8730d908599be41b9308",
     "prompt-points.json": "fe158b3b6c5c4e7a3fd3606c56633eac77683d365e2e93c82f3b065b8eb1879d",
-    "examples.json": "e5bc94283afbe112cc0bf2245e72705c673cec332a6c3e6348d7b92f947f56c6",
+    "examples.json": "afbd7234822fe00411e8ef68a05926699eb23fb0948cfe828a87434422c628c9",
     "fixtures/dev3-accept-three-day-annual-count-2-1.json": "a9d1137b93387b2428cbe33d62b878a69801cf54c64228eaaf0c9e37310515dc",
     "fixtures/dev3-adjust-annual-count-downward-2-1.json": "29bb8094c5eed070ab6efb1fda9912d068013ac1334748bd6cfc8039324583a2",
     "fixtures/dev3-adjust-annual-count-upward-2-1.json": "f6f746eefca62e723eb33c41847df4b81c786c44c58cad911b8280328f69c07e",
@@ -117,18 +117,18 @@
     "fixtures/dev3-wiehle-full-office-week-1-1.json": "2b0ed4945ab14ff68dddbdb916c21a53f78a473e26a82ec35a5e61458504becc",
     "fixtures/dev3-wiehle-to-fairfax-parkway-1-1.json": "1efb885691800bdaa2aae4537ac8b2174b33f9217d7dcece5de4eaaec5499ad2",
     "v2/uv.lock": "071ad13fcb49045309c63222c75e56ee5d40484cee25c0e4db36663ea4e16225",
-    "v2/eval/golden.py": "704db5d27e1f4f1c9a91a67e536e494e63d71d8fa01e2d649de453a9a6c555d2",
+    "v2/eval/golden.py": "bf21772e03e92241b0ee1ce051de9e76300dc4f3d7e9d5fb1b46c13ec15cf784",
     "v2/agent_tools/currency.py": "09a6325499e46ef0eca57ac3dd2cebedd460cf6937ceb48860c58eb1ea238710",
     "v2/eval/simulated.py": "b3b9c339a9696d0ba9615404717f86cc21de69f9a39e068f26325925404cb3fa",
     "v2/eval/run_evaluation.py": "1267150b08983b0754023b69bcfc0f704d32dabcfb710a759a69427a6bf3a727",
-    "v2/eval/golden_run.py": "3ff307ae6567fa9323abf1172001b30ff63cc9f6b000348d597d6d5043d54ff7",
-    "v2/eval/golden_actor_check.py": "bb6b3a03e8e435becae71f85343f4648c2c1ae09fd446cb66ef83aaa91a3b678",
+    "v2/eval/golden_run.py": "426bdc13afc9a5660a407a575b094789e802582b381f1431831bf9e74de69ee8",
+    "v2/eval/golden_actor_check.py": "a869303b4a201e291b1568fc2baa8f49f7b35269aaa741387075b08e86e62a58",
     "v2/eval/artifact_agent.py": "cc36d1bebd435a635b820b28bb1b6c9e63c6d7f7c7b928af9a82f779ec6f2fd5",
     "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
     "v2/agent_tools/current_price_domain.py": "028d36addc4cf35926113f09fc8f7fa203ce15a2fa04882e8979fb41f4d02e12",
     "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
-  "corpus_sha256": "6864662dd3f42c9e6bd524d93205e5d27da1d617d7c5d356af8c97d0856153fc",
+  "corpus_sha256": "d1c4ac30ed28224bca6b7978d477586a3d5ab74f0abb2c0fc315081cebf3fe47",
   "tool_description_policy": "literal-input-prose-v1"
 }

@@ -1,14 +1,20 @@
 # Running the frozen golden corpus
 
-The current development corpus has **100 cases and 143 calibration references**.
+The current development corpus has **100 cases and 146 calibration references**.
 Application baselines run three trials per case. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
 
+All golden judges, including the scripted actor-check assessment, use
+`gpt-6-luna` with xhigh reasoning and an 8,192-token output ceiling. Application
+generation remains low/2,048 and actor generation medium/2,048 on the same model.
+Run identities and cost reservations record those role-specific limits. Legacy
+scheduled evaluation settings are separate from this golden contract.
+
 ## Description-edit contract
 
-Contract 3.3.0 / harness 2.3.0 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.9 / harness 2.3.9 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -70,8 +76,8 @@ Run from `v2/`. Offline validation needs no model calls:
 uv run python -m eval.golden
 ```
 
-Paid work requires user authorization within a stated budget and a clean committed
-checkout. Use a new ignored output directory for each run. These examples assume
+Paid work requires user authorization for a stated budget or explicitly uncapped
+spending, and a clean committed checkout. Use a new ignored output directory for each run. These examples assume
 an authorized $25 cumulative ceiling and 16 workers; they do not grant permission
 to spend or reset a previous ledger.
 
@@ -80,6 +86,11 @@ uv run python -m eval.golden_run calibrate \
   --output eval/private/calibration-N --budget-usd 25 --workers 16 \
   --prior-run eval/private/previous-run
 ```
+
+Use `--no-budget-limit` instead of `--budget-usd` only when the user explicitly
+authorizes uncapped spending. The flags are mutually exclusive in both runner
+and actor-check CLIs. Uncapped manifests store `budget_usd: null`; usage accounting,
+call limits, worker bounds, and stop-on-unknown-usage rules still apply.
 
 Omit `--prior-run` only for a genuinely new authorized spending chain. Calibration
 judges all fixed development references; it does not generate new application or

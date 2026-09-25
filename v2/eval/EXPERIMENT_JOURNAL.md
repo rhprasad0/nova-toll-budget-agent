@@ -1440,6 +1440,437 @@ comparison tests passed, including archived report reproduction, along with
 lint/type, corpus and skill validation. The review explicitly leaves calibration
 unapproved and paid continuation stopped.
 
+
+## 2026-09-25 — uncapped overall-pass preparation; fresh calibration stop
+
+Ryan authorized repairing the remaining grading defects and then attempting a
+bounded three-round A/B climb on the exposed 100-case development set, optimizing
+successful trials out of all 300 expected trials. This authorization explicitly
+removes the prior $20 total and $15 preparation ceilings; it does not remove
+usage accounting, measurement gates, or the search and confirmation stopping
+rules. The preserved spending chain continues from $12.037866530.
+
+Preparation starts from merged `fbe65eb404eab8546d6bfe638e8c90a66b19bc2d`.
+The measured preparation commit is
+`6e76aaffdba87fbaada1bb41546ca6bb6747d4cd`, with corpus **3.3.1**, harness
+**2.3.1**, application **gpt-6-luna**, unchanged SOP **2.3.9**, and unchanged
+Oracle **1.15.1** catalog. All original 143 reference objects and all 100 cases
+remain unchanged; three focused contrasts cover equivalent versus omitted
+published-schedule provenance and conditional income suggestion versus unilateral
+adoption. No application prompt candidate was produced.
+
+The runner and actor-check CLI accept explicit `--no-budget-limit`, mutually
+exclusive with `--budget-usd`. Uncapped manifests record a null ceiling while
+retaining cumulative prior spend, reservations, known-usage checks, call bounds,
+and worker bounds. Capped behavior and historical comparison semantics remain.
+General grading instructions distinguish actual violations from compliance,
+preserved user inputs from mandatory prose repetition, optional schedule metadata
+from required provenance, and conditional income suggestions from adoption.
+Stored judgments still derive pass/fail from cited unmet requirements; no regex
+relabeling or post-hoc verdict correction is introduced.
+
+Fresh independent Codex review found the preparation code and all three new
+reference labels acceptable before paid execution. Corpus approval identifies
+that actual review and makes no claim of human trajectory adjudication or
+calibration approval. Focused runner/corpus/development tests, 36 historical
+compatibility tests, seven release-isolation tests, 11 comparison checks, corpus
+validation, lint/type checks, and skill validation passed. Later tests covered
+the added conditional-income contrast. No application model or runtime behavior
+changed.
+
+The predetermined sequence remains two full-reference calibrations, one full
+scripted actor check, and two identical application runs, with the second
+application run designated as baseline by position. Only calibration one was
+admitted, estimated at $0.40 and run with 16 workers.
+
+| Calibration measure | Result |
+| --- | ---: |
+| Complete references | 146 / 146 |
+| Started and finished calls, all usage known | 438 / 438 |
+| Measurement failures | 0 |
+| Outcome label agreement on actor-valid references | 136 / 143 |
+| Grounding label agreement on actor-valid references | 142 / 143 |
+| Rules label agreement on actor-valid references | 142 / 143 |
+| Actor-validity agreement | 145 / 146 |
+| Prior four disagreement references now matching labels | 4 / 4 |
+| Added contrast references matching labels | 3 / 3 |
+| Calibration cost | $0.268293010 |
+| Cumulative accounted eval cost | $12.306159540 |
+
+Independent review confirmed material grading errors. Multiple nonempty unmet
+lists explicitly describe compliant behavior and conclude there is no violation.
+Other judgments invent disclosure or question-format requirements, misinterpret
+modeled provenance, confuse an annual return destination with its origin, and
+accept an explicit actor stop before required endpoint facts are supplied.
+Two additional wording-sensitive findings do not alter the stop decision because
+multiple unambiguous errors independently invalidate grading readiness.
+
+**Decision: stop; the fresh calibration remains unapproved.** The four earlier
+disagreements now agree, but that does not establish a reliable repair: the same
+failure mechanism recurs elsewhere. Different stochastic draws and changed
+instructions prevent causal attribution of new disagreements to this patch.
+No second calibration, actor check, application repeat, candidate search, or
+confirmation ran. No training-set improvement or replacement baseline is claimed.
+All raw verdicts, references, and accounting remain preserved privately.
+
+Protected development delivery for the merged stack was still in progress at
+this stop; migration completion and deployed catalog parity were not yet
+verified. No manual migration or deployment was performed. Those checks remain
+required before a future climb. A separately authorized grading repair must
+resolve the structured-decision and actor-validity failures under a newly pinned
+contract and fresh evidence. Runtime/tool changes, larger models, larger candidate
+pools, and workflow redesign were not tested. Raw evidence stays in the ignored
+preparation worktree; this journal is the only published experiment summary.
+
+
+## 2026-09-25 — evidence-first grading repair; remaining source errors
+
+Ryan explicitly authorized further grading fixes after the preceding stop.
+The uncapped authorization and cumulative accounting continue; the failed
+calibrations remain preserved and no prior verdict or label was rewritten.
+The new measured commit is `565ff8d279d2465a623af37345ed4118d9073f44`, using
+corpus **3.3.2** / harness **2.3.2**. All 146 reference payloads and labels,
+100 application cases, fixtures, application SOP, models, actor generation,
+tools, and catalog remain unchanged.
+
+The judge schema now presents concise cited evidence before the unmet-requirement
+list and before actor-validity status. Shared first-call instructions include
+small generic supported/contradicted financial-claim examples. Actor grading
+explicitly checks whether a supplied profile fact was requested and left
+undelivered by an explicit goal-completed stop, distinguishing actual application
+termination and forced max-turn stops. Compact context guidance addresses road
+abbreviations, financial wording, missing-input clarification, and endpoint roles
+within each leg. Pass/fail still derives only from list emptiness; there is no
+regex relabeling, extra verifier call, or model substitution.
+
+Independent offline review verified the actual SDK-converted field order and
+unchanged field names, types, requiredness, constraints, and enum values. Field
+order is a plausible repair mechanism, not a proven causal explanation; stored
+JSON is reserialized and cannot establish the original generation order. All
+140 focused tests, 36 historical compatibility tests, seven release-isolation
+tests, 11 comparison checks, corpus validation, lint/type checks, and skill
+validation passed. Fresh corpus approval reflects that independent code review
+and does not imply calibration or human trajectory approval.
+
+One new full-reference calibration ran with 16 workers, estimated at $0.42,
+chained from the previous $12.306159540 cumulative spend.
+
+| Calibration measure | Result |
+| --- | ---: |
+| Complete references | 146 / 146 |
+| Started and finished calls, all usage known | 438 / 438 |
+| Measurement failures | 0 |
+| Outcome label agreement on actor-valid references | 142 / 143 |
+| Grounding label agreement on actor-valid references | 141 / 143 |
+| Rules label agreement on actor-valid references | 143 / 143 |
+| Actor-validity agreement | 146 / 146 |
+| Calibration cost | $0.272413545 |
+| Cumulative accounted eval cost | $12.578573085 |
+
+Independent review inspected all nonempty unmet lists and found no recurrence of
+satisfied requirements being listed as unmet. All ten preceding disagreement
+references now match their labels with appropriate explanations, including the
+premature actor stop. These are observations from one fresh draw under changed
+instructions, not proof of causality or established judge repeatability.
+
+Three disagreements remain. Two are clear material false passes: Outcome accepts
+an answer missing explicitly required price-source disclosure, and Grounding
+misses a false denial of the historical-observation source after otherwise correct
+financial figures. The third involves criterion-boundary ambiguity: explicitly
+keeping the old route after a correction clearly fails Outcome and Rules, but
+does not necessarily claim that the old quote prices the corrected route.
+
+**Decision: stop; calibration remains unapproved.** The repeat calibration,
+scripted actor check, application baselines, candidate search, and confirmation
+were not admitted. No application improvement is claimed. Further repair must
+separate required-disclosure completeness from affirmative-claim accuracy,
+check provenance denials alongside financial amounts, and clarify the route
+correction boundary under a newly reviewed contract. Existing source and consent
+labels must not be weakened to obtain agreement. Raw evidence and independent
+review remain private. Migration and deployed catalog parity remain prerequisites
+before any future climb; this repair performs no deployed mutation.
+
+
+## 2026-09-25 — source completeness calibration; actor/input-grounding stop
+
+Ryan authorized proceeding with calibration after the remaining grading fixes.
+The fresh reviewed contract is corpus **3.3.3** / harness **2.3.3**, measured at
+`7e4f69bf0f984d228f5f64daa60475644994f1e1`. Outcome now checks completion,
+required disclosures, and factual accuracy separately; Grounding explicitly
+checks source denials and distinguishes openly keeping an old route from falsely
+claiming its quote prices a corrected route. The generic positive formatting
+example no longer suggests that a correct amount alone completes all requirements.
+Evidence-first output, verdict derivation, all 146 reference payloads and labels,
+100 cases, application, actor generation, models, tool schemas and fixtures are
+unchanged. No old evidence was relabeled or rescored.
+
+Fresh independent preparation review found no material code/contract defect.
+All 140 focused tests, seven release-isolation checks, 11 comparison checks,
+corpus validation, lint/type/format checks and skill validation passed. Corpus
+approval reflects that review only, with no human trajectory or calibration
+approval claimed.
+
+One full calibration ran with 16 workers and a $0.42 complete-run estimate,
+continuing the uncapped ledger from $12.578573085.
+
+| Calibration measure | Result |
+| --- | ---: |
+| Complete references | 146 / 146 |
+| Started and finished calls, all usage known | 438 / 438 |
+| Measurement failures | 0 |
+| Outcome agreement among expected-valid references judged valid | 142 / 142 |
+| Grounding agreement among expected-valid references judged valid | 141 / 142 |
+| Rules agreement among expected-valid references judged valid | 142 / 142 |
+| Actor-validity agreement | 145 / 146 |
+| Calibration cost | $0.271214520 |
+| Cumulative accounted eval cost | $12.849787605 |
+
+The application-criterion denominator is 142 because one of the 143 valid
+references was wrongly classified actor-invalid and excluded as inconclusive.
+Those criterion fractions therefore do not imply all valid references were
+correctly measured. Independent review checked all 93 nonempty assessments and
+found no recurrence of satisfied requirements listed as unmet. All three prior
+disagreements now agree with their labels; changed draws and prompts prevent
+causal attribution or a repeatability claim.
+
+Two clear material errors remain. Actor validity denies a correction visibly
+delivered in the canonical second user turn, even though the same combined
+assessment's Outcome explanation recognizes that correction. Confusion with the
+empty auxiliary actor-reply log is a possible mechanism, not an established
+internal cause. Grounding also accepts a derived annual-day count in a tool call
+before user consent, treating valid arithmetic and successful execution as support
+for an unaccepted user input. Outcome and Rules correctly reject that premature
+call, but they do not replace Grounding's independent assessment.
+
+Review also preserved observations outside labeled application metrics: a
+correctly actor-invalid reference has a defensible Outcome disclosure concern,
+and another retains a failed Outcome with an auxiliary rationale that confuses a
+private required actor choice with the assistant's delivered workflow. These
+observations were not used to change labels or assert extra confirmed defects.
+
+**Decision: stop; calibration is unapproved.** No repeat calibration, actor check,
+application baseline, candidate search, or confirmation was admitted. A further
+repair must distinguish canonical delivered user messages from optional actor
+records and arithmetic support from turn-local support for actual user inputs.
+Existing instructions already cover these rules; this run does not establish
+that additional wording alone will fix them. Raw evidence, costs, and independent
+review remain private. No application improvement or deployed change is claimed.
+
+## 2026-09-25 — delivered-turn/input-support repair; calibration repeatability stop
+
+Ryan authorized proceeding with the remaining fixes and calibration, retaining
+uncapped spending and all non-budget stop rules. The preparation repair is
+`c84859b6bce422d2af6648cdf88f3816432dc23d`; both fresh calibrations measured
+`468e576fef8b8a86e8ca09829d081aa47cacf6be`, corpus **3.3.4** / harness **2.3.4**.
+Actor assessment now receives the exact delivered user turns separately from the
+optional simulator control log. Grounding checks financial and schedule inputs
+independently of output support, and the old-route exception no longer contains
+a broad answer-only restriction. Successful execution, echoed inputs and correct
+arithmetic cannot establish an unaccepted user fact. The recorded-call heading
+now describes execution without implying correctness.
+
+Independent preparation review found no material defect. All 146 reference
+payloads and labels, 100 cases, fixtures, application, actor generation, models,
+settings, schemas and verdict derivation remain unchanged. Offline checks covered
+142 focused tests, seven release-isolation checks, 11 comparison checks, corpus
+validation, lint, formatting, types and skill validation. The review-required
+check initially failed while the new contract review was pending, then passed
+after that independent review was recorded; the assertion was not weakened.
+
+The predetermined pair ran on identical application/evaluation identities with
+16 workers, an estimated $0.43 per complete calibration, and a continuous ledger
+starting at $12.849787605. Neither run regenerated application conversations.
+
+| Calibration measure | First | Predetermined repeat |
+| --- | ---: | ---: |
+| Complete references | 146 / 146 | 146 / 146 |
+| Started and finished calls, all usage known | 438 / 438 | 438 / 438 |
+| Measurement failures | 0 | 0 |
+| Outcome agreement on valid references | 143 / 143 | 140 / 143 |
+| Grounding agreement on valid references | 143 / 143 | 142 / 143 |
+| Rules agreement on valid references | 143 / 143 | 143 / 143 |
+| Actor-validity agreement | 146 / 146 | 146 / 146 |
+| Run cost | $0.272038170 | $0.263131380 |
+| Cumulative accounted eval cost | $13.121825775 | $13.384957155 |
+
+Both prior failures—the missed delivered correction and unaccepted annual-day
+input—were correctly explained in both runs. All 876 stored criterion booleans
+match unmet-list emptiness. The first independent review inspected all 94
+nonempty assessments and found no material scoring error; two limited citation
+or auxiliary-rationale errors were preserved without changing labels. That
+review supported the planned repeat, not application improvement or human
+trajectory adjudication.
+
+The unchanged repeat changed four scored criterion decisions across four
+references: three Outcome passes became false failures, and one Grounding
+failure became a false pass. Independent review confirmed all four as material
+judge errors. Outcome invented extra disclosure requirements for comparison
+provenance, an available historical date range, and a field-by-field enumeration
+of unavailable annual results. Grounding missed a final statement labeling the
+combined annual cost as toll alone after an otherwise correct financial answer.
+Rules and actor validity had no decision changes. These are judging variation,
+not changes in application quality or proof that the repair caused regressions.
+
+**Decision: stop; the calibration pair is unapproved for application execution.**
+The first run's repeat-admission approval was retained privately as history and
+removed from active calibration readiness after the repeat failed. No third
+calibration, scripted actor check, application baseline, candidate search or
+confirmation was admitted. The pair cost **$0.535169550**; cumulative known eval
+spend is **$13.384957155**. A further repair needs independent review of requirement
+applicability and contradictory financial claims before new paid admission;
+another unchanged-contract retry is not justified. No labels or historical
+measurements were altered. Raw reports and review evidence remain private.
+
+The protected development delivery for merged `fbe65eb404eab8546d6bfe638e8c90a66b19bc2d`
+completed successfully in workflow run `36148909062`, including its registered
+migration step. Deployed catalog parity remains unverified and is still required
+before a future climb. No database query, manual migration or deployment was
+performed during this repair.
+
+## 2026-09-25 — requirement applicability calibration; Outcome reliability stop
+
+Ryan explicitly requested another calibration round after the repeatability stop.
+The separately reviewed preparation at
+`102eb91a2a78e3de6907170a58e486ba983e803a` moved unchanged domain/catalog context
+before criterion policy and consolidated the decision guidance. Outcome now
+checks a requirement's applicability and policy exceptions before declaring an
+omission, including expected unavailability within a multi-request answer.
+Grounding separately checks call inputs and all output claims, including final
+prose and financial labels. These are general judging instructions, not changes
+to the application, actor generation, models, schemas, references or labels.
+
+Independent preparation review found no material defect. The 142 focused tests,
+seven release-isolation checks, 11 comparison checks, corpus validation, skill
+validation and lint/type/format checks passed. Captured requests verify that
+policy follows supporting context for all three criteria; assessment schemas
+and list-derived verdict conversion remain unchanged. The new contract is
+corpus **3.3.5** / harness **2.3.5**, measured at `76f4006`.
+
+One fresh full calibration ran with 16 workers, a $0.45 complete-run estimate,
+and uncapped accounting chained from $13.384957155. No application conversations
+were regenerated.
+
+| Calibration measure | Result |
+| --- | ---: |
+| Complete references | 146 / 146 |
+| Started and finished calls, all usage known | 438 / 438 |
+| Measurement failures | 0 |
+| Outcome agreement on valid references | 134 / 143 |
+| Grounding agreement on valid references | 143 / 143 |
+| Rules agreement on valid references | 143 / 143 |
+| Actor-validity agreement | 146 / 146 |
+| Calibration cost | $0.271813360 |
+| Cumulative accounted eval cost | $13.656770515 |
+
+Independent review confirmed all nine disagreements as material Outcome errors:
+seven false failures and two false passes. The false failures demand optional
+rate-period wording, reject a correct two-component breakdown, add historical
+source wording to a fixed-rate disclosure, misread three correctly labeled
+remaining-income statements as financial contradictions, and reject a supported
+missing-history explanation. The false passes overlook the required invitation
+to adjust proposed annual days and the omitted vehicle-cost assumption.
+All 98 nonempty assessments were inspected. Three financial-label failures cite
+semantically matching claims as contradictions, despite correct structured
+conversion; the semantic defect cannot be fixed by changing boolean derivation.
+
+The three actor-invalid exclusions remain supported. A changed Outcome decision
+on an excluded route-decline trajectory is defensible for the delivered facts
+and has no expected application label; it is not counted as another judge error.
+Different prompts and draws prevent causal attribution of the additional errors
+to context reordering. Matching Grounding/Rules/actor labels in this run does not
+establish repeatable judge correctness or an application improvement.
+
+**Decision: stop; calibration remains unapproved.** No second calibration,
+scripted actor check, application baseline, candidate search or confirmation was
+admitted. The available evidence does not justify another wording-only paid
+round: the current judge still invents requirements, misses explicit requirements
+and misreads equivalent financial statements. Revisit the grading approach under
+a separately reviewed, authorized plan before further calibration; do not weaken
+labels, select a favorable prior run, or retry the unchanged contract. All raw
+evidence and review details remain private. Deployed catalog parity remains a
+separate prerequisite before a future climb; no deployed mutation occurred.
+
+## 2026-09-25 — Luna/high calibration pair clears; actor stopping blocks continuation
+
+Ryan authorized moving golden judges directly to Luna/high without a comparison
+arm, retaining uncapped accounting. Preparation `a7174dd` adds a shared judge
+builder used by the three-criterion runner and scripted actor assessment, with
+an 8,192-token output ceiling. Role-specific reservations and run identities
+record that allowance. TollChat remains **Luna/low/2,048** and actor generation
+**Luna/medium/2,048**. Prompts, reference payloads and labels, schemas, application
+sources and actor generation are unchanged. Legacy scheduled evaluation is
+outside this golden contract and remains unchanged.
+
+Independent preparation review found no material defect. Relevant offline tests,
+historical compatibility checks, seven release-isolation checks, 11 comparison
+checks, corpus and skill validation, and lint/type/format checks passed. An old
+medium-effort assertion was corrected and its targeted rerun passed. SDK request
+checks verify all three roles and their accounting reservations. Fresh corpus
+review records the actual Codex review with human trajectory adjudication false.
+The contract is corpus **3.3.6** / harness **2.3.6**, measured at
+`1d6bc4fd5ce44eea886e25041e1c05c70738ca52`.
+
+Two predetermined full calibrations ran sequentially with 16 workers and
+identical identities. The first received independent review before the second
+was admitted. Both used a conservative $3.50 complete-run estimate and chained
+uncapped accounting from $13.656770515.
+
+| Calibration measure | First run | Second run |
+| --- | ---: | ---: |
+| Complete references | 146 / 146 | 146 / 146 |
+| Completed calls, all usage known | 438 | 438 |
+| Measurement failures | 0 | 0 |
+| Outcome agreement on valid references | 143 / 143 | 143 / 143 |
+| Grounding agreement on valid references | 143 / 143 | 143 / 143 |
+| Rules agreement on valid references | 143 / 143 | 143 / 143 |
+| Actor-validity agreement | 146 / 146 | 146 / 146 |
+| Cost | $0.296909860 | $0.287747700 |
+
+There were zero criterion or actor-validity flips, including excluded rows.
+Independent review inspected all 93 nonempty assessments in each run, the 27
+previously disagreeing reference rows, original financial/source/consent
+contrasts, and all three actor-invalid exclusions. All 876 verdict/list
+conversions and token-derived costs reconciled. No material grading defect was
+identified. The excluded healthcare trajectory retains a minor caveat-wording
+ambiguity, but its actor exclusion is independently supported and no scored
+criterion depends on resolving that ambiguity.
+
+**The pair is recorded as Codex-reviewed development calibration**, with human
+trajectory adjudication false. These are repeated exposed references, not new
+coverage or human gold-label adjudication. No comparison arm was run, so this
+does not isolate an effect of reasoning effort or establish generalization.
+
+The next predetermined full scripted actor check ran on the same committed
+identity with 16 workers and a $3.50 complete-run estimate. It completed all 300
+unique trials: **296 valid and four inconclusive**, with 423 actor calls and 296
+judge calls, all usage known. Cost was **$0.277166100**. Independent review
+inspected all four inconclusives and relevant passing stopping, cancellation,
+income and unavailable-history contrasts, plus actor and checker control flow.
+
+Three trials genuinely failed to stop after disclosing unavailable income and
+receiving the assistant's explanation of that limitation. The fourth rejected
+route alternatives first and supplied the profile-required cancellation in a
+later reply. The fixed script classified that continuation as unnecessary when
+it exceeded the scripted length; the pending cancellation exposes a script
+alignment limitation rather than proving a semantically unnecessary action.
+All four failures occurred before judge assessment and remain inconclusive.
+They do not invalidate the separately reviewed fixed-reference calibration.
+
+**Decision: stop before application repeats and candidate search.** No retry,
+relabeling, application baseline, candidate patch or confirmation was performed.
+A bounded next preparation could clarify precedence between answering repeated
+questions with known facts and stopping after acknowledged genuine unavailability,
+and encourage delivering jointly triggered profile actions together. Competing
+actor instructions are a plausible mechanism, not established causation. Such a
+repair needs a separately admitted contract and fresh matching validation; the
+frozen actor was not changed during this measurement.
+
+Total spending for this sequence was **$0.861823660**, bringing cumulative
+accounted evaluation spending to **$14.518594175**. Raw evidence and reviews
+remain private. No application improvement, release qualification or deployment
+is claimed. Deployed catalog parity remains unverified and required before a
+future climb; no deployed mutation occurred.
+
 ## 2026-09-25 — Private production qualification policy 3.0.0
 
 Ryan selected an **80% overall admission floor** for a future independently
@@ -1553,3 +1984,199 @@ production baseline. Updated the mixed-version test to accept an already-current
 schema as well as the reviewed production schema-label migration. All 78 focused
 compatibility, scheduled-evaluation and bundle tests pass; CI remains the merge
 gate. No deployment or model evaluation was performed.
+
+## 2026-09-25 — actor completion repair clears; normal-status grading error found
+
+Ryan authorized actor repairs and reruns, then continued fixes and measurements
+until ready for a new application baseline, followed by a ready-for-review PR.
+Uncapped accounting persists; the baseline itself is not part of this preparation.
+The actor repair at `54eb25f` gives acknowledged genuine unavailability precedence
+over repeated requests for known facts, and requires jointly triggered profile
+actions together while deferring future triggers. Models, profiles, schemas,
+scripted-check logic, reference payloads and labels remain unchanged.
+
+Reviewed main `94f89ca` was merged before measurement, preserving its shared
+currency parsing, complete payload validation and public production gate.
+Both journal histories were retained. Independent supplemental review confirmed
+these integrations and the unchanged judge prompts, application prompts and
+actor-check behavior. Fresh preparation approval was recorded without claiming
+human trajectory adjudication. The contract was corpus **3.3.7** / harness
+**2.3.7**, measured for actors at `92b00f0`.
+
+The full scripted actor run completed **300/300 valid trials**, with zero
+inconclusives and 723 complete known-usage calls (423 actor, 300 judge).
+Independent review inspected all 114 trials across the 38 staged profiles and
+verified termination without continuation for the remaining 186. All six trials
+of the two formerly troublesome scenarios now meet their completion conditions.
+Known facts, staged choices, corrections, cancellation and workflow switches
+remained intact. The scripts do not exercise repeated-question loops or arbitrary
+live application trajectories; this result does not establish universal actor
+reliability or a causal effect from one stochastic run.
+
+Cumulative PR review found no material code defect. Its CI coverage finding was
+fixed at `b7441bc`: the existing golden-validation step now explicitly executes
+the comparison helper's regression suite. Actionlint and the exact CI command
+passed. Relevant runner, corpus, retirement, historical compatibility, comparison,
+lint/type/format and skill checks passed. The CI-only commit does not alter the
+application or semantic evaluation identities.
+
+Two fresh full calibrations followed sequentially at `b7441bc`, with independent
+review before admitting the second. All three runs used 16 workers, conservative
+$3.50 complete-run estimates and the existing spending chain.
+
+| Measure | Actor check | Calibration 1 | Calibration 2 |
+| --- | ---: | ---: | ---: |
+| Complete trials/references | 300 | 146 | 146 |
+| Complete calls, all usage known | 723 | 438 | 438 |
+| Actor validity/agreement | 300/300 | 146/146 | 146/146 |
+| Outcome agreement on valid references | Not scored | 143/143 | 142/143 |
+| Grounding / Rules agreement | Not scored | 143/143 each | 143/143 each |
+| Cost | $0.287175100 | $0.288319200 | $0.289602700 |
+
+The second calibration falsely rejects one correct current-price reference solely
+for omitting normal OPEN status. Independent review confirms that neither the
+request nor contract makes normal successful availability a required separate
+disclosure. Price, source, observation time, route and clarification are correct.
+This is a material judge error, not a reference-label defect. One excluded
+actor-invalid route-alternatives reference also changes its Outcome decision;
+its actor exclusion and all scored labels except the normal-status false failure
+remain unchanged. No measurement failure or unknown usage occurred.
+
+**Decision: retain the actor evidence, leave this calibration pair unapproved,
+and repair availability materiality under a new contract before baseline
+admission.** Do not rewrite the failed verdict, inherit the first run's apparent
+success, or retry the unchanged pair. The bounded repair must distinguish normal
+successful/open metadata from restrictions or explicitly requested status, while
+preserving closure, staleness, missing-data, source and timing requirements.
+Fresh matching measurements and review are required. No application baseline,
+candidate search, merge or deployment occurred.
+
+This sequence cost **$0.865097000**, bringing cumulative accounted evaluation
+spending to **$15.383691175**. Raw run evidence remains private. Preparation is
+continuing under Ryan's authorization; reviewed merge and deployed catalog parity
+remain prerequisites for a later climb.
+
+Supplemental semantic review of the excluded route-alternatives row identified
+an unsupported Outcome failure: the judge acknowledges the permitted discovery
+call but still demands an estimate after the delivered user declines its returned
+alternatives. This does not create a new expected label or change the actor
+exclusion. It does expose confusion between expected validation failure and an
+agent-caused mistake that could affect valid unavailability paths. Before any
+3.3.8 paid run, the bounded preparation also clarifies that distinction and the
+need to respect the delivered refusal of alternatives, preserving all other
+applicable obligations. The original failed report remains unchanged.
+
+### 2026-09-25 — Final preparation calibration and reliability stop
+
+Corpus **3.3.8** / harness **2.3.8** clarifies normal successful status versus
+material restrictions, and permitted discovery unavailability versus an
+agent-caused failure after the delivered user declines alternatives. Independent
+preparation review cleared these bounded changes before measurement at
+`3af9d9f`. Application, actor prompt, models, schemas, reference payloads and
+labels remained frozen. Preparation approval does not approve calibration or
+claim human trajectory adjudication.
+
+The predetermined sequence was two full calibrations followed by a matching
+300-trial actor check, with independent review between admissions. The first
+calibration completed all **146 references and 438 calls**, with complete known
+usage, no measurement failures and 16 workers. Outcome agreed on **142/143**
+valid references; Grounding and Rules each agreed on **143/143**; actor validity
+agreed on **146/146**. The two newly clarified mechanisms were correctly graded
+in this run. These fixed, exposed references do not establish reliability on
+unseen application trajectories.
+
+The remaining false Outcome failure treats a recognizable road abbreviation as
+an internal endpoint ID despite an explicit existing rule accepting that
+rendering. Other references with the same presentation pass in this batch.
+Independent review confirms existing-policy noncompliance, not a reference-label
+defect or a missing domain rule. Another wording-only exemption is not justified;
+the failed verdict and reference label remain unchanged.
+
+The independent audit covered all 94 nonempty assessments, 27 historically
+problematic references, eight additional passing or boundary contrasts, and all
+three actor-invalid exclusions. It found no additional material grading error.
+All 146 trajectories and expected labels match the frozen references; semantic
+identity, evidence digest and accounting reconcile. The previously documented
+caveat ambiguity in one excluded reference remains unlabeled and does not become
+an application approval.
+
+**Decision: stop dependent paid admission and open the preparation PR for code
+review, with baseline readiness explicitly blocked.** The calibration remains
+unapproved; its planned repeat and matching actor check were not run. The earlier
+300/300 actor result belongs to contract 3.3.7 and is not transferred as final
+contract qualification. No application baseline, candidate search, holdout
+evaluation, merge, migration or deployment occurred. Reviewed merge and deployed
+catalog parity remain gates for the later climb.
+
+Independent code review found no material defect. All 150 relevant runner,
+development, corpus and retirement tests passed, alongside comparison, corpus,
+lint/format/type, workflow, skill and contract-version checks. An offline exercise
+of the actual baseline admission path confirmed that the unapproved calibration
+is rejected before run creation, credentials or model calls. Raw evidence and
+detailed reviews remain private.
+
+This calibration cost **$0.291537200**, bringing cumulative accounted evaluation
+spending to **$15.675228375**. Explicit uncapped authorization remained in effect;
+the stop is for grading reliability, not budget.
+
+
+### 2026-09-25 — Luna xhigh calibration preparation completed
+
+Ryan authorized increasing only the golden judge reasoning effort from high to
+**xhigh**, retaining `gpt-6-luna` and the 8,192-token output ceiling. Application
+generation remains low/2,048 and actor generation medium/2,048. Prompts, grading
+policy, reference trajectories and labels, fixtures, tool schemas and application
+behavior remained frozen. Corpus **3.3.9** / harness **2.3.9** records the changed
+measurement contract; comparison tooling admits the new version while retaining
+historical semantics. No earlier approval or failed verdict was transferred.
+
+Independent preparation review cleared `9b1d1d2`. The predetermined sequence ran
+at the unchanged measurement commit `a8415ef`, with 16 workers and independent
+review before each dependent admission. An expired SSO login was resolved before
+any model call. Existing uncapped authorization and cumulative accounting
+continued from the prior stopped calibration.
+
+| Measure | Calibration 1 | Calibration 2 | Scripted actor check |
+| --- | ---: | ---: | ---: |
+| Complete references/trials | 146/146 | 146/146 | 300/300 |
+| Application label agreement | 429/429 | 429/429 | Not scored |
+| Actor labels / valid actor trials | 146/146 | 146/146 | 300/300 |
+| Complete calls, all usage known | 438 | 438 | 723 |
+| Cost | $0.331475370 | $0.319100040 | $0.320316600 |
+
+Both calibrations have zero disagreements or measurement failures. All verdicts
+agree across the two runs, including the three actor-invalid exclusions. The
+previous road-abbreviation false Outcome failure passes in both. Independent
+reviews inspected all 93 nonempty assessments per run, negative controls, 29
+historically problematic references, additional passing contrasts and all actor
+exclusions, alongside frozen-input integrity, evidence digests and accounting.
+No material grading error was found.
+
+The reviews retained nonmaterial explanation defects: some Grounding rationales
+use incorrect direction or overly broad route-match wording, also present in the
+first run. Those labels remain justified under the Grounding boundary, while
+Outcome and Rules correctly reject the erroneous routes. The previously recorded
+caveat ambiguity in an excluded actor-invalid reference remains unlabeled. No
+verdict was rewritten. Fixed exposed references and two stochastic draws do not
+establish causal improvement or unseen-trajectory accuracy.
+
+Independent actor review inspected all 114 staged trials across 38 profiles and
+verified explicit completion without an undelivered message in the remaining
+186 trials. Scripted responses and tool payloads match the fixed references. All
+300 judge and 423 actor calls completed. These scripts do not exercise arbitrary
+live application trajectories or repeated-question loops; no universal actor
+reliability or human trajectory adjudication is claimed.
+
+**Decision: calibration preparation is complete.** Both calibrations have fresh
+reviews bound to their evidence digests, and the matching actor check is reviewed.
+The offline actual admission path accepts the matching calibration but was stopped
+before run creation, credentials or model calls; the changed-effort regression
+rejects stale approval. All 151 relevant runner, corpus, development and retirement
+tests passed, together with 11 comparison checks, corpus validation, lint/format/
+type checks, skill validation and tool/agent/schema contract checks.
+
+The sequence cost **$0.970892010**, bringing cumulative accounted evaluation
+spending to **$16.646120385**. Raw evidence and detailed reviews remain private.
+No application baseline, candidate search, holdout evaluation, merge, migration
+or deployment occurred. Human-reviewed merge and verified development
+migration/catalog parity remain prerequisites for a later baseline.
