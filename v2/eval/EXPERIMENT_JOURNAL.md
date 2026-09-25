@@ -582,3 +582,32 @@ passed**, along with corpus validation and repository checks. All 94 current
 documentation links resolve; the journal prefix and retained contract identities
 are unchanged. The cleanup removes 207 files containing about 242 MB of redundant
 experiment material from the working tree.
+
+### 2026-09-24 — SOP-only eval-climb pilot stopped by user
+
+Ryan authorized one round with a new $10 eval ceiling, targeting pass³ on the
+100-case development corpus. Calibration 9 matched contract 3.0.6 / harness
+2.0.13; Codex recorded an execution review without claiming human transcript
+adjudication. All runs used four workers and unchanged application model/tools.
+
+The baseline achieved **38/100 pass³, 208/300 successful trials, zero
+inconclusives**, costing $0.930307325. Candidate A added a per-leg endpoint
+resolution sequence: **36/100 pass³, 212/300 successful trials, zero
+inconclusives**, costing $0.920493580. Its aggregate trial gain did not satisfy
+the requested pass³ improvement. Candidate B added a pre-call endpoint audit;
+Ryan stopped the pilot after 130 of its 300 attempts completed. B remains an
+incomplete measurement. Independent candidate review and confirmation were not
+completed. No candidate was adopted.
+
+Recorded campaign cost is **$2.162977505**, including $0.312176600 of known B
+usage. Four in-flight calls lacked final receipts at termination; recorded cost
+is not a final billed total, and unknown usage blocks automatic continuation.
+The supervisor and evaluator were terminated. Raw evidence and candidate
+branches remain local; no holdout evaluation, deployment, push, or PR occurred.
+
+Deferred hypothesis: clarify direction in current-price and annual-tool endpoint
+descriptions after repeated eastbound IDs for westbound requests. Tool source
+edits would invalidate the frozen corpus/calibration, so this was not tested.
+The pilot also exposed that custom roles require a fresh session and that the
+skill explicitly selected four workers; its default is being changed to 16
+for future runs in response to Ryan's follow-up.
