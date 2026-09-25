@@ -1789,3 +1789,84 @@ a separately reviewed, authorized plan before further calibration; do not weaken
 labels, select a favorable prior run, or retry the unchanged contract. All raw
 evidence and review details remain private. Deployed catalog parity remains a
 separate prerequisite before a future climb; no deployed mutation occurred.
+
+## 2026-09-25 — Luna/high calibration pair clears; actor stopping blocks continuation
+
+Ryan authorized moving golden judges directly to Luna/high without a comparison
+arm, retaining uncapped accounting. Preparation `a7174dd` adds a shared judge
+builder used by the three-criterion runner and scripted actor assessment, with
+an 8,192-token output ceiling. Role-specific reservations and run identities
+record that allowance. TollChat remains **Luna/low/2,048** and actor generation
+**Luna/medium/2,048**. Prompts, reference payloads and labels, schemas, application
+sources and actor generation are unchanged. Legacy scheduled evaluation is
+outside this golden contract and remains unchanged.
+
+Independent preparation review found no material defect. Relevant offline tests,
+historical compatibility checks, seven release-isolation checks, 11 comparison
+checks, corpus and skill validation, and lint/type/format checks passed. An old
+medium-effort assertion was corrected and its targeted rerun passed. SDK request
+checks verify all three roles and their accounting reservations. Fresh corpus
+review records the actual Codex review with human trajectory adjudication false.
+The contract is corpus **3.3.6** / harness **2.3.6**, measured at
+`1d6bc4fd5ce44eea886e25041e1c05c70738ca52`.
+
+Two predetermined full calibrations ran sequentially with 16 workers and
+identical identities. The first received independent review before the second
+was admitted. Both used a conservative $3.50 complete-run estimate and chained
+uncapped accounting from $13.656770515.
+
+| Calibration measure | First run | Second run |
+| --- | ---: | ---: |
+| Complete references | 146 / 146 | 146 / 146 |
+| Completed calls, all usage known | 438 | 438 |
+| Measurement failures | 0 | 0 |
+| Outcome agreement on valid references | 143 / 143 | 143 / 143 |
+| Grounding agreement on valid references | 143 / 143 | 143 / 143 |
+| Rules agreement on valid references | 143 / 143 | 143 / 143 |
+| Actor-validity agreement | 146 / 146 | 146 / 146 |
+| Cost | $0.296909860 | $0.287747700 |
+
+There were zero criterion or actor-validity flips, including excluded rows.
+Independent review inspected all 93 nonempty assessments in each run, the 27
+previously disagreeing reference rows, original financial/source/consent
+contrasts, and all three actor-invalid exclusions. All 876 verdict/list
+conversions and token-derived costs reconciled. No material grading defect was
+identified. The excluded healthcare trajectory retains a minor caveat-wording
+ambiguity, but its actor exclusion is independently supported and no scored
+criterion depends on resolving that ambiguity.
+
+**The pair is recorded as Codex-reviewed development calibration**, with human
+trajectory adjudication false. These are repeated exposed references, not new
+coverage or human gold-label adjudication. No comparison arm was run, so this
+does not isolate an effect of reasoning effort or establish generalization.
+
+The next predetermined full scripted actor check ran on the same committed
+identity with 16 workers and a $3.50 complete-run estimate. It completed all 300
+unique trials: **296 valid and four inconclusive**, with 423 actor calls and 296
+judge calls, all usage known. Cost was **$0.277166100**. Independent review
+inspected all four inconclusives and relevant passing stopping, cancellation,
+income and unavailable-history contrasts, plus actor and checker control flow.
+
+Three trials genuinely failed to stop after disclosing unavailable income and
+receiving the assistant's explanation of that limitation. The fourth rejected
+route alternatives first and supplied the profile-required cancellation in a
+later reply. The fixed script classified that continuation as unnecessary when
+it exceeded the scripted length; the pending cancellation exposes a script
+alignment limitation rather than proving a semantically unnecessary action.
+All four failures occurred before judge assessment and remain inconclusive.
+They do not invalidate the separately reviewed fixed-reference calibration.
+
+**Decision: stop before application repeats and candidate search.** No retry,
+relabeling, application baseline, candidate patch or confirmation was performed.
+A bounded next preparation could clarify precedence between answering repeated
+questions with known facts and stopping after acknowledged genuine unavailability,
+and encourage delivering jointly triggered profile actions together. Competing
+actor instructions are a plausible mechanism, not established causation. Such a
+repair needs a separately admitted contract and fresh matching validation; the
+frozen actor was not changed during this measurement.
+
+Total spending for this sequence was **$0.861823660**, bringing cumulative
+accounted evaluation spending to **$14.518594175**. Raw evidence and reviews
+remain private. No application improvement, release qualification or deployment
+is claimed. Deployed catalog parity remains unverified and required before a
+future climb; no deployed mutation occurred.
