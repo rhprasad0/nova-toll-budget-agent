@@ -1,6 +1,10 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "d1c4ac30ed28224bca6b7978d477586a3d5ab74f0abb2c0fc315081cebf3fe47",
   "human_trajectory_adjudication": false,
-  "evidence": "Luna xhigh judge-only preparation requires fresh independent review; prior preparation and calibration approvals are not transferred."
+  "reviewer": "Codex supervisor with independent eval_reviewer preparation review",
+  "evidence": "Independent complete-diff and generated-identity review of 33b66d2 to 9b1d1d2 found no material preparation defect. Judge request and identity use Luna xhigh/8192, including scripted actor assessment. Application low/2048, actor medium/2048, prompts, labels, cases, fixtures and complete tool schemas remain unchanged. Eight independent transport/cache/calibration-mismatch checks and all 11 comparison checks passed. The new 3.3.9/2.3.9 comparison branch retains historical semantics. This approves admission to the first fresh full calibration only, not calibration, actor-check or application-baseline readiness. No human adjudication is claimed.",
+  "authorization": "Ryan explicitly authorized the Luna xhigh judge-only calibration plan and instructed implementation; prior uncapped evaluation authorization persists. Stop before application baseline.",
+  "reviewed_at": "2026-09-25T20:05:56.431133+00:00",
+  "contract_commit": "9b1d1d2d00b0763f3b09f74c2f5ea082e28d4fd4"
 }
