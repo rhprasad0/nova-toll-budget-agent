@@ -81,6 +81,7 @@
     "v2/agent/terms.txt": "8fe686b47200732c6d823a43ae214d9113849f53f2dd9f84e65a82c62f4f46af",
     "v2/agent/toll_agent.py": "aaa38c7db1365ca5fd7ff83c953c594d94d997d92c9c5768e13698d368c1e055",
     "v2/agent_tools/contract-manifest.json": "0bfed17d75d3329f3ad3fd9ca70aa226697bb16ed151cfebc663344c3546125e",
+    "v2/agent_tools/currency.py": "09a6325499e46ef0eca57ac3dd2cebedd460cf6937ceb48860c58eb1ea238710",
     "v2/agent_tools/current_price_domain.py": "673fbe6fc57b835347f4074c446a1da154cd03633c4e91185181e8521a8282d9",
     "v2/agent_tools/get_annual_toll_ballpark.py": "510ced8f159a913d5f49c9f55211be3615aa5c419d3418e6a9571d087544a493",
     "v2/agent_tools/get_current_toll_price.py": "03560678deb79a8665b47de80793e744a6072419f09e4ec95401019ab23befcc",
@@ -129,7 +130,7 @@
     "v2/db/roles.sql": "ac2bd729a38763870e904747622b9d76a6e9bf7ba2762870607a75004e5469f1",
     "v2/db/schema.sql": "9bed36a8a09b3f49dabf0f640702b2c72ad6955f6fb24db66825898016f6ed72",
     "v2/eval/dashboard.py": "9261dd25e0608c94c38175a8f7efcc37b4c8f628ce5c715802a318a4e67b56ec",
-    "v2/eval/run_evaluation.py": "4a141a87ef4ca6d0cdb40d85f58ce5ace1335d88ccda3d1abb4db14a9b57bf2b",
+    "v2/eval/run_evaluation.py": "1267150b08983b0754023b69bcfc0f704d32dabcfb710a759a69427a6bf3a727",
     "v2/eval/test-cases.jsonl": "88339a635880daea8c29171f0003386e0d7f6efb8c787ec806eeb92fed6bdf5c",
     "v2/infra/.terraform.lock.hcl": "fd42f83e883fe5b260118f566eeb4f4a918f6c68dd791bcf7a3e5677f3830fad",
     "v2/infra/agent_measurement.tf": "4044474e5f57758fbd70b25cb53dc9a17ad00189761811d5ca2968e0e1576502",
@@ -184,7 +185,7 @@
     "v2/scripts/run_private_stage.sh": "ef7e4065ae6c9eb839e1f0fe067877d52123acf2e6b54d31abb050b729d1d2b3",
     "v2/scripts/run_production_migrations.py": "2077cbd16ba4832de6c75f1f113c2f23bb16f1d57a0dcb1615701b2631bb2e5c",
     "v2/scripts/run_production_migrations_workflow.sh": "4ec207b6be9f754016a73e6c3fbcd2c219946ab1bbf4688c4f4e3b223e41746b",
-    "v2/scripts/shared-package-compatibility.json": "ff0bd16b00a8415117d478a4406652d59ba5491a6fbc997f6d0a2d91267bed25",
+    "v2/scripts/shared-package-compatibility.json": "2ad6f4d843ad9ae2524627891dc41d29322f3c0cda666a0ab6f5314f9057f2ad",
     "v2/scripts/shared_packages.py": "4c8be7bcf4ed0ba82579f3171e87ac3c2f97c7f2a0a2c87dbad623e052851c39",
     "v2/scripts/timed-checks-requirements.in": "8218bd738a1337e889d04756b2f7c53f1693503b97c519dcc8a10a423b2837e5",
     "v2/scripts/timed-checks-requirements.txt": "c7f9d037e3fb740603863c144cfc053ebb4e52b25024318b68390bf1518e0515",
@@ -193,11 +194,11 @@
     "v2/uv.lock": "071ad13fcb49045309c63222c75e56ee5d40484cee25c0e4db36663ea4e16225"
   },
   "packages": {
-    "agentcore.zip": "2940da36f6aaa25aa47cc545da357028b71f365df26c2ae382ea454d6a80ff24",
+    "agentcore.zip": "f9ee00026cb5f4d93b0780ae551a006e385e9d1df0d78da007ea50c3408ca64a",
     "chat-proxy.zip": "4a5f4a42a220217dd88318a2d2d44973d825ede4b78da7ef313c06beb93a9754",
     "loader.zip": "089969a77cd61816f1471656ad6dfda793b595c3f9244a1027c2e11ad71054fb",
     "publisher.zip": "0376194d6234dcd122529efc90e3f6e5eb1ff4a9705a271b11ffa2b5ba434bf9",
-    "timed-checks.zip": "4f7671649bc8b7d06195295a2c3d82cfe478f08d4a6826b654bb24f0f0621eea"
+    "timed-checks.zip": "ed10511919ee5575e85d1f5c9609e6d4637d6b1cf652439879ffa85c6af8c96e"
   },
   "mutations": [
     {

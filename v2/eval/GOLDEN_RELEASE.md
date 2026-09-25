@@ -128,7 +128,8 @@ These are prerequisites, not authorization to deploy infrastructure or run an ev
    credentials, network/telemetry isolation, attempt ledger, and signing key.
    Transfer only its public PEM key to
    `eval/results/golden/evaluator-public.pem`. Never generate its real key here.
-2. Review the private 100-case contract and calibration externally. Populate the
+2. Use the [public authoring kit](HOLDOUT_AUTHORING.md) in an isolated private
+   environment. Review the private 100-case contract and calibration externally. Populate the
    four currently unset digests in `policy-3.0.0.json` (including the SHA-256 of the
    exact public PEM bytes). Set the policy approval status, reviewer, approval time,
    evidence reference, and exact policy digest through human-reviewed changes.

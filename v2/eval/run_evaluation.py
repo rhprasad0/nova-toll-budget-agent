@@ -37,6 +37,8 @@ _V2_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_V2_ROOT))
 
 from agent.toll_agent import build_agent  # noqa: E402
+from agent_tools.currency import CURRENCY_PATTERN as _CURRENCY_PATTERN  # noqa: E402
+from agent_tools.currency import currency_decimal as _currency_decimal  # noqa: E402
 
 type JSON = str | int | float | bool | list[JSON] | dict[str, JSON] | None
 
@@ -75,10 +77,6 @@ _EMOJIS = (
     "📅",
 )
 _EASTERN_TIME = re.compile(r"\b(?:1[0-2]|[1-9]):[0-5]\d [AP]M E(?:S|D)T\b")
-_CURRENCY_PATTERN = re.compile(
-    r"(?P<sign_before>[+\-\u2212]?)\s*\$\s*"
-    r"(?P<sign_after>[+\-\u2212]?)\s*(?P<amount>[\d,]+(?:\.\d+)?)"
-)
 _UNPRICED_CURRENCY_PATTERN = re.compile(
     r"(?:[$\uFF04]\s*(?:about\s+)?[\d,]+(?:\.\d+)?"
     r"|\bUSD\b\s*(?:about\s+)?[\d,]+(?:\.\d+)?"
@@ -258,12 +256,6 @@ def _result(passed: bool, reason: str, label: str) -> list[EvaluationOutput]:
             score=float(passed), test_pass=passed, reason=reason, label=label
         )
     ]
-
-
-def _currency_decimal(match: re.Match[str]) -> Decimal:
-    sign = match.group("sign_before") or match.group("sign_after")
-    value = Decimal(match.group("amount").replace(",", ""))
-    return -value if sign in ("-", "\u2212") else value
 
 
 def _response_style_error(response: str, subject: str) -> list[EvaluationOutput] | None:

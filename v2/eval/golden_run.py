@@ -32,7 +32,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.0"
+VERSION = "2.3.1"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -1260,10 +1260,11 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
         "evaluator_sources_sha256": golden.digest(
             {
                 name: golden.hashlib.sha256(
-                    Path(__file__).with_name(name).read_bytes()
+                    (Path(__file__).parent / name).read_bytes()
                 ).hexdigest()
                 for name in (
                     "golden.py",
+                    "../agent_tools/currency.py",
                     "golden_run.py",
                     "golden_actor_check.py",
                     "simulated.py",

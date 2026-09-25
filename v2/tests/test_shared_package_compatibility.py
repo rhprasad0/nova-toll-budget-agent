@@ -55,7 +55,7 @@ def test_mixed_loader_publisher_timed_and_cost_contracts(
     for name, digest in REVIEW["schemas"].items():
         previous = retained("v2/db/" + name, baseline)
         current = (ROOT / "v2/db" / name).read_bytes()
-        if name == "oracle/schema.sql":
+        if name == "oracle/schema.sql" and previous != current:
             # The reviewed 1.15.1 label migration changes only these schema markers.
             for marker in (
                 b"-- oracle schema version: 1.15.0\n",
