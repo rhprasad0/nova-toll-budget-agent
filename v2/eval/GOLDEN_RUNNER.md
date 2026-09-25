@@ -6,6 +6,23 @@ user turns. The application, actor, judge settings, input hashes, and source com
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
 
+## Description-edit contract
+
+Contract 3.1.0 / harness 2.1.0 uses `literal-input-prose-v1`. The corpus hashes
+parsed source for the two pricing tool modules, masking only existing literal
+`TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
+allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
+schema constraints, validators, runtime logic, and output descriptions, stays
+pinned. Other corpus sources remain byte-hashed. Formatting/comments do not affect
+the parsed source hash; candidate review still admits only specified text edits.
+
+Each run records full tool schema hashes and the exact source artifact, so wording
+changes remain attributable. The eval-climb comparison permits differing tool
+hashes only with the supported policy and identical pinned corpus. Old-contract
+reports retain their original hash rules and cannot be compared with this contract.
+Corpus review and fresh matching calibration are required before the next climb;
+never transfer prior approvals or regenerate a candidate's corpus manifest.
+
 ## Execution
 
 Run from `v2/`. Offline validation needs no model calls:

@@ -350,6 +350,11 @@ def test_incomplete_report_retains_interrupted_measurements(
     assert report["attempts"][0]["error"] == "interrupted"
     assert not report["full_corpus_complete"]
     bad = report["manifest"]["identity"]
+    assert bad["tool_description_policy"] == golden.TOOL_DESCRIPTION_POLICY
+    policy = bad.pop("tool_description_policy")
+    with pytest.raises(ValueError, match="missing tool description policy"):
+        run.validate_identity(bad)
+    bad["tool_description_policy"] = policy
     del bad["prompt_hashes"]
     with pytest.raises(ValueError, match="missing run identity"):
         run.validate_identity(bad)
@@ -935,7 +940,7 @@ def test_packaged_model_budget_is_scored_but_protocol_failure_is_not(
         manifest = json.loads(
             (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
         )
-        manifest["identity"]["harness_version"] = run.VERSION
+        manifest["identity"]["harness_version"] = "2.0.13"
         manifest["identity"]["corpus"]["case_count"] = 1
         manifest["identity"]["cases"] = [case.model_dump(mode="json")]
         (journal.directory / "manifest.json").write_text(json.dumps(manifest))
@@ -1016,7 +1021,9 @@ def test_eval_cache_prefix_and_write_accounting(
         assert run.cost(usage) == pytest.approx(expected)
 
 
-@pytest.mark.parametrize("changed", ["judge_prompt_sha256", "transport"])
+@pytest.mark.parametrize(
+    "changed", ["judge_prompt_sha256", "transport", "tool_description_policy"]
+)
 def test_cli_rejects_changed_cache_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: str
 ) -> None:
@@ -1034,6 +1041,7 @@ def test_cli_rejects_changed_cache_contract(
         "reasoning_effort",
         "max_output_tokens",
         "transport",
+        "tool_description_policy",
     )
     pinned = dict.fromkeys(keys, "current")
     previous = {**pinned, changed: "old"}
@@ -1087,6 +1095,23 @@ def test_cache_adapter_change_invalidates_calibration_identity(
         != after["transport"]["cache_adapter_sha256"]
     )
     assert before["corpus"] == after["corpus"]
+
+
+def test_tool_wording_remains_in_full_run_identity(
+    golden_test_identity: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_git = run.git
+
+    def clean_git(*args: str) -> str:
+        return "" if args[0] == "status" else original_git(*args)
+
+    monkeypatch.setattr(run, "git", clean_git)
+    before = run.identity(golden.load_cases())
+    monkeypatch.setitem(golden.annual.TOOL_SPEC, "description", "Candidate wording")
+    after = run.identity(golden.load_cases())
+    assert before["tool_schema_hashes"] != after["tool_schema_hashes"]
+    assert before["corpus"] == after["corpus"]
+    assert before["evaluator_sources_sha256"] == after["evaluator_sources_sha256"]
 
 
 def test_wrong_route_reference_also_misnames_its_endpoint() -> None:
@@ -1424,7 +1449,7 @@ def test_v2_render_accounts_for_600_trials_and_embedded_case_count(
         )
         for number in range(1, 201)
     ]
-    manifest["identity"]["harness_version"] = run.VERSION
+    manifest["identity"]["harness_version"] = "2.0.13"
     manifest["identity"]["corpus"]["case_count"] = 200
     manifest["identity"]["cases"] = [case.model_dump(mode="json") for case in cases]
     directory = tmp_path / "accounting"
@@ -1499,7 +1524,7 @@ def test_invalid_actor_probe_is_complete_calibration_without_application_labels(
         (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
     )
     manifest["mode"] = "calibrate"
-    manifest["identity"]["harness_version"] = run.VERSION
+    manifest["identity"]["harness_version"] = "2.0.13"
     manifest["identity"]["calibration_labels"] = {"example_ids": [rows[0]["id"]]}
     (directory / "manifest.json").write_text(json.dumps(manifest))
     report = run.render(directory)
@@ -1517,7 +1542,7 @@ def test_interrupted_calibration_counts_missing_rows_without_judge_disagreements
         (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
     )
     manifest["mode"] = "calibrate"
-    manifest["identity"]["harness_version"] = run.VERSION
+    manifest["identity"]["harness_version"] = "2.0.13"
     manifest["identity"]["calibration_labels"] = {"example_ids": ["started", "queued"]}
     journal = run.Journal(tmp_path / "interrupted-calibration", 25)
     (journal.directory / "manifest.json").write_text(json.dumps(manifest))

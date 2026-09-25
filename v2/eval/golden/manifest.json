@@ -1,5 +1,5 @@
 {
-  "version": "3.0.6",
+  "version": "3.1.0",
   "evaluation_scope": "development",
   "case_count": 100,
   "trials_per_case": 3,
@@ -117,16 +117,17 @@
     "fixtures/dev3-wiehle-full-office-week-1-1.json": "2b0ed4945ab14ff68dddbdb916c21a53f78a473e26a82ec35a5e61458504becc",
     "fixtures/dev3-wiehle-to-fairfax-parkway-1-1.json": "1efb885691800bdaa2aae4537ac8b2174b33f9217d7dcece5de4eaaec5499ad2",
     "v2/uv.lock": "071ad13fcb49045309c63222c75e56ee5d40484cee25c0e4db36663ea4e16225",
-    "v2/eval/golden.py": "00d5a1439169a45d1192b12e19887d3727259a34295d3d2fcf0d9e7be9198bb9",
+    "v2/eval/golden.py": "ed361d7e08781b825ed07946e2617decfd1869464d3eefb2f737676713608389",
     "v2/eval/simulated.py": "b3b9c339a9696d0ba9615404717f86cc21de69f9a39e068f26325925404cb3fa",
     "v2/eval/run_evaluation.py": "4a141a87ef4ca6d0cdb40d85f58ce5ace1335d88ccda3d1abb4db14a9b57bf2b",
-    "v2/eval/golden_run.py": "a2d2e2bdfc773057e81031afa18b0b57ea5ce89cc97bcfea92e938d87b48561c",
+    "v2/eval/golden_run.py": "705fc8ad67339347676ae2c832283c64dd68f4761a3726ded437af9a17d57978",
     "v2/eval/golden_actor_check.py": "a00790fdab91929213cc720bc68bd7038d8b6743a438fef7a47871d4eff3467d",
     "v2/eval/artifact_agent.py": "cc36d1bebd435a635b820b28bb1b6c9e63c6d7f7c7b928af9a82f779ec6f2fd5",
     "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
-    "v2/agent_tools/current_price_domain.py": "673fbe6fc57b835347f4074c446a1da154cd03633c4e91185181e8521a8282d9",
-    "v2/agent_tools/get_annual_toll_ballpark.py": "510ced8f159a913d5f49c9f55211be3615aa5c419d3418e6a9571d087544a493",
+    "v2/agent_tools/current_price_domain.py": "804c44ee66c3f7a5b498c17fca814f0a56b45288150a9e2ca61aa5325a5b9d82",
+    "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
-  "corpus_sha256": "e51114c340da2addf7f24d5aca038a16c308d8af2edbdf1db38241e6564f7a4d"
+  "corpus_sha256": "1e3a92b545ecec634a1757f1f8ba7c0d6a89c4470f87d8e5729d1ed6b0ebf9f7",
+  "tool_description_policy": "literal-input-prose-v1"
 }

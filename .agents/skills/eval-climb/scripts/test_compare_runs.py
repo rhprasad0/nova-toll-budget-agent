@@ -5,7 +5,13 @@ import unittest
 from collections.abc import Callable
 from typing import Any
 
-from compare_runs import IDENTITY_KEYS, compare, digest, violation
+from compare_runs import (
+    IDENTITY_KEYS,
+    TOOL_DESCRIPTION_POLICY,
+    compare,
+    digest,
+    violation,
+)
 
 
 def report() -> dict[str, Any]:
@@ -112,7 +118,7 @@ class CompareRunsTest(unittest.TestCase):
         self.assertTrue(result["numeric_eligible"])
         self.assertEqual(result["paired"]["average_delta"], 1 / 300)
         self.assertIn(
-            "independent SOP-only scope and regression review",
+            "independent SOP/description scope and regression review",
             result["review_required"],
         )
 
@@ -202,6 +208,43 @@ class CompareRunsTest(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 candidate = copy.deepcopy(self.candidate)
                 change(candidate)
+                compare(self.baseline, candidate)
+
+    def test_description_policy_preserves_comparability_and_contract_guards(
+        self,
+    ) -> None:
+        for report in (self.baseline, self.candidate):
+            identity = report["manifest"]["identity"]
+            identity["tool_description_policy"] = TOOL_DESCRIPTION_POLICY
+            corpus = identity["corpus"]
+            corpus["tool_description_policy"] = TOOL_DESCRIPTION_POLICY
+            corpus["hashes"].update(
+                {
+                    "v2/agent_tools/current_price_domain.py": "a" * 64,
+                    "v2/agent_tools/get_annual_toll_ballpark.py": "b" * 64,
+                }
+            )
+            corpus["corpus_sha256"] = digest(corpus["hashes"])
+        identity = self.candidate["manifest"]["identity"]
+        identity["tool_schema_hashes"]["tool"] = "c" * 64
+        self.assertFalse(compare(self.baseline, self.candidate)["numeric_eligible"])
+        original = copy.deepcopy(self.candidate)
+        for mutation in ("policy", "missing_policy", "tool_name", "runtime"):
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                candidate = copy.deepcopy(original)
+                identity = candidate["manifest"]["identity"]
+                corpus = identity["corpus"]
+                if mutation == "policy":
+                    identity["tool_description_policy"] = "unknown"
+                elif mutation == "missing_policy":
+                    identity.pop("tool_description_policy")
+                elif mutation == "tool_name":
+                    identity["tool_schema_hashes"]["other"] = "d" * 64
+                else:
+                    corpus["hashes"]["v2/agent_tools/current_price_domain.py"] = (
+                        "e" * 64
+                    )
+                    corpus["corpus_sha256"] = digest(corpus["hashes"])
                 compare(self.baseline, candidate)
 
     def test_unknown_usage_and_stale_success_flags(self) -> None:
