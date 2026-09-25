@@ -85,7 +85,7 @@ BEGIN
        OR report.origin->>'role' <> 'entry'
        OR report.origin->'location'->>'type' <> 'Point'
        OR jsonb_array_length(report.origin->'location'->'coordinates') <> 2
-       OR report.destination->>'label' <> 'Westpark Drive'
+       OR report.destination->>'label' <> 'Westpark Drive (from I-495 northbound or I-95/I-395 northbound)'
        OR report.destination->>'place_name' <> 'Tysons'
        OR report.destination->>'region' <> 'Virginia'
        OR report.destination->>'country_code' <> 'US'
@@ -93,7 +93,7 @@ BEGIN
        OR report.destination->>'direction' <> 'northbound'
        OR report.destination->>'role' <> 'exit'
        OR report.destination->>'display_name'
-          <> 'Tysons, Virginia — Westpark Drive (northbound exit)'
+          <> 'Tysons, Virginia — Westpark Drive (from I-495 northbound or I-95/I-395 northbound) (northbound exit)'
        OR report.status <> 'valid'
        OR report.route_step_id !~ '^step-[1-9][0-9]*$'
        OR report.comparison_kind <> 'current'

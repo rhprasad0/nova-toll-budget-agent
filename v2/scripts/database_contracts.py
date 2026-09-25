@@ -28,13 +28,25 @@ CONTRACTS = (
 WRAPPED = {"oracle_prompt_points", "oracle_report", "oracle_security"}
 
 
-def retained_version_guard(source: bytes, candidate: bytes) -> bytes:
+def retained_version_guard(
+    source: bytes, candidate: bytes, *, report_labels: bool = False
+) -> bytes:
     """Only a retained metadata assertion follows the new canonical version."""
     pattern = rb"\(SELECT version FROM oracle\.schema_version WHERE singleton\) <> '[0-9]+\.[0-9]+\.[0-9]+'"
     old, new = re.findall(pattern, source), re.findall(pattern, candidate)
     if len(old) != 1 or len(new) != 1:
         raise ValueError("expected exactly one retained/candidate Oracle version guard")
-    return source.replace(old[0], new[0], 1)
+    source = source.replace(old[0], new[0], 1)
+    if report_labels:
+        # Only the approved report endpoint's two metadata expectations change.
+        # Retain every route, pricing, availability and security assertion.
+        for field in (b"label", b"display_name"):
+            guard = rb"report.destination->>'" + field + rb"'\s*<>\s*'[^']+'"
+            old, new = re.findall(guard, source), re.findall(guard, candidate)
+            if len(old) != 1 or len(new) != 1:
+                raise ValueError("expected exactly one destination metadata guard")
+            source = source.replace(old[0], new[0], 1)
+    return source
 
 
 def run_contracts(retained: Path, profile: str) -> None:
@@ -54,7 +66,9 @@ def run_contracts(retained: Path, profile: str) -> None:
         for name in {"oracle_restore", "oracle_report"} & baseline.keys():
             if baseline[name] != current[name]:
                 # Never change archived bytes or the installed schema version.
-                content = retained_version_guard(baseline[name], current[name])
+                content = retained_version_guard(
+                    baseline[name], current[name], report_labels=name == "oracle_report"
+                )
                 path = Path(temporary) / f"{name}_contract.sql"
                 path.write_bytes(content)
                 adapted[name] = path
