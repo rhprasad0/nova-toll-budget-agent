@@ -32,7 +32,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.8"
+VERSION = "2.3.9"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -247,7 +247,7 @@ EVAL_MODEL_PARAMS: dict[str, Any] = {
 JUDGE_MODEL_PARAMS: dict[str, Any] = {
     **EVAL_MODEL_PARAMS,
     "max_output_tokens": 8192,
-    "reasoning": {"effort": "high"},
+    "reasoning": {"effort": "xhigh"},
 }
 
 
@@ -1345,7 +1345,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
         "diagnostic_domain_facts": DOMAIN_FACTS,
         "diagnostic_prompt": DIAGNOSTIC_PROMPT,
         "model": "gpt-6-luna",
-        "reasoning_effort": {"agent": "low", "actor": "medium", "judge": "high"},
+        "reasoning_effort": {"agent": "low", "actor": "medium", "judge": "xhigh"},
         "max_output_tokens": {"agent": 2048, "actor": 2048, "judge": 8192},
         "sampling": {"temperature": "provider default", "seed": "not supplied"},
         "transport": {

@@ -1,12 +1,12 @@
 # TollChat evaluation
 
-**Current contract: 3.3.8 / harness 2.3.8.** Future development climbs optimize
+**Current contract: 3.3.9 / harness 2.3.9.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
 not make a development score production qualification.
-Development corpus preparation is approved in `golden/review.json`. Matching
-calibration remains unapproved, so application runs are blocked. See the
+Development corpus preparation review is pending in `golden/review.json`.
+Matching calibration remains unapproved, so application runs are blocked. See the
 [experiment journal](EXPERIMENT_JOURNAL.md) for the validation results and limits.
 
 TollChat remains on `gpt-6-luna`. Preparation changes are separate from prompt

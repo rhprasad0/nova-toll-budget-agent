@@ -7,14 +7,14 @@ are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract 
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
 
 All golden judges, including the scripted actor-check assessment, use
-`gpt-6-luna` with high reasoning and an 8,192-token output ceiling. Application
+`gpt-6-luna` with xhigh reasoning and an 8,192-token output ceiling. Application
 generation remains low/2,048 and actor generation medium/2,048 on the same model.
 Run identities and cost reservations record those role-specific limits. Legacy
 scheduled evaluation settings are separate from this golden contract.
 
 ## Description-edit contract
 
-Contract 3.3.8 / harness 2.3.8 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.9 / harness 2.3.9 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including

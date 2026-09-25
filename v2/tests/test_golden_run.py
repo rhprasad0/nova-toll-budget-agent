@@ -455,7 +455,7 @@ def test_real_sdk_transport_has_no_retries_and_bounded_timeout(
     assert request["model"] == "gpt-6-luna"
     assert (
         request["reasoning"]["effort"]
-        == {"agent": "low", "actor": "medium", "judge": "high"}[role]
+        == {"agent": "low", "actor": "medium", "judge": "xhigh"}[role]
     )
     expected_cap = 8192 if role == "judge" else 2048
     assert request["max_output_tokens"] == expected_cap
@@ -991,7 +991,7 @@ def test_eval_cache_prefix_and_write_accounting(
             system_prompt=self.reference_system_prompt,
         )
         requests.append(request)
-        assert request["reasoning"] == {"effort": "high"}
+        assert request["reasoning"] == {"effort": "xhigh"}
         assert request["max_output_tokens"] == 8192
         assert request["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
         assert request["prompt_cache_key"] == "tollchat-eval-v2"
@@ -1047,7 +1047,8 @@ def test_eval_cache_prefix_and_write_accounting(
 
 
 @pytest.mark.parametrize(
-    "changed", ["judge_prompt_sha256", "transport", "tool_description_policy"]
+    "changed",
+    ["judge_prompt_sha256", "transport", "tool_description_policy", "reasoning_effort"],
 )
 def test_cli_rejects_changed_cache_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: str
