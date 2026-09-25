@@ -1,10 +1,7 @@
 {
-  "status": "approved",
-  "corpus_sha256": "3ec74c3eb1639052731b1f3704bb2e7f66ee8ab0ed2b18c739ad9cf10508cec2",
+  "status": "pending",
+  "corpus_sha256": "6801841e253d3b6015e49475316ec35161ad29cf54d77cefba67e3264a947fc3",
   "human_trajectory_adjudication": false,
-  "reviewer": "Codex independent eval_reviewer preparation review",
-  "evidence": "Independent full actor-repair diff review and supplemental merged-main review found no material defect. The reviewer passed 58 focused offline tests,11 comparison checks, corpus validation and runtime identity construction. The actor completion prompt is the admitted repair. Judge prompts, application prompts, model settings, generated schemas, actor profiles, actor-check source, all146 references and labels, cases and fixtures remain unchanged. Reviewed main currency extraction and complete payload validation are preserved and pinned. Both journal histories and production isolation are retained. This approves preparation for the fresh full actor check only; matching calibration remains required and no human trajectory adjudication is claimed.",
-  "authorization": "Ryan explicitly authorized actor fixes and reruns, continued preparation until ready for a new baseline, and a ready-for-review PR; uncapped evaluation spending remains authorized.",
-  "reviewed_at": "2026-09-25T16:57:57.508417+00:00",
-  "contract_commit": "e0d905fe6e198380767f133c77ffa8e0d9f21567"
+  "reviewer": "",
+  "evidence": ""
 }

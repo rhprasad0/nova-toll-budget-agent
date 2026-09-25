@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.7"
+CORPUS_VERSION = "3.3.8"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -204,6 +204,10 @@ arguments satisfies a requirement to use them. Do not invent a
 requirement to print source URLs, retrieval dates, observation-age limits, or
 historical date ranges. Disclose only applicable sources, not every false source
 flag. Tool metadata is evidence, not an additional disclosure checklist. A
+status omission is material only when the status restricts or qualifies price
+availability/applicability, or answers an explicit status question. Normal
+successful/open status alone creates no extra disclosure requirement. Preserve
+actual closure, staleness, missing-data, source, and timing qualifications. A
 schedule period name is optional unless requested or necessary to explain an
 actual availability restriction. Still require material availability qualifications
 and accurate published-versus-observed provenance. A fixed published toll may vary by time of day: fixed distinguishes a

@@ -147,7 +147,7 @@ reported as out of scope. Test files are not candidate-edit surfaces.
    **not** an eligible candidate. Nonzero means unusable evidence. Send the full
    comparison and original reports to a fresh `eval_reviewer`.
 
-The helper checks numeric eligibility under corpus 3.3.7 / harness 2.3.7:
+The helper checks numeric eligibility under corpus 3.3.8 / harness 2.3.8:
 overall pass rate (successful trials divided by all 300 expected trials) must
 strictly increase; inconclusive slots must not increase; comparable Grounding
 and Rules violation rates must not worsen. Pass³ (successful three-trial cases

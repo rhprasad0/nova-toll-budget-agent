@@ -1984,3 +1984,74 @@ production baseline. Updated the mixed-version test to accept an already-current
 schema as well as the reviewed production schema-label migration. All 78 focused
 compatibility, scheduled-evaluation and bundle tests pass; CI remains the merge
 gate. No deployment or model evaluation was performed.
+
+## 2026-09-25 — actor completion repair clears; normal-status grading error found
+
+Ryan authorized actor repairs and reruns, then continued fixes and measurements
+until ready for a new application baseline, followed by a ready-for-review PR.
+Uncapped accounting persists; the baseline itself is not part of this preparation.
+The actor repair at `54eb25f` gives acknowledged genuine unavailability precedence
+over repeated requests for known facts, and requires jointly triggered profile
+actions together while deferring future triggers. Models, profiles, schemas,
+scripted-check logic, reference payloads and labels remain unchanged.
+
+Reviewed main `94f89ca` was merged before measurement, preserving its shared
+currency parsing, complete payload validation and public production gate.
+Both journal histories were retained. Independent supplemental review confirmed
+these integrations and the unchanged judge prompts, application prompts and
+actor-check behavior. Fresh preparation approval was recorded without claiming
+human trajectory adjudication. The contract was corpus **3.3.7** / harness
+**2.3.7**, measured for actors at `92b00f0`.
+
+The full scripted actor run completed **300/300 valid trials**, with zero
+inconclusives and 723 complete known-usage calls (423 actor, 300 judge).
+Independent review inspected all 114 trials across the 38 staged profiles and
+verified termination without continuation for the remaining 186. All six trials
+of the two formerly troublesome scenarios now meet their completion conditions.
+Known facts, staged choices, corrections, cancellation and workflow switches
+remained intact. The scripts do not exercise repeated-question loops or arbitrary
+live application trajectories; this result does not establish universal actor
+reliability or a causal effect from one stochastic run.
+
+Cumulative PR review found no material code defect. Its CI coverage finding was
+fixed at `b7441bc`: the existing golden-validation step now explicitly executes
+the comparison helper's regression suite. Actionlint and the exact CI command
+passed. Relevant runner, corpus, retirement, historical compatibility, comparison,
+lint/type/format and skill checks passed. The CI-only commit does not alter the
+application or semantic evaluation identities.
+
+Two fresh full calibrations followed sequentially at `b7441bc`, with independent
+review before admitting the second. All three runs used 16 workers, conservative
+$3.50 complete-run estimates and the existing spending chain.
+
+| Measure | Actor check | Calibration 1 | Calibration 2 |
+| --- | ---: | ---: | ---: |
+| Complete trials/references | 300 | 146 | 146 |
+| Complete calls, all usage known | 723 | 438 | 438 |
+| Actor validity/agreement | 300/300 | 146/146 | 146/146 |
+| Outcome agreement on valid references | Not scored | 143/143 | 142/143 |
+| Grounding / Rules agreement | Not scored | 143/143 each | 143/143 each |
+| Cost | $0.287175100 | $0.288319200 | $0.289602700 |
+
+The second calibration falsely rejects one correct current-price reference solely
+for omitting normal OPEN status. Independent review confirms that neither the
+request nor contract makes normal successful availability a required separate
+disclosure. Price, source, observation time, route and clarification are correct.
+This is a material judge error, not a reference-label defect. One excluded
+actor-invalid route-alternatives reference also changes its Outcome decision;
+its actor exclusion and all scored labels except the normal-status false failure
+remain unchanged. No measurement failure or unknown usage occurred.
+
+**Decision: retain the actor evidence, leave this calibration pair unapproved,
+and repair availability materiality under a new contract before baseline
+admission.** Do not rewrite the failed verdict, inherit the first run's apparent
+success, or retry the unchanged pair. The bounded repair must distinguish normal
+successful/open metadata from restrictions or explicitly requested status, while
+preserving closure, staleness, missing-data, source and timing requirements.
+Fresh matching measurements and review are required. No application baseline,
+candidate search, merge or deployment occurred.
+
+This sequence cost **$0.865097000**, bringing cumulative accounted evaluation
+spending to **$15.383691175**. Raw run evidence remains private. Preparation is
+continuing under Ryan's authorization; reviewed merge and deployed catalog parity
+remain prerequisites for a later climb.
