@@ -833,3 +833,474 @@ worktrees, reviews, hashes and progress remain private and preserved. These
 exposed-development findings do not establish generalization or release
 qualification. No push, PR, merge, deployment or production access occurred in
 this supervisor session.
+
+## 2026-09-25 — Description-only continuation on PR600 blocked at contract review
+
+Ryan authorized a new local description-only climb stacked on unmerged PR600,
+including fresh contract review and calibration under the existing cumulative
+$20 eval ceiling. The objective remained strict improvement in pass^3 over a
+fixed 100 development cases, with all three slots successful and inconclusives
+never successful. Prior scores could inform diagnosis only; a fresh baseline
+was required for contract 3.1.0 / harness 2.1.0 / `literal-input-prose-v1`.
+The exact starting commit was `97688142558f313887bd8e92b7b5ae516dc0a985`.
+
+The fresh named `eval_reviewer` (gpt-6-astra/high, isolated handoff, no child
+delegation) rejected prerequisite contract approval. `_PricingProfile` is an
+allowlisted input model but is also embedded in `_CurrentPriceResponse`.
+Changing one of its existing literal field descriptions leaves the normalized
+tool-source hash unchanged while changing the generated output description.
+The reviewer reproduced this in memory. The comparison helper permits different
+full schema hashes under this policy and cannot detect that output change.
+Existing synthetic normalization checks use a separate output class and miss
+this shared-model case. Full generated-schema review could reject an affected
+candidate, but the reviewer found the exact contract insufficient to justify
+approval of its stated output-preservation boundary. No approval was fabricated
+or transferred, and Ryan was not represented as having inspected trajectories.
+
+| Phase | Completed attempts / references | Pass^3 | Eval cost |
+| --- | ---: | ---: | ---: |
+| Carried prior campaign, seven full runs | 2,100 attempts | Not comparable across contracts | $6.555343780 |
+| Fresh offline contract review | No paid calls | Not measured | $0.000000000 |
+| New calibration, baseline, search, confirmation | Not started | Not measured | $0.000000000 |
+| Cumulative authorized accounting | 2,100 prior attempts | No new result | **$6.555343780 / $20** |
+
+The supervisor reconciled all seven prior raw journals, their immediate-prior
+run links, complete 300-slot coverage per run, and known model usage against the
+prior ledger. Decimal recomputation from token usage confirmed the carried cost;
+remaining authorization is $13.444656220. Historical calibration/pilot and Codex
+agent usage remain excluded under the original authorization. The separate
+stopped pilot was neither inspected nor resumed. No historical paid trial was
+repeated. The first future paid call in this chain must still use prior `r3b`.
+
+Offline validation passed for all 100 development cases, 82 relevant
+development/retirement/runner tests, eight comparison-helper checks, and the
+private fixed-denominator pass^3 self-check. The reviewer independently verified
+114 corpus/application files byte-identical across PR600 and its parent and ran
+focused checks. Passing tests did not override the demonstrated contract defect.
+Raw review evidence and accounting remain in the ignored campaign directory.
+
+Decision and stop reason: stop before calibration for the independently rejected
+measurement contract. Retain the original application and pending corpus review;
+no lifecycle assertion, source manifest, judge, cases, fixtures, labels, model,
+SOP, tool wording, or runtime changes were made. No candidate was implemented,
+measured, promoted, or confirmed. The required correction is to exclude shared
+output-model descriptions from the editable contract or otherwise enforce exact
+output-schema preservation, with a focused shared-model regression and fresh
+review before freezing. Such a harness/manifest repair is outside the permitted
+continuation edits and was deferred to the outer session. After a valid contract
+review, fresh calibration and baseline are still required under the same cap.
+There is no performance or generalization claim, production qualification,
+push, PR creation, merge, or deployment from this local run.
+
+## 2026-09-25 — Contract blocker resolved; calibration stopped at development credentials
+
+Ryan explicitly resumed the same description-only continuation stacked on PR600
+after the outer session committed the prerequisite correction in `657ef7b`.
+The previous blocker entry remains unchanged. Contract 3.1.1 / harness 2.1.1 /
+`literal-input-prose-v1` now excludes shared `_PricingProfile` descriptions from
+the editable allowlist and checks actual output-model definitions. The new
+corpus digest is
+`f64dcd1bc2fb6b68a434df1f7424df64618655591338996b235a77a177fa661a`.
+This explicit prerequisite change preceded every new measurement; it was not an
+application candidate or a change to a measured campaign. The same cumulative
+$20 cap, pass^3-first objective, and outer-session publication ownership apply.
+
+A fresh named `eval_reviewer` (gpt-6-astra/high, isolated handoff, no delegation)
+accepted the corrected contract. Its independent in-memory probes verified all
+13 admitted literal edits preserve complete output schemas and normalized source
+identity while changing their full schema hashes. Each of the three shared
+profile descriptions now changes normalized identity if edited. The reviewer
+verified 121 supporting files byte-identical against earlier commits, including
+the application, corpus, fixtures, and dependencies; tool specifications were
+also identical. The original deterministic contract blocker is resolved.
+
+Commit `292fe09` records fresh corpus approval as Codex review under Ryan
+authorization and updates only the approval lifecycle assertion. The record
+explicitly denies personal human trajectory adjudication and does not approve
+calibration or production. Missing/pending paid-entrypoint guards remain intact.
+The new manifest was unchanged by this approval step. The campaign identity was
+recorded from clean commit `292fe0943810cbfbf4f3a7f08fe87626d4999173`.
+
+The supervisor then invoked one fresh calibration with 16 workers, no retries,
+the existing `nova-toll-dev` AWS/SSM path, a cumulative $17 execution ceiling,
+and a $3 confirmation reserve. Its immediate predecessor was the old campaign
+`r3b`, carrying exactly $6.555343780. All 135 reference rows failed in the judge
+construction phase with `TokenRetrievalError`, before any model call started.
+A separate credential-resolution diagnostic confirmed the same development
+token retrieval failure without displaying credentials. No actor assessment or
+application verdict was measured. The empty disagreement list therefore does
+not represent calibration agreement, and no calibration approval was written.
+
+| Phase | Coverage / result | Pass^3 | Eval cost |
+| --- | --- | ---: | ---: |
+| Carried seven prior full runs | 2,100 completed attempts; all usage known | Not comparable | $6.555343780 |
+| Corrected contract review | Accepted offline | Not measured | $0.000000000 |
+| Fresh calibration | 135/135 measurement failures; zero model calls | Not applicable | $0.000000000 |
+| Baseline, candidates, confirmation | Not started | Not measured | $0.000000000 |
+| Cumulative accounting | No new model usage | No new result | **$6.555343780 / $20** |
+
+All seven prior journals were reconciled again against raw token usage and their
+spending chain. Calibration has zero model-started and model-finished events,
+so its zero cost is known, not estimated or missing usage. Remaining budget is
+$13.444656220. Historical calibration/pilot and Codex agent usage remain excluded
+exactly as authorized; the separate stopped pilot was not accessed. The failed
+calibration is now the latest accounted run and must be the predecessor of any
+subsequently authorized run. Its evidence digest is
+`3ad5980dc4f929c4d76f867a74684f7364ce832c788c24e20c6bfb6ac99716f3`.
+
+Validation passed: all 100 development cases, 82 focused tests, eight comparison
+checks, and then all seven lifecycle/entrypoint tests plus Ruff after the narrow
+approval update. Independent review also ran the 82 tests and eight comparison
+checks. These checks validate the contract, not application performance.
+
+Decision: stop for the new infrastructure/measurement failure, preserving the
+failed calibration and all original verdict/reference inputs. No replacement
+calibration, retry, baseline, candidate, promotion, or confirmation was run.
+The original application remains unchanged. Restore development authentication
+and explicitly direct subsequent calibration execution before continuation;
+do not reuse prior approval or overwrite this failed attempt. Detailed review,
+schemas, identity, accounting, and raw calibration evidence remain ignored and
+private. This session performed no push, PR, merge, deployment, production access,
+or release qualification.
+
+
+## 2026-09-25 — Authenticated description-climb continuation: calibration blocked
+
+Ryan's explicit “Authed” response resolved the development credential blocker
+and directed one new calibration attempt under the same cumulative **$20 eval
+cap**. This was a user-directed resumption, not an automatic retry. The existing
+development AWS/SSM retrieval succeeded without printing or saving credentials.
+The preceding zero-cost failed calibration remains immutable and is the direct
+prior run of this attempt. Both preceding blocker/resolution entries remain
+unchanged. Outer session owns publication through ready PR602 stacked on PR600;
+this continuation performs local work and commits only.
+
+Measured starting commit: `abfb039bfa00e9161bb7fa48d12fe037332572f6`.
+The corrected contract remains `3.1.1`, harness `2.1.1`, and
+`literal-input-prose-v1`, from prerequisite
+`657ef7b48cfa5cf299e2a733585900d68b6708f8`; authorization-bound corpus review and
+lifecycle checks remain at `292fe0943810cbfbf4f3a7f08fe87626d4999173`.
+Corpus digest: `f64dcd1bc2fb6b68a434df1f7424df64618655591338996b235a77a177fa661a`.
+Application SOP version `2.3.8`, renderer `1.0.0`, all tool wording and schemas,
+cases, fixtures, labels, judges, and models remain unchanged. Application, actor,
+and judges use `gpt-6-luna`, with reasoning efforts low/medium/medium and the
+existing 2,048-token ceiling. The shared `_PricingProfile` and all output
+descriptions remain frozen. No prior-contract score or approval was transferred.
+
+The fresh calibration used 16 workers and cumulative ceiling **$17**, retaining
+at least **$3** for a possible final confirmation. All 135 references completed;
+405 model calls started and finished with known usage, zero missing references,
+and zero measurement errors. Actor validity matched 135/135 labels: 132 valid
+and three invalid. The invalid references have no application labels.
+
+| Calibration criterion | Agreement | Disagreement |
+| --- | ---: | ---: |
+| Outcome, actor-valid references | 132/132 | 0 |
+| Grounding, actor-valid references | 130/132 | 2 |
+| Rules, actor-valid references | 132/132 | 0 |
+| Actor validity, all references | 135/135 | 0 |
+
+Fresh independent `eval_reviewer` (`gpt-6-astra`, high) reproduced the evidence
+identity, raw-event/report agreement, complete generated schema hashes, and usage
+accounting, then returned **STOP**. The parent accepts that recommendation.
+A reference uses a derived annual day count in a tool call before user acceptance.
+Its label expects Grounding to pass, while the judge fails the unsupported
+schedule argument under the fixed rubric. The deterministic workflow checks do
+not override Grounding in that reference, so the disagreement changes the
+required Grounding violation metric. Its unchanged overall failure does not
+resolve this material calibration ambiguity.
+
+The second disagreement concerns affirmative salary selection interpreted as a
+conditional midpoint proposal. The semantic judge passes Grounding against a
+failing label, but the existing `unsupported_money` check still makes effective
+Grounding fail. This is a bounded judge-boundary concern; it does not neutralize
+the first disagreement. Neither verdict nor label was altered. No calibration
+approval was written, and no human transcript inspection is claimed: this was
+Codex offline review under Ryan's direction.
+
+| New-contract application phase | Completed slots | Pass^3 / 100 | Successful slots / 300 | Inconclusive slots |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline | 0 | Not measured | Not measured | Not measured |
+| Candidate rounds | 0 | Not measured | Not measured | Not measured |
+| Confirmation pair | 0 | Not measured | Not measured | Not measured |
+
+**Decision: retain the original application; no confirmed improvement.** Search
+stopped before its first baseline/round because calibration has an unresolved
+material disagreement. There was no application regression comparison and no
+unnecessary confirmation. The requested pass^3-first objective and fixed 100-case,
+three-slot denominator were preserved but could not be measured. Endpoint-direction
+and opaque-ID description ideas remain untested hypotheses, not admitted patches.
+
+| Eval spending | USD |
+| --- | ---: |
+| Carried seven full runs / 2,100 attempts | 6.555343780 |
+| Preserved credential-failed calibration | 0.000000000 |
+| New authenticated calibration | 0.233439065 |
+| Cumulative charged eval usage | **6.788782845** |
+| Remaining original authorization | **13.211217155** |
+
+All amounts were reconciled from raw token usage and pinned prices; usage is
+known. Historical calibration/pilot and Codex usage remain excluded as originally
+authorized. The separate stopped pilot was not accessed or resumed. The latest
+accounted run is the authenticated calibration and must precede any later
+separately directed paid run in the spending chain.
+
+Its evidence digest is
+`389c373ec36e4f41fc4ff1aa3fe9380e383b2986b908184a8d2288d33cd6e7c0`;
+the preserved credential-failed calibration digest is
+`3ad5980dc4f929c4d76f867a74684f7364ce832c788c24e20c6bfb6ac99716f3`.
+Raw runs, accounting, and the independent review remain in ignored private
+storage. Any correction to the annual-days label/rubric boundary or salary judge
+boundary needs separately authorized measurement-contract work and matching
+calibration; those changes are outside this frozen application search. No retry,
+judge/label edit, application patch, remote write, merge, deployment, or production
+qualification occurred. These exposed development references establish neither
+application improvement nor generalization.
+
+
+## 2026-09-25 — Authorized annual-day grounding correction and first description-climb round
+
+**Decision: retain the original application; resume at admitted round 2 in a fresh
+supervisor session.** The scoring prerequisite is resolved and fresh calibration
+is approved. Both round-1 candidates were independently rejected. The host then
+refused both required editor followups and a fresh named editor spawn with
+`agent thread limit reached`. No round-2 implementation or paid evaluation began.
+This is a session-capacity blocker, not completion of the three-round search or
+the two-consecutive-no-improvement stopping condition; the current streak is one.
+
+### Authorization, versions, and evidence boundary
+
+Ryan explicitly selected **both Grounding and Rules** for using a derived annual
+day count as a tool argument before acceptance. Before any new-contract baseline
+or candidate evaluation, prerequisite commit
+`04451e0eb4fa36d068f4e5017cfbba0c98f60c6c` changed only the existing premature
+annual-day reference's expected Grounding from true to false, leaving Outcome and
+Rules false. The rubric/domain clarification preserves conditional 52-times-
+weekday proposals as grounded arithmetic, while actual unaccepted tool arguments
+fail both criteria even with a same-turn proposal or later acceptance. All
+transcripts, cases, fixtures, other labels, deterministic checks, application/SOP
+and tool wording remained unchanged at this boundary. Original labels and review
+remain in Git at `abd3ad390bcc71839cbdbe5bf2bbbb379e1c1314`.
+
+The new frozen contract is **corpus 3.1.2 / harness 2.1.2 /
+`literal-input-prose-v1`**, corpus digest
+`1fdd433f4871ba2b317facee126075a712c476e40ccd98a60508103faa6a9386`.
+Independent `eval_reviewer` (`gpt-6-astra`, high) assessed the targeted correction
+as acceptable with no substantive defect. Corpus approval was freshly bound in
+`f218fe47563a4dbc27a597b7730b6b977f71b99c`, the original application and baseline
+commit. This was authorized Codex review of the specific rule and evidence, not
+a claim that Ryan personally inspected all trajectories. The existing
+`human_trajectory_adjudication=false` lifecycle remains intact. The previously
+accepted shared `_PricingProfile` output-schema guard was preserved.
+
+### Fresh calibration and measurement
+
+One fresh matching calibration completed **135/135 references, 405/405 known
+model calls, and zero measurement errors**. Outcome and Rules each matched
+132/132 applicable labels; actor validity matched 135/135. Raw Grounding matched
+131/132. The corrected annual-day reference now matches, and the conditional
+proposal control still passes. The sole raw disagreement is the unchanged salary
+selection reference: `unsupported_money` independently forces effective Grounding
+to fail. Independent assessment verified effective Grounding and Rules each match
+132/132, with no material baseline blocker. The supervisor then bound fresh
+calibration approval to evidence digest
+`3ca8d9bbc3be08c67ebb27bfeed591da5beab4275a364466d4633f190da5fae9`.
+The raw disagreement and pre-approval report snapshot remain private; no reference
+was retried, relabeled, or dropped to obtain agreement.
+
+The prior zero-call credential-failed calibration and the prior authenticated
+calibration with two raw Grounding disagreements remain preserved and accounted.
+Their earlier blocked decisions stand as historical measurements; this explicit
+user adjudication resolved the annual-day ambiguity before the new search.
+
+### Full development measurements and independent decisions
+
+All application runs used the frozen 100-case development set, three trials per
+case, and 16 workers. Every run completed all 300 slots with known usage, no
+infrastructure errors, and no inconclusives. No holdout was accessed. Application,
+actor, and judge models remained `gpt-6-luna` with their pinned settings. The
+user's pass³-first override requires all three slots to succeed on each of the
+fixed 100 cases, while retaining violation, inconclusive, evidence-validity, and
+independent material-regression gates. Success-count and paired-delta improvements
+remain diagnostic rather than additional promotion requirements.
+
+| Application | Pass³ / 100 | Success / 300 | Inconclusive | Grounding / 300 | Rules / 300 | Decision |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Original `f218fe4` | 44 | 204 | 0 | 11 | 57 | Retained |
+| R1A SOP `87751cc` | 56 | 238 | 0 | 5 | 56 | Reject: unresolved material regressions |
+| R1B annual summary `d9f9504` | 65 | 253 | 0 | 12 | 35 | Reject: Grounding worsens; provenance concerns |
+
+The required `eval_cluster` (`gpt-6-luna`, high) diagnosed repeated omission of the
+annual forecast/guaranteed-budget caveat from fresh baseline trajectories and
+passing siblings. Separate `eval_implementer` agents (`gpt-6-sol`, xhigh) produced
+alternative SOP and annual-tool-summary text patches from the same incumbent.
+The parent checked full diffs, normalized source identity, and complete generated
+schemas before spending. B's initial offline wording was corrected by its editor
+to preserve all original unconditional disclosure duties before its sole paid run.
+The parent did not implement candidate patches.
+
+Fresh independent reviewers assessed each candidate without implementer
+conclusions. A's reviewer inspected all 39 distinct affected slots: numeric gates
+passed, but repeated route-direction failures and modeled-route clarification
+failures remained material and unresolved. B's reviewer inspected all 30 affected
+slots: Grounding increased from 11 to 12, and repeated denial of actual historical
+source evidence was a substantive concern. All lost successes and new violations
+were considered; neither comparison excluded cases. Individual stochastic flips
+do not establish patch causality, and neither review claimed they do.
+
+Round 2 was admitted from the retained original: two separate Greenway direction
+alternatives, one in the existing SOP paragraph and one in the current-price tool
+summary. The hypothesis uses baseline failures and passing controls for travel
+toward/away from Route 28, without imposing a global same-direction rule on other
+facilities. Both clean worktrees start at `f218fe4`. Required editor handoffs were
+blocked by host capacity before any edit. No role/model substitution occurred.
+No eligible incumbent exists, so no confirmation pair was warranted or run.
+
+### Accounting, checks, and limitations
+
+| Accounted work | Cost USD |
+| --- | ---: |
+| Carried seven older full runs | 6.555343780 |
+| Prior credential-failed calibration | 0.000000000 |
+| Prior authenticated calibration | 0.233439065 |
+| New matching calibration | 0.241132560 |
+| Fresh baseline | 0.933435640 |
+| R1A | 0.933457100 |
+| R1B | 0.980073850 |
+| **Cumulative** | **9.876881995** |
+
+This resumption incurred **$3.088099150** above its carried **$6.788782845**.
+The remaining hard-$20 authorization is **$10.123118005**. Historical excluded
+calibration/pilot and Codex usage remain excluded; the separate stopped pilot was
+not accessed. Every paid run chains directly through the previous accounted run,
+including rejects. The next paid run must use the private `grounding-r1b` directory
+as `--prior-run`. The $3 confirmation reserve remains intact under the $17 search
+ceiling; recheck the complete-next-run fit using the latest full cost before
+continuing. A shell invocation from the repository root failed to import the
+runner before creating any run or making calls; its log is preserved, and the sole
+actual baseline launched from `v2/`.
+
+Validation: 83 relevant prerequisite/lifecycle/runner tests passed, eight
+comparison-helper checks and the private pass³ self-check passed, and the complete
+corpus validated offline. Each initial candidate check had 67 passes and one
+expected versioned wording-digest mismatch; snapshots and version contracts were
+not rewritten. B's final offline wording correction revalidated corpus/source and
+full contract identity. Both comparison reports were independently reproduced.
+
+Deferred findings include catalog IDs with identical metadata rejected by strict
+fixtures, signed-delta and rounded-money wording sensitivity, inconsistent
+cancellation/provenance/financial-label judging, and separate I-495 direction
+guidance. These need separate measurement-contract work or a distinct admitted
+mechanism; they do not authorize rescoring or retries here. These exposed-set
+measurements establish neither generalization nor production qualification.
+Raw evidence, plans, reviews, accounting, and the exact continuation handoff stay
+in ignored `v2/eval/private/eval-climb/descriptions-20/`. Only this sanitized
+summary and current usage status are published locally. No push, PR update,
+merge, or deployment was performed; the outer session owns ready PR602 on PR600.
+
+
+## 2026-09-25 — Round 2 capacity continuation: no eligible improvement
+
+**Decision: retain the original application and stop the search after two
+consecutive rounds without an eligible improvement.** A fresh supervisor resolved
+the required agent-thread capacity blocker and executed the already admitted
+Round 2. This continued the same authorization, cumulative $20 cap, baseline,
+calibration, and pass³-first contract. No completed prerequisite, calibration,
+baseline, or Round 1 measurement was repeated. No candidate was promoted, so
+neither Round 3 nor an unnecessary confirmation pair ran.
+
+The original application remains
+`f218fe47563a4dbc27a597b7730b6b977f71b99c`. Journal-only campaign commits did not
+become new application incumbents. Corpus **3.1.2**, harness **2.1.2**, and
+`literal-input-prose-v1` remained frozen, with the existing approved calibration
+and corpus evidence. Application, actor, and judge models remained `gpt-6-luna`
+with unchanged settings. All previous journal bytes and rejected worktrees are
+preserved; the prior capacity entry remains a historical checkpoint.
+
+### Admitted alternatives and complete measurements
+
+Separate required `eval_implementer` agents (`gpt-6-sol`, xhigh) implemented the
+existing Greenway direction plan from the same original incumbent. A added four
+lines to the existing SOP paragraph, checking Greenway endpoints before a tool
+call. B added one sentence to the existing current-price tool summary, exposing
+EB toward Route 28 and WB away while resolving endpoint roles separately. Both
+preserved discovery and origin-correction guidance, other facilities' directions,
+SOP exceptions, and consent/security/money requirements. Neither included a
+rejected Round 1 annual-caveat patch. The supervisor did not implement either
+candidate.
+
+| Application | Pass³ / 100 | Successful slots / 300 | Inconclusive | Decision |
+| --- | ---: | ---: | ---: | --- |
+| Original `f218fe4` | 44 | 204 | 0 | Retained |
+| R2A SOP `9808e672e502504995a5f9f9fb917b2ba1db9853` | 57 | 231 | 0 | Reject: unresolved material direction regressions |
+| R2B current-price summary `b715c2cfc8489df1373eda3040408c7303174b74` | 52 | 222 | 1 | Reject: inconclusive increase and material direction regressions |
+
+A and then B each completed all **100 development cases × 3 trials**, using
+16 workers. Pass³ retains the fixed 100-case denominator and requires all three
+slots to succeed. A's comparable Grounding violations fell from 11 to 4 and Rules
+from 57 to 46, each over 300 slots. B's corresponding counts were 10 to 9 and 57
+to 52 over **299 commonly scored slots**; its actor-invalid slot is excluded from
+those comparable violation rates, remains an explicit inconclusive, and does not
+count as a success. One case was excluded from paired three-trial diagnostics,
+but all its trials remained in independent review. Successful-trial increase and
+paired delta remained diagnostics, not extra promotion gates.
+
+Fresh independent `eval_reviewer` agents (`gpt-6-astra`, high) inspected each
+candidate's complete diff, frozen identities, regenerated schemas, raw reports,
+and numeric packets without implementer conclusions. A's reviewer covered all
+45 unique affected slots: 38 lost successes, 4 new Grounding violations, and 29
+new Rules violations, with overlap. Numeric gates passed, but repeated actual
+wrong-direction failures on Greenway, Dulles Toll Road, and I-495 trips remained
+material. These included a westbound Greenway trip regressing from 2/3 successes
+to 0/3 with mixed endpoint directions, and an I-495 trip from 3/3 to 0/3.
+
+B's reviewer covered all 50 affected slots and all three trials of the
+case excluded from paired diagnostics. B fails the retained inconclusive gate
+because one actor stopped prematurely. Repeated wrong-direction failures on a
+westbound Greenway trip and an I-495 trip each regressed from 3/3 to 0/3. Neither
+review inferred causality from a single unseeded flip. No score, actor-invalid
+slot, raw report, fixture, or label was relabeled, retried, or replaced.
+
+### Accounting, validation, and deferred findings
+
+| Accounted work | Cost USD |
+| --- | ---: |
+| Cumulative before this capacity continuation | 9.876881995 |
+| R2A | 0.946600000 |
+| R2B | 0.956438880 |
+| **This continuation** | **1.903038880** |
+| **Cumulative** | **11.779920875** |
+| **Unused authorization** | **8.220079125** |
+
+The cumulative total includes $6.555343780 carried from the seven older runs and
+$5.224577095 incurred by this description-contract continuation across its
+sessions. All 15 accounted run journals reconcile through the original chain.
+R2A chained directly from R1B; R2B chained directly from R2A. All **1,997 A calls
+and 2,005 B calls** have known usage, with no infrastructure errors or missing
+slots. The search ceiling stayed at $17, with a $3 confirmation reserve; each
+complete run fit with the required cost headroom. The stop is the no-improvement
+rule, not budget exhaustion. Historical excluded calibration/pilot and Codex
+usage remain excluded; the separate stopped pilot was not accessed.
+
+Both candidate corpora validated offline. Each candidate's focused existing
+checks produced 67 passes and one expected versioned wording-digest mismatch;
+tests, snapshots, manifests, and versions were not changed to accept the wording.
+The supervisor and reviewers verified unchanged normalized source and full
+schema structure/output descriptions. A's complete schemas were identical; B's
+only schema difference was the admitted tool-summary string. Accounting and
+comparison results were independently reproduced.
+
+The reviews preserve separate findings about indistinguishable catalog metadata
+with strict replay IDs, signed-money extraction, inconsistent financial-caveat
+judgments, contradictory stored verdicts and explanations, and historical-source
+wording. Fixes to catalog identity, runtime behavior, or grading require separate
+work outside this frozen SOP/description search. Additional facility-direction
+wording was not tested because the two-round stopping rule was reached. No
+unmeasured improvement is claimed. These exposed development results establish
+neither generalization nor production qualification.
+
+Plans, complete run evidence, independent review records, accounting, and the
+final handoff remain in ignored `v2/eval/private/eval-climb/descriptions-20/`.
+Only this append-only summary and concise current usage status are committed.
+No push, PR update, merge, or deployment was performed; the outer session owns
+ready PR602 stacked on PR600. There is no application patch to publish.

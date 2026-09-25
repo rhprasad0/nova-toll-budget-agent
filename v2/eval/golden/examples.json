@@ -14687,7 +14687,7 @@
     ],
     "expected": {
       "outcome": false,
-      "grounding": true,
+      "grounding": false,
       "rules": false
     },
     "actor_validity": "valid",

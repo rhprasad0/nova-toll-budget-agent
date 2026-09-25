@@ -29,7 +29,7 @@ from eval.simulated import GroundedCorrectnessEvaluator
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.1.0"
+CORPUS_VERSION = "3.1.2"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -56,7 +56,7 @@ SOURCE_FILES = (
 )
 TOOL_DESCRIPTION_POLICY = "literal-input-prose-v1"
 TOOL_INPUT_MODELS = {
-    "agent_tools/current_price_domain.py": {"_PricingProfile", "_PricingRequest"},
+    "agent_tools/current_price_domain.py": {"_PricingRequest"},
     "agent_tools/get_annual_toll_ballpark.py": {
         "_DirectionRequest",
         "_BallparkRequest",

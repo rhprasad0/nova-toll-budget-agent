@@ -58,6 +58,24 @@ TOOL_SPEC: dict = {{"name": "tool", "description": "tool prose", "inputSchema": 
             golden.tool_source_digest(name, source.replace('"input prose"', expression))
 
 
+def test_shared_input_output_descriptions_remain_frozen() -> None:
+    for name, tool in (
+        ("agent_tools/current_price_domain.py", golden.current),
+        ("agent_tools/get_annual_toll_ballpark.py", golden.annual),
+    ):
+        output_definitions = tool.TOOL_SPEC["outputSchema"]["json"]["$defs"]
+        assert golden.TOOL_INPUT_MODELS[name].isdisjoint(output_definitions)
+    name = "agent_tools/current_price_domain.py"
+    source = (golden.V2 / name).read_text()
+    changed = source.replace(
+        "Supported value: two_axle_passenger.", "Changed profile wording."
+    )
+    assert changed != source
+    assert golden.tool_source_digest(name, source) != golden.tool_source_digest(
+        name, changed
+    )
+
+
 def test_tool_prose_keeps_pinned_corpus_but_runtime_changes_do_not(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -95,6 +113,34 @@ def test_complete_development_contract_and_reference_labels() -> None:
         assert "three_axle" not in case.model_dump_json()
         assert "adversarial_direct" not in case.coverage_tags
         assert "adversarial_tool" not in case.coverage_tags
+
+
+def test_annual_day_proposal_is_grounded_but_premature_use_is_not() -> None:
+    examples = {
+        e.label: e
+        for e in run.development_examples()
+        if e.case_id == "dev3-accept-three-day-annual-count"
+    }
+    good = examples["good"]
+    premature = examples["annual-call-before-day-acceptance"]
+    assert good.expected is not None and all(good.expected.model_dump().values())
+    assert premature.expected is not None
+    assert premature.expected.model_dump() == {
+        "outcome": False,
+        "grounding": False,
+        "rules": False,
+    }
+    # Identical conditional arithmetic and later acceptance; only call timing differs.
+    assert good.turns[0].response in premature.turns[0].response
+    assert not good.turns[0].calls
+    assert good.turns[1].user == premature.turns[1].user == "Use 156 days."
+    assert good.turns[1].calls[0].input == premature.turns[0].calls[0].input
+    assert premature.turns[0].calls[0].input["planned_annual_commute_days"] == 156
+    prompt = " ".join(run.judge_prompt("grounding").split())
+    assert "conditional annual-day question is grounded arithmetic" in prompt
+    assert "before user acceptance fails Grounding as well as Rules" in prompt
+    assert "even if proposed in the same assistant turn or accepted later" in prompt
+    assert "Supplied tool results can support reported amounts" in prompt
 
 
 def test_catalog_and_successful_routes_match_committed_oracle() -> None:

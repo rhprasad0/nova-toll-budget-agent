@@ -1,5 +1,10 @@
 {
-  "status": "pending",
-  "corpus_sha256": "1e3a92b545ecec634a1757f1f8ba7c0d6a89c4470f87d8e5729d1ed6b0ebf9f7",
-  "note": "Contract 3.1.0 / harness 2.1.0 allows literal input/tool description wording changes while pinning all other tool source syntax. Cases, fixtures, reference labels, and application wording are unchanged. Prior corpus/calibration approval does not transfer; fresh contract review and matching calibration are required before application evaluation."
+  "status": "approved",
+  "corpus_sha256": "1fdd433f4871ba2b317facee126075a712c476e40ccd98a60508103faa6a9386",
+  "reviewer": "Codex supervisor with independent eval_reviewer gpt-6-astra/high review, under Ryan authorization",
+  "reviewed_at": "2026-09-25T10:52:45.825788+00:00",
+  "contract_commit": "04451e0eb4fa36d068f4e5017cfbba0c98f60c6c",
+  "authorization": "Ryan explicitly authorized Both Grounding and Rules for premature derived annual-day tool arguments, the narrow reference/rubric correction, fresh independent review and matching calibration before search.",
+  "human_trajectory_adjudication": false,
+  "evidence": "Fresh Codex review under Ryan authorization with independent eval_reviewer gpt-6-astra/high targeted assessment: acceptable, no substantive correction defect. Exactly one Grounding label changes for premature derived annual-day tool use; conditional arithmetic proposals remain grounded. All transcripts, other labels, cases, fixtures, application/SOP/tool wording, models, deterministic checks and shared-output guard remain unchanged. Manifest independently reproduced;76 focused tests and8 comparison checks passed. User adjudicated this specific rule; human_trajectory_adjudication=false does not claim personal inspection of full trajectories. Independent campaign-eligibility STOP reflects the new uncalibrated contract, not rejection of this prerequisite. Fresh matching calibration required; this corpus approval is not calibration/candidate approval or release qualification."
 }
