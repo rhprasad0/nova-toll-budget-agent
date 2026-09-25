@@ -168,6 +168,7 @@ def test_parallel_calls_reserve_shared_budget_before_provider_calls(
             # Two reservations fit, but a third must stop before any call finishes.
             assert next(as_completed(futures, timeout=5)).result() is False
             with journal.lock:
+                assert journal.limit is not None
                 assert journal.spent == 0 and 0 < journal.reserved <= journal.limit
         finally:
             release.set()
