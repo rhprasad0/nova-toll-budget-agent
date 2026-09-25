@@ -1,9 +1,10 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "e188681582640fc49232e6c9a0e987f9467c1c80eb4d7c63acf9e9a0c2877512",
   "human_trajectory_adjudication": false,
-  "evidence": "Corpus 3.3.0 / harness 2.3.0 awaits fresh independent review after user-directed overall-pass objective change. Cases, fixtures, references and judge prompts unchanged. Calibration remains unapproved.",
+  "evidence": "Fresh independent eval_reviewer assessment of exact corpus 3.3.0 / harness 2.3.0: strict fixed-300 overall improvement; fixed-100 pass\u00b3 and paired delta diagnostic; historical scoring and report shapes preserved; safety and independent regression review retained. Cases, references, fixtures, actor/judge prompts and application unchanged from reviewed preparation. Development search excludes blind holdout feedback. Approval covers corpus/contract only; prior material calibration defects remain unresolved and no calibration or paid continuation is approved.",
   "reviewer": "Codex supervisor with independent eval_reviewer (gpt-6-astra, high) under user authorization",
   "reviewed_at": "2026-09-25",
-  "authorization": "Ryan explicitly authorized fresh preparation corpus/calibration review in the implementation plan; this records independent Codex corpus review only."
+  "authorization": "Ryan explicitly authorized updating PR #603 to optimize future development climbs for overall pass rate, with fresh independent corpus review.",
+  "contract_commit": "a6140708bd314a7c87bc49d91db1b8ea7bb28f77"
 }
