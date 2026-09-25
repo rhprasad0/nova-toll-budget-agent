@@ -13680,10 +13680,18 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
         for step in cast(list[dict[str, object]], job["steps"])
         if step.get("name") == "Run fixed-target migrations and emit sanitized evidence"
     )
-    assert migration_step["env"] == {
-        "EXPECTED_PRICING_VERSION": "1.4.0",
-        "EXPECTED_ORACLE_VERSION": "1.15.0",
+    baselines = json.loads((V2_ROOT / "db/migration-baselines.json").read_text())
+    expected_versions = {
+        f"EXPECTED_{row['schema'].upper()}_VERSION": row["version"]
+        for row in baselines
+        if hashlib.sha256((REPO_ROOT / row["source_path"]).read_bytes()).hexdigest()
+        == row["source_sha256"]
     }
+    assert set(expected_versions) == {
+        "EXPECTED_PRICING_VERSION",
+        "EXPECTED_ORACLE_VERSION",
+    }
+    assert migration_step["env"] == expected_versions
     defaults = cast(dict[str, object], job["defaults"])
     run_defaults = cast(dict[str, object], defaults["run"])
     assert run_defaults["working-directory"] == "v2"
