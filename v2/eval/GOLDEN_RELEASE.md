@@ -1,7 +1,7 @@
 # Golden production gate
 
 **Current status:** production golden qualification remains blocked. The active
-3.3.1 corpus is development-only and cannot qualify production, even with a
+3.3.2 corpus is development-only and cannot qualify production, even with a
 historical approved policy. Current corpus and calibration requirements are in
 the [evaluation guide](README.md). Independent holdout scope, a new protected
 policy, and fresh qualification evidence require separate review. See the

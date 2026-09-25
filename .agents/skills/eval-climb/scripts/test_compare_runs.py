@@ -343,7 +343,7 @@ class FixedPassCubedTest(unittest.TestCase):
             compare(left, right)
 
     def test_overall_gain_can_reduce_pass_cubed(self) -> None:
-        for version in ("2.3.0", "2.3.1"):
+        for version in ("2.3.0", "2.3.1", "2.3.2"):
             left = self.current()
             right = self.current()
             for value in (left, right):

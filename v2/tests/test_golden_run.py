@@ -1701,3 +1701,39 @@ def test_actor_check_uncapped_cli_preserves_prior_spend(
     assert manifest["budget_usd"] is None
     assert manifest["prior_spend_usd"] == 30
     assert manifest["prior_run_id"] == "prior"
+
+
+def test_judge_tool_schemas_emit_evidence_before_decisions() -> None:
+    from strands.tools.structured_output.structured_output_utils import (
+        convert_pydantic_to_tool_spec,
+    )
+
+    schema = cast(
+        dict[str, Any],
+        convert_pydantic_to_tool_spec(run.OutcomeAssessment)["inputSchema"]["json"],
+    )
+    outcome = schema["properties"]["outcome"]
+    actor = schema["properties"]["actor_validity"]
+    assert list(outcome["properties"]) == ["evidence", "unmet_requirements"]
+    assert set(outcome["required"]) == {"evidence", "unmet_requirements"}
+    assert list(actor["properties"]) == ["evidence", "status"]
+    assert set(actor["required"]) == {"evidence", "status"}
+    assert actor["properties"]["status"]["enum"] == ["valid", "invalid", "uncertain"]
+    assert outcome["properties"]["evidence"]["minLength"] == 1
+    standalone = cast(
+        dict[str, Any],
+        convert_pydantic_to_tool_spec(run.RequirementAssessment)["inputSchema"]["json"],
+    )
+    assert list(standalone["properties"]) == ["evidence", "unmet_requirements"]
+    assert standalone["properties"] == outcome["properties"]
+    assert standalone["required"] == outcome["required"]
+    # Contradictory output remains a calibration defect, never a regex relabel.
+    contradictory = run.RequirementAssessment(
+        evidence="This is supported; no violation.",
+        unmet_requirements=[
+            run.UnmetRequirement(
+                requirement="Use evidence", evidence="The answer is supported."
+            )
+        ],
+    )
+    assert not contradictory.verdict().passed

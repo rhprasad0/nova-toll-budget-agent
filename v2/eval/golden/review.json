@@ -1,10 +1,6 @@
 {
-  "status": "approved",
-  "corpus_sha256": "00b724d7ad38786ef44792315c52935880038f1bc585d9e2e0ad35c7cf88cfbd",
+  "status": "pending",
+  "corpus_sha256": "7cc2f454a94241419ce6faf69ea0076e77576b7ef9d2790084968208b420cd96",
   "human_trajectory_adjudication": false,
-  "reviewer": "Codex supervisor with independent eval_reviewer (gpt-6-astra, high) under user authorization",
-  "reviewed_at": "2026-09-25T14:58:33.537623+00:00",
-  "authorization": "Ryan explicitly authorized grading repair, fresh independent validation, and an uncapped bounded overall-pass climb.",
-  "contract_commit": "5d0ed0ed25b3b456f3906296f1b10acc07e81f5a",
-  "evidence": "Independent review of aabbe28 and follow-up delta through5d0ed0e found no material preparation defect. Reviewed generalized grading instructions, structured schema, capped/uncapped accounting and historical comparison behavior; independently validated all3 new contrast labels. Original143 reference objects,100cases,application,actors,tools and catalog unchanged. Corpus/code ready for first fresh calibration. This is corpus approval only, not calibration approval or candidate eligibility."
+  "evidence": "New evidence-first judge contract requires fresh independent review and calibration; no approval inherited."
 }
