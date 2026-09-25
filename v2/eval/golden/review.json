@@ -1,6 +1,10 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "94ba29c9998ac358a96dd852aac5f5281b5c962ec2c35875a403bdaeee61a275",
   "human_trajectory_adjudication": false,
-  "evidence": "Source completeness and claim coverage repair awaiting independent review; no approval inherited."
+  "evidence": "Fresh independent review of96c23d2..92878b8 found no material preparation defect. Outcome separates completion, required disclosures and factual accuracy; Grounding checks source denials and preserves route-workflow boundaries. All146 reference payloads/labels,100cases,fixtures,actor behavior,application,models and tool schemas unchanged; evidence-first schema and verdict derivation unchanged. Ready for first fresh calibration only. No calibration approval or human trajectory adjudication claimed.",
+  "reviewer": "Codex supervisor with independent eval_reviewer (gpt-6-astra, high) under user authorization",
+  "reviewed_at": "2026-09-25T15:28:22.928654+00:00",
+  "authorization": "Ryan explicitly authorized proceeding with calibration after the remaining grading fixes; uncapped spending remains authorized.",
+  "contract_commit": "92878b897dc2ca7aa17110bdf6fcc42bcba9114f"
 }
