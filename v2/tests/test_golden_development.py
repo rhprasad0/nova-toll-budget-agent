@@ -322,3 +322,24 @@ def test_signed_comparison_does_not_match_absolute_value(wording: str) -> None:
         Decimal("2.50"),
         Decimal("3.50"),
     }
+
+
+@pytest.mark.parametrize(
+    "case_id", ["dev3-two-comparable-weeks", "dev3-gallows-hybrid-salary"]
+)
+def test_approach_labels_do_not_make_duplicate_ids_interchangeable(
+    case_id: str,
+) -> None:
+    from copy import deepcopy
+
+    case = next(c for c in golden.load_cases() if c.id == case_id)
+    fixture = golden.load_fixture(case.steps[0].fixture)
+    golden.Replay(case).call(fixture.tool, fixture.input, [case.prompt])
+    wrong = deepcopy(fixture.input)
+    leg = wrong if fixture.tool == "get_current_toll_price" else wrong["outbound"]
+    assert isinstance(leg, dict)
+    endpoint = str(leg["destination_point_id"])
+    assert endpoint.endswith("ND") and not endpoint.endswith("9ND")
+    leg["destination_point_id"] = endpoint[:-2] + "9ND"
+    with pytest.raises(ValueError, match="tool_arguments"):
+        golden.Replay(case).call(fixture.tool, wrong, [case.prompt])
