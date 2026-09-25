@@ -1,11 +1,11 @@
-# Frozen quality evaluation never receives a production role or database access.
+# This repository imports aggregates only. Private evaluation runs elsewhere.
+# No role here can read private cases, call a model, or access a database.
 locals {
   golden_bucket = "nova-toll-golden-evidence-903859731897"
   golden_roles = var.environment == "development" ? {
-    evaluator = { environment = "golden-evaluation", writes = ["reports/*", "claims/*", "budget/current.json"] }
-    reviewer  = { environment = "golden-review", writes = ["reports/*", "candidates/*", "references/*"] }
+    evaluator = { environment = "golden-evaluation", writes = ["aggregates/reports/*", "aggregates/claims/*", "aggregates/accounting/*"] }
+    reviewer  = { environment = "golden-review", writes = ["candidates/private/*"] }
     reader    = { environment = "golden-read", writes = [] }
-    publisher = { environment = "golden-baseline", writes = ["approvals/*", "baseline/current.json"] }
   } : {}
 }
 
@@ -48,7 +48,7 @@ resource "aws_s3_bucket_public_access_block" "golden" {
 resource "aws_iam_role" "golden" {
   for_each             = local.golden_roles
   name                 = "nova-toll-golden-${each.key}"
-  max_session_duration = each.key == "evaluator" ? 7200 : 3600
+  max_session_duration = 3600
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -71,13 +71,11 @@ resource "aws_iam_role_policy" "golden" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = concat([
-      { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = "arn:aws:s3:::${local.golden_bucket}/*" },
+      { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = ["arn:aws:s3:::${local.golden_bucket}/aggregates/*", "arn:aws:s3:::${local.golden_bucket}/candidates/private/*"] },
       { Effect = "Deny", Action = ["s3:DeleteObject", "s3:DeleteObjectVersion", "s3:PutBucketVersioning"], Resource = ["arn:aws:s3:::${local.golden_bucket}", "arn:aws:s3:::${local.golden_bucket}/*"] }
       ], length(each.value.writes) == 0 ? [] : [
       { Effect = "Allow", Action = ["s3:PutObject"], Resource = [for prefix in each.value.writes : "arn:aws:s3:::${local.golden_bucket}/${prefix}"] }
-      ], each.key == "evaluator" ? [
-      { Effect = "Allow", Action = ["ssm:GetParameter"], Resource = "arn:aws:ssm:us-east-1:903859731897:parameter/nova-toll/openai_api_key" }
-    ] : [])
+    ])
   })
 }
 
@@ -94,7 +92,7 @@ resource "aws_s3_bucket_policy" "golden" {
       },
       {
         Effect    = "Deny", Principal = "*", Action = "s3:PutObject"
-        Resource  = [for prefix in ["reports/*", "claims/*", "approvals/*", "references/*"] : "${aws_s3_bucket.golden[0].arn}/${prefix}"]
+        Resource  = [for prefix in ["reports/*", "claims/*", "approvals/*", "references/*", "aggregates/*"] : "${aws_s3_bucket.golden[0].arn}/${prefix}"]
         Condition = { Null = { "s3:if-none-match" = "true" } }
       },
       {

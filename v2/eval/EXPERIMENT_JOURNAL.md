@@ -611,3 +611,65 @@ edits would invalidate the frozen corpus/calibration, so this was not tested.
 The pilot also exposed that custom roles require a fresh session and that the
 skill explicitly selected four workers; its default is being changed to 16
 for future runs in response to Ryan's follow-up.
+
+## 2026-09-25 — Private production qualification policy 3.0.0
+
+Ryan selected an **80% overall admission floor** for a future independently
+authored **100-case private holdout**, with three trials per case: at least
+**240 successful trials out of 300**, all valid and fully judged. Per-case pass
+requirements, the consistency floor, automatic regression veto, and latency and
+cost-per-success quality cutoffs are removed. Complete measurements, spending
+limits, exact-artifact provenance, fresh evidence, and human release review remain
+required. An evaluated production baseline is no longer a prerequisite.
+
+The repository now imports externally signed aggregate summaries rather than
+executing production holdout cases. Cases, expected answers, fixtures, transcripts,
+case-level outcomes, and the real signing key remain outside coding-agent access.
+Ed25519 verification binds aggregate evidence to the reviewed policy, private
+holdout/evaluator/calibration identities, and exact development artifact. Repeated
+use is disclosed as a reused private benchmark; the signed attempt history retains
+an original and at most one independently authorized infrastructure/actor-validity
+replacement. Quality-only reruns are prohibited. Aggregate reports show failures,
+inconclusives, fixed denominators, consistency, uncertainty, latency, cost, and
+attempt count instead of presenting admission as a claim of real-world accuracy.
+
+**No agent performance was measured and no paid calls were made for this change
+($0 evaluation cost).** The application model/prompt, grading rubric, development
+corpus, and historical scores are unchanged. Synthetic signing/admission checks
+exercise the new integration without private cases. The active policy remains
+pending: real holdout authoring, external evaluator provisioning and review, the
+public key and contract pins, exact policy approval, aggregate-only IAM activation,
+and fresh signed qualification evidence are still required. No deployment or
+production qualification is claimed. Current operation and activation requirements
+are documented in [the production gate guide](GOLDEN_RELEASE.md).
+
+Validation: the broader release/migration regression suite passed **328 tests**
+with **two skipped**; the final focused private-gate suite passed **41 tests**.
+Historical baseline compatibility tests also passed. Ruff, strict Pyright,
+workflow/ShellCheck checks, and backend-disabled Terraform validation passed.
+Deployment-input hashes were updated for the aggregate-only IAM and migration
+receipt bindings. Later production stages verify the signed envelope carried in
+the receipt without needing development-storage credentials.
+
+### 2026-09-25 — Adversarial review corrections before private-gate activation
+
+The local adversarial review reproduced two recovery failures: publishing the
+candidate index before a failed receipt upload prevented a new import of identical
+evidence, and freezing provisional costs prevented signed usage reconciliation.
+The receiving workflow now allows a newer, human-approved import to conditionally
+replace the index of a completed prior import only for the identical summary digest.
+S3 versioning preserves prior pointers; changed evidence, active/untrusted prior
+runs, older imports, and concurrent writes remain blocked.
+
+Outcome claims now exclude provisional costs. Full signed reports remain immutable,
+and the first usage-complete summary freezes per-attempt accounting separately.
+Reconciliation may correct costs while outcomes remain unchanged; finalized costs
+cannot subsequently change. No extra evaluation, quality retry, or rescoring is
+authorized. Synthetic regressions exercise both failures and the rejection paths.
+The external evaluator, private corpus, key, and policy approval remain pending;
+these fixes made no paid model calls and do not qualify or deploy an application.
+
+Post-correction validation passed **339 relevant tests**, with **two skipped**,
+plus repository static checks, secret scanning, and Terraform validation. The
+focused gate/retirement set includes 56 passing checks, including recovery of
+identical evidence, rejected pointer races, and one-time cost reconciliation.

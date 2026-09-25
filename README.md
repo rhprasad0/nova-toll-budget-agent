@@ -95,6 +95,13 @@ contract 3.0.5. Calibration 9 on 3.0.6 matched all 396 application labels and
 These are development measurements, not production qualification or whole-agent
 accuracy.
 
+The [production qualification gate](v2/eval/GOLDEN_RELEASE.md) is prepared for a
+separate, independently authored private set of 100 cases, with three trials each
+and an 80% overall admission floor. It accepts signed aggregate results and human
+review; private cases must remain outside coding-agent access. **Activation and
+private evaluation are still pending.** Reports will include failures, uncertainty,
+consistency, latency, cost, and repeat-attempt counts.
+
 The [experiment journal](v2/eval/EXPERIMENT_JOURNAL.md) records what was tried,
 results, limitations, costs, and decisions. The [evaluation guide](v2/eval/README.md)
 covers current usage. Granular experiment output stays in private storage.

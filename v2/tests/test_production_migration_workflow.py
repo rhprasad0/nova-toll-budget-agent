@@ -191,7 +191,7 @@ def _admission() -> dict[str, object]:
             "run_id": 100,
             "receipt_sha256": "e" * 64,
             "policy_sha256": "f" * 64,
-            "baseline_sha256": "a" * 64,
+            "holdout_sha256": "a" * 64,
             "report_sha256": "b" * 64,
             "created_at": "2026-09-20T20:00:00+00:00",
         },

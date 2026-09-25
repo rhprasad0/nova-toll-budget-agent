@@ -1,364 +1,504 @@
-"""Offline release demo: authentic passing evidence advances; altered evidence blocks."""
+"""Synthetic signed summaries exercise admission without accessing a holdout."""
 
-import asyncio
+import base64
 import hashlib
-import io
 import json
-import zipfile
-from collections.abc import AsyncIterator
+import subprocess
+from collections.abc import Callable
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
 import yaml
 
-from eval import golden_run as run
 from scripts import golden_gate as gate
 from scripts import golden_release as workflow
-from tests.golden_support import case as golden_case
-
-pytestmark = pytest.mark.usefixtures("golden_test_data")
 
 
 @pytest.fixture
-def evidence(
-    golden_gate_files: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    limits = gate.read(gate.POLICY)["policy"]
-    monkeypatch.setattr(gate, "policy", lambda: limits)
-    now = datetime.now(UTC)
-    baseline = {
-        "production": {"claim_id": 8},
-        "report_sha256": "b" * 64,
-        "created_at": (now - timedelta(days=1)).isoformat(),
+def signer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Callable[[dict[str, Any]], bytes]:
+    private, public = tmp_path / "test-only-key.pem", tmp_path / "public.pem"
+    subprocess.run(
+        ["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(private)],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["openssl", "pkey", "-in", str(private), "-pubout", "-out", str(public)],
+        check=True,
+        capture_output=True,
+    )
+    document = gate.read(gate.POLICY)
+    limits = document["policy"]
+    for index, key in enumerate(
+        ("holdout_sha256", "evaluator_sha256", "calibration_sha256")
+    ):
+        limits[key] = str(index + 1) * 64
+    limits["public_key_sha256"] = hashlib.sha256(public.read_bytes()).hexdigest()
+    document["approval"] = {
+        "status": "approved",
+        "reviewer": "test-only",
+        "evidence": "synthetic fixture",
+        "evidence_sha256": gate.digest(limits),
+        "approved_at": (datetime.now(UTC) - timedelta(days=10)).isoformat(),
     }
-    admission = {
+    path = tmp_path / "policy.json"
+    gate.write(path, document)
+    monkeypatch.setattr(gate, "POLICY", path)
+    monkeypatch.setattr(gate, "PUBLIC_KEY", public)
+
+    def sign(value: dict[str, Any]) -> bytes:
+        body = gate.canonical(value)
+        (tmp_path / "body").write_bytes(body)
+        subprocess.run(
+            [
+                "openssl",
+                "pkeyutl",
+                "-sign",
+                "-rawin",
+                "-inkey",
+                str(private),
+                "-in",
+                str(tmp_path / "body"),
+                "-out",
+                str(tmp_path / "signature"),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return gate.canonical(
+            {
+                "summary_base64": base64.b64encode(body).decode(),
+                "signature_base64": base64.b64encode(
+                    (tmp_path / "signature").read_bytes()
+                ).decode(),
+            }
+        )
+
+    return sign
+
+
+@pytest.fixture
+def summary(signer: Callable[[dict[str, Any]], bytes]) -> dict[str, Any]:
+    limits = gate.policy()
+    return {
+        "schema_version": 1,
+        "evaluation_scope": "private-held-out",
         "candidate": "a" * 40,
         "bundle_id": 12,
-        "bundle_digest": "sha256:" + "c" * 64,
+        "bundle_digest": "sha256:" + "b" * 64,
         "development_run": 10,
         "development_attempt": 1,
         "development_deployment": 11,
-    }
-    receipt: dict[str, Any] = {
-        **admission,
-        "run_id": 20,
-        "attempt": 1,
-        "trusted_sha": "d" * 40,
-        "evaluation_code_sha256": gate.code_digest(),
-        "qualified": True,
-        "errors": [],
-        "purpose": "candidate",
-        "review": {"user": {"login": "reviewer"}},
-        "created_at": now.isoformat(),
-        "report_sha256": "e" * 64,
         "policy_sha256": gate.digest(limits),
-        "contract_sha256": limits["contract_sha256"],
-        "baseline_sha256": gate.digest(baseline),
-        "archive": {
-            "key": "reports/test.zip",
-            "version_id": "version",
-            "sha256": "f" * 64,
+        **{
+            k: limits[k]
+            for k in (
+                "holdout_sha256",
+                "evaluator_sha256",
+                "calibration_sha256",
+                "cases",
+                "trials",
+            )
         },
+        "holdout_attempts": 1,
+        "cumulative_cost_usd": 2.0,
+        "unknown_usage": False,
+        "private_review_complete": True,
+        "attempts": [
+            {
+                "started_at": (datetime.now(UTC) - timedelta(hours=1)).isoformat(),
+                "completed_at": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+                "replacement_reason": "none",
+                "passed": 240,
+                "failed": 60,
+                "inconclusive": 0,
+                "unmeasured": 0,
+                "case_pass_counts": [20, 0, 0, 80],
+                "success_interval": {
+                    "method": "case-bootstrap-95",
+                    "lower": 0.7,
+                    "upper": 0.9,
+                },
+                "latency_p50_seconds": 45.0,
+                "latency_p95_seconds": 120.0,
+                "agent_cost_usd": 1.0,
+                "total_cost_usd": 2.0,
+            }
+        ],
     }
-    return admission, baseline, receipt
+
+
+@pytest.mark.parametrize("passed,qualified", [(239, False), (240, True), (300, True)])
+def test_quality_boundary_and_no_per_case_or_latency_veto(
+    summary: dict[str, Any],
+    signer: Callable[[dict[str, Any]], bytes],
+    passed: int,
+    qualified: bool,
+) -> None:
+    row = summary["attempts"][0]
+    row.update(
+        passed=passed,
+        failed=300 - passed,
+        case_pass_counts={
+            239: [20, 0, 1, 79],
+            240: [20, 0, 0, 80],
+            300: [0, 0, 0, 100],
+        }[passed],
+    )
+    row["success_interval"] = {"method": "case-bootstrap-95", "lower": 0, "upper": 1}
+    assert gate.decision(gate.verify_summary(signer(summary)))["qualified"] is qualified
 
 
 @pytest.mark.parametrize(
     "change",
     [
-        "none",
-        "missing",
-        "partial",
-        "critical",
-        "regression",
-        "infrastructure",
-        "hash",
-        "artifact",
-        "commit",
-        "baseline",
-        "contract",
-        "policy",
-        "reference",
+        "inconclusive",
+        "unmeasured",
+        "unknown_usage",
+        "review",
+        "latency",
+        "cost",
+        "cumulative",
         "stale",
-        "stale-baseline",
-        "future",
     ],
 )
-def test_valid_candidate_reaches_admission_and_invalid_candidates_block(
-    monkeypatch: pytest.MonkeyPatch,
-    evidence: tuple[dict[str, Any], dict[str, Any], dict[str, Any]],
+def test_incomplete_or_unapproved_evidence_never_passes(
+    summary: dict[str, Any], change: str
+) -> None:
+    row = summary["attempts"][0]
+    if change in {"inconclusive", "unmeasured"}:
+        row[change], row["failed"] = 1, 59
+    elif change == "unknown_usage":
+        summary["unknown_usage"] = True
+    elif change == "review":
+        summary["private_review_complete"] = False
+    elif change == "latency":
+        row["latency_p50_seconds"] = row["latency_p95_seconds"] = None
+    elif change == "cost":
+        row["total_cost_usd"] = summary["cumulative_cost_usd"] = 6
+    elif change == "cumulative":
+        summary["cumulative_cost_usd"] = 26
+    else:
+        row["started_at"] = (datetime.now(UTC) - timedelta(hours=26)).isoformat()
+        row["completed_at"] = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
+    assert not gate.decision(summary)["qualified"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "private",
+        "nested",
+        "counts",
+        "histogram",
+        "nan",
+        "bool",
+        "negative",
+        "scope",
+        "contract",
+        "policy",
+        "future",
+        "preapproval",
+        "method",
+    ],
+)
+def test_schema_and_contract_fail_closed(
+    summary: dict[str, Any],
+    signer: Callable[[dict[str, Any]], bytes],
     change: str,
 ) -> None:
-    admission, baseline, receipt = evidence
-    monkeypatch.setattr(gate, "development_account", lambda: None)
-    monkeypatch.setattr(gate, "production_reference", lambda: (baseline, "etag"))
-    if change in {"partial", "critical", "regression", "infrastructure"}:
-        receipt.update(qualified=False, errors=[change])
-    elif change == "missing":
-        receipt.pop("qualified")
-    elif change == "hash":
-        receipt["bundle_digest"] = "sha256:" + "0" * 64
-    elif change == "artifact":
-        receipt["bundle_id"] += 1
-    elif change == "commit":
-        receipt["candidate"] = "f" * 40
-    elif change == "baseline":
-        receipt["baseline_sha256"] = "0" * 64
-    elif change in {"contract", "policy"}:
-        receipt[change + "_sha256"] = "0" * 64
-    elif change == "reference":
-        receipt["purpose"] = "production-reference"
-    elif change == "stale":
-        receipt["created_at"] = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
-    elif change == "stale-baseline":
-        baseline["created_at"] = (datetime.now(UTC) - timedelta(days=31)).isoformat()
-        receipt["baseline_sha256"] = gate.digest(baseline)
+    row = summary["attempts"][0]
+    if change == "private":
+        summary["cases_detail"] = ["must never be published"]
+    elif change == "nested":
+        row["transcript"] = "private"
+    elif change == "counts":
+        row["failed"] = 59
+    elif change == "histogram":
+        row["case_pass_counts"] = [0, 20, 0, 80]
+    elif change == "nan":
+        row["agent_cost_usd"] = float("nan")
+    elif change == "bool":
+        summary["bundle_id"] = True
+    elif change == "negative":
+        row["failed"] = -1
+    elif change == "scope":
+        summary["evaluation_scope"] = "development"
+    elif change == "contract":
+        summary["holdout_sha256"] = "f" * 64
+    elif change == "policy":
+        summary["policy_sha256"] = "f" * 64
     elif change == "future":
-        receipt["created_at"] = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+        row["completed_at"] = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    elif change == "preapproval":
+        row["started_at"] = (datetime.now(UTC) - timedelta(days=11)).isoformat()
+    else:
+        row["success_interval"]["method"] = "trial-bootstrap-95"
+    with pytest.raises(ValueError):
+        gate.verify_summary(signer(summary))
+
+
+def test_signature_and_strict_envelope(
+    summary: dict[str, Any], signer: Callable[[dict[str, Any]], bytes]
+) -> None:
+    envelope = json.loads(signer(summary))
+    envelope["summary_base64"] = base64.b64encode(b"{}").decode()
+    with pytest.raises(ValueError, match="signature"):
+        gate.verify_summary(gate.canonical(envelope))
+    envelope = json.loads(signer(summary))
+    envelope["signature_base64"] = base64.b64encode(bytes(64)).decode()
+    with pytest.raises(ValueError, match="signature"):
+        gate.verify_summary(gate.canonical(envelope))
+    for body in (b'{"x":1,"x":2}', b" " * 16385):
+        with pytest.raises(ValueError):
+            gate.verify_summary(body)
+    envelope = json.loads(signer(summary))
+    envelope["private"] = "not an aggregate"
+    with pytest.raises(ValueError, match="fields"):
+        gate.verify_summary(gate.canonical(envelope))
+    gate.PUBLIC_KEY.write_text("changed")
+    with pytest.raises(ValueError, match="public key"):
+        gate.verify_summary(signer(summary))
+
+
+@pytest.mark.parametrize("reason", ["infrastructure", "actor_validity"])
+def test_only_one_valid_replacement(summary: dict[str, Any], reason: str) -> None:
+    original = summary["attempts"][0]
+    replacement = deepcopy(original)
+    replacement.update(
+        started_at=original["completed_at"],
+        completed_at=datetime.now(UTC).isoformat(),
+        replacement_reason=reason,
+    )
+    original["unmeasured" if reason == "infrastructure" else "inconclusive"] = 1
+    original["failed"] = 59
+    summary.update(
+        attempts=[original, replacement], holdout_attempts=2, cumulative_cost_usd=4
+    )
+    assert gate.decision(summary)["qualified"]
+    original.update(unmeasured=0, inconclusive=0, failed=60)
+    with pytest.raises(ValueError, match="original"):
+        gate.decision(summary)
+    replacement["replacement_reason"] = "quality"
+    with pytest.raises(ValueError, match="quality"):
+        gate.decision(summary)
+    summary["attempts"].append(deepcopy(replacement))
+    with pytest.raises(ValueError, match="one replacement"):
+        gate.decision(summary)
+
+
+def test_pending_and_historical_policies_cannot_activate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(ValueError, match="human approval"):
+        gate.code_digest()
+    monkeypatch.setattr(gate, "POLICY", gate.POLICY.with_name("policy-1.0.2.json"))
+    with pytest.raises(ValueError, match="unsupported"):
+        gate.admit({})
+
+
+def test_missing_activation_pins(summary: dict[str, Any]) -> None:
+    document = gate.read(gate.POLICY)
+    document["policy"]["holdout_sha256"] = None
+    document["approval"]["evidence_sha256"] = gate.digest(document["policy"])
+    gate.write(gate.POLICY, document)
+    with pytest.raises(ValueError, match="activation"):
+        gate.policy()
+
+
+@pytest.fixture
+def storage(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
+    objects: dict[str, bytes] = {}
+
+    def put(key: str, body: bytes, etag: str | None = None) -> dict[str, Any]:
+        if (key in objects and etag != hashlib.sha256(objects[key]).hexdigest()) or (
+            key not in objects and etag is not None
+        ):
+            raise ValueError("conditional conflict")
+        objects[key] = body
+        return {
+            "key": key,
+            "version_id": "v1",
+            "sha256": hashlib.sha256(body).hexdigest(),
+        }
+
+    def get(key: str, version: str | None = None) -> tuple[bytes, dict[str, str]]:
+        return objects[key], {
+            "VersionId": "v1",
+            "ETag": hashlib.sha256(objects[key]).hexdigest(),
+        }
+
+    monkeypatch.setattr(gate, "put_object", put)
     monkeypatch.setattr(
         gate,
         "get_object",
-        Mock(
-            return_value=(
-                gate.canonical({"run_id": 20, "receipt_sha256": gate.digest(receipt)}),
-                {},
-            )
-        ),
+        get,
     )
-    monkeypatch.setattr(gate, "receipt", Mock(return_value=receipt))
-    monkeypatch.setattr(gate, "fetch", Mock(return_value=b"authenticated archive"))
-    if change != "none":
-        with pytest.raises((ValueError, KeyError)):
-            gate.admit(admission)
-    else:
-        result = gate.admit(admission)
-        assert result["golden"]["receipt_sha256"] == gate.digest(receipt)
-        gate.revalidate(result)
-        result["golden"]["report_sha256"] = "0" * 64
-        with pytest.raises(ValueError, match="changed"):
-            gate.admit(result)
-        with pytest.raises(ValueError, match="changed"):
-            gate.revalidate(result)
+    monkeypatch.setattr(gate, "development_account", lambda: None)
+    monkeypatch.setattr(gate, "protection", Mock(return_value={}))
+    monkeypatch.setattr(
+        gate,
+        "human_approval",
+        Mock(return_value={"user": {"login": "reviewer"}}),
+    )
+    monkeypatch.setenv("GITHUB_RUN_ID", "20")
+    monkeypatch.setenv("GITHUB_SHA", "c" * 40)
+    return objects
+
+
+def producer() -> dict[str, Any]:
+    return {
+        "id": 20,
+        "head_sha": "c" * 40,
+        "head_branch": "main",
+        "path": gate.WORKFLOW,
+        "repository": {"full_name": gate.release.REPOSITORY},
+        "head_repository": {"full_name": gate.release.REPOSITORY},
+        "run_attempt": 1,
+        "event": "workflow_dispatch",
+        "status": "in_progress",
+    }
+
+
+def test_import_approval_admission_and_revalidation_without_baseline(
+    summary: dict[str, Any],
+    signer: Callable[[dict[str, Any]], bytes],
+    storage: dict[str, bytes],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    packet = signer(summary)
+    sha = hashlib.sha256(packet).hexdigest()
+    storage[f"aggregates/inbox/{sha}.json"] = packet
+    context = {k: summary[k] for k in gate.IDENTITY}
+    monkeypatch.setattr(workflow, "resolve", Mock(return_value=context))
+    run = producer()
+    monkeypatch.setattr(gate.release, "api", Mock(return_value=run))
+    directory = tmp_path / "import"
+    workflow.import_summary(context, sha, "v1", directory)
+    assert "240/300" in (directory / "review.md").read_text()
+    workflow.approve(directory)
+    receipt = gate.read(directory / "receipt.json")
+    monkeypatch.setattr(gate.release, "_artifacts", Mock(return_value={}))
+    monkeypatch.setattr(gate.release, "_single_json", Mock(return_value=receipt))
+    with pytest.raises(ValueError, match="complete"):
+        gate.admit(deepcopy(context))
+    run.update(status="completed", conclusion="success")
+    admitted = gate.admit(deepcopy(context))
+    with monkeypatch.context() as no_aws:
+        no_aws.setattr(
+            gate,
+            "get_object",
+            Mock(side_effect=AssertionError("no AWS at production revalidation")),
+        )
+        gate.revalidate(admitted)
+    historical = deepcopy(receipt)
+    historical.pop("schema_version")
+    with pytest.raises(ValueError, match="historical"):
+        gate.validate_receipt(historical, context)
+    altered = deepcopy(receipt)
+    altered["signed_summary"]["signature_base64"] = base64.b64encode(bytes(64)).decode()
+    with pytest.raises(ValueError, match="binding"):
+        gate.validate_receipt(altered, context)
+    assert not any("baseline" in key for key in storage)
+    for key in gate.IDENTITY:
+        changed = deepcopy(admitted)
+        changed[key] = 999 if isinstance(changed[key], int) else "different"
+        with pytest.raises(ValueError, match="identity"):
+            gate.revalidate(changed)
+    original_review = receipt["review"]
+    receipt["review"] = {"user": {"login": "invented"}}
+    with pytest.raises(ValueError, match="approval"):
+        gate.receipt(20)
+    receipt["review"] = original_review
+    receipt["evaluation_code_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="provenance"):
+        gate.receipt(20)
+
+
+def test_failed_result_retained_and_quality_retry_blocked(
+    summary: dict[str, Any],
+    signer: Callable[[dict[str, Any]], bytes],
+    storage: dict[str, bytes],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = {k: summary[k] for k in gate.IDENTITY}
+    monkeypatch.setattr(workflow, "resolve", Mock(return_value=context))
+    monkeypatch.setattr(gate.release, "api", Mock(return_value=producer()))
+    row = summary["attempts"][0]
+    row.update(passed=239, failed=61, case_pass_counts=[20, 0, 1, 79])
+    packet = signer(summary)
+    sha = hashlib.sha256(packet).hexdigest()
+    storage[f"aggregates/inbox/{sha}.json"] = packet
+    with pytest.raises(ValueError, match="machine qualification"):
+        workflow.import_summary(context, sha, "v1", tmp_path / "failed")
+    assert "239/300" in (tmp_path / "failed/review.md").read_text()
+    with pytest.raises(ValueError, match="did not qualify"):
+        workflow.approve(tmp_path / "failed")
+    row.update(passed=240, failed=60, case_pass_counts=[20, 0, 0, 80])
+    packet = signer(summary)
+    sha = hashlib.sha256(packet).hexdigest()
+    storage[f"aggregates/inbox/{sha}.json"] = packet
+    with pytest.raises(ValueError, match="collision"):
+        workflow.import_summary(context, sha, "v1", tmp_path / "retry")
 
 
 @pytest.mark.parametrize(
-    "change",
+    "key,value",
     [
-        "none",
-        "foreign",
-        "branch",
-        "path",
-        "attempt",
-        "event",
-        "failed",
-        "running",
-        "code",
-        "human",
-        "policy",
+        ("head_branch", "topic"),
+        ("path", "other.yml"),
+        ("run_attempt", 2),
+        ("event", "pull_request"),
     ],
 )
-def test_receipt_requires_completed_trusted_workflow_and_actual_approval(
-    monkeypatch: pytest.MonkeyPatch,
-    evidence: tuple[dict[str, Any], dict[str, Any], dict[str, Any]],
-    change: str,
+def test_untrusted_workflow_rejected(
+    monkeypatch: pytest.MonkeyPatch, key: str, value: object
 ) -> None:
-    _, _, receipt = evidence
-    producer: dict[str, Any] = {
-        "repository": {"full_name": gate.release.REPOSITORY},
-        "head_repository": {"full_name": gate.release.REPOSITORY},
-        "path": gate.WORKFLOW,
-        "head_branch": "main",
-        "head_sha": receipt["trusted_sha"],
-        "run_attempt": 1,
-        "event": "workflow_dispatch",
-        "status": "completed",
-        "conclusion": "success",
-    }
-    if change == "foreign":
-        producer["head_repository"] = {"full_name": "other/repo"}
-    for name, key, value in [
-        ("branch", "head_branch", "topic"),
-        ("path", "path", "fake.yml"),
-        ("attempt", "run_attempt", 2),
-        ("event", "event", "pull_request"),
-        ("failed", "conclusion", "failure"),
-        ("running", "status", "in_progress"),
-    ]:
-        if change == name:
-            producer[key] = value
-    approval = deepcopy(receipt["review"])
-    if change == "code":
-        receipt["evaluation_code_sha256"] = "0" * 64
-    elif change == "human":
-        receipt["review"] = {"user": {"login": "invented"}}
-    elif change == "policy":
-        receipt["policy_sha256"] = "0" * 64
-    monkeypatch.setattr(gate.release, "api", Mock(return_value=producer))
-    monkeypatch.setattr(gate.release, "_artifacts", Mock(return_value={}))
-    monkeypatch.setattr(gate.release, "_single_json", Mock(return_value=receipt))
-    monkeypatch.setattr(gate, "human_approval", Mock(return_value=approval))
-    if change == "none":
-        assert gate.receipt(20) == receipt
-    else:
-        with pytest.raises(ValueError):
-            gate.receipt(20)
+    run = producer()
+    run[key] = value
+    monkeypatch.setattr(gate.release, "api", Mock(return_value=run))
+    with pytest.raises(ValueError, match="untrusted"):
+        gate.trusted_run(20, completed=False)
 
 
-def test_unset_or_unpublished_production_blocks(
-    monkeypatch: pytest.MonkeyPatch,
+def test_optional_comparison_is_informational(
+    summary: dict[str, Any], signer: Callable[[dict[str, Any]], bytes], tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(gate, "recent_production", lambda: {"id": 9})
-    for pointer in ({"production": None}, {"production": {"claim_id": 8}}):
-        monkeypatch.setattr(
-            gate,
-            "get_object",
-            Mock(return_value=(gate.canonical(pointer), {"ETag": "etag"})),
-        )
-        with pytest.raises(ValueError, match=r"unset|deployed production"):
-            gate.production_reference()
-
-
-def test_unapproved_policy_and_calibration_are_blocked(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    policy = gate.read(gate.POLICY)
-    policy["approval"]["status"] = "pending"
-    path = tmp_path / "policy.json"
-    path.write_text(json.dumps(policy))
-    monkeypatch.setattr(gate, "POLICY", path)
-    reference = tmp_path / "v2/eval/golden/calibration-reference.json"
-    reference.parent.mkdir(parents=True)
-    reference.write_text('{"status":"pending"}')
-    monkeypatch.setattr(gate, "ROOT", tmp_path)
-    with pytest.raises(ValueError, match="human approval"):
-        gate.policy()
-    with pytest.raises(ValueError, match="human review"):
-        workflow.calibration()
-
-
-def test_approved_contract_and_changed_policy(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from eval import golden_baseline
-
-    historical, _ = golden_baseline.load_policy(
-        gate.POLICY.with_name("policy-1.0.1.json")
+    current, previous = tmp_path / "current", tmp_path / "previous"
+    current.write_bytes(signer(summary))
+    summary["attempts"][0].update(
+        passed=243, failed=57, case_pass_counts=[19, 0, 0, 81]
     )
-    assert historical.version == "1.0.1"
-    # Exercise the historical approved contract while the new contract awaits review.
-    monkeypatch.setattr(gate, "POLICY", gate.POLICY.with_name("policy-1.0.2.json"))
-    read = gate.read
-
-    def historical_reference(path: Path) -> dict[str, Any]:
-        if path.name == "calibration-reference.json":
-            directory = "v2/eval/evidence/golden-360/calibration-15"
-            return {
-                **read(gate.ROOT / directory / "review.json"),
-                "directory": directory,
-            }
-        return read(path)
-
-    monkeypatch.setattr(gate, "read", historical_reference)
-    gate.policy()
-    workflow.calibration()
-    document = gate.read(gate.POLICY)
-    document["policy"]["contract_sha256"] = "0" * 64
-    path = tmp_path / "changed-policy.json"
-    path.write_text(json.dumps(document))
-    monkeypatch.setattr(gate, "POLICY", path)
-    with pytest.raises(ValueError):
-        gate.policy()
-
-
-def test_retained_policy_preserves_numeric_limits() -> None:
-    from eval import golden_baseline
-
-    active = gate.read(gate.POLICY)["policy"]
-    golden_baseline.Policy.model_validate(active)
-    historical = gate.read(gate.POLICY.with_name("policy-1.0.0.json"))["policy"]
-    excluded = {"version", "contract_sha256", "cases"}
-    assert {k: v for k, v in active.items() if k not in excluded} == {
-        k: v for k, v in historical.items() if k not in excluded
-    }
-
-
-def test_archive_is_bounded_and_rejects_traversal(tmp_path: Path) -> None:
-    for name in ("../escape", "/absolute", "bad\\file"):
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w") as archive:
-            archive.writestr(name, "bad")
-        with pytest.raises(ValueError, match="unsafe"):
-            workflow.extract(buffer.getvalue(), tmp_path)
-    (tmp_path / "evidence.json").write_text("{}")
-    assert workflow.pack(tmp_path) == workflow.pack(tmp_path)
-    with pytest.raises(ValueError, match="size"):
-        workflow.extract(workflow.pack(tmp_path), tmp_path / "copy", maximum=1)
+    previous.write_bytes(signer(summary))
+    assert workflow.compare(current, previous)["successful_trial_delta"] == -3
+    assert workflow.compare(current, previous)["informational_only"]
 
 
 def test_storage_version_hash_and_conditional_publication(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[str, ...]] = []
-
-    def aws(*args: str) -> dict[str, Any]:
-        calls.append(args)
-        return {"VersionId": "immutable-version"}
-
+    aws = Mock(return_value={"VersionId": "v1"})
     monkeypatch.setattr(gate, "aws", aws)
-    reference = gate.put_object("baseline/current.json", b"{}", '"previous-etag"')
-    assert reference["version_id"] == "immutable-version"
-    assert "--if-match" in calls[0] and '"previous-etag"' in calls[0]
-    assert gate.ACCOUNT in calls[0] and "AES256" in calls[0]
-    gate.put_object("claims/one.json", b"{}")
-    assert "--if-none-match" in calls[1]
+    reference = gate.put_object("aggregates/reports/test.json", b"{}")
+    assert "--if-none-match" in aws.call_args.args and "AES256" in aws.call_args.args
     monkeypatch.setattr(
-        gate,
-        "get_object",
-        Mock(return_value=(b"{}", {"VersionId": "immutable-version"})),
+        gate, "get_object", Mock(return_value=(b"{}", {"VersionId": "v1"}))
     )
     assert gate.fetch(reference) == b"{}"
     reference["sha256"] = "0" * 64
     with pytest.raises(ValueError, match="hash"):
         gate.fetch(reference)
 
-    def conflict(*args: object) -> dict[str, Any]:
-        raise ValueError("conditional conflict")
 
-    monkeypatch.setattr(gate, "put_object", conflict)
-    assert gate.immutable("reports/a.zip", b"{}")["version_id"] == "immutable-version"
-    with pytest.raises(ValueError, match="collision"):
-        gate.immutable("reports/a.zip", b"different")
-
-
-@pytest.mark.parametrize(
-    "usage",
-    [
-        None,
-        {"inputTokens": -1, "outputTokens": 1},
-        {"inputTokens": True, "outputTokens": 1},
-        {"inputTokens": 10.5, "outputTokens": 1},
-    ],
-)
-def test_malformed_remote_usage_charges_reservation_and_stops(
-    tmp_path: Path, usage: object
-) -> None:
-    journal = run.Journal(tmp_path / "run", 5)
-    attempt = run.Attempt(id="test", case_id="test", trial=1)
-    reservation = journal.reserve(attempt, "agent", 8192)
-    journal.finish(attempt, "agent", reservation, cast(dict[str, int] | None, usage), 0)
-    assert journal.spent == reservation and journal.reserved == 0
-    assert journal.unknown_usage and not attempt.measurements[0].complete
-    with pytest.raises(run.StopRun):
-        journal.reserve(attempt, "judge", 8192)
-
-
-def test_workflow_gate_precedes_production_credentials_and_is_not_optional() -> None:
+def test_workflow_keeps_production_gates_and_imports_aggregates_only() -> None:
     root = gate.ROOT
     jobs = yaml.safe_load(
         (root / ".github/workflows/v2-production-plan.yml").read_text()
@@ -367,429 +507,177 @@ def test_workflow_gate_precedes_production_credentials_and_is_not_optional() -> 
     assert jobs["claim"]["needs"] == "golden"
     assert jobs["planner"]["needs"] == "claim"
     assert jobs["golden"]["uses"] == "./.github/workflows/v2-golden-read.yml"
-    migrations = yaml.safe_load(
+    migration = yaml.safe_load(
         (root / ".github/workflows/v2-production-migrations.yml").read_text()
     )["jobs"]
-    assert migrations["migrate"]["needs"] == "golden"
-    assert migrations["migrate"]["environment"] == "production"
-    for name in (
-        "v2-golden-evaluation.yml",
-        "v2-golden-read.yml",
-        "v2-golden-baseline.yml",
-    ):
-        source = (root / ".github/workflows" / name).read_text()
-        assert "920534282028" not in source
-        assert "903859731897" in source
-        assert "continue-on-error" not in source
-    evaluation = yaml.safe_load(
-        (root / ".github/workflows/v2-golden-evaluation.yml").read_text()
-    )["jobs"]["evaluate"]
-    credentials = next(
-        step["with"]
-        for step in evaluation["steps"]
-        if step.get("uses", "").startswith("aws-actions/configure-aws-credentials@")
-    )
-    assert evaluation["timeout-minutes"] == 90
-    assert credentials["role-duration-seconds"] == 7200
-    assert credentials["role-duration-seconds"] > evaluation["timeout-minutes"] * 60
-    infra = (root / "infra/golden_eval.tf").read_text()
-    assert 'max_session_duration = each.key == "evaluator" ? 7200 : 3600' in " ".join(
-        infra.split()
-    )
-    assert 'status = "Enabled"' in infra
-    assert "prevent_destroy = true" in infra
-    assert "s3:DeleteObjectVersion" in infra and 'Effect = "Deny"' in infra
-    assert "rds-db:" not in infra
-
-
-@pytest.mark.parametrize(
-    "failure",
-    [
-        "none",
-        "deployment",
-        "canary",
-        "candidate",
-        "newer",
-        "binding",
-        "conflict",
-        "reference",
-    ],
-)
-def test_baseline_advances_only_after_exact_success_and_preserves_history(
-    monkeypatch: pytest.MonkeyPatch,
-    evidence: tuple[dict[str, Any], dict[str, Any], dict[str, Any]],
-    failure: str,
-) -> None:
-    from scripts import development_deployment_status
-
-    _, previous, receipt = evidence
-    previous["initial"] = {
-        "key": "original",
-        "version_id": "original-version",
-        "sha256": "1" * 64,
-    }
-    receipt["baseline_sha256"] = gate.digest(previous)
-    if failure == "reference":
-        receipt["purpose"] = "production-reference"
-    producer = {
-        "repository": {"full_name": gate.release.REPOSITORY},
-        "head_repository": {"full_name": gate.release.REPOSITORY},
-        "path": ".github/workflows/v2-production-plan.yml",
-        "event": "workflow_run",
-        "head_branch": "main",
-        "run_attempt": 1,
-        "status": "completed",
-        "conclusion": "success",
-    }
-    promoted = {
-        "outcome": "success",
-        "migration_evidence": "success",
-        "candidate": receipt["candidate"],
-        "claim_id": 9,
-        "golden": {"run_id": 20, "receipt_sha256": gate.digest(receipt)},
-        "canary": {"success": True},
-    }
-    if failure == "deployment":
-        promoted["outcome"] = "failed"
-    elif failure == "candidate":
-        promoted["candidate"] = "0" * 40
-    elif failure == "binding":
-        promoted["golden"] = {"run_id": 20, "receipt_sha256": "0" * 64}
-    monkeypatch.setattr(gate, "development_account", lambda: None)
-    monkeypatch.setattr(gate, "receipt", Mock(return_value=receipt))
-    monkeypatch.setattr(gate.release, "api", Mock(return_value=producer))
-    monkeypatch.setattr(gate.release, "_artifacts", Mock(return_value={}))
-    monkeypatch.setattr(gate.release, "_single_json", Mock(return_value=promoted))
-    monkeypatch.setattr(
-        gate, "recent_production", lambda: {"id": 10 if failure == "newer" else 9}
-    )
-    monkeypatch.setattr(
-        gate,
-        "get_object",
-        Mock(
-            return_value=(
-                gate.canonical(previous),
-                {"VersionId": "previous-version", "ETag": "previous-etag"},
-            )
-        ),
-    )
-    monkeypatch.setattr(gate, "fetch", Mock(return_value=b"archive"))
-
-    def canary(*args: object) -> None:
-        if failure == "canary":
-            raise ValueError("canary failed")
-        assert args[1:4] == (receipt["candidate"], 30, 1)
-
-    monkeypatch.setattr(development_deployment_status, "validate_canary", canary)
-    writes: list[tuple[str, dict[str, Any], str | None]] = []
-
-    def put(key: str, body: bytes, etag: str | None = None) -> dict[str, Any]:
-        if failure == "conflict" and key == "baseline/current.json":
-            raise ValueError("CAS conflict")
-        writes.append((key, json.loads(body), etag))
-        return {
-            "key": key,
-            "version_id": "new",
-            "sha256": hashlib.sha256(body).hexdigest(),
-        }
-
-    monkeypatch.setattr(gate, "put_object", put)
-    if failure in {"none", "reference"}:
-        workflow.publish(20 if failure == "reference" else 0, 30)
-        key, pointer, etag = writes[-1]
-        assert key == "baseline/current.json" and etag == "previous-etag"
-        assert pointer["initial"] == previous["initial"]
-        assert pointer["production"] == {"claim_id": 9, "run_id": 30}
-        assert writes[0][1]["previous"]["version_id"] == "previous-version"
-        # Recovery after success is idempotent; no deployment or second pointer write.
-        previous.clear()
-        previous.update(pointer)
-        monkeypatch.setattr(
-            gate,
-            "get_object",
-            Mock(
-                return_value=(
-                    gate.canonical(previous),
-                    {"VersionId": "new", "ETag": "new"},
-                )
-            ),
-        )
-        workflow.publish(20, 30)
-        assert len(writes) == 2
-    else:
-        with pytest.raises(ValueError):
-            workflow.publish(0, 30)
-        assert not any(key == "baseline/current.json" for key, _, _ in writes)
-
-
-def test_replacement_cannot_change_identity_repeat_or_hide_quality_failure(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from eval import golden_baseline as baseline
-
-    original: dict[str, Any] = {
-        "run_id": 1,
-        "trusted_sha": "a" * 40,
-        "identity": {"contract": "fixed"},
-        "execution": {"replacement_number": 0},
-    }
-    prepared: dict[str, Any] = {
-        "run_id": 2,
-        "identity": original["identity"],
-        "execution": {},
-    }
-    monkeypatch.setattr(
-        gate, "get_object", Mock(return_value=(gate.canonical(original), {}))
-    )
-    monkeypatch.setattr(
-        gate.release,
-        "api",
-        Mock(
-            return_value={
-                "status": "completed",
-                "conclusion": "failure",
-                "run_attempt": 1,
-                "path": gate.WORKFLOW,
-                "head_sha": original["trusted_sha"],
-            }
-        ),
-    )
-    body = io.BytesIO()
-    with zipfile.ZipFile(body, "w") as archive:
-        archive.writestr("packet/run/report.json", "{}")
-    raw = body.getvalue()
-    monkeypatch.setattr(
-        gate.release,
-        "_artifacts",
-        Mock(
-            return_value={
-                "id": 4,
-                "digest": "sha256:" + hashlib.sha256(raw).hexdigest(),
-            }
-        ),
-    )
-
-    def download(artifact: int, path: Path) -> None:
-        path.write_bytes(raw)
-
-    monkeypatch.setattr(gate.release, "download", download)
-    prior: dict[str, Any] = {
-        "manifest": {"identity": original["identity"]},
-        "full_corpus_complete": True,
-        "evidence_sha256": "e" * 64,
-    }
-    monkeypatch.setattr(baseline, "load_evidence", Mock(return_value=prior))
-    monkeypatch.setattr(
-        gate, "human_approval", Mock(return_value={"user": {"login": "reviewer"}})
-    )
-    for index, reason in enumerate(("quality", "infrastructure")):
-        directory = tmp_path / str(index)
-        directory.mkdir()
-        with pytest.raises(ValueError, match=r"quality|Quality"):
-            workflow.replacement(directory, prepared, "claims/original.json", 1, reason)
-    directory = tmp_path / "allowed"
-    directory.mkdir()
-    workflow.replacement(
-        directory, prepared, "claims/original.json", 1, "actor_validity"
-    )
-    assert prepared["execution"]["replacement_number"] == 1
-    assert prepared["execution"]["supersedes"] == prior["evidence_sha256"]
+    assert migration["migrate"]["needs"] == "golden"
+    assert migration["migrate"]["environment"] == "production"
+    source = (root / gate.WORKFLOW).read_text()
+    assert "continue-on-error" not in source and "920534282028" not in source
     assert (
-        gate.read(directory / "packet/superseded/replacement-review.json")[
-            "actor_validity"
-        ]
-        == "invalid"
+        "scripts.golden_release execute" not in source and "review.html" not in source
     )
-    original["execution"]["replacement_number"] = 1
-    monkeypatch.setattr(
-        gate, "get_object", Mock(return_value=(gate.canonical(original), {}))
-    )
-    with pytest.raises(ValueError, match="claim mismatch"):
-        workflow.replacement(
-            directory, prepared, "claims/original.json", 1, "actor_validity"
-        )
+    assert "summary_version" in source and "summary-envelope.json" in source
+    assert not (root / ".github/workflows/v2-golden-baseline.yml").exists()
+    infra = (root / "infra/golden_eval.tf").read_text()
+    assert "ssm:GetParameter" not in infra and "rds-db:" not in infra
+    assert "aggregates/*" in infra and 'status = "Enabled"' in infra
+    assert "prevent_destroy = true" in infra and "s3:DeleteObjectVersion" in infra
 
 
-def test_ci_execution_uses_cached_evaluators_and_accounts_for_writes(
-    golden_gate_files: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("change", ["version", "artifact", "private"])
+def test_rejected_import_never_publishes_input(
+    summary: dict[str, Any],
+    signer: Callable[[dict[str, Any]], bytes],
+    storage: dict[str, bytes],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    change: str,
 ) -> None:
-    from strands.models import Model
-    from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
-
-    from eval import golden
-
-    original_digest = gate.code_digest()
-    read_bytes = Path.read_bytes
-
-    def changed_adapter(path: Path) -> bytes:
-        data = read_bytes(path)
-        return (
-            data + b"\n# changed cache adapter"
-            if path == gate.ROOT / "v2/agent/toll_agent.py"
-            else data
+    context = {k: summary[k] for k in gate.IDENTITY}
+    monkeypatch.setattr(workflow, "resolve", Mock(return_value=context))
+    monkeypatch.setattr(gate.release, "api", Mock(return_value=producer()))
+    if change == "artifact":
+        summary["bundle_id"] += 1
+    elif change == "private":
+        summary["transcript"] = "synthetic forbidden detail"
+    packet = signer(summary)
+    sha = hashlib.sha256(packet).hexdigest()
+    storage[f"aggregates/inbox/{sha}.json"] = packet
+    directory = tmp_path / "rejected"
+    with pytest.raises(ValueError):
+        workflow.import_summary(
+            context, sha, "wrong" if change == "version" else "v1", directory
         )
+    assert not directory.exists()
+    assert list(storage) == [f"aggregates/inbox/{sha}.json"]
 
-    with monkeypatch.context() as changed:
-        changed.setattr(Path, "read_bytes", changed_adapter)
-        assert gate.code_digest() != original_digest
-    case = golden_case(1)
-    example = next(
-        e
-        for e in run.development_examples()
-        if e.case_id == case.id and e.label == "good"
+
+@pytest.mark.parametrize("prior_conclusion", ["failure", "success"])
+def test_recover_identical_evidence_after_receipt_upload_or_import_failure(
+    summary: dict[str, Any],
+    signer: Callable[[dict[str, Any]], bytes],
+    storage: dict[str, bytes],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    prior_conclusion: str,
+) -> None:
+    context = {k: summary[k] for k in gate.IDENTITY}
+    monkeypatch.setattr(workflow, "resolve", Mock(return_value=context))
+    old_run, new_run = producer(), {**producer(), "id": 21}
+
+    def api(method: str, path: str) -> dict[str, Any]:
+        return old_run if path == "actions/runs/20" else new_run
+
+    monkeypatch.setattr(gate.release, "api", api)
+    packet = signer(summary)
+    sha = hashlib.sha256(packet).hexdigest()
+    storage[f"aggregates/inbox/{sha}.json"] = packet
+    workflow.import_summary(context, sha, "v1", tmp_path / "original")
+    workflow.approve(tmp_path / "original")
+    original_index = storage[gate.candidate_key(context["candidate"])]
+    original_claims = {k: v for k, v in storage.items() if k.startswith("aggregates/")}
+    old_run.update(status="completed", conclusion=prior_conclusion)
+    monkeypatch.setenv("GITHUB_RUN_ID", "21")
+    workflow.import_summary(context, sha, "v1", tmp_path / "recovery")
+    workflow.approve(tmp_path / "recovery")
+    new_run.update(status="completed", conclusion="success")
+    receipt = gate.read(tmp_path / "recovery/receipt.json")
+    monkeypatch.setattr(gate.release, "_artifacts", Mock(return_value={}))
+    monkeypatch.setattr(gate.release, "_single_json", Mock(return_value=receipt))
+    assert gate.admit(deepcopy(context))["golden"]["run_id"] == 21
+    assert original_index != storage[gate.candidate_key(context["candidate"])]
+    assert original_claims == {
+        k: v for k, v in storage.items() if k.startswith("aggregates/")
+    }
+    assert (
+        gate.read(tmp_path / "original/receipt.json")["report_sha256"]
+        == receipt["report_sha256"]
     )
-    monkeypatch.setattr(golden, "load_cases", lambda: [case])
-    monkeypatch.setattr(run.toll_agent, "load_openai_api_key", lambda: "offline")
-    original = run.build_eval_model
-    requests: list[dict[str, Any]] = []
 
-    def build_model() -> Model:
-        model = original()
 
-        async def stream(
-            *args: object, **kwargs: object
-        ) -> AsyncIterator[dict[str, Any]]:
-            request = cast(Any, model)._format_request(*args, **kwargs)
-            requests.append(request)
-            yield cast(Any, model)._format_chunk(
-                {
-                    "chunk_type": "metadata",
-                    "data": SimpleNamespace(
-                        input_tokens=2000,
-                        output_tokens=10,
-                        total_tokens=2010,
-                        input_tokens_details=SimpleNamespace(
-                            cached_tokens=1200,
-                            cache_write_tokens=100,
-                        ),
-                    ),
-                }
-            )
+@pytest.mark.parametrize("change", ["evidence", "older", "running", "foreign", "race"])
+def test_publication_recovery_rejects_new_evidence_untrusted_runs_and_races(
+    summary: dict[str, Any],
+    storage: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+    change: str,
+) -> None:
+    value: dict[str, Any] = {
+        "candidate": summary["candidate"],
+        "run_id": 20,
+        "report_sha256": gate.digest(summary),
+    }
+    workflow.publish_candidate(value)
+    old_index = storage[gate.candidate_key(value["candidate"])]
+    value["run_id"] = 21
+    prior = {**producer(), "status": "completed", "conclusion": "failure"}
+    if change == "evidence":
+        value["report_sha256"] = "f" * 64
+    elif change == "older":
+        value["run_id"] = 19
+    elif change == "running":
+        prior["status"] = "in_progress"
+    elif change == "foreign":
+        prior["head_repository"] = {"full_name": "other/repo"}
+    else:
+        original_put = gate.put_object
 
-        cast(Any, model).stream = stream
-        return model
+        def race(key: str, body: bytes, etag: str | None = None) -> dict[str, Any]:
+            if etag is not None:
+                raise ValueError("CAS conflict")
+            return original_put(key, body, etag)
 
-    monkeypatch.setattr(run, "build_eval_model", build_model)
+        monkeypatch.setattr(gate, "put_object", race)
+    monkeypatch.setattr(gate.release, "api", Mock(return_value=prior))
+    with pytest.raises(ValueError):
+        workflow.publish_candidate(value)
+    assert storage[gate.candidate_key(value["candidate"])] == old_index
 
-    async def consume(model: Model, prompt: str) -> None:
-        async for _ in model.stream(
-            [{"role": "user", "content": [{"text": "variable evidence"}]}],
-            system_prompt=prompt,
-        ):
-            pass
 
-    def evaluate(
-        self: run.ConversationJudge, data: EvaluationData[str, str]
-    ) -> list[EvaluationOutput]:
-        asyncio.run(consume(cast(Model, self.model), self.reference_system_prompt))
-        return [EvaluationOutput(score=1, test_pass=True, reason="offline")]
+def test_usage_reconciliation_preserves_outcomes_and_finalizes_costs_once(
+    summary: dict[str, Any],
+    signer: Callable[[dict[str, Any]], bytes],
+    storage: dict[str, bytes],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = {k: summary[k] for k in gate.IDENTITY}
+    monkeypatch.setattr(workflow, "resolve", Mock(return_value=context))
+    run = producer()
+    monkeypatch.setattr(gate.release, "api", Mock(return_value=run))
 
-    monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
+    def import_packet(name: str) -> None:
+        packet = signer(summary)
+        sha = hashlib.sha256(packet).hexdigest()
+        storage[f"aggregates/inbox/{sha}.json"] = packet
+        workflow.import_summary(context, sha, "v1", tmp_path / name)
 
-    def assess_outcome(
-        selected: golden.GoldenCase,
-        row: run.Attempt,
-        model: Model,
-        reference: str,
-        conversation: str,
-        *,
-        fixed_reference: bool = False,
-    ) -> None:
-        asyncio.run(
-            consume(model, run.judge_prompt("outcome") + run.ACTOR_ASSESSMENT_PROMPT)
-        )
-        row.verdicts["outcome"] = run.Verdict(passed=True, evidence="offline")
-        row.actor_validity = run.ActorAssessment(status="valid", evidence="offline")
-
-    monkeypatch.setattr(run, "assess_outcome", assess_outcome)
-
-    def execute(
-        selected: golden.GoldenCase,
-        trial: int,
-        journal: run.Journal,
-        factory: object,
-    ) -> run.Attempt:
-        assert callable(factory)
-        row = run.Attempt(
-            id=f"{selected.id}-{trial}",
-            case_id=selected.id,
-            trial=trial,
-            turns=example.turns,
-        )
-        actor = journal.model(build_model(), "actor", row, 1)
-        asyncio.run(consume(actor, golden.ACTOR_PROMPT))
-        run.judge(selected, row, journal)
-        return row
-
-    monkeypatch.setattr(run, "execute", execute)
-    digest = gate.code_digest()
-    gate.write(
-        tmp_path / "prepared.json",
-        {
-            "run_id": 42,
-            "evaluation_code_sha256": digest,
-            "identity": {"application": {}},
-        },
+    summary["unknown_usage"] = True
+    with pytest.raises(ValueError, match="machine qualification"):
+        import_packet("unknown")
+    assert not any(k.startswith("aggregates/accounting/") for k in storage)
+    original_envelope = (tmp_path / "unknown/summary-envelope.json").read_bytes()
+    outcomes = {k: v for k, v in storage.items() if k.startswith("aggregates/claims/")}
+    summary["unknown_usage"] = False
+    summary["attempts"][0].update(agent_cost_usd=1.1, total_cost_usd=2.1)
+    summary["cumulative_cost_usd"] = 2.1
+    import_packet("reconciled")
+    workflow.approve(tmp_path / "reconciled")
+    assert outcomes == {
+        k: v for k, v in storage.items() if k.startswith("aggregates/claims/")
+    }
+    assert len([k for k in storage if k.startswith("aggregates/reports/")]) == 2
+    assert gate.canonical(gate.strict_json(original_envelope)) in storage.values()
+    assert gate.read(tmp_path / "reconciled/decision.json")["qualified"]
+    assert any(k.startswith("aggregates/accounting/") for k in storage)
+    summary["attempts"][0].update(agent_cost_usd=1, total_cost_usd=2)
+    summary["cumulative_cost_usd"] = 2
+    with pytest.raises(ValueError, match="collision"):
+        import_packet("changed-final-costs")
+    summary["unknown_usage"] = True
+    summary["attempts"][0].update(
+        passed=243, failed=57, case_pass_counts=[19, 0, 0, 81]
     )
-    monkeypatch.setattr(
-        gate,
-        "get_object",
-        Mock(
-            side_effect=[
-                (
-                    gate.canonical(
-                        {"active_run": None, "unknown_usage": False, "spent_usd": 1.0}
-                    ),
-                    {"ETag": "before"},
-                ),
-                (gate.canonical({"active_run": 42}), {"ETag": "reserved"}),
-            ]
-        ),
-    )
-    put = Mock(return_value={})
-    monkeypatch.setattr(gate, "put_object", put)
-    monkeypatch.setattr(workflow, "archive", Mock(return_value={}))
-    monkeypatch.setattr(
-        run,
-        "render",
-        Mock(
-            return_value={
-                "manifest": {"run_id": "calibration"},
-                "evidence_sha256": "offline",
-                "review": {"status": "approved"},
-            }
-        ),
-    )
-    workflow.execute(tmp_path)
-
-    assert len(requests) == 12  # Three trials, one actor and three judge calls each.
-    for request in requests:
-        assert request["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
-        assert request["prompt_cache_key"] == "tollchat-eval-v2"
-        assert request["input"][0]["content"][0]["prompt_cache_breakpoint"] == {
-            "mode": "explicit"
-        }
-    assert sum(r["reasoning"] == {"effort": "medium"} for r in requests) == 12
-    directory = tmp_path / "packet/run"
-    assert gate.read(directory / "manifest.json")["workers"] == 4
-    events = [
-        json.loads(line)
-        for line in (directory / "events.jsonl").read_text().splitlines()
-    ]
-    finished = [e for e in events if e["event"] == "model_finished"]
-    assert len(finished) == 12 and all(e["complete"] for e in finished)
-    assert sum(e["written_tokens"] for e in finished) == 1200
-    settled = json.loads(put.call_args.args[1])
-    assert settled["spent_usd"] == pytest.approx(
-        1.0
-        + 12
-        * run.cost(
-            {
-                "inputTokens": 2000,
-                "outputTokens": 10,
-                "cacheReadInputTokens": 1200,
-                "cacheWriteInputTokens": 100,
-            }
-        )
-    )
-    assert settled["unknown_usage"] is False and settled["active_run"] is None
+    with pytest.raises(ValueError, match="collision"):
+        import_packet("changed-outcomes")

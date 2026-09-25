@@ -1,14 +1,17 @@
 """Trusted golden evidence admission and development-only immutable storage.
 
-This module uses the standard library so production revalidation needs no eval
-SDK or model credential. A decision is accepted only from a completed protected
-workflow with the exact currently reviewed evaluator code and configuration.
+The standard library and system OpenSSL verify external aggregate evidence;
+no eval SDK or model credential is required. Decisions require a completed
+protected workflow, exact importer identity, and actual human approval.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
+import math
 import re
 import subprocess
 import sys
@@ -26,31 +29,28 @@ ROOT = Path(__file__).resolve().parents[2]
 ACCOUNT = "903859731897"
 BUCKET = "nova-toll-golden-evidence-903859731897"
 WORKFLOW = ".github/workflows/v2-golden-evaluation.yml"
-POLICY = ROOT / "v2/eval/results/golden/policy-2.0.5.json"
+POLICY = ROOT / "v2/eval/results/golden/policy-3.0.0.json"
+PUBLIC_KEY = ROOT / "v2/eval/results/golden/evaluator-public.pem"
 MAX_BYTES = 32 * 1024 * 1024
+IDENTITY = (
+    "candidate",
+    "bundle_id",
+    "bundle_digest",
+    "development_run",
+    "development_attempt",
+    "development_deployment",
+)
 CODE = (
     WORKFLOW,
     ".github/workflows/v2-golden-read.yml",
-    ".github/workflows/v2-golden-baseline.yml",
     ".github/workflows/v2-production-plan.yml",
     ".github/workflows/v2-production-migrations.yml",
+    "v2/scripts/run_production_migrations_workflow.sh",
     "v2/scripts/check_production_release.py",
     "v2/scripts/verify_release_bundle.py",
     "v2/scripts/development_deployment_status.py",
     "v2/scripts/golden_gate.py",
     "v2/scripts/golden_release.py",
-    "v2/eval/artifact_agent.py",
-    "v2/eval/artifact_worker.py",
-    "v2/eval/golden_run.py",
-    "v2/eval/golden_actor_check.py",
-    "v2/eval/golden.py",
-    "v2/eval/golden_baseline.py",
-    "v2/eval/golden/manifest.json",
-    "v2/eval/golden/calibration-reference.json",
-    "v2/eval/simulated.py",
-    "v2/agent/toll_agent.py",  # Evaluator cache adapter and credential loader.
-    "v2/eval/run_evaluation.py",
-    "v2/uv.lock",
 )
 
 
@@ -83,26 +83,7 @@ def write(path: Path, value: object) -> None:
 
 
 def code_digest() -> str:
-    require(
-        (ROOT / "v2/eval/golden/manifest.json").is_file(),
-        "No active golden corpus; see eval/GOLDEN_EVAL_SPEC.md",
-    )
-    manifest = read(ROOT / "v2/eval/golden/manifest.json")
-    require(
-        manifest.get("evaluation_scope") != "development",
-        "development-only corpus cannot qualify production",
-    )
-    require(
-        digest(manifest["hashes"]) == manifest["corpus_sha256"],
-        "active corpus manifest changed",
-    )
-    for name, expected in obj(manifest["hashes"]).items():
-        path = ROOT / name if name.startswith("v2/") else ROOT / "v2/eval/golden" / name
-        require(
-            path.resolve().is_relative_to(ROOT.resolve())
-            and hashlib.sha256(path.read_bytes()).hexdigest() == expected,
-            "active corpus files changed",
-        )
+    policy()  # No local corpus, historical policy, or unset signer can activate this gate.
     return digest(
         {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in CODE}
     )
@@ -112,13 +93,298 @@ def policy() -> dict[str, Any]:
     value = read(POLICY)
     approval, limits = obj(value["approval"]), obj(value["policy"])
     require(
+        limits.get("version") == "3.0.0"
+        and limits.get("evaluation_scope") == "private-held-out"
+        and limits.get("cases") == 100
+        and limits.get("trials") == 3
+        and limits.get("successes_min") == 240
+        and limits.get("candidate_max_age_hours") == 24
+        and limits.get("run_cost_max_usd") == 5
+        and limits.get("authorized_cost_max_usd") == 25,
+        "unsupported private qualification policy",
+    )
+    require(
         approval.get("status") == "approved"
         and approval.get("evidence_sha256") == digest(limits)
         and bool(approval.get("reviewer"))
         and bool(approval.get("evidence")),
         "active policy awaits exact human approval",
     )
+    for name in (
+        "holdout_sha256",
+        "evaluator_sha256",
+        "calibration_sha256",
+        "public_key_sha256",
+    ):
+        require(is_hash(limits.get(name)), "private evaluator activation is incomplete")
+    require(
+        PUBLIC_KEY.is_file()
+        and hashlib.sha256(PUBLIC_KEY.read_bytes()).hexdigest()
+        == limits["public_key_sha256"],
+        "trusted evaluator public key is unavailable or changed",
+    )
+    timestamp(approval.get("approved_at"))
     return limits
+
+
+def is_hash(value: object) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def timestamp(value: object) -> datetime:
+    require(isinstance(value, str) and len(value) <= 40, "invalid timestamp")
+    result = datetime.fromisoformat(cast(str, value))
+    require(result.tzinfo is not None, "timestamp needs timezone")
+    return result
+
+
+def fields(value: object, names: str) -> dict[str, Any]:
+    result = obj(value)
+    require(set(result) == set(names.split()), "unexpected or missing aggregate fields")
+    return result
+
+
+def number(value: object, maximum: float, *, integer: bool = False) -> float:
+    require(
+        type(value) in ({int} if integer else {int, float})
+        and 0 <= cast(float, value) <= maximum
+        and math.isfinite(cast(float, value)),
+        "invalid aggregate number",
+    )
+    return cast(float, value)
+
+
+def strict_json(body: bytes) -> dict[str, Any]:
+    def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            require(key not in result, "duplicate JSON field")
+            result[key] = value
+        return result
+
+    require(len(body) <= 16384, "aggregate summary too large")
+    return obj(json.loads(body, object_pairs_hook=unique))
+
+
+def verify_summary(packet: bytes) -> dict[str, Any]:
+    """Authenticate exact bytes before interpreting the aggregate-only schema."""
+    limits = policy()
+    envelope = fields(strict_json(packet), "summary_base64 signature_base64")
+    try:
+        body = base64.b64decode(envelope["summary_base64"], validate=True)
+        signature = base64.b64decode(envelope["signature_base64"], validate=True)
+    except (binascii.Error, TypeError, ValueError) as exc:
+        raise ValueError("invalid signed envelope") from exc
+    require(len(signature) == 64, "invalid Ed25519 signature")
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp)
+        (root / "summary").write_bytes(body)
+        (root / "signature").write_bytes(signature)
+        result = subprocess.run(
+            [
+                "openssl",
+                "pkeyutl",
+                "-verify",
+                "-rawin",
+                "-pubin",
+                "-inkey",
+                str(PUBLIC_KEY),
+                "-in",
+                str(root / "summary"),
+                "-sigfile",
+                str(root / "signature"),
+            ],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    require(result.returncode == 0, "invalid evaluator signature")
+    summary = strict_json(body)
+    validate_summary(summary, limits)
+    return summary
+
+
+def validate_summary(summary: dict[str, Any], limits: dict[str, Any]) -> None:
+    fields(
+        summary,
+        "schema_version evaluation_scope candidate bundle_id bundle_digest "
+        "development_run development_attempt development_deployment policy_sha256 "
+        "holdout_sha256 evaluator_sha256 calibration_sha256 cases trials "
+        "holdout_attempts cumulative_cost_usd unknown_usage private_review_complete "
+        "attempts",
+    )
+    require(
+        type(summary["schema_version"]) is int and summary["schema_version"] == 1,
+        "unsupported summary schema",
+    )
+    require(
+        summary["evaluation_scope"] == "private-held-out",
+        "development evidence cannot qualify",
+    )
+    require(
+        isinstance(summary["candidate"], str)
+        and re.fullmatch(r"[0-9a-f]{40}", summary["candidate"]) is not None,
+        "invalid candidate commit",
+    )
+    require(
+        isinstance(summary["bundle_digest"], str)
+        and re.fullmatch(r"sha256:[0-9a-f]{64}", summary["bundle_digest"]) is not None,
+        "invalid bundle digest",
+    )
+    for key in IDENTITY[1:]:
+        if key != "bundle_digest":
+            require(
+                number(summary[key], 2**53 - 1, integer=True) > 0,
+                "invalid artifact identity",
+            )
+    require(summary["policy_sha256"] == digest(limits), "summary policy mismatch")
+    for key in (
+        "holdout_sha256",
+        "evaluator_sha256",
+        "calibration_sha256",
+        "cases",
+        "trials",
+    ):
+        require(
+            type(summary[key]) is type(limits[key]) and summary[key] == limits[key],
+            "summary contract mismatch",
+        )
+    require(
+        type(summary["unknown_usage"]) is bool
+        and type(summary["private_review_complete"]) is bool,
+        "invalid review attestation",
+    )
+    attempts = summary["attempts"]
+    require(
+        isinstance(attempts, list) and 1 <= len(cast(list[object], attempts)) <= 2,
+        "one original and one replacement only",
+    )
+    attempts = cast(list[dict[str, Any]], attempts)
+    total_cost = 0.0
+    previous_end = timestamp(read(POLICY)["approval"]["approved_at"])
+    for index, raw in enumerate(cast(list[object], attempts)):
+        trial = fields(
+            raw,
+            "started_at completed_at replacement_reason passed failed inconclusive "
+            "unmeasured case_pass_counts success_interval latency_p50_seconds "
+            "latency_p95_seconds agent_cost_usd total_cost_usd",
+        )
+        started, ended = (
+            timestamp(trial["started_at"]),
+            timestamp(trial["completed_at"]),
+        )
+        require(
+            previous_end <= started <= ended <= datetime.now(UTC),
+            "invalid execution chronology",
+        )
+        previous_end = ended
+        reason = trial["replacement_reason"]
+        require(
+            (index == 0 and reason == "none")
+            or (index == 1 and reason in ("infrastructure", "actor_validity")),
+            "quality-only retries are forbidden",
+        )
+        if index:
+            prior = attempts[0]
+            require(
+                prior["unmeasured"] > 0
+                if reason == "infrastructure"
+                else prior["inconclusive"] > 0,
+                "replacement lacks an invalid or incomplete original",
+            )
+        for key in ("passed", "failed", "inconclusive", "unmeasured"):
+            number(trial[key], 300, integer=True)
+        require(
+            sum(trial[k] for k in ("passed", "failed", "inconclusive", "unmeasured"))
+            == 300,
+            "trial counts must total 300",
+        )
+        histogram = trial["case_pass_counts"]
+        require(
+            isinstance(histogram, list) and len(cast(list[object], histogram)) == 4,
+            "invalid consistency counts",
+        )
+        histogram = cast(list[int], histogram)
+        for count in histogram:
+            number(count, 100, integer=True)
+        require(
+            sum(histogram) == 100
+            and sum(i * n for i, n in enumerate(histogram)) == trial["passed"],
+            "inconsistent pass counts",
+        )
+        interval = fields(trial["success_interval"], "method lower upper")
+        require(
+            interval["method"] == "case-bootstrap-95",
+            "uncertainty must resample whole cases",
+        )
+        number(interval["lower"], 1)
+        number(interval["upper"], 1)
+        require(
+            interval["lower"] <= trial["passed"] / 300 <= interval["upper"],
+            "invalid uncertainty interval",
+        )
+        for key in ("latency_p50_seconds", "latency_p95_seconds"):
+            if trial[key] is not None:
+                number(trial[key], 86400)
+        require(
+            (
+                trial["latency_p50_seconds"] is None
+                and trial["latency_p95_seconds"] is None
+            )
+            or (
+                trial["latency_p50_seconds"] is not None
+                and trial["latency_p95_seconds"] is not None
+                and trial["latency_p50_seconds"] <= trial["latency_p95_seconds"]
+            ),
+            "invalid latency percentiles",
+        )
+        number(trial["agent_cost_usd"], 1_000_000)
+        number(trial["total_cost_usd"], 1_000_000)
+        require(
+            trial["agent_cost_usd"] <= trial["total_cost_usd"],
+            "inconsistent evaluation cost",
+        )
+        total_cost += trial["total_cost_usd"]
+    require(
+        number(summary["holdout_attempts"], 2**53 - 1, integer=True) >= len(attempts),
+        "missing cumulative holdout attempts",
+    )
+    require(
+        number(summary["cumulative_cost_usd"], 1_000_000) >= total_cost,
+        "inconsistent cumulative spending",
+    )
+
+
+def decision(summary: dict[str, Any]) -> dict[str, Any]:
+    limits = policy()
+    validate_summary(summary, limits)
+    current = summary["attempts"][-1]
+    errors: list[str] = []
+    if current["inconclusive"] or current["unmeasured"]:
+        errors.append(
+            "inconclusive: all 300 trials need valid simulations and judgments"
+        )
+    if current["passed"] < limits["successes_min"]:
+        errors.append("fewer than 240 successful trials")
+    if summary["unknown_usage"] or not summary["private_review_complete"]:
+        errors.append(
+            "usage reconciliation or independent evidence review is incomplete"
+        )
+    if current["latency_p50_seconds"] is None:
+        errors.append("latency measurements are missing")
+    if (
+        any(
+            a["total_cost_usd"] > limits["run_cost_max_usd"]
+            for a in summary["attempts"]
+        )
+        or summary["cumulative_cost_usd"] > limits["authorized_cost_max_usd"]
+    ):
+        errors.append("approved spending limit exceeded")
+    try:
+        age(current["completed_at"], limits["candidate_max_age_hours"])
+    except ValueError:
+        errors.append("expired candidate evidence")
+    return {"qualified": not errors, "errors": errors}
 
 
 def aws(*args: str) -> dict[str, Any]:
@@ -273,7 +539,9 @@ def human_approval(run_id: int, environment: str) -> dict[str, Any]:
     return matches[0]
 
 
-def trusted_run(run_id: int, *, completed: bool) -> dict[str, Any]:
+def trusted_run(
+    run_id: int, *, completed: bool, successful: bool = True
+) -> dict[str, Any]:
     value = obj(release.api("GET", f"actions/runs/{run_id}"))
     require(
         value.get("repository", {}).get("full_name") == release.REPOSITORY
@@ -286,7 +554,8 @@ def trusted_run(run_id: int, *, completed: bool) -> dict[str, Any]:
     )
     if completed:
         require(
-            value.get("status") == "completed" and value.get("conclusion") == "success",
+            value.get("status") == "completed"
+            and (not successful or value.get("conclusion") == "success"),
             "evaluation did not complete successfully",
         )
     else:
@@ -313,46 +582,6 @@ def receipt(run_id: int) -> dict[str, Any]:
     return result
 
 
-def recent_production() -> dict[str, Any]:
-    deployments = release.api(
-        "GET", "deployments?environment=production-release&per_page=100"
-    )
-    require(isinstance(deployments, list), "production history unavailable")
-    for record in cast(list[dict[str, Any]], deployments):
-        statuses = release.api(
-            "GET", f"deployments/{record['id']}/statuses?per_page=100"
-        )
-        if any(
-            s.get("state") == "success" for s in cast(list[dict[str, Any]], statuses)
-        ):
-            return record
-    raise ValueError("no successful production deployment")
-
-
-def production_reference() -> tuple[dict[str, Any], str]:
-    body, metadata = get_object("baseline/current.json")
-    pointer = obj(json.loads(body))
-    require(
-        pointer.get("production") is not None, "approved production baseline is unset"
-    )
-    require(
-        pointer["production"]["claim_id"] == recent_production()["id"],
-        "baseline does not match deployed production",
-    )
-    evidence = obj(json.loads(fetch(pointer["approval"])))
-    approved = receipt(evidence["evaluation_run_id"])
-    require(
-        approved["report_sha256"] == pointer["report_sha256"]
-        and approved["archive"] == pointer["archive"]
-        and digest(approved) == evidence["receipt_sha256"]
-        and evidence["production"]["claim_id"] == pointer["production"]["claim_id"]
-        and evidence["production"]["candidate"] == approved["candidate"]
-        and evidence["production"].get("outcome") == "success",
-        "baseline approval mismatch",
-    )
-    return pointer, metadata["ETag"]
-
-
 def age(created: str, maximum_hours: int, now: datetime | None = None) -> None:
     value = datetime.fromisoformat(created)
     require(value.tzinfo is not None, "timestamp needs timezone")
@@ -364,112 +593,93 @@ def age(created: str, maximum_hours: int, now: datetime | None = None) -> None:
     )
 
 
-def validate_receipt(
-    value: dict[str, Any],
-    admission: dict[str, Any],
-    baseline: dict[str, Any],
-    *,
-    now: datetime | None = None,
-) -> None:
-    limits = policy()
+def validate_receipt(value: dict[str, Any], admission: dict[str, Any]) -> None:
     require(
-        value.get("qualified") is True
-        and value.get("errors") == []
-        and value.get("purpose") == "candidate",
+        value.get("schema_version") == 2 and value.get("purpose") == "candidate",
+        "historical receipt cannot qualify",
+    )
+    require(
+        value.get("qualified") is True and value.get("errors") == [],
         "candidate did not qualify",
     )
-    for key in (
-        "candidate",
-        "bundle_id",
-        "bundle_digest",
-        "development_run",
-        "development_attempt",
-        "development_deployment",
-    ):
+    for key in IDENTITY:
         require(
             value.get(key) == admission.get(key), "candidate/artifact identity mismatch"
         )
+    # Later production stages have GitHub access, not development AWS credentials.
+    # Carry the signed bytes in the authenticated receipt so verification stays local.
+    packet = canonical(obj(value.get("signed_summary")))
     require(
-        value.get("policy_sha256") == digest(limits)
-        and value.get("contract_sha256") == limits["contract_sha256"],
-        "policy/contract mismatch",
+        hashlib.sha256(packet).hexdigest() == obj(value.get("archive")).get("sha256"),
+        "signed archive binding changed",
+    )
+    summary = verify_summary(packet)
+    require(decision(summary)["qualified"], "signed evidence did not qualify")
+    require(
+        all(summary[key] == value[key] for key in IDENTITY),
+        "signed artifact identity mismatch",
     )
     require(
-        value.get("baseline_sha256") == digest(baseline), "production baseline changed"
+        value.get("report_sha256") == digest(summary)
+        and value.get("policy_sha256") == digest(policy())
+        and value.get("holdout_sha256") == summary["holdout_sha256"]
+        and value.get("created_at") == summary["attempts"][-1]["completed_at"],
+        "signed evidence binding changed",
     )
-    age(value["created_at"], limits["candidate_max_age_hours"], now)
-    age(baseline["created_at"], limits["production_max_age_hours"], now)
 
 
-def candidate_key(candidate: str, baseline: dict[str, Any]) -> str:
-    experiment = digest(
-        {
-            "policy": digest(policy()),
-            "baseline": digest(baseline),
-            "code": code_digest(),
-        }
-    )
-    return f"candidates/{candidate}/{experiment}.json"
+def candidate_key(candidate: str) -> str:
+    return f"candidates/private/{candidate}/{digest(policy())}.json"
+
+
+def binding(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "receipt_sha256": digest(value),
+        **{
+            key: value[key]
+            for key in (
+                "run_id",
+                "policy_sha256",
+                "holdout_sha256",
+                "created_at",
+                "report_sha256",
+            )
+        },
+    }
 
 
 def admit(admission: dict[str, Any]) -> dict[str, Any]:
     code_digest()
     development_account()
-    pointer, _ = production_reference()
-    body, _ = get_object(candidate_key(admission["candidate"], pointer))
-    index = obj(json.loads(body))
+    body, _ = get_object(candidate_key(admission["candidate"]))
+    index = fields(strict_json(body), "run_id receipt_sha256 report_sha256")
     value = receipt(index["run_id"])
-    require(index["receipt_sha256"] == digest(value), "candidate index mismatch")
-    validate_receipt(value, admission, pointer)
-    fetch(value["archive"])
-    binding = {
-        "run_id": value["run_id"],
-        "receipt_sha256": digest(value),
-        "policy_sha256": value["policy_sha256"],
-        "baseline_sha256": value["baseline_sha256"],
-        "created_at": value["created_at"],
-        "report_sha256": value["report_sha256"],
-    }
     require(
-        "golden" not in admission or admission["golden"] == binding,
+        index["receipt_sha256"] == digest(value)
+        and index["report_sha256"] == value["report_sha256"],
+        "candidate index mismatch",
+    )
+    validate_receipt(value, admission)
+    fetch(obj(value.get("archive")))  # Durable storage is checked under the read role.
+    result = binding(value)
+    require(
+        "golden" not in admission or admission["golden"] == result,
         "previous golden admission changed",
     )
-    admission["golden"] = binding
+    admission["golden"] = result
     return admission
 
 
 def revalidate(admission: dict[str, Any]) -> None:
     code_digest()
-    binding = obj(admission.get("golden"))
-    value = receipt(binding["run_id"])
-    require(
-        digest(value) == binding.get("receipt_sha256")
-        and value.get("policy_sha256") == binding.get("policy_sha256")
-        and value.get("baseline_sha256") == binding.get("baseline_sha256")
-        and value.get("report_sha256") == binding.get("report_sha256"),
-        "golden binding changed",
-    )
-    require(
-        value.get("qualified") is True
-        and value.get("errors") == []
-        and value.get("purpose") == "candidate",
-        "golden decision failed",
-    )
-    for key in (
-        "candidate",
-        "bundle_id",
-        "bundle_digest",
-        "development_run",
-        "development_attempt",
-        "development_deployment",
-    ):
-        require(value.get(key) == admission.get(key), "golden candidate mismatch")
-    age(value["created_at"], policy()["candidate_max_age_hours"])
+    expected = obj(admission.get("golden"))
+    value = receipt(expected["run_id"])
+    require(binding(value) == expected, "golden binding changed")
+    validate_receipt(value, admission)
 
 
 if __name__ == "__main__":
     try:
-        value = admit(read(Path(sys.argv[1])))
-        write(Path(sys.argv[2]), value)
+        write(Path(sys.argv[2]), admit(read(Path(sys.argv[1]))))
     except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError):
         raise SystemExit("golden evidence: blocked") from None

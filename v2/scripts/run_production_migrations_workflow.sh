@@ -49,10 +49,10 @@ run_private_stage migration-identity "$OUT" "$ERR" jq -e --arg candidate "$CANDI
   type == "object" and
   (keys | sort) == ["bundle_digest","bundle_id","candidate","claim_id","consumer_attempt","consumer_run","development_attempt","development_deployment","development_run","evidence_artifact","golden","listener_attempt","listener_run","release_id","schema_versions","tag"] and
   (.golden | type == "object" and
-    (keys | sort) == ["baseline_sha256","created_at","policy_sha256","receipt_sha256","report_sha256","run_id"] and
+    (keys | sort) == ["created_at","holdout_sha256","policy_sha256","receipt_sha256","report_sha256","run_id"] and
     (.run_id | type == "number" and . > 0 and . == floor) and
     (.created_at | type == "string" and length > 0) and
-    ([.baseline_sha256,.policy_sha256,.receipt_sha256,.report_sha256] |
+    ([.holdout_sha256,.policy_sha256,.receipt_sha256,.report_sha256] |
       all(type == "string" and test("^[0-9a-f]{64}$")))) and
   .candidate == $candidate and ($candidate | test("^[0-9a-f]{40}$")) and
   (.release_id | type == "number") and (.claim_id | type == "number") and
