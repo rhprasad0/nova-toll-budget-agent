@@ -184,7 +184,7 @@
     "v2/scripts/run_private_stage.sh": "ef7e4065ae6c9eb839e1f0fe067877d52123acf2e6b54d31abb050b729d1d2b3",
     "v2/scripts/run_production_migrations.py": "2077cbd16ba4832de6c75f1f113c2f23bb16f1d57a0dcb1615701b2631bb2e5c",
     "v2/scripts/run_production_migrations_workflow.sh": "4c9310d395b93e1a6982ca31dff8cca92ee6444a8621d8cdc615a5cc92cff2ef",
-    "v2/scripts/shared-package-compatibility.json": "588b486853c7a33e44630fab1682b2bccc09d4247fde3e2209a2f7efdf291697",
+    "v2/scripts/shared-package-compatibility.json": "0802f989411e19232ec798b39b21e858136b1eb546e800b3f687ab569738dc6b",
     "v2/scripts/shared_packages.py": "4c8be7bcf4ed0ba82579f3171e87ac3c2f97c7f2a0a2c87dbad623e052851c39",
     "v2/scripts/timed-checks-requirements.in": "8218bd738a1337e889d04756b2f7c53f1693503b97c519dcc8a10a423b2837e5",
     "v2/scripts/timed-checks-requirements.txt": "c7f9d037e3fb740603863c144cfc053ebb4e52b25024318b68390bf1518e0515",
@@ -193,11 +193,11 @@
     "v2/uv.lock": "071ad13fcb49045309c63222c75e56ee5d40484cee25c0e4db36663ea4e16225"
   },
   "packages": {
-    "agentcore.zip": "1d9c1f3eb8c8fd51e32b12533a6590d1cff8532c8d9b523a887a129f531ddfcf",
+    "agentcore.zip": "2940da36f6aaa25aa47cc545da357028b71f365df26c2ae382ea454d6a80ff24",
     "chat-proxy.zip": "4a5f4a42a220217dd88318a2d2d44973d825ede4b78da7ef313c06beb93a9754",
     "loader.zip": "089969a77cd61816f1471656ad6dfda793b595c3f9244a1027c2e11ad71054fb",
     "publisher.zip": "0376194d6234dcd122529efc90e3f6e5eb1ff4a9705a271b11ffa2b5ba434bf9",
-    "timed-checks.zip": "c55ec2c9a66f681bd44d86606177c5da352d4b99eb75093bd70caf581829a900"
+    "timed-checks.zip": "4f7671649bc8b7d06195295a2c3d82cfe478f08d4a6826b654bb24f0f0621eea"
   },
   "mutations": [
     {

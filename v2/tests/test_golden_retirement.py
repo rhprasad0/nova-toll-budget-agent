@@ -23,7 +23,7 @@ def test_retired_test_data_is_not_an_active_corpus(tmp_path: Path) -> None:
         golden.validate(TEST_DATA)
 
 
-def test_description_contract_has_fresh_bound_review() -> None:
+def test_development_contract_has_fresh_bound_review() -> None:
     review = json.loads((golden.ROOT / "review.json").read_text())
     manifest = json.loads((golden.ROOT / "manifest.json").read_text())
     assert review["status"] == "approved"
@@ -47,7 +47,7 @@ def test_paid_entrypoints_stop_before_credentials_or_output(
     output = tmp_path / "paid-run"
     args = ["test", "--output", str(output)]
     if mode == "actor-check":
-        args += ["--prior-spend-usd", "0"]
+        args += ["--budget-usd", "15"]
     else:
         args.insert(1, mode)
     monkeypatch.setattr("sys.argv", args)

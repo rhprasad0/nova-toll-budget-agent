@@ -1389,3 +1389,10 @@ development migration plus deployed catalog parity before any climb. This work
 does not merge, deploy, or manually migrate a deployed database. GEPA-style
 candidate pools, larger models, new runtime agents, and general workflow redesign
 remain deferred.
+
+Post-calibration CI correction: restored explicit authorization and reviewed-commit
+provenance in the fresh corpus review record, updated the retired-input test to
+supply the actor CLI budget, and regenerated package/shared-compatibility hashes
+for the prepared SOP and Oracle schema. These delivery/test metadata corrections
+do not change the measured application, grading code, or corpus payload. The
+stopped calibration remains unapproved and no paid run was repeated.
