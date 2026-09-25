@@ -32,7 +32,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.5"
+VERSION = "2.3.6"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -244,6 +244,11 @@ EVAL_MODEL_PARAMS: dict[str, Any] = {
     "prompt_cache_key": "tollchat-eval-v2",
     "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},
 }
+JUDGE_MODEL_PARAMS: dict[str, Any] = {
+    **EVAL_MODEL_PARAMS,
+    "max_output_tokens": 8192,
+    "reasoning": {"effort": "high"},
+}
 
 
 def build_eval_model() -> Model:
@@ -257,6 +262,13 @@ def build_eval_model() -> Model:
         params=deepcopy(EVAL_MODEL_PARAMS),
         stateful=False,
     )
+
+
+def build_judge_model() -> Model:
+    """Give judges more reasoning headroom without changing actor generation."""
+    model = build_eval_model()
+    model.update_config(params=deepcopy(JUDGE_MODEL_PARAMS))
+    return model
 
 
 class Measurement(golden.Record):
@@ -593,7 +605,10 @@ class Journal:
     ) -> float:
         if type(input_bound) is not int or not 0 < input_bound <= 1_000_000:
             raise StopRun("input_budget")
-        reserve = (input_bound * 0.25 + 2048 * 0.75) / 1_000_000
+        output_bound = (
+            JUDGE_MODEL_PARAMS["max_output_tokens"] if role == "judge" else 2048
+        )
+        reserve = (input_bound * 0.25 + output_bound * 0.75) / 1_000_000
         with self.lock:
             if (
                 self.stop_requested
@@ -939,11 +954,7 @@ def judge(
 ) -> None:
     # Serialize SSM-backed model construction; provider calls run outside the lock.
     with journal.lock:
-        native = build_eval_model()
-        native.update_config(
-            params={**deepcopy(EVAL_MODEL_PARAMS), "reasoning": {"effort": "medium"}}
-        )
-        model = journal.model(native, "judge", attempt, 12)
+        model = journal.model(build_judge_model(), "judge", attempt, 12)
     evaluator = ConversationJudge(
         model=model, name="Correctness", reference_system_prompt=golden.JUDGE_PROMPT
     )
@@ -1333,15 +1344,16 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
         "diagnostic_domain_facts": DOMAIN_FACTS,
         "diagnostic_prompt": DIAGNOSTIC_PROMPT,
         "model": "gpt-6-luna",
-        "reasoning_effort": {"agent": "low", "actor": "medium", "judge": "medium"},
-        "max_output_tokens": 2048,
+        "reasoning_effort": {"agent": "low", "actor": "medium", "judge": "high"},
+        "max_output_tokens": {"agent": 2048, "actor": 2048, "judge": 8192},
         "sampling": {"temperature": "provider default", "seed": "not supplied"},
         "transport": {
             "openai_max_retries": 0,
             "evaluator_tool_choice": "required",
             "timeout_seconds": 60,
             "unknown_usage": "stop further paid calls",
-            "evaluator_model_config": deepcopy(EVAL_MODEL_PARAMS),
+            "evaluator_model_config": deepcopy(JUDGE_MODEL_PARAMS),
+            "actor_model_config": deepcopy(EVAL_MODEL_PARAMS),
             "cache_adapter_sha256": golden.digest(
                 inspect.getsource(toll_agent._CachedResponsesModel)
             ),

@@ -80,7 +80,7 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
         if case.contract_version >= 2:
             row.failure_phase = "judge"
             with journal.lock:
-                model = journal.model(run.build_eval_model(), "judge", row, 3)
+                model = journal.model(run.build_judge_model(), "judge", row, 3)
             run.assess_outcome(
                 case,
                 row,

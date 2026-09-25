@@ -1,10 +1,7 @@
 {
-  "status": "approved",
-  "corpus_sha256": "7862f5c3fa103b7fde8ccef5d4a83b6806aa9e058082a59a7e5181c2abb3d715",
+  "status": "pending",
+  "corpus_sha256": "907a6501c6bd6e2de12428001337d065652426714f495364d8bea69784ec9633",
   "human_trajectory_adjudication": false,
-  "reviewer": "Codex supervisor with independent eval_reviewer (gpt-6-astra, high) under user authorization",
-  "evidence": "Fresh independent review ofbb7f82a..102eb91 found no material preparation defect. Unchanged supporting context precedes criterion policy. Outcome checks requirement applicability and exceptions before omissions, including expected unavailability within answer objectives. Grounding checks financial/schedule inputs and all output claims with preserved consent and evidence boundaries. All146 reference payloads/labels,100cases,fixtures,application,actor generation,models,schemas and verdict conversion unchanged. Offline prompt ordering, schemas, comparisons and corpus independently checked. Ready for one fresh full calibration only; no human trajectory adjudication or calibration approval claimed.",
-  "reviewed_at": "2026-09-25T16:02:40.671871+00:00",
-  "authorization": "Ryan explicitly authorized another calibration round after the repeatability stop; scoped grading fixes and uncapped spending remain authorized.",
-  "contract_commit": "102eb91a2a78e3de6907170a58e486ba983e803a"
+  "reviewer": "",
+  "evidence": ""
 }

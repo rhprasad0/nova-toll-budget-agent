@@ -410,7 +410,11 @@ def test_real_sdk_transport_has_no_retries_and_bounded_timeout(
     monkeypatch.setattr(run.toll_agent, "load_openai_api_key", lambda: "offline")
     monkeypatch.setattr(simulated, "load_openai_api_key", lambda: "offline")
     native = (
-        run.toll_agent._build_model() if role == "agent" else run.build_eval_model()
+        run.toll_agent._build_model()
+        if role == "agent"
+        else run.build_judge_model()
+        if role == "judge"
+        else run.build_eval_model()
     )
     requests: list[httpx.Request] = []
     clients: list[openai.AsyncOpenAI] = []
@@ -447,6 +451,18 @@ def test_real_sdk_transport_has_no_retries_and_bounded_timeout(
         asyncio.run(consume())
     assert len(clients) == len(requests) == len(row.measurements) == 1
     assert journal.unknown_usage and not row.measurements[0].complete
+    request = json.loads(requests[0].content)
+    assert request["model"] == "gpt-6-luna"
+    assert (
+        request["reasoning"]["effort"]
+        == {"agent": "low", "actor": "medium", "judge": "high"}[role]
+    )
+    expected_cap = 8192 if role == "judge" else 2048
+    assert request["max_output_tokens"] == expected_cap
+    started = json.loads(
+        (journal.directory / "events.jsonl").read_text().splitlines()[0]
+    )
+    assert started["reserved_usd"] >= expected_cap * 0.75 / 1_000_000
 
 
 def test_real_agent_keeps_conversation_and_uses_only_replay(
@@ -806,9 +822,7 @@ def test_judges_receive_rejected_calls_without_pricing_evidence(
         rejected_tools=example.rejected_tools,
     )
     run.judge(case, attempt, run.Journal(tmp_path / "judge", 25))
-    native.update_config.assert_called_once_with(
-        params={**run.EVAL_MODEL_PARAMS, "reasoning": {"effort": "medium"}}
-    )
+    native.update_config.assert_called_once_with(params=run.JUDGE_MODEL_PARAMS)
     assert len(seen) == 3
     assert "GROUNDING ONLY" in prompts[1] and "RULES ONLY" not in prompts[1]
     assert "RULES ONLY" in prompts[2] and "GROUNDING ONLY" not in prompts[2]
@@ -977,7 +991,8 @@ def test_eval_cache_prefix_and_write_accounting(
             system_prompt=self.reference_system_prompt,
         )
         requests.append(request)
-        assert request["reasoning"] == {"effort": "medium"}
+        assert request["reasoning"] == {"effort": "high"}
+        assert request["max_output_tokens"] == 8192
         assert request["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
         assert request["prompt_cache_key"] == "tollchat-eval-v2"
         assert request["store"] is False
@@ -1658,6 +1673,7 @@ def test_uncapped_accounting_still_stops_on_unknown_usage(tmp_path: Path) -> Non
     journal = run.Journal(tmp_path / "uncapped", None, prior_spend=30)
     row = run.Attempt(id="uncapped", case_id="synthetic", trial=1)
     reserve = journal.reserve(row, "judge", 1000)
+    assert reserve == pytest.approx((1000 * 0.25 + 8192 * 0.75) / 1_000_000)
     journal.finish(row, "judge", reserve, {"inputTokens": 100, "outputTokens": 20}, 1)
     assert journal.spent == 30 + run.cost({"inputTokens": 100, "outputTokens": 20})
     reserve = journal.reserve(row, "judge", 1000)
@@ -1686,6 +1702,41 @@ def test_budget_cli_flags_are_exclusive(
         (golden_actor_check.main if actor_check else run.main)()
     assert error.value.code == 2
     assert not (tmp_path / "run").exists()
+
+
+def test_actor_check_uses_high_judge_and_medium_actor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from eval import golden_actor_check
+
+    example = next(
+        e for e in run.development_examples() if e.label == "good" and len(e.turns) == 1
+    )
+    actor_model, judge_model = Mock(), Mock()
+    factory = Mock(side_effect=[actor_model, judge_model])
+    monkeypatch.setattr(run, "build_eval_model", factory)
+    actor = Mock()
+    actor.act.return_value.structured_output = SimpleNamespace(
+        stop=True, message=None, stop_reason="goal_completed"
+    )
+    monkeypatch.setattr(golden, "make_actor", Mock(return_value=actor))
+    journal = run.Journal(tmp_path / "actor-check", None)
+
+    def measured(model: Model, role: str, row: run.Attempt, maximum: int) -> Model:
+        assert model is (actor_model if role == "actor" else judge_model)
+        row.measurements.append(measurement())
+        return model
+
+    def assess(*args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+        args[1].actor_validity = run.ActorAssessment(status="valid", evidence="Offline")
+
+    monkeypatch.setattr(journal, "model", measured)
+    monkeypatch.setattr(run, "assess_outcome", assess)
+    row = golden_actor_check.check(example, 1, journal)
+    assert row.status == "scored"
+    actor_model.update_config.assert_not_called()
+    judge_model.update_config.assert_called_once_with(params=run.JUDGE_MODEL_PARAMS)
+    assert factory.call_count == 2
 
 
 def test_actor_check_uncapped_cli_preserves_prior_spend(
