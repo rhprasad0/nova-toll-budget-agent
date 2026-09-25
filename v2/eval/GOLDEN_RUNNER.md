@@ -8,13 +8,15 @@ are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract 
 
 ## Description-edit contract
 
-Contract 3.1.0 / harness 2.1.0 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.1.1 / harness 2.1.1 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
 schema constraints, validators, runtime logic, and output descriptions, stays
 pinned. Other corpus sources remain byte-hashed. Formatting/comments do not affect
 the parsed source hash; candidate review still admits only specified text edits.
+The shared `_PricingProfile` model is excluded because its descriptions also
+appear in the output schema.
 
 Each run records full tool schema hashes and the exact source artifact, so wording
 changes remain attributable. The eval-climb comparison permits differing tool

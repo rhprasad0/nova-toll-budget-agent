@@ -1,5 +1,5 @@
 {
   "status": "pending",
-  "corpus_sha256": "1e3a92b545ecec634a1757f1f8ba7c0d6a89c4470f87d8e5729d1ed6b0ebf9f7",
-  "note": "Contract 3.1.0 / harness 2.1.0 allows literal input/tool description wording changes while pinning all other tool source syntax. Cases, fixtures, reference labels, and application wording are unchanged. Prior corpus/calibration approval does not transfer; fresh contract review and matching calibration are required before application evaluation."
+  "corpus_sha256": "f64dcd1bc2fb6b68a434df1f7424df64618655591338996b235a77a177fa661a",
+  "note": "Contract 3.1.1 / harness 2.1.1 excludes the shared input/output _PricingProfile descriptions from candidate edits. All output descriptions, other tool source syntax, cases, fixtures, reference labels, and application wording remain fixed. Fresh contract review and matching calibration are required before application evaluation."
 }

@@ -76,7 +76,8 @@ Candidate edits may change admitted text in:
   `v2/agent_tools/current_price_domain.py` and
   `v2/agent_tools/get_annual_toll_ballpark.py`.
 - Existing literal `Field(description=...)` values in their input models:
-  `_PricingProfile`, `_PricingRequest`, `_DirectionRequest`, and `_BallparkRequest`.
+  `_PricingRequest`, `_DirectionRequest`, and `_BallparkRequest`.
+  `_PricingProfile` is shared with the output schema, so its descriptions stay frozen.
 
 Description edits require the `literal-input-prose-v1` contract and matching
 approved calibration. The corpus pins each tool's parsed Python source with only

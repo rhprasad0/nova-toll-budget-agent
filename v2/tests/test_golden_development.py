@@ -58,6 +58,24 @@ TOOL_SPEC: dict = {{"name": "tool", "description": "tool prose", "inputSchema": 
             golden.tool_source_digest(name, source.replace('"input prose"', expression))
 
 
+def test_shared_input_output_descriptions_remain_frozen() -> None:
+    for name, tool in (
+        ("agent_tools/current_price_domain.py", golden.current),
+        ("agent_tools/get_annual_toll_ballpark.py", golden.annual),
+    ):
+        output_definitions = tool.TOOL_SPEC["outputSchema"]["json"]["$defs"]
+        assert golden.TOOL_INPUT_MODELS[name].isdisjoint(output_definitions)
+    name = "agent_tools/current_price_domain.py"
+    source = (golden.V2 / name).read_text()
+    changed = source.replace(
+        "Supported value: two_axle_passenger.", "Changed profile wording."
+    )
+    assert changed != source
+    assert golden.tool_source_digest(name, source) != golden.tool_source_digest(
+        name, changed
+    )
+
+
 def test_tool_prose_keeps_pinned_corpus_but_runtime_changes_do_not(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
