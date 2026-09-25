@@ -1197,3 +1197,110 @@ Raw evidence, plans, reviews, accounting, and the exact continuation handoff sta
 in ignored `v2/eval/private/eval-climb/descriptions-20/`. Only this sanitized
 summary and current usage status are published locally. No push, PR update,
 merge, or deployment was performed; the outer session owns ready PR602 on PR600.
+
+
+## 2026-09-25 — Round 2 capacity continuation: no eligible improvement
+
+**Decision: retain the original application and stop the search after two
+consecutive rounds without an eligible improvement.** A fresh supervisor resolved
+the required agent-thread capacity blocker and executed the already admitted
+Round 2. This continued the same authorization, cumulative $20 cap, baseline,
+calibration, and pass³-first contract. No completed prerequisite, calibration,
+baseline, or Round 1 measurement was repeated. No candidate was promoted, so
+neither Round 3 nor an unnecessary confirmation pair ran.
+
+The original application remains
+`f218fe47563a4dbc27a597b7730b6b977f71b99c`. Journal-only campaign commits did not
+become new application incumbents. Corpus **3.1.2**, harness **2.1.2**, and
+`literal-input-prose-v1` remained frozen, with the existing approved calibration
+and corpus evidence. Application, actor, and judge models remained `gpt-6-luna`
+with unchanged settings. All previous journal bytes and rejected worktrees are
+preserved; the prior capacity entry remains a historical checkpoint.
+
+### Admitted alternatives and complete measurements
+
+Separate required `eval_implementer` agents (`gpt-6-sol`, xhigh) implemented the
+existing Greenway direction plan from the same original incumbent. A added four
+lines to the existing SOP paragraph, checking Greenway endpoints before a tool
+call. B added one sentence to the existing current-price tool summary, exposing
+EB toward Route 28 and WB away while resolving endpoint roles separately. Both
+preserved discovery and origin-correction guidance, other facilities' directions,
+SOP exceptions, and consent/security/money requirements. Neither included a
+rejected Round 1 annual-caveat patch. The supervisor did not implement either
+candidate.
+
+| Application | Pass³ / 100 | Successful slots / 300 | Inconclusive | Decision |
+| --- | ---: | ---: | ---: | --- |
+| Original `f218fe4` | 44 | 204 | 0 | Retained |
+| R2A SOP `9808e672e502504995a5f9f9fb917b2ba1db9853` | 57 | 231 | 0 | Reject: unresolved material direction regressions |
+| R2B current-price summary `b715c2cfc8489df1373eda3040408c7303174b74` | 52 | 222 | 1 | Reject: inconclusive increase and material direction regressions |
+
+A and then B each completed all **100 development cases × 3 trials**, using
+16 workers. Pass³ retains the fixed 100-case denominator and requires all three
+slots to succeed. A's comparable Grounding violations fell from 11 to 4 and Rules
+from 57 to 46, each over 300 slots. B's corresponding counts were 10 to 9 and 57
+to 52 over **299 commonly scored slots**; its actor-invalid slot is excluded from
+those comparable violation rates, remains an explicit inconclusive, and does not
+count as a success. One case was excluded from paired three-trial diagnostics,
+but all its trials remained in independent review. Successful-trial increase and
+paired delta remained diagnostics, not extra promotion gates.
+
+Fresh independent `eval_reviewer` agents (`gpt-6-astra`, high) inspected each
+candidate's complete diff, frozen identities, regenerated schemas, raw reports,
+and numeric packets without implementer conclusions. A's reviewer covered all
+45 unique affected slots: 38 lost successes, 4 new Grounding violations, and 29
+new Rules violations, with overlap. Numeric gates passed, but repeated actual
+wrong-direction failures on Greenway, Dulles Toll Road, and I-495 trips remained
+material. These included a westbound Greenway trip regressing from 2/3 successes
+to 0/3 with mixed endpoint directions, and an I-495 trip from 3/3 to 0/3.
+
+B's reviewer covered all 50 affected slots and all three trials of the
+case excluded from paired diagnostics. B fails the retained inconclusive gate
+because one actor stopped prematurely. Repeated wrong-direction failures on a
+westbound Greenway trip and an I-495 trip each regressed from 3/3 to 0/3. Neither
+review inferred causality from a single unseeded flip. No score, actor-invalid
+slot, raw report, fixture, or label was relabeled, retried, or replaced.
+
+### Accounting, validation, and deferred findings
+
+| Accounted work | Cost USD |
+| --- | ---: |
+| Cumulative before this capacity continuation | 9.876881995 |
+| R2A | 0.946600000 |
+| R2B | 0.956438880 |
+| **This continuation** | **1.903038880** |
+| **Cumulative** | **11.779920875** |
+| **Unused authorization** | **8.220079125** |
+
+The cumulative total includes $6.555343780 carried from the seven older runs and
+$5.224577095 incurred by this description-contract continuation across its
+sessions. All 15 accounted run journals reconcile through the original chain.
+R2A chained directly from R1B; R2B chained directly from R2A. All **1,997 A calls
+and 2,005 B calls** have known usage, with no infrastructure errors or missing
+slots. The search ceiling stayed at $17, with a $3 confirmation reserve; each
+complete run fit with the required cost headroom. The stop is the no-improvement
+rule, not budget exhaustion. Historical excluded calibration/pilot and Codex
+usage remain excluded; the separate stopped pilot was not accessed.
+
+Both candidate corpora validated offline. Each candidate's focused existing
+checks produced 67 passes and one expected versioned wording-digest mismatch;
+tests, snapshots, manifests, and versions were not changed to accept the wording.
+The supervisor and reviewers verified unchanged normalized source and full
+schema structure/output descriptions. A's complete schemas were identical; B's
+only schema difference was the admitted tool-summary string. Accounting and
+comparison results were independently reproduced.
+
+The reviews preserve separate findings about indistinguishable catalog metadata
+with strict replay IDs, signed-money extraction, inconsistent financial-caveat
+judgments, contradictory stored verdicts and explanations, and historical-source
+wording. Fixes to catalog identity, runtime behavior, or grading require separate
+work outside this frozen SOP/description search. Additional facility-direction
+wording was not tested because the two-round stopping rule was reached. No
+unmeasured improvement is claimed. These exposed development results establish
+neither generalization nor production qualification.
+
+Plans, complete run evidence, independent review records, accounting, and the
+final handoff remain in ignored `v2/eval/private/eval-climb/descriptions-20/`.
+Only this append-only summary and concise current usage status are committed.
+No push, PR update, merge, or deployment was performed; the outer session owns
+ready PR602 stacked on PR600. There is no application patch to publish.

@@ -5,9 +5,9 @@ calibration are approved under Ryan-authorized Codex review. The annual-day
 Grounding boundary is resolved; one bounded raw salary disagreement remains
 visible and is caught by the existing deterministic check.
 
-**The original application remains retained.** The climb is blocked at admitted
-round 2 by host capacity for required agent roles. Resume with the existing private
-ledger, frozen contract, and last accounted run; do not repeat completed work.
+**The original application remains retained.** The climb stopped after two
+consecutive rounds without an eligible improvement. No confirmation pair was
+needed; the private ledger and evidence preserve the completed search.
 Shared `_PricingProfile` and output descriptions remain frozen under
 `literal-input-prose-v1`. This development corpus cannot qualify production.
 
