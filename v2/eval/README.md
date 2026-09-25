@@ -1,7 +1,8 @@
 # TollChat evaluation
 
 **Current contract: 3.1.2 / harness 2.1.2.** The authorized annual-day scoring
-correction is awaiting independent corpus review and fresh matching calibration.
+correction has independent assessment and approved corpus review; fresh matching
+calibration is still required.
 Using an unaccepted derived day count in a tool argument fails both Grounding
 and Rules; a conditional proposal alone remains grounded arithmetic.
 Application search has not started under this contract. Shared `_PricingProfile`
