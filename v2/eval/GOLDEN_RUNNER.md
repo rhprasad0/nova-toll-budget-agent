@@ -1,10 +1,66 @@
 # Running the frozen golden corpus
 
-The current development corpus has **100 cases and 135 calibration references**.
+The current development corpus has **100 cases and 143 calibration references**.
 Application baselines run three trials per case. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
+
+## Description-edit contract
+
+Contract 3.3.0 / harness 2.3.0 uses `literal-input-prose-v1`. The corpus hashes
+parsed source for the two pricing tool modules, masking only existing literal
+`TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
+allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
+schema constraints, validators, runtime logic, and output descriptions, stays
+pinned. Other corpus sources remain byte-hashed. Formatting/comments do not affect
+the parsed source hash; candidate review still admits only specified text edits.
+The shared `_PricingProfile` model is excluded because its descriptions also
+appear in the output schema.
+
+Each run records full tool schema hashes and the exact source artifact, so wording
+changes remain attributable. The eval-climb comparison permits differing tool
+hashes only with the supported policy and identical pinned corpus. Old-contract
+reports retain their original hash rules and cannot be compared with this contract.
+Corpus review and fresh matching calibration are required before the next climb;
+never transfer prior approvals or regenerate a candidate's corpus manifest.
+
+## Scoring and preparation
+
+Pass³ is successful three-trial cases divided by **all 100 cases**. Missing,
+failed, and inconclusive trials cannot make a case successful. Historical report
+rendering follows the recorded harness version; cross-contract comparisons fail.
+Development promotion requires strict overall-pass-rate improvement: successful
+trials divided by all **300 expected trials**, including inconclusives in the
+denominator. Keep inconclusive nonincrease, comparable Grounding/Rules
+nonworsening, and independent material-regression review. Pass³ and paired deltas
+are diagnostics. Rank eligible candidates by overall pass rate, fewer changed
+lines, then A. Harness 2.2.0 retains its historical pass³ promotion rule.
+
+Optimize using development cases only. The separate blind production standard is
+at least 240/300 successful trials, with valid simulations and complete judgments;
+80% on this exposed set cannot qualify production. Keep holdout cases and feedback
+out of candidate search. The separate gate work does not increase the development
+spending authorization.
+
+Judges return cited unmet requirements; an empty list determines success.
+The stored `passed`/`evidence` interface remains stable. Calibration must still
+check semantic errors; explanations are never regex-relabelled.
+
+For a preparation repeatability check, the sequence is two full-reference calibrations with
+independent review, one full scripted actor check, then two identical application
+runs (100 cases × 3 trials, 16 workers). Compare repeatability and criterion
+variation; designate the second application run by position as the next baseline,
+never by score. Reuse only with unchanged application/evaluation identities and
+verified development migration/catalog parity after human-reviewed merge.
+
+Chain preparation from the last accounted run using the user-authorized cumulative
+ceiling. Admit each complete run only when its estimate with headroom fits, reserving
+the agreed search and confirmation budget. Record amounts and decisions in the
+private ledger and append-only experiment journal.
+Stop on unknown usage, infrastructure failure, unresolved material grading
+ambiguity or insufficient budget. Do not repeat runs to obtain passing results. Candidate
+search belongs in a separate PR and starts only after the deployment parity gate.
 
 ## Execution
 
@@ -44,6 +100,15 @@ The calibration must match the execution contract. `--cases` selects a partial
 application diagnostic, which cannot represent a full baseline. Actor-invalid
 or uncertain attempts remain inconclusive. Do not retry failures to improve a
 score, erase interrupted attempts, or silently relabel an old report.
+
+The scripted actor check uses the same journal accounting and accepts explicit
+worker and cumulative budget controls:
+
+```bash
+uv run python -m eval.golden_actor_check \
+  --output eval/private/actor-check-N --budget-usd 15 --workers 16 \
+  --prior-run eval/private/previous-run
+```
 
 ## Evidence and reporting
 

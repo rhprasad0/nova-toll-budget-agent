@@ -88,11 +88,9 @@ Promotion changes routing to the validated candidate and retains the previous re
 
 ## Evaluation status
 
-**The golden corpus contains 100 development cases.** The latest baseline
-recorded **206 passed, 93 failed, and one inconclusive** out of 300 trials under
-contract 3.0.5. Calibration 9 on 3.0.6 matched all 396 application labels and
-135 actor labels; no application baseline has run on that revised contract.
-These are development measurements, not production qualification or whole-agent
+**The golden corpus contains 100 development cases.** Development baselines and
+bounded prompt experiments are recorded in the experiment journal. These exposed
+development measurements do not qualify production or establish whole-agent
 accuracy.
 
 The [production qualification gate](v2/eval/GOLDEN_RELEASE.md) is prepared for a

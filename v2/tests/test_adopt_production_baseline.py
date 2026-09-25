@@ -105,7 +105,7 @@ def test_adoption_selects_only_current_canonical_rows() -> None:
     assert {
         (baseline.schema, baseline.version)
         for baseline in adopt.load_baseline_manifest()
-    } == {("pricing", "1.4.0"), ("oracle", "1.15.0")}
+    } == {("pricing", "1.4.0"), ("oracle", "1.15.1")}
 
 
 @pytest.mark.parametrize(
@@ -765,17 +765,37 @@ def test_disposable_postgis_adoption_and_rerun_guard(
                 text=True,
             ).replace("\\ir analysis.sql", f"\\i {adopt.ROOT / 'v2/db/analysis.sql'}")
         if filename == "v2/db/oracle/schema.sql":
+            # Production remains at the reviewed 1.15.0 predecessor even when
+            # development's canonical bootstrap advances.
+            retained_data = tmp_path / "oracle-1.15.0-data.sql"
+            retained_data.write_bytes(
+                subprocess.check_output(
+                    [
+                        "git",
+                        "show",
+                        "59709fb8c88a2fe03424af890695280a4b8e1527:v2/db/oracle/data.sql",
+                    ],
+                    cwd=adopt.ROOT,
+                )
+            )
             # This test-only superuser fixture creates PostGIS as the observed
             # platform owner. It does not prove RDS authority.
             input_sql = (
-                (adopt.ROOT / filename)
-                .read_text()
+                subprocess.check_output(
+                    [
+                        "git",
+                        "show",
+                        f"59709fb8c88a2fe03424af890695280a4b8e1527:{filename}",
+                    ],
+                    cwd=adopt.ROOT,
+                    text=True,
+                )
                 .replace(
                     "CREATE EXTENSION postgis WITH SCHEMA oracle;",
                     "SET ROLE rdsadmin;\nCREATE EXTENSION postgis WITH SCHEMA oracle;\nRESET ROLE;",
                     1,
                 )
-                .replace("\\ir data.sql", f"\\i {adopt.ROOT / 'v2/db/oracle/data.sql'}")
+                .replace("\\ir data.sql", f"\\i {retained_data}")
             )
         result = run_psql(
             "--username",

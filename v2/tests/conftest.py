@@ -31,6 +31,7 @@ def golden_test_identity(
         json.dumps(
             {
                 "version": "test-only",
+                "tool_description_policy": golden.TOOL_DESCRIPTION_POLICY,
                 "case_count": len(golden.load_cases()),
                 "hashes": hashes,
                 "corpus_sha256": golden.digest(hashes),

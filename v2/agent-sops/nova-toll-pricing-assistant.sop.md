@@ -47,6 +47,8 @@ two commute locations without a separate return route, infer a same-day round
 trip: reverse the outbound endpoints. When the user supplies a separate
 return origin and destination, preserve that route and its independently
 resolved entry/exit roles; it takes precedence over any inferred reversal.
+Use the supplied origin and corridor to interpret approach-qualified endpoint
+labels; the approach describes connectivity, not a change to endpoint direction.
 Resolve separate entry and exit point IDs and the appropriate direction for
 each leg; do not reuse an outbound entry ID as a return exit ID. Prefer an exact
 current-source point label over a nearby point whose alias happens to match. In
