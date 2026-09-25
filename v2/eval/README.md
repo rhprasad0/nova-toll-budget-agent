@@ -1,7 +1,11 @@
 # TollChat evaluation
 
 **Current contract: 3.1.1 / harness 2.1.1.** SOP and model-facing tool-description
-climbs require corpus review and fresh calibration. Approval remains **pending**.
+climbs require corpus review and fresh calibration. **Corpus review is approved**
+under Ryan-authorized Codex review. Fresh calibration is **not approved**: the
+attempt failed to retrieve development AWS credentials before any model calls.
+Restore development authentication before separately directed calibration work;
+preserve and account for the failed attempt when continuing the spending chain.
 Shared `_PricingProfile` descriptions stay frozen because they also appear in
 the output schema; only input-only model descriptions and tool summaries may vary.
 Prior approvals and scores do not transfer. Cases, reference labels,

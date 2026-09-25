@@ -891,3 +891,74 @@ continuation edits and was deferred to the outer session. After a valid contract
 review, fresh calibration and baseline are still required under the same cap.
 There is no performance or generalization claim, production qualification,
 push, PR creation, merge, or deployment from this local run.
+
+## 2026-09-25 — Contract blocker resolved; calibration stopped at development credentials
+
+Ryan explicitly resumed the same description-only continuation stacked on PR600
+after the outer session committed the prerequisite correction in `657ef7b`.
+The previous blocker entry remains unchanged. Contract 3.1.1 / harness 2.1.1 /
+`literal-input-prose-v1` now excludes shared `_PricingProfile` descriptions from
+the editable allowlist and checks actual output-model definitions. The new
+corpus digest is
+`f64dcd1bc2fb6b68a434df1f7424df64618655591338996b235a77a177fa661a`.
+This explicit prerequisite change preceded every new measurement; it was not an
+application candidate or a change to a measured campaign. The same cumulative
+$20 cap, pass^3-first objective, and outer-session publication ownership apply.
+
+A fresh named `eval_reviewer` (gpt-6-astra/high, isolated handoff, no delegation)
+accepted the corrected contract. Its independent in-memory probes verified all
+13 admitted literal edits preserve complete output schemas and normalized source
+identity while changing their full schema hashes. Each of the three shared
+profile descriptions now changes normalized identity if edited. The reviewer
+verified 121 supporting files byte-identical against earlier commits, including
+the application, corpus, fixtures, and dependencies; tool specifications were
+also identical. The original deterministic contract blocker is resolved.
+
+Commit `292fe09` records fresh corpus approval as Codex review under Ryan
+authorization and updates only the approval lifecycle assertion. The record
+explicitly denies personal human trajectory adjudication and does not approve
+calibration or production. Missing/pending paid-entrypoint guards remain intact.
+The new manifest was unchanged by this approval step. The campaign identity was
+recorded from clean commit `292fe0943810cbfbf4f3a7f08fe87626d4999173`.
+
+The supervisor then invoked one fresh calibration with 16 workers, no retries,
+the existing `nova-toll-dev` AWS/SSM path, a cumulative $17 execution ceiling,
+and a $3 confirmation reserve. Its immediate predecessor was the old campaign
+`r3b`, carrying exactly $6.555343780. All 135 reference rows failed in the judge
+construction phase with `TokenRetrievalError`, before any model call started.
+A separate credential-resolution diagnostic confirmed the same development
+token retrieval failure without displaying credentials. No actor assessment or
+application verdict was measured. The empty disagreement list therefore does
+not represent calibration agreement, and no calibration approval was written.
+
+| Phase | Coverage / result | Pass^3 | Eval cost |
+| --- | --- | ---: | ---: |
+| Carried seven prior full runs | 2,100 completed attempts; all usage known | Not comparable | $6.555343780 |
+| Corrected contract review | Accepted offline | Not measured | $0.000000000 |
+| Fresh calibration | 135/135 measurement failures; zero model calls | Not applicable | $0.000000000 |
+| Baseline, candidates, confirmation | Not started | Not measured | $0.000000000 |
+| Cumulative accounting | No new model usage | No new result | **$6.555343780 / $20** |
+
+All seven prior journals were reconciled again against raw token usage and their
+spending chain. Calibration has zero model-started and model-finished events,
+so its zero cost is known, not estimated or missing usage. Remaining budget is
+$13.444656220. Historical calibration/pilot and Codex agent usage remain excluded
+exactly as authorized; the separate stopped pilot was not accessed. The failed
+calibration is now the latest accounted run and must be the predecessor of any
+subsequently authorized run. Its evidence digest is
+`3ad5980dc4f929c4d76f867a74684f7364ce832c788c24e20c6bfb6ac99716f3`.
+
+Validation passed: all 100 development cases, 82 focused tests, eight comparison
+checks, and then all seven lifecycle/entrypoint tests plus Ruff after the narrow
+approval update. Independent review also ran the 82 tests and eight comparison
+checks. These checks validate the contract, not application performance.
+
+Decision: stop for the new infrastructure/measurement failure, preserving the
+failed calibration and all original verdict/reference inputs. No replacement
+calibration, retry, baseline, candidate, promotion, or confirmation was run.
+The original application remains unchanged. Restore development authentication
+and explicitly direct subsequent calibration execution before continuation;
+do not reuse prior approval or overwrite this failed attempt. Detailed review,
+schemas, identity, accounting, and raw calibration evidence remain ignored and
+private. This session performed no push, PR, merge, deployment, production access,
+or release qualification.
