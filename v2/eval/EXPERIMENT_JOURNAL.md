@@ -2065,3 +2065,56 @@ agent-caused mistake that could affect valid unavailability paths. Before any
 3.3.8 paid run, the bounded preparation also clarifies that distinction and the
 need to respect the delivered refusal of alternatives, preserving all other
 applicable obligations. The original failed report remains unchanged.
+
+### 2026-09-25 — Final preparation calibration and reliability stop
+
+Corpus **3.3.8** / harness **2.3.8** clarifies normal successful status versus
+material restrictions, and permitted discovery unavailability versus an
+agent-caused failure after the delivered user declines alternatives. Independent
+preparation review cleared these bounded changes before measurement at
+`3af9d9f`. Application, actor prompt, models, schemas, reference payloads and
+labels remained frozen. Preparation approval does not approve calibration or
+claim human trajectory adjudication.
+
+The predetermined sequence was two full calibrations followed by a matching
+300-trial actor check, with independent review between admissions. The first
+calibration completed all **146 references and 438 calls**, with complete known
+usage, no measurement failures and 16 workers. Outcome agreed on **142/143**
+valid references; Grounding and Rules each agreed on **143/143**; actor validity
+agreed on **146/146**. The two newly clarified mechanisms were correctly graded
+in this run. These fixed, exposed references do not establish reliability on
+unseen application trajectories.
+
+The remaining false Outcome failure treats a recognizable road abbreviation as
+an internal endpoint ID despite an explicit existing rule accepting that
+rendering. Other references with the same presentation pass in this batch.
+Independent review confirms existing-policy noncompliance, not a reference-label
+defect or a missing domain rule. Another wording-only exemption is not justified;
+the failed verdict and reference label remain unchanged.
+
+The independent audit covered all 94 nonempty assessments, 27 historically
+problematic references, eight additional passing or boundary contrasts, and all
+three actor-invalid exclusions. It found no additional material grading error.
+All 146 trajectories and expected labels match the frozen references; semantic
+identity, evidence digest and accounting reconcile. The previously documented
+caveat ambiguity in one excluded reference remains unlabeled and does not become
+an application approval.
+
+**Decision: stop dependent paid admission and open the preparation PR for code
+review, with baseline readiness explicitly blocked.** The calibration remains
+unapproved; its planned repeat and matching actor check were not run. The earlier
+300/300 actor result belongs to contract 3.3.7 and is not transferred as final
+contract qualification. No application baseline, candidate search, holdout
+evaluation, merge, migration or deployment occurred. Reviewed merge and deployed
+catalog parity remain gates for the later climb.
+
+Independent code review found no material defect. All 150 relevant runner,
+development, corpus and retirement tests passed, alongside comparison, corpus,
+lint/format/type, workflow, skill and contract-version checks. An offline exercise
+of the actual baseline admission path confirmed that the unapproved calibration
+is rejected before run creation, credentials or model calls. Raw evidence and
+detailed reviews remain private.
+
+This calibration cost **$0.291537200**, bringing cumulative accounted evaluation
+spending to **$15.675228375**. Explicit uncapped authorization remained in effect;
+the stop is for grading reliability, not budget.
