@@ -2055,3 +2055,13 @@ This sequence cost **$0.865097000**, bringing cumulative accounted evaluation
 spending to **$15.383691175**. Raw run evidence remains private. Preparation is
 continuing under Ryan's authorization; reviewed merge and deployed catalog parity
 remain prerequisites for a later climb.
+
+Supplemental semantic review of the excluded route-alternatives row identified
+an unsupported Outcome failure: the judge acknowledges the permitted discovery
+call but still demands an estimate after the delivered user declines its returned
+alternatives. This does not create a new expected label or change the actor
+exclusion. It does expose confusion between expected validation failure and an
+agent-caused mistake that could affect valid unavailability paths. Before any
+3.3.8 paid run, the bounded preparation also clarifies that distinction and the
+need to respect the delivered refusal of alternatives, preserving all other
+applicable obligations. The original failed report remains unchanged.
