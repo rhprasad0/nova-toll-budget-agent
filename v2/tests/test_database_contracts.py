@@ -160,3 +160,31 @@ def test_unknown_internal_profile_is_rejected(
     with pytest.raises(ValueError, match="profile"):
         contracts.run_contracts(sources[1], "typo")
     assert not calls
+
+
+def test_retained_version_adaptation_preserves_behavior_and_fails_closed() -> None:
+    old = b"(SELECT version FROM oracle.schema_version WHERE singleton) <> '1.15.0'"
+    new = old.replace(b"1.15.0", b"1.15.1")
+    source = (
+        b"-- behavioral marker 1.15.0\nIF "
+        + old
+        + b" THEN RAISE EXCEPTION 'wrong version'; END IF;"
+    )
+    candidate = b"IF " + new + b" THEN RAISE EXCEPTION 'new behavior'; END IF;"
+    assert contracts.retained_version_guard(source, candidate) == source.replace(
+        old, new
+    )
+    for malformed in (b"SELECT 1", old + old):
+        with pytest.raises(ValueError, match="exactly one"):
+            contracts.retained_version_guard(malformed, candidate)
+        with pytest.raises(ValueError, match="exactly one"):
+            contracts.retained_version_guard(source, malformed)
+
+
+def test_malformed_retained_guard_fails_before_sql(
+    sources: tuple[Path, Path], calls: list[list[str]]
+) -> None:
+    (sources[1] / "oracle_restore_contract.sql").write_text("SELECT 2;\n")
+    with pytest.raises(ValueError, match="exactly one"):
+        contracts.run_contracts(sources[1], "full")
+    assert calls == []
