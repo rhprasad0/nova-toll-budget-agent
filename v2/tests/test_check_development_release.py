@@ -555,7 +555,7 @@ def test_canary_contract_versions_match_trusted_runtime_sources() -> None:
     assert check._canary_contract() == {
         "model": "gpt-6-luna",
         "tool_contract": "1.5.1",
-        "prompt_version": "2.3.8",
+        "prompt_version": "2.3.9",
         "renderer_version": "1.0.0",
     }
 

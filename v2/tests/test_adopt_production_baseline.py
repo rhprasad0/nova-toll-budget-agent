@@ -105,7 +105,7 @@ def test_adoption_selects_only_current_canonical_rows() -> None:
     assert {
         (baseline.schema, baseline.version)
         for baseline in adopt.load_baseline_manifest()
-    } == {("pricing", "1.4.0"), ("oracle", "1.15.0")}
+    } == {("pricing", "1.4.0"), ("oracle", "1.15.1")}
 
 
 @pytest.mark.parametrize(
