@@ -1,10 +1,9 @@
 # TollChat evaluation
 
-**Current contract: 3.0.6 / harness 2.0.13.** Calibration 9 matched all **396
-application labels and 135 actor labels**, with zero disagreements. The latest
-application baseline remains the 3.0.5 measurement: **206 passed, 93 failed, one
-inconclusive** out of 300 trials (68.9% of 299 scored trials). No baseline has run
-on 3.0.6. This exposed development corpus cannot qualify production.
+**Current contract: 3.0.6 / harness 2.0.13.** A full three-trial application
+baseline has run on this contract. See the experiment journal for calibration,
+results, inconclusives, and independent review. This exposed development corpus
+cannot qualify production.
 
 The [experiment journal](EXPERIMENT_JOURNAL.md) is the record of what was tried,
 results, limitations, costs, and decisions. Publish summaries there; keep granular
