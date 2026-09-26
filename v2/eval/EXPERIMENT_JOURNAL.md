@@ -2330,3 +2330,61 @@ these limitations and follow-up work unresolved:
 These objections do not show that the model is wrong. They limit the accuracy
 claims supported by this historical study; modeled labels and withholding an
 estimate when the view has no eligible row remain required.
+
+## 2026-09-26 — Adversarial-review fixes before the next climb
+
+Ryan authorized the review fixes and a ready-for-review PR. The deterministic
+money check rejected a supported “$2.50 decrease” while accepting “decreased by
+$2.50” against the same negative movement evidence. Contract **3.3.10 / harness
+2.3.10** now recognizes decrease, drop and reduction after an amount. Focused
+regressions retain rejection of wrong signs, wrong amounts and an unsupported
+absolute price. Cases, calibration references, fixtures, tool schemas and model
+settings are unchanged. The corpus review is **pending**; old approvals do not
+transfer, and new calibration is required before an application run.
+
+The climb now names **270/300 successful trials (90%) on fresh confirmation** as
+the development target, requires all trials valid and measured for that milestone,
+and reports per-case success/scoring/violation counts. Existing numeric promotion
+and violation gates remain unchanged. Review distinguishes demonstrated regressions
+from sampling uncertainty using all three trials and the unchanged-application
+repeatability pair. Fresh trajectory audits include passing and failing examples
+from each coverage family, actor exclusions and new violations. A failed final
+confirmation is retained without retrying for a favorable score. Later campaigns
+require authorization and preserve cumulative spending.
+
+Application SOP **2.3.10** clarifies call limits within an assistant turn versus
+new user-authorized requests, preserves the Washington correction and consent
+rules, and scopes annual presentation instructions explicitly to annual success.
+The change has no measured application-performance result. Luna remains low/2048
+for the application, medium/2048 for actors and xhigh/8192 for judges. Capacity
+experiments, broader route-resolution changes and separating actor/Outcome judge
+calls remain deferred until fresh trajectory evidence justifies them. Frozen
+replay still does not establish live pricing or deployment correctness.
+
+**Offline validation:** 187 focused harness, corpus, retirement, agent and tool
+contract tests passed; all 12 comparison checks passed. Corpus validation, skill
+validation, Ruff, strict Pyright and agent/tool manifest advancement checks passed.
+The 100 cases, 146 references and 107 fixtures retain their prior data hashes.
+No paid model calls, calibration, application baseline, holdout access, migration
+or deployment occurred. Incremental evaluation cost: **$0**. Historical costs and
+results above are unchanged. The 80% independent holdout requirement remains a
+separate qualification step.
+
+### 2026-09-26 — PR package-verification correction
+
+The first PR build rejected the unchanged delivery manifest after the SOP and
+agent-version edit. Rebuilt the packages and refreshed the two changed source
+digests plus `agentcore.zip` and `timed-checks.zip` digests; the other package
+digests are unchanged. The local release verifier accepted the rebuilt inputs
+and packages, and all 19 manifest tests passed. This is credential-free build
+validation, with no delivery authorization or application-performance claim.
+
+The subsequent read-only plan correctly rejected the old shared-package
+compatibility record. Bound development compatibility to CI's observed serving
+release `9d04cc7` and the rebuilt scheduled-check package. Database schemas,
+loader/publisher/scheduled-check handlers and pinned requirements are unchanged
+from that release; the application changes are the reviewed SOP and version
+constant. The five compatibility checks passed against the retained production
+and updated development baselines; all 120 shared-package checks also passed.
+The release verifier accepts the updated binding. Production baseline and
+delivery approvals remain unchanged.
