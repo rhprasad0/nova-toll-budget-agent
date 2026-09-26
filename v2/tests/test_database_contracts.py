@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.fixture
 def sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     monkeypatch.delenv("DB_CONTRACT_DIAGNOSTICS", raising=False)
+    monkeypatch.delenv("DB_CONTRACT_IDENTITY", raising=False)
     current, retained = tmp_path / "candidate", tmp_path / "retained"
     for directory in (current, retained):
         directory.mkdir()
@@ -85,6 +86,35 @@ def test_fast_keeps_targeted_contracts_and_disables_exhaustive_blocks(
         "oracle_report_contract.sql" in " ".join(command) for command in calls
     )
     assert any("oracle_fast_contract.sql" in " ".join(command) for command in calls)
+
+
+@pytest.mark.parametrize("profile", ["fast", "full"])
+def test_isolated_identities_preserve_the_complete_contract_sequence(
+    sources: tuple[Path, Path],
+    calls: list[list[str]],
+    monkeypatch: pytest.MonkeyPatch,
+    profile: str,
+) -> None:
+    _, retained = sources
+    (retained / "oracle_route_contract.sql").write_text("SELECT 2;\n")
+    contracts.run_contracts(retained, profile)
+    complete = calls.copy()
+    calls.clear()
+    for identity in ("retained", "candidate"):
+        monkeypatch.setenv("DB_CONTRACT_IDENTITY", identity)
+        contracts.run_contracts(retained, profile)
+    assert calls == complete
+
+
+def test_unknown_identity_fails_before_any_contract(
+    sources: tuple[Path, Path],
+    calls: list[list[str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DB_CONTRACT_IDENTITY", "typo")
+    with pytest.raises(ValueError, match="DB_CONTRACT_IDENTITY"):
+        contracts.run_contracts(sources[1], "full")
+    assert calls == []
 
 
 @pytest.mark.parametrize("identity", [0, 1])

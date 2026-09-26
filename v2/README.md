@@ -190,6 +190,14 @@ bootstrap, migration, rollback, privilege, retirement, and adoption checks. Both
 profiles require the same empty disposable cluster. Contract logs identify the
 profile, retained/candidate version, elapsed seconds, and outcome. Identical
 retained and candidate contracts run once; changed versions both run.
+The disposable test sessions disable PostgreSQL JIT to avoid repeated compilation
+of small route queries and refresh fixture statistics before running contracts.
+See the [profiling results](eval/EXPERIMENT_JOURNAL.md).
+Full PR CI runs retained and candidate contracts concurrently in separate
+PostGIS services on the same runner. Each service repeats the disposable setup
+and migration checks; either worker failing fails the job. Fast CI and local
+runs keep both identities in one service. `DB_CONTRACT_IDENTITY` defaults to
+`all`; CI selects `retained` and `candidate` for the isolated workers.
 
 To profile the same contracts, set `DB_CONTRACT_DIAGNOSTICS=timing` before
 running the command above. Statement timings are printed with contract identity

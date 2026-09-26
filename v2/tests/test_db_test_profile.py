@@ -1,11 +1,68 @@
 """Profile selection is conservative, including unusual filenames and deletions."""
 
+import os
 import subprocess
+import textwrap
 from pathlib import Path
 
 import pytest
 
 from scripts.select_db_test_profile import select_profile
+
+
+@pytest.mark.parametrize(
+    ("profile", "retained_exit", "candidate_exit"),
+    [("full", 0, 0), ("full", 7, 0), ("full", 0, 9), ("full", 7, 9), ("fast", 7, 0)],
+)
+def test_ci_workers_use_separate_targets_and_fail_if_either_fails(
+    tmp_path: Path, profile: str, retained_exit: int, candidate_exit: int
+) -> None:
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    ).read_text()
+    step = workflow.split("- name: Validate disposable database contracts\n", 1)[1]
+    script = textwrap.dedent(step.split("run: |\n", 1)[1].split("        env:\n", 1)[0])
+    runner = tmp_path / "v2/scripts/run_db_tests.sh"
+    runner.parent.mkdir(parents=True)
+    runner.write_text(
+        "#!/usr/bin/env bash\nset -eu\n"
+        'echo "worker=$DB_CONTRACT_IDENTITY"\n'
+        'if [[ "$DB_CONTRACT_IDENTITY" == retained ]]; then\n'
+        '  test "$PGPORT:$POSTGRES_CONTAINER_ID" = 5433:retained\n'
+        '  exit "$RETAINED_EXIT"\n'
+        "fi\n"
+        'test "$PGPORT:$POSTGRES_CONTAINER_ID" = 5432:candidate\n'
+        'exit "$CANDIDATE_EXIT"\n'
+    )
+    runner.chmod(0o755)
+    result = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", script],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "RUNNER_TEMP": str(tmp_path),
+            "DATABASE_PROFILE": profile,
+            "SCHEMA_BASE_REF": "base",
+            "DB_CONTRACT_IDENTITY": "all",
+            "PGPORT": "5432",
+            "POSTGRES_CONTAINER_ID": "candidate",
+            "RETAINED_POSTGRES_CONTAINER_ID": "retained",
+            "RETAINED_EXIT": str(retained_exit),
+            "CANDIDATE_EXIT": str(candidate_exit),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert bool(result.returncode) == bool(
+        candidate_exit or (profile == "full" and retained_exit)
+    ), result.stderr
+    workers = sorted(
+        line for line in result.stdout.splitlines() if line.startswith("worker=")
+    )
+    assert workers == (
+        ["worker=candidate", "worker=retained"] if profile == "full" else ["worker=all"]
+    )
 
 
 def git(repo: Path, *args: str) -> str:

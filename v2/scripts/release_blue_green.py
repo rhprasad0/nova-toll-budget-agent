@@ -348,7 +348,7 @@ def shared_readiness(expected: dict[str, Any], *, wait: bool = True) -> dict[str
                 ):
                     statuses[component] = "unknown"
                     pending = True
-            if not pending or attempt == 59 or time.monotonic() >= deadline:
+            if not wait or not pending or attempt == 59 or time.monotonic() >= deadline:
                 break
             time.sleep(10)
         timing["ok"] = all(status == "verified" for status in statuses.values())

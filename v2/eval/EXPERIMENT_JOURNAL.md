@@ -2574,3 +2574,171 @@ other normal PR checks and final cleanup validation. Billing was not queried;
 no third-party runner was purchased. The initial PR also ran its existing
 read-only development plan and browser checks. Raw logs, metadata, and analysis
 remain ignored locally; this journal is the aggregate experiment record.
+
+### 2026-09-26 — Disable JIT in disposable CI databases
+
+**Purpose:** follow the CI profile with controlled changes to JIT, planner row
+estimates, fixture statistics, and isolated contract workers. PR #615 is stacked
+on profiling PR #614. The initial implementation (`18fa5ad`, manifest correction
+`80d7fe3`) disables JIT only after the test runner verifies an empty disposable
+PostGIS cluster. It also removes the retry sleep from
+`shared_readiness(wait=False)`; waiting calls retain their retry behavior.
+
+**Controlled report probe:** schema and fixture source `1b53c5d` (Oracle 1.15.1,
+pricing 1.4.0), PostgreSQL 17.5/PostGIS 3.5, local cached image config
+`624f5195b91d424dbebf018890148cc0e5a3e80db5467da8b53cc2ed2ce49216`.
+The same Ryzen 7 5800X host ran each SQL sample sequentially in a fresh container,
+with warm host/image caches and no CPU or memory limit. Shared buffers remained
+128 MiB and work memory 4 MiB. Each sample installed the canonical schema,
+inserted the report contract's two direction rows, assumed `report_publisher`,
+and materialized `get_i95_i495_report_inputs()`; all returned 829 rows.
+Two repetitions per variant, with no `auto_explain` instrumentation:
+
+| Fixture/planner variant | JIT on median (range), seconds | JIT off median (range), seconds |
+| --- | ---: | ---: |
+| Fresh schema, default function row estimates | 16.62 (16.54–16.69) | 16.26 (15.84–16.69) |
+| Fresh schema, five single-row route functions estimated as `ROWS 1` | 15.24 (15.14–15.34) | 15.86 (15.64–16.09) |
+| Analyze graph tables and the two-row I-95 fixture | 86.90 (84.60–89.21) | 7.65 (7.53–7.78) |
+| Analyze those tables and apply the same `ROWS 1` estimates | 87.48 (84.30–90.67) | 7.33 (7.08–7.58) |
+
+Statistics changed the effect of JIT substantially: turning JIT off reduced the
+analyzed report median by 91.2%, while it barely changed the fresh-schema probe.
+Correcting function row estimates alone did not remove the slow case. These
+are query probes, not full-suite or hosted speedup claims. Elapsed times include
+the small fixture/setup commands in the query session. Two observations cannot
+establish tail latency; host caches were warm, and these synthetic data do not
+establish the best JIT setting for deployed workloads. An initial probe setup
+used a nonexistent table name and failed before the measured query; it was
+corrected and excluded.
+
+**Loader check:** the same 120 shared-package tests passed before and after the
+readiness fix: 11.01 s before, 0.96 s after. The existing failure-path test now
+asserts that `wait=False` never sleeps; the transient-error test still checks a
+10-second retry for waiting calls. The combined focused database/profile and
+shared-package checks passed (182 tests), as did Ruff, Pyright, ShellCheck,
+schema-version validation, secret scanning, and 19 release-manifest tests.
+The first hosted attempt found the changed readiness script's stale deployment
+input checksum; only that checksum was refreshed before retesting.
+
+**Decision at this stage:** keep the disposable JIT setting and readiness fix;
+do not change deployed settings or add a schema migration for `ROWS 1` based on
+these results. Full-suite comparisons and the isolated-worker experiment follow
+below before the final decision. Raw drivers, SQL output and logs stay in ignored
+`v2/eval/private/ci-optimization/`. The report probes used about 8.5 minutes of
+query-session wall time locally, plus container setup. No provider was purchased
+and no deployed database was changed. Hosted runner usage is reported with the
+completed comparisons below; billing has not been queried.
+
+**Full-suite follow-up:** one sequential local run per variant, each using a
+fresh container, the same image/host/settings as the probes, no optional
+instrumentation, and `--profile full`. The control ran the unchanged `1b53c5d`
+worktree; the candidate used the JIT/readiness changes above. The final variant
+added one `ANALYZE` after fixture/bootstrap preparation and before the retained
+and candidate contracts. All bootstrap, migration, negative, role, rollback,
+retirement, retained, and candidate checks passed.
+
+| Local full database script | Wall time | Report contracts combined | Route/pricing contracts combined |
+| --- | ---: | ---: | ---: |
+| Control, JIT on | 556.47 s | 342.87 s | 182.99 s |
+| JIT off | 310.91 s | 97.13 s | 183.48 s |
+| JIT off plus statistics refresh | 242.87 s | 67.63 s | 145.43 s |
+
+JIT off cut the full local run by 44.1%; adding statistics refresh cut a further
+21.9% (56.4% below the control). This full-suite comparison has one observation
+per variant, so these are measured examples, not stable tail estimates. The
+report probe's repeated observations support the JIT effect separately. The
+statistics-only probe with JIT on was slower; the retained fix uses both together.
+The tested statistics refresh is now included in the candidate.
+
+Before that additional refresh, the ordinary hosted CI at `80d7fe3` and
+`d98f7fd` passed all 14 checks. Runs `36266028206` and `36266519238` used the same
+executable candidate; the second commit added only the journal. Database jobs
+were 353 and 354 s; loader jobs were 252 and 234 s, with 2,092 tests passed,
+8 skipped and 23 deselected in each. Database jobs used the full profile and
+ordinary merge checkout. Parent PR #614's most recent unchanged run took 917 s
+for the database job. These hosted observations were not paired on a fixed CPU,
+so the local controlled comparison is the stronger causal evidence. The two
+completed hosted database/loader pairs consumed about 19.9 runner-minutes;
+other CI checks and the initial interrupted attempt are additional. The revised
+statistics setting and worker trial are still being validated below.
+
+Correction (2026-09-26): the combined report-contract time in the local
+statistics-refresh row above is **66.98 s**, not 67.63 s. Script wall time and
+route/pricing totals are unchanged.
+
+**Isolated workers:** with JIT off and initial statistics refreshed, the contract
+harness passed twice sequentially and twice with retained/candidate identities
+running concurrently in separate fresh PostGIS clusters. Total container CPU
+quota stayed at four cores: one four-core container or two two-core containers.
+The same canonical schema, retained ref and candidate SQL were used; identical
+retained contracts still ran only under the candidate identity. Order was
+serial/parallel, then parallel/serial. This harness includes canonical setup and
+container teardown, but excludes the full migration/adoption test sequence.
+
+| Contract harness | Median wall time | Range |
+| --- | ---: | ---: |
+| One worker, four-core quota | 210.10 s | 207.78–212.42 s |
+| Two isolated workers, two cores each | 114.18 s | 112.32–116.04 s |
+
+Concurrent execution reduced this phase by 45.7%. A concurrent Docker sample
+showed roughly 101% and 116% CPU for the two servers; this demonstrates separate
+SQL sessions using multiple cores, not parallel execution inside one query.
+All 17 executed retained/candidate contract identities passed in each mode.
+Raw records and the source-local harness remain ignored. The four trials used
+about 10.8 minutes of local elapsed time, including container setup/teardown.
+
+**Implementation decision:** split full PR CI's retained and candidate contract
+identities across two native PostGIS services on the existing runner. Both run
+the full disposable setup, migration, adoption and negative checks independently;
+there is no shared database or role catalog. The job waits for both and propagates
+either failure. Fast-profile and ordinary local invocations execute both
+identities in one worker; CI still starts its second service in the fast profile,
+so there is a small extra container-startup cost there. Development delivery
+continues to run its complete default single-worker validation. Focused checks
+verify the partition preserves the complete command sequence and exercise the
+actual workflow shell with each worker failing, both failing, and fast mode.
+The complete two-container workflow still requires the final validation below.
+
+The hosted JIT-off/statistics follow-up in run `36267052966` (`c4bd47d`) passed all
+14 checks: database 347 s and loader 191 s. Its database timing did not reproduce
+the local statistics speedup on a different hosted allocation; these unpaired
+hosted observations cannot isolate CPU or planner-state variation. That pair
+used about 9.0 additional runner-minutes. The final concurrent version is tested
+separately; earlier serial samples are not pooled with it.
+
+**Final concurrent validation (`0a73696a`):** the actual workflow shell passed
+locally against two fresh containers in **131.72 s**, including both complete
+setup/migration sequences and both disposable adoption tests. The harness used
+assigned loopback ports instead of CI's fixed ports to preserve an unrelated
+local service. Its log contained exactly the expected 17 unique passed contract
+identities, no failed contracts, and two passed adoption tests. This is 76.3%
+below the 556.47 s local original control and 45.8% below the 242.87 s tuned
+single-worker run. These full-workflow timings each have one observation; the
+two repeated contract-only trials above support the concurrency effect.
+
+Hosted run `36267885271` passed all 14 required checks on the concurrent change.
+The database job took **216 s (3m36s)** and the loader job **242 s (4m02s)**;
+the loader became the longer job. Both worker adoption tests passed and the
+full retained/candidate contract set passed. Container initialization was 18 s,
+compared with 16 s in the preceding single-service run; this is an observation
+on different hosted allocations, not a controlled startup benchmark. This pair
+used about 7.6 runner-minutes. All four completed optimization-stage hosted
+database/loader pairs together used about 36.5 runner-minutes, excluding other
+checks, the initially interrupted run and subsequent documentation-only CI.
+No third-party runner was purchased and billing was not queried.
+
+The final focused suite passed 190 tests. Repository-wide Ruff, formatting,
+Pyright, ESLint, TypeScript, shell and workflow checks passed after installing
+the existing locked JavaScript dependencies in the new worktree. No new
+dependency was added. The existing review request for controlled evidence was
+resolved after publishing the aggregate results. Raw output remains ignored,
+all experiment containers were removed, and the unrelated local database was
+left untouched. Subsequent journal/comment-only commits rerun ordinary CI and
+are excluded from the executable performance comparison.
+
+**Final decision:** retain JIT off, refreshed fixture statistics, two isolated
+full-CI contract workers, and the no-wait readiness fix. Keep default local and
+development-delivery validation serial and complete. Do not add SQL migrations,
+parallel-safety declarations or function row-estimate changes on this evidence.
+Hosted variation still limits hardware comparisons; these results do not
+establish a Depot or Blacksmith speedup or a deployed-database tuning policy.

@@ -56,6 +56,8 @@ require_disposable_cluster() {
 }
 
 require_disposable_cluster
+# Compiling repeated small route queries costs more than executing them.
+export PGOPTIONS="${PGOPTIONS:-} -c jit=off"
 export NOVA_TOLL_EXPECTED_RDS_ENDPOINT="${PGHOST:-localhost}"
 if [[ "$base_ref" == "0000000000000000000000000000000000000000" ]]; then
   # Keep replaying upgrades from migration 026's declared 1.2.0 source.
@@ -918,6 +920,8 @@ BEGIN
 END $$;
 UPDATE pricing.schema_version SET version = '1.3.0' WHERE singleton;
 SQL
+# Refresh statistics for the populated fixtures before planning contract queries.
+psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 --command ANALYZE
 # Run the reviewed serving baseline and candidate contracts against the same
 # upgraded disposable schema. Fixtures roll back data; never downgrade schemas.
 retained_contract_ref="$(python3 -c 'import json; print(json.load(open("v2/scripts/shared-package-compatibility.json"))["baseline"])')"
