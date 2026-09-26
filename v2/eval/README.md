@@ -17,8 +17,9 @@ The Tysons round-trip contract distinguishes route-ID mapping from user consent.
 Contract 3.3.19 clarifies result-qualified fallback statements, permits explicit
 whole-dollar restatements after exact amounts, specifies actor departure times,
 and reinforces Outcome checks for source contradictions. Six calibration
-regressions cover these findings. Fresh calibration and review are required;
-earlier approvals do not transfer. The experiment journal preserves prior results.
+regressions cover these findings. The single calibration is accepted with one
+documented Rules disagreement; independent corpus review admits fresh application
+preparation. The experiment journal preserves the findings and limits.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the
 [experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.
