@@ -23,10 +23,14 @@ Run identities and cost reservations record those role-specific limits. Legacy
 scheduled evaluation settings are separate from this golden contract.
 
 The replay validator also determines Rules failures for mismatched tool arguments
-and call ordering; a matching call still needs semantic consent/workflow review.
+and call ordering. It supplies field-level differences directly; the Rules judge
+assesses the remaining semantic consent/workflow obligations. A matching call
+does not establish user consent.
 Outcome receives applicable disclosure IDs for published current-price sources,
 peak current prices, and returned annual vehicle-cost assumptions. It supplies
 exact assistant quotes for each ID, or an empty list for a missing disclosure.
+The original assistant answers appear beside these requirements, followed by
+the full conversation and tool evidence for the remaining assessment.
 Code records every assistant turn containing each exact quote; the model does
 not assign turn numbers. User and tool text are excluded. Invalid IDs or quotes
 make the measurement unusable. The model judges the meaning of authentic quotes
@@ -35,7 +39,7 @@ in private evidence. This uses the existing three calls per calibration referenc
 
 ## Description-edit contract
 
-Contract 3.3.17 / harness 2.3.17 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.18 / harness 2.3.18 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including

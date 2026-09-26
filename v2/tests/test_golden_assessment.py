@@ -55,6 +55,92 @@ def test_rules_reuse_replay_for_rejected_arguments_and_discovery() -> None:
         run.mechanical_rules(case, attempt)
 
 
+def test_mechanical_findings_isolate_wrong_id_and_ignore_weekday_order() -> None:
+    case = golden_case(22)
+    example = next(
+        e
+        for e in run.development_examples()
+        if e.case_id == case.id and e.label == "good"
+    )
+    attempt = run.Attempt(
+        id="route", case_id=case.id, trial=1, turns=deepcopy(example.turns)
+    )
+    call = attempt.turns[-1].calls[0]
+    weekdays = call.input["weekdays"]
+    assert isinstance(weekdays, list)
+    call.input["weekdays"] = list(reversed(weekdays))
+    assert run.mechanical_rules(case, attempt) == []
+    outbound = call.input["outbound"]
+    assert isinstance(outbound, dict)
+    permitted = outbound["destination_point_id"]
+    outbound["destination_point_id"] = f"{permitted}9"
+    findings = run.mechanical_rules(case, attempt)
+    assert len(findings) == 1
+    assert json.loads(findings[0].evidence) == {
+        "turn": 2,
+        "error": "tool_arguments",
+        "differences": [
+            {
+                "field": "outbound.destination_point_id",
+                "actual": f"{permitted}9",
+                "permitted": permitted,
+            }
+        ],
+    }
+    assert run.argument_differences({"value": None}, {}) == [
+        {
+            "field": "value",
+            "actual": None,
+            "permitted": None,
+            "actual_present": True,
+            "permitted_present": False,
+        }
+    ]
+    assert run.argument_differences({}, {"value": None})[0]["actual_present"] is False
+
+
+def test_outcome_places_original_answers_beside_disclosure_requirements(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = golden_case(1)
+    answer = "**Assumed vehicle cost:** $0.685 per straight-line tolled mile.\nNot individualized."
+    attempt = run.Attempt(
+        id="answers",
+        case_id=case.id,
+        trial=1,
+        turns=[golden.Turn(user="USER ONLY", response=answer, calls=[])],
+    )
+    evaluator = Mock(
+        return_value=SimpleNamespace(
+            structured_output=run.OutcomeAssessment(
+                disclosures=[],
+                outcome=run.RequirementAssessment(
+                    evidence="Satisfied", unmet_requirements=[]
+                ),
+                actor_validity=run.ActorAssessment(
+                    status="valid", evidence="Consistent"
+                ),
+            )
+        )
+    )
+    monkeypatch.setattr(run, "Agent", Mock(return_value=evaluator))
+    run.assess_outcome(
+        case, attempt, Mock(spec=Model), "contract", "FULL TOOL EVIDENCE"
+    )
+    prompt = evaluator.call_args.args[0]
+    block = prompt.split("ASSISTANT ANSWERS", 1)[1].split("DISCLOSURE ASSESSMENT", 1)[0]
+    assert (
+        answer in block
+        and "USER ONLY" not in block
+        and "FULL TOOL EVIDENCE" not in block
+    )
+    assert (
+        prompt.index("COMPILED DISCLOSURE REQUIREMENTS")
+        < prompt.index("ASSISTANT ANSWERS")
+        < prompt.index("FULL TOOL EVIDENCE")
+    )
+
+
 @pytest.mark.parametrize("period,expected", [("peak", 2), ("off_peak", 1)])
 def test_schedule_disclosure_applicability(period: str, expected: int) -> None:
     call = golden.Call(
