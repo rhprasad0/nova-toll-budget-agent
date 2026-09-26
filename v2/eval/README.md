@@ -1,6 +1,6 @@
 # TollChat evaluation
 
-**Current contract: 3.3.18 / harness 2.3.18.** Future development climbs optimize
+**Current contract: 3.3.19 / harness 2.3.19.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
@@ -14,10 +14,11 @@ assistant quotes for applicable schedule and vehicle-cost disclosures. Code
 locates every matching assistant turn. Disclosure requirements appear beside the
 original assistant answers; replay failures identify the differing fields.
 The Tysons round-trip contract distinguishes route-ID mapping from user consent.
-The three-calibration sequence is accepted. Ryan adjudicated the documented
-exceptions in runs 1 and 2; run 3 passed independent review with full label
-agreement. The experiment journal preserves the findings and limits.
-Earlier approvals do not transfer.
+Contract 3.3.19 clarifies result-qualified fallback statements, permits explicit
+whole-dollar restatements after exact amounts, specifies actor departure times,
+and reinforces Outcome checks for source contradictions. Six calibration
+regressions cover these findings. Fresh calibration and review are required;
+earlier approvals do not transfer. The experiment journal preserves prior results.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the
 [experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.
@@ -33,7 +34,7 @@ output in ignored `eval/private/` or the existing private workflow store.
 ## Frozen golden evaluation
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
-  147 labeled references, 107 synthetic fixtures, and five-turn actors.
+  153 labeled references, 107 synthetic fixtures, and five-turn actors.
 - [Private authoring kit](HOLDOUT_AUTHORING.md): public instructions and an offline
   validator for independently authored private cases; no held-out data is included.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, three-trial application

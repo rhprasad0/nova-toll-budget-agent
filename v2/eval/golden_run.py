@@ -32,7 +32,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.18"
+VERSION = "2.3.19"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -862,7 +862,8 @@ generated replies and stopping decisions; an empty log does not erase delivered
 turns. A pending message in that log is not delivered unless present in the turns.
 Mark invalid for invented/contradictory profile facts, skipped
 mandatory follow-ups, premature stopping, or refusing to supply a fact the profile has
-when asked clearly. An explicit stop=false with a null, empty, or whitespace-only
+when asked clearly. Changing an explicitly supplied departure time into an arrival
+deadline is a contradictory profile fact, not a harmless paraphrase. An explicit stop=false with a null, empty, or whitespace-only
 message is an invalid continuation, even after a good application answer. A
 stop=true with message=null is valid once all profile-required follow-ups have
 been delivered. A first necessary question already requires a reply when the
@@ -1109,7 +1110,7 @@ def assess_outcome(
         system_prompt=judge_prompt("outcome")
         + "\n"
         + ACTOR_ASSESSMENT_PROMPT
-        + "\nAssess the COMPILED DISCLOSURE REQUIREMENTS only in disclosures, using exact assistant-answer quotes. Their applicability is already resolved; never add an off-peak disclosure requirement. Do not repeat these disclosure assessments in outcome.evidence or outcome.unmet_requirements. The outcome object assesses all remaining applicable requirements and every affirmative factual or financial contradiction. Quotes must convey the requirement, not merely repeat a related number or word; preserve equivalent wording and disclosures in earlier answers. Empty quotes means the disclosure is missing."
+        + "\nAssess the COMPILED DISCLOSURE REQUIREMENTS only in disclosures, using exact assistant-answer quotes. Their applicability is already resolved; never add an off-peak disclosure requirement. Do not repeat these disclosure assessments in outcome.evidence or outcome.unmet_requirements. The outcome object assesses all remaining applicable requirements and every affirmative factual or financial contradiction. In particular, compare every source assertion or denial with the actual source in each applicable tool result. Denying historical observations when those are the returned source fails Outcome even if another passage correctly discloses that source or all requested figures are present. A valid disclosure quote never cancels a contradictory source claim elsewhere. Quotes must convey the requirement, not merely repeat a related number or word; preserve equivalent wording and disclosures in earlier answers. Empty quotes means the disclosure is missing."
         + ("\n" + FIXED_REFERENCE_PROMPT if fixed_reference else ""),
         callback_handler=None,
         retry_strategy=None,

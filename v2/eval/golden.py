@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.18"
+CORPUS_VERSION = "3.3.19"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -70,6 +70,8 @@ ACTOR_PROMPT = """Speak as the driver described below, in first person.
 Use your initial request and supplied profile facts together. Profile omissions
 do not retract facts from your initial request. Only explicit correction or
 selection instructions change those facts. Answer questions briefly and naturally. Follow
+the supplied time roles: a departure time is not an arrival deadline, and a known
+departure time must be supplied when asked rather than described as unknown. Follow
 any stated correction or selection instructions before stopping. When one assistant
 turn triggers multiple profile-required actions, deliver all of them together in
 your next message. Do not defer part of that response to another reply or perform
@@ -168,6 +170,16 @@ Actual claims about personal tax treatment still require evidence.
 Check every affirmative financial claim, including prose appended after a correct
 table. Correct figures elsewhere do not cancel a contradictory amount or label;
 such a contradiction also fails Outcome even when the requested table is complete.
+A clearly qualified nearest-whole-dollar restatement (for example, 'about $125'
+after the supported $125.20) is acceptable after the exact amount has been given.
+Preserve the amount's sign, financial meaning, period and scenario. This does not
+permit invented amounts, rounding small charges to zero, or unqualified replacements.
+Fallback eligibility is a workflow conclusion supported by the returned fields
+and the SOP. If no returned gap has fallback_required=true with an allowed role
+and boundary, saying no qualifying I-495-only fallback is available for this result
+is supported, just as saying no eligible fallback was returned is supported.
+Neither statement claims that all physical alternative routes are impossible.
+An unqualified claim that no alternative route exists still needs route evidence.
 Only when the user requests official closure proof, the response must explain that no official notice
 was supplied, preserve non-affiliation, and refer to official channels without
 claiming verified proof; matching a template is unnecessary.
@@ -643,7 +655,7 @@ class Replay:
         )
 
 
-def money(text: str) -> set[Decimal]:
+def _money_text(text: str) -> str:
     # Emphasis can straddle the movement word and amount.
     text = re.sub(r"[*_`]", "", text)
     # Reuse signed currency parsing; also accept common salary shorthand.
@@ -678,11 +690,45 @@ def money(text: str) -> set[Decimal]:
         text,
         flags=re.IGNORECASE,
     )
+    return text
+
+
+def money(text: str) -> set[Decimal]:
+    text = _money_text(text)
     return {
         currency_decimal(match)
         * (1000 if text[match.end() : match.end() + 1].lower() == "k" else 1)
         for match in CURRENCY_PATTERN.finditer(text)
     }
+
+
+def unsupported_money(
+    text: str, allowed: set[Decimal], reported: set[Decimal] | None = None
+) -> set[Decimal]:
+    text = _money_text(text)
+
+    def restatement(match: re.Match[str]) -> str:
+        amount = currency_decimal(match)
+        # ponytail: only explicit whole-dollar restatements after an exact amount;
+        # broader rounding needs labeled examples and a separate policy decision.
+        if "." not in match["amount"] and amount != 0:
+            quoted = (money(text[: match.start()]) | (reported or set())) & allowed
+            if any(
+                v.quantize(Decimal("1"), rounding=ROUND_HALF_UP) == amount
+                for v in quoted
+            ):
+                return "[rounded restatement]"
+        return match[0]
+
+    remaining = re.sub(
+        r"\b(?:about|approximately|roughly|around)\s+"
+        + CURRENCY_PATTERN.pattern
+        + r"(?![\w,]|\.\d)",
+        restatement,
+        text,
+        flags=re.IGNORECASE,
+    )
+    return money(remaining) - allowed
 
 
 def evidence_money(value: JsonValue) -> set[Decimal]:
@@ -713,6 +759,7 @@ def grade_assertions(
     replay = Replay(case, root)
     messages: list[str] = []
     retained_money: set[Decimal] = set()
+    reported_money: set[Decimal] = set()
     for turn in turns:
         messages.append(turn.user)
         if turn.calls:
@@ -788,8 +835,9 @@ def grade_assertions(
                         proposal.group(), "[conditional income choices]"
                     )
             monetary_claims = plain
-        if money(monetary_claims) - allowed_money:
+        if unsupported_money(monetary_claims, allowed_money, reported_money):
             failures.append("unsupported_money")
+        reported_money.update(money(turn.response) & allowed_money)
     if sum(len(t.calls) for t in turns) > case.max_tool_calls:
         failures.append("tool_budget")
     if any(not step.optional for step in case.steps[replay.index :]):
