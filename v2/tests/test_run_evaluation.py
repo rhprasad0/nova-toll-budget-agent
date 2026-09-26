@@ -27,10 +27,186 @@ from eval.run_evaluation import (
 )
 
 
-def test_evaluator_regressions() -> None:
+def _current_example() -> tuple[dict[str, Any], dict[str, Any], str]:
+    rows = load_rows()
+    metadata = rows[1]
+    success = {
+        "name": "get_current_toll_price",
+        "input": metadata["expected_call"],
+        "tool_result": {
+            "origin_point_id": "i95:206NO",
+            "destination_point_id": "i495:185ND",
+            "source_kind": "observed",
+            "total_usd": "16.40",
+            "components": [
+                {
+                    "route_step_id": "step-1",
+                    "facility": "i95_i495",
+                    "source_kind": "observed",
+                    "price_usd": "4.80",
+                    "source_status": "SOUTHBOUND_OPEN",
+                    "observed_at": "2026-08-22T10:50:00-04:00",
+                    "recent_movement": {
+                        "direction": "unchanged",
+                        "net_change_usd": "0.00",
+                        "net_change_percent": "0.0",
+                    },
+                    "prior_week_comparison": {
+                        "median_usd": "4.80",
+                        "minimum_usd": "4.80",
+                        "maximum_usd": "4.80",
+                        "current_delta_usd": "0.00",
+                    },
+                },
+                {
+                    "route_step_id": "step-2",
+                    "facility": "i95_i495",
+                    "source_kind": "observed",
+                    "price_usd": "11.60",
+                    "source_status": "NO_DETERMINATION",
+                    "observed_at": "2026-08-22T10:50:00-04:00",
+                    "recent_movement": {
+                        "direction": "mixed",
+                        "net_change_usd": "0.35",
+                        "net_change_percent": "3.1",
+                    },
+                    "prior_week_comparison": {
+                        "median_usd": "12.05",
+                        "minimum_usd": "11.25",
+                        "maximum_usd": "12.30",
+                        "current_delta_usd": "-0.45",
+                    },
+                },
+            ],
+        },
+        "is_error": False,
+    }
+    good_response = (
+        "### 🚗 Current toll\n\n**Estimate: $16.40** at 9:30 AM EDT.\n\n"
+        "**Provenance:** Observed pricing.\n\n"
+        "- ➡️ unchanged: $0.00 (0.0%)\n"
+        "- 🔄 mixed: $0.35 (3.1%)\n"
+        "- ✅ At the recent median of $4.80; range $4.80-$4.80\n"
+        "- 🎉 You're getting a deal — below the recent median of $12.05; "
+        "range $11.25-$12.30"
+    )
+    return metadata, success, good_response
+
+
+def _annual_example() -> tuple[dict[str, Any], dict[str, JSON], str]:
+    rows = load_rows()
+    annual = rows[4]
+    annual_call: dict[str, JSON] = {
+        "name": "get_annual_toll_ballpark",
+        "input": annual["expected_call"],
+        "tool_result": {
+            "coverage": {
+                "eligible_date_count": 12,
+                "complete_pair_count": 12,
+                "coverage_percent": "100.0",
+            },
+            "sample_status": "complete",
+            "income": {
+                "gross_annual_usd": "120000.00",
+                "estimated_after_tax_usd": "80000.00",
+            },
+            "vehicle_cost": {"annual_usd": "1885.12"},
+            "scenarios": {
+                name: {
+                    "daily_toll_usd": daily_toll,
+                    "daily_total_tolled_commute_cost_usd": daily,
+                    "average_monthly_tolled_commute_cost_usd": monthly,
+                    "annual_total_tolled_commute_cost_usd": annual_total,
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": remaining,
+                    "annual_toll_usd": annual_toll,
+                    "additional_gross_income_to_offset_usd": offset,
+                }
+                for name, daily_toll, daily, monthly, annual_total, remaining, annual_toll, offset in (
+                    (
+                        "p25",
+                        "15.63",
+                        "23.00",
+                        "460.00",
+                        "5520.00",
+                        "74480.00",
+                        "3634.88",
+                        "8280.00",
+                    ),
+                    (
+                        "p50",
+                        "16.63",
+                        "24.00",
+                        "480.00",
+                        "5760.00",
+                        "74240.00",
+                        "3874.88",
+                        "8640.00",
+                    ),
+                    (
+                        "p90",
+                        "17.63",
+                        "25.00",
+                        "500.00",
+                        "6000.00",
+                        "74000.00",
+                        "4114.88",
+                        "9000.00",
+                    ),
+                )
+            },
+        },
+        "is_error": False,
+    }
+    annual_response = (
+        "### 💼 Annual commute impact\n\n"
+        "**P50 leaves $74240.00 after assumed tax and tolled commuting.**\n\n"
+        "- 🧾 Gross income: $120000.00; after one-third tax: $80000.00\n"
+        "- 🚗 Tolled-segment vehicle cost: $1885.12\n"
+        "- 🛣️ Annualized daily-P50 toll scenario: $16.63 daily; $3874.88 annual\n"
+        "- 💵 Total annual tolled-commute cost under P50: $5760.00\n"
+        "- 🎯 Additional gross salary needed: $8640.00\n\n"
+        "| Scenario | Daily | Monthly | Annual | Remaining |\n"
+        "|---|---:|---:|---:|---:|\n"
+        "| P25 | $23.00 | $460.00 | $5520.00 | $74480.00 |\n"
+        "| P50 | $24.00 | $480.00 | $5760.00 | $74240.00 |\n"
+        "| P90 | $25.00 | $500.00 | $6000.00 | $74000.00 |\n\n"
+        "⚠️ Historical coverage; tolled straight-line portions only at $0.685/mile "
+        "as a fixed TollChat vehicle-cost assumption."
+    )
+    return annual, annual_call, annual_response
+
+
+def no_complete_result() -> dict[str, Any]:
+    return {
+        "error": "ballpark_unavailable",
+        "reason": "no_complete_paired_days",
+        "coverage": {"complete_pair_count": 0},
+        "income": {
+            "gross_annual_usd": "120000.00",
+            "estimated_tax_usd": "40000.00",
+            "estimated_after_tax_usd": "80000.00",
+        },
+        "vehicle_cost": {"daily_usd": "7.85", "annual_usd": "1885.12"},
+        "assumptions": {"vehicle_cost_per_mile_usd": "0.685"},
+    }
+
+
+def no_complete_call(expected_call: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": "get_annual_toll_ballpark",
+        "input": expected_call,
+        "tool_result": no_complete_result(),
+        "is_error": False,
+    }
+
+
+def test_movement_value_sign() -> None:
     assert _movement_value_is_reported("down $0.50", "-0.50")
     assert _movement_value_is_reported("\u2212$0.50", "-0.50")
     assert not _movement_value_is_reported("$0.50", "-0.50")
+
+
+def test_case_selection() -> None:
     rows = load_rows()
     assert [row["id"] for row in rows] == [
         "reagan-airport-pentagon-eads-westpark-parity",
@@ -98,6 +274,21 @@ def test_evaluator_regressions() -> None:
         "i66-west-to-route-7-current-price",
         "route-7-to-i495-south-current-price",
     ]
+
+    new_case_ids = {
+        "annual-independent-ramps",
+        "annual-backlick-alternatives",
+        "annual-backlick-alternative-selection",
+        "annual-divergent-areas-confirmation",
+        "annual-ordinary-reversal-regression",
+    }
+    for window in ("i95_northbound", "i95_southbound", "i95_reversal"):
+        selected_ids = {case.name for case in load_cases(window=window)}
+        assert new_case_ids <= selected_ids
+
+
+def test_i66_schedule() -> None:
+    rows = load_rows()
     assert date(2026, 7, 3) in _i66_holidays(2026)
     assert date(2026, 7, 5) not in _i66_holidays(2026)
     assert date(2027, 7, 5) in _i66_holidays(2027)
@@ -188,68 +379,153 @@ def test_evaluator_regressions() -> None:
         "**$3.25 estimate** ✅ Observed pricing at 5:22 PM EDT.",
         wb_active,
     )[0].test_pass
-    metadata = rows[1]
-    success = {
-        "name": "get_current_toll_price",
-        "input": metadata["expected_call"],
-        "tool_result": {
-            "origin_point_id": "i95:206NO",
-            "destination_point_id": "i495:185ND",
-            "source_kind": "observed",
-            "total_usd": "16.40",
-            "components": [
-                {
-                    "route_step_id": "step-1",
-                    "facility": "i95_i495",
-                    "source_kind": "observed",
-                    "price_usd": "4.80",
-                    "source_status": "SOUTHBOUND_OPEN",
-                    "observed_at": "2026-08-22T10:50:00-04:00",
-                    "recent_movement": {
-                        "direction": "unchanged",
-                        "net_change_usd": "0.00",
-                        "net_change_percent": "0.0",
-                    },
-                    "prior_week_comparison": {
-                        "median_usd": "4.80",
-                        "minimum_usd": "4.80",
-                        "maximum_usd": "4.80",
-                        "current_delta_usd": "0.00",
-                    },
-                },
-                {
-                    "route_step_id": "step-2",
-                    "facility": "i95_i495",
-                    "source_kind": "observed",
-                    "price_usd": "11.60",
-                    "source_status": "NO_DETERMINATION",
-                    "observed_at": "2026-08-22T10:50:00-04:00",
-                    "recent_movement": {
-                        "direction": "mixed",
-                        "net_change_usd": "0.35",
-                        "net_change_percent": "3.1",
-                    },
-                    "prior_week_comparison": {
-                        "median_usd": "12.05",
-                        "minimum_usd": "11.25",
-                        "maximum_usd": "12.30",
-                        "current_delta_usd": "-0.45",
-                    },
-                },
-            ],
-        },
-        "is_error": False,
+
+
+def test_current_price_response() -> None:
+    metadata, success, good_response = _current_example()
+    assert evaluate_westpark_turn([success], good_response, metadata)[0].test_pass
+    assert (
+        evaluate_westpark_turn(
+            [success],
+            good_response
+            + "\n\nOne component has a NO_DETERMINATION source-status qualification.",
+            metadata,
+        )[0].label
+        == "spurious_source_status"
+    )
+    for qualification in ("inconclusive", "indeterminate", "unknown"):
+        assert (
+            evaluate_westpark_turn(
+                [success],
+                good_response + f"\n\nThe source status metadata is {qualification}.",
+                metadata,
+            )[0].label
+            == "spurious_source_status"
+        )
+    assert (
+        evaluate_westpark_turn(
+            [success],
+            good_response + "\n\n**Source status:**\n- unknown",
+            metadata,
+        )[0].label
+        == "spurious_source_status"
+    )
+    assert (
+        evaluate_westpark_turn([], good_response, metadata)[0].label == "tool_mismatch"
+    )
+    wrong_input = {
+        **success,
+        "input": {**metadata["expected_call"], "destination_point_id": "wrong"},
     }
-    good_response = (
-        "### 🚗 Current toll\n\n**Estimate: $16.40** at 9:30 AM EDT.\n\n"
-        "**Provenance:** Observed pricing.\n\n"
-        "- ➡️ unchanged: $0.00 (0.0%)\n"
-        "- 🔄 mixed: $0.35 (3.1%)\n"
+    assert (
+        evaluate_westpark_turn([wrong_input], good_response, metadata)[0].label
+        == "input_mismatch"
+    )
+    error = {**success, "tool_result": {"error": "pricing_unavailable"}}
+    assert (
+        evaluate_westpark_turn([error], good_response, metadata)[0].label
+        == "tool_error"
+    )
+    assert (
+        evaluate_westpark_turn([success], "$16.40 at 9:30 AM EST", metadata)[0].label
+        == "missing_markdown"
+    )
+    missing_provenance = good_response.replace(
+        "**Provenance:** Observed pricing.\n\n", ""
+    )
+    assert (
+        evaluate_westpark_turn([success], missing_provenance, metadata)[0].label
+        == "missing_provenance"
+    )
+    missing_movement = good_response.replace(
+        "- ➡️ unchanged: $0.00 (0.0%)\n- 🔄 mixed: $0.35 (3.1%)\n", ""
+    )
+    assert (
+        evaluate_westpark_turn([success], missing_movement, metadata)[0].label
+        == "missing_movement"
+    )
+    missing_comparison = good_response.replace(
         "- ✅ At the recent median of $4.80; range $4.80-$4.80\n"
         "- 🎉 You're getting a deal — below the recent median of $12.05; "
-        "range $11.25-$12.30"
+        "range $11.25-$12.30",
+        "",
     )
-    assert evaluate_westpark_turn([success], good_response, metadata)[0].test_pass
+    assert (
+        evaluate_westpark_turn([success], missing_comparison, metadata)[0].label
+        == "missing_comparison"
+    )
+    closure = {
+        **success,
+        "tool_result": {
+            "status": "currently_unavailable",
+            "point_ids": ["i95:206NO", "i495:185ND"],
+        },
+    }
+    assert (
+        evaluate_westpark_turn([closure], "### 🚧 Closed", metadata)[0].label
+        == "tool_unavailable"
+    )
+
+
+def test_current_price_unavailable() -> None:
+    rows = load_rows()
+    _, success, _ = _current_example()
+    unavailable_metadata = rows[10]
+    unavailable = {
+        **success,
+        "input": unavailable_metadata["expected_call"],
+        "tool_result": {
+            "origin_point_id": "airport_iad",
+            "destination_point_id": "airport_dca",
+            "error": "pricing_unavailable",
+            "reason": "incomplete_route_price",
+            "unavailable_components": [{"observed_at": "2026-08-22T15:40:00-04:00"}],
+        },
+    }
+    unavailable_response = (
+        "### 🚫 Current toll unavailable\n\nThe complete price cannot be provided as "
+        "of 3:40 PM EDT."
+    )
+    assert evaluate_westpark_turn(
+        [unavailable],
+        unavailable_response,
+        unavailable_metadata,
+    )[0].test_pass
+    for invented_toll in (
+        "$999.00",
+        "USD 999.00",
+        "999.00 USD",
+        "999 dollars",
+        "\uff04999.00",
+        "$about 999.00",
+    ):
+        assert (
+            evaluate_westpark_turn(
+                [unavailable],
+                unavailable_response + f" It would cost {invented_toll}.",
+                unavailable_metadata,
+            )[0].label
+            == "invented_financials"
+        )
+    unknown = {
+        **unavailable,
+        "tool_result": {
+            "status": "unknown_availability",
+            "reason": {"code": "i95_stale_evidence"},
+            "origin_point_id": "airport_iad",
+            "destination_point_id": "airport_dca",
+        },
+    }
+    assert evaluate_westpark_turn(
+        [unknown],
+        "### 🚧 Current toll unavailable\n\nThe I-95 evidence is stale.",
+        unavailable_metadata,
+    )[0].test_pass
+
+
+def test_dca_pentagon_parity() -> None:
+    rows = load_rows()
+    _, success, good_response = _current_example()
     parity = rows[0]
     parity_calls: list[dict[str, JSON]] = []
     for expected_call in parity["expected_calls"]:
@@ -495,6 +771,11 @@ def test_evaluator_regressions() -> None:
         evaluate_dca_pentagon_parity_turns(parity_mismatched_sum, parity)[0].label
         == "malformed_projection"
     )
+
+
+def test_current_route_clarification() -> None:
+    rows = load_rows()
+    _, success, good_response = _current_example()
     washington_current = rows[13]
     washington_current_call = json.loads(json.dumps(success))
     washington_current_call["input"] = washington_current["expected_call"]
@@ -563,138 +844,10 @@ def test_evaluator_regressions() -> None:
         ].label
         == "ungrounded_price"
     )
-    assert (
-        evaluate_westpark_turn(
-            [success],
-            good_response
-            + "\n\nOne component has a NO_DETERMINATION source-status qualification.",
-            metadata,
-        )[0].label
-        == "spurious_source_status"
-    )
-    for qualification in ("inconclusive", "indeterminate", "unknown"):
-        assert (
-            evaluate_westpark_turn(
-                [success],
-                good_response + f"\n\nThe source status metadata is {qualification}.",
-                metadata,
-            )[0].label
-            == "spurious_source_status"
-        )
-    assert (
-        evaluate_westpark_turn(
-            [success],
-            good_response + "\n\n**Source status:**\n- unknown",
-            metadata,
-        )[0].label
-        == "spurious_source_status"
-    )
-    assert (
-        evaluate_westpark_turn([], good_response, metadata)[0].label == "tool_mismatch"
-    )
-    wrong_input = {
-        **success,
-        "input": {**metadata["expected_call"], "destination_point_id": "wrong"},
-    }
-    assert (
-        evaluate_westpark_turn([wrong_input], good_response, metadata)[0].label
-        == "input_mismatch"
-    )
-    error = {**success, "tool_result": {"error": "pricing_unavailable"}}
-    assert (
-        evaluate_westpark_turn([error], good_response, metadata)[0].label
-        == "tool_error"
-    )
-    unavailable_metadata = rows[10]
-    unavailable = {
-        **success,
-        "input": unavailable_metadata["expected_call"],
-        "tool_result": {
-            "origin_point_id": "airport_iad",
-            "destination_point_id": "airport_dca",
-            "error": "pricing_unavailable",
-            "reason": "incomplete_route_price",
-            "unavailable_components": [{"observed_at": "2026-08-22T15:40:00-04:00"}],
-        },
-    }
-    unavailable_response = (
-        "### 🚫 Current toll unavailable\n\nThe complete price cannot be provided as "
-        "of 3:40 PM EDT."
-    )
-    assert evaluate_westpark_turn(
-        [unavailable],
-        unavailable_response,
-        unavailable_metadata,
-    )[0].test_pass
-    for invented_toll in (
-        "$999.00",
-        "USD 999.00",
-        "999.00 USD",
-        "999 dollars",
-        "\uff04999.00",
-        "$about 999.00",
-    ):
-        assert (
-            evaluate_westpark_turn(
-                [unavailable],
-                unavailable_response + f" It would cost {invented_toll}.",
-                unavailable_metadata,
-            )[0].label
-            == "invented_financials"
-        )
-    unknown = {
-        **unavailable,
-        "tool_result": {
-            "status": "unknown_availability",
-            "reason": {"code": "i95_stale_evidence"},
-            "origin_point_id": "airport_iad",
-            "destination_point_id": "airport_dca",
-        },
-    }
-    assert evaluate_westpark_turn(
-        [unknown],
-        "### 🚧 Current toll unavailable\n\nThe I-95 evidence is stale.",
-        unavailable_metadata,
-    )[0].test_pass
-    assert (
-        evaluate_westpark_turn([success], "$16.40 at 9:30 AM EST", metadata)[0].label
-        == "missing_markdown"
-    )
-    missing_provenance = good_response.replace(
-        "**Provenance:** Observed pricing.\n\n", ""
-    )
-    assert (
-        evaluate_westpark_turn([success], missing_provenance, metadata)[0].label
-        == "missing_provenance"
-    )
-    missing_movement = good_response.replace(
-        "- ➡️ unchanged: $0.00 (0.0%)\n- 🔄 mixed: $0.35 (3.1%)\n", ""
-    )
-    assert (
-        evaluate_westpark_turn([success], missing_movement, metadata)[0].label
-        == "missing_movement"
-    )
-    missing_comparison = good_response.replace(
-        "- ✅ At the recent median of $4.80; range $4.80-$4.80\n"
-        "- 🎉 You're getting a deal — below the recent median of $12.05; "
-        "range $11.25-$12.30",
-        "",
-    )
-    assert (
-        evaluate_westpark_turn([success], missing_comparison, metadata)[0].label
-        == "missing_comparison"
-    )
-    closure = {
-        **success,
-        "tool_result": {
-            "status": "currently_unavailable",
-            "point_ids": ["i95:206NO", "i495:185ND"],
-        },
-    }
-    assert (
-        evaluate_westpark_turn([closure], "### 🚧 Closed", metadata)[0].label
-        == "tool_unavailable"
-    )
+
+
+def test_current_route_fallback() -> None:
+    rows = load_rows()
     fallback = {**rows[2], "active_window": "i95_northbound"}
     fallback_turns = [
         {
@@ -792,6 +945,9 @@ def test_evaluator_regressions() -> None:
         == "result_mismatch"
     )
 
+
+def test_current_route_unavailable() -> None:
+    rows = load_rows()
     unavailable = {**rows[3], "active_window": "i95_southbound"}
     unavailable_turns = [
         {
@@ -851,86 +1007,80 @@ def test_evaluator_regressions() -> None:
         evaluate_unavailable_turn(wrong_unavailable_result, unavailable)[0].label
         == "result_mismatch"
     )
-    annual = rows[4]
-    annual_call: dict[str, JSON] = {
-        "name": "get_annual_toll_ballpark",
-        "input": annual["expected_call"],
-        "tool_result": {
-            "coverage": {
-                "eligible_date_count": 12,
-                "complete_pair_count": 12,
-                "coverage_percent": "100.0",
-            },
-            "sample_status": "complete",
-            "income": {
-                "gross_annual_usd": "120000.00",
-                "estimated_after_tax_usd": "80000.00",
-            },
-            "vehicle_cost": {"annual_usd": "1885.12"},
-            "scenarios": {
-                name: {
-                    "daily_toll_usd": daily_toll,
-                    "daily_total_tolled_commute_cost_usd": daily,
-                    "average_monthly_tolled_commute_cost_usd": monthly,
-                    "annual_total_tolled_commute_cost_usd": annual_total,
-                    "estimated_annual_income_after_tax_and_tolled_commute_usd": remaining,
-                    "annual_toll_usd": annual_toll,
-                    "additional_gross_income_to_offset_usd": offset,
-                }
-                for name, daily_toll, daily, monthly, annual_total, remaining, annual_toll, offset in (
-                    (
-                        "p25",
-                        "15.63",
-                        "23.00",
-                        "460.00",
-                        "5520.00",
-                        "74480.00",
-                        "3634.88",
-                        "8280.00",
-                    ),
-                    (
-                        "p50",
-                        "16.63",
-                        "24.00",
-                        "480.00",
-                        "5760.00",
-                        "74240.00",
-                        "3874.88",
-                        "8640.00",
-                    ),
-                    (
-                        "p90",
-                        "17.63",
-                        "25.00",
-                        "500.00",
-                        "6000.00",
-                        "74000.00",
-                        "4114.88",
-                        "9000.00",
-                    ),
-                )
-            },
-        },
-        "is_error": False,
-    }
-    annual_response = (
-        "### 💼 Annual commute impact\n\n"
-        "**P50 leaves $74240.00 after assumed tax and tolled commuting.**\n\n"
-        "- 🧾 Gross income: $120000.00; after one-third tax: $80000.00\n"
-        "- 🚗 Tolled-segment vehicle cost: $1885.12\n"
-        "- 🛣️ Annualized daily-P50 toll scenario: $16.63 daily; $3874.88 annual\n"
-        "- 💵 Total annual tolled-commute cost under P50: $5760.00\n"
-        "- 🎯 Additional gross salary needed: $8640.00\n\n"
-        "| Scenario | Daily | Monthly | Annual | Remaining |\n"
-        "|---|---:|---:|---:|---:|\n"
-        "| P25 | $23.00 | $460.00 | $5520.00 | $74480.00 |\n"
-        "| P50 | $24.00 | $480.00 | $5760.00 | $74240.00 |\n"
-        "| P90 | $25.00 | $500.00 | $6000.00 | $74000.00 |\n\n"
-        "⚠️ Historical coverage; tolled straight-line portions only at $0.685/mile "
-        "as a fixed TollChat vehicle-cost assumption."
-    )
+
+
+def test_annual_price_response() -> None:
+    annual, annual_call, annual_response = _annual_example()
     annual_turns = [{"response": annual_response, "calls": [annual_call]}]
     assert evaluate_annual_turn(annual_turns, annual)[0].test_pass
+    bold_scenario_labels = annual_response
+    for label, description in (
+        ("P25", "lower historical scenario"),
+        ("P50", "middle historical scenario"),
+        ("P90", "higher historical scenario"),
+    ):
+        bold_scenario_labels = bold_scenario_labels.replace(
+            f"| {label} |", f"| **{label} — {description}** |"
+        )
+    assert evaluate_annual_turn(
+        [{"response": bold_scenario_labels, "calls": [annual_call]}], annual
+    )[0].test_pass
+    swapped_scenarios = (
+        annual_response.replace("| P25 |", "| TEMP |")
+        .replace("| P90 |", "| P25 |")
+        .replace("| TEMP |", "| P90 |")
+    )
+    assert (
+        evaluate_annual_turn(
+            [{"response": swapped_scenarios, "calls": [annual_call]}], annual
+        )[0].label
+        == "misbound_money"
+    )
+    swapped_p50_columns = annual_response.replace(
+        "| P50 | $24.00 | $480.00 |", "| P50 | $480.00 | $24.00 |"
+    )
+    assert (
+        evaluate_annual_turn(
+            [{"response": swapped_p50_columns, "calls": [annual_call]}], annual
+        )[0].label
+        == "misbound_money"
+    )
+    misplaced_p50 = annual_response.replace(
+        "**P50 leaves $74240.00 after assumed tax and tolled commuting.**",
+        "**P50 affordability estimate after assumed tax and tolled commuting.**",
+    )
+    assert (
+        evaluate_annual_turn(
+            [{"response": misplaced_p50, "calls": [annual_call]}], annual
+        )[0].label
+        == "misbound_money"
+    )
+    implicit_coverage = annual_response.replace(
+        "Historical coverage",
+        "Historical evidence: 12 of 12 eligible dates; complete sample",
+    )
+    assert evaluate_annual_turn(
+        [{"response": implicit_coverage, "calls": [annual_call]}], annual
+    )[0].test_pass
+    missing_table = annual_response.replace("|", "")
+    missing_table_turns = [{"response": missing_table, "calls": [annual_call]}]
+    assert (
+        evaluate_annual_turn(missing_table_turns, annual)[0].label
+        == "missing_affordability_context"
+    )
+    missing_method = annual_response.replace(
+        "Annualized daily-P50 toll scenario", "Toll"
+    )
+    missing_method_turns = [{"response": missing_method, "calls": [annual_call]}]
+    assert (
+        evaluate_annual_turn(missing_method_turns, annual)[0].label
+        == "missing_affordability_context"
+    )
+
+
+def test_annual_missing_paired_history() -> None:
+    rows = load_rows()
+    _, annual_call, _ = _annual_example()
     washington_annual = rows[14]
     washington_annual_call = json.loads(json.dumps(annual_call))
     washington_annual_call["input"] = washington_annual["expected_call"]
@@ -1038,69 +1188,11 @@ def test_evaluator_regressions() -> None:
     assert not evaluate_annual_turn(blank_washington_annual, washington_annual)[
         0
     ].test_pass
-    bold_scenario_labels = annual_response
-    for label, description in (
-        ("P25", "lower historical scenario"),
-        ("P50", "middle historical scenario"),
-        ("P90", "higher historical scenario"),
-    ):
-        bold_scenario_labels = bold_scenario_labels.replace(
-            f"| {label} |", f"| **{label} — {description}** |"
-        )
-    assert evaluate_annual_turn(
-        [{"response": bold_scenario_labels, "calls": [annual_call]}], annual
-    )[0].test_pass
-    swapped_scenarios = (
-        annual_response.replace("| P25 |", "| TEMP |")
-        .replace("| P90 |", "| P25 |")
-        .replace("| TEMP |", "| P90 |")
-    )
-    assert (
-        evaluate_annual_turn(
-            [{"response": swapped_scenarios, "calls": [annual_call]}], annual
-        )[0].label
-        == "misbound_money"
-    )
-    swapped_p50_columns = annual_response.replace(
-        "| P50 | $24.00 | $480.00 |", "| P50 | $480.00 | $24.00 |"
-    )
-    assert (
-        evaluate_annual_turn(
-            [{"response": swapped_p50_columns, "calls": [annual_call]}], annual
-        )[0].label
-        == "misbound_money"
-    )
-    misplaced_p50 = annual_response.replace(
-        "**P50 leaves $74240.00 after assumed tax and tolled commuting.**",
-        "**P50 affordability estimate after assumed tax and tolled commuting.**",
-    )
-    assert (
-        evaluate_annual_turn(
-            [{"response": misplaced_p50, "calls": [annual_call]}], annual
-        )[0].label
-        == "misbound_money"
-    )
-    implicit_coverage = annual_response.replace(
-        "Historical coverage",
-        "Historical evidence: 12 of 12 eligible dates; complete sample",
-    )
-    assert evaluate_annual_turn(
-        [{"response": implicit_coverage, "calls": [annual_call]}], annual
-    )[0].test_pass
-    missing_table = annual_response.replace("|", "")
-    missing_table_turns = [{"response": missing_table, "calls": [annual_call]}]
-    assert (
-        evaluate_annual_turn(missing_table_turns, annual)[0].label
-        == "missing_affordability_context"
-    )
-    missing_method = annual_response.replace(
-        "Annualized daily-P50 toll scenario", "Toll"
-    )
-    missing_method_turns = [{"response": missing_method, "calls": [annual_call]}]
-    assert (
-        evaluate_annual_turn(missing_method_turns, annual)[0].label
-        == "missing_affordability_context"
-    )
+
+
+def test_annual_route_clarification() -> None:
+    rows = load_rows()
+    _, annual_call, annual_response = _annual_example()
     tysons = rows[5]
     tysons_call: dict[str, JSON] = {**annual_call, "input": tysons["expected_call"]}
     tysons_turns: list[dict[str, JSON]] = [
@@ -1118,6 +1210,10 @@ def test_evaluator_regressions() -> None:
     premature_call[0]["calls"] = [tysons_call]
     assert evaluate_annual_turn(premature_call, tysons)[0].label == "bad_clarification"
 
+
+def test_annual_missing_inputs() -> None:
+    rows = load_rows()
+    _, annual_call, _ = _annual_example()
     missing = rows[6]
     missing_turns: list[dict[str, JSON]] = [
         {
@@ -1160,6 +1256,10 @@ def test_evaluator_regressions() -> None:
         == "missing_required_input"
     )
 
+
+def test_annual_day_estimate() -> None:
+    rows = load_rows()
+    _, annual_call, annual_response = _annual_example()
     estimate_case = rows[9]
     estimate_call: dict[str, JSON] = {
         **annual_call,
@@ -1190,6 +1290,10 @@ def test_evaluator_regressions() -> None:
         == "bad_annual_day_estimate"
     )
 
+
+def test_annual_income_clarification() -> None:
+    rows = load_rows()
+    _, annual_call, annual_response = _annual_example()
     income = rows[7]
     income_call: dict[str, JSON] = {**annual_call, "input": income["expected_call"]}
     income_turns: list[dict[str, JSON]] = [
@@ -1216,6 +1320,9 @@ def test_evaluator_regressions() -> None:
         == "premature_call"
     )
 
+
+def test_annual_route_unavailable() -> None:
+    rows = load_rows()
     unavailable_annual = rows[8]
     unavailable_call = {
         "name": "get_annual_toll_ballpark",
@@ -1278,39 +1385,9 @@ def test_evaluator_regressions() -> None:
         == "result_mismatch"
     )
 
-    new_case_ids = {
-        "annual-independent-ramps",
-        "annual-backlick-alternatives",
-        "annual-backlick-alternative-selection",
-        "annual-divergent-areas-confirmation",
-        "annual-ordinary-reversal-regression",
-    }
-    for window in ("i95_northbound", "i95_southbound", "i95_reversal"):
-        selected_ids = {case.name for case in load_cases(window=window)}
-        assert new_case_ids <= selected_ids
 
-    def no_complete_result() -> dict[str, Any]:
-        return {
-            "error": "ballpark_unavailable",
-            "reason": "no_complete_paired_days",
-            "coverage": {"complete_pair_count": 0},
-            "income": {
-                "gross_annual_usd": "120000.00",
-                "estimated_tax_usd": "40000.00",
-                "estimated_after_tax_usd": "80000.00",
-            },
-            "vehicle_cost": {"daily_usd": "7.85", "annual_usd": "1885.12"},
-            "assumptions": {"vehicle_cost_per_mile_usd": "0.685"},
-        }
-
-    def no_complete_call(expected_call: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "name": "get_annual_toll_ballpark",
-            "input": expected_call,
-            "tool_result": no_complete_result(),
-            "is_error": False,
-        }
-
+def test_annual_route_alternatives_and_selection() -> None:
+    rows = load_rows()
     alternative_payload = {
         "error": "ballpark_unavailable",
         "reason": "route_unavailable",
@@ -1482,6 +1559,10 @@ def test_evaluator_regressions() -> None:
         == "tool_mismatch"
     )
 
+
+def test_annual_independent_routes() -> None:
+    rows = load_rows()
+    _, annual_call, annual_response = _annual_example()
     independent = next(row for row in rows if row["id"] == "annual-independent-ramps")
     independent_success = json.loads(json.dumps(annual_call))
     independent_success["input"] = independent["expected_call"]
@@ -1545,6 +1626,9 @@ def test_evaluator_regressions() -> None:
         == "tool_error"
     )
 
+
+def test_annual_divergent_route_confirmation() -> None:
+    rows = load_rows()
     divergent = next(
         row for row in rows if row["id"] == "annual-divergent-areas-confirmation"
     )
@@ -1575,6 +1659,9 @@ def test_evaluator_regressions() -> None:
         == "bad_confirmation"
     )
 
+
+def test_annual_reversed_route() -> None:
+    rows = load_rows()
     reversal = next(
         row for row in rows if row["id"] == "annual-ordinary-reversal-regression"
     )

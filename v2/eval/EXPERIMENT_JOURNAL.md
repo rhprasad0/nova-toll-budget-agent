@@ -2180,3 +2180,153 @@ spending to **$16.646120385**. Raw evidence and detailed reviews remain private.
 No application baseline, candidate search, holdout evaluation, merge, migration
 or deployment occurred. Human-reviewed merge and verified development
 migration/catalog parity remain prerequisites for a later baseline.
+
+
+## 2026-09-26 — Retrospective summaries of retired evidence
+
+The summaries below consolidate historical reports during repository cleanup.
+They preserve the recorded results and limitations; they do not rescore runs,
+renew approvals, or add spending to the current cumulative ledger. Original
+manifests, events, reports and standalone analyses remain recoverable from the
+[pre-cleanup commit](https://github.com/rhprasad0/nova-toll-budget-agent/tree/e2b7d4b5514ce3f0228d2556ab197f0c1c38ec1a/v2/eval).
+Future granular output belongs in ignored `eval/private/` or the existing private
+workflow artifact store. Focused synthetic tests replace archived-run test inputs.
+
+### Legacy golden demonstration and calibrations
+
+These source-checkout experiments used `gpt-5.6-luna`, prompt 2.3.0, renderer
+1.0.0 and a 2,048-token ceiling. They predate the current measurement contract.
+The demonstration and calibration 7 used low reasoning; calibration 15 used low
+for application/actor generation and medium for judging.
+
+| Historical run | Commit | Corpus / harness | Recorded result | Run cost | Prior recorded spending |
+| --- | --- | --- | --- | ---: | ---: |
+| Demonstration, 2026-09-20 | `e9abf4eaef1b6f4bc615815c7b9b302ba8710821` | 1.0.5 / 1.0.4 | 27/72 successful trials (37.5%); 3/24 cases passed all three (12.5%); 546 model calls | $0.38888630 | $0.33607270 |
+| Calibration 7, 2026-09-20 | `a3c30b60dd100f299e9085bd20847569eea10d3a` | 1.0.7 / 1.1.0 | 100/102 label agreement across 34 references; 103 model calls | $0.07223746 | $0.79967600 |
+| Calibration 15, 2026-09-21 | `41f09f991cf0a2db54bd9410b33eb55d080be6e9` | 1.0.11 / 1.2.1 | 138/138 label agreement across 46 references; 138 model calls | $0.06590064 | $2.06711088 |
+
+The demonstration completed all 72 measurements, with 37 Outcome passes, 16
+Grounding violations and 24 Rules violations. Its recorded 95% case-cluster
+interval for successful trials was 25–50%; repeated trials are not independent.
+Human actor review remained pending. The retained
+[initial review](results/golden/initial-review.json) marks actor validity invalid:
+actors stopped before required clarification/correction, a held-out confirmation
+was not delivered, catalog aliases affected exact-ID judgments, and the run did
+not verify production-artifact execution. Historical held-out material was
+exposed by the review page. **Decision: preserve as a limited demonstration,
+without release or baseline approval.** Its duplicate registry archive has the
+same historical status.
+
+Calibration 7 retained two Grounding disagreements: an unauthorized early Tysons
+call and a missing-schedule clarification reference. The original report remained
+pending human adjudication. **Decision: retain the disagreement evidence as
+historical calibration work, with no current approval inferred.**
+
+Calibration 15 had no recorded disagreements. Ryan's 2026-09-21
+[exact-evidence approval](evidence/golden-360/calibration-15/review.json) remains
+unchanged. It accepted the historical actors-6 limitation (59/60 checks, including
+a redundant vehicle/E-ZPass reply) and expressly authorized no merge, deployment
+or production qualification. **Decision: preserve that historical approval;
+its contract does not qualify the current corpus or application.**
+
+### August 22 live integration checks
+
+Three selected 2026-08-22 runs each recorded a 1.0000 code-graded score:
+
+| Scenario | Recorded result | Checked behavior |
+| --- | --- | --- |
+| Reagan Airport and Pentagon/Eads Street to Westpark | 2/2 passed | Each made the exact current-price call to `i495:1859ND` and returned two observed components totaling $14.65, with movement and median comparison. |
+| Dulles Airport to Reagan Airport | 1/1 passed | The cross-direction request returned typed stale I-95 availability; the response withheld a price. |
+| Annual affordability workflows | 6/6 passed | Fixed/modeled success, Tysons exit clarification, complete input acquisition, salary-range clarification, adjustable 52-week annual-day estimates, and unavailable return routes. |
+
+The two Westpark responses labeled a 10:50 observation as EST in August; the
+historical code-graded passes do not establish timezone-label correctness. The
+reports did not record model/version identity or measured cost; those values are
+unavailable. These selected live checks are neither a frozen application baseline
+nor a whole-agent accuracy estimate. **Decision: retain the aggregate integration
+findings and remove the raw response/trajectory reports.**
+
+### Annual ballpark grounding experiment
+
+The historical OpenAI Batch experiment used `gpt-5.6-luna` and one frozen,
+reviewed Springfield-Franconia–Westpark annual tool result: Monday–Friday,
+8:30 AM outbound and 5:30 PM return. Five reviewed prompt variants were each
+repeated 200 times. Deterministic checks were followed by adjudication of every
+flagged quantitative claim and semantic review of contract failures.
+
+| Measure | Result |
+| --- | ---: |
+| Reconciled responses, transport success, correct P25/P50/P90 tables | 1,000/1,000 each |
+| Strict quantitative grounding | 996/1,000 (99.6%) |
+| No incorrect quantitative fact | 999/1,000 (99.9%) |
+| Core semantic contract | 971/1,000 (97.1%) |
+| Core contract plus explicit TollChat attribution | 935/1,000 (93.5%) |
+| Core contract plus strict quantitative grounding | 967/1,000 (96.7%) |
+| Attribution requirement plus strict quantitative grounding | 931/1,000 (93.1%) |
+
+One response changed the supplied 5:31 PM evaluation time to 1:31 PM. Three
+others computed correct scenario differences ($3,156 twice; $1,008 once) absent
+from the tool payload. Those three violated the tool-returned-numbers policy;
+their arithmetic was correct. Of 29 core-contract failures, 28 inadequately
+disclosed 50/60-day (83.3%) coverage and one omitted the $14,088 annual P50 toll
+amount. Another 36 otherwise complete answers omitted the TollChat attribution
+for the fixed vehicle-cost assumption.
+
+The raw deterministic score of 426/1,000 was invalid as a model-performance
+result: literal matching rejected 441 equivalent 12-hour timestamps, eight
+rounded currency renderings, and valid wording/formatting. **Decision recorded
+by the report:** fix and regrade that grader before using it as a release gate;
+report newly derived arithmetic separately; strengthen or simplify disclosure
+instructions only if required; add routes, evidence shapes and unavailable-result
+fixtures before broader claims. This retrospective does not claim those follow-up
+actions are complete.
+
+The `tiktoken` 0.14.0 / `o200k_base` preflight estimated 35,148,600 input tokens,
+with a 38,663,460 guarded estimate below the then-recorded 40,000,000 queued-token
+limit. Actual usage was 30,196,200 input and 638,936 output tokens. Measured dollar
+cost was not recorded in the report and is unavailable. These historical capacity
+figures are not current service limits. Correlated repetitions of one fixture do
+not establish an agent-wide hallucination rate, route coverage, source accuracy
+or production performance. Executable cases and runner remain in the repository;
+raw artifacts remain private under `eval/private/annual-ballpark-hallucination/`.
+
+### I-95/I-495 identity-proxy validation
+
+The historical study addressed 16 missing OD IDs (1374–1389): the route oracle had
+330 distinct IDs while retained VDOT history priced 314, affecting 107 of 685
+routes. The `identity_proxy_v1` model copies the mapped VDOT price without
+adjustment. [Current mapping and query guidance](results/i95-missing-od-pricing.md)
+retain the modeled-label, direction and no-fallback requirements.
+
+The study paired 578 retained Transurban captures from July 25–30, 2026 with
+VDOT's corresponding ten-minute intervals, filtered to the open direction, and
+used the first 70% chronologically for model selection and the final 30% for
+assessment. Across 1,200 holdout comparisons, identity copying had **$0.106 MAE**,
+**96.1% within $0.50**, **$0.00 p95 absolute error**, and **$8.05 maximum error**.
+Ordinary least squares increased MAE to $0.154; median bias correction selected
+$0 for every mapping. PostgreSQL regression, correlation and percentile functions
+were diagnostic tools, not the production formula. Measured analysis cost was
+not recorded and is unavailable.
+
+**Decision: retain the identity proxy as a provisional ballpark estimate.** The
+short overlap does not establish seasonal accuracy. An adversarial review left
+these limitations and follow-up work unresolved:
+
+- Pooled results can hide weak OD mappings or traffic regimes. About 47/1,200
+  comparisons exceeded $0.50 based on the rounded rate. Per-OD counts, unique
+  intervals, exact matches, signed bias, MAE/RMSE, p95/p99, maximum errors and
+  direction/rush-hour strata are still needed for stronger claims.
+- Rows are clustered within captures; 1,200 comparisons are not independent.
+  Preserve the exact split, unique holdout intervals, duplicate handling and
+  confirmation that proxy selection used only training data.
+- VDOT republishes the Transurban series about ten minutes later, so the feeds
+  are not independent evidence. Reproduction needs the pairing query and a
+  non-secret input manifest covering clock shift and S3 `LastModified` alignment.
+- Restore tests verify mapping constants and SQL behavior, not each mapping's
+  empirical quality. Retain a runnable analysis and per-OD output before claiming
+  every mapping is validated; compare each against identity, mean/median offsets
+  and simple destination-matched baselines.
+
+These objections do not show that the model is wrong. They limit the accuracy
+claims supported by this historical study; modeled labels and withholding an
+estimate when the view has no eligible row remain required.

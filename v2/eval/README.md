@@ -69,9 +69,11 @@ submits, retrieves, and grades the frozen annual-ballpark Batch experiment.
 Its canonical input is [ballpark-hallucination-cases.jsonl](ballpark-hallucination-cases.jsonl);
 generated inputs and outputs belong in `eval/private/`. Inspect preparation and
 obtain authorization before submitting paid work. The
-[existing summary](ballpark-hallucination-report.md) records the result and limits.
+[journal summary](EXPERIMENT_JOURNAL.md#annual-ballpark-grounding-experiment)
+records the result and limits.
 
-Legacy files under `evidence/golden-360/` and the initial registry archive under
-`results/golden/` remain only because offline compatibility tests and the existing
-release initializer read them. They are not current calibration or production
-qualification. New regression checks use focused inputs rather than full runs.
+Historical golden demonstrations and calibrations are summarized in the
+[experiment journal](EXPERIMENT_JOURNAL.md#legacy-golden-demonstration-and-calibrations).
+Exact approval records and release policies retain their original identities.
+Offline regression checks use focused synthetic inputs; historical run archives
+remain recoverable through the Git commit linked in the journal.

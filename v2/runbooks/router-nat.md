@@ -17,7 +17,7 @@ Elastic IP are removed. Cross-AZ traffic from subnet `1a` can still incur charge
 Merge the reviewed PR after required CI and human review. Use that exact checkout
 and its locked providers; never use these steps to deploy an unreviewed checkout.
 Run `bash v2/scripts/test_router_nat.sh`, Terraform validation for both roots, and
-`uv run --project v2 pytest v2/tests/test_router_nat.py v2/tests/test_infrastructure_contract.py`.
+`uv run --project v2 pytest v2/tests/test_router_nat.py v2/tests/test_infrastructure_foundation.py`.
 The Docker test uses real Linux packet forwarding and Tailscale-equivalent rules;
 it simulates lost kernel state and executes the persisted service, not a VM reboot.
 

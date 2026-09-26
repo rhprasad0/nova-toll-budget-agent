@@ -37,7 +37,7 @@ plans, state evidence, or documentation.
 
 - [PostgreSQL schema](db/schema.sql)
 - [IAM-authenticated database roles](db/roles.sql)
-- [Missing I-95/495 OD validation](eval/results/i95-missing-od-pricing.md) and
+- [Missing I-95/495 OD proxy guidance](eval/results/i95-missing-od-pricing.md) and
   [production proxy mapping and pricing views](db/analysis.sql)
 
 The independently deployable `pricing` application schema is at **1.4.0**. Its
