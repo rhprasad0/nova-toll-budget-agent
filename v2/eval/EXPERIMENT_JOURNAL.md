@@ -2378,3 +2378,13 @@ digests plus `agentcore.zip` and `timed-checks.zip` digests; the other package
 digests are unchanged. The local release verifier accepted the rebuilt inputs
 and packages, and all 19 manifest tests passed. This is credential-free build
 validation, with no delivery authorization or application-performance claim.
+
+The subsequent read-only plan correctly rejected the old shared-package
+compatibility record. Bound development compatibility to CI's observed serving
+release `9d04cc7` and the rebuilt scheduled-check package. Database schemas,
+loader/publisher/scheduled-check handlers and pinned requirements are unchanged
+from that release; the application changes are the reviewed SOP and version
+constant. The five compatibility checks passed against the retained production
+and updated development baselines; all 120 shared-package checks also passed.
+The release verifier accepts the updated binding. Production baseline and
+delivery approvals remain unchanged.
