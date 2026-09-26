@@ -69,7 +69,7 @@ migrations; the later production cutover approval authorizes application routing
 Before preparation apply, the trusted gate requires the reviewed package hashes,
 unchanged schema contracts and serving baseline in
 `v2/scripts/shared-package-compatibility.json`. This record covers the development
-transition from `b7c581c9d7f72360eecd5f4d7af1204ebb2077cd` and retains the production
+transition from `8a42520a7ac2d01a529d3c175aa0477aa6339e5d` and retains the production
 baseline `4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe`. Preparation checks compatibility
 before migrations and repeats the check before applying the saved plan.
 An already-completed preparation retains these verified packages without needing

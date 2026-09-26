@@ -441,7 +441,6 @@ def admit(
     deadline = time.monotonic() + max(timeout_seconds, 0)
     predecessor_deadline: float | None = None
     while True:
-        waiting_for_predecessor = False
         try:
             if terraform_applicable(paths):
                 terraform_run = _one_run(
@@ -456,9 +455,7 @@ def admit(
                     predecessor_deadline = time.monotonic() + max(
                         predecessor_timeout_seconds, 0
                     )
-                waiting_for_predecessor = True
                 _predecessor(api, repository, before)
-                waiting_for_predecessor = False
             current = {
                 "id": current_run_id,
                 "run_number": 0,
@@ -478,9 +475,8 @@ def admit(
             if not check_predecessor:
                 raise AdmissionError("admission recheck not ready") from None
             wait_deadline = (
-                predecessor_deadline if waiting_for_predecessor else deadline
+                predecessor_deadline if predecessor_deadline is not None else deadline
             )
-            assert wait_deadline is not None
             if time.monotonic() >= wait_deadline:
                 raise AdmissionError("admission timed out") from None
             sleep(min(max(poll_seconds, 0), max(wait_deadline - time.monotonic(), 0)))

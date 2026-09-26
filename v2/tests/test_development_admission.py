@@ -381,13 +381,22 @@ def test_workflow_waits_thirty_minutes_without_relaxing_evidence(
 
 
 @pytest.mark.parametrize("complete", [True, False])
+@pytest.mark.parametrize("ci_retry", [True, False])
 def test_predecessor_has_a_separate_bounded_wait(
-    monkeypatch: pytest.MonkeyPatch, complete: bool
+    monkeypatch: pytest.MonkeyPatch, complete: bool, ci_retry: bool
 ) -> None:
     api = FakeAPI()
     api.predecessor.update(status="in_progress", conclusion=None)
     elapsed = 0.0
     monkeypatch.setattr(admission.time, "monotonic", lambda: elapsed)
+    original_get = api.get
+
+    def get(path: str, params: Mapping[str, str] | None = None) -> dict[str, Any]:
+        if ci_retry and elapsed == 1800 and "ci.yml" in path:
+            raise admission.RetryableAdmission("GitHub API temporarily unavailable")
+        return original_get(path, params)
+
+    monkeypatch.setattr(api, "get", get)
 
     def advance(seconds: float) -> None:
         nonlocal elapsed
