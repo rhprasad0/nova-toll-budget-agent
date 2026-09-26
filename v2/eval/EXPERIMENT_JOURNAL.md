@@ -3284,3 +3284,12 @@ findings remain unchanged. Local validation passed 475 focused tests and 25
 subtests, corpus validation, lint and type checks. Required PR CI remains the
 merge gate. No paid rerun was needed; cumulative evaluation spending remains
 $7.483414620.
+
+The read-only development plan then rejected the older shared-package baseline
+`8a42520a`: its sanitized evidence identified `6af96ec9` as the serving release.
+Updated the development compatibility binding to that observed release and
+refreshed its manifest digest. Shared handlers, pinned requirements and database
+schemas are unchanged from the serving release; production compatibility is
+unchanged. All 145 focused compatibility, shared-package and manifest checks
+passed, with three subtests. The next PR run must verify the corrected binding.
+This metadata correction made no model calls and changed no calibrated behavior.
