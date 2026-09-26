@@ -32,7 +32,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.15"
+VERSION = "2.3.16"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -324,7 +324,30 @@ class ActorAssessment(golden.Record):
     status: Literal["valid", "invalid", "uncertain"]
 
 
+class AssistantQuote(golden.Record):
+    turn: int = Field(
+        ge=1,
+        description="One-based assistant answer turn, never a user message or tool result.",
+    )
+    quote: str = Field(
+        min_length=1,
+        pattern=r"\S",
+        description="Exact contiguous text copied from that assistant answer, including its original formatting.",
+    )
+
+
+class DisclosureAssessment(golden.Record):
+    requirement_id: str = Field(min_length=1)
+    quotes: list[AssistantQuote] = Field(
+        description="Assistant answer quotes that together convey this requirement, accepting equivalent wording. Return [] when the material disclosure is missing. Tool-only facts do not count."
+    )
+
+
 class OutcomeAssessment(golden.Record):
+    disclosures: list[DisclosureAssessment] = Field(
+        default_factory=list[DisclosureAssessment],
+        description="Assess every compiled disclosure ID exactly once, before the remaining Outcome requirements. Use [] when no disclosure IDs are supplied.",
+    )
     outcome: RequirementAssessment
     actor_validity: ActorAssessment
 
@@ -893,6 +916,119 @@ This provenance rule affects actor validity only; apply the full application rub
 """
 
 
+def disclosure_requirements(attempt: Attempt) -> dict[str, str]:
+    """Resolve the three targeted disclosure obligations from actual returned data."""
+    requirements: dict[str, str] = {}
+    for turn, response in enumerate(attempt.turns, 1):
+        for index, call in enumerate(response.calls, 1):
+            if call.is_error:
+                continue
+            result = cast(dict[str, Any], call.result)
+            prefix = f"turn_{turn}.call_{index}"
+            if call.name == "get_current_toll_price":
+                for component_index, component in enumerate(
+                    result.get("components", []), 1
+                ):
+                    if component.get("source_kind") != "schedule_derived":
+                        continue
+                    component_id = f"{prefix}.component_{component_index}"
+                    facility = component.get("facility", "the quoted facility")
+                    requirements[f"{component_id}.published_source"] = (
+                        f"Identify the {facility} price from turn {turn}, call {index} as coming from a published schedule or fixed rates. Equivalent wording suffices."
+                    )
+                    if component.get("rate_period") == "peak":
+                        requirements[f"{component_id}.peak"] = (
+                            f"Identify the {facility} price from turn {turn}, call {index} as peak pricing. Equivalent wording suffices."
+                        )
+            elif call.name == "get_annual_toll_ballpark":
+                assumptions = result.get("assumptions", {})
+                rate = assumptions.get("vehicle_cost_per_mile_usd")
+                if rate is not None and result.get("vehicle_cost"):
+                    requirements[f"{prefix}.vehicle_assumption"] = (
+                        f"Disclose the assumed ${rate} vehicle cost per straight-line tolled mile used by the annual estimate in turn {turn}, call {index}. Equivalent wording or units suffice; derived totals alone do not disclose the assumption."
+                    )
+    return requirements
+
+
+def disclosure_verdict(
+    assessment: OutcomeAssessment,
+    requirements: dict[str, str],
+    turns: list[golden.Turn],
+) -> Verdict:
+    ids = [item.requirement_id for item in assessment.disclosures]
+    if len(ids) != len(set(ids)) or set(ids) != set(requirements):
+        raise ValueError("invalid_disclosure_ids")
+    unmet = list(assessment.outcome.unmet_requirements)
+    for item in assessment.disclosures:
+        for citation in item.quotes:
+            if (
+                citation.turn > len(turns)
+                or citation.quote not in turns[citation.turn - 1].response
+            ):
+                # A fabricated citation is a measurement defect, not an application failure.
+                raise ValueError("invalid_disclosure_quote")
+        if not item.quotes:
+            unmet.append(
+                UnmetRequirement(
+                    requirement=requirements[item.requirement_id],
+                    evidence=f"No assistant-answer disclosure supplied for {item.requirement_id}.",
+                )
+            )
+    evidence = assessment.outcome.model_dump()
+    evidence["unmet_requirements"] = [item.model_dump() for item in unmet]
+    evidence["disclosures"] = [item.model_dump() for item in assessment.disclosures]
+    return Verdict(passed=not unmet, evidence=json.dumps(evidence, ensure_ascii=False))
+
+
+def mechanical_rules(
+    case: golden.GoldenCase, attempt: Attempt
+) -> list[UnmetRequirement]:
+    """Use the same replay contract as execution, including permitted discovery calls."""
+    replay = golden.Replay(case)
+    messages: list[str] = []
+    failures: list[UnmetRequirement] = []
+    for turn, response in enumerate(attempt.turns, 1):
+        messages.append(response.user)
+        calls = [(call.name, call.input) for call in response.calls]
+        calls += [
+            (call.name, call.input)
+            for call in attempt.rejected_tools
+            if call.turn == turn
+        ]
+        for name, arguments in calls:
+            try:
+                replay.call(name, arguments, messages)
+            except ValueError as error:
+                if str(error) not in {
+                    "tool_arguments",
+                    "premature_call",
+                    "missing_user_fact",
+                    "unexpected_call",
+                }:
+                    raise
+                expected = (
+                    golden.load_fixture(case.steps[replay.index].fixture)
+                    if replay.index < len(case.steps)
+                    else None
+                )
+                failures.append(
+                    UnmetRequirement(
+                        requirement="Follow the permitted tool arguments and sequence at the time of each call.",
+                        evidence=json.dumps(
+                            {
+                                "turn": turn,
+                                "error": str(error),
+                                "actual_tool": name,
+                                "actual_input": arguments,
+                                "permitted_tool": expected.tool if expected else None,
+                                "permitted_input": expected.input if expected else None,
+                            }
+                        ),
+                    )
+                )
+    return failures
+
+
 def assess_outcome(
     case: golden.GoldenCase,
     attempt: Attempt,
@@ -902,11 +1038,13 @@ def assess_outcome(
     *,
     fixed_reference: bool = False,
 ) -> None:
+    requirements = disclosure_requirements(attempt)
     evaluator = Agent(
         model=model,
         system_prompt=judge_prompt("outcome")
         + "\n"
         + ACTOR_ASSESSMENT_PROMPT
+        + "\nAssess the COMPILED DISCLOSURE REQUIREMENTS only in disclosures, using exact assistant-answer quotes. Their applicability is already resolved; never add an off-peak disclosure requirement. Do not repeat these disclosure assessments in outcome.evidence or outcome.unmet_requirements. The outcome object assesses all remaining applicable requirements and every affirmative factual or financial contradiction. Quotes must convey the requirement, not merely repeat a related number or word; preserve equivalent wording and disclosures in earlier answers. Empty quotes means the disclosure is missing."
         + ("\n" + FIXED_REFERENCE_PROMPT if fixed_reference else ""),
         callback_handler=None,
         retry_strategy=None,
@@ -916,6 +1054,8 @@ def assess_outcome(
     result = evaluator(
         "APPLICATION CASE CONTRACT:\n"
         + reference
+        + "\nCOMPILED DISCLOSURE REQUIREMENTS (IDs and meanings; empty means none):\n"
+        + json.dumps(requirements)
         + "\nAPPLICATION-VISIBLE CONVERSATION:\n"
         + conversation
         + "\nPRIVATE SIMULATOR PROFILE, FOR ACTOR VALIDITY ONLY:\n"
@@ -937,7 +1077,13 @@ def assess_outcome(
     assessment = result.structured_output
     if not isinstance(assessment, OutcomeAssessment):
         raise ValueError("missing_judge_verdict")
-    attempt.verdicts["outcome"] = assessment.outcome.verdict()
+    # Preserve raw output if citation validation makes this measurement unusable.
+    attempt.verdicts["outcome"] = Verdict(
+        passed=False, evidence=assessment.model_dump_json()
+    )
+    attempt.verdicts["outcome"] = disclosure_verdict(
+        assessment, requirements, attempt.turns
+    )
     attempt.actor_validity = assessment.actor_validity
     if (
         attempt.application_stop
@@ -996,12 +1142,18 @@ def judge(
                 else "return the supplied pricing evidence",
             }
         )
+    rule_failures = mechanical_rules(case, attempt)
     for key in ("outcome", *RUBRICS):
         evaluator.reference_system_prompt = judge_prompt(key)
         reference = reference_requirements if key != "grounding" else ""
         reference = f"Criterion: {key.upper()}\n" + reference
         if key == "outcome":
             reference += f"\nDeclared terminal objective: {case.terminal_objective}."
+        if key == "rules":
+            reference += (
+                "\nMECHANICAL TOOL-CONTRACT VIOLATIONS (authoritative replay validation; these fail Rules even if other behavior is supported; [] does not establish consent or overall compliance):\n"
+                + json.dumps([failure.model_dump() for failure in rule_failures])
+            )
         if key != "grounding":
             reference += (
                 f"\nConversation limits: {case.actor.max_turns} delivered user turns, "
@@ -1054,6 +1206,18 @@ def judge(
         attempt.verdicts[key] = Verdict(
             passed=result[0].test_pass, evidence=result[0].reason
         )
+        if key == "rules" and rule_failures:
+            attempt.verdicts[key] = Verdict(
+                passed=False,
+                evidence=json.dumps(
+                    {
+                        "model_assessment": attempt.verdicts[key].model_dump(),
+                        "mechanical_violations": [
+                            failure.model_dump() for failure in rule_failures
+                        ],
+                    }
+                ),
+            )
 
 
 def failure_class(attempt: Attempt) -> str | None:
