@@ -2628,3 +2628,36 @@ below before the final decision. Raw drivers, SQL output and logs stay in ignore
 query-session wall time locally, plus container setup. No provider was purchased
 and no deployed database was changed. Hosted runner usage is reported with the
 completed comparisons below; billing has not been queried.
+
+**Full-suite follow-up:** one sequential local run per variant, each using a
+fresh container, the same image/host/settings as the probes, no optional
+instrumentation, and `--profile full`. The control ran the unchanged `1b53c5d`
+worktree; the candidate used the JIT/readiness changes above. The final variant
+added one `ANALYZE` after fixture/bootstrap preparation and before the retained
+and candidate contracts. All bootstrap, migration, negative, role, rollback,
+retirement, retained, and candidate checks passed.
+
+| Local full database script | Wall time | Report contracts combined | Route/pricing contracts combined |
+| --- | ---: | ---: | ---: |
+| Control, JIT on | 556.47 s | 342.87 s | 182.99 s |
+| JIT off | 310.91 s | 97.13 s | 183.48 s |
+| JIT off plus statistics refresh | 242.87 s | 67.63 s | 145.43 s |
+
+JIT off cut the full local run by 44.1%; adding statistics refresh cut a further
+21.9% (56.4% below the control). This full-suite comparison has one observation
+per variant, so these are measured examples, not stable tail estimates. The
+report probe's repeated observations support the JIT effect separately. The
+statistics-only probe with JIT on was slower; the retained fix uses both together.
+The tested statistics refresh is now included in the candidate.
+
+Before that additional refresh, the ordinary hosted CI at `80d7fe3` and
+`d98f7fd` passed all 14 checks. Runs `36266028206` and `36266519238` used the same
+executable candidate; the second commit added only the journal. Database jobs
+were 353 and 354 s; loader jobs were 252 and 234 s, with 2,092 tests passed,
+8 skipped and 23 deselected in each. Database jobs used the full profile and
+ordinary merge checkout. Parent PR #614's most recent unchanged run took 917 s
+for the database job. These hosted observations were not paired on a fixed CPU,
+so the local controlled comparison is the stronger causal evidence. The two
+completed hosted database/loader pairs consumed about 19.9 runner-minutes;
+other CI checks and the initial interrupted attempt are additional. The revised
+statistics setting and worker trial are still being validated below.

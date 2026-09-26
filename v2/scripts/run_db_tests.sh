@@ -920,6 +920,8 @@ BEGIN
 END $$;
 UPDATE pricing.schema_version SET version = '1.3.0' WHERE singleton;
 SQL
+# Refresh statistics for the populated fixtures before planning contract queries.
+psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 --command ANALYZE
 # Run the reviewed serving baseline and candidate contracts against the same
 # upgraded disposable schema. Fixtures roll back data; never downgrade schemas.
 retained_contract_ref="$(python3 -c 'import json; print(json.load(open("v2/scripts/shared-package-compatibility.json"))["baseline"])')"
