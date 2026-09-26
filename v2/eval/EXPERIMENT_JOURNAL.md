@@ -2574,3 +2574,57 @@ other normal PR checks and final cleanup validation. Billing was not queried;
 no third-party runner was purchased. The initial PR also ran its existing
 read-only development plan and browser checks. Raw logs, metadata, and analysis
 remain ignored locally; this journal is the aggregate experiment record.
+
+### 2026-09-26 — Disable JIT in disposable CI databases
+
+**Purpose:** follow the CI profile with controlled changes to JIT, planner row
+estimates, fixture statistics, and isolated contract workers. PR #615 is stacked
+on profiling PR #614. The initial implementation (`18fa5ad`, manifest correction
+`80d7fe3`) disables JIT only after the test runner verifies an empty disposable
+PostGIS cluster. It also removes the retry sleep from
+`shared_readiness(wait=False)`; waiting calls retain their retry behavior.
+
+**Controlled report probe:** schema and fixture source `1b53c5d` (Oracle 1.15.1,
+pricing 1.4.0), PostgreSQL 17.5/PostGIS 3.5, local cached image config
+`624f5195b91d424dbebf018890148cc0e5a3e80db5467da8b53cc2ed2ce49216`.
+The same Ryzen 7 5800X host ran each SQL sample sequentially in a fresh container,
+with warm host/image caches and no CPU or memory limit. Shared buffers remained
+128 MiB and work memory 4 MiB. Each sample installed the canonical schema,
+inserted the report contract's two direction rows, assumed `report_publisher`,
+and materialized `get_i95_i495_report_inputs()`; all returned 829 rows.
+Two repetitions per variant, with no `auto_explain` instrumentation:
+
+| Fixture/planner variant | JIT on median (range), seconds | JIT off median (range), seconds |
+| --- | ---: | ---: |
+| Fresh schema, default function row estimates | 16.62 (16.54–16.69) | 16.26 (15.84–16.69) |
+| Fresh schema, five single-row route functions estimated as `ROWS 1` | 15.24 (15.14–15.34) | 15.86 (15.64–16.09) |
+| Analyze graph tables and the two-row I-95 fixture | 86.90 (84.60–89.21) | 7.65 (7.53–7.78) |
+| Analyze those tables and apply the same `ROWS 1` estimates | 87.48 (84.30–90.67) | 7.33 (7.08–7.58) |
+
+Statistics changed the effect of JIT substantially: turning JIT off reduced the
+analyzed report median by 91.2%, while it barely changed the fresh-schema probe.
+Correcting function row estimates alone did not remove the slow case. These
+are query probes, not full-suite or hosted speedup claims. Elapsed times include
+the small fixture/setup commands in the query session. Two observations cannot
+establish tail latency; host caches were warm, and these synthetic data do not
+establish the best JIT setting for deployed workloads. An initial probe setup
+used a nonexistent table name and failed before the measured query; it was
+corrected and excluded.
+
+**Loader check:** the same 120 shared-package tests passed before and after the
+readiness fix: 11.01 s before, 0.96 s after. The existing failure-path test now
+asserts that `wait=False` never sleeps; the transient-error test still checks a
+10-second retry for waiting calls. The combined focused database/profile and
+shared-package checks passed (182 tests), as did Ruff, Pyright, ShellCheck,
+schema-version validation, secret scanning, and 19 release-manifest tests.
+The first hosted attempt found the changed readiness script's stale deployment
+input checksum; only that checksum was refreshed before retesting.
+
+**Decision at this stage:** keep the disposable JIT setting and readiness fix;
+do not change deployed settings or add a schema migration for `ROWS 1` based on
+these results. Full-suite comparisons and the isolated-worker experiment follow
+below before the final decision. Raw drivers, SQL output and logs stay in ignored
+`v2/eval/private/ci-optimization/`. The report probes used about 8.5 minutes of
+query-session wall time locally, plus container setup. No provider was purchased
+and no deployed database was changed. Hosted runner usage is reported with the
+completed comparisons below; billing has not been queried.
