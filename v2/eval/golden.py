@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.9"
+CORPUS_VERSION = "3.3.10"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -662,7 +662,7 @@ def money(text: str) -> set[Decimal]:
     text = re.sub(
         r"\$(\d[\d,]*(?:\.\d+)?)(?:\*{1,2}|_{1,2}|`)?"
         r"(?:\s*\(\d+(?:\.\d+)?%\))?(?:\*{1,2}|_{1,2}|`)?\s+"
-        r"(?:below|less than|lower(?: than)?)\b",
+        r"(?:below|less than|lower(?: than)?|decrease|drop|reduction)\b",
         r"-$\1",
         text,
         flags=re.IGNORECASE,

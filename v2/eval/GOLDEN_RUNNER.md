@@ -14,7 +14,7 @@ scheduled evaluation settings are separate from this golden contract.
 
 ## Description-edit contract
 
-Contract 3.3.9 / harness 2.3.9 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.10 / harness 2.3.10 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -43,6 +43,14 @@ nonworsening, and independent material-regression review. Pass³ and paired delt
 are diagnostics. Rank eligible candidates by overall pass rate, fewer changed
 lines, then A. Harness 2.2.0 retains its historical pass³ promotion rule.
 
+The development target is **270/300 (90%)**, confirmed on a fresh full-set run
+with all trials valid and fully measured. Reaching it during search triggers the
+planned confirmation. A confirmed improvement below 90% is progress, not target
+completion. If the unchanged baseline already reaches 90%, confirm it once without
+requiring a strict improvement over itself. See the
+[eval-climb skill](../../.agents/skills/eval-climb/SKILL.md) for the bounded search,
+regression evidence rules and separately authorized continuation.
+
 Optimize using development cases only. The separate blind production standard is
 at least 240/300 successful trials, with valid simulations and complete judgments;
 80% on this exposed set cannot qualify production. Keep holdout cases and feedback
@@ -59,6 +67,27 @@ runs (100 cases × 3 trials, 16 workers). Compare repeatability and criterion
 variation; designate the second application run by position as the next baseline,
 never by score. Reuse only with unchanged application/evaluation identities and
 verified development migration/catalog parity after human-reviewed merge.
+
+Preserve both repeat reports and their per-case counts for candidate review.
+Unseeded trial numbers identify slots, not identical random draws. A case changing
+from 3/3 to 0/3 warrants inspection but does not by itself prove patch causality.
+The comparison helper's per-case counts and `development_target_met` are
+diagnostics; neither overrides the numeric gates or independent review.
+
+Audit fresh application trajectories before search and at final confirmation.
+Use a fixed selection rule: in each coverage family, review the first successful
+and first scored failing trial in `(case_id, trial)` order, when present. Also
+review all actor-invalid/uncertain trials and all new Grounding/Rules violations
+in comparisons. Cite delivered messages and actual tool evidence; private actor
+facts cannot supply missing application facts or consent. Record disagreements
+without rewriting scores. A substantive grading defect requires a new contract
+and matching calibration. Repeated agreement on exposed calibration references,
+or a scripted actor check, cannot establish accuracy on unseen trajectories.
+
+Frozen replay accepts the declared tool sequence and exact arguments, apart from
+weekday ordering. Investigate apparently equivalent rejected calls before changing
+that contract; never accept a different route merely because it is nearby. Retain
+relevant tool/runtime tests separately, since replay does not execute live pricing.
 
 Chain preparation from the last accounted run using the user-authorized cumulative
 ceiling. Admit each complete run only when its estimate with headroom fits, reserving
