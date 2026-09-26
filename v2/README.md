@@ -196,10 +196,6 @@ running the command above. Statement timings are printed with contract identity
 and statement ordinal; SQL output stays in
 `v2/eval/private/ci-profiling/contracts/`. Set `DB_CONTRACT_PROFILE_DIR` to a
 different ignored directory for each repetition. Use a fresh container each time.
-The temporary CI profiling branch enables timing, forces full coverage, and
-checks out the PR head. For three comparable GitHub attempts, rerun the two jobs
-from the same workflow run and verify their candidate and event-base SHAs match.
-Revert the temporary workflow overrides after collecting those repetitions.
 
 For a separate local diagnostic pass, use `DB_CONTRACT_DIAGNOSTICS=plans`.
 This loads PostgreSQL's `auto_explain` in the contract sessions, including nested

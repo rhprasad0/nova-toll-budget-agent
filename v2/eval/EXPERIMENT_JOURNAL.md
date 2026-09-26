@@ -2501,3 +2501,76 @@ excluded; nested plans were collected in the executing contract sessions.
 local compute cost was not metered. Manifests, timings, SQL/plans, profiles, and
 local drivers remain ignored under `v2/eval/private/ci-profiling/`. Only this
 aggregate summary is intended for publication with the instrumentation.
+
+### 2026-09-26 — GitHub repetitions and cleanup
+
+The hosted phase completed on frozen candidate
+`3d6f88a3ca21f07821b050f53ac9b4490608edd9`, event base
+`53145d442c7149f7c3bb3508273a55b8f61d4955`, and the same retained-contract revision
+as the local phase. [PR #614](https://github.com/rhprasad0/nova-toll-budget-agent/pull/614)
+contains the instrumentation. Workflow run `36254825178` supplied three actual
+executions of each target job: database in attempts 1–3 and loader in attempts
+1, 4, and 5. GitHub refused overlapping job reruns. Its copied completed jobs
+receive new IDs but preserve their old start times; those copies were excluded.
+All six executions passed, and every loader execution recorded 2,067 passed,
+8 skipped, and 23 deselected, with coverage and authored-code checks passing.
+
+Candidate/event-base SHAs, source/lockfile hashes, and database image identity
+matched across repetitions. Each database execution used a fresh service and
+full coverage with statement timing enabled. Runners exposed four CPUs and
+about 16 GiB RAM, using Ubuntu 24.04 image `20260920.314.1`. Python was 3.13.15,
+Node 22.22.1, Terraform 1.15.8, and PostgreSQL 17.5. Database runners reported
+AMD EPYC 9V74 or 7763; loader runners reported AMD EPYC 9V45, Intel Xeon Platinum
+8573C, or AMD EPYC 7763. Hardware was not fixed by `ubuntu-latest`.
+
+| Hosted measurement | Median | Range |
+| --- | ---: | ---: |
+| Database job, including setup and cleanup | 895 s (14m 55s) | 638–924 s |
+| Database script, with statement timing | 869.30 s | 607.30–891.87 s |
+| Report contracts within the script | 567.56 s | 371.40–594.19 s |
+| Route and pricing parity contracts | 239.79 s | 186.26–247.10 s |
+| PostGIS service initialization | 17 s | 16–18 s |
+| Loader job, including setup and cleanup | 233 s (3m 53s) | 184–247 s |
+| Loader coverage/pytest command | 159.51 s | 119.22–173.21 s |
+| Loader authored-code checks | 27 s | 20–32 s |
+
+Job durations exclude queue time. Step API durations have one-second precision;
+command wall times come from `/usr/bin/time`. Its database CPU measurements
+exclude PostgreSQL running in the service container. Hosted CPU/I/O attribution
+therefore remains limited; the stronger CPU-heavy evidence comes from the local
+container samples and SQL plans. The hosted runs remain separate from the local
+baselines because revisions, images, hardware, and cache conditions differ.
+
+Report and route/pricing checks consumed **91.8–93.7%** of hosted database script
+time. Container startup and dependency setup are small targets. The retained
+report-input statement varied from about 17 s to 123 s even between the two
+runners reporting the same CPU model. Statement timings do not distinguish plan,
+statistics, compilation, or host contention as the cause. Loader timings again
+identified Terraform policy rendering, package construction, and the fixed
+10-second readiness sleep. Three samples do not establish a stable tail latency
+or a causal hardware comparison.
+
+**Decision:** retain optional local diagnostics and investigate repeated SQL
+work and report-input variability next. Faster, more consistent CPU execution
+may help, but this experiment does not establish a Depot or Blacksmith speedup.
+Fixing the `wait=False` sleep remains a separate small loader improvement.
+Any provider comparison should keep the workload fixed and report hardware,
+repeated job timings, and cost together; cache or vCPU-count claims alone do not
+address the measured bottleneck.
+
+The normal PR workflow's development-plan check rejected a stale development
+compatibility baseline (`9d04cc7` versus observed serving release `8a42520`).
+This unrelated failure persisted as copied results during targeted reruns; it
+does not make the complete workflow green. After measurements, cleanup integrated
+main `a4a23a0`, which already contained the exact baseline correction. The six
+compatibility and required-workflow checks passed after integration; the 57
+database/profile checks also passed. Temporary timing, image, full-profile,
+timeout, and PR-head checkout overrides were removed, restoring the ordinary
+merge-commit CI gate and addressing the automated review. No query optimization,
+coverage reduction, provider migration, or deployment was performed.
+
+The six measured jobs consumed approximately **52.0 runner-minutes**, excluding
+other normal PR checks and final cleanup validation. Billing was not queried;
+no third-party runner was purchased. The initial PR also ran its existing
+read-only development plan and browser checks. Raw logs, metadata, and analysis
+remain ignored locally; this journal is the aggregate experiment record.
