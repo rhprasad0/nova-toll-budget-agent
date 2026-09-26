@@ -179,6 +179,7 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # ponytail: both services start for fast profiles; create the second on demand if startup becomes material.
       postgres_retained:
         image: postgis/postgis:17-3.5
         env:

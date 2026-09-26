@@ -2705,3 +2705,40 @@ the local statistics speedup on a different hosted allocation; these unpaired
 hosted observations cannot isolate CPU or planner-state variation. That pair
 used about 9.0 additional runner-minutes. The final concurrent version is tested
 separately; earlier serial samples are not pooled with it.
+
+**Final concurrent validation (`0a73696a`):** the actual workflow shell passed
+locally against two fresh containers in **131.72 s**, including both complete
+setup/migration sequences and both disposable adoption tests. The harness used
+assigned loopback ports instead of CI's fixed ports to preserve an unrelated
+local service. Its log contained exactly the expected 17 unique passed contract
+identities, no failed contracts, and two passed adoption tests. This is 76.3%
+below the 556.47 s local original control and 45.8% below the 242.87 s tuned
+single-worker run. These full-workflow timings each have one observation; the
+two repeated contract-only trials above support the concurrency effect.
+
+Hosted run `36267885271` passed all 14 required checks on the concurrent change.
+The database job took **216 s (3m36s)** and the loader job **242 s (4m02s)**;
+the loader became the longer job. Both worker adoption tests passed and the
+full retained/candidate contract set passed. Container initialization was 18 s,
+compared with 16 s in the preceding single-service run; this is an observation
+on different hosted allocations, not a controlled startup benchmark. This pair
+used about 7.6 runner-minutes. All four completed optimization-stage hosted
+database/loader pairs together used about 36.5 runner-minutes, excluding other
+checks, the initially interrupted run and subsequent documentation-only CI.
+No third-party runner was purchased and billing was not queried.
+
+The final focused suite passed 190 tests. Repository-wide Ruff, formatting,
+Pyright, ESLint, TypeScript, shell and workflow checks passed after installing
+the existing locked JavaScript dependencies in the new worktree. No new
+dependency was added. The existing review request for controlled evidence was
+resolved after publishing the aggregate results. Raw output remains ignored,
+all experiment containers were removed, and the unrelated local database was
+left untouched. Subsequent journal/comment-only commits rerun ordinary CI and
+are excluded from the executable performance comparison.
+
+**Final decision:** retain JIT off, refreshed fixture statistics, two isolated
+full-CI contract workers, and the no-wait readiness fix. Keep default local and
+development-delivery validation serial and complete. Do not add SQL migrations,
+parallel-safety declarations or function row-estimate changes on this evidence.
+Hosted variation still limits hardware comparisons; these results do not
+establish a Depot or Blacksmith speedup or a deployed-database tuning policy.
