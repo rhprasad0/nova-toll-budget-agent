@@ -49,7 +49,7 @@ weaken that story.
 | Recovery | The closure record links candidate rejection, recovery, and healthy cleanup; [PR #533](https://github.com/rhprasad0/nova-toll-budget-agent/pull/533) explains the retained frontend defect | The earlier rehearsal demonstrated routing/API recovery, not frontend health. Do not discard that proof or claim it covered the browser. |
 | Streaming and sessions | [Runtime](../agent/agentcore_entrypoint.py) and [proxy](../lambdas/chat_proxy/handler.mjs) implement checked streaming, release fencing, and request leases | Streaming exists. Session metadata is stored, but conversation state is in runtime memory; releases intentionally require a new chat. |
 | Data and security | [Loader](../lambdas/loader/handler.py), [pricing SQL](../db/analysis.sql), [security policy](../../SECURITY.md), and [telemetry runbook](../runbooks/telemetry-pii-redaction.md) | Code and tests establish specific contracts; live observations retain their narrower scope. |
-| Cost and evaluation | [Billing dashboard runbook](../runbooks/cost-dashboard.md) and [retained evaluation results](../eval/results/README.md) | Per-turn cost is unmeasured. Evaluation timings that include actors and judges are not serving latency. |
+| Cost and evaluation | [Billing dashboard runbook](../runbooks/cost-dashboard.md) and [experiment summaries](../eval/EXPERIMENT_JOURNAL.md) | Per-turn cost is unmeasured. Evaluation timings that include actors and judges are not serving latency. |
 
 ## Ranked TODO
 

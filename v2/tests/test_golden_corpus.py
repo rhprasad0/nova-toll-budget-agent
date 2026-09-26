@@ -3,7 +3,7 @@
 import json
 from copy import deepcopy
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from pydantic import ValidationError
@@ -28,13 +28,25 @@ def test_actor_schema_has_one_decision_and_cannot_discard_a_reply() -> None:
 
 
 def test_actor_and_judge_keep_private_expectations_separate() -> None:
+    from strands import Agent
+
     case = golden_case(13)
     secret = "PRIVATE_ORACLE_SENTINEL"
     case.expected_assertion = secret
     case.provenance.note = secret
     case.coverage_tags = [secret]
     model = Mock(spec=Model)
-    actor = golden.make_actor(case, model)
+    with patch("strands.Agent", wraps=Agent) as factory:
+        actor = golden.make_actor(case, model)
+    formatting = factory.call_args.kwargs["structured_output_prompt"]
+    assert (
+        "no necessary question or triggered, unfulfilled profile follow-up remains"
+        in formatting
+    )
+    assert "still answer repeated necessary questions" in formatting
+    assert "Profile facts are available answers, not a checklist to volunteer" in str(
+        actor.agent.system_prompt
+    )
     assert not actor.agent.tool_names
     assert secret not in str(actor.agent.system_prompt)
     assert secret not in golden.actor_profile(case).model_dump_json()

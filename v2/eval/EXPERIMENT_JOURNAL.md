@@ -54,19 +54,19 @@ Review accepted generic home/work-area labels for supplied commute legs while co
 
 ## 2026-09-24 — Make cases 79/80 more realistic
 
-Corpus 3.0.2 revised the two split-itinerary cases to use a more plausible Springfield route, preserving their five-turn maximum and requiring confirmation before combining options. Only those cases and three references changed; the remaining 98 cases and application stayed frozen. Forty-two relevant tests passed, but matching calibration and human approval were still pending.
+Corpus 3.0.2 revised the two split-itinerary cases to use a more plausible Springfield route, preserving their five-turn maximum and requiring confirmation before combining options. Only those cases and three references changed; the remaining 98 cases and application stayed frozen. Forty-two relevant tests passed. The matching calibration then completed 120 references and 360 calls with 354/360 label agreement for $0.19802250; six disagreements across five references remained, so human approval was still pending.
 
 ## 2026-09-24 — Adjudicate case 65 and clarify judge criteria
 
-Ryan adjudicated case 65’s negative control to fail Outcome and Rules, and clarified evaluator criteria while preserving its transcript and the rest of the corpus. Corpus 3.0.3 / harness 2.0.10 received a fresh calibration; the following entries record its repeat and application baseline. No prior calibration or score was silently rewritten.
+Ryan adjudicated case 65’s negative control to fail Outcome and Rules, and clarified evaluator criteria while preserving its transcript and the rest of the corpus. Corpus 3.0.3 / harness 2.0.10 calibration matched 358/360 labels for $0.20658857; two disagreements remained and approval was pending. No prior calibration or score was silently rewritten.
 
 ### 2026-09-24 — Authorized repeat of unchanged 3.0.3 calibration
 
-The unchanged 3.0.3 calibration was repeated at Ryan’s direction; the two measurements are recorded as separate evidence. Their results informed approval of the current corpus/calibration and the first development baseline below. A repeated exposed-reference calibration does not establish unseen-case accuracy.
+The unchanged 3.0.3 calibration was repeated at Ryan’s direction: all 360/360 labels matched for $0.19815320, including the two disputed in the first run. The repeat informed approval of the current corpus/calibration and the first development baseline below; exposed-reference agreement does not establish unseen-case accuracy.
 
 ### 2026-09-24 — Approve current corpus/calibration and authorize baseline
 
-The current corpus and calibration were approved for a development baseline, without claiming production qualification or human adjudication beyond the recorded review. The matching application run used the frozen 100-case set and three trials per case; its metrics and cost remain in the following table and baseline entry.
+The current corpus and calibration were approved for a development baseline, without production qualification. On the frozen 100-case set, the first run passed 156 trials, failed 131, and had 13 inconclusives; 33 cases passed all three trials. It cost $0.91475671. Actor validity and signed-money parsing errors motivated the measurement repair below; no verdict was rewritten.
 
 ## 2026-09-24 — Correct measurement defects before a second golden-100 baseline
 
@@ -416,3 +416,197 @@ Contract 3.3.9 raised only judge reasoning to Luna/xhigh; two calibrations then 
 | Actor labels / valid actor trials | 146/146 | 146/146 | 300/300 |
 | Complete calls, all usage known | 438 | 438 | 723 |
 | Cost | $0.331475370 | $0.319100040 | $0.320316600 |
+
+## 2026-09-26 — Retrospective summaries of retired evidence
+
+Historical reports were consolidated during repository cleanup without rescoring or renewing approvals. Original evidence remains available at the [pre-cleanup commit](https://github.com/rhprasad0/nova-toll-budget-agent/tree/e2b7d4b5514ce3f0228d2556ab197f0c1c38ec1a/v2/eval); the costs below are historical, outside the current spending ledger.
+
+### Legacy golden demonstration and calibrations
+
+These `gpt-5.6-luna` source-checkout runs used prompt 2.3.0 and predate the current measurement contract. The 72-trial demonstration had incomplete actor behavior and exposed held-out material, so it remains a limited demonstration without baseline or release approval. Calibration 7 retained two Grounding disagreements and pending human review; calibration 15 had none and received [exact-evidence approval](evidence/golden-360/calibration-15/review.json), with an accepted 59/60 actor-check limitation. That historical approval does not qualify the current corpus or application.
+
+| Historical run | Commit | Corpus / harness | Recorded result | Run cost | Prior recorded spending |
+| --- | --- | --- | --- | ---: | ---: |
+| Demonstration, 2026-09-20 | `e9abf4eaef1b6f4bc615815c7b9b302ba8710821` | 1.0.5 / 1.0.4 | 27/72 successful trials (37.5%); 3/24 cases passed all three (12.5%); 546 model calls | $0.38888630 | $0.33607270 |
+| Calibration 7, 2026-09-20 | `a3c30b60dd100f299e9085bd20847569eea10d3a` | 1.0.7 / 1.1.0 | 100/102 label agreement across 34 references; 103 model calls | $0.07223746 | $0.79967600 |
+| Calibration 15, 2026-09-21 | `41f09f991cf0a2db54bd9410b33eb55d080be6e9` | 1.0.11 / 1.2.1 | 138/138 label agreement across 46 references; 138 model calls | $0.06590064 | $2.06711088 |
+
+### August 22 live integration checks
+
+Three selected live runs passed their code-graded checks, but two responses labeled an August observation EST. Model identity and cost were not recorded. These examples show integration behavior, not an agent-wide baseline or timezone correctness; raw response reports were removed.
+
+| Scenario | Recorded result | Checked behavior |
+| --- | --- | --- |
+| Reagan Airport and Pentagon/Eads Street to Westpark | 2/2 passed | Each made the exact current-price call to `i495:1859ND` and returned two observed components totaling $14.65, with movement and median comparison. |
+| Dulles Airport to Reagan Airport | 1/1 passed | The cross-direction request returned typed stale I-95 availability; the response withheld a price. |
+| Annual affordability workflows | 6/6 passed | Fixed/modeled success, Tysons exit clarification, complete input acquisition, salary-range clarification, adjustable 52-week annual-day estimates, and unavailable return routes. |
+
+### Annual ballpark grounding experiment
+
+Five prompt variants of one frozen Springfield-Franconia–Westpark result produced 1,000 `gpt-5.6-luna` responses. Adjudication found one wrong evaluation time, three correct but unsupported derived differences, 28 inadequate coverage disclosures, one missing annual toll amount, and 36 missing TollChat attributions. The original literal grader's 426/1,000 score was invalid because it rejected equivalent times, rounding, and wording; it needed correction before release-gate use. Actual usage was 30,196,200 input and 638,936 output tokens; dollar cost was unrecorded. Repetitions of one fixture do not establish route-wide or production accuracy.
+
+| Measure | Result |
+| --- | ---: |
+| Reconciled responses, transport success, correct P25/P50/P90 tables | 1,000/1,000 each |
+| Strict quantitative grounding | 996/1,000 (99.6%) |
+| No incorrect quantitative fact | 999/1,000 (99.9%) |
+| Core semantic contract | 971/1,000 (97.1%) |
+| Core contract plus explicit TollChat attribution | 935/1,000 (93.5%) |
+| Core contract plus strict quantitative grounding | 967/1,000 (96.7%) |
+| Attribution requirement plus strict quantitative grounding | 931/1,000 (93.1%) |
+
+### I-95/I-495 identity-proxy validation
+
+For 16 missing OD IDs, `identity_proxy_v1` copies the mapped VDOT price as a provisional ballpark. A chronological 70/30 split of July 25–30 captures gave 1,200 holdout comparisons: $0.106 MAE, 96.1% within $0.50, $0.00 p95 absolute error, and $8.05 maximum error; measured analysis cost was unrecorded. The feeds are related, observations cluster within captures, and the short overlap leaves per-OD and seasonal accuracy unproven. Keep modeled labels and withhold an estimate when no eligible row exists; stronger claims need per-OD and direction-stratified results plus reproducible pairing evidence. [Mapping guidance](results/i95-missing-od-pricing.md) retains those limits.
+
+## 2026-09-26 — Adversarial-review fixes before the next climb
+
+Contract 3.3.10 / harness 2.3.10 fixed signed-money grading for phrases such as “$2.50 decrease,” while preserving rejection of wrong amounts and signs. The development target is 270/300 successful fresh-confirmation trials (90%) with all trials measured; repeatability, violation counts, and trajectory review remain required. SOP 2.3.10 clarified per-turn call limits, consent, and annual presentation scope; the application stayed on Luna low/2,048. Offline checks passed, but no calibration or application run measured these changes. Corpus review remained pending, prior approvals did not transfer, and evaluation cost was $0.
+
+### 2026-09-26 — PR package-verification correction
+
+The SOP change required refreshed package digests and a development compatibility binding to the observed serving release `9d04cc7`. The rebuilt release manifest, five compatibility checks, 120 shared-package checks, and 19 manifest tests passed. This credential-free correction made no model calls or delivery claim; production compatibility and approvals were unchanged.
+
+## 2026-09-26 — CI database and loader profiling
+
+Optional statement timing and PostgreSQL plans identified where database and loader CI spent time before choosing an optimization. The local and hosted measurements below use different hardware and image builds and should be read separately; no paid runner was purchased.
+
+### Controls and environment
+
+Local measurements used fresh disposable PostgreSQL 17.5/PostGIS 3.5 containers, fixed schemas and fixtures, and source `8a42520` against base `9d04cc7`. Loader commands used warm dependency caches. The local cached image differed from GitHub's official image, so their timings are not directly comparable.
+
+### Aggregate results
+
+Three local baseline repetitions found report contracts and route/pricing parity dominated database time; all database and loader passes succeeded. Separate instrumented database passes took 567.98 s with statement timing and 589.39 s with nested plans; they were diagnostic runs, not speed comparisons. The focused database/profile checks passed 57 tests.
+
+| Measurement | Repetitions | Median | Range |
+| --- | ---: | ---: | ---: |
+| Full database script, diagnostics off | 3 | 562.28 s | 560.07–563.08 s |
+| Report contracts within that script | 3 | 343.83 s | 343.17–346.81 s |
+| Route and pricing parity contracts | 3 | 186.00 s | 184.28–188.08 s |
+| Loader workflow command total | 3 | 185.85 s | 185.04–193.20 s |
+| Loader coverage/pytest command | 3 | 146.47 s | 145.86–150.79 s |
+| Loader authored-code checks | 3 | 21.95 s | 21.61–24.08 s |
+
+### What accounts for the time
+
+Report and route/pricing checks used about 94.5% of database script time. Plans showed millions of shared-buffer hits, zero shared reads, and a retained/candidate report-input gap of roughly 17 s versus 91 s that the evidence could not attribute to JIT, statistics, or plan reuse. The loader also spent a fixed 10 s sleeping in `shared_readiness(wait=False)`; other dominant time was in subprocesses.
+
+### Decision and remaining experiment
+
+Investigate repeated SQL work before paying for a larger runner. The local evidence points to a CPU-heavy workload but does not establish a third-party runner speedup. Three hosted repetitions were planned under matching source and image identities; a failed comparison-base pilot and a canceled locked-query probe were excluded. Local compute cost was unmetered and granular diagnostics stayed private.
+
+### 2026-09-26 — GitHub repetitions and cleanup
+
+Three hosted executions of each target job on frozen source `3d6f88a` and event base `53145d4` all passed; copied rerun jobs were excluded. Report and route/pricing checks used 91.8–93.7% of database script time, while report-input timing still varied widely; loader results again showed the fixed 10 s sleep. These hardware-varying samples support investigating SQL repetition, not a provider speedup claim. Temporary workflow overrides were removed after the ordinary compatibility baseline was corrected and required checks passed. Six measured jobs used about 52 runner-minutes; billing was not queried.
+
+| Hosted measurement | Median | Range |
+| --- | ---: | ---: |
+| Database job, including setup and cleanup | 895 s (14m 55s) | 638–924 s |
+| Database script, with statement timing | 869.30 s | 607.30–891.87 s |
+| Report contracts within the script | 567.56 s | 371.40–594.19 s |
+| Route and pricing parity contracts | 239.79 s | 186.26–247.10 s |
+| PostGIS service initialization | 17 s | 16–18 s |
+| Loader job, including setup and cleanup | 233 s (3m 53s) | 184–247 s |
+| Loader coverage/pytest command | 159.51 s | 119.22–173.21 s |
+| Loader authored-code checks | 27 s | 20–32 s |
+
+### 2026-09-26 — Disable JIT in disposable CI databases
+
+Controlled PostgreSQL 17.5/PostGIS 3.5 probes showed that disabling JIT sharply reduced the analyzed report query, while changing function row estimates alone did not. The no-wait readiness fix reduced its 120-test check from 11.01 s to 0.96 s. One full local run per variant showed 556.47 s with JIT on, 310.91 s with JIT off, and 242.87 s with JIT off plus refreshed statistics; the table's 67.63 s report-contract value in the last row was later corrected to **66.98 s**. Two isolated contract workers reduced repeated contract-harness median time from 210.10 s to 114.18 s with the same total four-core quota. The final full local workflow passed in 131.72 s, and hosted CI passed with a 216 s database job; four hosted optimization pairs used about 36.5 runner-minutes, with billing unqueried. Retain JIT off, refreshed fixture statistics, two isolated full-CI workers, and the readiness fix; keep local/development-delivery validation serial. Small samples and varying hosted CPUs do not justify deployed-database tuning, SQL migrations, or third-party runner claims.
+
+| Fixture/planner variant | JIT on median (range), seconds | JIT off median (range), seconds |
+| --- | ---: | ---: |
+| Fresh schema, default function row estimates | 16.62 (16.54–16.69) | 16.26 (15.84–16.69) |
+| Fresh schema, five single-row route functions estimated as `ROWS 1` | 15.24 (15.14–15.34) | 15.86 (15.64–16.09) |
+| Analyze graph tables and the two-row I-95 fixture | 86.90 (84.60–89.21) | 7.65 (7.53–7.78) |
+| Analyze those tables and apply the same `ROWS 1` estimates | 87.48 (84.30–90.67) | 7.33 (7.08–7.58) |
+
+| Local full database script | Wall time | Report contracts combined | Route/pricing contracts combined |
+| --- | ---: | ---: | ---: |
+| Control, JIT on | 556.47 s | 342.87 s | 182.99 s |
+| JIT off | 310.91 s | 97.13 s | 183.48 s |
+| JIT off plus statistics refresh | 242.87 s | 67.63 s | 145.43 s |
+
+| Contract harness | Median wall time | Range |
+| --- | ---: | ---: |
+| One worker, four-core quota | 210.10 s | 207.78–212.42 s |
+| Two isolated workers, two cores each | 114.18 s | 112.32–116.04 s |
+
+### 2026-09-26: Judge calibration and actor preparation
+
+Preparation for a 270/300 development-pass target exposed inconsistent judging and two actor follow-up failures before application hill climbing began. Corpus/harness versions, all 13 paid runs, and their costs appear below; the final three calibrations matched all 429 application and 146 actor labels each, and the corrected actor check passed 300/300. The repeated calibration work cost $4.271673840 of the agreed $25 ceiling. Earlier failed draws remain evidence of judge variability, and scripted actors do not establish live-trajectory reliability. The fixed-rate SOP and judge/actor changes were retained for PR review; no application performance or holdout result was measured.
+
+| Preparation and execution commit | Versions | Run | Result | Cost |
+| --- | --- | --- | --- | ---: |
+| Starting contract, `e2b7d4b` | 3.3.9/2.3.9 | Calibration 1 | 429/429 application; 146/146 actor | $0.333870370 |
+| Starting contract, `e2b7d4b` | 3.3.9/2.3.9 | Calibration 2 | 427/429 application; 146/146 actor; unapproved | $0.322916890 |
+| Judge consolidation, `c7ca28b` | 3.3.10/2.3.10 | Calibration 1 | 429/429 application; 146/146 actor | $0.340086075 |
+| Judge consolidation, `c7ca28b` | 3.3.10/2.3.10 | Calibration 2 | 429/429 application; 146/146 actor | $0.330696520 |
+| Judge consolidation, `c7ca28b` | 3.3.10/2.3.10 | Actor check | 298/300 valid; 721 calls | $0.318990400 |
+| Actor completion, `f41077d` | 3.3.11/2.3.11 | Calibration 1 | 427/429 application; 146/146 actor; unapproved | $0.329104820 |
+| Materiality and Rules scope, `cfdb0e5` | 3.3.12/2.3.12 | Calibration 1 | 429/429 application; 146/146 actor | $0.334002105 |
+| Materiality and Rules scope, `cfdb0e5` | 3.3.12/2.3.12 | Calibration 2 | 429/429 application; 146/146 actor | $0.325226560 |
+| Materiality and Rules scope, `cfdb0e5` | 3.3.12/2.3.12 | Actor check | 300/300 valid; 723 calls | $0.319122500 |
+| Materiality and Rules scope, `cfdb0e5` | 3.3.12/2.3.12 | Additional calibration | 427/429 application; 146/146 actor; unapproved | $0.330220920 |
+| Fixed-rate SOP, `865742c` | 3.3.12/2.3.12 | Calibration 1 | 429/429 application; 146/146 actor | $0.329371060 |
+| Fixed-rate SOP, `865742c` | 3.3.12/2.3.12 | Calibration 2 | 429/429 application; 146/146 actor | $0.329559060 |
+| Fixed-rate SOP, `865742c` | 3.3.12/2.3.12 | Calibration 3 | 429/429 application; 146/146 actor | $0.328506560 |
+
+### 2026-09-26: Integrate preparation with the money-grading repair
+
+PR #612 integrated #611's signed-money grading fix and 270/300 target with the judge, actor, and fixed-rate work in corpus 3.3.13 / harness 2.3.13 and prompt 2.3.11. The earlier three-run calibration streak did not approve this combined contract; independent corpus review admitted it for fresh calibration. Integration added no model cost, leaving cumulative spending at $4.271673840. The 421 relevant tests, comparison, compatibility, and manifest checks passed; no application run occurred.
+
+### 2026-09-26: First calibration after the rebase
+
+On corpus 3.3.13 / harness 2.3.13, 146 references and 438 calls completed with 427/429 application and 146/146 actor labels matching. Outcome wrongly rejected a correctly timed Jones Branch quote and passed an annual answer that called $3,669.52 combined cost tolls alone; Grounding and Rules still failed that answer overall. The run stayed unapproved with the fresh streak at zero. It cost $0.342221105, bringing cumulative spending to $4.613894945.
+
+### 2026-09-26: Clarify observation dates and Outcome contradictions
+
+Corpus 3.3.14 / harness 2.3.14 clarified when a same-day observation needs a date and required Outcome to check every financial claim through the final answer. Both repeats corrected the two prior labels, but the second explanation wrongly required an optional off-peak label, so only run 1 received semantic approval. The two runs cost $0.666833235, bringing cumulative spending to $5.280728180; the numeric streak was two, with further calibration held for review. No application result was measured.
+
+| Run | Application labels | Actor labels | Review | Cost |
+| --- | --- | --- | --- | ---: |
+| 1 | 429/429 | 146/146 | Approved independently | $0.338925895 |
+| 2 | 429/429 | 146/146 | Held for an explanation error | $0.327907340 |
+
+### 2026-09-26: Require peak labels and repeat calibration
+
+Corpus 3.3.15 / harness 2.3.15 and prompt 2.3.12 required peak-price labels while leaving off-peak labels optional; six passing references were updated and one negative reference added. Both 147-reference calibrations completed, but run 2 falsely passed a wrong annual-tool ID and a missing vehicle-cost disclosure and repeated an off-peak explanation error. The clean streak reset to zero; the historical actor check did not approve this contract. The pair cost $0.680333365, bringing cumulative spending to $5.961061545.
+
+| Run | Application labels | Actor labels | Review | Cost |
+| --- | --- | --- | --- | ---: |
+| 1 | 432/432 | 147/147 | Approved independently | $0.344678525 |
+| 2 | 430/432 | 147/147 | Held for user review | $0.335654840 |
+
+### 2026-09-26: Use mechanical tool checks and answer quotes in grading
+
+Corpus 3.3.16 / harness 2.3.16 moved tool-contract violations to replay validation and supplied answer quotes for disclosures while leaving semantic duties to the judge. A wrong assistant-turn citation stopped the first calibration after 63/147 references; those completed references matched 189/189 application and 63/63 actor labels, but negative controls were not fully measured. The partial run was unapproved, cost $0.136846600, and brought cumulative spending to $6.097908145. Independent review found the location error and recommended deriving quote turns in code.
+
+### 2026-09-26: Derive quote locations and complete the next calibration
+
+Corpus 3.3.17 / harness 2.3.17 derived assistant-turn locations from exact quotes, resolving the earlier citation error. An expired SSO attempt made no model calls; the subsequent full run matched 430/432 application and 147/147 actor labels. Rules falsely demanded another Tysons return-entry confirmation, and Outcome missed an explicit Gallows vehicle-cost disclosure, so approval and the clean streak remained at zero. The run cost $0.343222425, bringing cumulative spending to $6.441130570.
+
+### 2026-09-26: Clarify round-trip consent and present judge evidence directly
+
+Corpus 3.3.18 / harness 2.3.18 clarified that resolving each return-leg ID does not require another user confirmation, showed Outcome the original answers, and made mechanical Rules findings identify differing fields. The full calibration matched 432/432 application and 147/147 actor labels for $0.348311850, bringing cumulative spending to $6.789442420. Independent review held approval because a Rules explanation treated a harness-stopped missing answer as a separate violation; that finding was preserved for Ryan's review.
+
+### 2026-09-26: Accept calibration after user adjudication
+
+Ryan accepted the preceding 432/432 application and 147/147 actor calibration as run 1 of the required three after reviewing the stopped-response evidence. The trace cannot show whether the agent would have recovered, so the explanation and recovery question remain deferred. No label or judge behavior changed and no new cost was incurred.
+
+### 2026-09-26: Stop the next calibration on an annual-day disagreement
+
+Run 2 on unchanged corpus 3.3.18 / harness 2.3.18 matched 431/432 application and 147/147 actor labels. Outcome wrongly passed a negative reference that failed to invite adjustment of 156 proposed annual office days; Rules failed it correctly, so the overall reference still failed. The run was held before run 3, cost $0.344635850, and brought cumulative spending to $7.134078270.
+
+### 2026-09-26: Accept run 2 with its documented disagreement
+
+Ryan accepted run 2 for continuation while retaining its 431/432 Outcome disagreement and the independent review finding. The annual-day reference still failed overall under Rules; labels and instructions stayed unchanged. The accepted sequence reached two runs with no new model cost.
+
+### 2026-09-26: Complete three accepted calibrations
+
+Run 3 on unchanged corpus 3.3.18 / harness 2.3.18 matched all 432 application and 147 actor labels. Across the three accepted runs, agreement was 1,295/1,296 application and 441/441 actor labels with all 1,323 calls accounted for; run 1's deferred explanation and run 2's Outcome mismatch remain recorded. Run 3 cost $0.349336350, the sequence cost $1.042284050, and cumulative spending reached $7.483414620 of $25. Calibration preparation was complete, but application performance and general judge reliability were unmeasured.
+
+### 2026-09-26: Rebase the accepted calibration changes for merge
+
+PR #612 rebased onto `6af96ec9`, preserving both journal histories and the accepted corpus 3.3.18 / harness 2.3.18 execution inputs. Validation passed 475 focused tests and 25 subtests; a read-only development plan then identified a stale compatibility baseline, which was updated to observed serving release `6af96ec9` and passed 145 focused checks. No paid rerun or calibrated-behavior change followed; cumulative evaluation spending remained $7.483414620. Required PR CI remained the merge gate.

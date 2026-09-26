@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from io import TextIOWrapper
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.fixture
 def sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    monkeypatch.delenv("DB_CONTRACT_DIAGNOSTICS", raising=False)
+    monkeypatch.delenv("DB_CONTRACT_IDENTITY", raising=False)
     current, retained = tmp_path / "candidate", tmp_path / "retained"
     for directory in (current, retained):
         directory.mkdir()
@@ -83,6 +86,35 @@ def test_fast_keeps_targeted_contracts_and_disables_exhaustive_blocks(
         "oracle_report_contract.sql" in " ".join(command) for command in calls
     )
     assert any("oracle_fast_contract.sql" in " ".join(command) for command in calls)
+
+
+@pytest.mark.parametrize("profile", ["fast", "full"])
+def test_isolated_identities_preserve_the_complete_contract_sequence(
+    sources: tuple[Path, Path],
+    calls: list[list[str]],
+    monkeypatch: pytest.MonkeyPatch,
+    profile: str,
+) -> None:
+    _, retained = sources
+    (retained / "oracle_route_contract.sql").write_text("SELECT 2;\n")
+    contracts.run_contracts(retained, profile)
+    complete = calls.copy()
+    calls.clear()
+    for identity in ("retained", "candidate"):
+        monkeypatch.setenv("DB_CONTRACT_IDENTITY", identity)
+        contracts.run_contracts(retained, profile)
+    assert calls == complete
+
+
+def test_unknown_identity_fails_before_any_contract(
+    sources: tuple[Path, Path],
+    calls: list[list[str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DB_CONTRACT_IDENTITY", "typo")
+    with pytest.raises(ValueError, match="DB_CONTRACT_IDENTITY"):
+        contracts.run_contracts(sources[1], "full")
+    assert calls == []
 
 
 @pytest.mark.parametrize("identity", [0, 1])
@@ -160,6 +192,84 @@ def test_unknown_internal_profile_is_rejected(
     with pytest.raises(ValueError, match="profile"):
         contracts.run_contracts(sources[1], "typo")
     assert not calls
+
+
+@pytest.mark.parametrize("mode", ["timing", "plans"])
+@pytest.mark.parametrize("exit_code", [0, 7])
+def test_diagnostics_keep_sql_private_and_preserve_failures(
+    sources: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    mode: str,
+    exit_code: int,
+) -> None:
+    private = tmp_path / "private"
+    monkeypatch.setenv("DB_CONTRACT_DIAGNOSTICS", mode)
+    monkeypatch.setenv("DB_CONTRACT_PROFILE_DIR", str(private))
+    commands: list[list[str]] = []
+
+    def run(
+        command: list[str],
+        *,
+        check: bool,
+        stdout: TextIOWrapper,
+        stderr: int,
+        env: dict[str, str],
+    ) -> subprocess.CompletedProcess[bytes]:
+        assert check and stderr == subprocess.STDOUT and env["LC_ALL"] == "C"
+        commands.append(command)
+        assert "ON_ERROR_STOP=1" in command
+        assert "\\timing on" in command and "--echo-all" in command
+        assert ("LOAD 'auto_explain'" in " ".join(command)) == (mode == "plans")
+        stdout.write("PRIVATE SQL AND PLAN\nTime: 12.500 ms\n")
+        if exit_code:
+            raise subprocess.CalledProcessError(exit_code, command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(contracts.subprocess, "run", run)
+    if exit_code:
+        with pytest.raises(subprocess.CalledProcessError) as raised:
+            contracts.run_contracts(sources[1], "full")
+        assert raised.value.returncode == exit_code
+        assert len(commands) == 1
+    else:
+        contracts.run_contracts(sources[1], "full")
+        report = next(
+            cmd for cmd in commands if "oracle_report_contract.sql" in " ".join(cmd)
+        )
+        assert report.index("BEGIN") < report.index("--file") < report.index("ROLLBACK")
+    output = capsys.readouterr()
+    assert "PRIVATE" not in output.out + output.err
+    assert "statement=1 elapsed_ms=12.500" in output.err
+    assert all("PRIVATE" in path.read_text() for path in private.glob("*.log"))
+
+
+def test_unknown_diagnostics_fail_before_sql(
+    sources: tuple[Path, Path],
+    calls: list[list[str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DB_CONTRACT_DIAGNOSTICS", "typo")
+    with pytest.raises(ValueError, match="DB_CONTRACT_DIAGNOSTICS"):
+        contracts.run_contracts(sources[1], "full")
+    assert not calls
+
+
+def test_diagnostics_still_require_disposable_container(tmp_path: Path) -> None:
+    environment = {**os.environ, "DB_CONTRACT_DIAGNOSTICS": "plans"}
+    environment.pop("POSTGRES_CONTAINER_ID", None)
+    environment["DB_CONTRACT_PROFILE_DIR"] = str(tmp_path / "profiles")
+    result = subprocess.run(
+        ["bash", str(ROOT / "v2/scripts/run_db_tests.sh"), "HEAD", "--profile", "full"],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "POSTGRES_CONTAINER_ID is required" in result.stderr
+    assert not (tmp_path / "profiles").exists()
 
 
 def test_retained_version_adaptation_preserves_behavior_and_fails_closed() -> None:

@@ -56,6 +56,8 @@ require_disposable_cluster() {
 }
 
 require_disposable_cluster
+# Compiling repeated small route queries costs more than executing them.
+export PGOPTIONS="${PGOPTIONS:-} -c jit=off"
 export NOVA_TOLL_EXPECTED_RDS_ENDPOINT="${PGHOST:-localhost}"
 if [[ "$base_ref" == "0000000000000000000000000000000000000000" ]]; then
   # Keep replaying upgrades from migration 026's declared 1.2.0 source.
@@ -260,6 +262,9 @@ if NOVA_TOLL_ADMIN_URL='postgresql://must-not-be-used@127.0.0.1:1/postgres' \
   exit 1
 fi
 v2/scripts/test_development_database_bootstrap.sh
+development_verify_output="$(python3 v2/scripts/run_development_migrations.py --verify-only)"
+jq -e '.status == "ok" and .before == .after and .applied == []' \
+  <<<"$development_verify_output" >/dev/null
 development_migration_output="$(python3 v2/scripts/run_development_migrations.py)"
 DEVELOPMENT_MIGRATION_OUTPUT="$development_migration_output" python3 - <<'PY'
 import json
@@ -345,7 +350,7 @@ if os.environ.get("SHAPE_FAILURE") == "1":
     runner.bootstrap.render = malformed_render
 
 try:
-    result = runner.run()
+    result = runner.run(verify_only=os.environ.get("VERIFY_ONLY") == "1")
 except runner.MigrationError:
     raise SystemExit(0 if os.environ.get("EXPECT_FAILURE") == "1" else 1)
 if os.environ.get("EXPECT_FAILURE") == "1":
@@ -391,6 +396,12 @@ reset_pricing_for_runner_test() {
 }
 
 reset_pricing_for_runner_test
+# A pending upgrade is a verification failure, never permission to migrate.
+EXPECT_FAILURE=1 VERIFY_ONLY=1 python3 "$migration_source_dir/run_actual_runner_atomicity.py"
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  'SELECT version FROM pricing.schema_version WHERE singleton')" = "1.0.0"
+test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
+  "SELECT count(*) FROM tollchat_migration.schema_history WHERE migration_id = '002_upgrade_pricing_1_0_0_to_1_0_1.sql'")" = "0"
 psql --dbname "$development_db" --set ON_ERROR_STOP=1 <<'SQL'
 CREATE OR REPLACE FUNCTION public.fail_development_migration_history()
 RETURNS trigger
@@ -909,6 +920,8 @@ BEGIN
 END $$;
 UPDATE pricing.schema_version SET version = '1.3.0' WHERE singleton;
 SQL
+# Refresh statistics for the populated fixtures before planning contract queries.
+psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 --command ANALYZE
 # Run the reviewed serving baseline and candidate contracts against the same
 # upgraded disposable schema. Fixtures roll back data; never downgrade schemas.
 retained_contract_ref="$(python3 -c 'import json; print(json.load(open("v2/scripts/shared-package-compatibility.json"))["baseline"])')"

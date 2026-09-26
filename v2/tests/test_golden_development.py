@@ -101,12 +101,12 @@ def test_complete_development_contract_and_reference_labels() -> None:
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 146
+    assert len(examples) == 147
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 46,
+        False: 47,
     }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 143, "invalid": 3}
+    assert Counter(e.actor_validity for e in examples) == {"valid": 144, "invalid": 3}
     assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5
@@ -310,6 +310,9 @@ def test_planned_trials_and_empty_holdout_have_no_success_rate() -> None:
         "The current toll is **$2.50 (27.9%)** lower.",
         "It is $2.50 lower than the median.",
         "It is $2.50 (27.9%) below the median.",
+        "The toll showed a $2.50 decrease.",
+        "Recent movement: a **$2.50 (27.9%)** drop.",
+        "The toll had a USD 2.50 reduction.",
     ],
 )
 def test_signed_comparison_does_not_match_absolute_value(wording: str) -> None:
@@ -322,6 +325,28 @@ def test_signed_comparison_does_not_match_absolute_value(wording: str) -> None:
         Decimal("2.50"),
         Decimal("3.50"),
     }
+
+
+def test_equivalent_falling_movement_keeps_financial_errors_failing() -> None:
+    case = next(c for c in golden.load_cases() if c.id == "dev3-falling-gallows-quote")
+    example = next(
+        e
+        for e in run.development_examples()
+        if e.case_id == case.id and e.label == "good"
+    )
+    assert not golden.grade_assertions(case, example.turns)
+    for wording, unsupported in (
+        ("The toll decreased by $2.50.", False),
+        ("The toll showed a $2.50 decrease.", False),
+        ("The toll showed a $2.50 increase.", True),
+        ("The toll showed a $2.51 decrease.", True),
+        ("The toll is $2.50.", True),
+    ):
+        turns = [turn.model_copy(deep=True) for turn in example.turns]
+        turns[-1].response += " " + wording
+        assert (
+            "unsupported_money" in golden.grade_assertions(case, turns)
+        ) is unsupported
 
 
 @pytest.mark.parametrize(

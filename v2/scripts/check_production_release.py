@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -19,6 +20,7 @@ from typing import Any, cast
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from scripts import release_blue_green as delivery
 from scripts.check_development_release import _canary_contract
 
 REPOSITORY = "rhprasad0/nova-toll-budget-agent"
@@ -686,7 +688,11 @@ def verify_cutover_environment() -> dict[str, str]:
 
 
 def recovery_admission(
-    claim_id: str, record_version: str, expected_state_sha256: str
+    claim_id: str,
+    record_version: str,
+    expected_state_sha256: str,
+    *,
+    claim_only: bool = False,
 ) -> dict[str, Any]:
     """Read the original claim without claiming or retrying a release."""
     identity = _positive(claim_id)
@@ -702,7 +708,20 @@ def recovery_admission(
         payload = _load(payload.encode())
     payload = _mapping(payload)
     candidate = _sha(deployment.get("sha"))
-    listener, release = _listener_event(_positive(payload.get("listener_run")))
+    if claim_only:
+        # Recovery cannot depend on the release-event artifact's retention window.
+        listener = _run(_positive(payload.get("listener_run")))
+        _workflow(listener, LISTENER_WORKFLOW, "release", 1)
+        release = _mapping(
+            api("GET", f"releases/{_positive(payload.get('release_id'))}")
+        )
+        if (
+            listener.get("head_branch") != payload.get("tag")
+            or _mapping(listener.get("head_repository")).get("full_name") != REPOSITORY
+        ):
+            raise AdmissionError("recovery_provenance")
+    else:
+        listener, release = _listener_event(_positive(payload.get("listener_run")))
     release_id, tag, released_candidate = _release(release)
     consumer_id = _positive(payload.get("consumer_run"))
     consumer = _run(consumer_id)
@@ -732,6 +751,14 @@ def recovery_admission(
         not in {"success", "failure", "cancelled", "timed_out"}
     ):
         raise AdmissionError("recovery_provenance")
+    if claim_only:
+        return {
+            "claim_id": identity,
+            "candidate": candidate,
+            "record_version": record_version,
+            "expected_state_sha256": expected_state_sha256,
+            "original_claim": payload,
+        }
     _, evidence, versions = _development(candidate)
     return {
         "claim_id": identity,
@@ -858,6 +885,164 @@ def validate_saved_plan(
     return saved
 
 
+def _archive_require(condition: object) -> None:
+    if not condition:
+        raise ValueError("recovery_archive")
+
+
+def recovery_archive_prefix(admission: dict[str, Any]) -> str:
+    candidate, claim = admission.get("candidate"), str(admission.get("claim_id"))
+    _archive_require(
+        isinstance(candidate, str) and re.fullmatch(r"[0-9a-f]{40}", candidate)
+    )
+    _archive_require(re.fullmatch(r"[1-9][0-9]*", claim))
+    return f"releases/{candidate}/recovery/{claim}/"
+
+
+def verify_recovery_archive(path: Path, admission: dict[str, Any]) -> None:
+    _archive_require(path.is_file() and not path.is_symlink())
+    _archive_require(0 < path.stat().st_size <= MAX_BUNDLE_BYTES)
+    _archive_require(
+        "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        == admission.get("bundle_digest")
+    )
+    _archive_require(re.fullmatch(r"[1-9][0-9]*", str(admission.get("bundle_id"))))
+    versions = _mapping(admission.get("schema_versions"))
+    _archive_require(set(versions) == {"pricing", "oracle"})
+    _archive_require(
+        all(
+            isinstance(v, str) and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", v)
+            for v in versions.values()
+        )
+    )
+
+
+def save_recovery_archive(
+    admission: dict[str, Any], bundle: Path, directory: Path
+) -> None:
+    """Inputs have passed production revalidation and checkout verification."""
+    key = recovery_archive_prefix(admission)
+    verify_recovery_archive(bundle, admission)
+    uploaded = delivery.upload(
+        bundle,
+        delivery.artifact_bucket,
+        key + "bundle.zip",
+        "application/zip",
+        "private, no-store",
+    )
+    manifest = directory / "recovery-archive.json"
+    delivery.write(
+        manifest, {"admission": admission, "version_id": uploaded["VersionId"]}
+    )
+    _archive_require(manifest.stat().st_size <= MAX_JSON_BYTES)
+    delivery.upload(
+        manifest,
+        delivery.artifact_bucket,
+        key + "archive.json",
+        "application/json",
+        "private, no-store",
+    )
+
+
+def _get_archive_object(key: str, version: object, path: Path, maximum: int) -> None:
+    if (
+        not isinstance(version, str)
+        or not re.fullmatch(r"[!-~]{1,1024}", version)
+        or version == "null"
+    ):
+        raise ValueError("recovery_version")
+    head = delivery.aws(
+        "s3api",
+        "head-object",
+        "--bucket",
+        delivery.artifact_bucket,
+        "--key",
+        key,
+        "--version-id",
+        version,
+        "--expected-bucket-owner",
+        delivery.account,
+    )
+    _archive_require(
+        type(head.get("ContentLength")) is int and 0 < head["ContentLength"] <= maximum
+    )
+    delivery.aws(
+        "s3api",
+        "get-object",
+        "--bucket",
+        delivery.artifact_bucket,
+        "--key",
+        key,
+        "--version-id",
+        version,
+        "--expected-bucket-owner",
+        delivery.account,
+        str(path),
+    )
+    _archive_require(path.stat().st_size == head["ContentLength"])
+
+
+def restore_recovery_archive(claim: dict[str, Any], directory: Path) -> dict[str, Any]:
+    key = recovery_archive_prefix(claim)
+    bundle = directory / "release.zip"
+    # The exact, human-selected recovery record binds the archive's original bytes.
+    context = delivery.load_recovery(
+        directory, claim["candidate"], str(claim["claim_id"]), claim["record_version"]
+    )
+    try:
+        head = delivery.aws(
+            "s3api",
+            "head-object",
+            "--bucket",
+            delivery.artifact_bucket,
+            "--key",
+            key + "archive.json",
+            "--expected-bucket-owner",
+            delivery.account,
+        )
+    except delivery.checks.CheckFailure:
+        # Historical releases retain the original full GitHub admission contract.
+        legacy = recovery_admission(
+            str(claim["claim_id"]),
+            claim["record_version"],
+            claim["expected_state_sha256"],
+        )
+        _archive_require(
+            context.get("bundle")
+            == {"id": str(legacy["bundle_id"]), "digest": legacy["bundle_digest"]}
+        )
+        download(legacy["bundle_id"], bundle)
+        verify_recovery_archive(bundle, legacy)
+        return legacy
+    manifest = directory / "recovery-archive.json"
+    _get_archive_object(
+        key + "archive.json", head["VersionId"], manifest, MAX_JSON_BYTES
+    )
+    archived = _mapping(json.loads(manifest.read_text()))
+    _archive_require(set(archived) == {"admission", "version_id"})
+    admission = _mapping(archived["admission"])
+    _archive_require(recovery_archive_prefix(admission) == key)
+    _archive_require(
+        all(admission.get(k) == v for k, v in claim["original_claim"].items())
+    )
+    _archive_require(admission.get("claim_id") == claim["claim_id"])
+    _archive_require(
+        context.get("bundle")
+        == {
+            "id": str(admission.get("bundle_id")),
+            "digest": admission.get("bundle_digest"),
+        }
+    )
+    _get_archive_object(
+        key + "bundle.zip", archived["version_id"], bundle, MAX_BUNDLE_BYTES
+    )
+    verify_recovery_archive(bundle, admission)
+    return {
+        **claim,
+        **{k: admission[k] for k in ("bundle_id", "bundle_digest", "schema_versions")},
+    }
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -880,6 +1065,13 @@ def _parser() -> argparse.ArgumentParser:
     recovery.add_argument("--record-version", required=True)
     recovery.add_argument("--expected-state-sha256", required=True)
     recovery.add_argument("--output", type=Path, required=True)
+    recovery.add_argument("--claim-only", action="store_true")
+    for name in ("archive-save", "archive-restore"):
+        archive = commands.add_parser(name)
+        archive.add_argument("--admission", type=Path, required=True)
+        archive.add_argument("--directory", type=Path, required=True)
+        if name == "archive-save":
+            archive.add_argument("--bundle", type=Path, required=True)
     saved_plan = commands.add_parser("validate-saved-plan")
     saved_plan.add_argument("--admission", type=Path, required=True)
     saved_plan.add_argument("--saved-plan", type=Path, required=True)
@@ -890,11 +1082,33 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Iterable[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        if args.command in {"archive-save", "archive-restore"}:
+            os.umask(0o077)
+            delivery.configure("production")
+            caller = delivery.aws("sts", "get-caller-identity")
+            _archive_require(
+                caller["Account"] == delivery.account
+                and caller["Arn"].startswith(
+                    f"arn:aws:sts::{delivery.account}:assumed-role/nova-toll-production-deploy/"
+                )
+            )
+            admission = _mapping(_load(args.admission.read_bytes()))
+            args.directory.mkdir(parents=True, exist_ok=True)
+            if args.command == "archive-save":
+                save_recovery_archive(admission, args.bundle, args.directory)
+            else:
+                delivery.write(
+                    args.admission, restore_recovery_archive(admission, args.directory)
+                )
+            return 0
         if args.command == "cutover-environment":
             result = verify_cutover_environment()
         elif args.command == "recovery-admission":
             result = recovery_admission(
-                args.claim_id, args.record_version, args.expected_state_sha256
+                args.claim_id,
+                args.record_version,
+                args.expected_state_sha256,
+                claim_only=args.claim_only,
             )
         elif args.command == "admit":
             result = admit(
@@ -916,7 +1130,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n",
             encoding="utf-8",
         )
-    except (AdmissionError, OSError, ValueError):
+    except (AdmissionError, OSError, ValueError, KeyError, TypeError):
         print("production release admission: rejected", file=sys.stderr)
         return 1
     return 0

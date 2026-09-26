@@ -37,7 +37,7 @@ plans, state evidence, or documentation.
 
 - [PostgreSQL schema](db/schema.sql)
 - [IAM-authenticated database roles](db/roles.sql)
-- [Missing I-95/495 OD validation](eval/results/i95-missing-od-pricing.md) and
+- [Missing I-95/495 OD proxy guidance](eval/results/i95-missing-od-pricing.md) and
   [production proxy mapping and pricing views](db/analysis.sql)
 
 The independently deployable `pricing` application schema is at **1.4.0**. Its
@@ -190,6 +190,29 @@ bootstrap, migration, rollback, privilege, retirement, and adoption checks. Both
 profiles require the same empty disposable cluster. Contract logs identify the
 profile, retained/candidate version, elapsed seconds, and outcome. Identical
 retained and candidate contracts run once; changed versions both run.
+The disposable test sessions disable PostgreSQL JIT to avoid repeated compilation
+of small route queries and refresh fixture statistics before running contracts.
+See the [profiling results](eval/EXPERIMENT_JOURNAL.md).
+Full PR CI runs retained and candidate contracts concurrently in separate
+PostGIS services on the same runner. Each service repeats the disposable setup
+and migration checks; either worker failing fails the job. Fast CI and local
+runs keep both identities in one service. `DB_CONTRACT_IDENTITY` defaults to
+`all`; CI selects `retained` and `candidate` for the isolated workers.
+
+To profile the same contracts, set `DB_CONTRACT_DIAGNOSTICS=timing` before
+running the command above. Statement timings are printed with contract identity
+and statement ordinal; SQL output stays in
+`v2/eval/private/ci-profiling/contracts/`. Set `DB_CONTRACT_PROFILE_DIR` to a
+different ignored directory for each repetition. Use a fresh container each time.
+
+For a separate local diagnostic pass, use `DB_CONTRACT_DIAGNOSTICS=plans`.
+This loads PostgreSQL's `auto_explain` in the contract sessions, including nested
+statements taking at least 250ms, with actual rows and buffer counts but without
+per-node timing. It preserves the contract's role changes and transactions.
+Detailed plans stay in the same private logs, including on failure. Diagnostics
+default to `off`; never compare instrumented runs with ordinary runs as a claimed
+speedup. Run summaries and limitations belong in the
+[experiment journal](eval/EXPERIMENT_JOURNAL.md).
 
 The required `v2-database` CI job selects full coverage for PR/merge-group changes
 under `v2/db/`, `v2/oracle/`, `v2/tests/`, `v2/scripts/`, either infrastructure

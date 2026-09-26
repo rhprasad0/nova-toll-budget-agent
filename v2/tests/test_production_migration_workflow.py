@@ -283,7 +283,7 @@ def test_actual_delivery_evidence_emits_the_validated_canary_once(
         "elapsed_ms": 1,
         "model": "gpt-6-luna",
         "tool_contract": "1.5.1",
-        "prompt_version": "2.3.9",
+        "prompt_version": "2.3.12",
         "renderer_version": "1.0.0",
         "guardrail_blocked": True,
         "address_redacted": True,

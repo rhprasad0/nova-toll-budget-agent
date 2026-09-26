@@ -1,14 +1,26 @@
 # TollChat evaluation
 
-**Current contract: 3.3.9 / harness 2.3.9.** Future development climbs optimize
+**Current contract: 3.3.18 / harness 2.3.18.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
-not make a development score production qualification.
-Development corpus preparation, two matching calibrations and the scripted actor
-check have independent Codex review. A new application baseline still requires
+not make a development score production qualification. The development
+target is **270/300 (90%) on fresh final confirmation**, with all trials valid
+and fully measured.
+Peak pricing requires a peak qualification; off-peak labels are optional.
+The authored references and SOP now match that rule. The harness checks
+tool-contract failures mechanically and requires verified
+assistant quotes for applicable schedule and vehicle-cost disclosures. Code
+locates every matching assistant turn. Disclosure requirements appear beside the
+original assistant answers; replay failures identify the differing fields.
+The Tysons round-trip contract distinguishes route-ID mapping from user consent.
+The three-calibration sequence is accepted. Ryan adjudicated the documented
+exceptions in runs 1 and 2; run 3 passed independent review with full label
+agreement. The experiment journal preserves the findings and limits.
+Earlier approvals do not transfer.
+Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the
-[experiment journal](EXPERIMENT_JOURNAL.md) for the validation results and limits.
+[experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.
 
 TollChat remains on `gpt-6-luna`. Preparation changes are separate from prompt
 search. Shared `_PricingProfile` and output descriptions remain frozen under
@@ -21,7 +33,7 @@ output in ignored `eval/private/` or the existing private workflow store.
 ## Frozen golden evaluation
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
-  146 labeled references, 107 synthetic fixtures, and five-turn actors.
+  147 labeled references, 107 synthetic fixtures, and five-turn actors.
 - [Private authoring kit](HOLDOUT_AUTHORING.md): public instructions and an offline
   validator for independently authored private cases; no held-out data is included.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, three-trial application
@@ -69,9 +81,11 @@ submits, retrieves, and grades the frozen annual-ballpark Batch experiment.
 Its canonical input is [ballpark-hallucination-cases.jsonl](ballpark-hallucination-cases.jsonl);
 generated inputs and outputs belong in `eval/private/`. Inspect preparation and
 obtain authorization before submitting paid work. The
-[existing summary](ballpark-hallucination-report.md) records the result and limits.
+[journal summary](EXPERIMENT_JOURNAL.md#annual-ballpark-grounding-experiment)
+records the result and limits.
 
-Legacy files under `evidence/golden-360/` and the initial registry archive under
-`results/golden/` remain only because offline compatibility tests and the existing
-release initializer read them. They are not current calibration or production
-qualification. New regression checks use focused inputs rather than full runs.
+Historical golden demonstrations and calibrations are summarized in the
+[experiment journal](EXPERIMENT_JOURNAL.md#legacy-golden-demonstration-and-calibrations).
+Exact approval records and release policies retain their original identities.
+Offline regression checks use focused synthetic inputs; historical run archives
+remain recoverable through the Git commit linked in the journal.

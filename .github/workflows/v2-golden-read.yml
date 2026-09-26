@@ -1,5 +1,6 @@
 name: v2-golden-read
 on:
+  workflow_dispatch:
   workflow_call:
     inputs:
       admission:
@@ -33,6 +34,7 @@ jobs:
           aws-region: us-east-1
           allowed-account-ids: '903859731897'
       - id: check
+        if: inputs.admission != ''
         env:
           GH_TOKEN: ${{ github.token }}
           ADMISSION: ${{ inputs.admission }}
@@ -41,3 +43,10 @@ jobs:
           printf '%s' "$ADMISSION" >"$RUNNER_TEMP/admission.json"
           python3 v2/scripts/golden_gate.py "$RUNNER_TEMP/admission.json" "$RUNNER_TEMP/qualified.json"
           printf 'admission=%s\n' "$(jq -c . "$RUNNER_TEMP/qualified.json")" >>"$GITHUB_OUTPUT"
+      - name: Verify fixed reader identity
+        if: inputs.admission == '' && github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity --output json | jq -e \
+            '.Account == "903859731897" and (.Arn | startswith("arn:aws:sts::903859731897:assumed-role/nova-toll-golden-reader/"))' >/dev/null
+          echo 'Golden reader OIDC assumption verified; no release was claimed or deployed.' >>"$GITHUB_STEP_SUMMARY"

@@ -354,6 +354,15 @@ class FixedPassCubedTest(unittest.TestCase):
             "2.3.7",
             "2.3.8",
             "2.3.9",
+            "2.3.10",
+            "2.3.11",
+            "2.3.12",
+            "2.3.13",
+            "2.3.14",
+            "2.3.15",
+            "2.3.16",
+            "2.3.17",
+            "2.3.18",
         ):
             left = self.current()
             right = self.current()
@@ -389,6 +398,42 @@ class FixedPassCubedTest(unittest.TestCase):
             right["manifest"]["identity"]["harness_version"] = "2.2.0"
             with self.assertRaisesRegex(ValueError, "incompatible"):
                 compare(left, right)
+
+    def test_development_target_requires_270_successes_and_complete_scoring(
+        self,
+    ) -> None:
+        left = self.current()
+        left["manifest"]["identity"]["harness_version"] = "2.3.10"
+        right = copy.deepcopy(left)
+        for row in right["attempts"][:269]:
+            row["verdicts"]["outcome"]["passed"] = True
+        self.update(right)
+        self.assertFalse(compare(left, right)["candidate"]["development_target_met"])
+        right["attempts"][269]["verdicts"]["outcome"]["passed"] = True
+        self.update(right)
+        result = compare(left, right)
+        self.assertTrue(result["candidate"]["development_target_met"])
+        self.assertTrue(result["numeric_eligible"])
+        # A 270/300 score is a target observation, not improvement over itself.
+        self.assertFalse(compare(right, right)["numeric_eligible"])
+        self.assertEqual(len(result["case_results"]), 100)
+        case = next(row for row in result["case_results"] if row["case_id"] == "dev-0")
+        self.assertEqual(case["baseline"]["successful_trials"], 0)
+        self.assertEqual(case["candidate"]["successful_trials"], 3)
+        self.assertEqual(case["candidate"]["scored_trials"], 3)
+        # Meeting the target never overrides violation or completeness gates.
+        right["attempts"][-1]["verdicts"]["grounding"]["passed"] = False
+        self.update(right)
+        result = compare(left, right)
+        self.assertTrue(result["candidate"]["development_target_met"])
+        self.assertFalse(result["numeric_eligible"])
+        case = next(row for row in result["case_results"] if row["case_id"] == "dev-99")
+        self.assertEqual(case["candidate"]["violations"]["grounding"], 1)
+        right["attempts"][-1].update(
+            status="inconclusive", actor_validity={"status": "uncertain"}
+        )
+        self.update(right)
+        self.assertFalse(compare(left, right)["candidate"]["development_target_met"])
 
 
 if __name__ == "__main__":

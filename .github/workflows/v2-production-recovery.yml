@@ -21,7 +21,7 @@ permissions:
 
 concurrency:
   group: v2-production-release-delivery
-  cancel-in-progress: false
+  queue: max
 
 jobs:
   recover:
@@ -40,7 +40,7 @@ jobs:
           ref: ${{ github.sha }}
           path: trusted
           persist-credentials: false
-      - name: Verify original release and retained development evidence
+      - name: Verify original release claim before credentials
         id: admission
         env:
           GH_TOKEN: ${{ github.token }}
@@ -54,6 +54,7 @@ jobs:
           private="$RUNNER_TEMP/production-recovery"
           mkdir "$private"
           python3 trusted/v2/scripts/check_production_release.py recovery-admission \
+            --claim-only \
             --claim-id "$CLAIM_ID" --record-version "$RECORD_VERSION" \
             --expected-state-sha256 "$EXPECTED_STATE_SHA256" --output "$private/admission.json"
           jq -r '"candidate=\(.candidate)"' "$private/admission.json" >>"$GITHUB_OUTPUT"
@@ -62,6 +63,27 @@ jobs:
           ref: ${{ steps.admission.outputs.candidate }}
           path: candidate
           persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-deploy
+          aws-region: us-east-1
+          allowed-account-ids: '920534282028'
+          inline-session-policy: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject","s3:GetObjectVersion"],"Resource":"arn:aws:s3:::nova-toll-agentcore-920534282028/releases/*"}]}'
+      - name: Read the retained verified recovery bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 trusted/v2/scripts/check_production_release.py archive-restore \
+            --admission "$RUNNER_TEMP/production-recovery/admission.json" \
+            --directory "$RUNNER_TEMP/production-recovery"
+      - name: Clear archive read credentials
+        if: always()
+        run: |
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN; do
+            unset "$name" || true
+            printf '%s=\n' "$name" >>"$GITHUB_ENV"
+          done
       - name: Verify the original bundle against the original candidate checkout
         env:
           GH_TOKEN: ${{ github.token }}
@@ -72,7 +94,6 @@ jobs:
           private="$RUNNER_TEMP/production-recovery"
           admission="$private/admission.json"
           bundle="$private/release.zip"
-          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/artifacts/$(jq -er .bundle_id "$admission")/zip" | dd of="$bundle" bs=1048576 count=513 iflag=fullblock status=none
           test "$(stat -c %s "$bundle")" -le 536870912
           python3 -c 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); sizes=[i.file_size for i in z.infolist()]; raise SystemExit(not sizes or max(sizes)>268435456 or sum(sizes)>536870912)' "$bundle"
           python3 trusted/v2/scripts/verify_release_bundle.py verify \

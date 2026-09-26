@@ -53,7 +53,7 @@ def context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Any, ...]:
                 "elapsed_ms": 10,
                 "model": "gpt-6-luna",
                 "tool_contract": "1.5.1",
-                "prompt_version": "2.3.9",
+                "prompt_version": "2.3.12",
                 "renderer_version": "1.0.0",
                 "guardrail_blocked": True,
                 "address_redacted": True,
@@ -136,7 +136,7 @@ def test_prepare_writes_exact_versioned_evidence_then_finish_publishes_success(
             "elapsed_ms": 10,
             "model": "gpt-6-luna",
             "tool_contract": "1.5.1",
-            "prompt_version": "2.3.9",
+            "prompt_version": "2.3.12",
             "renderer_version": "1.0.0",
             "guardrail_blocked": True,
             "address_redacted": True,
@@ -172,7 +172,7 @@ def test_non_success_prerequisite_never_passes(
     with pytest.raises(ValueError):
         status.finish()
     assert calls[-1][2] and calls[-1][2]["state"] == "failure"
-    assert '"artifact_id": "unavailable"' in (tmp_path / "summary").read_text()
+    assert '"artifact_id": 99' in (tmp_path / "summary").read_text()
 
 
 @pytest.mark.parametrize("stage", ["prepare", "upload"])
@@ -444,3 +444,77 @@ def test_malformed_needs_reason_does_not_expose_nested_content(
     assert "stage=release-status" not in captured.err
     assert "reason=malformed_evidence" in captured.err
     assert "secret nested evidence" not in captured.err
+
+
+@pytest.mark.parametrize("failed_job", ["admission", "build", "deploy"])
+def test_failure_evidence_survives_without_qualifying_as_success(
+    context: tuple[Any, ...], monkeypatch: pytest.MonkeyPatch, failed_job: str
+) -> None:
+    needs, _, _, calls, tmp_path = context
+    needs[failed_job]["result"] = "failure"
+    needs["deploy"]["outputs"]["diagnostics"] = json.dumps(
+        {
+            "stage": "apply",
+            "reason": "shared_compatibility",
+            "deployment": "failed",
+            "recovery": "recovered",
+            "private": "do not publish",
+        }
+    )
+    monkeypatch.setenv("NEEDS_JSON", json.dumps(needs))
+    status.prepare()
+    evidence = json.loads((tmp_path / status.EVIDENCE_FILE).read_text())
+    assert evidence["outcome"] == "failed"
+    assert evidence["artifact_id"] == 99
+    assert evidence["diagnostics"]["recovery"] == "recovered"
+    assert "do not publish" not in json.dumps(evidence)
+    with pytest.raises(status.DeploymentStatusError):
+        status.finish()
+    assert not any(
+        payload and payload.get("state") == "success" for _, _, payload in calls
+    )
+
+
+@pytest.mark.parametrize("failed_job", ["admission", "release-record"])
+def test_early_failure_keeps_summary_without_a_deployment_record(
+    context: tuple[Any, ...], monkeypatch: pytest.MonkeyPatch, failed_job: str
+) -> None:
+    needs, _, _, calls, directory = context
+    for name in ("release-record", "build", "deploy"):
+        needs[name] = {"result": "skipped", "outputs": {}}
+    needs[failed_job]["result"] = "failure"
+    monkeypatch.setenv("NEEDS_JSON", json.dumps(needs))
+    status.prepare()
+    with pytest.raises(status.DeploymentStatusError):
+        status.finish()
+    summary = (directory / "summary").read_text()
+    assert f'"stage": "{failed_job}"' in summary
+    assert '"evidence_artifact_id": 101' in summary
+    assert '"state": "failure"' in summary
+    assert calls == []
+
+
+def test_failure_output_retains_only_bounded_fields(context: tuple[Any, ...]) -> None:
+    _, _, _, _, directory = context
+    (directory / "delivery-failure.txt").write_text(
+        "stage=apply status=fail elapsed=12 exit=1 reason=shared_compatibility\n"
+    )
+    (directory / "blue-green-result.json").write_text(
+        json.dumps(
+            {
+                "deployment": "failed",
+                "recovery": "secret value",
+                "private": "secret value",
+            }
+        )
+    )
+    status.failure_output()
+    raw = (directory / "output").read_text()
+    value = json.loads(raw.removeprefix("diagnostics="))
+    assert value == {
+        "stage": "apply",
+        "reason": "shared_compatibility",
+        "deployment": "failed",
+        "recovery": "unknown",
+    }
+    assert "secret value" not in raw

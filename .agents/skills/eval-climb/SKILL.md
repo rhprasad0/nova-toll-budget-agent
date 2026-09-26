@@ -10,6 +10,11 @@ admits plans, runs evaluations, tracks spending, and selects candidates; it does
 not implement candidate patches. Creating or inspecting this skill does not
 authorize a paid climb. Honor authorization already supplied in the session.
 
+The development target is **270/300 successful trials (90%)**, with all 300
+trials valid and fully measured, on fresh final confirmation. A search score at
+90% triggers confirmation; it is not a confirmed result. The separate blind
+holdout requires 240/300 (80%). Neither threshold replaces the other.
+
 ## Graph and roles
 
 ```text
@@ -59,6 +64,10 @@ comparison, without implementer conclusions.
    campaign except the application SOP and description text changes below. A
    changed judging contract requires a new campaign and matching calibration, not a
    silent baseline comparison. The baseline is unchanged TollChat, not Astra.
+   Preparation must include the unchanged-application repeatability pair in the
+   runner guide. Preserve its aggregate and per-case variation for regression
+   review; use the predetermined second repeat as baseline only under step 1 of
+   the round procedure. Include both repeat reports in reviewer handoffs.
 3. Require a user-authorized cumulative **eval-dollar** ceiling or explicit
    uncapped authorization, and a reviewed calibration path. Three rounds is the default and maximum; fewer may be
    requested. Existing historical budgets do not transfer. Codex agent usage
@@ -103,7 +112,12 @@ reported as out of scope. Test files are not candidate-edit surfaces.
    designated second preparation repeat only when application and evaluation
    identities remain unchanged and deployed migration/catalog parity has been
    verified after human-reviewed merge. Never choose a repeat by its score. Do not substitute
-   a report from an older judge version. Have `eval_cluster` inspect failure and
+   a report from an older judge version. Review fresh trajectories using the
+   runner guide's fixed audit sample before admitting search. If the baseline
+   already meets the development target, skip candidate search and confirm that
+   unchanged application once on a fresh full set. This target confirmation
+   requires complete measurements and independent review, not improvement over
+   itself. Otherwise have `eval_cluster` inspect failure and
    passing trajectories and return JSON with `failure_class`, `evidence`
    (case/trial references), `hypotheses` (exactly two alternatives), `allowed_files`,
    `permitted_edits`, `invariants`, `checks`, and `deferred_improvements`
@@ -147,7 +161,7 @@ reported as out of scope. Test files are not candidate-edit surfaces.
    **not** an eligible candidate. Nonzero means unusable evidence. Send the full
    comparison and original reports to a fresh `eval_reviewer`.
 
-The helper checks numeric eligibility under corpus 3.3.9 / harness 2.3.9:
+The helper checks numeric eligibility under corpus 3.3.18 / harness 2.3.18:
 overall pass rate (successful trials divided by all 300 expected trials) must
 strictly increase; inconclusive slots must not increase; comparable Grounding
 and Rules violation rates must not worsen. Pass³ (successful three-trial cases
@@ -157,12 +171,27 @@ contract semantics; never compare across contracts or use a private campaign
 helper to override the committed decision rules. Inconclusives remain explicit, not scored
 failures. Deterministic checks contribute to violations using runner semantics.
 
+The helper also reports each case's success, scored-trial and violation counts,
+plus `development_target_met`. These are review aids, not additional eligibility
+gates or proof of confirmation. Trial numbers identify slots, not matched random
+seeds; compare all three trials and passing/failing sibling cases.
+
 The reviewer returns `eligible`, `reject`, or `stop`, with evidence references
-and unresolved regressions. Inspect every old-pass/new-fail and new violation,
-including those outside the paired subset. A changed stochastic trial alone is
-not proof the patch caused harm, but unresolved material regressions disqualify
-it. Never relabel evidence to gain eligibility. The parent chooses the eligible
-candidate with highest overall pass rate, then fewer changed lines, then A if
+and unresolved findings. Inspect every old-pass/new-fail and new violation,
+including those outside the paired subset. Classify findings as a demonstrated
+regression, sampling uncertainty, or a measurement defect. A demonstrated
+regression needs a causal explanation supported by the diff or controlled
+evidence; a changed slot or a case dropping from 3/3 to 0/3 is a signal to inspect,
+not proof of causality. Compare against the unchanged-application repeatability
+pair. Reject demonstrated weakening of consent, financial accuracy, security or
+route correctness. Sampling uncertainty alone is not a per-case veto: retain
+it for the one planned confirmation. Stop for a substantive grading ambiguity.
+At confirmation, unresolved material regression evidence disqualifies the patch;
+do not repeat runs to settle it. Existing numeric violation and inconclusive
+gates remain mandatory; changing those gates requires a separately reviewed
+policy change before another campaign. Never relabel evidence to gain eligibility.
+The parent chooses the eligible candidate with highest overall pass rate,
+then fewer changed lines, then A if
 still tied. A tie with the incumbent retains the incumbent.
 
 Optimize this metric on the exposed development cases. The separate production
@@ -179,6 +208,11 @@ Stop after three rounds, two consecutive rounds without an eligible improvement,
 insufficient budget, invalid measurement contract, or unknown usage. A narrowed
 proposal consumes another round; it is not a free retry. Preserve rejected
 candidates and reports without destructive resets.
+When an eligible incumbent reaches 270/300 with complete scoring, stop search
+and perform the planned confirmation. Below target, an eligible confirmed gain
+is progress, not completion. A later explicitly authorized campaign may continue
+from that incumbent with matching identities and the existing spending chain;
+do not silently reset spending or extend the three-round cap.
 
 For capped campaigns, before each search run reserve enough budget for two final full-set runs, using
 the latest full-set cost with headroom; a partial run can never establish a winner.
@@ -196,6 +230,19 @@ contract. Chain both costs, run the same comparison and independent review, and
 recommend the patch only if it remains eligible. A failed/inconclusive confirmation
 leaves an unconfirmed candidate; do not repeat until it passes. If nothing improved,
 return the incumbent and the negative findings without unnecessary confirmation.
+Report the 90% target as achieved only when the final candidate's fresh
+confirmation has at least 270 successes, zero inconclusives and complete
+measurements, and the required review passes. A confirmed improvement below 90%
+remains useful and may be returned as such. The unchanged-baseline target check
+above is the only confirmation that does not require a strict improvement.
+
+If prompt search stalls, rank deferred causes using actual trajectories: output
+truncation, endpoint resolution, tool-interface ambiguity and missing disclosures.
+Propose a separate engineering or configuration experiment for a supported cause;
+do not compensate with benchmark-specific prompt exceptions. Keep Luna and all
+campaign settings fixed until such work is explicitly authorized. Frozen replay
+measures conversation behavior against fixtures; retain relevant tool/runtime
+checks separately and do not claim live pricing or deployment correctness from it.
 
 Append a sanitized dated entry to
 [`EXPERIMENT_JOURNAL.md`](../../../v2/eval/EXPERIMENT_JOURNAL.md) after evaluations,

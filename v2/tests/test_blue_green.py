@@ -363,6 +363,9 @@ def test_identity_rejects_primary_fallback_and_wrong_invoked_release() -> None:
     [
         ([False, False], 1, "recovered"),
         ([False, True, False, True, True], 0, "not_attempted"),
+        ([False, True, False, True, False], 1, "recovered"),
+        ([True, True, True, True, False], 1, "recovered"),
+        ([True, True, True, False, True], 1, "recovered"),
         ([True, False, False], 1, "recovered"),
         ([True] * 5, 0, "not_attempted"),
     ],
@@ -668,6 +671,11 @@ def test_complete_release_state_machine(
         "unhealthy_after_approval",
     }:
         pytest.skip("Production approval boundary only")
+    monkeypatch.setattr(
+        delivery,
+        "save_resume_pointer",
+        Mock(return_value={"key": "record", "version_id": "record-v1"}),
+    )
     initial = previous(target)
     claim = "12:1" if target == "development" else "12"
     monkeypatch.setenv("CANARY_ARTIFACT_ID", "42")

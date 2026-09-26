@@ -9,7 +9,7 @@ permissions:
 
 concurrency:
   group: v2-production-release-delivery
-  cancel-in-progress: false
+  queue: max
 
 jobs:
   record:

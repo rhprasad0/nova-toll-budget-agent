@@ -137,76 +137,40 @@ def create_server(
     """Create the local-only HTTP server; tests use an ephemeral port."""
 
     static = {
-        "/": (_ASSET_ROOT / "dev_chat.html", "text/html; charset=utf-8"),
-        "/faq.html": (_ASSET_ROOT / "faq.html", "text/html; charset=utf-8"),
-        "/privacy.txt": (_ASSET_ROOT / "privacy.txt", "text/plain; charset=utf-8"),
-        "/terms.txt": (_ASSET_ROOT / "terms.txt", "text/plain; charset=utf-8"),
-        "/dev_chat.mjs": (
-            _ASSET_ROOT / "dev_chat.mjs",
-            "text/javascript; charset=utf-8",
-        ),
-        "/chat.mjs": (
-            _ASSET_ROOT / "dev_chat.mjs",
-            "text/javascript; charset=utf-8",
-        ),
-        "/assets/tollchat-logo.png": (
-            _ASSET_ROOT / "assets/tollchat-logo.png",
-            "image/png",
-        ),
-        "/assets/favicon.png": (
-            _ASSET_ROOT / "assets/favicon.png",
-            "image/png",
-        ),
-        "/assets/evals.css": (
-            _ASSET_ROOT / "assets/evals.css",
-            "text/css; charset=utf-8",
-        ),
-        "/assets/chat.css": (
-            _ASSET_ROOT / "assets/chat.css",
-            "text/css; charset=utf-8",
-        ),
-        "/assets/commute-map.mjs": (
-            _ASSET_ROOT / "assets/commute-map.mjs",
-            "text/javascript; charset=utf-8",
-        ),
-        "/assets/commute-routes.mjs": (
-            _ASSET_ROOT / "assets/commute-routes.mjs",
-            "text/javascript; charset=utf-8",
-        ),
-        "/assets/commute-estimates.json": (
-            _ASSET_ROOT / "assets/commute-estimates.json",
-            "application/json; charset=utf-8",
-        ),
-        "/assets/coverage-locations.json": (
-            _ASSET_ROOT / "assets/coverage-locations.json",
-            "application/json; charset=utf-8",
-        ),
-        "/assets/chat-markdown.mjs": (
-            _ASSET_ROOT / "assets/chat-markdown.mjs",
-            "text/javascript; charset=utf-8",
-        ),
-        "/assets/markdown-it.esm.min.mjs": (
-            _ASSET_ROOT / "assets/markdown-it.esm.min.mjs",
-            "text/javascript; charset=utf-8",
-        ),
-        "/assets/LICENSE.txt": (
-            _ASSET_ROOT / "assets/LICENSE.txt",
-            "text/plain; charset=utf-8",
-        ),
-        **{
-            f"/assets/maplibre-gl-6.0.0/{name}": (
-                _ASSET_ROOT / "assets/maplibre-gl-6.0.0" / name,
-                content_type,
-            )
-            for name, content_type in {
-                "LICENSE.txt": "text/plain; charset=utf-8",
-                "maplibre-gl.css": "text/css; charset=utf-8",
-                "maplibre-gl.mjs": "text/javascript; charset=utf-8",
-                "maplibre-gl-shared.mjs": "text/javascript; charset=utf-8",
-                "maplibre-gl-worker.mjs": "text/javascript; charset=utf-8",
-            }.items()
-        },
+        f"/{name}": (_ASSET_ROOT / name, content_type)
+        for content_type, names in {
+            "text/html; charset=utf-8": ("dev_chat.html", "faq.html"),
+            "text/plain; charset=utf-8": (
+                "privacy.txt",
+                "terms.txt",
+                "assets/LICENSE.txt",
+                "assets/maplibre-gl-6.0.0/LICENSE.txt",
+            ),
+            "text/javascript; charset=utf-8": (
+                "dev_chat.mjs",
+                "assets/commute-map.mjs",
+                "assets/commute-routes.mjs",
+                "assets/chat-markdown.mjs",
+                "assets/markdown-it.esm.min.mjs",
+                "assets/maplibre-gl-6.0.0/maplibre-gl.mjs",
+                "assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs",
+                "assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs",
+            ),
+            "image/png": ("assets/tollchat-logo.png", "assets/favicon.png"),
+            "text/css; charset=utf-8": (
+                "assets/evals.css",
+                "assets/chat.css",
+                "assets/maplibre-gl-6.0.0/maplibre-gl.css",
+            ),
+            "application/json; charset=utf-8": (
+                "assets/commute-estimates.json",
+                "assets/coverage-locations.json",
+            ),
+        }.items()
+        for name in names
     }
+    static["/"] = static.pop("/dev_chat.html")
+    static["/chat.mjs"] = static["/dev_chat.mjs"]
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:

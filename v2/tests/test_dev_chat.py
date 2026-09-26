@@ -9,7 +9,7 @@ import urllib.request
 from collections.abc import AsyncIterator
 from datetime import date
 from hashlib import sha256
-from http.client import HTTPResponse
+from http.client import HTTPConnection, HTTPResponse
 from pathlib import Path
 from typing import Any
 
@@ -437,6 +437,99 @@ def test_http_server_serves_assets_streams_ndjson_and_resets() -> None:
             assert rejected.value.code == expected_status
         assert len(factory.agents) == 1
     finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+
+def test_http_asset_allowlist_preserves_bytes_headers_and_rejections() -> None:
+    expected = {
+        "/": "text/html; charset=utf-8",
+        "/faq.html": "text/html; charset=utf-8",
+        "/privacy.txt": "text/plain; charset=utf-8",
+        "/terms.txt": "text/plain; charset=utf-8",
+        "/dev_chat.mjs": "text/javascript; charset=utf-8",
+        "/chat.mjs": "text/javascript; charset=utf-8",
+        "/assets/tollchat-logo.png": "image/png",
+        "/assets/favicon.png": "image/png",
+        "/assets/evals.css": "text/css; charset=utf-8",
+        "/assets/chat.css": "text/css; charset=utf-8",
+        "/assets/commute-map.mjs": "text/javascript; charset=utf-8",
+        "/assets/commute-routes.mjs": "text/javascript; charset=utf-8",
+        "/assets/commute-estimates.json": "application/json; charset=utf-8",
+        "/assets/coverage-locations.json": "application/json; charset=utf-8",
+        "/assets/chat-markdown.mjs": "text/javascript; charset=utf-8",
+        "/assets/markdown-it.esm.min.mjs": "text/javascript; charset=utf-8",
+        "/assets/LICENSE.txt": "text/plain; charset=utf-8",
+        "/assets/maplibre-gl-6.0.0/LICENSE.txt": "text/plain; charset=utf-8",
+        "/assets/maplibre-gl-6.0.0/maplibre-gl.css": "text/css; charset=utf-8",
+        "/assets/maplibre-gl-6.0.0/maplibre-gl.mjs": "text/javascript; charset=utf-8",
+        "/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs": "text/javascript; charset=utf-8",
+        "/assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs": "text/javascript; charset=utf-8",
+    }
+    headers = {
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+        "Content-Security-Policy": (
+            "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "connect-src 'self' https://tiles.openfreemap.org; "
+            "worker-src 'self' blob:; "
+            "object-src 'none'; base-uri 'none'; form-action 'self'"
+        ),
+    }
+    root = Path(dev_chat.__file__).parent
+    unserved_files = (
+        "/dev_chat.html",
+        "/dev_chat.py",
+        "/toll_agent.py",
+        "/assets/costs.mjs",
+        "/assets/tollchat-annual-commute-example.png",
+        "/assets/maplibre-gl-6.0.0/maplibre-gl.d.mts",
+    )
+    assert all((root / path.lstrip("/")).is_file() for path in unserved_files)
+    server = create_server(DevChat(_Factory()), port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+    try:
+        for path, content_type in expected.items():
+            connection.request("GET", path)
+            response = connection.getresponse()
+            filename = {"/": "dev_chat.html", "/chat.mjs": "dev_chat.mjs"}.get(
+                path, path.lstrip("/")
+            )
+            body = (root / filename).read_bytes()
+            assert response.status == 200, path
+            assert response.read() == body, path
+            assert response.headers["Content-Type"] == content_type, path
+            assert response.headers["Content-Length"] == str(len(body)), path
+            for name, value in headers.items():
+                assert response.headers[name] == value, (path, name)
+
+        for path in (
+            *unserved_files,
+            "/missing",
+            "/assets/",
+            "/../pyproject.toml",
+            "/assets/../dev_chat.py",
+            "/%2e%2e/pyproject.toml",
+            "/assets/%2e%2e/dev_chat.py",
+            "/?cache=1",
+            "/assets/chat.css?cache=1",
+        ):
+            connection.request("GET", path)
+            response = connection.getresponse()
+            assert response.status == 404, path
+            response.read()
+
+        connection.request("HEAD", "/")
+        response = connection.getresponse()
+        assert response.status == 501
+        assert response.read() == b""
+    finally:
+        connection.close()
         server.shutdown()
         thread.join()
         server.server_close()
