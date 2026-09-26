@@ -1,10 +1,10 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "870b1b5f164a3680c0d2a405b398cad4b73bc5a20258ffd3a896bff1ea36bbeb",
   "human_trajectory_adjudication": false,
-  "reviewer": "",
-  "evidence": "Contract 3.3.14 / harness 2.3.14 clarifies same-day observation-time disclosure and makes the Outcome contradiction check precede completion and omission assessment. Independent review and fresh calibration are pending. Cases, references, actor, application, schemas and model settings are unchanged.",
+  "reviewer": "Codex supervisor with independent preparation_review review",
+  "evidence": "Independent review of d0d10d5 found no material issue in the user-authorized Outcome fixes. Same-day local time with timezone is sufficient; older observations still require date or age context and stale qualifications. Outcome checks closing financial claims before completion and omissions. Generated identities confirm unchanged references, labels, application, actor, schemas and model settings. Offline corpus validation and identity construction passed. This approves corpus admission to the authorized rerun only, not calibration, actor or application readiness; stop for user review on new disagreements.",
   "authorization": "Ryan explicitly authorized fixes for the two reviewed Outcome disagreements and a calibration rerun, stopping for review if further disagreements occur.",
-  "reviewed_at": null,
-  "contract_commit": null
+  "reviewed_at": "2026-09-26T15:27:34.020426+00:00",
+  "contract_commit": "d0d10d575dc723c7aa80538194393f434123516e"
 }

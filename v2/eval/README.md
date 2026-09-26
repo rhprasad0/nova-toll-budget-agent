@@ -8,8 +8,8 @@ not make a development score production qualification. The development
 target is **270/300 (90%) on fresh final confirmation**, with all trials valid
 and fully measured.
 Judge preparation clarifies same-day observation times and checks financial
-contradictions before task completion. Corpus review and fresh calibration are
-pending; prior approvals do not transfer.
+contradictions before task completion. Independent corpus review permits a fresh
+calibration; its results remain pending. Prior approvals do not transfer.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the
 [experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.
