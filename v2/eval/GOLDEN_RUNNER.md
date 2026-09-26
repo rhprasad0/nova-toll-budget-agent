@@ -6,15 +6,25 @@ user turns. The application, actor, judge settings, input hashes, and source com
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
 
+Actors reply to necessary questions and outstanding triggered follow-ups. Once a
+choice has been delivered, a completed answer using it does not trigger it again;
+later necessary questions and separate profile actions still require replies.
+
 All golden judges, including the scripted actor-check assessment, use
 `gpt-6-luna` with xhigh reasoning and an 8,192-token output ceiling. Application
 generation remains low/2,048 and actor generation medium/2,048 on the same model.
+Judge instructions require checking source and other factual claims before
+amounts, and evaluating missing qualifications by the meaning conveyed across
+the conversation.
+Useful answers pass despite optional detail or minor omissions that preserve
+material meaning. Missing final-answer disclosures affect Outcome; Rules checks
+prohibited actions, affirmative misrepresentations, and required workflow steps.
 Run identities and cost reservations record those role-specific limits. Legacy
 scheduled evaluation settings are separate from this golden contract.
 
 ## Description-edit contract
 
-Contract 3.3.10 / harness 2.3.10 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.13 / harness 2.3.13 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including

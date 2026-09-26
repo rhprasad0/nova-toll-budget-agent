@@ -256,12 +256,19 @@ def test_development_only_and_full_trajectory() -> None:
     parsed = judge._get_last_turn(data)  # pyright: ignore[reportPrivateUsage]
     prompt = judge._format_reference_prompt(parsed, data)  # pyright: ignore[reportPrivateUsage]
     assert "Battlefield" in prompt and "Leesburg" in prompt and "5.80" in prompt
+    example.turns[-1].response += " Trailing factual claim must remain visible."
     whole = run.ConversationJudge(model=Mock(spec=Model))
     data.actual_output = json.dumps([t.model_dump() for t in example.turns])
     prompt = whole._format_reference_prompt(parsed, data)  # pyright: ignore[reportPrivateUsage]
     assert "COMPLETE ORDERED CONVERSATION" in prompt
     assert json.dumps(example.turns[0].response) in prompt
     assert json.dumps(example.turns[1].response) in prompt
+    assert any(turn.calls for turn in example.turns)
+    assert all(
+        json.dumps(call.result) in prompt
+        for turn in example.turns
+        for call in turn.calls
+    )
     assert "AGENT RESPONSE:" not in prompt
 
 
@@ -1234,6 +1241,9 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
             < prompt.index(golden.JUDGING_POLICY)
             < prompt.index(run.ASSESSMENT_INSTRUCTIONS)
         )
+    for key, prompt in zip(run.RUBRICS, diagnostic_prompts, strict=True):
+        assert prompt.count(run.RUBRICS[key]) == 1
+        assert "Return CORRECT or INCORRECT" not in prompt
     assert all("Recorded sequence" in prompt for prompt in diagnostic_prompts)
     assert "Permitted tool sequence" not in diagnostic_prompts[0]
     assert row.verdicts["outcome"].passed

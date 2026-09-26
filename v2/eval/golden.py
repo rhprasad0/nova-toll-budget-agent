@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.10"
+CORPUS_VERSION = "3.3.13"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -96,8 +96,12 @@ both are requested. Never stop merely because the assistant asked a clear questi
 Explicit profile choices override preserving the original route: if instructed
 to select a named alternative when offered, choose it rather than rejecting all
 alternatives. Do not invent a preference to retain the original starting point.
-Deliver your profile's available facts, choices, and confirmations as a message
-BEFORE you can finish.
+Profile facts are available answers, not a checklist to volunteer. Send a message
+when a necessary question or a triggered, unfulfilled profile follow-up requires
+one. Once you have delivered a choice, correction, or confirmation, the assistant
+using or repeating it does not trigger that action again. Still answer a repeated
+necessary question and deliver any separate later profile-required action.
+Otherwise return message=null after completion.
 A proposed estimate is not yet a completed estimate. Deliver any explicitly
 profile-required correction, choice, cancellation, proof question, or workflow
 switch before stopping, including after an answer or unavailable result.
@@ -112,8 +116,11 @@ an unrelated trip is not a necessary clarification of your requested trip.
 When formatting structured output, preserve YOUR next user message. Never grade
 your own previous message or mistake writing it for delivering it to the assistant.
 """
-JUDGING_POLICY = """Grade useful meaning and behavior, not presentation fidelity. This policy
-overrides presentation-only demands in case requirements: equivalent wording,
+JUDGING_POLICY = """Grade useful meaning and behavior, not presentation fidelity. Accept a
+substantively correct answer with equivalent wording, optional details omitted,
+or minor omissions that leave the material meaning intact. Fail concrete errors
+under the named criterion, not opportunities to improve an otherwise useful answer.
+This policy overrides presentation-only demands in case requirements: equivalent wording,
 plain text instead of Markdown, different headings, emoji choices or omission,
 table versus prose, ordering, and harmless verbosity are not failures. An exact
 prescribed response may be paraphrased if its material meaning is preserved.
@@ -544,7 +551,7 @@ def make_actor(case: GoldenCase, model: Model) -> ActorSimulator:
         messages=actor.conversation_history,
         callback_handler=None,
         retry_strategy=None,
-        structured_output_prompt="Format YOUR next driver action, not an evaluation of your preceding response. Deliver necessary clarification, choice, confirmation, or a profile-required correction, cancellation, proof question, or workflow switch in message: writing it has NOT delivered it yet. Once the profile's follow-ups are complete, return message=null, never an empty or whitespace-only string. Never return thanks or a summary as a stopping message.",
+        structured_output_prompt="Format YOUR next driver action, not an evaluation of your preceding response. Deliver necessary clarification, choice, confirmation, or a profile-required correction, cancellation, proof question, or workflow switch in message: writing it has NOT delivered it yet. After completion, return message=null only when no necessary question or triggered, unfulfilled profile follow-up remains. Using or repeating an already delivered choice does not trigger it again; still answer repeated necessary questions or separate later profile actions. Never return an empty or whitespace-only string, thanks, or a summary as a stopping message.",
     )
     return actor
 
