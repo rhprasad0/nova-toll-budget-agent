@@ -3241,3 +3241,29 @@ This supersedes the run-2 hold and brings the sequence to two accepted runs,
 with the documented exceptions retained. Continue with the third calibration
 and stop for any new disagreement or measurement error. No model calls were
 made for this adjudication; cumulative spending remains $7.134078270.
+
+### 2026-09-26: Complete three accepted calibrations
+
+The third calibration used corpus 3.3.18 / harness 2.3.18 at `ace2d235`.
+All executable identity fields remained unchanged; only the README and journal
+differed from prior runs. It completed 147 references and 441 calls with known
+usage. All 432 application labels and 147 actor labels agreed. Independent
+review checked 38 negative references, three actor exclusions, passing contrasts,
+prior failure cases and all 135 disclosure quotes. It found no materially new
+blocking explanation error. The annual-day reference that disagreed in run 2
+correctly failed both Outcome and Rules in this run.
+
+The sequence now has three accepted calibrations: run 1 after Ryan deferred
+the stopped-response explanation/recovery finding, run 2 after Ryan accepted
+its single Outcome disagreement, and run 3 after independent approval. Across
+the sequence, 1,295/1,296 application labels and 441/441 actor labels agree,
+with all 1,323 calls accounted for. The known exceptions, original judgments
+and expected labels remain preserved. This completes the accepted calibration
+sequence; it does not establish general judge reliability or an application
+pass-rate improvement.
+
+Run 3 cost $0.349336350. The three-run sequence cost $1.042284050; cumulative
+spending is $7.483414620, leaving $17.516585380 under the agreed $25 ceiling.
+No further calibration was launched. Application baselines and hill climbing
+still require the remaining preparation, reviewed merge and development parity.
+Detailed evidence stays private.
