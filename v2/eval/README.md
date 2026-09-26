@@ -14,10 +14,9 @@ assistant quotes for applicable schedule and vehicle-cost disclosures. Code
 locates every matching assistant turn. Disclosure requirements appear beside the
 original assistant answers; replay failures identify the differing fields.
 The Tysons round-trip contract distinguishes route-ID mapping from user consent.
-Ryan accepted the current calibration with the explanation/recovery finding
-deferred. The next run is held for review of a new Outcome disagreement about
-the annual-day adjustment invitation. Three consecutive successful calibrations
-are still required.
+Ryan accepted the first two calibrations with the documented explanation/recovery
+finding and annual-day Outcome disagreement. The sequence is 2/3 accepted runs;
+the third calibration remains required.
 Earlier approvals do not transfer.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the

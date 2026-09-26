@@ -3227,3 +3227,17 @@ and deferred recovery finding remain preserved; the new disagreement interrupts
 the consecutive-success sequence. Cost was $0.344635850, bringing cumulative
 spending to $7.134078270 and leaving $17.865921730 under the agreed $25 ceiling.
 No application evaluation or hill climbing occurred. Detailed evidence stays private.
+
+### 2026-09-26: Accept run 2 with its documented disagreement
+
+Ryan accepted the second calibration after reviewing the annual-day disagreement,
+judging the observed consistency sufficient to continue. Agreement remains
+431/432 application labels and 147/147 actor labels under corpus 3.3.18 /
+harness 2.3.18. The omitted adjustment invitation still fails Rules, so the
+reference fails overall. The Outcome mismatch and independent review finding
+remain recorded; expected labels and judge instructions are unchanged.
+
+This supersedes the run-2 hold and brings the sequence to two accepted runs,
+with the documented exceptions retained. Continue with the third calibration
+and stop for any new disagreement or measurement error. No model calls were
+made for this adjudication; cumulative spending remains $7.134078270.
