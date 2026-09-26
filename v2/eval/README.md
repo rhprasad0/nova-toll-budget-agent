@@ -14,7 +14,8 @@ assistant quotes for applicable schedule and vehicle-cost disclosures. Code
 locates every matching assistant turn. Disclosure requirements appear beside the
 original assistant answers; replay failures identify the differing fields.
 The Tysons round-trip contract distinguishes route-ID mapping from user consent.
-Fresh calibration is required; the three-run streak is incomplete.
+Calibration is held for review of a Rules explanation error despite full label
+agreement. The three-run approval streak remains incomplete.
 Earlier approvals do not transfer.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the

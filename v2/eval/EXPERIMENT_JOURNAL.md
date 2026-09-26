@@ -3153,3 +3153,38 @@ the clean streak remains zero, and no further change or run followed. Raw eviden
 stays private. Cost was $0.343222425; cumulative spending is $6.441130570, leaving
 $18.558869430 under the agreed $25 ceiling. No application evaluation, hill climbing
 or deployment occurred.
+
+
+### 2026-09-26: Clarify round-trip consent and present judge evidence directly
+
+Ryan authorized three preparation changes under corpus 3.3.18 / harness 2.3.18.
+The Tysons contract now distinguishes resolving each leg's IDs from asking for
+another user confirmation. Outcome receives original assistant answers beside
+its disclosure requirements. Mechanical Rules findings identify differing fields;
+the model assesses the remaining Rules obligations, including budgets and
+misrepresentations. All 147 reference answers and labels, application prompt
+2.3.12, actors and model settings remain fixed. The changes passed 186 targeted
+tests and 22 subtests, corpus validation, lint, formatting and type checks.
+Independent review approved `7f375ce` for measurement. Replay decisions matched
+the prior implementation across all 147 references, including 14 with violations.
+
+The fresh calibration at `165f83c` completed all 147 references and 441 calls
+with known usage. Agreement was 432/432 application labels and 147/147 actor
+labels. Independent review checked all 38 negative references, three actor
+exclusions, passing contrasts, and all 135 disclosure quotes for origin and
+meaning. The Tysons clarification, Gallows vehicle assumption, and two previous
+wrong-ID explanations were correct in this draw. Peak/source/vehicle omissions,
+financial contradictions and consent violations still failed as expected.
+
+Approval is held because one Rules explanation incorrectly treats a missing final
+answer after a harness stop as a separate Rules violation. Task completion belongs
+to Outcome; the mechanical wrong-ID failure masks that explanation error in the
+aggregate score. A second workflow rationale is ambiguous because it also involves
+an omitted call after clarification. The run has no scored disagreements, but the
+independently approved streak remains 0/3 pending user review. No further change
+or run followed. One successful extraction pass does not establish judge reliability
+or an application pass-rate improvement.
+
+Cost was $0.348311850; cumulative spending is $6.789442420, leaving $18.210557580
+under the agreed $25 ceiling. Raw evidence stays private. No application evaluation,
+hill climbing or deployment occurred.
