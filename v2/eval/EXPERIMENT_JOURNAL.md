@@ -3267,3 +3267,20 @@ spending is $7.483414620, leaving $17.516585380 under the agreed $25 ceiling.
 No further calibration was launched. Application baselines and hill climbing
 still require the remaining preparation, reviewed merge and development parity.
 Detailed evidence stays private.
+
+### 2026-09-26: Rebase the accepted calibration changes for merge
+
+Ryan authorized rebasing PR #612 onto `origin/main` and merging after checks.
+The new base is `6af96ec9` (#615), including deployment hardening and CI profiling
+and database-performance changes. Rebase conflicts were limited to appended
+journal entries and generated compatibility hashes in the release manifest.
+Both journal histories are preserved byte-for-byte. All deployment-input hashes
+match their files, and the agent and tool contract manifests advance cleanly.
+
+Comparison with accepted calibration 3 found identical corpus, harness, prompts,
+tool schemas, actors and model settings; only the commit and whole-checkout
+artifact hash changed. Corpus 3.3.18 / harness 2.3.18 and the recorded calibration
+findings remain unchanged. Local validation passed 475 focused tests and 25
+subtests, corpus validation, lint and type checks. Required PR CI remains the
+merge gate. No paid rerun was needed; cumulative evaluation spending remains
+$7.483414620.
