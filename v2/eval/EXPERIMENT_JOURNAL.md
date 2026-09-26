@@ -2665,3 +2665,43 @@ statistics setting and worker trial are still being validated below.
 Correction (2026-09-26): the combined report-contract time in the local
 statistics-refresh row above is **66.98 s**, not 67.63 s. Script wall time and
 route/pricing totals are unchanged.
+
+**Isolated workers:** with JIT off and initial statistics refreshed, the contract
+harness passed twice sequentially and twice with retained/candidate identities
+running concurrently in separate fresh PostGIS clusters. Total container CPU
+quota stayed at four cores: one four-core container or two two-core containers.
+The same canonical schema, retained ref and candidate SQL were used; identical
+retained contracts still ran only under the candidate identity. Order was
+serial/parallel, then parallel/serial. This harness includes canonical setup and
+container teardown, but excludes the full migration/adoption test sequence.
+
+| Contract harness | Median wall time | Range |
+| --- | ---: | ---: |
+| One worker, four-core quota | 210.10 s | 207.78–212.42 s |
+| Two isolated workers, two cores each | 114.18 s | 112.32–116.04 s |
+
+Concurrent execution reduced this phase by 45.7%. A concurrent Docker sample
+showed roughly 101% and 116% CPU for the two servers; this demonstrates separate
+SQL sessions using multiple cores, not parallel execution inside one query.
+All 17 executed retained/candidate contract identities passed in each mode.
+Raw records and the source-local harness remain ignored. The four trials used
+about 10.8 minutes of local elapsed time, including container setup/teardown.
+
+**Implementation decision:** split full PR CI's retained and candidate contract
+identities across two native PostGIS services on the existing runner. Both run
+the full disposable setup, migration, adoption and negative checks independently;
+there is no shared database or role catalog. The job waits for both and propagates
+either failure. Fast-profile and ordinary local invocations execute both
+identities in one worker; CI still starts its second service in the fast profile,
+so there is a small extra container-startup cost there. Development delivery
+continues to run its complete default single-worker validation. Focused checks
+verify the partition preserves the complete command sequence and exercise the
+actual workflow shell with each worker failing, both failing, and fast mode.
+The complete two-container workflow still requires the final validation below.
+
+The hosted JIT-off/statistics follow-up in run `36267052966` (`c4bd47d`) passed all
+14 checks: database 347 s and loader 191 s. Its database timing did not reproduce
+the local statistics speedup on a different hosted allocation; these unpaired
+hosted observations cannot isolate CPU or planner-state variation. That pair
+used about 9.0 additional runner-minutes. The final concurrent version is tested
+separately; earlier serial samples are not pooled with it.

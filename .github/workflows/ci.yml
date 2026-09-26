@@ -179,6 +179,17 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      postgres_retained:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       PGHOST: localhost
       PGPORT: 5432
@@ -203,10 +214,27 @@ jobs:
             --event "$PROFILE_EVENT" --ref "$PROFILE_REF" \
             --base "$SCHEMA_BASE_REF" --head "$PROFILE_HEAD")"
           printf 'profile=%s\n' "$profile" >>"$GITHUB_OUTPUT"
-      - run: v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF" --profile "$DATABASE_PROFILE"
+      - name: Validate disposable database contracts
+        run: |
+          if [[ "$DATABASE_PROFILE" == full ]]; then
+            PGPORT=5433 POSTGRES_CONTAINER_ID="$RETAINED_POSTGRES_CONTAINER_ID" \
+              DB_CONTRACT_IDENTITY=retained \
+              v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF" --profile "$DATABASE_PROFILE" \
+              >"$RUNNER_TEMP/retained-database.log" 2>&1 &
+            retained_pid=$!
+            status=0
+            DB_CONTRACT_IDENTITY=candidate \
+              v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF" --profile "$DATABASE_PROFILE" || status=$?
+            wait "$retained_pid" || status=$?
+            cat "$RUNNER_TEMP/retained-database.log"
+            exit "$status"
+          fi
+          v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF" --profile "$DATABASE_PROFILE"
         env:
           POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+          RETAINED_POSTGRES_CONTAINER_ID: ${{ job.services.postgres_retained.id }}
           DATABASE_PROFILE: ${{ steps.database-profile.outputs.profile }}
+          DB_CONTRACT_IDENTITY: all
 
   trusted-development-plan:
     if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true'

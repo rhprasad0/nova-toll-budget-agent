@@ -98,6 +98,9 @@ def retained_version_guard(
 def run_contracts(retained: Path, profile: str) -> None:
     if profile not in {"fast", "full"}:
         raise ValueError("database profile must be fast or full")
+    selected = os.environ.get("DB_CONTRACT_IDENTITY", "all")
+    if selected not in {"all", "retained", "candidate"}:
+        raise ValueError("DB_CONTRACT_IDENTITY must be all, retained or candidate")
     diagnostics = os.environ.get("DB_CONTRACT_DIAGNOSTICS", "off")
     if diagnostics not in {"off", "timing", "plans"}:
         raise ValueError("DB_CONTRACT_DIAGNOSTICS must be off, timing or plans")
@@ -128,6 +131,8 @@ def run_contracts(retained: Path, profile: str) -> None:
                 path.write_bytes(content)
                 adapted[name] = path
         for identity, directory in (("retained", retained), ("candidate", CURRENT)):
+            if selected not in {"all", identity}:
+                continue
             for name in names:
                 if identity == "retained" and name not in baseline:
                     continue
