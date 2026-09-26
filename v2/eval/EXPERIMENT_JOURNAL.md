@@ -3202,3 +3202,28 @@ This user adjudication supersedes the approval hold above and counts as run 1
 of the required three consecutive successful calibrations. No labels, judge
 instructions or execution behavior changed. No new model calls were made;
 cumulative spending remains $6.789442420. Two further successful runs are needed.
+
+### 2026-09-26: Stop the next calibration on an annual-day disagreement
+
+Ryan authorized continuing the calibration sequence after accepting run 1.
+Run 2 used corpus 3.3.18 / harness 2.3.18 at `dbac2515`. Only the README and
+experiment journal had changed since run 1; all executable identity fields,
+reference answers, expected labels and model settings matched. The run completed
+147 references and 441 calls with known usage. Agreement was 431/432 application
+labels and 147/147 actor labels. Independent review checked all 38 negative
+references, three actor exclusions, passing contrasts and all 135 disclosure
+quotes. It found one new scored disagreement and no other material new error.
+
+Outcome passed a negative reference that proposed 156 annual office days with
+only a yes/no confirmation. The user supplied 134 days and received a correct
+estimate. The frozen policy explicitly requires inviting adjustment and says a
+later correction does not cure that omission: Outcome and Rules must both fail.
+Rules applied the policy correctly, so the case still fails overall. Run 1 had
+also failed Outcome correctly. Relaxing this policy would be a separate decision;
+the current expected labels and evidence remain unchanged.
+
+Run 2 is held for user review, and run 3 was not started. The earlier acceptance
+and deferred recovery finding remain preserved; the new disagreement interrupts
+the consecutive-success sequence. Cost was $0.344635850, bringing cumulative
+spending to $7.134078270 and leaving $17.865921730 under the agreed $25 ceiling.
+No application evaluation or hill climbing occurred. Detailed evidence stays private.
