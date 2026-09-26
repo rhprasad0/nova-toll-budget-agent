@@ -2979,3 +2979,42 @@ judge, label, actor or application change followed. The new streak remains zero.
 Cost was $0.342221105, bringing cumulative spending to $4.613894945 and leaving
 $20.386105055 under the agreed $25 ceiling. Raw evidence stays private. This
 calibration generated no application answers and did not assess deployment.
+
+
+### 2026-09-26: Clarify observation dates and Outcome contradictions
+
+Ryan agreed with both preceding disagreement assessments and authorized a fix
+and rerun. Commit `d0d10d5` introduced corpus 3.3.14 / harness 2.3.14: a same-day
+observation may use its correct local time and timezone without repeating the
+date; older observations still need date or age context and stale qualifications.
+Outcome now checks every financial claim through the final sentence before
+assessing task completion or omissions. Cases, labels, application, actor, schemas
+and model settings did not change. Independent preparation review approved the
+contract, recorded at execution commit `e10560b`.
+
+The patch passed 158 relevant tests, 12 comparison checks, corpus validation, lint,
+formatting and type checks. Two full calibrations then used the same execution
+identity, each completing 146 references and 438 calls with known usage.
+
+| Run | Application labels | Actor labels | Review | Cost |
+| --- | --- | --- | --- | ---: |
+| 1 | 429/429 | 146/146 | Approved independently | $0.338925895 |
+| 2 | 429/429 | 146/146 | Held for an explanation error | $0.327907340 |
+
+Both diagnosed Outcome errors were corrected in both runs. All verdicts, including
+excluded diagnostics, matched across the repeats. Independent review covered the
+37 negative references, passing contrasts and three actor exclusions. Some
+explanations still describe supported behavior before contradictions, so the
+results do not establish that the requested review order caused the improvement.
+
+The second run correctly failed a Greenway quote for omitting published-schedule
+source disclosure, but also demanded an off-peak qualification. The policy makes
+that schedule-period label optional here. This did not change the correct failure
+label, but semantic approval was withheld. Following the stop-for-review instruction,
+no third run or further judging change followed. The numeric streak is two; only
+the first run has semantic approval. Raw verdicts and explanations are preserved.
+
+These runs cost $0.666833235, bringing cumulative spending to $5.280728180 and
+leaving $19.719271820 under the agreed $25 ceiling. No application evaluation or
+deployment occurred. Further calibration awaits Ryan’s review of the added
+requirement; this is not evidence of an application pass-rate gain.
