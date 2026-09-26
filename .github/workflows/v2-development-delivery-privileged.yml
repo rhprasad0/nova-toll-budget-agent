@@ -431,6 +431,9 @@ jobs:
             confirm_account
 
       - name: Create and gate the saved development plan before migrations
+        env:
+          CANARY_ARTIFACT_ID: ${{ inputs.release_artifact_id }}
+          CANARY_ARTIFACT_DIGEST: ${{ inputs.release_artifact_digest }}
         run: |
           set -euo pipefail
           umask 077
@@ -496,6 +499,8 @@ jobs:
             --foundation-vars "$FOUNDATION_VARS" --work-dir "$RUNNER_TEMP/blue-green" \
             --claim "$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT" \
             --output "$RUNNER_TEMP/blue-green-plan-result.json"
+          mode="$(jq -er '.deployment | select(. == "prepared_plan" or . == "resume_validation")' "$RUNNER_TEMP/blue-green-plan-result.json")"
+          printf 'DEVELOPMENT_DELIVERY_MODE=%s\n' "$mode" >>"$GITHUB_ENV"
 
       - name: Fetch pinned RDS CA bundle for automatic migrations
         run: |
@@ -526,7 +531,7 @@ jobs:
           aws-region: us-east-1
           unset-current-credentials: true
 
-      - name: Run reviewed backward-compatible development migrations
+      - name: Apply reviewed migrations or verify the resumed release schema
         run: bash v2/scripts/run_development_migrations_workflow.sh
 
       - name: Extract verified installed schema versions

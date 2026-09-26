@@ -965,3 +965,48 @@ def test_main_rejects_psql_failure_or_missing_marker(
     assert captured.out == ""
     assert captured.err == "development migrations failed\n"
     assert len(calls) == 1
+
+
+def test_verify_only_checks_identity_history_and_versions_without_migrations() -> None:
+    schemas, versions = runner._registry()
+    migrations = runner._migration_candidates(schemas)
+    sql = runner._session_sql(
+        migrations,
+        versions,
+        {},
+        "a" * 40,
+        "verify-run",
+        verify_only=True,
+    )
+    assert sql.index("BEGIN READ ONLY;") < sql.index("current_database()")
+    assert "migration baseline is not exact" in sql
+    assert "migration history contains an unknown or edited source" in sql
+    assert "canonical version or history verification failed" in sql
+    assert "TOLLCHAT_RESULT_verify-run" in sql
+    assert "\\ir " not in sql
+    assert "INSERT INTO" not in sql
+    assert "TOLLCHAT_APPLIED_" not in sql
+    assert sql.rstrip().endswith("COMMIT;")
+    with pytest.raises(runner.MigrationError, match="development-only"):
+        runner.run(runner.PRODUCTION_PROFILE, verify_only=True)
+
+
+def test_verify_only_cli_preserves_default_and_rejects_extra_arguments(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[bool] = []
+
+    def run(*, verify_only: bool = False) -> dict[str, object]:
+        calls.append(verify_only)
+        return {"status": "ok"}
+
+    monkeypatch.setattr(runner, "run", run)
+    for args, status in (
+        ([], 0),
+        (["--verify-only"], 0),
+        (["--verify-only", "--target", "production"], 2),
+    ):
+        monkeypatch.setattr(runner.sys, "argv", ["runner", *args])
+        assert runner.main() == status
+    assert calls == [False, True]
+    capsys.readouterr()

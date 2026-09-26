@@ -19,7 +19,7 @@ import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager, nullcontext, suppress
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 if __package__:
     from . import blue_green as gate
@@ -650,12 +650,23 @@ def assets(slot: dict[str, Any], *, document: bool = False) -> None:
 
 
 @timed_stage("candidate-canary")
-def validate_candidate(prepared: dict[str, Any], claim: str) -> dict[str, Any]:
-    slot = prepared["slots"]["green" if prepared["active"] == "blue" else "blue"]
+def validate_candidate(
+    prepared: dict[str, Any], claim: str, *, active_release: bool = False
+) -> dict[str, Any]:
+    target = (
+        prepared["active"]
+        if active_release
+        else ("green" if prepared["active"] == "blue" else "blue")
+    )
+    slot = prepared["slots"][target]
     readiness(slot)
-    checks.candidate_header = aws(
-        "ssm", "get-parameter", "--name", header_parameter, "--with-decryption"
-    )["Parameter"]["Value"]
+    checks.candidate_header = (
+        None
+        if active_release
+        else aws(
+            "ssm", "get-parameter", "--name", header_parameter, "--with-decryption"
+        )["Parameter"]["Value"]
+    )
     previous_spacing = checks.public_post_spacing
     # Stay below the existing per-IP WAF budget, including session reset requests.
     checks.public_post_spacing = 35.0 if environment == "development" else 17.0
@@ -697,7 +708,10 @@ def validate_candidate(prepared: dict[str, Any], claim: str) -> dict[str, Any]:
         probe(active)
         checks.security_checks()
         assets(active, document=True)
-        assets(slot)
+        retained = prepared["slots"][
+            "green" if prepared["active"] == "blue" else "blue"
+        ]
+        assets(retained if active_release else slot)
         checks.candidate_header = "invalid-candidate-header"
         probe(prepared["slots"][prepared["active"]])
         return {
@@ -838,7 +852,7 @@ def load_recovery(work: Path, release: str, claim: str, version: str) -> dict[st
     return context
 
 
-def production_bundle_identity() -> dict[str, str]:
+def bundle_identity() -> dict[str, str]:
     identity = {
         "id": os.environ.get("CANARY_ARTIFACT_ID", ""),
         "digest": os.environ.get("CANARY_ARTIFACT_DIGEST", ""),
@@ -852,9 +866,7 @@ def production_bundle_identity() -> dict[str, str]:
 
 
 def verify_recovery_bundle(context: dict[str, Any], bundle: Path, release: str) -> None:
-    gate.require(
-        context.get("bundle") == production_bundle_identity(), "recovery_bundle"
-    )
+    gate.require(context.get("bundle") == bundle_identity(), "recovery_bundle")
     manifest = json.loads((bundle / "release-manifest.json").read_text())
     gate.require(manifest["commit_sha"] == release, "recovery_release")
     prepared = context["prepared"]
@@ -872,6 +884,248 @@ def verify_recovery_bundle(context: dict[str, Any], bundle: Path, release: str) 
         gate.require(
             prepared["slots"][inactive][f"{kind}_sha256"] == expected, "recovery_bundle"
         )
+
+
+def development_claim(claim: str) -> tuple[str, int]:
+    run, separator, attempt = claim.partition(":")
+    gate.require(
+        environment == "development"
+        and separator == ":"
+        and re.fullmatch(r"[1-9][0-9]*", run) is not None
+        and re.fullmatch(r"[1-9][0-9]*", attempt) is not None
+        and run == os.environ.get("GITHUB_RUN_ID")
+        and attempt == os.environ.get("GITHUB_RUN_ATTEMPT"),
+        "resume_claim",
+    )
+    return run, int(attempt)
+
+
+def resume_pointer(
+    work: Path, release: str, run: str, version: str | None = None
+) -> dict[str, str]:
+    key = recovery_key(release, run)
+    if version is None:
+        head = aws(
+            "s3api",
+            "head-object",
+            "--bucket",
+            artifact_bucket,
+            "--key",
+            key,
+            "--expected-bucket-owner",
+            account,
+        )
+        version = head["VersionId"]
+    if not isinstance(version, str) or version in ("", "null"):
+        raise gate.Rejected("resume_record")
+    path = work / "resume-pointer.json"
+    aws(
+        "s3api",
+        "get-object",
+        "--bucket",
+        artifact_bucket,
+        "--key",
+        key,
+        "--version-id",
+        version,
+        "--expected-bucket-owner",
+        account,
+        str(path),
+    )
+    value: object = json.loads(path.read_text())
+    gate.require(isinstance(value, dict), "resume_record")
+    pointer = cast(dict[str, Any], value)
+    gate.require(set(pointer) == {"claim", "version_id"}, "resume_record")
+    gate.require(
+        isinstance(pointer["claim"], str)
+        and re.fullmatch(re.escape(run) + r":[1-9][0-9]*", pointer["claim"]) is not None
+        and isinstance(pointer["version_id"], str),
+        "resume_claim",
+    )
+    return {
+        "pointer_version": version,
+        "claim": pointer["claim"],
+        "version_id": pointer["version_id"],
+    }
+
+
+def resume_source(
+    work: Path,
+    bundle: Path,
+    claim: str,
+    pointer: dict[str, str],
+    actual: dict[str, Any],
+    identity: dict[str, Any],
+    expected: dict[str, Any],
+    *,
+    promoted: bool = True,
+) -> dict[str, Any]:
+    run, attempt = development_claim(claim)
+    original_run, _, original_attempt = pointer["claim"].partition(":")
+    gate.require(
+        original_run == run
+        and original_attempt.isdigit()
+        and 1 <= int(original_attempt) <= attempt - int(promoted),
+        "resume_claim",
+    )
+    release = expected["release"]
+    gate.require(release == os.environ.get("GITHUB_SHA"), "resume_bundle")
+    directory = work / "recovery"
+    directory.mkdir(exist_ok=True)
+    context = load_recovery(directory, release, pointer["claim"], pointer["version_id"])
+    verify_recovery_bundle(context, bundle, release)
+    gate.require(
+        context.get("shared_packages") == expected
+        and context.get("shared_identities") == shared_packages.identities(expected),
+        "resume_bundle",
+    )
+    prepared = context["prepared"]
+    original_identity = context["prepared_identity"]
+    gate.require(
+        original_identity["lineage"] == identity["lineage"]
+        and type(original_identity["serial"]) is int
+        and type(identity["serial"]) is int
+        and 0 <= original_identity["serial"] <= identity["serial"],
+        "resume_state",
+    )
+    wanted = (
+        dict(prepared, active="green" if prepared["active"] == "blue" else "blue")
+        if promoted
+        else prepared
+    )
+    gate.require(actual == wanted, "resume_state")
+    return context
+
+
+def save_resume_pointer(
+    work: Path,
+    bundle: Path,
+    claim: str,
+    record: dict[str, str],
+    prepared: dict[str, Any],
+    identity: dict[str, Any],
+    expected: dict[str, Any],
+) -> dict[str, str]:
+    run, _ = development_claim(claim)
+    release = expected["release"]
+    try:
+        pointer = resume_pointer(work, release, run)
+    except checks.CheckFailure:
+        # Missing keys can be 403 without ListBucket. A conditional write is safe
+        # in either case; failure is fatal, never treated as a missing record.
+        path = work / "resume-pointer.json"
+        write(path, {"claim": claim, "version_id": record["version_id"]})
+        upload(
+            path,
+            artifact_bucket,
+            recovery_key(release, run),
+            "application/json",
+            "private, no-store",
+        )
+        return record
+    resume_source(
+        work, bundle, claim, pointer, prepared, identity, expected, promoted=False
+    )
+    return {
+        "key": recovery_key(release, pointer["claim"]),
+        "version_id": pointer["version_id"],
+    }
+
+
+def prepare_resume(
+    bundle: Path,
+    work: Path,
+    claim: str,
+    actual: dict[str, Any],
+    identity: dict[str, Any],
+    expected: dict[str, Any],
+) -> None:
+    run, _ = development_claim(claim)
+    pointer = resume_pointer(work, expected["release"], run)
+    resume_source(work, bundle, claim, pointer, actual, identity, expected)
+    write(
+        work / "context.json",
+        {
+            "claim": claim,
+            "resume": pointer,
+            "previous": actual,
+            "identity": identity,
+            "shared_packages": expected,
+        },
+    )
+
+
+def resume_release(
+    root: Path,
+    bundle: Path,
+    foundation: Path,
+    work: Path,
+    claim: str,
+    expected: dict[str, Any],
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    run, _ = development_claim(claim)
+    gate.require(
+        context["claim"] == claim and context["shared_packages"] == expected,
+        "resume_claim",
+    )
+    actual, identity = current(root)
+    gate.require(
+        (actual, identity) == (context["previous"], context["identity"]), "resume_state"
+    )
+    pointer = resume_pointer(
+        work, expected["release"], run, context["resume"]["pointer_version"]
+    )
+    gate.require(pointer == context["resume"], "resume_record")
+    original = resume_source(work, bundle, claim, pointer, actual, identity, expected)
+    shared_status = shared_readiness(expected)
+    gate.require(
+        set(shared_status) == set(shared_packages.FUNCTIONS)
+        and all(value == "verified" for value in shared_status.values()),
+        "shared_readback",
+    )
+    stage_packages(root, bundle, expected)
+
+    def restore() -> bool:
+        return recover(
+            root,
+            bundle,
+            foundation,
+            work,
+            original["prepared"],
+            expected,
+            expected_identity=identity,
+        )
+
+    result: dict[str, Any]
+    # Authorization failures above never initiate rollback. Operational checks
+    # below have the same one-attempt restoration boundary as normal promotion.
+    try:
+        wait_routing(root, actual)
+        private_probe(root, actual["slots"][actual["active"]])
+        validate_candidate(actual, claim, active_release=True)
+    except Exception:
+        try:
+            recovered = restore()
+        except Exception:
+            recovered = False
+        result = {
+            "deployment": "failed",
+            "recovery": "recovered" if recovered else "failed",
+        }
+    else:
+        gate.require(current(root) == (actual, identity), "resume_state")
+        result = observe(
+            lambda: bool(probe(actual["slots"][actual["active"]])), restore
+        )
+        if result["deployment"] == "succeeded":
+            gate.require(current(root) == (actual, identity), "resume_state")
+    result["shared_components"] = shared_status
+    result["recovery_record"] = {
+        "key": recovery_key(expected["release"], pointer["claim"]),
+        "version_id": pointer["version_id"],
+    }
+    return result
 
 
 def main() -> int:
@@ -916,6 +1170,7 @@ def main() -> int:
     shared_status = dict.fromkeys(shared_packages.FUNCTIONS, "unknown")
     recovery_record: dict[str, str] | None = None
     authorized = False
+    resumed: dict[str, Any] | None = None
     try:
         configure(args.environment)
         gate.require(
@@ -953,12 +1208,26 @@ def main() -> int:
         if args.phase != "recover":
             expected_packages = package_evidence(bundle)
         if args.phase == "prepare-production":
-            production_bundle_identity()
+            bundle_identity()
         context_file = work / "context.json"
         if args.phase == "prepare-plan":
             assert expected_packages is not None
             previous, identity = current(root)
             write(work / "previous.json", previous)
+            if (
+                environment == "development"
+                and previous["slots"][previous["active"]]["release_id"]
+                == expected_packages["release"]
+            ):
+                prepare_resume(
+                    bundle, work, args.claim, previous, identity, expected_packages
+                )
+                result = {
+                    "deployment": "resume_validation",
+                    "recovery": "not_attempted",
+                }
+                write(args.output, result)
+                return 0
             candidate = prepare_descriptor(bundle, previous)
             inputs = gate.desired(previous, candidate)
             saved = plan(
@@ -1042,6 +1311,24 @@ def main() -> int:
                 expected_identity=identity,
             ):
                 result["recovery"] = "recovered"
+        elif (
+            args.phase == "finish"
+            and args.saved_plan is None
+            and context_file.is_file()
+            and "resume" in json.loads(context_file.read_text())
+        ):
+            assert expected_packages is not None
+            resumed = cast(dict[str, Any], json.loads(context_file.read_text()))
+            result = resume_release(
+                root,
+                bundle,
+                foundation,
+                work,
+                args.claim,
+                expected_packages,
+                resumed,
+            )
+            shared_status = result["shared_components"]
         else:
             assert expected_packages is not None
             if args.phase == "promote-production":
@@ -1162,10 +1449,10 @@ def main() -> int:
                 )
                 context["prepared"] = prepared
                 context["environment"] = environment
+                context["prepared_identity"] = prepared_identity
+                context["bundle"] = bundle_identity()
                 if environment == "production":
-                    context["prepared_identity"] = prepared_identity
                     context["foundation"] = json.loads(foundation.read_text())
-                    context["bundle"] = production_bundle_identity()
                 write(context_file, context)
             shared_status = shared_readiness(expected_packages)
             gate.require(
@@ -1191,6 +1478,16 @@ def main() -> int:
                     "private, no-store",
                 )
                 recovery_record = {"key": key, "version_id": record["VersionId"]}
+                if environment == "development":
+                    recovery_record = save_resume_pointer(
+                        work,
+                        bundle,
+                        args.claim,
+                        recovery_record,
+                        prepared,
+                        context["prepared_identity"],
+                        expected_packages,
+                    )
             write(args.output, {**result, "recovery_record": recovery_record})
             if args.phase == "prepare-production":
                 gate.require(
@@ -1286,7 +1583,13 @@ def main() -> int:
         result["shared_components"] = shared_status
     if authorized and args.phase != "prepare-plan":
         try:
-            final_state, _ = current(root)
+            final_state, final_identity = current(root)
+            if resumed is not None and result["deployment"] == "succeeded":
+                gate.require(
+                    (final_state, final_identity)
+                    == (resumed["previous"], resumed["identity"]),
+                    "resume_state",
+                )
             result["active"] = final_state["active"]
             result["releases"] = {
                 name: {

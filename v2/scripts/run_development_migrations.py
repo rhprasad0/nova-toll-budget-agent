@@ -973,7 +973,11 @@ def _session_sql(
     run_id: str,
     baselines: tuple[bootstrap.Baseline, ...] | None = None,
     profile: MigrationProfile = DEVELOPMENT_PROFILE,
+    *,
+    verify_only: bool = False,
 ) -> str:
+    if verify_only and profile is not DEVELOPMENT_PROFILE:
+        raise MigrationError("verify-only is development-only")
     if baselines is None:
         baselines = bootstrap.load_baseline_manifest()
     lines = [
@@ -991,16 +995,21 @@ def _session_sql(
     ]
     if profile is PRODUCTION_PROFILE:
         lines.insert(3, _production_postgis_type_guard())
-    lines.extend(
-        _migration_sql(migration, rendered[migration.path], commit, run_id, profile)
-        for migration in migrations
-    )
+    if verify_only:
+        lines.insert(2, "BEGIN READ ONLY;")
+    else:
+        lines.extend(
+            _migration_sql(migration, rendered[migration.path], commit, run_id, profile)
+            for migration in migrations
+        )
     # Keep the established development hook signature used by the disposable
     # atomicity probe; production needs its distinct baseline evidence.
     if profile is DEVELOPMENT_PROFILE:
         lines.append(_final_sql(migrations, canonical_versions, run_id))
     else:
         lines.append(_final_sql(migrations, canonical_versions, run_id, profile))
+    if verify_only:
+        lines.append("COMMIT;")
     return "\n".join(lines)
 
 
@@ -1071,7 +1080,11 @@ def _parse_result(stdout: str, run_id: str) -> tuple[dict[str, str], list[str]]:
     }, applied
 
 
-def run(profile: MigrationProfile = DEVELOPMENT_PROFILE) -> dict[str, object]:
+def run(
+    profile: MigrationProfile = DEVELOPMENT_PROFILE, *, verify_only: bool = False
+) -> dict[str, object]:
+    if verify_only and profile is not DEVELOPMENT_PROFILE:
+        raise MigrationError("verify-only is development-only")
     if profile not in (DEVELOPMENT_PROFILE, PRODUCTION_PROFILE):
         raise MigrationError("migration profile is not fixed")
     baselines = (
@@ -1137,7 +1150,16 @@ def run(profile: MigrationProfile = DEVELOPMENT_PROFILE) -> dict[str, object]:
                 migration.path, ROOT / migration.path, captured_sources[migration.path]
             )
         session = (
-            _session_sql(migrations, canonical_versions, rendered, commit, run_id)
+            _session_sql(
+                migrations,
+                canonical_versions,
+                rendered,
+                commit,
+                run_id,
+                verify_only=True,
+            )
+            if verify_only
+            else _session_sql(migrations, canonical_versions, rendered, commit, run_id)
             if profile is DEVELOPMENT_PROFILE
             else _session_sql(
                 migrations,
@@ -1172,6 +1194,12 @@ def run(profile: MigrationProfile = DEVELOPMENT_PROFILE) -> dict[str, object]:
         raise MigrationError(
             f"{profile.name} migration session ended before canonical versions"
         )
+    if verify_only and (
+        applied
+        or versions["pricing_before"] != versions["pricing_after"]
+        or versions["oracle_before"] != versions["oracle_after"]
+    ):
+        raise MigrationError("verify-only reported database changes")
     return {
         "database": profile.database,
         "user": profile.user,
@@ -1365,11 +1393,12 @@ def run_production() -> dict[str, object]:
 
 
 def main() -> int:
-    if len(sys.argv) != 1:
-        print(f"usage: {Path(sys.argv[0]).name}", file=sys.stderr)
+    if sys.argv[1:] not in ([], ["--verify-only"]):
+        print(f"usage: {Path(sys.argv[0]).name} [--verify-only]", file=sys.stderr)
         return 2
     try:
-        print(json.dumps(run(), sort_keys=True, separators=(",", ":")))
+        result = run(verify_only=True) if sys.argv[1:] else run()
+        print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     except (MigrationError, OSError, ValueError, subprocess.SubprocessError):
         print("development migrations failed", file=sys.stderr)
         return 1

@@ -668,6 +668,11 @@ def test_complete_release_state_machine(
         "unhealthy_after_approval",
     }:
         pytest.skip("Production approval boundary only")
+    monkeypatch.setattr(
+        delivery,
+        "save_resume_pointer",
+        Mock(return_value={"key": "record", "version_id": "record-v1"}),
+    )
     initial = previous(target)
     claim = "12:1" if target == "development" else "12"
     monkeypatch.setenv("CANARY_ARTIFACT_ID", "42")
