@@ -1,10 +1,10 @@
 {
-  "status": "approved",
-  "corpus_sha256": "d1c4ac30ed28224bca6b7978d477586a3d5ab74f0abb2c0fc315081cebf3fe47",
+  "status": "pending",
+  "corpus_sha256": "50b4832f6693cde39701fa153b36dca9b7d37a8d68b7c409c0795e06d506cc61",
   "human_trajectory_adjudication": false,
-  "reviewer": "Codex supervisor with independent eval_reviewer preparation review",
-  "evidence": "Independent complete-diff and generated-identity review of 33b66d2 to 9b1d1d2 found no material preparation defect. Judge request and identity use Luna xhigh/8192, including scripted actor assessment. Application low/2048, actor medium/2048, prompts, labels, cases, fixtures and complete tool schemas remain unchanged. Eight independent transport/cache/calibration-mismatch checks and all 11 comparison checks passed. The new 3.3.9/2.3.9 comparison branch retains historical semantics. This approves admission to the first fresh full calibration only, not calibration, actor-check or application-baseline readiness. No human adjudication is claimed.",
-  "authorization": "Ryan explicitly authorized the Luna xhigh judge-only calibration plan and instructed implementation; prior uncapped evaluation authorization persists. Stop before application baseline.",
-  "reviewed_at": "2026-09-25T20:05:56.431133+00:00",
-  "contract_commit": "9b1d1d2d00b0763f3b09f74c2f5ea082e28d4fd4"
+  "reviewer": "",
+  "evidence": "Contract 3.3.10 / harness 2.3.10 fixes signed movement noun phrases in deterministic money grading. Cases, references, fixtures, tool schemas and model settings are unchanged. Corpus review and fresh calibration remain pending; prior approvals do not transfer. Offline validation is recorded in EXPERIMENT_JOURNAL.md.",
+  "authorization": "Ryan explicitly authorized the adversarial-review fixes and a ready-for-review PR. This change does not authorize paid calibration, application evaluation, holdout access or deployment.",
+  "reviewed_at": null,
+  "contract_commit": null
 }

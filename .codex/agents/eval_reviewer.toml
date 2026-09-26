@@ -24,15 +24,26 @@ The comparison helper provides numeric eligibility, not review approval.
 Inspect every old-pass/new-fail and newly observed Grounding/Rules violation,
 including cases excluded from paired metrics and inconclusive attempts. Read the
 actual trajectory rather than trusting labels alone; a single changed stochastic
-trial is not automatically causal evidence. Explain whether evidence shows a
-material regression, sampling variation, or unresolved grading ambiguity. Never
+trial is not automatically causal evidence. Use all three trials, per-case counts,
+passing/failing siblings and the unchanged-application repeatability pair. Trial
+numbers are not matched random seeds. Classify a finding as a demonstrated
+regression, sampling uncertainty or a measurement defect. A regression needs a
+causal explanation supported by the diff or controlled evidence; even a 3/3 to
+0/3 case flip alone does not establish it. Reject demonstrated weakening of
+consent, financial accuracy, security or route correctness. Carry ordinary
+sampling uncertainty into the single planned confirmation without imposing a
+per-case veto. Stop on substantive grading ambiguity. Never
 rewrite a verdict, retry a trial, or ignore a violation to promote a candidate.
-Unresolved material regressions disqualify it. Suspected judge defects are a
-separate finding, not permission to change scoring during the campaign.
+All numeric violation and inconclusive gates still apply. At final confirmation,
+unresolved material regression evidence disqualifies the patch. Suspected judge
+defects are a separate finding, not permission to change scoring during the campaign.
 
 Return JSON: verdict (eligible, reject, or stop), evidence (case/trial and diff
 references), scope_findings, regressions, and unresolved. Use eligible only when
 numeric rules and independent scope/regression review both pass; reject for valid
 but inferior or out-of-scope candidates; stop for invalid/unknown-usage evidence
-or changed measurement contracts. No deployment or generalization claims.
+or changed measurement contracts. For an unchanged-baseline target confirmation,
+strict improvement is inapplicable: require at least 270/300 successes, all trials
+valid and fully measured, and the same evidence review. A search score alone
+does not confirm the development target. No deployment or generalization claims.
 """

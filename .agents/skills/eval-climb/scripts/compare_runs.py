@@ -311,6 +311,7 @@ def attempts(
         "2.3.7",
         "2.3.8",
         "2.3.9",
+        "2.3.10",
     }
     denominator = (
         100
@@ -335,6 +336,7 @@ def attempts(
         "2.3.7",
         "2.3.8",
         "2.3.9",
+        "2.3.10",
     }:
         require(
             overall.get("overall_pass_rate") == successful / 300,
@@ -348,6 +350,7 @@ def attempts(
         "successful_trials": successful,
         "scored_trials": scored,
         "inconclusive_trials": 300 - scored,
+        "development_target_met": successful >= 270 and scored == 300,
         "inconclusive_slots": [
             {"case_id": cid, "trial": trial}
             for cid, trial in sorted(by_slot)
@@ -381,6 +384,24 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
             )
     left, left_totals = attempts(baseline, ids, "baseline")
     right, right_totals = attempts(candidate, ids, "candidate")
+    case_results: list[dict[str, Any]] = []
+    for case in sorted(left_identity["cases"], key=lambda case: case["id"]):
+        cid = case["id"]
+        result: dict[str, Any] = {
+            "case_id": cid,
+            "coverage_family": case.get("coverage_family", ""),
+        }
+        for label, slots in (("baseline", left), ("candidate", right)):
+            rows = [slots[cid, n] for n in (1, 2, 3)]
+            result[label] = {
+                "successful_trials": sum(row["passed"] for row in rows),
+                "scored_trials": sum(row["scored"] for row in rows),
+                "violations": {
+                    key: sum(row["violations"][key] for row in rows if row["scored"])
+                    for key in ("grounding", "rules")
+                },
+            }
+        case_results.append(result)
     common = {slot for slot in left if left[slot]["scored"] and right[slot]["scored"]}
     paired = [cid for cid in sorted(ids) if all((cid, n) in common for n in (1, 2, 3))]
     excluded = sorted(ids - set(paired))
@@ -447,6 +468,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "2.3.7",
         "2.3.8",
         "2.3.9",
+        "2.3.10",
     }:
         del criteria["paired_delta_positive"]
     return {
@@ -458,6 +480,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "criteria": criteria,
         "baseline": left_totals,
         "candidate": right_totals,
+        "case_results": case_results,
         "paired": {
             "cases": len(paired),
             "excluded_cases": excluded,

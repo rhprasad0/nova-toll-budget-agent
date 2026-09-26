@@ -1,14 +1,17 @@
 # TollChat evaluation
 
-**Current contract: 3.3.9 / harness 2.3.9.** Future development climbs optimize
+**Current contract: 3.3.10 / harness 2.3.10.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
-not make a development score production qualification.
-Development corpus preparation, two matching calibrations and the scripted actor
-check have independent Codex review. A new application baseline still requires
+not make a development score production qualification. The development
+target is **270/300 (90%) on fresh final confirmation**, with all trials valid
+and fully measured.
+The money-grading repair changes the measurement contract; corpus review and
+fresh calibration are pending. Prior calibration approvals do not transfer.
+Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the
-[experiment journal](EXPERIMENT_JOURNAL.md) for the validation results and limits.
+[experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.
 
 TollChat remains on `gpt-6-luna`. Preparation changes are separate from prompt
 search. Shared `_PricingProfile` and output descriptions remain frozen under

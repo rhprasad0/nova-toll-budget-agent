@@ -23,14 +23,20 @@ def test_retired_test_data_is_not_an_active_corpus(tmp_path: Path) -> None:
         golden.validate(TEST_DATA)
 
 
-def test_development_contract_has_fresh_bound_review() -> None:
+def test_development_contract_binds_review_without_transferring_approval() -> None:
     review = json.loads((golden.ROOT / "review.json").read_text())
     manifest = json.loads((golden.ROOT / "manifest.json").read_text())
-    assert review["status"] == "approved"
-    assert review["reviewer"].startswith("Codex")
+    assert review["status"] in {"approved", "pending"}
     assert review["authorization"].startswith("Ryan explicitly authorized")
     assert review["human_trajectory_adjudication"] is False
-    assert review["contract_commit"] and review["reviewed_at"] and review["evidence"]
+    assert review["evidence"]
+    if review["status"] == "approved":
+        assert (
+            review["reviewer"] and review["contract_commit"] and review["reviewed_at"]
+        )
+    else:
+        assert not review["reviewer"]
+        assert review["contract_commit"] is None and review["reviewed_at"] is None
     assert manifest["tool_description_policy"] == golden.TOOL_DESCRIPTION_POLICY
     assert review["corpus_sha256"] == manifest["corpus_sha256"]
     assert manifest["evaluation_scope"] == "development"
