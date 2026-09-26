@@ -1,10 +1,10 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "2bd6b6602f70eb73fa06cbcfb1757709cded1fe12380715ac797842b89f3320c",
   "human_trajectory_adjudication": false,
-  "reviewer": "",
-  "evidence": "Pending independent review of explicit Tysons round-trip interpretation, adjacent original assistant answers for disclosure extraction, and mechanical field differences. Reference answers and labels, application prompt, actors, and models remain unchanged.",
+  "reviewer": "Codex supervisor with independent preparation_review review",
+  "evidence": "Independent preparation_review approved 7f375ce for one fresh 147-reference calibration. Only Tysons expected instruction changed; all reference answers/labels, fixtures, application, actors and models remain fixed. Original assistant answers appear beside disclosure requirements; full conversation and exact assistant-only quote validation remain. Replay decisions match the prior implementation across all 147 references, including 14 mechanical-failure references. Field differences explain findings without changing validity. Rules retains all semantic obligations, including budgets and affirmative misrepresentations. Corpus, focused tests, lint and types pass. This admits measurement only; stop on disagreements or measurement errors. No human trajectory adjudication is claimed.",
   "authorization": "Ryan explicitly authorized the three proposed judge preparation fixes and the next calibration run. Halt for review on disagreements or measurement errors.",
-  "contract_commit": null,
-  "reviewed_at": null
+  "contract_commit": "7f375cefb24ad1e792a14dba9c1186b104c09575",
+  "reviewed_at": "2026-09-26T19:39:59.154644+00:00"
 }
