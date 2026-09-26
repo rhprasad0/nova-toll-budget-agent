@@ -2958,3 +2958,24 @@ The reviewer found no material integration issue and confirmed that the main fix
 and the earlier preparation changes remain intact. Lint, formatting and type
 checks passed. This permits the first future calibration after CI passes; it
 does not approve calibration results, application evaluation or deployment.
+
+
+### 2026-09-26: First calibration after the rebase
+
+Ryan authorized fixed-reference calibration at `041f547` while the deployment
+plan remained blocked by CloudFront drift, with a stop for review on disagreements.
+Corpus 3.3.13 / harness 2.3.13 completed all 146 references and 438 calls with
+known usage. Agreement was Outcome 141/143, Grounding 143/143, Rules 143/143
+and actor validity 146/146; total application agreement was 427/429.
+
+Two Outcome judgments disagreed with the unchanged labels. The Jones Branch
+quote was rejected because its correct local observation time omitted the date.
+The fixed-rate annual summary passed despite a final sentence calling $3,669.52
+combined toll-and-vehicle cost tolls alone; actual annual tolls were $1,620.00.
+Grounding and Rules rejected that contradiction, so the response still failed
+overall. The run remains unapproved pending Ryan’s review. No second run or
+judge, label, actor or application change followed. The new streak remains zero.
+
+Cost was $0.342221105, bringing cumulative spending to $4.613894945 and leaving
+$20.386105055 under the agreed $25 ceiling. Raw evidence stays private. This
+calibration generated no application answers and did not assess deployment.
