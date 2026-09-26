@@ -19,6 +19,7 @@ from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
 from eval import golden
 from eval import golden_run as run
 from tests.golden_support import case as golden_case
+from tests.golden_support import report_manifest
 
 pytestmark = pytest.mark.usefixtures("golden_test_data")
 
@@ -961,12 +962,7 @@ def test_packaged_model_budget_is_scored_but_protocol_failure_is_not(
             journal.append(
                 {"event": "attempt_finished", **attempt(case, number).model_dump()}
             )
-        manifest = json.loads(
-            (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
-        )
-        manifest["identity"]["harness_version"] = "2.0.13"
-        manifest["identity"]["corpus"]["case_count"] = 1
-        manifest["identity"]["cases"] = [case.model_dump(mode="json")]
+        manifest = report_manifest([case])
         (journal.directory / "manifest.json").write_text(json.dumps(manifest))
         report = run.render(journal.directory)
         # Infrastructure replacement requires incomplete evidence; a scored budget
@@ -1457,25 +1453,61 @@ def test_v2_explicit_calibration_labels_ignore_names_and_missing_verdicts(
     assert rows[1]["disagreements"] == [] and not rows[1]["measurement_complete"]
 
 
-def test_archived_report_reproduces_original_application_scores(tmp_path: Path) -> None:
-    source = golden.V2 / "eval/evidence/golden-360/demo-1"
-    expected = json.loads((source / "report.json").read_text())
-    directory = tmp_path / "archive"
-    shutil.copytree(source, directory)
-    actual = run.render(directory)
-    for key in ("overall", "attempts", "subsets", "full_corpus_complete"):
-        assert actual[key] == expected[key]
-    assert all(
-        "actor_validity" not in row and "failure_phase" not in row
-        for row in actual["attempts"]
-    )
+@pytest.mark.parametrize(
+    ("version", "absent_fields"),
+    [
+        (
+            "1.0.4",
+            {"actor_validity", "failure_phase", "application_stop", "rejected_tools"},
+        ),
+        ("1.2.1", {"actor_validity", "failure_phase", "application_stop"}),
+        ("2.0.10", {"application_stop"}),
+        ("2.0.11", set[str]()),
+    ],
+)
+def test_report_preserves_historical_schema_and_application_scores(
+    tmp_path: Path, version: str, absent_fields: set[str]
+) -> None:
+    case = golden_case(1)
+    journal = run.Journal(tmp_path / "historical-report", 25)
+    manifest = report_manifest([case], harness_version=version)
+    (journal.directory / "manifest.json").write_text(json.dumps(manifest))
+    for number in (1, 2, 3):
+        row = attempt(case, number)
+        if number == 3:
+            row.verdicts["grounding"] = run.Verdict(
+                passed=False, evidence="Unsupported claim."
+            )
+            row.failure_class = "grounding"
+        journal.append(
+            {"event": "attempt_finished", **row.model_dump(exclude=absent_fields)}
+        )
+    report = run.render(journal.directory)
+    assert report["full_corpus_complete"]
+    overall = report["overall"]
+    assert overall["expected_trials"] == overall["scored_trials"] == 3
+    assert overall["successful_trials"] == 2
+    assert overall["outcome_successful_trials"] == 3
+    assert overall["pass_at_1"] == pytest.approx(2 / 3)
+    assert overall["pass_cubed"] == overall["passing_all_three_cases"] == 0
+    assert overall["cost_usd"] == {"agent": 0.03, "actor": 0, "judge": 0}
+    assert overall["violations"]["grounding"]["count"] == 1
+    assert report["subsets"]["current"]["successful_trials"] == 2
+    assert [row["overall_success"] for row in report["attempts"]] == [True, True, False]
+    for row in report["attempts"]:
+        for field in (
+            "actor_validity",
+            "failure_phase",
+            "application_stop",
+            "rejected_tools",
+        ):
+            assert (field in row) == (field not in absent_fields)
+    assert run.render(journal.directory) == report
 
 
 def test_v2_render_accounts_for_600_trials_and_embedded_case_count(
     tmp_path: Path,
 ) -> None:
-    source = golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json"
-    manifest = json.loads(source.read_text())
     template = golden_case(1)
     cases = [
         template.model_copy(
@@ -1491,9 +1523,7 @@ def test_v2_render_accounts_for_600_trials_and_embedded_case_count(
         )
         for number in range(1, 201)
     ]
-    manifest["identity"]["harness_version"] = "2.0.13"
-    manifest["identity"]["corpus"]["case_count"] = 200
-    manifest["identity"]["cases"] = [case.model_dump(mode="json") for case in cases]
+    manifest = report_manifest(cases)
     directory = tmp_path / "accounting"
     journal = run.Journal(directory, 25)
     (directory / "manifest.json").write_text(json.dumps(manifest))
@@ -1562,11 +1592,8 @@ def test_invalid_actor_probe_is_complete_calibration_without_application_labels(
         rows = run.calibrate(journal, pool)
     assert rows[0]["measurement_complete"] and rows[0]["status"] == "inconclusive"
     assert rows[0]["disagreements"] == [] and rows[0]["expected"] is None
-    manifest = json.loads(
-        (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
-    )
+    manifest = report_manifest([case])
     manifest["mode"] = "calibrate"
-    manifest["identity"]["harness_version"] = "2.0.13"
     manifest["identity"]["calibration_labels"] = {"example_ids": [rows[0]["id"]]}
     (directory / "manifest.json").write_text(json.dumps(manifest))
     report = run.render(directory)
@@ -1580,11 +1607,8 @@ def test_invalid_actor_probe_is_complete_calibration_without_application_labels(
 def test_interrupted_calibration_counts_missing_rows_without_judge_disagreements(
     tmp_path: Path,
 ) -> None:
-    manifest = json.loads(
-        (golden.V2 / "eval/evidence/golden-360/demo-1/manifest.json").read_text()
-    )
+    manifest = report_manifest([golden_case(1)])
     manifest["mode"] = "calibrate"
-    manifest["identity"]["harness_version"] = "2.0.13"
     manifest["identity"]["calibration_labels"] = {"example_ids": ["started", "queued"]}
     journal = run.Journal(tmp_path / "interrupted-calibration", 25)
     (journal.directory / "manifest.json").write_text(json.dumps(manifest))

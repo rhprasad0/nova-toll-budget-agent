@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -16,6 +16,15 @@ from strands.types.tools import ToolResult, ToolUse
 
 from agent_tools import current_price_domain as pricing_tool
 from agent_tools import get_current_toll_price as pricing_transport
+from tests.current_price_support import (
+    dtr_handoff_leg,
+    dtr_leg,
+    greenway_leg,
+    i66_leg,
+    i66_rows,
+    i95_leg,
+    i95_rows,
+)
 
 type FixtureValue = JSON | datetime | Decimal
 
@@ -187,299 +196,6 @@ def _i95_evidence(availability: str) -> dict[str, str]:
     }
 
 
-def _greenway_leg(
-    *, direction: str = "EB", entry: str = "1", exit_: str = "28"
-) -> pricing_tool.route_validation._GreenwayFacilityLeg:
-    route_key = f"{direction}:{entry}:{exit_}"
-    return pricing_tool.route_validation._GreenwayFacilityLeg.model_validate(
-        {
-            "route_step_id": "step-1",
-            "facility": "greenway",
-            "point_ids": [
-                f"greenway:{entry}:entry:{direction}",
-                f"greenway:{exit_}:exit:{direction}",
-            ],
-            "connection_ids": [f"source:greenway:{route_key}"],
-            "pricing_key": {"source_route_key": route_key, "charge_index": 1},
-        }
-    )
-
-
-def _dtr_leg(
-    *,
-    route_step_id: str = "step-1",
-    direction: str = "EB",
-    entry: str = "10",
-    exit_: str = "16",
-    charge_index: int = 1,
-) -> pricing_tool.route_validation._DtrFacilityLeg:
-    route_key = f"{direction}:{entry}:{exit_}"
-    return pricing_tool.route_validation._DtrFacilityLeg.model_validate(
-        {
-            "route_step_id": route_step_id,
-            "facility": "dtr",
-            "point_ids": [
-                f"dtr:{entry}:entry:{direction}",
-                f"dtr:{exit_}:exit:{direction}",
-            ],
-            "connection_ids": [f"source:dtr:{route_key}"],
-            "pricing_key": {
-                "source_route_key": route_key,
-                "charge_index": charge_index,
-            },
-        }
-    )
-
-
-def _dtr_handoff_leg(
-    route_key: str, route_step_id: str
-) -> pricing_tool.route_validation._DtrFacilityLeg:
-    point_ids = {
-        "greenway_to_dtr": ["greenway:28:exit:EB", "dtr:28:entry:EB"],
-        "dtr_to_greenway": ["dtr:28:exit:WB", "greenway:28:entry:WB"],
-    }[route_key]
-    return pricing_tool.route_validation._DtrFacilityLeg.model_validate(
-        {
-            "route_step_id": route_step_id,
-            "facility": "dtr",
-            "point_ids": point_ids,
-            "connection_ids": [route_key],
-            "pricing_key": {"source_route_key": route_key, "charge_index": 1},
-        }
-    )
-
-
-def _i66_leg(
-    *,
-    route_step_id: str = "step-1",
-    direction: str = "EB",
-    entry: str = "6",
-    exit_: str = "10",
-    start_zone_id: int = 3110,
-    end_zone_id: int = 3110,
-) -> pricing_tool.route_validation._I66FacilityLeg:
-    route_key = f"{direction}:{entry}:{exit_}"
-    return pricing_tool.route_validation._I66FacilityLeg.model_validate(
-        {
-            "route_step_id": route_step_id,
-            "facility": "i66",
-            "point_ids": [
-                f"i66:{entry}:entry:{direction}",
-                f"i66:{exit_}:exit:{direction}",
-            ],
-            "connection_ids": [f"source:i66:{route_key}"],
-            "pricing_key": {
-                "source_route_key": route_key,
-                "start_zone_id": start_zone_id,
-                "end_zone_id": end_zone_id,
-            },
-        }
-    )
-
-
-def _i66_rows(
-    *, unavailable_reason: str | None = None
-) -> list[pricing_tool._I66ComparisonRow]:
-    evaluated_at = datetime(2026, 8, 13, 8, 32, 6, tzinfo=_EASTERN)
-    bin_start = datetime(2026, 8, 13, 8, 24, tzinfo=_EASTERN)
-    rows = [
-        {
-            "evaluated_at": evaluated_at,
-            "comparison_kind": "current",
-            "comparison_offset": 0,
-            "bin_start_at": bin_start
-            if unavailable_reason != "missing_observation"
-            else None,
-            "bin_end_at": bin_start.replace(minute=30)
-            if unavailable_reason != "missing_observation"
-            else None,
-            "interval_end_at": bin_start.replace(minute=29)
-            if unavailable_reason != "missing_observation"
-            else None,
-            "observed_at": (
-                evaluated_at - timedelta(minutes=31)
-                if unavailable_reason == "stale_observation"
-                else bin_start.replace(minute=22)
-                if unavailable_reason is None
-                else None
-            ),
-            "price_usd": Decimal("7.20")
-            if unavailable_reason != "missing_observation"
-            else None,
-            "available": unavailable_reason is None,
-            "availability_reason": unavailable_reason,
-            "source_kind": (
-                None if unavailable_reason == "missing_observation" else "observed"
-            ),
-            "pricing_method": (
-                None
-                if unavailable_reason == "missing_observation"
-                else "source_observation"
-            ),
-        }
-    ]
-    if unavailable_reason is None:
-        rows.extend(
-            {
-                "evaluated_at": evaluated_at,
-                "comparison_kind": kind,
-                "comparison_offset": offset,
-                "bin_start_at": bin_start,
-                "bin_end_at": bin_start.replace(minute=30),
-                "interval_end_at": bin_start.replace(minute=29),
-                "observed_at": bin_start.replace(minute=22),
-                "price_usd": Decimal(price),
-                "available": True,
-                "availability_reason": None,
-                "source_kind": "observed",
-                "pricing_method": "source_observation",
-            }
-            for kind, offset, price in [
-                ("prior_cycle", 1, "6.20"),
-                ("prior_cycle", 2, "5.10"),
-                ("prior_week", 1, "5.20"),
-                ("prior_week", 2, "5.00"),
-                ("prior_week", 3, "4.10"),
-            ]
-        )
-    return [pricing_tool._I66ComparisonRow.model_validate(row) for row in rows]
-
-
-def _i66_schedule_rows() -> list[pricing_tool._I66ComparisonRow]:
-    evaluated_at = datetime(2026, 8, 13, 12, 0, tzinfo=_EASTERN)
-    return [
-        pricing_tool._I66ComparisonRow.model_validate(
-            {
-                "evaluated_at": evaluated_at,
-                "comparison_kind": comparison_kind,
-                "comparison_offset": comparison_offset,
-                "bin_start_at": bin_start,
-                "bin_end_at": bin_start + timedelta(minutes=6),
-                "interval_end_at": None,
-                "observed_at": None,
-                "price_usd": Decimal("0.00"),
-                "available": True,
-                "availability_reason": None,
-                "source_kind": "schedule_derived",
-                "pricing_method": "published_schedule",
-            }
-        )
-        for comparison_kind, comparison_offset, bin_start in (
-            ("current", 0, evaluated_at),
-            ("prior_cycle", 1, evaluated_at - timedelta(minutes=6)),
-            ("prior_cycle", 2, evaluated_at - timedelta(minutes=12)),
-            ("prior_week", 1, evaluated_at - timedelta(days=7)),
-            ("prior_week", 2, evaluated_at - timedelta(days=14)),
-            ("prior_week", 3, evaluated_at - timedelta(days=21)),
-        )
-    ]
-
-
-def _i95_leg(
-    *,
-    route_step_id: str = "step-1",
-    direction: str = "Northbound",
-    entry: str = "203NO",
-    exit_: str = "223ND",
-    od_pair_id: int = 1261,
-    point_ids: list[str] | None = None,
-) -> pricing_tool.route_validation._I95FacilityLeg:
-    route_key = f"{direction}:{entry}:{exit_}"
-    return pricing_tool.route_validation._I95FacilityLeg.model_validate(
-        {
-            "route_step_id": route_step_id,
-            "facility": "i95_i495",
-            "point_ids": point_ids or [f"i95:{entry}", f"i95:{exit_}"],
-            "connection_ids": [f"source:i95_shared:{route_key}"],
-            "pricing_key": {
-                "source_route_key": route_key,
-                "od_pair_id": od_pair_id,
-            },
-        }
-    )
-
-
-def _i95_rows(
-    *,
-    unavailable_reason: str | None = None,
-    source_kind: str = "observed",
-    od_pair_id: int | None = None,
-) -> list[pricing_tool._I95ComparisonRow]:
-    evaluated_at = datetime(2026, 8, 13, 8, 32, 6, tzinfo=_EASTERN)
-    bin_start = datetime(2026, 8, 13, 8, 20, tzinfo=_EASTERN)
-    missing = unavailable_reason == "missing_observation"
-    stale = unavailable_reason == "stale_observation"
-    modeled = source_kind == "modeled"
-    provenance = {
-        "source_kind": None if missing else source_kind,
-        "pricing_method": (
-            None
-            if missing
-            else "identity_proxy_v1"
-            if modeled
-            else "source_observation"
-        ),
-        "od_pair_id": None if missing else od_pair_id or (1374 if modeled else 1261),
-        "proxy_od_pair_id": 1146 if modeled and not missing else None,
-        "source_status": (
-            None
-            if missing
-            else "CLOSED"
-            if unavailable_reason == "exceptional_i95_schedule"
-            else "NORTHBOUND_OPEN"
-        ),
-    }
-    rows = [
-        {
-            "evaluated_at": evaluated_at,
-            "comparison_kind": "current",
-            "comparison_offset": 0,
-            "bin_start_at": None if missing else bin_start,
-            "bin_end_at": None if missing else bin_start.replace(minute=30),
-            "interval_end_at": None if missing else bin_start.replace(minute=29),
-            "observed_at": (
-                None
-                if missing
-                else evaluated_at - timedelta(minutes=31)
-                if stale
-                else bin_start.replace(minute=22)
-            ),
-            "price_usd": (
-                None
-                if missing or unavailable_reason == "facility_unavailable"
-                else Decimal("8.20")
-            ),
-            "available": unavailable_reason is None,
-            "availability_reason": unavailable_reason,
-            **provenance,
-        }
-    ]
-    if unavailable_reason is None:
-        rows.extend(
-            {
-                "evaluated_at": evaluated_at,
-                "comparison_kind": kind,
-                "comparison_offset": offset,
-                "bin_start_at": bin_start,
-                "bin_end_at": bin_start.replace(minute=30),
-                "interval_end_at": bin_start.replace(minute=29),
-                "observed_at": bin_start.replace(minute=22),
-                "price_usd": Decimal(price),
-                "available": True,
-                "availability_reason": None,
-                **provenance,
-            }
-            for kind, offset, price in [
-                ("prior_cycle", 1, "7.20"),
-                ("prior_cycle", 2, "6.10"),
-                ("prior_week", 1, "6.20"),
-                ("prior_week", 2, "6.00"),
-                ("prior_week", 3, "5.10"),
-            ]
-        )
-    return [pricing_tool._I95ComparisonRow.model_validate(row) for row in rows]
-
-
 def _pricing_route(
     row: dict[str, Any], legs: list[dict[str, Any]]
 ) -> pricing_tool.route_validation._PricingRouteResponse:
@@ -520,7 +236,7 @@ def _southbound_westpark_pricing_route(
         "i95_evidence": _i95_evidence("southbound"),
     }
     legs = [
-        _i95_leg(
+        i95_leg(
             route_step_id="step-1",
             direction="Southbound",
             entry="2233SO",
@@ -528,7 +244,7 @@ def _southbound_westpark_pricing_route(
             od_pair_id=1204,
             point_ids=["i95:2233SO", "i495:192SD"],
         ).model_dump(mode="json"),
-        _i95_leg(
+        i95_leg(
             route_step_id="step-2",
             direction="Southbound",
             entry="2233SO",
@@ -663,7 +379,7 @@ def test_tool_matches_domain_builder_for_every_canonical_i95_i495_source_route(
             else [[origin, destination]]
         )
         legs = [
-            _i95_leg(
+            i95_leg(
                 route_step_id=f"step-{index}",
                 direction=direction,
                 entry=entry,
@@ -695,7 +411,7 @@ def test_tool_matches_domain_builder_for_every_canonical_i95_i495_source_route(
         }
 
         rows_by_od_pair = {
-            od_pair_id: _i95_rows(od_pair_id=od_pair_id) for od_pair_id in od_pair_ids
+            od_pair_id: i95_rows(od_pair_id=od_pair_id) for od_pair_id in od_pair_ids
         }
         payload = _domain_result(
             request,
@@ -771,7 +487,7 @@ def test_domain_builder_characterizes_i95_i495_price_states(
     expected_reason: str | None,
     expected_source: str | None,
 ) -> None:
-    leg = _i95_leg(
+    leg = i95_leg(
         entry="191NO" if source_kind == "modeled" else "203NO",
         exit_="201ND" if source_kind == "modeled" else "223ND",
         od_pair_id=1374 if source_kind == "modeled" else 1261,
@@ -790,7 +506,7 @@ def test_domain_builder_characterizes_i95_i495_price_states(
         },
         [leg.model_dump(mode="json")],
     )
-    rows = _i95_rows(
+    rows = i95_rows(
         unavailable_reason=unavailable_reason,
         source_kind=source_kind,
         od_pair_id=leg.pricing_key.od_pair_id,
@@ -977,283 +693,10 @@ def test_route_failure_streams_failed_and_returns_only_safe_error(
     assert secret not in caplog.text
 
 
-@pytest.mark.parametrize(
-    ("direction", "entry", "exit_", "evaluated_at", "price", "period", "rate_name"),
-    [
-        (
-            "EB",
-            "1",
-            "2A",
-            datetime(2026, 8, 17, 6, 29, tzinfo=_EASTERN),
-            "4.55",
-            "off_peak",
-            "secondary_plaza",
-        ),
-        (
-            "EB",
-            "1",
-            "2A",
-            datetime(2026, 8, 17, 6, 30, tzinfo=_EASTERN),
-            "5.10",
-            "peak",
-            "secondary_plaza",
-        ),
-        (
-            "EB",
-            "1",
-            "28",
-            datetime(2026, 8, 17, 8, 59, tzinfo=_EASTERN),
-            "5.80",
-            "peak",
-            "mainline_plaza",
-        ),
-        (
-            "EB",
-            "1",
-            "28",
-            datetime(2026, 8, 17, 9, 0, tzinfo=_EASTERN),
-            "5.25",
-            "off_peak",
-            "mainline_plaza",
-        ),
-        (
-            "WB",
-            "28",
-            "1",
-            datetime(2026, 8, 17, 16, 0, tzinfo=_EASTERN),
-            "5.80",
-            "peak",
-            "mainline_plaza",
-        ),
-        (
-            "WB",
-            "8",
-            "1",
-            datetime(2026, 8, 17, 18, 29, tzinfo=_EASTERN),
-            "5.10",
-            "peak",
-            "secondary_plaza",
-        ),
-        (
-            "WB",
-            "28",
-            "1",
-            datetime(2026, 8, 17, 18, 30, tzinfo=_EASTERN),
-            "5.25",
-            "off_peak",
-            "mainline_plaza",
-        ),
-        (
-            "EB",
-            "1",
-            "28",
-            datetime(2026, 8, 22, 7, 0, tzinfo=_EASTERN),
-            "5.25",
-            "off_peak",
-            "mainline_plaza",
-        ),
-        (
-            "EB",
-            "1",
-            "28",
-            datetime(2026, 8, 17, 10, 30, tzinfo=UTC),
-            "5.80",
-            "peak",
-            "mainline_plaza",
-        ),
-    ],
-)
-def test_greenway_schedule_rates(
-    direction: str,
-    entry: str,
-    exit_: str,
-    evaluated_at: datetime,
-    price: str,
-    period: str,
-    rate_name: str,
-) -> None:
-    component = pricing_tool.price_greenway_leg(
-        _greenway_leg(direction=direction, entry=entry, exit_=exit_), evaluated_at
-    )
-
-    assert component.price_usd == Decimal(price)
-    assert component.rate_period == period
-    assert component.published_schedule.rate_name == rate_name
-    assert component.component_evaluated_at.tzinfo == _EASTERN
-
-
-def _callback_4(data: dict[str, FixtureValue]) -> object:
-    return data.update({"connection_ids": ["source:greenway:EB:1:8"]})
-
-
-def _callback_5(data: dict[str, FixtureValue]) -> object:
-    return data.update({"point_ids": ["greenway:1:entry:EB", "greenway:8:exit:EB"]})
-
-
-def _strict_callback_6(data: dict[str, FixtureValue]) -> object:
-    return cast(dict[str, JSON], data["pricing_key"]).update({"charge_index": 2})
-
-
-def _strict_callback_7(data: dict[str, FixtureValue]) -> object:
-    return cast(dict[str, JSON], data["pricing_key"]).update(
-        {"source_route_key": "bad-key"}
-    )
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        _strict_callback_6,
-        _callback_4,
-        _callback_5,
-        _strict_callback_7,
-    ],
-)
-def test_greenway_pricer_rejects_misaligned_legs(
-    mutation: Callable[[dict[str, FixtureValue]], object],
-) -> None:
-    data = _greenway_leg().model_dump(mode="python")
-    mutation(data)
-    leg = pricing_tool.route_validation._GreenwayFacilityLeg.model_validate(data)
-
-    with pytest.raises(ValueError, match="Greenway"):
-        pricing_tool.price_greenway_leg(
-            leg, datetime(2026, 8, 17, 8, 0, tzinfo=_EASTERN)
-        )
-
-
-def test_greenway_pricer_requires_aware_evaluation_time() -> None:
-    with pytest.raises(ValueError, match="aware"):
-        pricing_tool.price_greenway_leg(
-            _greenway_leg(),
-            datetime(2026, 8, 17, 8),  # noqa: DTZ001
-        )
-
-
-@pytest.mark.parametrize(
-    ("direction", "entry", "exit_", "charge_index", "price", "rate_name"),
-    [
-        ("EB", "28", "10", 1, "2.00", "ramp"),
-        ("EB", "10", "17", 1, "2.00", "ramp"),
-        ("EB", "10", "17", 2, "4.00", "mainline_plaza"),
-        ("EB", "10", "17", 3, "2.00", "ramp"),
-        ("WB", "66", "28", 1, "4.00", "mainline_plaza"),
-        ("EB", "16", "17", 1, "4.00", "mainline_plaza"),
-        ("EB", "16", "17", 2, "2.00", "ramp"),
-    ],
-)
-def test_dtr_schedule_rates(
-    direction: str,
-    entry: str,
-    exit_: str,
-    charge_index: int,
-    price: str,
-    rate_name: str,
-) -> None:
-    component = pricing_tool.price_dtr_leg(
-        _dtr_leg(
-            direction=direction,
-            entry=entry,
-            exit_=exit_,
-            charge_index=charge_index,
-        ),
-        datetime(2026, 8, 17, 10, 0, tzinfo=UTC),
-    )
-
-    assert component.price_usd == Decimal(price)
-    assert component.published_schedule.rate_name == rate_name
-    assert component.component_evaluated_at.tzinfo == _EASTERN
-
-
-def test_dtr_pricer_matches_every_canonical_source_charge() -> None:
-    source = json.loads(
-        (
-            Path(__file__).parents[1] / "oracle" / "sources" / "dulles_toll_road.json"
-        ).read_text()
-    )
-
-    checked = 0
-    for pair in source["pairs"]:
-        for charge_index, charge in enumerate(pair["charges"], 1):
-            component = pricing_tool.price_dtr_leg(
-                _dtr_leg(
-                    direction=pair["direction"],
-                    entry=pair["entry"],
-                    exit_=pair["exit"],
-                    charge_index=charge_index,
-                ),
-                datetime(2026, 8, 17, 12, tzinfo=_EASTERN),
-            )
-            assert component.price_usd == Decimal(charge["price_off_peak_usd"])
-            assert component.published_schedule.rate_name == (
-                "mainline_plaza" if charge["label"] == "Mainline plaza" else "ramp"
-            )
-            checked += 1
-
-    assert checked == 175
-
-
-@pytest.mark.parametrize("route_key", ["greenway_to_dtr", "dtr_to_greenway"])
-def test_dtr_handoff_is_a_ramp_charge(route_key: str) -> None:
-    component = pricing_tool.price_dtr_leg(
-        _dtr_handoff_leg(route_key, "step-1"),
-        datetime(2026, 8, 17, 12, tzinfo=_EASTERN),
-    )
-
-    assert component.price_usd == Decimal("2.00")
-    assert component.published_schedule.rate_name == "ramp"
-
-
-def _callback_6(data: dict[str, FixtureValue]) -> object:
-    return data.update({"connection_ids": ["source:dtr:EB:10:17"]})
-
-
-def _callback_7(data: dict[str, FixtureValue]) -> object:
-    return data.update({"point_ids": ["dtr:10:entry:EB", "dtr:17:exit:EB"]})
-
-
-def _callback_8(data: dict[str, FixtureValue]) -> object:
-    return cast(dict[str, JSON], data["pricing_key"]).update(
-        {"source_route_key": "WB:10:16"}
-    )
-
-
-def _strict_callback_8(data: dict[str, FixtureValue]) -> object:
-    return cast(dict[str, JSON], data["pricing_key"]).update({"charge_index": 4})
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        _strict_callback_8,
-        _callback_6,
-        _callback_7,
-        _callback_8,
-    ],
-)
-def test_dtr_pricer_rejects_misaligned_legs(
-    mutation: Callable[[dict[str, FixtureValue]], object],
-) -> None:
-    data = _dtr_leg().model_dump(mode="python")
-    mutation(data)
-    leg = pricing_tool.route_validation._DtrFacilityLeg.model_validate(data)
-
-    with pytest.raises(ValueError, match="DTR"):
-        pricing_tool.price_dtr_leg(leg, datetime(2026, 8, 17, 8, 0, tzinfo=_EASTERN))
-
-
-def test_dtr_pricer_requires_aware_evaluation_time() -> None:
-    with pytest.raises(ValueError, match="aware"):
-        pricing_tool.price_dtr_leg(
-            _dtr_leg(),
-            datetime(2026, 8, 17, 8),  # noqa: DTZ001
-        )
-
-
 def test_greenway_only_route_streams_progress_and_returns_total(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    leg = _greenway_leg().model_dump(mode="json")
+    leg = greenway_leg().model_dump(mode="json")
     _install_route(monkeypatch, [leg])
     evaluated_at = datetime(2026, 8, 17, 6, 30, tzinfo=_EASTERN)
     monkeypatch.setattr(pricing_tool, "_current_eastern_time", lambda: evaluated_at)
@@ -1328,9 +771,9 @@ def test_greenway_only_route_streams_progress_and_returns_total(
                 ],
             },
             [
-                _greenway_leg().model_dump(mode="json"),
-                _dtr_handoff_leg("greenway_to_dtr", "step-2").model_dump(mode="json"),
-                _dtr_leg(route_step_id="step-3", entry="28", exit_="10").model_dump(
+                greenway_leg().model_dump(mode="json"),
+                dtr_handoff_leg("greenway_to_dtr", "step-2").model_dump(mode="json"),
+                dtr_leg(route_step_id="step-3", entry="28", exit_="10").model_dump(
                     mode="json"
                 ),
             ],
@@ -1364,14 +807,14 @@ def test_greenway_only_route_streams_progress_and_returns_total(
                 ],
             },
             [
-                _dtr_leg(
+                dtr_leg(
                     route_step_id="step-1",
                     direction="WB",
                     entry="66",
                     exit_="28",
                 ).model_dump(mode="json"),
-                _dtr_handoff_leg("dtr_to_greenway", "step-2").model_dump(mode="json"),
-                _greenway_leg(direction="WB", entry="28", exit_="1")
+                dtr_handoff_leg("dtr_to_greenway", "step-2").model_dump(mode="json"),
+                greenway_leg(direction="WB", entry="28", exit_="1")
                 .model_copy(update={"route_step_id": "step-3"})
                 .model_dump(mode="json"),
             ],
@@ -1497,221 +940,6 @@ def test_iad_terminal_connectors_return_zero_toll(
     assert payload["total_usd"] == "0.00"
 
 
-def test_i66_pricer_returns_current_price_and_comparisons() -> None:
-    component = pricing_tool._build_i66_component(_i66_leg(), _i66_rows())
-
-    assert isinstance(component, pricing_tool._I66ObservedComponent)
-    assert component.price_usd == Decimal("7.20")
-    assert component.recent_movement is not None
-    assert component.recent_movement.direction == "rising"
-    assert component.recent_movement.net_change_usd == Decimal("2.10")
-    assert component.recent_movement.net_change_percent == Decimal("41.2")
-    assert component.prior_week_comparison is not None
-    assert component.prior_week_comparison.median_usd == Decimal("5.00")
-    assert component.prior_week_comparison.current_delta_percent == Decimal("44.0")
-    assert component.prior_week_comparison.position == "above_recent_range"
-    assert component.prior_week_comparison.higher_than_count == 3
-
-
-def test_i66_pricer_returns_schedule_derived_zero() -> None:
-    component = pricing_tool._build_i66_component(_i66_leg(), _i66_schedule_rows())
-
-    assert isinstance(component, pricing_tool._I66ScheduleComponent)
-    assert component.price_usd == Decimal("0.00")
-    assert component.source_kind == "schedule_derived"
-    assert component.pricing_method == "published_schedule"
-    assert component.rate_period == "off_peak"
-    assert component.published_schedule.schedule_id == (
-        "vdot_i66_inside_beltway_2026-08-10"
-    )
-    assert "observed_at" not in component.model_dump(mode="json")
-
-
-@pytest.mark.parametrize(
-    ("source_kind", "pricing_method", "od_pair_id", "proxy_od_pair_id"),
-    [
-        ("observed", "source_observation", 1261, None),
-        ("modeled", "identity_proxy_v1", 1374, 1146),
-    ],
-)
-def test_i95_pricer_returns_current_price_comparisons_and_provenance(
-    source_kind: str, pricing_method: str, od_pair_id: int, proxy_od_pair_id: int | None
-) -> None:
-    leg = (
-        _i95_leg()
-        if source_kind == "observed"
-        else _i95_leg(
-            entry="191NO",
-            exit_="201ND",
-            od_pair_id=1374,
-            point_ids=["i495:192NO", "i95:201ND"],
-        )
-    )
-    component = pricing_tool._build_i95_i495_component(
-        leg, _i95_rows(source_kind=source_kind)
-    )
-
-    assert isinstance(component, pricing_tool._I95Component)
-    assert component.price_usd == Decimal("8.20")
-    assert component.source_kind == source_kind
-    assert component.pricing_method == pricing_method
-    assert component.od_pair_id == od_pair_id
-    assert component.proxy_od_pair_id == proxy_od_pair_id
-    assert component.bin_minutes == 10
-    assert component.recent_movement is not None
-    assert component.recent_movement.direction == "rising"
-    assert component.recent_movement.net_change_usd == Decimal("2.10")
-    assert component.prior_week_comparison is not None
-    assert component.prior_week_comparison.median_usd == Decimal("6.00")
-    assert component.prior_week_comparison.position == "above_recent_range"
-
-
-def _callback_9(row: dict[str, FixtureValue]) -> object:
-    return row.update({"price_usd": Decimal("-0.01")})
-
-
-def _callback_10(row: dict[str, FixtureValue]) -> object:
-    return row.update(
-        {"observed_at": cast(datetime, row["evaluated_at"]) + timedelta(minutes=1)}
-    )
-
-
-def _callback_11(row: dict[str, FixtureValue]) -> object:
-    return row.update(
-        {"bin_end_at": cast(datetime, row["bin_end_at"]) + timedelta(minutes=1)}
-    )
-
-
-def _callback_12(row: dict[str, FixtureValue]) -> object:
-    return row.update({"source_status": None})
-
-
-def _strict_callback_11(row: dict[str, FixtureValue]) -> object:
-    return row.update({"comparison_offset": 1})
-
-
-def _strict_callback_12(row: dict[str, FixtureValue]) -> object:
-    return row.update({"proxy_od_pair_id": 1146})
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        _strict_callback_11,
-        _callback_9,
-        _callback_10,
-        _callback_11,
-        _strict_callback_12,
-        _callback_12,
-    ],
-)
-def test_i95_comparison_row_rejects_invalid_database_data(
-    mutation: Callable[[dict[str, FixtureValue]], object],
-) -> None:
-    row = _i95_rows()[0].model_dump(mode="python")
-    mutation(row)
-
-    with pytest.raises(ValueError):
-        pricing_tool._I95ComparisonRow.model_validate(row)
-
-
-def _callback_13(rows: list[dict[str, FixtureValue]]) -> object:
-    return rows.append(dict(rows[0]))
-
-
-def _callback_14(rows: list[dict[str, FixtureValue]]) -> object:
-    return rows[1].update(
-        {
-            "source_kind": "modeled",
-            "pricing_method": "identity_proxy_v1",
-            "proxy_od_pair_id": 1146,
-        }
-    )
-
-
-def _strict_callback_14(rows: list[dict[str, FixtureValue]]) -> object:
-    return rows[0].update({"od_pair_id": 9999})
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        _strict_callback_14,
-        _callback_13,
-        _callback_14,
-    ],
-)
-def test_i95_fetch_rejects_misaligned_row_sets(
-    monkeypatch: pytest.MonkeyPatch,
-    mutation: Callable[[list[dict[str, FixtureValue]]], object],
-) -> None:
-    rows = [row.model_dump(mode="python") for row in _i95_rows()]
-    mutation(rows)
-
-    def _strict_callback_13(*_args: object) -> object:
-        return rows
-
-    monkeypatch.setattr(pricing_tool, "_fetch_pricing_rows", _strict_callback_13)
-
-    with pytest.raises(ValueError, match="I-95/I-495"):
-        pricing_tool._fetch_i95_i495_comparisons(1261)
-
-
-@pytest.mark.parametrize(
-    "reason",
-    [
-        "missing_observation",
-        "stale_observation",
-        "facility_unavailable",
-        "exceptional_i95_schedule",
-    ],
-)
-def test_i95_pricer_preserves_unavailable_diagnostic(reason: str) -> None:
-    result = pricing_tool._build_i95_i495_component(
-        _i95_leg(), _i95_rows(unavailable_reason=reason)
-    )
-
-    assert isinstance(result, pricing_tool._UnavailableComponent)
-    assert result.reason == reason
-    assert result.source_status == {
-        "missing_observation": None,
-        "exceptional_i95_schedule": "CLOSED",
-    }.get(reason, "NORTHBOUND_OPEN")
-    assert "price_usd" not in result.model_dump()
-
-
-def _callback_15(data: dict[str, FixtureValue]) -> object:
-    return data.update({"connection_ids": ["source:i95_shared:Northbound:203NO:224ND"]})
-
-
-def _callback_16(data: dict[str, FixtureValue]) -> object:
-    return cast(dict[str, JSON], data["pricing_key"]).update(
-        {"source_route_key": "bad-key"}
-    )
-
-
-def _strict_callback_15(data: dict[str, FixtureValue]) -> object:
-    return data.update({"point_ids": ["i95:204NO", "i95:223ND"]})
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        _callback_15,
-        _strict_callback_15,
-        _callback_16,
-    ],
-)
-def test_i95_pricer_rejects_misaligned_leg(
-    mutation: Callable[[dict[str, FixtureValue]], object],
-) -> None:
-    data = _i95_leg().model_dump(mode="python")
-    mutation(data)
-    leg = pricing_tool.route_validation._I95FacilityLeg.model_validate(data)
-    with pytest.raises(ValueError, match="I-95/I-495"):
-        pricing_tool._build_i95_i495_component(leg, _i95_rows())
-
-
 def test_i95_to_reagan_prices_only_the_i95_leg(monkeypatch: pytest.MonkeyPatch) -> None:
     row = {
         **_route_row(),
@@ -1723,7 +951,7 @@ def test_i95_to_reagan_prices_only_the_i95_leg(monkeypatch: pytest.MonkeyPatch) 
         "connection_types": ["within_facility", "airport_access"],
         "i95_evidence": _i95_evidence("northbound"),
     }
-    response = _pricing_route(row, [_i95_leg().model_dump(mode="json")])
+    response = _pricing_route(row, [i95_leg().model_dump(mode="json")])
 
     def _strict_callback_16(*_args: object, **_kwargs: object) -> object:
         return response
@@ -1735,7 +963,7 @@ def test_i95_to_reagan_prices_only_the_i95_leg(monkeypatch: pytest.MonkeyPatch) 
     )
 
     def _strict_callback_17(*_args: object) -> object:
-        return _i95_rows()
+        return i95_rows()
 
     monkeypatch.setattr(
         pricing_tool, "_fetch_i95_i495_comparisons", _strict_callback_17
@@ -1780,7 +1008,7 @@ def test_southbound_westpark_routes_price_both_components(
 
     def fetch_prices(od_pair_id: int) -> list[pricing_tool._I95ComparisonRow]:
         requested_od_pairs.append(od_pair_id)
-        return _i95_rows(od_pair_id=od_pair_id)
+        return i95_rows(od_pair_id=od_pair_id)
 
     monkeypatch.setattr(pricing_tool, "_fetch_i95_i495_comparisons", fetch_prices)
 
@@ -1827,14 +1055,14 @@ def test_southbound_westpark_routes_price_both_components(
                 ],
             },
             [
-                _dtr_leg(route_step_id="step-1", entry="10", exit_="1819"),
-                _dtr_leg(
+                dtr_leg(route_step_id="step-1", entry="10", exit_="1819"),
+                dtr_leg(
                     route_step_id="step-2",
                     entry="10",
                     exit_="1819",
                     charge_index=2,
                 ),
-                _i95_leg(
+                i95_leg(
                     route_step_id="step-3",
                     entry="182NO",
                     exit_="181ND",
@@ -1869,19 +1097,19 @@ def test_southbound_westpark_routes_price_both_components(
                 ],
             },
             [
-                _i95_leg(
+                i95_leg(
                     entry="191NO",
                     exit_="182ND",
                     od_pair_id=1014,
                     point_ids=["i495:191NO", "i495:182ND"],
                 ),
-                _dtr_leg(
+                dtr_leg(
                     route_step_id="step-2",
                     direction="WB",
                     entry="1819",
                     exit_="10",
                 ),
-                _dtr_leg(
+                dtr_leg(
                     route_step_id="step-3",
                     direction="WB",
                     entry="1819",
@@ -1916,14 +1144,14 @@ def test_southbound_westpark_routes_price_both_components(
                 ],
             },
             [
-                _i66_leg(
+                i66_leg(
                     direction="WB",
                     entry="11",
                     exit_="5",
                     start_zone_id=3220,
                     end_zone_id=3230,
                 ),
-                _i95_leg(
+                i95_leg(
                     route_step_id="step-2",
                     entry="187NO",
                     exit_="181ND",
@@ -1958,13 +1186,13 @@ def test_southbound_westpark_routes_price_both_components(
                 ],
             },
             [
-                _i95_leg(
+                i95_leg(
                     entry="191NO",
                     exit_="187ND",
                     od_pair_id=1010,
                     point_ids=["i495:191NO", "i495:187ND"],
                 ),
-                _i66_leg(
+                i66_leg(
                     route_step_id="step-2",
                     entry="3",
                     exit_="10",
@@ -2004,12 +1232,12 @@ def test_i495_junctions_price_every_facility(
         requested_od_pair_id: int,
     ) -> list[pricing_tool._I95ComparisonRow]:
         requested_od_pairs.append(requested_od_pair_id)
-        return _i95_rows(od_pair_id=requested_od_pair_id)
+        return i95_rows(od_pair_id=requested_od_pair_id)
 
     monkeypatch.setattr(pricing_tool, "_fetch_i95_i495_comparisons", fetch_i95_prices)
 
     def _strict_callback_20(*_args: object) -> object:
-        return _i66_rows()
+        return i66_rows()
 
     monkeypatch.setattr(pricing_tool, "_fetch_i66_comparisons", _strict_callback_20)
 
@@ -2039,7 +1267,7 @@ def test_i95_unavailable_returns_no_partial_price(
         "connection_ids": ["source:i95_shared:Northbound:203NO:223ND"],
         "i95_evidence": _i95_evidence("northbound"),
     }
-    response = _pricing_route(row, [_i95_leg().model_dump(mode="json")])
+    response = _pricing_route(row, [i95_leg().model_dump(mode="json")])
 
     def _strict_callback_21(*_args: object, **_kwargs: object) -> object:
         return response
@@ -2051,7 +1279,7 @@ def test_i95_unavailable_returns_no_partial_price(
     )
 
     def _strict_callback_22(*_args: object) -> object:
-        return _i95_rows(unavailable_reason="stale_observation")
+        return i95_rows(unavailable_reason="stale_observation")
 
     monkeypatch.setattr(
         pricing_tool,
@@ -2084,8 +1312,8 @@ def test_multicomponent_route_returns_no_partial_price(
         "destination_point_id": "i495:1859ND",
     }
     rows_by_od_pair = {
-        1204: _i95_rows(od_pair_id=1204),
-        1005: _i95_rows(od_pair_id=1005, unavailable_reason="stale_observation"),
+        1204: i95_rows(od_pair_id=1204),
+        1005: i95_rows(od_pair_id=1005, unavailable_reason="stale_observation"),
     }
     evaluated_at = rows_by_od_pair[1204][0].evaluated_at
     expected = _domain_result(
@@ -2140,8 +1368,8 @@ def test_domain_builder_rejects_i95_rows_for_another_leg() -> None:
             response,
             datetime(2026, 8, 13, 8, 32, 6, tzinfo=_EASTERN),
             {
-                "step-1": _i95_rows(od_pair_id=1005),
-                "step-2": _i95_rows(od_pair_id=1204),
+                "step-1": i95_rows(od_pair_id=1005),
+                "step-2": i95_rows(od_pair_id=1204),
             },
         )
 
@@ -2149,7 +1377,7 @@ def test_domain_builder_rejects_i95_rows_for_another_leg() -> None:
 def test_i95_component_failure_marks_pricing_stage_failed(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    leg = _i95_leg().model_dump(mode="json")
+    leg = i95_leg().model_dump(mode="json")
     leg["pricing_key"]["source_route_key"] = "Northbound:204NO:223ND"
     row = {
         **_route_row(),
@@ -2169,7 +1397,7 @@ def test_i95_component_failure_marks_pricing_stage_failed(
     )
 
     def _strict_callback_26(*_args: object) -> object:
-        return _i95_rows()
+        return i95_rows()
 
     monkeypatch.setattr(
         pricing_tool, "_fetch_i95_i495_comparisons", _strict_callback_26
@@ -2206,7 +1434,7 @@ def test_i95_failure_streams_failed_and_sanitizes_error(
         "connection_ids": ["source:i95_shared:Northbound:203NO:223ND"],
         "i95_evidence": _i95_evidence("northbound"),
     }
-    response = _pricing_route(row, [_i95_leg().model_dump(mode="json")])
+    response = _pricing_route(row, [i95_leg().model_dump(mode="json")])
 
     def _strict_callback_27(*_args: object, **_kwargs: object) -> object:
         return response
@@ -2248,106 +1476,6 @@ def test_i95_failure_streams_failed_and_sanitizes_error(
     assert secret not in caplog.text
 
 
-def test_i66_pricer_omits_incomplete_history() -> None:
-    component = pricing_tool._build_i66_component(_i66_leg(), _i66_rows()[:1])
-
-    assert isinstance(component, pricing_tool._I66ObservedComponent)
-    assert component.recent_movement is None
-    assert component.prior_week_comparison is None
-
-
-def test_prior_week_expectation_excludes_nonexistent_spring_forward_bin() -> None:
-    assert (
-        pricing_tool._count_valid_prior_week_bins(
-            datetime(2026, 3, 22, 2, 0, tzinfo=_EASTERN)
-        )
-        == 2
-    )
-
-
-def _callback_17(row: dict[str, FixtureValue]) -> object:
-    # A naive timestamp is the invalid fixture this test must reject.
-    return row.update({"evaluated_at": datetime(2026, 8, 13, 8, 32)})  # noqa: DTZ001
-
-
-def _callback_18(row: dict[str, FixtureValue]) -> object:
-    return row.update(
-        {"observed_at": cast(datetime, row["evaluated_at"]) + timedelta(minutes=1)}
-    )
-
-
-def _callback_19(row: dict[str, FixtureValue]) -> object:
-    return row.update(
-        {"available": False, "availability_reason": "missing_observation"}
-    )
-
-
-def _strict_callback_29(row: dict[str, FixtureValue]) -> object:
-    return row.update({"comparison_offset": 1})
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        _strict_callback_29,
-        _callback_17,
-        _callback_18,
-        _callback_19,
-    ],
-)
-def test_i66_comparison_row_rejects_invalid_database_data(
-    mutation: Callable[[dict[str, FixtureValue]], object],
-) -> None:
-    row = _i66_rows()[0].model_dump(mode="python")
-    mutation(row)
-
-    with pytest.raises(ValueError):
-        pricing_tool._I66ComparisonRow.model_validate(row)
-
-
-@pytest.mark.parametrize("reason", ["missing_observation", "stale_observation"])
-def test_i66_pricer_preserves_unavailable_diagnostic(reason: str) -> None:
-    result = pricing_tool._build_i66_component(
-        _i66_leg(), _i66_rows(unavailable_reason=reason)
-    )
-
-    assert isinstance(result, pricing_tool._UnavailableComponent)
-    assert result.reason == reason
-    assert "price_usd" not in result.model_dump()
-
-
-def _callback_20(data: dict[str, FixtureValue]) -> object:
-    return data.update({"point_ids": ["i66:7:entry:EB", "i66:10:exit:EB"]})
-
-
-def _callback_21(data: dict[str, FixtureValue]) -> object:
-    return cast(dict[str, JSON], data["pricing_key"]).update(
-        {"source_route_key": "bad-key"}
-    )
-
-
-def _strict_callback_30(data: dict[str, FixtureValue]) -> object:
-    return data.update({"connection_ids": ["source:i66:EB:7:10"]})
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        _strict_callback_30,
-        _callback_20,
-        _callback_21,
-    ],
-)
-def test_i66_pricer_rejects_misaligned_leg(
-    mutation: Callable[[dict[str, FixtureValue]], object],
-) -> None:
-    data = _i66_leg().model_dump(mode="python")
-    mutation(data)
-    leg = pricing_tool.route_validation._I66FacilityLeg.model_validate(data)
-    with pytest.raises(ValueError, match="I-66"):
-        pricing_tool._build_i66_component(leg, _i66_rows())
-
-
 @pytest.mark.parametrize(
     ("input_data", "row", "legs", "facilities", "expected_i66_component"),
     [
@@ -2377,13 +1505,13 @@ def test_i66_pricer_rejects_misaligned_leg(
                 ],
             },
             [
-                _dtr_leg(route_step_id="step-1", entry="10", exit_="66").model_dump(
+                dtr_leg(route_step_id="step-1", entry="10", exit_="66").model_dump(
                     mode="json"
                 ),
-                _dtr_leg(
+                dtr_leg(
                     route_step_id="step-2", entry="10", exit_="66", charge_index=2
                 ).model_dump(mode="json"),
-                _i66_leg(route_step_id="step-3").model_dump(mode="json"),
+                i66_leg(route_step_id="step-3").model_dump(mode="json"),
             ],
             ["dtr", "dtr", "i66"],
             (3110, 3110, "EB"),
@@ -2414,7 +1542,7 @@ def test_i66_pricer_rejects_misaligned_leg(
                 ],
             },
             [
-                _i66_leg(
+                i66_leg(
                     route_step_id="step-1",
                     direction="WB",
                     entry="11",
@@ -2422,10 +1550,10 @@ def test_i66_pricer_rejects_misaligned_leg(
                     start_zone_id=3220,
                     end_zone_id=3220,
                 ).model_dump(mode="json"),
-                _dtr_leg(
+                dtr_leg(
                     route_step_id="step-2", direction="WB", entry="66", exit_="10"
                 ).model_dump(mode="json"),
-                _dtr_leg(
+                dtr_leg(
                     route_step_id="step-3",
                     direction="WB",
                     entry="66",
@@ -2465,7 +1593,7 @@ def test_i66_dtr_junction_prices_both_directions(
         start_zone_id: int, end_zone_id: int, direction: str
     ) -> list[pricing_tool._I66ComparisonRow]:
         requested_i66_components.append((start_zone_id, end_zone_id, direction))
-        return _i66_rows()
+        return i66_rows()
 
     monkeypatch.setattr(pricing_tool, "_fetch_i66_comparisons", fetch_i66_prices)
 
@@ -2496,7 +1624,7 @@ def test_i66_unavailable_returns_no_partial_price(
         "point_ids": ["i66:6:entry:EB", "i66:10:exit:EB"],
         "connection_ids": ["source:i66:EB:6:10"],
     }
-    response = _pricing_route(row, [_i66_leg().model_dump(mode="json")])
+    response = _pricing_route(row, [i66_leg().model_dump(mode="json")])
 
     def _strict_callback_32(*_args: object, **_kwargs: object) -> object:
         return response
@@ -2508,7 +1636,7 @@ def test_i66_unavailable_returns_no_partial_price(
     )
 
     def _strict_callback_33(*_args: object) -> object:
-        return _i66_rows(unavailable_reason="stale_observation")
+        return i66_rows(unavailable_reason="stale_observation")
 
     monkeypatch.setattr(
         pricing_tool,
@@ -2540,7 +1668,7 @@ def test_i66_failure_streams_failed_and_sanitizes_error(
         "point_ids": ["i66:6:entry:EB", "i66:10:exit:EB"],
         "connection_ids": ["source:i66:EB:6:10"],
     }
-    response = _pricing_route(row, [_i66_leg().model_dump(mode="json")])
+    response = _pricing_route(row, [i66_leg().model_dump(mode="json")])
 
     def _strict_callback_34(*_args: object, **_kwargs: object) -> object:
         return response
@@ -2590,7 +1718,7 @@ def test_greenway_failure_streams_failed_and_sanitizes_error(
     def fail(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError(secret)
 
-    _install_route(monkeypatch, [_greenway_leg().model_dump(mode="json")])
+    _install_route(monkeypatch, [greenway_leg().model_dump(mode="json")])
     monkeypatch.setattr(
         pricing_tool,
         "price_greenway_leg",
@@ -2628,7 +1756,7 @@ def test_dtr_failure_streams_failed_and_sanitizes_error(
     }
     response = _pricing_route(
         row,
-        [_dtr_leg(entry="28", exit_="10").model_dump(mode="json")],
+        [dtr_leg(entry="28", exit_="10").model_dump(mode="json")],
     )
 
     def _strict_callback_36(*_args: object, **_kwargs: object) -> object:

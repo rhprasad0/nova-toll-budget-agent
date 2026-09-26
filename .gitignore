@@ -38,3 +38,4 @@ test-results/
 # Experiment output belongs in private storage; publish journal summaries only.
 /v2/eval/evidence/
 /v2/eval/results/golden/runs/
+/v2/eval/results/[0-9]*T[0-9]*Z.json
