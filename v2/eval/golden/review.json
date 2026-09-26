@@ -1,10 +1,1 @@
-{
-  "status": "approved",
-  "corpus_sha256": "25dbf56c82c199a6aa8d648dcd76965220b1d0f96632737c01304d379213a980",
-  "human_trajectory_adjudication": false,
-  "reviewer": "Codex supervisor with independent eval_reviewer contract_3319_preflight review",
-  "evidence": "Independent read-only review admitted contract3.3.19/harness2.3.19 repairs and six labeled regressions. Verified unchanged application/SOP/tools/schemas/models, preserved147 prior labels, matched calibration identities and459 accounted calls. Parent validation:184 focused tests,12 comparator checks,lint/types/corpus passed. User accepted the single calibration with known Rules false pass preserved. Fresh actor check, two unchanged application repeats and trajectory audit remain required before search.",
-  "authorization": "Ryan accepted calibration and requested hill climbing; explicitly waived merged-corpus prerequisite for this local campaign only, preserving all other checks and spending limits.",
-  "contract_commit": "ea93200a68628a9a8220e6316aa4cae33fa121f8",
-  "reviewed_at": "2026-09-26T22:44:32.457161+00:00"
-}
+{"status": "pending"}

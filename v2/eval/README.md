@@ -1,6 +1,6 @@
 # TollChat evaluation
 
-**Current contract: 3.3.19 / harness 2.3.19.** Future development climbs optimize
+**Current contract: 3.3.20 / harness 2.3.20.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
@@ -10,16 +10,13 @@ and fully measured.
 Peak pricing requires a peak qualification; off-peak labels are optional.
 The authored references and SOP now match that rule. The harness checks
 tool-contract failures mechanically and requires verified
-assistant quotes for applicable schedule and vehicle-cost disclosures. Code
-locates every matching assistant turn. Disclosure requirements appear beside the
-original assistant answers; replay failures identify the differing fields.
-The Tysons round-trip contract distinguishes route-ID mapping from user consent.
-Contract 3.3.19 clarifies result-qualified fallback statements, permits explicit
-whole-dollar restatements after exact amounts, specifies actor departure times,
-and reinforces Outcome checks for source contradictions. Six calibration
-regressions cover these findings. The single calibration is accepted with one
-documented Rules disagreement; independent corpus review admits fresh application
-preparation. The experiment journal preserves the findings and limits.
+assistant line IDs for applicable schedule and vehicle-cost disclosures. Code
+resolves IDs to the original text, preserving Markdown and assistant-only
+provenance. The judge selects all lines needed to convey the requirement;
+unknown IDs make the measurement unusable. Replay failures identify differing
+fields. Missing disclosures and contradictory claims still fail their rubrics.
+Calibration review records material disagreements without requiring perfect
+label agreement. See the experiment journal for accepted limitations.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the
 [experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.
