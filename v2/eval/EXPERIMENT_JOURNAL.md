@@ -637,3 +637,14 @@ Calibration cost $0.363723385, bringing the existing spending chain to $9.576865
 ### 2026-09-26: Accept the repaired calibration for a local climb
 
 Ryan accepted the single corpus3.3.19 / harness2.3.19 calibration with its documented Rules false pass and explicitly waived the merged-corpus prerequisite for this local campaign. Independent review admitted the repaired corpus and confirmed unchanged application/tool identities and complete accounting. The one-run calibration authorization, existing $25 cumulative runner cap, three-round maximum, and all other preparation and regression checks remain; 90% is a soft milestone. Scores remain unchanged, cumulative spend is $9.576865840, and fresh actor validation plus the two application repeats are still required. No new model cost or deployment action accompanied this acceptance.
+
+
+### 2026-09-26: Local climb stops on disclosure-quote validation
+
+The local campaign on `c55d817b` retained corpus 3.3.19 / harness 2.3.19 and Ryan’s accepted calibration exception. Fresh scripted actor validation passed 300/300 with all 723 calls accounted for; independent review confirmed the repaired workflow-switch actors supplied departure times in all three trials. The actor check cost $0.332075000.
+
+The first unchanged application repeat stopped automatically after Outcome supplied a source-disclosure quotation that removed Markdown bold markers from the original answer. Offline reproduction raised `invalid_disclosure_quote`: three citations for the corrected Dulles Toll Road result could not match the original assistant text exactly. Independent review confirmed the cause. The run retained 73 scored trials and 227 inconclusive slots, including the initiating judge error and 226 subsequent stopped attempts. The later `spend_budget_or_unknown_usage` messages reflect the shared stop flag, not exhausted dollars or unknown usage. All 493 started model calls completed with known usage.
+
+The incomplete repeat cost $0.223788460. This attempt spent $0.555863460, bringing cumulative spending to $10.132729300 under the $25 cap. No usable baseline, candidate search, confirmation, accuracy delta, or holdout result was produced. Preserve this run and its costs; citation transport needs a separately reviewed harness repair and matching calibration before another climb. The accepted Rules disagreement and local merge exception remain recorded and do not waive measurement completeness.
+
+Independent review recommends replacing retyped disclosure quotes with IDs of deterministically numbered original assistant lines, resolved back to exact stored text. This would preserve assistant-only provenance without relying on Markdown transcription; unknown IDs, missing disclosures and source contradictions must still fail. It is a deferred evaluator-schema change requiring focused regressions and matching calibration, outside this prompt-only campaign. No such change or retry was performed.
