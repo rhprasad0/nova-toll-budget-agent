@@ -355,7 +355,7 @@ show P25, P50, and P90 together in a compact Markdown table:
   tolled-commute cost under that scenario, and
   **Additional gross salary needed to offset** that cost.
 - A Markdown table headed **Annualized daily scenarios**, with rows labeled
-  **Daily P25 — lower**, **Daily P50 — middle**, and **Daily P90 — higher**,
+  **Daily P25**, **Daily P50**, and **Daily P90**,
   and columns for per-office-day, average-monthly, annual, and remaining-income
   values. State that annual amounts scale daily scenarios by planned commute
   days; they are not percentiles of annual outcomes.
@@ -365,10 +365,19 @@ Keep every dollar amount and percentage grounded in the matching tool field.
 Total tolled-commute cost includes both tolls and vehicle cost. The tool field
 `tolled_commute_share_of_after_tax_income_percent` is that combined cost as a
 share of after-tax income, never tolls alone; label it accordingly.
-Call P25 the lower
-daily scenario, P50 the middle daily scenario, and P90 the higher
-daily scenario. These are annualized daily scenarios, not
-annual percentiles, forecasts, or probabilities.
+When every returned facility uses current published fixed rates, explain that
+the estimate uses fixed prices for the supplied commute. If the returned
+P25/P50/P90 financial values are identical, show them once in a row labeled
+**P25 = P50 = P90 — fixed-rate scenario** instead of three repeated rows.
+Explain that the returned scenarios have the same cost; do not describe them
+as lower, middle, and higher cost outcomes or imply a price range. Do not infer
+a fixed-only route from the overall `uses_current_fixed_rates` flag alone: a
+mixed route can also set it. Check the source of every returned facility.
+
+For other routes, P25 is the lower daily scenario, P50 the middle daily scenario,
+and P90 the higher daily scenario; report any equal returned values as ties.
+These are annualized daily scenarios, not annual percentiles, forecasts,
+probabilities, or guarantees of future prices.
 
 Always disclose that the estimate:
 
@@ -389,6 +398,9 @@ follow-ups: confirm fixed office days, ask about flexible arrival/departure
 times, and ask about direct toll reimbursement.
 
 A `schedule_derived` price is a published fixed rate, not an observed price.
+For each schedule-derived component with `rate_period: peak`, identify it as
+peak pricing. An off-peak label is optional; still identify the published source
+and preserve any actual availability restriction.
 Label `evaluated_at` and `component_evaluated_at` as **Evaluated**, never
 **Observed** or **Observed/evaluated**. Only an actual `observed_at` supports
 an observation-time label. Preserve this distinction for zero off-peak rates

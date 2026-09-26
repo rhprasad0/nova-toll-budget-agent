@@ -101,12 +101,12 @@ def test_complete_development_contract_and_reference_labels() -> None:
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 146
+    assert len(examples) == 147
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 46,
+        False: 47,
     }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 143, "invalid": 3}
+    assert Counter(e.actor_validity for e in examples) == {"valid": 144, "invalid": 3}
     assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5

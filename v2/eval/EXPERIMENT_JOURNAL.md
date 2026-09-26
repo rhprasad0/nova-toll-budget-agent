@@ -2742,3 +2742,554 @@ development-delivery validation serial and complete. Do not add SQL migrations,
 parallel-safety declarations or function row-estimate changes on this evidence.
 Hosted variation still limits hardware comparisons; these results do not
 establish a Depot or Blacksmith speedup or a deployed-database tuning policy.
+
+
+### 2026-09-26: Judge calibration and actor preparation
+
+The aim was to improve TollChat's overall development pass rate: successful
+trials out of 300, across 100 cases. Preparation exposed inconsistent judging
+and two actor follow-up failures, so application hill climbing has not started.
+The latest three full calibrations have zero scored disagreements, meeting
+Ryan's condition for opening a PR. The scripted actor check passed 300/300.
+
+#### Setup and accounting
+
+Ryan authorized $50 in new runner spending and chose the runner's stricter
+$25 cumulative ceiling. Earlier preparation spending of $16.646120385 is
+excluded; Codex agent usage is separate. The planned search allows at most
+three rounds and reserves two confirmation runs. Preparation used 16 workers
+and a $22 spending ceiling, leaving $3 reserved.
+
+All model roles stayed on `gpt-6-luna`: application low/2,048 output tokens,
+actor medium/2,048, judge xhigh/8,192. Each calibration grades 146 fixed
+references with 438 judge calls. Application agreement covers 143 actor-valid
+references and three criteria, or 429 labels. All 146 actor-validity labels
+are checked separately. The three actor-invalid references have no application
+reference labels; their diagnostic verdicts do not enter agreement scores.
+
+Every call completed with known usage. All failed runs remain in the ledger;
+no transcript, reference label or recorded verdict was changed. Raw reports,
+reviews and exact evidence digests stay in ignored private storage. The table
+records every paid run in execution order. Versions name corpus/harness.
+
+| Preparation and execution commit | Versions | Run | Result | Cost |
+| --- | --- | --- | --- | ---: |
+| Starting contract, `e2b7d4b` | 3.3.9/2.3.9 | Calibration 1 | 429/429 application; 146/146 actor | $0.333870370 |
+| Starting contract, `e2b7d4b` | 3.3.9/2.3.9 | Calibration 2 | 427/429 application; 146/146 actor; unapproved | $0.322916890 |
+| Judge consolidation, `c7ca28b` | 3.3.10/2.3.10 | Calibration 1 | 429/429 application; 146/146 actor | $0.340086075 |
+| Judge consolidation, `c7ca28b` | 3.3.10/2.3.10 | Calibration 2 | 429/429 application; 146/146 actor | $0.330696520 |
+| Judge consolidation, `c7ca28b` | 3.3.10/2.3.10 | Actor check | 298/300 valid; 721 calls | $0.318990400 |
+| Actor completion, `f41077d` | 3.3.11/2.3.11 | Calibration 1 | 427/429 application; 146/146 actor; unapproved | $0.329104820 |
+| Materiality and Rules scope, `cfdb0e5` | 3.3.12/2.3.12 | Calibration 1 | 429/429 application; 146/146 actor | $0.334002105 |
+| Materiality and Rules scope, `cfdb0e5` | 3.3.12/2.3.12 | Calibration 2 | 429/429 application; 146/146 actor | $0.325226560 |
+| Materiality and Rules scope, `cfdb0e5` | 3.3.12/2.3.12 | Actor check | 300/300 valid; 723 calls | $0.319122500 |
+| Materiality and Rules scope, `cfdb0e5` | 3.3.12/2.3.12 | Additional calibration | 427/429 application; 146/146 actor; unapproved | $0.330220920 |
+| Fixed-rate SOP, `865742c` | 3.3.12/2.3.12 | Calibration 1 | 429/429 application; 146/146 actor | $0.329371060 |
+| Fixed-rate SOP, `865742c` | 3.3.12/2.3.12 | Calibration 2 | 429/429 application; 146/146 actor | $0.329559060 |
+| Fixed-rate SOP, `865742c` | 3.3.12/2.3.12 | Calibration 3 | 429/429 application; 146/146 actor | $0.328506560 |
+
+Total spending is $4.271673840, leaving $20.728326160 under the agreed ceiling.
+The final two runs cost $0.658065620. Each run in the final streak has the same
+execution identity, including source artifact, prompts, labels and model settings.
+
+#### What changed and why
+
+The first repeat failed on two annual-summary judgments. Grounding accepted an
+explicit denial of the historical source, while Outcome rejected equivalent
+wording describing a rough historical screen as neither a forecast nor a
+financial plan. Both judgments were correct in the first draw. This stopped
+the initial climb before actor checks or an application baseline. Missing private
+calibration evidence had been recreated with Ryan's authorization. These two
+runs cost $0.656787260; $24.343212740 remained.
+
+Ryan then authorized judge preparation. Inspection found no lost transcript or
+tool evidence. Commit `01b2853` consolidated the instructions: Grounding checks
+claims and source denials before amounts; Outcome examines supplied wording
+before declaring a qualification missing. Diagnostic rubrics now appear once.
+The change replaced a stale CORRECT/INCORRECT instruction with the structured
+assessment contract.
+Schemas, verdict derivation and model settings stayed fixed. No blanket exception
+for rough estimates or missing disclosures was added.
+
+Both calibrations passed, with identical verdicts even on excluded diagnostics.
+The source-denial and equivalent-caveat cases were judged correctly. Some
+Grounding explanations still listed supported facts before contradictions, so
+the results do not show that the requested review order caused the improvement.
+The actor check then found two unnecessary replies: asking whether a stated
+$6 total included its $4 and $2 components, and repeating an accepted annual-day
+choice after the completed estimate. Both failed the deterministic continuation
+check before judging. The annual-day profile's trigger was also ambiguous.
+The check used 423 actor calls and 298 judge calls, including 114 staged trials
+across 38 cases. This preparation cost $0.989772995; cumulative spending was
+$1.646560255, with $23.353439745 remaining. Further actor work was deferred
+until Ryan authorized it.
+
+Commit `31504ff` clarified actor completion. Profile facts are available answers,
+not a list to volunteer. Actors answer necessary questions and outstanding
+triggered follow-ups, then stop. Repeating a delivered choice does not trigger
+another reply, but a necessary repeated question or a separate later action does.
+The structured-output instruction uses the same rule. One annual-day profile
+now selects its count when asked to accept or adjust a proposal and needs no
+confirmation after the completed answer. Reference transcripts and labels stayed
+fixed, as did judges, application behavior, fixtures, schemas and runtime checks.
+
+Fresh calibration failed before the actor change could be measured. Outcome
+required an optional schedule-period label without an actual availability
+restriction. Rules penalized a source-disclosure omission that belongs under
+Outcome alone. Both references had passed both earlier calibrations; fixed
+reference grading generates no actor turns, so this was no evidence of actor
+regression. Agreement was Outcome 142/143, Grounding 143/143 and Rules 142/143.
+The run cost $0.329104820; cumulative spending was $1.975665075, with
+$23.024334925 remaining. The planned second calibration and actor check did not run.
+
+Ryan asked for more relaxed judging. Commit `f2e2319` made material meaning the
+test for an omission: identify the applicable requirement and explain what the
+conversation still fails to convey. Useful answers can omit optional detail or
+use equivalent wording. Rules covers prohibited actions, affirmative
+misrepresentations and required intermediate steps; final-answer disclosure
+omissions belong to Outcome. Source, assumption, uncertainty, financial accuracy
+and consent requirements remain. The preceding actor patch stayed intact.
+
+Two calibrations passed, including both previously brittle disclosure cases.
+Independent review checked all 37 negative-reference requirement lists, three
+actor exclusions and passing contrasts. Material source and assumption omissions,
+financial contradictions and workflow violations still failed. The actor check
+passed all 300 unique slots, using 423 actor and 300 judge calls. Review covered
+114 staged trials across 38 cases for facts, consent, corrections, cancellations,
+route choices and workflow switches. All six trials covering the earlier failures
+stopped correctly; explicitly requested reconfirmation still received an answer.
+Minor wording slips preserved facts and behavior. The current cases contain no
+explicit proof-request follow-up, so that behavior remains unmeasured. This
+stage cost $0.978351165; cumulative spending was $2.954016240, with
+$22.045983760 remaining.
+
+Ryan requested another calibration. It used the exact same execution identity
+and found two Rules errors. One rejected the prescribed lower/middle/higher
+percentile labels despite correctly reported tied prices. The other accepted
+a wrong route-approach argument by extending a discovery exception beyond its
+listed call. The Grounding explanation also overstated endpoint correspondence,
+although its pass label was appropriate without an unsupported factual claim.
+Both Rules verdicts had been correct in the first two draws; Outcome and
+Grounding remained at 143/143, while Rules fell to 141/143. The run remained
+unapproved and preparation readiness was revised. It cost $0.330220920, bringing
+spending to $3.284237160 and leaving $21.715762840.
+
+After reviewing these disagreements, Ryan requested an application SOP correction.
+Commit `865742c` adds prompt release 2.3.10 and its digest, preserving previous
+releases and renderer 1.0.0. When every facility uses current published fixed rates
+and the returned scenario values tie, the answer shows one fixed-rate scenario
+and explains that the costs are equal. Mixed routes retain their scenarios and
+report ties. Values, source disclosures and uncertainty limits remain intact.
+The existing route prompt already supplies both approach labels and requires
+selection from the origin and corridor. The points share aliases, coordinates
+and direction, but the supplied route needed no further user clarification.
+No routing change was made. This SOP correction incurred no model-call cost.
+
+The next requested calibration passed without changing judge inputs or fixed
+answers. It cost $0.329371060, bringing spending to $3.613608220 and leaving
+$21.386391780. Ryan then required three consecutive clean runs before a PR.
+Counting that pass as the first, two further runs passed independent review.
+Paid calibration stopped once the condition was met.
+
+#### Checks and limits
+
+Preparation changes received independent agent review before measurement. Each
+changed evaluation contract received fresh hashes and review; old approvals did
+not transfer. The initial preflight passed corpus validation, 105 runner and
+development tests, and 11 comparison checks. Subsequent preparation passed
+151 relevant tests, 11 comparison checks, lint, formatting and type checks.
+The actual admission path rejected stale calibration before loading credentials
+or creating output. The application SOP correction passed 16 agent tests,
+the version check, corpus validation, lint and formatting.
+
+Before preparing the PR, the branch incorporated `main` at `8a42520`, preserving
+its journal and archive cleanup. The combined branch passed 170 relevant tests,
+11 comparison checks, contract-version validation and offline corpus validation.
+
+Starting development parity was accepted from retained protected-delivery evidence:
+Oracle 1.15.0 preceded migration 034; its release showed 1.15.1; the later successful
+release confirmed Oracle 1.15.1 and pricing 1.4.0. Strict history checks, unchanged
+application/database sources and the frozen 220-point catalog check supported
+that conclusion. Migration application and postconditions were inferred from
+provenance because the raw receipt was gone. There was no fresh live catalog
+comparison. The then-latest delivery failed after successful migrations; this
+campaign did not repair or rerun delivery.
+
+The excluded actor-invalid uncertainty diagnostic varies between pass and fail;
+its actor status is unchanged. The last two calibrations agree with each other
+on every verdict, but differ from the first streak run on that diagnostic.
+This does not break the scored-disagreement condition. Earlier failed runs remain
+evidence of judge inconsistency. Independent agent review is not human trajectory
+adjudication, and three clean draws do not establish general judge reliability.
+The historical 298/300 and later 300/300 actor checks used different judge
+contracts, so they do not prove that the actor patch caused the difference.
+
+**Decision: retain the changes for a PR.** Application evaluation must still
+measure the fixed-rate SOP's effect and any pass-rate gain. Application baselines
+and hill climbing remain subject to the reviewed-merge and development-parity
+requirements. No application search, release qualification or deployment occurred.
+
+
+### 2026-09-26: Integrate preparation with the money-grading repair
+
+Rebased PR #612 onto `53145d4` (#611). The combined contract retains main's
+signed-money grading fix, pricing-request rules and confirmed 270/300 development
+target, together with the judge, actor and fixed-rate changes above. It uses
+corpus 3.3.13 / harness 2.3.13 and application prompt 2.3.11. Main's published
+prompt 2.3.10 digest is preserved; the earlier branch-only 2.3.10 named a different
+prompt and remains identifiable by its recorded commit and digest.
+
+The earlier three-run streak belongs to the previous contract. It does not
+approve this combination: independent corpus review and a fresh three-run
+calibration streak are required. The historical actor result also remains bound
+to its original contract. No paid runs occurred during integration, so cumulative
+spending remains $4.271673840 under the agreed $25 ceiling.
+
+All 421 relevant application, eval and deployment-evidence tests passed after
+correcting the required authorization wording in review metadata. Twelve comparison
+checks, five mixed-version compatibility checks and 19 release-manifest tests
+passed. Rebuilt packages and their source inputs passed the full manifest verifier.
+The deployment-evidence fixtures now bind prompt 2.3.11; runtime checks were not
+weakened. Fresh CI and independent review remain gates before calibration.
+
+Independent review approved corpus admission at `84a0935`, bound to corpus digest
+`318e4f32b796fcffb3e34716d921e92edc6958462dad137864683883659949cc`.
+The reviewer found no material integration issue and confirmed that the main fixes
+and the earlier preparation changes remain intact. Lint, formatting and type
+checks passed. This permits the first future calibration after CI passes; it
+does not approve calibration results, application evaluation or deployment.
+
+
+### 2026-09-26: First calibration after the rebase
+
+Ryan authorized fixed-reference calibration at `041f547` while the deployment
+plan remained blocked by CloudFront drift, with a stop for review on disagreements.
+Corpus 3.3.13 / harness 2.3.13 completed all 146 references and 438 calls with
+known usage. Agreement was Outcome 141/143, Grounding 143/143, Rules 143/143
+and actor validity 146/146; total application agreement was 427/429.
+
+Two Outcome judgments disagreed with the unchanged labels. The Jones Branch
+quote was rejected because its correct local observation time omitted the date.
+The fixed-rate annual summary passed despite a final sentence calling $3,669.52
+combined toll-and-vehicle cost tolls alone; actual annual tolls were $1,620.00.
+Grounding and Rules rejected that contradiction, so the response still failed
+overall. The run remains unapproved pending Ryan’s review. No second run or
+judge, label, actor or application change followed. The new streak remains zero.
+
+Cost was $0.342221105, bringing cumulative spending to $4.613894945 and leaving
+$20.386105055 under the agreed $25 ceiling. Raw evidence stays private. This
+calibration generated no application answers and did not assess deployment.
+
+
+### 2026-09-26: Clarify observation dates and Outcome contradictions
+
+Ryan agreed with both preceding disagreement assessments and authorized a fix
+and rerun. Commit `d0d10d5` introduced corpus 3.3.14 / harness 2.3.14: a same-day
+observation may use its correct local time and timezone without repeating the
+date; older observations still need date or age context and stale qualifications.
+Outcome now checks every financial claim through the final sentence before
+assessing task completion or omissions. Cases, labels, application, actor, schemas
+and model settings did not change. Independent preparation review approved the
+contract, recorded at execution commit `e10560b`.
+
+The patch passed 158 relevant tests, 12 comparison checks, corpus validation, lint,
+formatting and type checks. Two full calibrations then used the same execution
+identity, each completing 146 references and 438 calls with known usage.
+
+| Run | Application labels | Actor labels | Review | Cost |
+| --- | --- | --- | --- | ---: |
+| 1 | 429/429 | 146/146 | Approved independently | $0.338925895 |
+| 2 | 429/429 | 146/146 | Held for an explanation error | $0.327907340 |
+
+Both diagnosed Outcome errors were corrected in both runs. All verdicts, including
+excluded diagnostics, matched across the repeats. Independent review covered the
+37 negative references, passing contrasts and three actor exclusions. Some
+explanations still describe supported behavior before contradictions, so the
+results do not establish that the requested review order caused the improvement.
+
+The second run correctly failed a Greenway quote for omitting published-schedule
+source disclosure, but also demanded an off-peak qualification. The policy makes
+that schedule-period label optional here. This did not change the correct failure
+label, but semantic approval was withheld. Following the stop-for-review instruction,
+no third run or further judging change followed. The numeric streak is two; only
+the first run has semantic approval. Raw verdicts and explanations are preserved.
+
+These runs cost $0.666833235, bringing cumulative spending to $5.280728180 and
+leaving $19.719271820 under the agreed $25 ceiling. No application evaluation or
+deployment occurred. Further calibration awaits Ryan’s review of the added
+requirement; this is not evidence of an application pass-rate gain.
+
+
+### 2026-09-26: Require peak labels and repeat calibration
+
+Ryan confirmed that peak pricing requires a label and off-peak pricing does not,
+and authorized updating the SOP and affected references. Commit `2a8212d` applies
+that rule to the shared judging policy and application prompt. Six authored
+passing references now identify peak pricing in seven responses. One original
+answer remains as a new Outcome-only negative for omitting the peak label.
+Historical transcripts and labels are preserved. The corpus still has 100 cases,
+with 147 calibration references: 144 actor-valid and three actor-invalid.
+
+Independent preparation review approved corpus 3.3.15 / harness 2.3.15, digest
+`35715241b3a22c4f9c573a97b5347576362ab72a838f200905de8b416be5f314`.
+Application prompt 2.3.12 preserves main's published releases; the intermediate
+branch-only 2.3.11 remains in branch history. Release metadata binds rebuilt
+packages and the observed serving development baseline `8a42520`. All 421 relevant
+tests, 12 comparison checks, five compatibility checks and 19 release-manifest
+tests passed, as did corpus, version, lint, formatting, type and full manifest
+checks. The read-only development plan passed at execution commit `8cff082`.
+
+Both calibrations used that same execution identity. Each completed all 147
+references and 441 judge calls with known usage.
+
+| Run | Application labels | Actor labels | Review | Cost |
+| --- | --- | --- | --- | ---: |
+| 1 | 432/432 | 147/147 | Approved independently | $0.344678525 |
+| 2 | 430/432 | 147/147 | Held for user review | $0.335654840 |
+
+Run two produced two false passes. Rules accepted a rejected annual-tool call
+using `i495:1839ND` instead of the permitted `i495:183ND`. Outcome credited the
+annual answer with disclosing the $0.685-per-mile vehicle-cost assumption, although
+that disclosure was absent. Independent review also found that the Belmont
+source-omission explanation again demanded an off-peak label, contrary to the
+explicit policy; its failure verdict remained correct because the source was
+missing. The excluded Sunday reference's Outcome changed from fail to pass while
+its actor remained invalid; that diagnostic is outside application agreement.
+
+The peak-label positive and negative references behaved correctly in both runs.
+The earlier timestamp and financial-contradiction fixes also held. These results
+do not resolve the wider judge inconsistency. The consecutive clean streak resets
+to zero. Following Ryan's instruction, no third run or further judging change
+followed; raw evidence remains private and run two has no calibration approval.
+
+The two runs cost $0.680333365, bringing cumulative spending to $5.961061545 and
+leaving $19.038938455 under the agreed $25 ceiling. No application evaluation,
+hill climbing or deployment occurred. The historical actor check does not approve
+the current contract, and no application pass-rate gain is claimed.
+
+
+### 2026-09-26: Use mechanical tool checks and answer quotes in grading
+
+Ryan authorized a structural judge change after reviewing research on smaller
+grading questions and deterministic checks. Corpus 3.3.16 / harness 2.3.16 reuses
+the replay validator to determine Rules failures for tool-contract violations.
+Outcome receives applicable IDs for published current-price sources, peak prices
+and returned annual vehicle-cost assumptions. It supplies exact assistant-answer
+quotes for those disclosures or an empty list when one is missing. Invalid IDs
+or citations make the measurement unusable. Semantic interpretation and all other
+obligations remain model-judged. The three calls per reference, 147 reference
+answers and labels, cases, application prompt 2.3.12, actors and models are unchanged.
+
+Independent review found that separate executed/rejected lists could lose call
+order within a turn. The correction requires a complete ordered invocation log
+for mixed records; ambiguous records are measurement errors. A focused integration
+test verifies that invalid citations retain raw evidence and charged usage and
+stop further reservations without retry. All 170 relevant eval tests and 12
+comparison tests passed, along with corpus validation, lint, formatting and types.
+Independent preparation review approved `b605b48`, bound to corpus digest
+`91c6905c4d579574eac182f007df9b1fed88f14475c5784a6d8cc03557432e51`.
+
+The first calibration ran at `72ec6bc`. It stopped when the judge quoted the
+correct vehicle-cost disclosure from assistant turn 3 but assigned it to turn 1.
+The citation validator rejected that record and the runner stopped new paid calls.
+The raw assessment and known usage are retained. This is a judge citation error,
+not an application failure or a budget overrun; the shared stop flag accounts for
+the later reservation rejections.
+
+Only 63 of 147 references were fully measured: 189/189 application labels and
+63/63 actor labels agreed. The other 84 were incomplete. All 196 started model
+calls finished with known usage. No negative-reference contrasts were fully
+measured, so this partial result cannot establish that the earlier false passes
+or off-peak explanation error are fixed. The run remains unapproved, the clean
+streak is zero, and no retry or second run followed. Exact quotes verify origin;
+their semantic relevance still needs review.
+
+Independent review checked all 75 emitted disclosure quotes. The turn-number
+error was the only incorrect location, with no other material semantic issue
+found in the reviewed output. All fully scored references were positive; negative
+cases and actor exclusions remain untested. The reviewer recommends deriving
+assistant-turn locations from exact quotes, retaining all matches when wording
+repeats and continuing to exclude user/tool text. That correction has not been
+implemented or measured in this entry.
+
+Cost was $0.136846600, bringing cumulative spending to $6.097908145 and leaving
+$18.902091855 under the agreed $25 ceiling. Raw output stays private. No
+application evaluation, hill climbing or deployment occurred. The result exposes
+an additional source of judging brittleness: requiring the model to identify a
+turn that code could locate from the exact quote.
+
+
+### 2026-09-26: Derive quote locations and complete the next calibration
+
+Ryan authorized the quote-location fix and one fresh calibration. Corpus 3.3.17 /
+harness 2.3.17 removes model-generated turn numbers and records every assistant
+turn containing each exact quote. User/tool text and fuzzy matches remain excluded;
+unknown quotes or IDs still invalidate the measurement. All 147 reference answers
+and labels, application prompt 2.3.12, actors and model settings are unchanged.
+The patch passed 172 eval tests, 12 comparison tests, corpus validation, lint,
+formatting and types. Independent review approved `e7ea37f`, with corpus digest
+`3a8ef9cf91f36bfb89893be9e78f7a13e8d226c55eeb261d9144c08f71e63bc5`.
+
+At execution commit `cf9bed4`, expired development SSO credentials prevented model
+construction. That preserved attempt made zero model calls and cost $0. After Ryan
+renewed the session, a fresh directory on the identical source identity completed
+all 147 references and 441 calls with known usage. Agreement was 430/432 application
+labels and 147/147 actor labels. Independent review verified all 134 emitted quotes
+and their locations, 38 negative references, three actor exclusions and passing
+contrasts. The previous turn-location failure is resolved.
+
+Two false failures remain. Rules demanded another return-entry confirmation for
+the Tysons round trip; the contract's “resolve return entry separately” wording
+was interpreted too strictly despite the user's “and back” request and selected
+Jones Branch endpoint. Outcome acknowledged an explicit vehicle-cost assumption
+in the Gallows annual summary but supplied no quote, causing a disclosure failure.
+Two stopped-route explanations also falsely described different IDs as matching,
+although mechanical validation produced the correct failures.
+
+The missing vehicle-assumption and peak-label negatives failed correctly. Belmont's
+missing-source answer failed without an off-peak requirement, and its paraphrase
+passed. This does not establish broader judge reliability. The run is unapproved,
+the clean streak remains zero, and no further change or run followed. Raw evidence
+stays private. Cost was $0.343222425; cumulative spending is $6.441130570, leaving
+$18.558869430 under the agreed $25 ceiling. No application evaluation, hill climbing
+or deployment occurred.
+
+
+### 2026-09-26: Clarify round-trip consent and present judge evidence directly
+
+Ryan authorized three preparation changes under corpus 3.3.18 / harness 2.3.18.
+The Tysons contract now distinguishes resolving each leg's IDs from asking for
+another user confirmation. Outcome receives original assistant answers beside
+its disclosure requirements. Mechanical Rules findings identify differing fields;
+the model assesses the remaining Rules obligations, including budgets and
+misrepresentations. All 147 reference answers and labels, application prompt
+2.3.12, actors and model settings remain fixed. The changes passed 186 targeted
+tests and 22 subtests, corpus validation, lint, formatting and type checks.
+Independent review approved `7f375ce` for measurement. Replay decisions matched
+the prior implementation across all 147 references, including 14 with violations.
+
+The fresh calibration at `165f83c` completed all 147 references and 441 calls
+with known usage. Agreement was 432/432 application labels and 147/147 actor
+labels. Independent review checked all 38 negative references, three actor
+exclusions, passing contrasts, and all 135 disclosure quotes for origin and
+meaning. The Tysons clarification, Gallows vehicle assumption, and two previous
+wrong-ID explanations were correct in this draw. Peak/source/vehicle omissions,
+financial contradictions and consent violations still failed as expected.
+
+Approval is held because one Rules explanation incorrectly treats a missing final
+answer after a harness stop as a separate Rules violation. Task completion belongs
+to Outcome; the mechanical wrong-ID failure masks that explanation error in the
+aggregate score. A second workflow rationale is ambiguous because it also involves
+an omitted call after clarification. The run has no scored disagreements, but the
+independently approved streak remains 0/3 pending user review. No further change
+or run followed. One successful extraction pass does not establish judge reliability
+or an application pass-rate improvement.
+
+Cost was $0.348311850; cumulative spending is $6.789442420, leaving $18.210557580
+under the agreed $25 ceiling. Raw evidence stays private. No application evaluation,
+hill climbing or deployment occurred.
+
+### 2026-09-26: Accept calibration after user adjudication
+
+Ryan reviewed the stopped Gallows-to-Jones Branch case and explicitly accepted
+the corpus 3.3.18 / harness 2.3.18 calibration at `165f83c` as successful.
+The run has 432/432 application and 147/147 actor labels in agreement. The harness
+stopped before another model step, so the trace cannot establish whether the
+agent would have recovered. Work on recovery and the Rules explanation is
+deferred. The independent review finding and original evidence remain preserved.
+
+This user adjudication supersedes the approval hold above and counts as run 1
+of the required three consecutive successful calibrations. No labels, judge
+instructions or execution behavior changed. No new model calls were made;
+cumulative spending remains $6.789442420. Two further successful runs are needed.
+
+### 2026-09-26: Stop the next calibration on an annual-day disagreement
+
+Ryan authorized continuing the calibration sequence after accepting run 1.
+Run 2 used corpus 3.3.18 / harness 2.3.18 at `dbac2515`. Only the README and
+experiment journal had changed since run 1; all executable identity fields,
+reference answers, expected labels and model settings matched. The run completed
+147 references and 441 calls with known usage. Agreement was 431/432 application
+labels and 147/147 actor labels. Independent review checked all 38 negative
+references, three actor exclusions, passing contrasts and all 135 disclosure
+quotes. It found one new scored disagreement and no other material new error.
+
+Outcome passed a negative reference that proposed 156 annual office days with
+only a yes/no confirmation. The user supplied 134 days and received a correct
+estimate. The frozen policy explicitly requires inviting adjustment and says a
+later correction does not cure that omission: Outcome and Rules must both fail.
+Rules applied the policy correctly, so the case still fails overall. Run 1 had
+also failed Outcome correctly. Relaxing this policy would be a separate decision;
+the current expected labels and evidence remain unchanged.
+
+Run 2 is held for user review, and run 3 was not started. The earlier acceptance
+and deferred recovery finding remain preserved; the new disagreement interrupts
+the consecutive-success sequence. Cost was $0.344635850, bringing cumulative
+spending to $7.134078270 and leaving $17.865921730 under the agreed $25 ceiling.
+No application evaluation or hill climbing occurred. Detailed evidence stays private.
+
+### 2026-09-26: Accept run 2 with its documented disagreement
+
+Ryan accepted the second calibration after reviewing the annual-day disagreement,
+judging the observed consistency sufficient to continue. Agreement remains
+431/432 application labels and 147/147 actor labels under corpus 3.3.18 /
+harness 2.3.18. The omitted adjustment invitation still fails Rules, so the
+reference fails overall. The Outcome mismatch and independent review finding
+remain recorded; expected labels and judge instructions are unchanged.
+
+This supersedes the run-2 hold and brings the sequence to two accepted runs,
+with the documented exceptions retained. Continue with the third calibration
+and stop for any new disagreement or measurement error. No model calls were
+made for this adjudication; cumulative spending remains $7.134078270.
+
+### 2026-09-26: Complete three accepted calibrations
+
+The third calibration used corpus 3.3.18 / harness 2.3.18 at `ace2d235`.
+All executable identity fields remained unchanged; only the README and journal
+differed from prior runs. It completed 147 references and 441 calls with known
+usage. All 432 application labels and 147 actor labels agreed. Independent
+review checked 38 negative references, three actor exclusions, passing contrasts,
+prior failure cases and all 135 disclosure quotes. It found no materially new
+blocking explanation error. The annual-day reference that disagreed in run 2
+correctly failed both Outcome and Rules in this run.
+
+The sequence now has three accepted calibrations: run 1 after Ryan deferred
+the stopped-response explanation/recovery finding, run 2 after Ryan accepted
+its single Outcome disagreement, and run 3 after independent approval. Across
+the sequence, 1,295/1,296 application labels and 441/441 actor labels agree,
+with all 1,323 calls accounted for. The known exceptions, original judgments
+and expected labels remain preserved. This completes the accepted calibration
+sequence; it does not establish general judge reliability or an application
+pass-rate improvement.
+
+Run 3 cost $0.349336350. The three-run sequence cost $1.042284050; cumulative
+spending is $7.483414620, leaving $17.516585380 under the agreed $25 ceiling.
+No further calibration was launched. Application baselines and hill climbing
+still require the remaining preparation, reviewed merge and development parity.
+Detailed evidence stays private.
+
+### 2026-09-26: Rebase the accepted calibration changes for merge
+
+Ryan authorized rebasing PR #612 onto `origin/main` and merging after checks.
+The new base is `6af96ec9` (#615), including deployment hardening and CI profiling
+and database-performance changes. Rebase conflicts were limited to appended
+journal entries and generated compatibility hashes in the release manifest.
+Both journal histories are preserved byte-for-byte. All deployment-input hashes
+match their files, and the agent and tool contract manifests advance cleanly.
+
+Comparison with accepted calibration 3 found identical corpus, harness, prompts,
+tool schemas, actors and model settings; only the commit and whole-checkout
+artifact hash changed. Corpus 3.3.18 / harness 2.3.18 and the recorded calibration
+findings remain unchanged. Local validation passed 475 focused tests and 25
+subtests, corpus validation, lint and type checks. Required PR CI remains the
+merge gate. No paid rerun was needed; cumulative evaluation spending remains
+$7.483414620.
+
+The read-only development plan then rejected the older shared-package baseline
+`8a42520a`: its sanitized evidence identified `6af96ec9` as the serving release.
+Updated the development compatibility binding to that observed release and
+refreshed its manifest digest. Shared handlers, pinned requirements and database
+schemas are unchanged from the serving release; production compatibility is
+unchanged. All 145 focused compatibility, shared-package and manifest checks
+passed, with three subtests. The next PR run must verify the corrected binding.
+This metadata correction made no model calls and changed no calibrated behavior.

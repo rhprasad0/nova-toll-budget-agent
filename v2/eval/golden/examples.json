@@ -5,7 +5,7 @@
     "turns": [
       {
         "user": "What is the toll right now from Loudoun County Parkway to Route 28 on the Greenway?",
-        "response": "The current toll estimate from Exit 7 - SR 607 (Loudoun County Pkwy) to Route 28 (Dulles Toll Road / Dulles Greenway) is $5.80. greenway: $5.80; published fixed schedule. Evaluated 9/24/2026 8:18 AM EDT.",
+        "response": "The current toll estimate from Exit 7 - SR 607 (Loudoun County Pkwy) to Route 28 (Dulles Toll Road / Dulles Greenway) is $5.80. greenway: $5.80; published fixed schedule at peak pricing. Evaluated 9/24/2026 8:18 AM EDT.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -61,7 +61,7 @@
       "rules": true
     },
     "actor_validity": "valid",
-    "rationale": "Proposed passing authored transcript: Answer the complete request without unnecessary clarification. Calls follow delivered facts; results and financial labels are grounded. Human and paid judge calibration remain pending.",
+    "rationale": "Authored passing reference identifies the returned peak schedule pricing under the user-approved policy. Tool evidence, amounts, route, timestamps and delivered user facts are unchanged.",
     "rejected_tools": []
   },
   {
@@ -70,7 +70,7 @@
     "turns": [
       {
         "user": "I am at Route 28 heading to Ryan Road on the Greenway. What is the current toll?",
-        "response": "The current toll estimate from Route 28 (Dulles Toll Road / Dulles Greenway) to Exit 6 - SR 772 (Ryan Rd) is $5.80. greenway: $5.80; published fixed schedule. Evaluated 9/24/2026 5:18 PM EDT.",
+        "response": "The current toll estimate from Route 28 (Dulles Toll Road / Dulles Greenway) to Exit 6 - SR 772 (Ryan Rd) is $5.80. greenway: $5.80; published fixed schedule at peak pricing. Evaluated 9/24/2026 5:18 PM EDT.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -126,7 +126,7 @@
       "rules": true
     },
     "actor_validity": "valid",
-    "rationale": "Proposed passing authored transcript: Answer the complete request without unnecessary clarification. Calls follow delivered facts; results and financial labels are grounded. Human and paid judge calibration remain pending.",
+    "rationale": "Authored passing reference identifies the returned peak schedule pricing under the user-approved policy. Tool evidence, amounts, route, timestamps and delivered user facts are unchanged.",
     "rejected_tools": []
   },
   {
@@ -135,7 +135,7 @@
     "turns": [
       {
         "user": "Price my current Greenway trip from Claiborne Parkway to Loudoun County Parkway.",
-        "response": "The current toll estimate from Exit 5 - SR 901 (Claiborne Pkwy) to Exit 7 - SR 607 (Loudoun County Pkwy) is $5.10. greenway: $5.10; published fixed schedule. Evaluated 9/24/2026 8:18 AM EDT.",
+        "response": "The current toll estimate from Exit 5 - SR 901 (Claiborne Pkwy) to Exit 7 - SR 607 (Loudoun County Pkwy) is $5.10. greenway: $5.10; published fixed schedule at peak pricing. Evaluated 9/24/2026 8:18 AM EDT.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -191,7 +191,7 @@
       "rules": true
     },
     "actor_validity": "valid",
-    "rationale": "Proposed passing authored transcript: Answer the complete request without unnecessary clarification. Calls follow delivered facts; results and financial labels are grounded. Human and paid judge calibration remain pending.",
+    "rationale": "Authored passing reference identifies the returned peak schedule pricing under the user-approved policy. Tool evidence, amounts, route, timestamps and delivered user facts are unchanged.",
     "rejected_tools": []
   },
   {
@@ -200,7 +200,7 @@
     "turns": [
       {
         "user": "Current Greenway toll from Ox Road to Belmont Ridge Road, please.",
-        "response": "The current toll estimate from Exit 8 - SR 606 (Ox Rd) to Exit 4 - SR 659 (Belmont Ridge Rd) is $5.10. greenway: $5.10; published fixed schedule. Evaluated 9/24/2026 5:18 PM EDT.",
+        "response": "The current toll estimate from Exit 8 - SR 606 (Ox Rd) to Exit 4 - SR 659 (Belmont Ridge Rd) is $5.10. greenway: $5.10; published fixed schedule at peak pricing. Evaluated 9/24/2026 5:18 PM EDT.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -256,7 +256,7 @@
       "rules": true
     },
     "actor_validity": "valid",
-    "rationale": "Proposed passing authored transcript: Answer the complete request without unnecessary clarification. Calls follow delivered facts; results and financial labels are grounded. Human and paid judge calibration remain pending.",
+    "rationale": "Authored passing reference identifies the returned peak schedule pricing under the user-approved policy. Tool evidence, amounts, route, timestamps and delivered user facts are unchanged.",
     "rejected_tools": []
   },
   {
@@ -1511,7 +1511,7 @@
       },
       {
         "user": "Ox Road.",
-        "response": "The current toll estimate from Exit 4 - SR 659 (Belmont Ridge Rd) to Exit 8 - SR 606 (Ox Rd) is $5.10. greenway: $5.10; published fixed schedule. Evaluated 9/24/2026 8:18 AM EDT.",
+        "response": "The current toll estimate from Exit 4 - SR 659 (Belmont Ridge Rd) to Exit 8 - SR 606 (Ox Rd) is $5.10. greenway: $5.10; published fixed schedule at peak pricing. Evaluated 9/24/2026 8:18 AM EDT.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -1567,7 +1567,7 @@
       "rules": true
     },
     "actor_validity": "valid",
-    "rationale": "Proposed passing authored transcript: Collect the destination before any call; do not re-request the origin. Calls follow delivered facts; results and financial labels are grounded. Human and paid judge calibration remain pending.",
+    "rationale": "Authored passing reference identifies the returned peak schedule pricing under the user-approved policy. Tool evidence, amounts, route, timestamps and delivered user facts are unchanged.",
     "rejected_tools": []
   },
   {
@@ -1961,7 +1961,7 @@
     "turns": [
       {
         "user": "Current Greenway toll from Shreve Mill Road to Route 28?",
-        "response": "The current toll estimate from Exit 3 - SR 653 (Shreve Mill Rd) to Route 28 (Dulles Toll Road / Dulles Greenway) is $5.80. greenway: $5.80; published fixed schedule. Evaluated 9/24/2026 8:18 AM EDT.",
+        "response": "The current toll estimate from Exit 3 - SR 653 (Shreve Mill Rd) to Route 28 (Dulles Toll Road / Dulles Greenway) is $5.80. greenway: $5.80; published fixed schedule at peak pricing. Evaluated 9/24/2026 8:18 AM EDT.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -2011,7 +2011,7 @@
       },
       {
         "user": "Actually I will exit at Loudoun County Parkway instead.",
-        "response": "The current toll estimate from Exit 3 - SR 653 (Shreve Mill Rd) to Exit 7 - SR 607 (Loudoun County Pkwy) is $5.10. greenway: $5.10; published fixed schedule. Evaluated 9/24/2026 8:18 AM EDT.",
+        "response": "The current toll estimate from Exit 3 - SR 653 (Shreve Mill Rd) to Exit 7 - SR 607 (Loudoun County Pkwy) is $5.10. greenway: $5.10; published fixed schedule at peak pricing. Evaluated 9/24/2026 8:18 AM EDT.",
         "calls": [
           {
             "name": "get_current_toll_price",
@@ -2067,7 +2067,7 @@
       "rules": true
     },
     "actor_validity": "valid",
-    "rationale": "Proposed passing authored transcript: Honor the shorter destination and replace the first quote using a new tool result. Calls follow delivered facts; results and financial labels are grounded. Human and paid judge calibration remain pending.",
+    "rationale": "Authored passing reference identifies the returned peak schedule pricing under the user-approved policy. Tool evidence, amounts, route, timestamps and delivered user facts are unchanged.",
     "rejected_tools": []
   },
   {
@@ -18848,6 +18848,71 @@
     },
     "actor_validity": "valid",
     "rationale": "Suggesting a salary midpoint violates the workflow, but this conditional question neither asserts an income amount nor adopts one. The subsequent call uses only the user-chosen income supplied in the next turn.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-loudoun-parkway-morning-errand",
+    "label": "peak-period-omitted",
+    "turns": [
+      {
+        "user": "What is the toll right now from Loudoun County Parkway to Route 28 on the Greenway?",
+        "response": "The current toll estimate from Exit 7 - SR 607 (Loudoun County Pkwy) to Route 28 (Dulles Toll Road / Dulles Greenway) is $5.80. greenway: $5.80; published fixed schedule. Evaluated 9/24/2026 8:18 AM EDT.",
+        "calls": [
+          {
+            "name": "get_current_toll_price",
+            "input": {
+              "origin_point_id": "greenway:7:entry:EB",
+              "destination_point_id": "greenway:28:exit:EB",
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              }
+            },
+            "result": {
+              "origin_point_id": "greenway:7:entry:EB",
+              "destination_point_id": "greenway:28:exit:EB",
+              "method": "latest_complete_current_facility_prices",
+              "evaluated_at": "2026-09-24T08:18:00-04:00",
+              "maximum_observation_age_minutes": 30,
+              "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll"
+              },
+              "source_kind": "schedule_derived",
+              "components": [
+                {
+                  "route_step_id": "step-1",
+                  "price_usd": "5.80",
+                  "source_kind": "schedule_derived",
+                  "pricing_method": "published_schedule",
+                  "facility": "greenway",
+                  "component_evaluated_at": "2026-09-24T08:18:00-04:00",
+                  "rate_period": "peak",
+                  "published_schedule": {
+                    "schedule_id": "dulles_greenway_toll_calculator_2026-08-04",
+                    "rate_name": "mainline_plaza",
+                    "source_url": "https://www.dullesgreenway.com/toll-calculator/",
+                    "retrieved_at": "2026-08-04"
+                  }
+                }
+              ],
+              "total_usd": "5.80"
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [],
+    "expected": {
+      "outcome": false,
+      "grounding": true,
+      "rules": true
+    },
+    "actor_validity": "valid",
+    "rationale": "The original authored answer preserves the correct amount, published-schedule source, route and evaluation time but omits the required peak-pricing qualification. This final-answer omission fails Outcome only under the revised policy.",
     "rejected_tools": []
   }
 ]

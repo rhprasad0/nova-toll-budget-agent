@@ -1,20 +1,46 @@
 # Running the frozen golden corpus
 
-The current development corpus has **100 cases and 146 calibration references**.
+The current development corpus has **100 cases and 147 calibration references**.
 Application baselines run three trials per case. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
 
+Actors reply to necessary questions and outstanding triggered follow-ups. Once a
+choice has been delivered, a completed answer using it does not trigger it again;
+later necessary questions and separate profile actions still require replies.
+
 All golden judges, including the scripted actor-check assessment, use
 `gpt-6-luna` with xhigh reasoning and an 8,192-token output ceiling. Application
 generation remains low/2,048 and actor generation medium/2,048 on the same model.
+Judge instructions require checking source and other factual claims before
+amounts, and evaluating missing qualifications by the meaning conveyed across
+the conversation.
+Useful answers pass despite optional detail or minor omissions that preserve
+material meaning. Missing final-answer disclosures affect Outcome; Rules checks
+prohibited actions, affirmative misrepresentations, and required workflow steps.
 Run identities and cost reservations record those role-specific limits. Legacy
 scheduled evaluation settings are separate from this golden contract.
 
+The replay validator also determines Rules failures for mismatched tool arguments
+and call ordering. It supplies field-level differences directly; the Rules judge
+assesses all remaining Rules obligations, including consent, workflow, budgets
+and affirmative misrepresentations. A matching call
+does not establish user consent.
+Outcome receives applicable disclosure IDs for published current-price sources,
+peak current prices, and returned annual vehicle-cost assumptions. It supplies
+exact assistant quotes for each ID, or an empty list for a missing disclosure.
+The original assistant answers appear beside these requirements, followed by
+the full conversation and tool evidence for the remaining assessment.
+Code records every assistant turn containing each exact quote; the model does
+not assign turn numbers. User and tool text are excluded. Invalid IDs or quotes
+make the measurement unusable. The model judges the meaning of authentic quotes
+and all remaining requirements. Raw model judgments and mechanical findings remain
+in private evidence. This uses the existing three calls per calibration reference.
+
 ## Description-edit contract
 
-Contract 3.3.10 / harness 2.3.10 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.18 / harness 2.3.18 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
