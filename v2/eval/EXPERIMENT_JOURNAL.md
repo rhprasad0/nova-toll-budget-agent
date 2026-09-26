@@ -3117,3 +3117,39 @@ $18.902091855 under the agreed $25 ceiling. Raw output stays private. No
 application evaluation, hill climbing or deployment occurred. The result exposes
 an additional source of judging brittleness: requiring the model to identify a
 turn that code could locate from the exact quote.
+
+
+### 2026-09-26: Derive quote locations and complete the next calibration
+
+Ryan authorized the quote-location fix and one fresh calibration. Corpus 3.3.17 /
+harness 2.3.17 removes model-generated turn numbers and records every assistant
+turn containing each exact quote. User/tool text and fuzzy matches remain excluded;
+unknown quotes or IDs still invalidate the measurement. All 147 reference answers
+and labels, application prompt 2.3.12, actors and model settings are unchanged.
+The patch passed 172 eval tests, 12 comparison tests, corpus validation, lint,
+formatting and types. Independent review approved `e7ea37f`, with corpus digest
+`3a8ef9cf91f36bfb89893be9e78f7a13e8d226c55eeb261d9144c08f71e63bc5`.
+
+At execution commit `cf9bed4`, expired development SSO credentials prevented model
+construction. That preserved attempt made zero model calls and cost $0. After Ryan
+renewed the session, a fresh directory on the identical source identity completed
+all 147 references and 441 calls with known usage. Agreement was 430/432 application
+labels and 147/147 actor labels. Independent review verified all 134 emitted quotes
+and their locations, 38 negative references, three actor exclusions and passing
+contrasts. The previous turn-location failure is resolved.
+
+Two false failures remain. Rules demanded another return-entry confirmation for
+the Tysons round trip; the contract's “resolve return entry separately” wording
+was interpreted too strictly despite the user's “and back” request and selected
+Jones Branch endpoint. Outcome acknowledged an explicit vehicle-cost assumption
+in the Gallows annual summary but supplied no quote, causing a disclosure failure.
+Two stopped-route explanations also falsely described different IDs as matching,
+although mechanical validation produced the correct failures.
+
+The missing vehicle-assumption and peak-label negatives failed correctly. Belmont's
+missing-source answer failed without an off-peak requirement, and its paraphrase
+passed. This does not establish broader judge reliability. The run is unapproved,
+the clean streak remains zero, and no further change or run followed. Raw evidence
+stays private. Cost was $0.343222425; cumulative spending is $6.441130570, leaving
+$18.558869430 under the agreed $25 ceiling. No application evaluation, hill climbing
+or deployment occurred.

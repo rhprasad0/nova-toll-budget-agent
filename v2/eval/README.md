@@ -11,8 +11,8 @@ Peak pricing requires a peak qualification; off-peak labels are optional.
 The authored references and SOP now match that rule. The harness checks
 tool-contract failures mechanically and requires verified
 assistant quotes for applicable schedule and vehicle-cost disclosures. Code
-locates every matching assistant turn. Fresh calibration is required; the
-three-run streak is incomplete.
+locates every matching assistant turn. Calibration is halted for review of two
+false failures and remaining explanation errors; the three-run streak is incomplete.
 Earlier approvals do not transfer.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the
