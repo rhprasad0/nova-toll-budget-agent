@@ -3018,3 +3018,51 @@ These runs cost $0.666833235, bringing cumulative spending to $5.280728180 and
 leaving $19.719271820 under the agreed $25 ceiling. No application evaluation or
 deployment occurred. Further calibration awaits Ryan’s review of the added
 requirement; this is not evidence of an application pass-rate gain.
+
+
+### 2026-09-26: Require peak labels and repeat calibration
+
+Ryan confirmed that peak pricing requires a label and off-peak pricing does not,
+and authorized updating the SOP and affected references. Commit `2a8212d` applies
+that rule to the shared judging policy and application prompt. Six authored
+passing references now identify peak pricing in seven responses. One original
+answer remains as a new Outcome-only negative for omitting the peak label.
+Historical transcripts and labels are preserved. The corpus still has 100 cases,
+with 147 calibration references: 144 actor-valid and three actor-invalid.
+
+Independent preparation review approved corpus 3.3.15 / harness 2.3.15, digest
+`35715241b3a22c4f9c573a97b5347576362ab72a838f200905de8b416be5f314`.
+Application prompt 2.3.12 preserves main's published releases; the intermediate
+branch-only 2.3.11 remains in branch history. Release metadata binds rebuilt
+packages and the observed serving development baseline `8a42520`. All 421 relevant
+tests, 12 comparison checks, five compatibility checks and 19 release-manifest
+tests passed, as did corpus, version, lint, formatting, type and full manifest
+checks. The read-only development plan passed at execution commit `8cff082`.
+
+Both calibrations used that same execution identity. Each completed all 147
+references and 441 judge calls with known usage.
+
+| Run | Application labels | Actor labels | Review | Cost |
+| --- | --- | --- | --- | ---: |
+| 1 | 432/432 | 147/147 | Approved independently | $0.344678525 |
+| 2 | 430/432 | 147/147 | Held for user review | $0.335654840 |
+
+Run two produced two false passes. Rules accepted a rejected annual-tool call
+using `i495:1839ND` instead of the permitted `i495:183ND`. Outcome credited the
+annual answer with disclosing the $0.685-per-mile vehicle-cost assumption, although
+that disclosure was absent. Independent review also found that the Belmont
+source-omission explanation again demanded an off-peak label, contrary to the
+explicit policy; its failure verdict remained correct because the source was
+missing. The excluded Sunday reference's Outcome changed from fail to pass while
+its actor remained invalid; that diagnostic is outside application agreement.
+
+The peak-label positive and negative references behaved correctly in both runs.
+The earlier timestamp and financial-contradiction fixes also held. These results
+do not resolve the wider judge inconsistency. The consecutive clean streak resets
+to zero. Following Ryan's instruction, no third run or further judging change
+followed; raw evidence remains private and run two has no calibration approval.
+
+The two runs cost $0.680333365, bringing cumulative spending to $5.961061545 and
+leaving $19.038938455 under the agreed $25 ceiling. No application evaluation,
+hill climbing or deployment occurred. The historical actor check does not approve
+the current contract, and no application pass-rate gain is claimed.

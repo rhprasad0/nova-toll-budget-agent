@@ -8,8 +8,9 @@ not make a development score production qualification. The development
 target is **270/300 (90%) on fresh final confirmation**, with all trials valid
 and fully measured.
 Peak pricing requires a peak qualification; off-peak labels are optional.
-The authored references and SOP now match that rule. Independent corpus review
-permits fresh calibration; its results remain pending. Earlier approvals do not transfer.
+The authored references and SOP now match that rule. Calibration is paused for
+Ryan's review of disagreements; the required three-run streak is incomplete.
+Earlier approvals do not transfer.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the
 [experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.
