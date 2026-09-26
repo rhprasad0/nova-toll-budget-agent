@@ -3188,3 +3188,17 @@ or an application pass-rate improvement.
 Cost was $0.348311850; cumulative spending is $6.789442420, leaving $18.210557580
 under the agreed $25 ceiling. Raw evidence stays private. No application evaluation,
 hill climbing or deployment occurred.
+
+### 2026-09-26: Accept calibration after user adjudication
+
+Ryan reviewed the stopped Gallows-to-Jones Branch case and explicitly accepted
+the corpus 3.3.18 / harness 2.3.18 calibration at `165f83c` as successful.
+The run has 432/432 application and 147/147 actor labels in agreement. The harness
+stopped before another model step, so the trace cannot establish whether the
+agent would have recovered. Work on recovery and the Rules explanation is
+deferred. The independent review finding and original evidence remain preserved.
+
+This user adjudication supersedes the approval hold above and counts as run 1
+of the required three consecutive successful calibrations. No labels, judge
+instructions or execution behavior changed. No new model calls were made;
+cumulative spending remains $6.789442420. Two further successful runs are needed.
