@@ -2661,3 +2661,7 @@ so the local controlled comparison is the stronger causal evidence. The two
 completed hosted database/loader pairs consumed about 19.9 runner-minutes;
 other CI checks and the initial interrupted attempt are additional. The revised
 statistics setting and worker trial are still being validated below.
+
+Correction (2026-09-26): the combined report-contract time in the local
+statistics-refresh row above is **66.98 s**, not 67.63 s. Script wall time and
+route/pricing totals are unchanged.
