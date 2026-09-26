@@ -2369,3 +2369,12 @@ No paid model calls, calibration, application baseline, holdout access, migratio
 or deployment occurred. Incremental evaluation cost: **$0**. Historical costs and
 results above are unchanged. The 80% independent holdout requirement remains a
 separate qualification step.
+
+### 2026-09-26 — PR package-verification correction
+
+The first PR build rejected the unchanged delivery manifest after the SOP and
+agent-version edit. Rebuilt the packages and refreshed the two changed source
+digests plus `agentcore.zip` and `timed-checks.zip` digests; the other package
+digests are unchanged. The local release verifier accepted the rebuilt inputs
+and packages, and all 19 manifest tests passed. This is credential-free build
+validation, with no delivery authorization or application-performance claim.
