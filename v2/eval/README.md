@@ -1,6 +1,6 @@
 # TollChat evaluation
 
-**Current contract: 3.3.16 / harness 2.3.16.** Future development climbs optimize
+**Current contract: 3.3.17 / harness 2.3.17.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
@@ -10,9 +10,9 @@ and fully measured.
 Peak pricing requires a peak qualification; off-peak labels are optional.
 The authored references and SOP now match that rule. The harness checks
 tool-contract failures mechanically and requires verified
-assistant quotes for applicable schedule and vehicle-cost disclosures. The first
-calibration stopped on an invalid turn citation and awaits review; the three-run
-streak is incomplete.
+assistant quotes for applicable schedule and vehicle-cost disclosures. Code
+locates every matching assistant turn. Fresh calibration is required; the
+three-run streak is incomplete.
 Earlier approvals do not transfer.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the

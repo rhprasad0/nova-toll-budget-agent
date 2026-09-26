@@ -32,7 +32,7 @@ from agent import toll_agent
 from eval import golden
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.16"
+VERSION = "2.3.17"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -325,14 +325,10 @@ class ActorAssessment(golden.Record):
 
 
 class AssistantQuote(golden.Record):
-    turn: int = Field(
-        ge=1,
-        description="One-based assistant answer turn, never a user message or tool result.",
-    )
     quote: str = Field(
         min_length=1,
         pattern=r"\S",
-        description="Exact contiguous text copied from that assistant answer, including its original formatting.",
+        description="Exact contiguous text copied from an assistant answer, including its original formatting. Never quote user messages or tool results. Code locates all matching assistant turns.",
     )
 
 
@@ -959,14 +955,20 @@ def disclosure_verdict(
     if len(ids) != len(set(ids)) or set(ids) != set(requirements):
         raise ValueError("invalid_disclosure_ids")
     unmet = list(assessment.outcome.unmet_requirements)
+    disclosures: list[dict[str, Any]] = []
     for item in assessment.disclosures:
+        quotes: list[dict[str, Any]] = []
         for citation in item.quotes:
-            if (
-                citation.turn > len(turns)
-                or citation.quote not in turns[citation.turn - 1].response
-            ):
+            matching_turns = [
+                index
+                for index, turn in enumerate(turns, 1)
+                if citation.quote in turn.response
+            ]
+            if not matching_turns:
                 # A fabricated citation is a measurement defect, not an application failure.
                 raise ValueError("invalid_disclosure_quote")
+            quotes.append({"quote": citation.quote, "assistant_turns": matching_turns})
+        disclosures.append({"requirement_id": item.requirement_id, "quotes": quotes})
         if not item.quotes:
             unmet.append(
                 UnmetRequirement(
@@ -976,7 +978,7 @@ def disclosure_verdict(
             )
     evidence = assessment.outcome.model_dump()
     evidence["unmet_requirements"] = [item.model_dump() for item in unmet]
-    evidence["disclosures"] = [item.model_dump() for item in assessment.disclosures]
+    evidence["disclosures"] = disclosures
     return Verdict(passed=not unmet, evidence=json.dumps(evidence, ensure_ascii=False))
 
 

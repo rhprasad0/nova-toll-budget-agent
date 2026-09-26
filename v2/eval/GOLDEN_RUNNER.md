@@ -26,15 +26,16 @@ The replay validator also determines Rules failures for mismatched tool argument
 and call ordering; a matching call still needs semantic consent/workflow review.
 Outcome receives applicable disclosure IDs for published current-price sources,
 peak current prices, and returned annual vehicle-cost assumptions. It supplies
-assistant-turn quotes for each ID, or an empty list for a missing disclosure.
-Quotes are checked against the original assistant answers; invalid IDs or quotes
+exact assistant quotes for each ID, or an empty list for a missing disclosure.
+Code records every assistant turn containing each exact quote; the model does
+not assign turn numbers. User and tool text are excluded. Invalid IDs or quotes
 make the measurement unusable. The model judges the meaning of authentic quotes
 and all remaining requirements. Raw model judgments and mechanical findings remain
 in private evidence. This uses the existing three calls per calibration reference.
 
 ## Description-edit contract
 
-Contract 3.3.16 / harness 2.3.16 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.17 / harness 2.3.17 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including

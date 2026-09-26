@@ -1,5 +1,6 @@
 """Small contrasts for mechanical grading and assistant-only disclosure evidence."""
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
@@ -106,7 +107,7 @@ def test_unavailable_annual_baseline_still_requires_vehicle_assumption() -> None
     "quotes,passed",
     [
         ([], False),
-        ([run.AssistantQuote(turn=1, quote="68.5 cents per tolled mile")], True),
+        ([run.AssistantQuote(quote="68.5 cents per tolled mile")], True),
     ],
 )
 def test_disclosure_missing_or_supplied_in_earlier_answer(
@@ -136,7 +137,7 @@ def test_disclosure_missing_or_supplied_in_earlier_answer(
 
 
 @pytest.mark.parametrize(
-    "defect", ["tool_only", "wrong_turn", "missing_id", "duplicate_id", "unknown_id"]
+    "defect", ["tool_only", "fabricated", "missing_id", "duplicate_id", "unknown_id"]
 )
 def test_invalid_disclosure_evidence_is_a_measurement_error(defect: str) -> None:
     turn = golden.Turn(
@@ -154,7 +155,7 @@ def test_invalid_disclosure_evidence_is_a_measurement_error(defect: str) -> None
         requirement_id="vehicle",
         quotes=[
             run.AssistantQuote(
-                turn=2 if defect == "wrong_turn" else 1, quote="$0.685 per mile"
+                quote="FABRICATED" if defect == "fabricated" else "$0.685 per mile"
             )
         ],
     )
@@ -178,6 +179,40 @@ def test_invalid_disclosure_evidence_is_a_measurement_error(defect: str) -> None
         run.disclosure_verdict(
             assessment, {"vehicle": "Disclose vehicle assumption."}, [turn]
         )
+
+
+@pytest.mark.parametrize("locations", [[3], [1, 3]])
+def test_quote_locations_are_derived_and_repeated_answers_preserved(
+    locations: list[int],
+) -> None:
+    quote = "Vehicle cost assumes 68.5 cents per straight-line tolled mile."
+    turns = [
+        golden.Turn(
+            user=quote,
+            response=quote if index in locations else "Other answer.",
+            calls=[],
+        )
+        for index in range(1, 4)
+    ]
+    assessment = run.OutcomeAssessment(
+        disclosures=[
+            run.DisclosureAssessment(
+                requirement_id="vehicle", quotes=[run.AssistantQuote(quote=quote)]
+            )
+        ],
+        outcome=run.RequirementAssessment(
+            evidence="Other requirements satisfied.", unmet_requirements=[]
+        ),
+        actor_validity=run.ActorAssessment(evidence="Consistent user.", status="valid"),
+    )
+    verdict = run.disclosure_verdict(
+        assessment, {"vehicle": "Disclose vehicle assumption."}, turns
+    )
+    assert verdict.passed
+    assert json.loads(verdict.evidence)["disclosures"][0]["quotes"] == [
+        {"quote": quote, "assistant_turns": locations}
+    ]
+    assert set(run.AssistantQuote.model_json_schema()["properties"]) == {"quote"}
 
 
 def test_calibration_preserves_bad_quote_and_usage_then_stops(
@@ -204,7 +239,7 @@ def test_calibration_preserves_bad_quote_and_usage_then_stops(
             disclosures=[
                 run.DisclosureAssessment(
                     requirement_id=key,
-                    quotes=[run.AssistantQuote(turn=1, quote="FABRICATED DISCLOSURE")],
+                    quotes=[run.AssistantQuote(quote="FABRICATED DISCLOSURE")],
                 )
                 for key in requirements
             ],

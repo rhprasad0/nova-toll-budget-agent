@@ -1,10 +1,10 @@
 {
-  "status": "approved",
-  "corpus_sha256": "91c6905c4d579574eac182f007df9b1fed88f14475c5784a6d8cc03557432e51",
+  "status": "pending",
+  "corpus_sha256": "3a8ef9cf91f36bfb89893be9e78f7a13e8d226c55eeb261d9144c08f71e63bc5",
   "human_trajectory_adjudication": false,
-  "reviewer": "Codex supervisor with independent preparation_review review",
-  "evidence": "Independent preparation review approved b605b48 for the first fresh calibration. Mechanical replay validation preserves permitted discovery and normalization; mixed same-turn records require a complete ordered invocation log. Outcome compiles applicable source, peak and annual vehicle-cost disclosures and validates assistant quotes. Invalid citations preserve raw evidence and charged usage, make measurement incomplete and stop without retry. All 147 references and labels, application, actors and models remain unchanged. Quotes establish origin, not semantic sufficiency; independent semantic calibration review remains required. No human trajectory adjudication is claimed.",
-  "authorization": "Ryan explicitly authorized the researched simpler judge changes and measurement. Existing references, labels, application, actor and models stay unchanged. Stop for review on disagreements.",
-  "contract_commit": "b605b48d7ee589584c09ee07a8740d25fcce7013",
-  "reviewed_at": "2026-09-26T16:24:29.240296+00:00"
+  "reviewer": "",
+  "evidence": "Exact-quote location correction awaits independent preparation review and fresh calibration.",
+  "authorization": "Ryan explicitly authorized deriving quote locations mechanically and the next calibration run. Preserve existing references, labels, application, actor and models; halt for review on disagreements or measurement errors.",
+  "contract_commit": null,
+  "reviewed_at": null
 }
