@@ -120,10 +120,10 @@ Uploads use conditional writes and checksum/version verification.
 
 ## Development retry after promotion
 
-Development deliveries enter a workflow queue before admission, so waiting for
-an earlier deployment does not consume the CI-evidence deadline or a runner.
 Admission allows 30 minutes for exact CI evidence and a separate two-hour bounded
-predecessor wait for ordering checks. The apply queue still serializes mutations,
+predecessor wait for ordering checks. It holds no workflow-wide lock: an older
+run or rerun must be able to finish while its successor waits. The apply queue
+serializes mutations,
 and admission is rechecked inside that lock before credentials. The stale-rerun
 guard recognizes both historical and reusable-workflow job names.
 
@@ -512,5 +512,5 @@ Preserve release IDs, published identities, timestamps, probe booleans,
 public/private verification outcomes and separate deployment/recovery status.
 Exclude candidate headers, cookies, prompts, private plans and credentials.
 
-**Live bootstrap and rollback rehearsal: not run; separately reviewed setup is
-required.** Shared database and capacity failures remain shared.
+Run live rehearsal only after the fixed development bootstrap and protected
+delivery succeed. Shared database and capacity failures remain shared.

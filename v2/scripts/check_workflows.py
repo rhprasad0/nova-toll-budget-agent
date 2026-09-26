@@ -22,7 +22,6 @@ COMPATIBILITY: dict[str, dict[str, str]] = {
     **{
         f".github/workflows/{name}": {QUEUE_MESSAGE: "queue: max"}
         for name in (
-            "v2-development-delivery.yml",
             "v2-production-release.yml",
             "v2-production-plan.yml",
             "v2-production-recovery.yml",

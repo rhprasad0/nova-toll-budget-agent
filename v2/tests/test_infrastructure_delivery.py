@@ -1724,10 +1724,8 @@ def _assert_development_delivery_caller(source: str) -> None:
     workflow = cast(dict[str, object], yaml.safe_load(source))
     assert workflow_trigger(workflow) == {"push": {"branches": ["main"]}}
     assert workflow["permissions"] == {"contents": "read"}
-    assert workflow["concurrency"] == {
-        "group": "v2-development-delivery",
-        "queue": "max",
-    }
+    # Admission must not hold a lock needed by its predecessor's queued rerun.
+    assert "concurrency" not in workflow
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     assert set(jobs) == {
         "admission",

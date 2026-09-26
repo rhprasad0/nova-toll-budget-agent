@@ -512,13 +512,14 @@ def prepare() -> None:
 def finish() -> None:
     sha, run, attempt = identity()
     needs = _needs()
-    record = _record(needs)
-    _validate_record(record, sha, run, attempt)
+    record: int | None = None
     try:
+        candidate_record = _record(needs)
+        _validate_record(candidate_record, sha, run, attempt)
+        record = candidate_record
         evidence = _prerequisites(sha, run, attempt, needs)
         publication = _publication(run, attempt)
     except DeploymentStatusError as error:
-        status(record, "failure", run, attempt)
         failed = failure_evidence(sha, run, attempt, needs, error.reason)
         try:
             publication = _publication(run, attempt)
@@ -528,17 +529,15 @@ def finish() -> None:
                 "id": "unavailable",
                 "name": "unavailable",
             }
-        _summary(
-            "failure",
-            {
-                **failed,
-                "attempt": attempt,
-                "commit": sha,
-                "run_id": run,
-                "schema_versions": "unavailable",
-            },
-            publication,
-        )
+        try:
+            _summary(
+                "failure",
+                {**failed, "schema_versions": "unavailable"},
+                publication,
+            )
+        finally:
+            if record is not None:
+                status(record, "failure", run, attempt)
         raise error
     try:
         _summary("pending", evidence, publication)

@@ -475,6 +475,25 @@ def test_failure_evidence_survives_without_qualifying_as_success(
     )
 
 
+@pytest.mark.parametrize("failed_job", ["admission", "release-record"])
+def test_early_failure_keeps_summary_without_a_deployment_record(
+    context: tuple[Any, ...], monkeypatch: pytest.MonkeyPatch, failed_job: str
+) -> None:
+    needs, _, _, calls, directory = context
+    for name in ("release-record", "build", "deploy"):
+        needs[name] = {"result": "skipped", "outputs": {}}
+    needs[failed_job]["result"] = "failure"
+    monkeypatch.setenv("NEEDS_JSON", json.dumps(needs))
+    status.prepare()
+    with pytest.raises(status.DeploymentStatusError):
+        status.finish()
+    summary = (directory / "summary").read_text()
+    assert f'"stage": "{failed_job}"' in summary
+    assert '"evidence_artifact_id": 101' in summary
+    assert '"state": "failure"' in summary
+    assert calls == []
+
+
 def test_failure_output_retains_only_bounded_fields(context: tuple[Any, ...]) -> None:
     _, _, _, _, directory = context
     (directory / "delivery-failure.txt").write_text(
