@@ -56,6 +56,8 @@ require_disposable_cluster() {
 }
 
 require_disposable_cluster
+# Compiling repeated small route queries costs more than executing them.
+export PGOPTIONS="${PGOPTIONS:-} -c jit=off"
 export NOVA_TOLL_EXPECTED_RDS_ENDPOINT="${PGHOST:-localhost}"
 if [[ "$base_ref" == "0000000000000000000000000000000000000000" ]]; then
   # Keep replaying upgrades from migration 026's declared 1.2.0 source.

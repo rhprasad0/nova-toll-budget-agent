@@ -190,6 +190,8 @@ bootstrap, migration, rollback, privilege, retirement, and adoption checks. Both
 profiles require the same empty disposable cluster. Contract logs identify the
 profile, retained/candidate version, elapsed seconds, and outcome. Identical
 retained and candidate contracts run once; changed versions both run.
+The disposable test sessions disable PostgreSQL JIT to avoid repeated compilation
+of small route queries. See the [profiling results](eval/EXPERIMENT_JOURNAL.md).
 
 To profile the same contracts, set `DB_CONTRACT_DIAGNOSTICS=timing` before
 running the command above. Statement timings are printed with contract identity

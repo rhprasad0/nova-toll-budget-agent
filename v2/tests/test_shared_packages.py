@@ -305,6 +305,7 @@ def test_readbacks_include_earlier_success_and_do_not_invoke_handlers(
 ) -> None:
     _, _, expected = package_plan("development")
     identities = shared_packages.identities(expected)
+    sleeps: list[int] = []
 
     def aws(*args: str) -> dict[str, str]:
         assert args[:3] == ("lambda", "get-function-configuration", "--function-name")
@@ -322,12 +323,14 @@ def test_readbacks_include_earlier_success_and_do_not_invoke_handlers(
         }
 
     monkeypatch.setattr(release_blue_green, "aws", aws)
+    monkeypatch.setattr(release_blue_green.time, "sleep", sleeps.append)
     assert release_blue_green.shared_readiness(expected, wait=False) == {
         "loader": "unknown",
         "publisher": "verified",
         "timed_checks": "failed",
         "costs": "verified",
     }
+    assert sleeps == []
 
 
 def test_transient_shared_readback_error_retries(
