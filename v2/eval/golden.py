@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.13"
+CORPUS_VERSION = "3.3.14"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,

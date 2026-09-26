@@ -1,15 +1,15 @@
 # TollChat evaluation
 
-**Current contract: 3.3.13 / harness 2.3.13.** Future development climbs optimize
+**Current contract: 3.3.14 / harness 2.3.14.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
 not make a development score production qualification. The development
 target is **270/300 (90%) on fresh final confirmation**, with all trials valid
 and fully measured.
-The combined money-grading, judge and actor changes create a new measurement
-contract. Independent corpus review permits the first fresh calibration once CI
-passes. Fresh calibration remains pending; prior approvals do not transfer.
+Judge preparation clarifies same-day observation times and checks financial
+contradictions before task completion. Corpus review and fresh calibration are
+pending; prior approvals do not transfer.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the
 [experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.
