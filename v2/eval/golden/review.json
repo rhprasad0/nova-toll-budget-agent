@@ -1,10 +1,10 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "3a8ef9cf91f36bfb89893be9e78f7a13e8d226c55eeb261d9144c08f71e63bc5",
   "human_trajectory_adjudication": false,
-  "reviewer": "",
-  "evidence": "Exact-quote location correction awaits independent preparation review and fresh calibration.",
+  "reviewer": "Codex supervisor with independent preparation_review review",
+  "evidence": "Independent preparation review approved e7ea37f for one fresh calibration. Model-generated turn numbers are removed; code records every exact assistant-response match and excludes user/tool text. Unknown quotes or disclosure IDs remain measurement errors. Tests cover later-turn quotes, repeated matches, excluded sources and charged-usage/stop behavior. Identity checks preserve application prompts, actors, models/settings, cases and all 147 reference labels. Offline reproduction located the previous rejected quote in assistant turn 3 without changing historical evidence. Quote origin does not establish semantic sufficiency; calibration remains required. No human trajectory adjudication is claimed.",
   "authorization": "Ryan explicitly authorized deriving quote locations mechanically and the next calibration run. Preserve existing references, labels, application, actor and models; halt for review on disagreements or measurement errors.",
-  "contract_commit": null,
-  "reviewed_at": null
+  "contract_commit": "e7ea37f9d6ea8b7f88b97745b1c4cdd6c69cd801",
+  "reviewed_at": "2026-09-26T19:13:43.701544+00:00"
 }
