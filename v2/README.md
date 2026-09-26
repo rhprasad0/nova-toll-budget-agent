@@ -191,6 +191,21 @@ profiles require the same empty disposable cluster. Contract logs identify the
 profile, retained/candidate version, elapsed seconds, and outcome. Identical
 retained and candidate contracts run once; changed versions both run.
 
+To profile the same contracts, set `DB_CONTRACT_DIAGNOSTICS=timing` before
+running the command above. Statement timings are printed with contract identity
+and statement ordinal; SQL output stays in
+`v2/eval/private/ci-profiling/contracts/`. Set `DB_CONTRACT_PROFILE_DIR` to a
+different ignored directory for each repetition. Use a fresh container each time.
+
+For a separate local diagnostic pass, use `DB_CONTRACT_DIAGNOSTICS=plans`.
+This loads PostgreSQL's `auto_explain` in the contract sessions, including nested
+statements taking at least 250ms, with actual rows and buffer counts but without
+per-node timing. It preserves the contract's role changes and transactions.
+Detailed plans stay in the same private logs, including on failure. Diagnostics
+default to `off`; never compare instrumented runs with ordinary runs as a claimed
+speedup. Run summaries and limitations belong in the
+[experiment journal](eval/EXPERIMENT_JOURNAL.md).
+
 The required `v2-database` CI job selects full coverage for PR/merge-group changes
 under `v2/db/`, `v2/oracle/`, `v2/tests/`, `v2/scripts/`, either infrastructure
 directory, `.github/`, or the Python project/lock files. Ordinary PRs and main

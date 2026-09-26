@@ -2388,3 +2388,189 @@ constant. The five compatibility checks passed against the retained production
 and updated development baselines; all 120 shared-package checks also passed.
 The release verifier accepts the updated binding. Production baseline and
 delivery approvals remain unchanged.
+
+## 2026-09-26 — CI database and loader profiling
+
+**Purpose:** locate the slow work before choosing a different GitHub Actions
+runner. This experiment adds optional statement timing and nested PostgreSQL
+plans. The local phase is complete; three comparable GitHub repetitions remain
+pending publication of the experiment branch. No optimization was applied.
+
+### Controls and environment
+
+Local repetitions used source `8a42520a7ac2d01a529d3c175aa0477aa6339e5d`, comparison
+base `9d04cc7bc1671cfdd35a2d2911efa2d1a0f966c9`, and retained contracts from
+`4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe`, with profiling instrumentation applied.
+Schemas, contract fixtures, and dependency locks stayed fixed. Every full
+database pass used a fresh disposable container and the existing retained and
+candidate contract path. Baselines had diagnostics disabled; statement timing
+and plans each ran in a separate full pass. No deployed database was used.
+
+The local host was a Ryzen 7 5800X (8 cores/16 threads), about 64 GiB RAM,
+Linux 7.0, and rootless Docker 29.1.3. Tools: Python 3.13.15, Node 22.22.1,
+Terraform 1.15.8, uv 0.12.5, PostgreSQL client 18.4, and PostgreSQL server 17.5
+with PostGIS 3.5. PostgreSQL used 128 MiB shared buffers, 4 MiB work memory,
+JIT enabled, and fsync/synchronous commit enabled. The shared host had no imposed
+CPU/memory limit. Loader repetitions used warm uv/npm caches, a fresh Terraform
+provider cache per repetition, and all 21 measured workflow commands; checkout
+and hosted-action setup time are excluded.
+
+The local cached image config was
+`sha256:624f5195b91d424dbebf018890148cc0e5a3e80db5467da8b53cc2ed2ce49216`.
+It differs from the official image config checked by the temporary CI experiment,
+`sha256:2ed748fc602dd3031c6724db8cb289e1578c2deb552a4f6e291f6f7e5e6e4f69`.
+Both report PostgreSQL 17.5, but **local and GitHub timings must be analyzed
+separately**. These results cannot establish a Depot or Blacksmith speedup.
+
+### Aggregate results
+
+| Measurement | Repetitions | Median | Range |
+| --- | ---: | ---: | ---: |
+| Full database script, diagnostics off | 3 | 562.28 s | 560.07–563.08 s |
+| Report contracts within that script | 3 | 343.83 s | 343.17–346.81 s |
+| Route and pricing parity contracts | 3 | 186.00 s | 184.28–188.08 s |
+| Loader workflow command total | 3 | 185.85 s | 185.04–193.20 s |
+| Loader coverage/pytest command | 3 | 146.47 s | 145.86–150.79 s |
+| Loader authored-code checks | 3 | 21.95 s | 21.61–24.08 s |
+
+All five full database passes succeeded. The separate statement-timing pass took
+567.98 s and the nested-plan pass took 589.39 s; neither is a speedup comparison.
+Each of three loader passes recorded 2,063 passed, 8 skipped, and 23 deselected,
+and passed the existing coverage report and authored-code checks. The focused
+database/profile checks passed all 57 cases, including failure propagation and
+the disposable-container guard.
+
+### What accounts for the time
+
+Report and route/pricing checks together consumed about **94.5% of database
+script time**. Container samples were typically near one CPU core, using about
+132–134 MiB memory. Rootless Docker's zero Block I/O counters may be unavailable;
+SQL plans provide the stronger I/O evidence:
+
+- The exhaustive route check called `validate_toll_route` 12,305 times, with
+  about 40.9 million shared-buffer hits and zero shared reads. Pricing parity
+  called both validation and resolution 12,305 times each, with about 81.9
+  million hits and zero shared reads.
+- Report-input calls returned the same 829 rows but took about 17 s in the
+  retained session and 91 s in the candidate session. Both executed 2,842
+  structural resolutions and 685 pricing validations, with no shared reads.
+  Their 423-block temporary writes took only about 3–4 ms. Function row estimates
+  were 1,000 where actual output was one row; JIT was enabled. The time difference
+  remains unexplained: these plans do not isolate compilation or plan reuse.
+- A separate single-route probe took 7.83 ms before `ANALYZE` and 5.27 ms after
+  it in the same session. Warming and statistics changed together, so this does
+  not establish that `ANALYZE` fixes the full-contract discrepancy. Nested and
+  outer plan times must not be summed.
+
+The three slowest loader tests were Terraform policy rendering (16–18 s),
+deterministic package construction (about 13 s), and a readiness readback test
+(exactly 10 s). A separate stdlib cProfile pass of those three tests confirmed
+10.000 s in `time.sleep`: `shared_readiness(wait=False)` still sleeps after its
+only attempt. Other dominant time was waiting for subprocesses. The profile
+used warm provider caches and cannot distinguish child-process CPU from network
+wait, or be compared directly with a full loader repetition. All three selected
+tests passed; their coverage warning does not replace the full-suite result.
+
+### Decision and remaining experiment
+
+**Investigate repeated SQL work before purchasing a larger runner.** The local
+plans support a CPU-heavy database workload; faster single-core execution may
+help, but extra cores and disk throughput alone have no demonstrated benefit.
+The next database experiment should isolate the retained/candidate report-input
+plan/JIT difference with identical fixtures and session state, changing one
+setting at a time while preserving every assertion. Separately, fixing the
+`wait=False` sleep could remove about 10 s from the loader; that fix was not
+included in this profiling change.
+
+The temporary CI workflow records environment and source hashes, checks the
+PostGIS image, forces full database coverage, enables statement timing, and
+records process resource usage. After publication, collect three attempts of the
+same workflow's loader and database jobs, verify identical candidate/event-base
+SHAs and image identity, and compare medians and ranges within GitHub. Preserve
+the event-derived version-check bases. Separate service/setup, dependency,
+contract/test, and total job times. Append the aggregate findings here, then
+remove the temporary workflow overrides; optional local diagnostics can remain.
+
+One loader pilot was excluded after a temporary fixed comparison-base override
+failed the existing fail-closed workflow test. The event-derived expressions
+were restored before all three accepted loader repetitions. An external pricing
+probe blocked on a contract transaction's table lock, was canceled, and is
+excluded; nested plans were collected in the executing contract sessions.
+
+**Cost and artifacts:** no new paid runner or deployed AWS workload was used;
+local compute cost was not metered. Manifests, timings, SQL/plans, profiles, and
+local drivers remain ignored under `v2/eval/private/ci-profiling/`. Only this
+aggregate summary is intended for publication with the instrumentation.
+
+### 2026-09-26 — GitHub repetitions and cleanup
+
+The hosted phase completed on frozen candidate
+`3d6f88a3ca21f07821b050f53ac9b4490608edd9`, event base
+`53145d442c7149f7c3bb3508273a55b8f61d4955`, and the same retained-contract revision
+as the local phase. [PR #614](https://github.com/rhprasad0/nova-toll-budget-agent/pull/614)
+contains the instrumentation. Workflow run `36254825178` supplied three actual
+executions of each target job: database in attempts 1–3 and loader in attempts
+1, 4, and 5. GitHub refused overlapping job reruns. Its copied completed jobs
+receive new IDs but preserve their old start times; those copies were excluded.
+All six executions passed, and every loader execution recorded 2,067 passed,
+8 skipped, and 23 deselected, with coverage and authored-code checks passing.
+
+Candidate/event-base SHAs, source/lockfile hashes, and database image identity
+matched across repetitions. Each database execution used a fresh service and
+full coverage with statement timing enabled. Runners exposed four CPUs and
+about 16 GiB RAM, using Ubuntu 24.04 image `20260920.314.1`. Python was 3.13.15,
+Node 22.22.1, Terraform 1.15.8, and PostgreSQL 17.5. Database runners reported
+AMD EPYC 9V74 or 7763; loader runners reported AMD EPYC 9V45, Intel Xeon Platinum
+8573C, or AMD EPYC 7763. Hardware was not fixed by `ubuntu-latest`.
+
+| Hosted measurement | Median | Range |
+| --- | ---: | ---: |
+| Database job, including setup and cleanup | 895 s (14m 55s) | 638–924 s |
+| Database script, with statement timing | 869.30 s | 607.30–891.87 s |
+| Report contracts within the script | 567.56 s | 371.40–594.19 s |
+| Route and pricing parity contracts | 239.79 s | 186.26–247.10 s |
+| PostGIS service initialization | 17 s | 16–18 s |
+| Loader job, including setup and cleanup | 233 s (3m 53s) | 184–247 s |
+| Loader coverage/pytest command | 159.51 s | 119.22–173.21 s |
+| Loader authored-code checks | 27 s | 20–32 s |
+
+Job durations exclude queue time. Step API durations have one-second precision;
+command wall times come from `/usr/bin/time`. Its database CPU measurements
+exclude PostgreSQL running in the service container. Hosted CPU/I/O attribution
+therefore remains limited; the stronger CPU-heavy evidence comes from the local
+container samples and SQL plans. The hosted runs remain separate from the local
+baselines because revisions, images, hardware, and cache conditions differ.
+
+Report and route/pricing checks consumed **91.8–93.7%** of hosted database script
+time. Container startup and dependency setup are small targets. The retained
+report-input statement varied from about 17 s to 123 s even between the two
+runners reporting the same CPU model. Statement timings do not distinguish plan,
+statistics, compilation, or host contention as the cause. Loader timings again
+identified Terraform policy rendering, package construction, and the fixed
+10-second readiness sleep. Three samples do not establish a stable tail latency
+or a causal hardware comparison.
+
+**Decision:** retain optional local diagnostics and investigate repeated SQL
+work and report-input variability next. Faster, more consistent CPU execution
+may help, but this experiment does not establish a Depot or Blacksmith speedup.
+Fixing the `wait=False` sleep remains a separate small loader improvement.
+Any provider comparison should keep the workload fixed and report hardware,
+repeated job timings, and cost together; cache or vCPU-count claims alone do not
+address the measured bottleneck.
+
+The normal PR workflow's development-plan check rejected a stale development
+compatibility baseline (`9d04cc7` versus observed serving release `8a42520`).
+This unrelated failure persisted as copied results during targeted reruns; it
+does not make the complete workflow green. After measurements, cleanup integrated
+main `a4a23a0`, which already contained the exact baseline correction. The six
+compatibility and required-workflow checks passed after integration; the 57
+database/profile checks also passed. Temporary timing, image, full-profile,
+timeout, and PR-head checkout overrides were removed, restoring the ordinary
+merge-commit CI gate and addressing the automated review. No query optimization,
+coverage reduction, provider migration, or deployment was performed.
+
+The six measured jobs consumed approximately **52.0 runner-minutes**, excluding
+other normal PR checks and final cleanup validation. Billing was not queried;
+no third-party runner was purchased. The initial PR also ran its existing
+read-only development plan and browser checks. Raw logs, metadata, and analysis
+remain ignored locally; this journal is the aggregate experiment record.
