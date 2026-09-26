@@ -10,8 +10,9 @@ and fully measured.
 Peak pricing requires a peak qualification; off-peak labels are optional.
 The authored references and SOP now match that rule. The harness checks
 tool-contract failures mechanically and requires verified
-assistant quotes for applicable schedule and vehicle-cost disclosures. Fresh
-calibration is required; the three-run streak is incomplete.
+assistant quotes for applicable schedule and vehicle-cost disclosures. The first
+calibration stopped on an invalid turn citation and awaits review; the three-run
+streak is incomplete.
 Earlier approvals do not transfer.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the

@@ -3066,3 +3066,54 @@ The two runs cost $0.680333365, bringing cumulative spending to $5.961061545 and
 leaving $19.038938455 under the agreed $25 ceiling. No application evaluation,
 hill climbing or deployment occurred. The historical actor check does not approve
 the current contract, and no application pass-rate gain is claimed.
+
+
+### 2026-09-26: Use mechanical tool checks and answer quotes in grading
+
+Ryan authorized a structural judge change after reviewing research on smaller
+grading questions and deterministic checks. Corpus 3.3.16 / harness 2.3.16 reuses
+the replay validator to determine Rules failures for tool-contract violations.
+Outcome receives applicable IDs for published current-price sources, peak prices
+and returned annual vehicle-cost assumptions. It supplies exact assistant-answer
+quotes for those disclosures or an empty list when one is missing. Invalid IDs
+or citations make the measurement unusable. Semantic interpretation and all other
+obligations remain model-judged. The three calls per reference, 147 reference
+answers and labels, cases, application prompt 2.3.12, actors and models are unchanged.
+
+Independent review found that separate executed/rejected lists could lose call
+order within a turn. The correction requires a complete ordered invocation log
+for mixed records; ambiguous records are measurement errors. A focused integration
+test verifies that invalid citations retain raw evidence and charged usage and
+stop further reservations without retry. All 170 relevant eval tests and 12
+comparison tests passed, along with corpus validation, lint, formatting and types.
+Independent preparation review approved `b605b48`, bound to corpus digest
+`91c6905c4d579574eac182f007df9b1fed88f14475c5784a6d8cc03557432e51`.
+
+The first calibration ran at `72ec6bc`. It stopped when the judge quoted the
+correct vehicle-cost disclosure from assistant turn 3 but assigned it to turn 1.
+The citation validator rejected that record and the runner stopped new paid calls.
+The raw assessment and known usage are retained. This is a judge citation error,
+not an application failure or a budget overrun; the shared stop flag accounts for
+the later reservation rejections.
+
+Only 63 of 147 references were fully measured: 189/189 application labels and
+63/63 actor labels agreed. The other 84 were incomplete. All 196 started model
+calls finished with known usage. No negative-reference contrasts were fully
+measured, so this partial result cannot establish that the earlier false passes
+or off-peak explanation error are fixed. The run remains unapproved, the clean
+streak is zero, and no retry or second run followed. Exact quotes verify origin;
+their semantic relevance still needs review.
+
+Independent review checked all 75 emitted disclosure quotes. The turn-number
+error was the only incorrect location, with no other material semantic issue
+found in the reviewed output. All fully scored references were positive; negative
+cases and actor exclusions remain untested. The reviewer recommends deriving
+assistant-turn locations from exact quotes, retaining all matches when wording
+repeats and continuing to exclude user/tool text. That correction has not been
+implemented or measured in this entry.
+
+Cost was $0.136846600, bringing cumulative spending to $6.097908145 and leaving
+$18.902091855 under the agreed $25 ceiling. Raw output stays private. No
+application evaluation, hill climbing or deployment occurred. The result exposes
+an additional source of judging brittleness: requiring the model to identify a
+turn that code could locate from the exact quote.
