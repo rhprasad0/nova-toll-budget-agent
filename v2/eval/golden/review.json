@@ -1,10 +1,10 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "318e4f32b796fcffb3e34716d921e92edc6958462dad137864683883659949cc",
   "human_trajectory_adjudication": false,
-  "reviewer": "",
-  "evidence": "The combined 3.3.13 / 2.3.13 contract retains the merged money-grading fix with judge materiality and actor-completion preparation. Independent corpus review and fresh calibration are pending; historical approvals do not transfer.",
+  "reviewer": "Codex supervisor with independent preparation_review review",
+  "evidence": "Independent review of 84a0935 against main 53145d4 and prior preparation bf7aa68 found no material integration issue. Main money-grading repair, request boundaries, 90% target and review procedures remain intact alongside the previously reviewed judge, actor and fixed-rate changes. Cases differ from main only by the previously reviewed actor trigger. Offline corpus validation and identity construction passed; model, schema and tool/runtime boundaries are unchanged. This approves admission to the first future full calibration only. Fresh CI and matching calibration remain required; historical calibration and actor approvals do not transfer. No human trajectory adjudication is claimed.",
   "authorization": "Ryan explicitly authorized rebasing PR #612, resolving integration issues and preparing a reviewed calibration-ready commit. No paid runs in this integration phase.",
-  "reviewed_at": null,
-  "contract_commit": null
+  "reviewed_at": "2026-09-26T15:11:49.204646+00:00",
+  "contract_commit": "84a0935c8958677075b01f6f328df657551e7f49"
 }

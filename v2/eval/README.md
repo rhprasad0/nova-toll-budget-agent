@@ -8,7 +8,8 @@ not make a development score production qualification. The development
 target is **270/300 (90%) on fresh final confirmation**, with all trials valid
 and fully measured.
 The combined money-grading, judge and actor changes create a new measurement
-contract; corpus review and fresh calibration are pending. Prior calibration approvals do not transfer.
+contract. Independent corpus review permits the first fresh calibration once CI
+passes. Fresh calibration remains pending; prior approvals do not transfer.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the
 [experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.

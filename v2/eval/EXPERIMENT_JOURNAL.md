@@ -2951,3 +2951,10 @@ checks, five mixed-version compatibility checks and 19 release-manifest tests
 passed. Rebuilt packages and their source inputs passed the full manifest verifier.
 The deployment-evidence fixtures now bind prompt 2.3.11; runtime checks were not
 weakened. Fresh CI and independent review remain gates before calibration.
+
+Independent review approved corpus admission at `84a0935`, bound to corpus digest
+`318e4f32b796fcffb3e34716d921e92edc6958462dad137864683883659949cc`.
+The reviewer found no material integration issue and confirmed that the main fixes
+and the earlier preparation changes remain intact. Lint, formatting and type
+checks passed. This permits the first future calibration after CI passes; it
+does not approve calibration results, application evaluation or deployment.
