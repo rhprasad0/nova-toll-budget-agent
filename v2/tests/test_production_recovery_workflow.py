@@ -24,7 +24,7 @@ def test_fixed_protected_recovery_workflow() -> None:
     }
     assert workflow["concurrency"] == {
         "group": "v2-production-release-delivery",
-        "cancel-in-progress": False,
+        "queue": "max",
     }
     job = workflow["jobs"]["recover"]
     assert job["environment"] == "production"
@@ -45,6 +45,29 @@ def test_fixed_protected_recovery_workflow() -> None:
     assert text.count('release_blue_green.py" recover') == 1
     assert "--verify-checkout" in text
     assert "-lockfile=readonly" in text
+    for name in ("v2-production-plan.yml", "v2-production-release.yml"):
+        assert (
+            yaml.safe_load((WORKFLOW.parent / name).read_text())["concurrency"]
+            == workflow["concurrency"]
+        )
+    assert "--claim-only" in text
+    assert "s3:GetObjectVersion" in credentials["with"]["inline-session-policy"]
+    assert "s3:PutObject" not in credentials["with"]["inline-session-policy"]
+    migration = yaml.safe_load(
+        (WORKFLOW.parent / "v2-production-migrations.yml").read_text()
+    )
+    steps = migration["jobs"]["migrate"]["steps"]
+    archive = next(
+        i
+        for i, step in enumerate(steps)
+        if step.get("name") == "Retain verified recovery inputs before migration"
+    )
+    migrate = next(
+        i
+        for i, step in enumerate(steps)
+        if step.get("name") == "Run fixed production migrations"
+    )
+    assert archive < migrate
 
 
 @pytest.mark.parametrize("change", [None, "unverified", "identity", "failed", "exit"])

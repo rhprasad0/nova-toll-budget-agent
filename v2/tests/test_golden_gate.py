@@ -500,6 +500,12 @@ def test_storage_version_hash_and_conditional_publication(
 
 def test_workflow_keeps_production_gates_and_imports_aggregates_only() -> None:
     root = gate.ROOT
+    reader = yaml.safe_load((root / ".github/workflows/v2-golden-read.yml").read_text())
+    assert "workflow_dispatch" in reader[True]
+    reader_job = reader["jobs"]["check"]
+    assert reader_job["environment"] == "golden-read"
+    qualified = next(step for step in reader_job["steps"] if step.get("id") == "check")
+    assert qualified["if"] == "inputs.admission != ''"
     jobs = yaml.safe_load(
         (root / ".github/workflows/v2-production-plan.yml").read_text()
     )["jobs"]

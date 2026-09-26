@@ -3,6 +3,9 @@
 _run_private_stage_emit() {
   local event="$1"
   printf '%s\n' "$event" >&2
+  if [[ "$event" == *" status=fail "* && -n "${RUNNER_TEMP:-}" ]]; then
+    (umask 077; printf '%s\n' "$event" >"$RUNNER_TEMP/delivery-failure.txt") 2>/dev/null || true
+  fi
   if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
     if ! (printf '%s\n' "$event" >>"$GITHUB_STEP_SUMMARY") 2>/dev/null; then
       PRIVATE_STAGE_SUMMARY_FAILED=1

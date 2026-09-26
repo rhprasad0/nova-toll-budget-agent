@@ -24,6 +24,8 @@ on:
       TS_DEVELOPMENT_OAUTH_SECRET:
         required: true
     outputs:
+      diagnostics:
+        value: ${{ jobs.deploy.outputs.diagnostics }}
       verified:
         value: ${{ jobs.deploy.outputs.verified }}
       canary:
@@ -180,6 +182,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: development
     outputs:
+      diagnostics: ${{ steps.failure-details.outputs.diagnostics }}
       verified: ${{ steps.verify-release.outputs.verified }}
       canary: ${{ steps.verify-release.outputs.canary }}
       verified_pricing_schema: ${{ steps.migration-schema.outputs.verified_pricing_schema }}
@@ -619,6 +622,11 @@ jobs:
             --output "$RUNNER_TEMP/blue-green-result.json"
           jq -c . "$RUNNER_TEMP/development-canary-evidence.json" | sed 's/^/canary=/' >>"$GITHUB_OUTPUT"
           echo 'verified=success' >>"$GITHUB_OUTPUT"
+
+      - name: Capture bounded delivery diagnostics
+        id: failure-details
+        if: always()
+        run: python3 v2/scripts/development_deployment_status.py failure-output
 
       - name: Record deployment and recovery outcomes separately
         if: always()

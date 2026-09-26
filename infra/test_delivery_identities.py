@@ -454,7 +454,8 @@ def _check_production_planner() -> None:
     assert "schedule:" not in PRODUCTION_PLAN
     assert "workflow_call:" not in PRODUCTION_PLAN
     require("group: v2-production-release-delivery", PRODUCTION_PLAN)
-    require("cancel-in-progress: false", PRODUCTION_PLAN)
+    require("queue: max", PRODUCTION_PLAN)
+    assert "cancel-in-progress: true" not in PRODUCTION_PLAN
 
     for job in ("admission", "claim", "planner"):
         require(f"  {job}:\n", PRODUCTION_PLAN)
