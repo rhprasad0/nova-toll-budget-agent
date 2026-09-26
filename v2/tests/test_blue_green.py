@@ -363,6 +363,9 @@ def test_identity_rejects_primary_fallback_and_wrong_invoked_release() -> None:
     [
         ([False, False], 1, "recovered"),
         ([False, True, False, True, True], 0, "not_attempted"),
+        ([False, True, False, True, False], 1, "recovered"),
+        ([True, True, True, True, False], 1, "recovered"),
+        ([True, True, True, False, True], 1, "recovered"),
         ([True, False, False], 1, "recovered"),
         ([True] * 5, 0, "not_attempted"),
     ],

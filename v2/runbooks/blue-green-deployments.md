@@ -47,7 +47,7 @@ Lambda ARN/version, runtime ARN/version/endpoint, and runtime-emitted release ID
 | Validate | Readiness, grounded terminal answer, guardrail rejection, archive redaction, origin/session/reset, assets and actual identity; absent/wrong headers reach primary | No promotion |
 | Approve (production) | Persist the exact prepared state in the existing private, versioned recovery record; wait for Ryan's `production-cutover` approval | Candidate remains running; public/private traffic remains on the active slot |
 | Promote | Recheck claim, evidence and state; persist recovery record; apply a separate routing-only plan | Inspect state and attempt one fresh restoration plan |
-| Observe | Wait for public/private deployment; five core probes one minute apart, each with a 60-second deadline | Two consecutive failures trigger one rollback; success resets the count |
+| Observe | Wait for public/private deployment; five core probes one minute apart, each with a 60-second deadline | Two consecutive failures trigger one rollback; the final two probes must both pass, otherwise restore once |
 | Recover | Fresh gated Terraform plan restores retained public/private routing; verify both streamed answers and retained assets | Report recovery separately; deployment remains failed |
 | Complete | Record active/previous identities and keep the previous slot | After observation, cancellation or runner loss, use manual recovery |
 
@@ -120,6 +120,17 @@ Uploads use conditional writes and checksum/version verification.
 
 ## Development retry after promotion
 
+Development deliveries enter a workflow queue before admission, so waiting for
+an earlier deployment does not consume the CI-evidence deadline or a runner.
+Admission allows 30 minutes for exact CI evidence and a separate two-hour bounded
+predecessor wait for ordering checks. The apply queue still serializes mutations,
+and admission is rechecked inside that lock before credentials. The stale-rerun
+guard recognizes both historical and reusable-workflow job names.
+
+Every completed result job retains bounded failure evidence as well as success
+evidence. Failed records include available bundle identity and sanitized stage,
+reason, deployment, and recovery outcomes; they never qualify a production release.
+
 Use **Re-run failed jobs** when a development runner fails after promotion. The
 workflow detects the already-active release before planning or applying changes.
 It verifies the original bundle and recovery record, checks installed schema
@@ -145,6 +156,27 @@ recovery or a new release for those historical runs. Re-running all jobs also
 remains subject to the retained immutable-artifact build guard.
 
 ## Production cutover approval
+
+Production release, deployment, and recovery share a FIFO queue (`queue: max`),
+so a new release cannot replace a pending recovery. An approval-waiting deployment
+still owns the lock. For emergency recovery, cancel that workflow, wait until all
+its jobs are terminal, and dispatch the fixed recovery workflow with the reviewed
+claim, record version, and current state hash. Keep the common lock: recovery and
+delivery must never mutate routing concurrently.
+
+Before production migrations, delivery archives the verified GitHub bundle and
+its admission record under `releases/<commit>/recovery/<claim>/` in the existing
+private, versioned AgentCore artifact bucket. Recovery pins S3 object versions,
+checks the original claim and the selected recovery record's bundle digest, and
+verifies the bundle against the original checkout before receiving write credentials.
+These objects have no automatic expiry; retain them while either slot is recoverable.
+Releases predating archival retain the original GitHub-artifact recovery path and
+its retention limit. This change does not backfill historical releases.
+
+After merging pipeline or IAM changes, run the main-only `v2-golden-read` workflow
+manually to verify the protected reader's OIDC assumption before publishing a
+production release. The smoke check creates no release claim and deploys nothing;
+normal release calls still require qualified golden evidence.
 
 The existing `production` environment still protects preparation and migration.
 A separate `production-cutover` environment protects the later approval job,

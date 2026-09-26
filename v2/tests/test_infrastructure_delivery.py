@@ -1585,7 +1585,7 @@ def test_production_release_plan_workflows_keep_trust_before_credentials_and_app
     for workflow in (listener, planner):
         assert workflow["concurrency"] == {
             "group": "v2-production-release-delivery",
-            "cancel-in-progress": False,
+            "queue": "max",
         }
 
     listener_source = "\n".join(
@@ -1724,6 +1724,10 @@ def _assert_development_delivery_caller(source: str) -> None:
     workflow = cast(dict[str, object], yaml.safe_load(source))
     assert workflow_trigger(workflow) == {"push": {"branches": ["main"]}}
     assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["concurrency"] == {
+        "group": "v2-development-delivery",
+        "queue": "max",
+    }
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     assert set(jobs) == {
         "admission",
@@ -1798,6 +1802,7 @@ def _assert_development_delivery_privileged(source: str) -> None:
         "TS_DEVELOPMENT_OAUTH_SECRET": {"required": True},
     }
     assert call["outputs"] == {
+        "diagnostics": {"value": "${{ jobs.deploy.outputs.diagnostics }}"},
         "verified": {"value": "${{ jobs.deploy.outputs.verified }}"},
         "canary": {"value": "${{ jobs.deploy.outputs.canary }}"},
         "verified_pricing_schema": {

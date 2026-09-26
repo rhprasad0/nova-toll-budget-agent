@@ -362,7 +362,10 @@ def _has_started_deploy(api: GitHubAPI, run: Mapping[str, object]) -> bool:
         if not isinstance(value, dict):
             continue
         job = cast(dict[str, object], value)
-        if job.get("name") != "Deploy v2 to development":
+        if job.get("name") not in {
+            "Deploy v2 to development",  # Historical non-reusable jobs.
+            "Deploy v2 to development / Deploy v2 to development",
+        }:
             continue
         if job.get("run_id") != run_id or job.get("head_sha") != run.get("head_sha"):
             raise AdmissionError("descendant job identity is malformed")
@@ -426,6 +429,7 @@ def admit(
     current_run_id: int | None = None,
     timeout_seconds: float = 900,
     poll_seconds: float = 10,
+    predecessor_timeout_seconds: float = 7200,
     check_predecessor: bool = True,
     sleep: Callable[[float], None] = time.sleep,
 ) -> bool:
@@ -435,7 +439,9 @@ def admit(
         raise AdmissionError("predecessor SHA is malformed")
     _emit_progress("start")
     deadline = time.monotonic() + max(timeout_seconds, 0)
+    predecessor_deadline: float | None = None
     while True:
+        waiting_for_predecessor = False
         try:
             if terraform_applicable(paths):
                 terraform_run = _one_run(
@@ -446,7 +452,13 @@ def admit(
                 run = _one_run(api, repository, workflow, sha, require_success=True)
                 _jobs(api, run, expected, sha)
             if check_predecessor:
+                if predecessor_deadline is None:
+                    predecessor_deadline = time.monotonic() + max(
+                        predecessor_timeout_seconds, 0
+                    )
+                waiting_for_predecessor = True
                 _predecessor(api, repository, before)
+                waiting_for_predecessor = False
             current = {
                 "id": current_run_id,
                 "run_number": 0,
@@ -465,9 +477,13 @@ def admit(
             _emit_progress("pending", reason)
             if not check_predecessor:
                 raise AdmissionError("admission recheck not ready") from None
-            if time.monotonic() >= deadline:
+            wait_deadline = (
+                predecessor_deadline if waiting_for_predecessor else deadline
+            )
+            assert wait_deadline is not None
+            if time.monotonic() >= wait_deadline:
                 raise AdmissionError("admission timed out") from None
-            sleep(min(max(poll_seconds, 0), max(deadline - time.monotonic(), 0)))
+            sleep(min(max(poll_seconds, 0), max(wait_deadline - time.monotonic(), 0)))
 
 
 def _event(path: Path) -> dict[str, object]:

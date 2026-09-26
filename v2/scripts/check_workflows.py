@@ -19,6 +19,15 @@ ROOT = Path(__file__).resolve().parents[2]
 QUEUE_MESSAGE = 'unexpected key "queue" for "concurrency" section. expected one of "cancel-in-progress", "group"'
 JOB_TYPE = "{check_run_id: number; container: {id: string; network: string}; services: {string => {id: string; network: string; ports: {string => string}}}; status: string}"
 COMPATIBILITY: dict[str, dict[str, str]] = {
+    **{
+        f".github/workflows/{name}": {QUEUE_MESSAGE: "queue: max"}
+        for name in (
+            "v2-development-delivery.yml",
+            "v2-production-release.yml",
+            "v2-production-plan.yml",
+            "v2-production-recovery.yml",
+        )
+    },
     ".github/workflows/v2-development-delivery-privileged.yml": {
         QUEUE_MESSAGE: "queue: max"
     },

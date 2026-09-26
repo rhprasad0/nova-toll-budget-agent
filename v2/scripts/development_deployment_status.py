@@ -16,6 +16,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.check_development_release import _canary_contract
+from scripts.classify_deployment_error import REASONS
 
 REPOSITORY = "rhprasad0/nova-toll-budget-agent"
 ENVIRONMENT = "development-release"
@@ -337,6 +338,11 @@ def _summary(state: str, evidence: dict[str, Any], publication: dict[str, Any]) 
                     "run_id": evidence["run_id"],
                     "schema_versions": evidence["schema_versions"],
                     "state": state,
+                    **(
+                        {"diagnostics": evidence["diagnostics"]}
+                        if "diagnostics" in evidence
+                        else {}
+                    ),
                 },
                 sort_keys=True,
             )
@@ -367,9 +373,138 @@ def create() -> None:
     status(record, "in_progress", run, attempt)
 
 
+def failure_details(value: object) -> dict[str, str]:
+    """Only finite diagnostic fields may cross the private runner boundary."""
+    allowed = {
+        "stage": {
+            "admission",
+            "release-record",
+            "artifact-build",
+            "plan",
+            "apply",
+            "release-verification",
+            "artifact-download",
+            "oidc-claims",
+            "account-identity",
+            "delivery-role",
+            "rds-ca",
+            "migration-runner",
+            "migration-evidence",
+            "foundation-init",
+            "foundation-output",
+            "release-init",
+            "unknown",
+        },
+        "reason": {*REASONS, "upstream_failed"},
+        "deployment": {
+            "failed",
+            "succeeded",
+            "prepared_plan",
+            "resume_validation",
+            "unknown",
+        },
+        "recovery": {"not_attempted", "recovered", "failed", "unknown"},
+    }
+    defaults = {
+        "stage": "unknown",
+        "reason": "upstream_failed",
+        "deployment": "unknown",
+        "recovery": "unknown",
+    }
+    if isinstance(value, dict):
+        value = cast(dict[str, Any], value)
+        for key, choices in allowed.items():
+            if isinstance(value.get(key), str) and value[key] in choices:
+                defaults[key] = value[key]
+    return defaults
+
+
+def failure_output() -> None:
+    directory = Path(os.environ["RUNNER_TEMP"])
+    value: dict[str, object] = {}
+    try:
+        event = (directory / "delivery-failure.txt").read_text()
+        match = re.fullmatch(
+            r"stage=([a-z-]+) status=fail elapsed=[0-9]+ exit=[0-9]+ reason=([a-z_]+)\n?",
+            event,
+        )
+        if match:
+            value.update(stage=match[1], reason=match[2])
+    except OSError:
+        pass
+    try:
+        result = json.loads((directory / "blue-green-result.json").read_text())
+        if isinstance(result, dict):
+            result = cast(dict[str, Any], result)
+            value.update({key: result.get(key) for key in ("deployment", "recovery")})
+    except (OSError, ValueError):
+        pass
+    with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+        output.write(
+            "diagnostics=" + json.dumps(failure_details(value), sort_keys=True) + "\n"
+        )
+
+
+def failure_evidence(
+    sha: str, run: int, attempt: int, needs: dict[str, Any], reason: str
+) -> dict[str, Any]:
+    # Malformed identities never become public strings or qualifying evidence.
+    build = needs.get("build", {}).get("outputs", {})
+    deploy = needs.get("deploy", {}).get("outputs", {})
+    artifact = digest = None
+    try:
+        artifact = _positive(build.get("artifact_id"))
+        digest = _prefixed_digest(build.get("artifact_digest"))
+    except (DeploymentStatusError, AttributeError):
+        pass
+    diagnostics: object
+    try:
+        diagnostics = json.loads(deploy.get("diagnostics", "{}"))
+    except (ValueError, TypeError, AttributeError):
+        diagnostics = {}
+    details = failure_details(diagnostics)
+    if details["stage"] == "unknown":
+        for name, stage in (
+            ("admission", "admission"),
+            ("release-record", "release-record"),
+            ("build", "artifact-build"),
+        ):
+            if needs[name].get("result") != "success":
+                details["stage"] = stage
+                break
+    return {
+        "schema_version": 1,
+        "outcome": "failed",
+        "repository": REPOSITORY,
+        "environment": ENVIRONMENT,
+        "commit": sha,
+        "run_id": run,
+        "attempt": attempt,
+        "artifact_id": artifact,
+        "artifact_digest": digest,
+        "reason": reason,
+        "jobs": {
+            key: (
+                job.get("result")
+                if job.get("result") in ("success", "failure", "cancelled", "skipped")
+                else "unknown"
+            )
+            for key, job in needs.items()
+            if key in {"admission", "release-record", "build", "deploy"}
+        },
+        "diagnostics": details,
+    }
+
+
 def prepare() -> None:
     sha, run, attempt = identity()
-    evidence = _prerequisites(sha, run, attempt, _needs())
+    needs = _needs()
+    for name in ("admission", "release-record", "build", "deploy"):
+        _job(needs, name)
+    try:
+        evidence = _prerequisites(sha, run, attempt, needs)
+    except DeploymentStatusError as error:
+        evidence = failure_evidence(sha, run, attempt, needs, error.reason)
     path = Path(os.environ["RUNNER_TEMP"]) / EVIDENCE_FILE
     path.write_text(json.dumps(evidence, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -384,17 +519,25 @@ def finish() -> None:
         publication = _publication(run, attempt)
     except DeploymentStatusError as error:
         status(record, "failure", run, attempt)
+        failed = failure_evidence(sha, run, attempt, needs, error.reason)
+        try:
+            publication = _publication(run, attempt)
+        except DeploymentStatusError:
+            publication = {
+                "digest": "unavailable",
+                "id": "unavailable",
+                "name": "unavailable",
+            }
         _summary(
             "failure",
             {
-                "artifact_digest": "unavailable",
-                "artifact_id": "unavailable",
+                **failed,
                 "attempt": attempt,
                 "commit": sha,
                 "run_id": run,
                 "schema_versions": "unavailable",
             },
-            {"digest": "unavailable", "id": "unavailable", "name": "unavailable"},
+            publication,
         )
         raise error
     try:
@@ -413,6 +556,8 @@ def main() -> int:
         stage = "release-evidence-prepare"
     elif command == ["finish"]:
         stage = "release-status"
+    elif command == ["failure-output"]:
+        stage = "release-diagnostics"
     else:
         stage = "release-evidence-invalid"
     try:
@@ -423,6 +568,8 @@ def main() -> int:
             prepare()
         elif command == ["finish"]:
             finish()
+        elif command == ["failure-output"]:
+            failure_output()
         else:
             raise DeploymentStatusError("malformed_evidence")
     except DeploymentStatusError as error:
