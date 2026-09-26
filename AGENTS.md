@@ -27,11 +27,16 @@ app if it would actually help.
 - Preserve `v2/eval/EXPERIMENT_JOURNAL.md`: it is important permanent experiment
   history. Do not delete, truncate, replace, or remove it during cleanup without
   Ryan's explicit approval; append new results and dated corrections.
-- Publish experiment summaries only. Use `v2/eval/EXPERIMENT_JOURNAL.md` as the
-  single record of what was tried: purpose, relevant versions, aggregate results,
-  limitations, cost, and the decision. Do not add per-run documentation, review
-  packets, full transcripts, event logs, raw reports, or copied run archives to
-  commits or PRs unless Ryan explicitly requests publishing those artifacts.
+- Keep `v2/eval/EXPERIMENT_JOURNAL.md` readable for people outside the project.
+  Give each experiment a few concise, plain-language sentences covering its
+  purpose, relevant versions, aggregate result, limitations, cost when relevant,
+  and decision; retain useful figures and tables as-is. Cut repeated process
+  narration, raw identifiers, and AI-sounding filler unless needed to verify a
+  claim.
+  Preserve material findings and chronology when condensing old entries.
+- Do not add per-run documentation, review packets, full transcripts, event logs,
+  raw reports, or copied run archives to commits or PRs unless Ryan explicitly
+  requests publishing those artifacts.
 - Keep granular experiment output in ignored `v2/eval/private/` or the existing
   private workflow artifact store. Keep only executable eval inputs, focused test
   fixtures, and evidence required by an existing release contract in source
