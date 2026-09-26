@@ -118,6 +118,32 @@ Both retained pages reference `/releases/<id>/*` on the bucket-root origin.
 Document caching is disabled. Shared reports keep their existing root paths.
 Uploads use conditional writes and checksum/version verification.
 
+## Development retry after promotion
+
+Use **Re-run failed jobs** when a development runner fails after promotion. The
+workflow detects the already-active release before planning or applying changes.
+It verifies the original bundle and recovery record, checks installed schema
+versions/history in a read-only transaction, then runs fresh active-route checks
+and a complete observation window. Success evidence belongs to the new attempt.
+
+Before promotion, new development runs write an immutable per-run pointer at
+`releases/<release>/recovery/<run>.json` to the original attempt's versioned
+recovery record. Resume pins both versions and verifies both slots and the state
+lineage/serial. It needs no bucket-list permission. Missing, legacy, conflicting,
+or inaccessible records fail closed. A changed state, bundle, or schema never
+initiates rollback. Once authorized, failed operational checks retain the existing
+single restoration attempt and observation failure threshold, guarded against a
+newer deployment.
+
+Resume does not reapply preparation, promote again, or execute migrations. Normal
+partial-preparation retries still create a fresh plan. Production keeps its
+existing approval and recovery procedures.
+
+GitHub reruns execute the original commit: runs created before this change cannot
+use it, and their failure records remain unchanged. Use a separately reviewed
+recovery or a new release for those historical runs. Re-running all jobs also
+remains subject to the retained immutable-artifact build guard.
+
 ## Production cutover approval
 
 The existing `production` environment still protects preparation and migration.

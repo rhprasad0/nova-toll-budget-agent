@@ -171,8 +171,14 @@ else
 fi
 export PGPASSWORD="$DB_TOKEN"
 unset DB_TOKEN
+migration_args=()
+case "${DEVELOPMENT_DELIVERY_MODE:-prepared_plan}" in
+  prepared_plan) ;;
+  resume_validation) migration_args=(--verify-only) ;;
+  *) exit 1 ;;
+esac
 run_private_stage "migration-runner" "$MIGRATION_STDOUT_LOG" "$MIGRATION_STDERR_LOG" \
-  python3 scripts/run_development_migrations.py
+  python3 scripts/run_development_migrations.py "${migration_args[@]}"
 RUNNER_JSON="$(<"$MIGRATION_STDOUT_LOG")"
 unset PGPASSWORD
 

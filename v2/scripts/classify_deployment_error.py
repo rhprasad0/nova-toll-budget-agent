@@ -9,6 +9,11 @@ from pathlib import Path
 
 MAX_BYTES = 64 * 1024
 GATE_REASONS = (
+    "release_reused",
+    "resume_claim",
+    "resume_record",
+    "resume_state",
+    "resume_bundle",
     "incomplete_or_drift",
     "shared_package_boundary",
     "shared_package_evidence",
