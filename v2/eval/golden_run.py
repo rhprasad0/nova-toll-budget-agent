@@ -990,11 +990,24 @@ def mechanical_rules(
     for turn, response in enumerate(attempt.turns, 1):
         messages.append(response.user)
         calls = [(call.name, call.input) for call in response.calls]
-        calls += [
+        rejected = [
             (call.name, call.input)
             for call in attempt.rejected_tools
             if call.turn == turn
         ]
+        if calls and rejected:
+            ordered = [
+                (item["name"], item["input"])
+                for item in attempt.attempted_tools
+                if item["turn"] == turn
+            ]
+            if sorted(json.dumps(item, sort_keys=True) for item in ordered) != sorted(
+                json.dumps(item, sort_keys=True) for item in calls + rejected
+            ):
+                raise ValueError("ambiguous_tool_order")
+            calls = ordered
+        else:
+            calls += rejected
         for name, arguments in calls:
             try:
                 replay.call(name, arguments, messages)

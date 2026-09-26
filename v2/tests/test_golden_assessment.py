@@ -1,8 +1,13 @@
 """Small contrasts for mechanical grading and assistant-only disclosure evidence."""
 
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
+from strands.models import Model
 
 from eval import golden
 from eval import golden_run as run
@@ -23,8 +28,7 @@ def test_rules_reuse_replay_for_rejected_arguments_and_discovery() -> None:
     )
     assert attempt.turns[0].calls[0].result.get("error")
     assert run.mechanical_rules(case, attempt) == []
-    wrong = deepcopy(attempt.turns[0].calls[0].input)
-    wrong["origin_point_id"] = "i95:999NO"
+    wrong = deepcopy(attempt.turns[-1].calls[-1].input)
     attempt.rejected_tools = [
         golden.RejectedCall(
             turn=1,
@@ -34,11 +38,20 @@ def test_rules_reuse_replay_for_rejected_arguments_and_discovery() -> None:
             reason="tool_arguments",
         )
     ]
+    attempt.attempted_tools = [
+        {"turn": 1, "name": attempt.rejected_tools[0].name, "input": wrong}
+    ] + [
+        {"turn": turn, "name": call.name, "input": call.input}
+        for turn, response in enumerate(attempt.turns, 1)
+        for call in response.calls
+    ]
     # Rejection in turn 1 does not consume the step needed by the later selection.
     failures = run.mechanical_rules(case, attempt)
     assert len(failures) == 1
     assert '"error": "tool_arguments"' in failures[0].evidence
-    assert "i95:999NO" in failures[0].evidence
+    attempt.attempted_tools = []
+    with pytest.raises(ValueError, match="ambiguous_tool_order"):
+        run.mechanical_rules(case, attempt)
 
 
 @pytest.mark.parametrize("period,expected", [("peak", 2), ("off_peak", 1)])
@@ -164,4 +177,69 @@ def test_invalid_disclosure_evidence_is_a_measurement_error(defect: str) -> None
     with pytest.raises(ValueError, match="invalid_disclosure_"):
         run.disclosure_verdict(
             assessment, {"vehicle": "Disclose vehicle assumption."}, [turn]
+        )
+
+
+def test_calibration_preserves_bad_quote_and_usage_then_stops(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    example = next(
+        e
+        for e in run.development_examples()
+        if e.case_id == golden_case(22).id and e.label == "good"
+    )
+    monkeypatch.setattr(run, "development_examples", lambda: [example])
+    evaluator = Mock()
+
+    def judge(
+        case: golden.GoldenCase,
+        attempt: run.Attempt,
+        journal: run.Journal,
+        *,
+        fixed_reference: bool = False,
+    ) -> None:
+        requirements = run.disclosure_requirements(attempt)
+        assert requirements
+        assessment = run.OutcomeAssessment(
+            disclosures=[
+                run.DisclosureAssessment(
+                    requirement_id=key,
+                    quotes=[run.AssistantQuote(turn=1, quote="FABRICATED DISCLOSURE")],
+                )
+                for key in requirements
+            ],
+            outcome=run.RequirementAssessment(
+                evidence="Raw model claims disclosure.", unmet_requirements=[]
+            ),
+            actor_validity=run.ActorAssessment(
+                evidence="Consistent user.", status="valid"
+            ),
+        )
+        reserve = journal.reserve(attempt, "judge", 100)
+        journal.finish(
+            attempt, "judge", reserve, {"inputTokens": 100, "outputTokens": 20}, 0.1
+        )
+        evaluator.return_value = SimpleNamespace(structured_output=assessment)
+        monkeypatch.setattr(run, "Agent", Mock(return_value=evaluator))
+        run.assess_outcome(
+            case,
+            attempt,
+            Mock(spec=Model),
+            "contract",
+            "conversation",
+            fixed_reference=fixed_reference,
+        )
+
+    monkeypatch.setattr(run, "judge", judge)
+    journal = run.Journal(tmp_path / "bad-citation", 25)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        row = run.calibrate(journal, pool)[0]
+    assert row["status"] == "infrastructure" and not row["measurement_complete"]
+    assert "FABRICATED DISCLOSURE" in row["verdicts"]["outcome"]["evidence"]
+    assert row["measurements"][0]["complete"] and journal.spent > 0
+    assert journal.stop_requested and not journal.unknown_usage
+    assert evaluator.call_count == 1
+    with pytest.raises(run.StopRun):
+        journal.reserve(
+            run.Attempt(id="next", case_id=example.case_id, trial=1), "judge", 100
         )

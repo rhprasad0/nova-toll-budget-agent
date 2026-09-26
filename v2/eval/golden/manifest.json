@@ -121,7 +121,7 @@
     "v2/agent_tools/currency.py": "09a6325499e46ef0eca57ac3dd2cebedd460cf6937ceb48860c58eb1ea238710",
     "v2/eval/simulated.py": "b3b9c339a9696d0ba9615404717f86cc21de69f9a39e068f26325925404cb3fa",
     "v2/eval/run_evaluation.py": "1267150b08983b0754023b69bcfc0f704d32dabcfb710a759a69427a6bf3a727",
-    "v2/eval/golden_run.py": "06f6d9de010bdb8753daf0678c6896dcc2fa0875cea1dc2ed3d50b7df3e9f50f",
+    "v2/eval/golden_run.py": "6e1b2120266d1579e19ac5333878ea294faae76d78a53e1a6381be95e6aed5d9",
     "v2/eval/golden_actor_check.py": "a869303b4a201e291b1568fc2baa8f49f7b35269aaa741387075b08e86e62a58",
     "v2/eval/artifact_agent.py": "cc36d1bebd435a635b820b28bb1b6c9e63c6d7f7c7b928af9a82f779ec6f2fd5",
     "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
@@ -129,6 +129,6 @@
     "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
-  "corpus_sha256": "ede225067506574881041c109b764cce22adb9d922bbefba8e846f41065598ae",
+  "corpus_sha256": "91c6905c4d579574eac182f007df9b1fed88f14475c5784a6d8cc03557432e51",
   "tool_description_policy": "literal-input-prose-v1"
 }

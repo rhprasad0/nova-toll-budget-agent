@@ -1,8 +1,10 @@
 {
   "status": "pending",
-  "corpus_sha256": "ede225067506574881041c109b764cce22adb9d922bbefba8e846f41065598ae",
+  "corpus_sha256": "91c6905c4d579574eac182f007df9b1fed88f14475c5784a6d8cc03557432e51",
   "human_trajectory_adjudication": false,
   "reviewer": "",
   "evidence": "Structural judge changes await independent preparation review and fresh calibration.",
-  "authorization": "Ryan explicitly authorized the researched simpler judge changes and measurement. Existing references, labels, application, actor and models stay unchanged. Stop for review on disagreements."
+  "authorization": "Ryan explicitly authorized the researched simpler judge changes and measurement. Existing references, labels, application, actor and models stay unchanged. Stop for review on disagreements.",
+  "contract_commit": null,
+  "reviewed_at": null
 }
