@@ -347,7 +347,7 @@ jobs:
   release-result:
     name: Record end-to-end development result
     needs: [admission, release-record, build, deploy]
-    if: always() && needs.admission.result == 'success'
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: read

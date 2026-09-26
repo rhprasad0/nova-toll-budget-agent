@@ -9,7 +9,7 @@ permissions:
   contents: read
 concurrency:
   group: v2-production-release-delivery
-  cancel-in-progress: false
+  queue: max
 env:
   AWS_REGION: us-east-1
   EXPECTED_ACCOUNT: '920534282028'

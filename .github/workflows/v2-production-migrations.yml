@@ -217,6 +217,14 @@ jobs:
           aws-region: us-east-1
           inline-session-policy: ${{ steps.saved-plan.outputs.session_policy }}
           unset-current-credentials: true
+      - name: Retain verified recovery inputs before migration
+        if: inputs.phase == 'prepare-production'
+        run: |
+          set -euo pipefail
+          python3 trusted/v2/scripts/check_production_release.py archive-save \
+            --admission "$RUNNER_TEMP/admission.json" \
+            --bundle "$RUNNER_TEMP/production-migration-release.zip" \
+            --directory "$RUNNER_TEMP/production-recovery-archive"
       - name: Verify exact saved plan and state before migration
         if: inputs.phase == 'prepare-production'
         env:

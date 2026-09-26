@@ -241,11 +241,16 @@ def test_later_ci_first_is_bounded_and_eventually_admitted() -> None:
     )
 
 
-def test_newer_descendant_mutation_rejects_old_rerun() -> None:
+@pytest.mark.parametrize(
+    "job_name",
+    ["Deploy v2 to development", "Deploy v2 to development / Deploy v2 to development"],
+)
+@pytest.mark.parametrize("state", ["in_progress", "completed"])
+def test_newer_descendant_mutation_rejects_old_rerun(job_name: str, state: str) -> None:
     api = FakeAPI()
     api.descendant = _run(DESCENDANT, 901, number=10)
-    api.jobs[901] = [_job("Deploy v2 to development", 901, DESCENDANT)]
-    api.jobs[901][0]["status"] = "in_progress"
+    api.jobs[901] = [_job(job_name, 901, DESCENDANT)]
+    api.jobs[901][0]["status"] = state
     api.jobs[901][0]["started_at"] = "2026-09-07T00:10:00Z"
     with pytest.raises(admission.AdmissionError, match="stale"):
         _admit(api)
@@ -373,3 +378,47 @@ def test_workflow_waits_thirty_minutes_without_relaxing_evidence(
         with pytest.raises(admission.AdmissionError, match=reason):
             admit()
     assert elapsed == (1800 if ending == "pending" else 1110)
+
+
+@pytest.mark.parametrize("complete", [True, False])
+@pytest.mark.parametrize("ci_retry", [True, False])
+def test_predecessor_has_a_separate_bounded_wait(
+    monkeypatch: pytest.MonkeyPatch, complete: bool, ci_retry: bool
+) -> None:
+    api = FakeAPI()
+    api.predecessor.update(status="in_progress", conclusion=None)
+    elapsed = 0.0
+    monkeypatch.setattr(admission.time, "monotonic", lambda: elapsed)
+    original_get = api.get
+
+    def get(path: str, params: Mapping[str, str] | None = None) -> dict[str, Any]:
+        if ci_retry and elapsed == 1800 and "ci.yml" in path:
+            raise admission.RetryableAdmission("GitHub API temporarily unavailable")
+        return original_get(path, params)
+
+    monkeypatch.setattr(api, "get", get)
+
+    def advance(seconds: float) -> None:
+        nonlocal elapsed
+        elapsed += seconds
+        if complete and elapsed >= 4500:
+            api.predecessor.update(status="completed", conclusion="success")
+
+    def run() -> bool:
+        return admission.admit(
+            cast(Any, api),
+            repository=REPOSITORY,
+            sha=SHA,
+            before=BEFORE,
+            paths=[],
+            timeout_seconds=1800,
+            sleep=advance,
+        )
+
+    if complete:
+        assert run()
+        assert elapsed == 4500
+    else:
+        with pytest.raises(admission.AdmissionError, match="timed out"):
+            run()
+        assert elapsed == 7200

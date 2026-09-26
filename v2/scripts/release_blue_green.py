@@ -745,7 +745,8 @@ def observe(
                 ok = False
             results.append(ok)
             failures = 0 if ok else failures + 1
-            if failures == 2:
+            # Completing observation also requires a healthy ending.
+            if failures == 2 or (index == 4 and results[-2:] != [True, True]):
                 timing["ok"] = False
                 try:
                     with timed_stage("observation-recovery") as recovery:
