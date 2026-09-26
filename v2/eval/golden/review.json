@@ -1,1 +1,9 @@
-{"status": "pending"}
+{
+  "status": "approved",
+  "corpus_sha256": "7290e132b41e91b92f5f245ba6f457dda97c2504abf7f34700079863deafbf1e",
+  "human_trajectory_adjudication": false,
+  "reviewer": "Codex supervisor with independent eval_reviewer contract_3319_preflight",
+  "evidence": "Supervisor and independent eval_reviewer contract_3319_preflight reviewed153 references/459known calls and all140 disclosure citations.444/447criterion labels,153/153actorlabels,148/149overall verdicts. Accepted bounded Rules ordering false failure and Grounding/Rules wrong-rounding false passes under explicit user allowance for imperfect label agreement. Outcome plus deterministic money check rejects wrong rounding. No relabels, retries or claimed human inspection.",
+  "authorization": "User requested repairs/calibration/climbing and allowed nonperfect label agreement; local merge waiver retained.",
+  "contract_commit": "8ab9ecc4fb1af353334f4ce9bbd4b3f20a1f60e2"
+}
