@@ -1,6 +1,6 @@
 {
   "status": "pending",
-  "corpus_sha256": "bd05ff68e8c2b6090933be97dc3f7a93649a51e702bb681e293bdbe653bc7e57",
+  "corpus_sha256": "2bd6b6602f70eb73fa06cbcfb1757709cded1fe12380715ac797842b89f3320c",
   "human_trajectory_adjudication": false,
   "reviewer": "",
   "evidence": "Pending independent review of explicit Tysons round-trip interpretation, adjacent original assistant answers for disclosure extraction, and mechanical field differences. Reference answers and labels, application prompt, actors, and models remain unchanged.",

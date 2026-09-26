@@ -24,7 +24,8 @@ scheduled evaluation settings are separate from this golden contract.
 
 The replay validator also determines Rules failures for mismatched tool arguments
 and call ordering. It supplies field-level differences directly; the Rules judge
-assesses the remaining semantic consent/workflow obligations. A matching call
+assesses all remaining Rules obligations, including consent, workflow, budgets
+and affirmative misrepresentations. A matching call
 does not establish user consent.
 Outcome receives applicable disclosure IDs for published current-price sources,
 peak current prices, and returned annual vehicle-cost assumptions. It supplies

@@ -1226,7 +1226,7 @@ def judge(
                 + json.dumps(
                     [json.loads(failure.evidence) for failure in rule_failures]
                 )
-                + "\nMechanical checks establish these argument and sequence findings. Each listed failure is a Rules violation; the report includes these findings directly. Do not independently restate or reinterpret their comparisons. Your assessment covers remaining consent, clarification and workflow obligations. A successful mechanical check does not establish user consent or overall compliance."
+                + "\nMechanical checks establish these argument and sequence findings. Each listed failure is a Rules violation; the report includes these findings directly. Do not independently restate or reinterpret their comparisons. Assess all remaining obligations in the Rules rubric, including consent, clarification, workflow, budgets, and affirmative misrepresentations. A successful mechanical check does not establish user consent or overall compliance."
             )
         if key != "grounding":
             reference += (
