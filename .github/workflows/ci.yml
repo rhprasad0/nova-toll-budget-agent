@@ -36,6 +36,7 @@ jobs:
         run: uv run python -m tests.golden_artifact_smoke infra/build/agentcore
   v2-loader:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: v2
@@ -43,6 +44,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Reject em dashes in front-end copy
         run: >-
           ! git grep -n '—' --
@@ -69,6 +71,16 @@ jobs:
           cache-dependency-path: |
             v2/package-lock.json
             v2/lambdas/chat_proxy/package-lock.json
+      - name: Record loader profiling environment
+        run: |
+          git rev-parse HEAD
+          sha256sum uv.lock package-lock.json lambdas/chat_proxy/package-lock.json
+          uname -sr
+          lscpu
+          free -m
+          uv run python --version
+          node --version
+          terraform version
       - run: npm ci --ignore-scripts
       - run: npm ci --ignore-scripts --prefix lambdas/chat_proxy
       - name: Install pinned shell, workflow and secret checkers
@@ -88,7 +100,7 @@ jobs:
       - run: uv run python -m scripts.check_agent_contract_versions "$AGENT_CONTRACT_BASE_REF"
         env:
           AGENT_CONTRACT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-      - run: uv run coverage run -m pytest --durations=30 --durations-min=1
+      - run: /usr/bin/time -v uv run coverage run -m pytest --durations=30 --durations-min=1
       - run: uv run coverage report
       - run: node --test tests/*.mjs
       - if: github.event_name != 'pull_request'
@@ -167,6 +179,7 @@ jobs:
 
   v2-database:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgis/postgis:17-3.5
@@ -180,6 +193,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      # Temporary profiling experiment; detailed SQL stays on the runner's disk.
+      DB_CONTRACT_DIAGNOSTICS: timing
       PGHOST: localhost
       PGPORT: 5432
       PGUSER: postgres
@@ -188,9 +203,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           python-version: "3.13"
+      - name: Verify database profiling image and record environment
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          git rev-parse HEAD
+          sha256sum v2/db/oracle/schema.sql v2/tests/oracle_report_contract.sql v2/scripts/shared-package-compatibility.json
+          image="$(docker inspect --format '{{.Image}}' "$POSTGRES_CONTAINER_ID")"
+          test "$image" = sha256:2ed748fc602dd3031c6724db8cb289e1578c2deb552a4f6e291f6f7e5e6e4f69
+          printf 'PostGIS image: %s\n' "$image"
+          uname -sr
+          lscpu
+          free -m
+          psql --version
+          psql -X --dbname postgres --command "SELECT name, setting FROM pg_settings WHERE name IN ('server_version', 'shared_buffers', 'work_mem', 'jit', 'max_parallel_workers_per_gather', 'fsync', 'synchronous_commit', 'track_io_timing') ORDER BY name"
       - run: python3 v2/scripts/check_schema_versions.py "$SCHEMA_BASE_REF"
       - name: Select database test profile
         id: database-profile
@@ -202,8 +232,11 @@ jobs:
           profile="$(python3 v2/scripts/select_db_test_profile.py \
             --event "$PROFILE_EVENT" --ref "$PROFILE_REF" \
             --base "$SCHEMA_BASE_REF" --head "$PROFILE_HEAD")"
+          # Compare the same full coverage in every profiling repetition.
+          profile=full
+          echo 'Profiling experiment: forcing full database coverage.'
           printf 'profile=%s\n' "$profile" >>"$GITHUB_OUTPUT"
-      - run: v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF" --profile "$DATABASE_PROFILE"
+      - run: /usr/bin/time -v v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF" --profile "$DATABASE_PROFILE"
         env:
           POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
           DATABASE_PROFILE: ${{ steps.database-profile.outputs.profile }}
