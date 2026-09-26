@@ -316,6 +316,7 @@ def attempts(
         "2.3.12",
         "2.3.13",
         "2.3.14",
+        "2.3.15",
     }
     denominator = (
         100
@@ -345,6 +346,7 @@ def attempts(
         "2.3.12",
         "2.3.13",
         "2.3.14",
+        "2.3.15",
     }:
         require(
             overall.get("overall_pass_rate") == successful / 300,
@@ -481,6 +483,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "2.3.12",
         "2.3.13",
         "2.3.14",
+        "2.3.15",
     }:
         del criteria["paired_delta_positive"]
     return {

@@ -1,15 +1,15 @@
 # TollChat evaluation
 
-**Current contract: 3.3.14 / harness 2.3.14.** Future development climbs optimize
+**Current contract: 3.3.15 / harness 2.3.15.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
 not make a development score production qualification. The development
 target is **270/300 (90%) on fresh final confirmation**, with all trials valid
 and fully measured.
-Judge preparation clarifies same-day observation times and checks financial
-contradictions before task completion. Independent corpus review permits a fresh
-calibration; its results remain pending. Prior approvals do not transfer.
+Peak pricing requires a peak qualification; off-peak labels are optional.
+The authored references and SOP now match that rule. Corpus review and fresh
+calibration are pending; earlier approvals do not transfer.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the
 [experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.
@@ -25,7 +25,7 @@ output in ignored `eval/private/` or the existing private workflow store.
 ## Frozen golden evaluation
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
-  146 labeled references, 107 synthetic fixtures, and five-turn actors.
+  147 labeled references, 107 synthetic fixtures, and five-turn actors.
 - [Private authoring kit](HOLDOUT_AUTHORING.md): public instructions and an offline
   validator for independently authored private cases; no held-out data is included.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, three-trial application

@@ -398,6 +398,9 @@ follow-ups: confirm fixed office days, ask about flexible arrival/departure
 times, and ask about direct toll reimbursement.
 
 A `schedule_derived` price is a published fixed rate, not an observed price.
+For each schedule-derived component with `rate_period: peak`, identify it as
+peak pricing. An off-peak label is optional; still identify the published source
+and preserve any actual availability restriction.
 Label `evaluated_at` and `component_evaluated_at` as **Evaluated**, never
 **Observed** or **Observed/evaluated**. Only an actual `observed_at` supports
 an observation-time label. Preserve this distinction for zero off-peak rates

@@ -1,10 +1,10 @@
 {
-  "status": "approved",
-  "corpus_sha256": "870b1b5f164a3680c0d2a405b398cad4b73bc5a20258ffd3a896bff1ea36bbeb",
+  "status": "pending",
+  "corpus_sha256": "35715241b3a22c4f9c573a97b5347576362ab72a838f200905de8b416be5f314",
   "human_trajectory_adjudication": false,
-  "reviewer": "Codex supervisor with independent preparation_review review",
-  "evidence": "Independent review of d0d10d5 found no material issue in the user-authorized Outcome fixes. Same-day local time with timezone is sufficient; older observations still require date or age context and stale qualifications. Outcome checks closing financial claims before completion and omissions. Generated identities confirm unchanged references, labels, application, actor, schemas and model settings. Offline corpus validation and identity construction passed. This approves corpus admission to the authorized rerun only, not calibration, actor or application readiness; stop for user review on new disagreements.",
-  "authorization": "Ryan explicitly authorized fixes for the two reviewed Outcome disagreements and a calibration rerun, stopping for review if further disagreements occur.",
-  "reviewed_at": "2026-09-26T15:27:34.020426+00:00",
-  "contract_commit": "d0d10d575dc723c7aa80538194393f434123516e"
+  "reviewer": "",
+  "evidence": "Contract 3.3.15 / harness 2.3.15 requires peak-pricing qualification and makes off-peak labels optional. The SOP and six authored passing peak-price references are aligned; one original answer is retained as a missing-peak negative reference, failing Outcome only. Historical run evidence is unchanged. Independent preparation review and fresh calibration are pending.",
+  "authorization": "Ryan explicitly authorized requiring additional labels only for peak pricing, the fix and a calibration rerun. The implementation uses the stated recommended interpretation: require peak labels and align affected references and SOP. Stop for review on new disagreements.",
+  "reviewed_at": null,
+  "contract_commit": null
 }

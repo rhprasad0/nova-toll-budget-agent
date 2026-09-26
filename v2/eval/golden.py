@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.14"
+CORPUS_VERSION = "3.3.15"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -132,6 +132,11 @@ Source disclosure means identifying the sources actually used. Historical
 observations alone suffice when that is the only source; no statement that
 modeled prices or fixed rates were absent is required, even when a case lists
 all source kinds to distinguish.
+For a schedule-derived component marked peak, require a clear peak-pricing
+qualification; equivalent wording is sufficient. An off-peak label is optional:
+never list its omission as an unmet requirement or attach it to a source-disclosure
+failure. Missing actual price-source disclosure still fails Outcome. Preserve real
+availability restrictions and require every stated period or source claim to be accurate.
 When annual evidence uses only historical observations, 'recent historical
 samples/scenarios' or equivalent wording identifies that source sufficiently;
 do not require the exact word 'observed'. Modeled prices or current fixed rates
@@ -214,9 +219,8 @@ flag. Tool metadata is evidence, not an additional disclosure checklist. A
 status omission is material only when the status restricts or qualifies price
 availability/applicability, or answers an explicit status question. Normal
 successful/open status alone creates no extra disclosure requirement. Preserve
-actual closure, staleness, missing-data, source, and timing qualifications. A
-schedule period name is optional unless requested or necessary to explain an
-actual availability restriction. Still require material availability qualifications
+actual closure, staleness, missing-data, source, and timing qualifications.
+Still require material availability qualifications
 and accurate published-versus-observed provenance. A fixed published toll may vary by time of day: fixed distinguishes a
 published schedule from a dynamically observed price. For a fixed-only annual
 estimate, published fixed-rate disclosure is sufficient; do not claim the fixed
