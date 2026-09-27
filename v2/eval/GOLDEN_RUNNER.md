@@ -59,6 +59,24 @@ reports retain their original hash rules and cannot be compared with this contra
 Corpus review and fresh matching calibration are required before the next climb;
 never transfer prior approvals or regenerate a candidate's corpus manifest.
 
+## Directed-catalog campaign comparison
+
+The separately authorized three-trial campaign may use
+`compare_runs.py BASELINE_REPORT CANDIDATE_REPORT --campaign-policy directed-catalog-v1`.
+This opt-in policy is limited to harness 2.3.27, three repetitions and renderer
+versions 1.0.0 and 1.0.2. It pins both Dulles route source graphs and application
+code outside the named renderer functions to the campaign's starting commit.
+The usual identity checks still pin tools, corpus, actors, judges and model
+settings. Default and historical comparisons retain their original behavior.
+
+Independent review must verify that supplemental entry-to-exit relationships
+match all 189 canonical same-facility pairs, preserve every catalog record and
+field, and introduce no pricing, availability, consent or cross-facility claims.
+This evaluates the rendered application prompt. A pricing-runtime resolver
+requires a separate measurement repair because frozen replay replaces that code.
+The campaign's isolated manifest uses three repetitions; the ordinary development
+default stays at one. Results belong in the experiment journal.
+
 ## Scoring and preparation
 
 Development score is successful trials divided by **all 100 expected slots**.

@@ -4,8 +4,10 @@ import copy
 import unittest
 from collections.abc import Callable
 from typing import Any
+from unittest.mock import patch
 
 from compare_runs import (
+    CATALOG_POLICY,
     IDENTITY_KEYS,
     TOOL_DESCRIPTION_POLICY,
     compare,
@@ -562,6 +564,82 @@ class RepetitionContractTest(unittest.TestCase):
             value["manifest"]["identity"]["corpus"].update(trials_per_case=repetitions)
             with self.assertRaises(ValueError):
                 compare(value, value)
+
+
+class CatalogCampaignTest(unittest.TestCase):
+    def test_opt_in_catalog_scope_and_fail_closed_contract(self) -> None:
+        left = RepetitionContractTest().current(3)
+        right = copy.deepcopy(left)
+        for value, commit, version in (
+            (left, "a" * 40, "1.0.0"),
+            (right, "b" * 40, "1.0.2"),
+        ):
+            value["manifest"]["identity"].update(
+                harness_version="2.3.27",
+                commit=commit,
+                renderer_version=version,
+                artifact_kind="source_checkout",
+            )
+        original = (
+            "MODEL = 'fixed'\nSYSTEM_PROMPT_RENDERER_VERSION = '1.0.0'\n"
+            "def _render_system_prompt_values(points):\n"
+            "    points = parse_prompt_points(points)\n"
+            "    return {'PROMPT_POINTS_JSON': render(points), 'CURRENT_DATE': 'fixed'}\n"
+        )
+        edited = (
+            original.replace("1.0.0", "1.0.2")
+            + "def _render_prompt_points(): return []\n"
+        )
+
+        def source(commit: str, path: str) -> str:
+            if path.endswith("toll_agent.py"):
+                return edited if commit == "b" * 40 else original
+            return '{"pairs": []}'
+
+        with patch("compare_runs.source_at", side_effect=source):
+            with self.assertRaisesRegex(ValueError, "renderer_version"):
+                compare(left, right)
+            self.assertFalse(
+                compare(left, right, campaign_policy=CATALOG_POLICY)["numeric_eligible"]
+            )
+            for policy in ("unknown", "directed-catalog-v2"):
+                with self.assertRaisesRegex(ValueError, "unsupported campaign"):
+                    compare(left, right, campaign_policy=policy)
+            for key, value in (
+                ("renderer_version", "1.0.3"),
+                ("harness_version", "2.3.26"),
+            ):
+                bad = copy.deepcopy(right)
+                bad["manifest"]["identity"][key] = value
+                with self.assertRaisesRegex(ValueError, "campaign identity"):
+                    compare(left, bad, campaign_policy=CATALOG_POLICY)
+            admitted = edited
+            for changed in (
+                admitted + "def _build_model(): return 'changed'\n",
+                admitted.replace("parse_prompt_points(points)", "list(points)"),
+                admitted.replace(
+                    "'CURRENT_DATE': 'fixed'", "'CURRENT_DATE': 'changed'"
+                ),
+                admitted.replace("= '1.0.2'", "= str('1.0.2')"),
+                admitted.replace("= '1.0.2'", "= MODEL = '1.0.2'"),
+                admitted.replace("= '1.0.2'", "= '1.0.0'"),
+            ):
+                edited = changed
+                with self.subTest(changed=changed), self.assertRaises(ValueError):
+                    compare(left, right, campaign_policy=CATALOG_POLICY)
+            edited = admitted
+        with (
+            patch(
+                "compare_runs.source_at",
+                side_effect=lambda commit, path: (
+                    '{"pairs": [1]}'
+                    if commit == "b" * 40 and path.endswith(".json")
+                    else source(commit, path)
+                ),
+            ),
+            self.assertRaisesRegex(ValueError, "route graph changed"),
+        ):
+            compare(left, right, campaign_policy=CATALOG_POLICY)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,11 @@
 """Compare two frozen 100-case development reports without rerunning or regrading."""
 
+import ast
 import hashlib
 import json
 import math
+import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, TypeGuard, cast
@@ -46,6 +49,8 @@ ALLOWED_CHANGES = {
     "prompt_hashes",
 }
 TOOL_DESCRIPTION_POLICY = "literal-input-prose-v1"
+CATALOG_POLICY = "directed-catalog-v1"
+CAMPAIGN_BASE = "c6f13851c0d9c353a40aadc0243f3c8dfd49f4d0"
 VERDICTS = {"outcome", "grounding", "rules"}
 GROUNDING_CHECKS = {"unsupported_money", "tool_evidence"}
 ACTOR_ERRORS = {
@@ -379,14 +384,111 @@ def attempts(
     }
 
 
-def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+def source_at(commit: str, path: str) -> str:
+    require(bool(re.fullmatch(r"[0-9a-f]{40}", commit)), "invalid source commit")
+    return subprocess.check_output(
+        ["git", "show", f"{commit}:{path}"],
+        cwd=Path(__file__).resolve().parents[4],
+        text=True,
+    )
+
+
+def renderer_scope(source: str, version: str) -> str:
+    """Mask only the admitted renderer regions; runtime/model code stays pinned."""
+    tree = ast.parse(source)
+    versions = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name)
+            and target.id == "SYSTEM_PROMPT_RENDERER_VERSION"
+            for target in node.targets
+        )
+    ]
+    require(
+        len(versions) == 1
+        and len(versions[0].targets) == 1
+        and isinstance(versions[0].value, ast.Constant)
+        and versions[0].value.value == version,
+        "renderer version must be the recorded literal",
+    )
+    versions[0].value = ast.Constant(value="MASKED")
+    replacements = 0
+    for function in tree.body:
+        if (
+            isinstance(function, ast.FunctionDef)
+            and function.name == "_render_system_prompt_values"
+        ):
+            for node in ast.walk(function):
+                if isinstance(node, ast.Dict):
+                    for index, key in enumerate(node.keys):
+                        if (
+                            isinstance(key, ast.Constant)
+                            and key.value == "PROMPT_POINTS_JSON"
+                        ):
+                            node.values[index] = ast.Constant(value="MASKED")
+                            replacements += 1
+    require(replacements == 1, "expected one catalog rendering value")
+    tree.body = [
+        node
+        for node in tree.body
+        if not (
+            isinstance(node, ast.FunctionDef) and node.name == "_render_prompt_points"
+        )
+    ]
+    return ast.dump(tree, include_attributes=False)
+
+
+def catalog_scope(identities: list[dict[str, Any]], policy: str) -> None:
+    require(policy == CATALOG_POLICY, "unsupported campaign comparison policy")
+    require(
+        identities[0]["tool_schema_hashes"] == identities[1]["tool_schema_hashes"],
+        "directed-catalog campaign tool schemas changed",
+    )
+    paths = (
+        "v2/oracle/sources/dulles_toll_road.json",
+        "v2/oracle/sources/dulles_greenway.json",
+    )
+    pinned_graphs = {path: source_at(CAMPAIGN_BASE, path) for path in paths}
+    agent_path = "v2/agent/toll_agent.py"
+    pinned_agent = renderer_scope(source_at(CAMPAIGN_BASE, agent_path), "1.0.0")
+    for value in identities:
+        require(
+            value["harness_version"] == "2.3.27"
+            and value["corpus"]["trials_per_case"] == 3
+            and value["artifact_kind"] == "source_checkout"
+            and value["renderer_version"] in {"1.0.0", "1.0.2"},
+            "unsupported directed-catalog campaign identity",
+        )
+        for path, source in pinned_graphs.items():
+            require(source_at(value["commit"], path) == source, "route graph changed")
+        require(
+            renderer_scope(
+                source_at(value["commit"], agent_path), value["renderer_version"]
+            )
+            == pinned_agent,
+            "application changed outside admitted renderer regions",
+        )
+
+
+def compare(
+    baseline: dict[str, Any],
+    candidate: dict[str, Any],
+    *,
+    campaign_policy: str | None = None,
+) -> dict[str, Any]:
     left_identity, ids = identity(baseline, "baseline")
     right_identity, candidate_ids = identity(candidate, "candidate")
     require(
         ids == candidate_ids and left_identity.keys() == right_identity.keys(),
         "incompatible evaluation identity",
     )
+    if campaign_policy is not None:
+        catalog_scope([left_identity, right_identity], campaign_policy)
     for key in left_identity:
+        if key == "renderer_version" and campaign_policy == CATALOG_POLICY:
+            continue
         if (
             key == "tool_schema_hashes"
             and left_identity.get("tool_description_policy") == TOOL_DESCRIPTION_POLICY
@@ -518,10 +620,24 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
 
 
 def main(argv: list[str]) -> None:
+    policy = None
+    if len(argv) == 5 and argv[3] == "--campaign-policy":
+        policy = argv[4]
+        argv = argv[:3]
     if len(argv) != 3:
-        raise ValueError("usage: compare_runs.py BASELINE_REPORT CANDIDATE_REPORT")
+        raise ValueError(
+            "usage: compare_runs.py BASELINE_REPORT CANDIDATE_REPORT "
+            "[--campaign-policy directed-catalog-v1]"
+        )
     baseline, candidate = (json.loads(Path(path).read_text()) for path in argv[1:])
-    print(json.dumps(compare(baseline, candidate), indent=2))
+    result = compare(baseline, candidate, campaign_policy=policy)
+    if policy is not None:
+        result["campaign_policy"] = policy
+        result["review_required"] = (
+            "Independent directed-catalog source derivation, renderer scope and "
+            "regression review required; numeric eligibility is not promotion."
+        )
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":
