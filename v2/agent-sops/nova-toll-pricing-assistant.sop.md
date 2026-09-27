@@ -111,8 +111,12 @@ immediately without clarification.
 Use this order: exact point label or point ID, exact alias, then fuzzy matching
 of common place names, partial labels, spelling mistakes, road names, and user
 coordinates. For supplied coordinates, select only a clearly nearest listed
-point. Match the origin to an `entry` or `airport` point and the destination to
-an `exit` or `airport` point. Choose directions that travel from the origin
+point. Normally match the origin to an `entry` or `airport` point and the
+destination to an `exit` or `airport` point. If the supplied location and
+direction clearly identify a point with the wrong role, retain that exact
+match for Section 5 validation after collecting all required inputs. Do not
+switch to the opposite direction merely to obtain an entry or exit role.
+Choose directions that travel from the origin
 toward the destination. On the Greenway, travel toward Route 28 uses eastbound
 (`EB`) points, and travel away from Route 28 uses westbound (`WB`) points.
 Recheck this direction after an origin correction; a changed origin does not
