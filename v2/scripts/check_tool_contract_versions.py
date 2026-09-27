@@ -73,8 +73,12 @@ def validate_manifest_update(previous: dict[str, Any], current: dict[str, Any]) 
             raise ValueError(
                 f"{name} version {current_version} must advance beyond {previous_version}"
             )
-        if new_releases != {current_version}:
-            raise ValueError("manifest must add exactly the new current release")
+        # A push or merge group can accumulate several reviewed releases.
+        for version in new_releases:
+            if _version_tuple(version) <= _version_tuple(previous_version):
+                raise ValueError(
+                    f"{name} added release {version} must advance beyond {previous_version}"
+                )
 
 
 def comparison_ref(base_ref: str) -> str | None:

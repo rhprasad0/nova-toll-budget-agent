@@ -256,6 +256,8 @@ def test_wrong_identity_or_evidence_fails_closed(
         ("record", "0"),
         ("record", "-1"),
         ("record", "seven"),
+        ("record", None),
+        ("record", ""),
         ("canary", 0),
         ("canary", -1),
         ("canary", "seven"),
@@ -280,7 +282,7 @@ def test_deployment_id_zero_negative_malformed_or_unequal_fails_closed(
             canary["deployment_id"] = value
         needs["deploy"]["outputs"]["canary"] = json.dumps(canary)
     monkeypatch.setenv("NEEDS_JSON", json.dumps(needs))
-    with pytest.raises(ValueError):
+    with pytest.raises(status.DeploymentStatusError, match="malformed_evidence"):
         status.finish()
     assert not any(
         payload and payload.get("state") == "success" for _, _, payload in calls
@@ -476,16 +478,22 @@ def test_failure_evidence_survives_without_qualifying_as_success(
 
 
 @pytest.mark.parametrize("failed_job", ["admission", "release-record"])
+@pytest.mark.parametrize("outcome", ["failure", "cancelled", "skipped"])
 def test_early_failure_keeps_summary_without_a_deployment_record(
-    context: tuple[Any, ...], monkeypatch: pytest.MonkeyPatch, failed_job: str
+    context: tuple[Any, ...],
+    monkeypatch: pytest.MonkeyPatch,
+    failed_job: str,
+    outcome: str,
 ) -> None:
     needs, _, _, calls, directory = context
     for name in ("release-record", "build", "deploy"):
         needs[name] = {"result": "skipped", "outputs": {}}
-    needs[failed_job]["result"] = "failure"
+    needs[failed_job]["result"] = outcome
     monkeypatch.setenv("NEEDS_JSON", json.dumps(needs))
     status.prepare()
-    with pytest.raises(status.DeploymentStatusError):
+    evidence = json.loads((directory / status.EVIDENCE_FILE).read_text())
+    assert evidence["reason"] == "upstream_failed"
+    with pytest.raises(status.DeploymentStatusError, match="upstream_failed"):
         status.finish()
     summary = (directory / "summary").read_text()
     assert f'"stage": "{failed_job}"' in summary
