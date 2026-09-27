@@ -233,7 +233,8 @@ approvals. A source-checkout development baseline cannot qualify a release.
 
 The runner and comparison helpers derive execution slots from the recorded
 `trials_per_case` (1 or 3). The active development contract uses one repetition;
-three repetitions belong to historical development contracts.
+three repetitions are available for explicitly authorized campaigns and historical
+development contracts.
 Single-pass reports use all expected slots for overall pass rate and record
 Pass³ fields as `null` (inapplicable). Missing slots remain in the denominator;
 inconclusives remain explicit. Comparisons reject missing or duplicate slots,
