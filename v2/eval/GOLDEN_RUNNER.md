@@ -202,7 +202,8 @@ The [production gate](GOLDEN_RELEASE.md) requires separate protected evidence an
 approvals. A source-checkout development baseline cannot qualify a release.
 
 The runner and comparison helpers derive execution slots from the recorded
-`trials_per_case` (1 or 3). This contract still activates three repetitions.
+`trials_per_case` (1 or 3). The active development contract uses one repetition;
+three repetitions belong to historical development contracts.
 Single-pass reports use all expected slots for overall pass rate and record
 Pass³ fields as `null` (inapplicable). Missing slots remain in the denominator;
 inconclusives remain explicit. Comparisons reject missing or duplicate slots,
