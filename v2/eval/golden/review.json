@@ -1,10 +1,10 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "9f324029980a73c53a0a6f4a75d4562f9afaa224915f5b433b5d6273c28b5b00",
   "human_trajectory_adjudication": false,
-  "reviewer": null,
-  "evidence": "Contract3.3.23 activates100 cases with one repetition after material judging changes. Offline validation and independent review precede paid calibration; no prior approval is transferred.",
+  "reviewer": "Codex parent with independent measurement_review recommendation; Ryan-authorized campaign",
+  "evidence": "Parent accepted independent measurement_review recommendation under Ryan authorization:161/161 references,483 known calls,468/471 criterion labels,156/157 overall verdicts,161/161 actor labels,24/24 new paired criteria and45/45 negative controls rejected overall. Preserve bounded Rules scenario-name false failure and Outcome/Rules wrong-rounding false passes; Grounding and deterministic money check reject the incorrect amount. No relabeling, repeated calibration or claimed human adjudication.",
   "authorization": "Ryan explicitly authorized the stacked measurement changes and $25 additional eval API spending; this layer ran offline checks only.",
-  "contract_commit": null,
-  "reviewed_at": null
+  "contract_commit": "f700aa3bec8daadad5a4d2bcda99ddf0a2edf9e5",
+  "reviewed_at": "2026-09-27T11:46:36.222852+00:00"
 }
