@@ -14,6 +14,7 @@ from strands_evals.types.simulation import ActorResponse
 
 from eval import golden
 from eval import golden_run as run
+from eval.repetition import report_trials
 
 
 def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Attempt:
@@ -138,7 +139,10 @@ def main() -> None:
             and all(example.expected.model_dump().values())
         ):
             passing.setdefault(example.case_id, example)
+    if set(passing) != {case.id for case in cases}:
+        raise ValueError("actor checks require one passing example per case")
     examples = list(passing.values())
+    trials = report_trials(identity)
     prior, spent = run.prior_accounting(args.prior_run)
     journal = run.Journal(args.output, args.budget_usd, spent)
     manifest = {
@@ -156,7 +160,7 @@ def main() -> None:
         futures = [
             pool.submit(check, example, trial, journal)
             for example in examples
-            for trial in (1, 2, 3)
+            for trial in trials
         ]
         rows = [future.result() for future in futures]
     events = [
@@ -165,7 +169,8 @@ def main() -> None:
     ]
     report = {
         "warning": "Scripted development answers; actor checks only, not application quality or release qualification. Human actor review remains required.",
-        "expected_trials": len(examples) * 3,
+        "trials_per_case": len(trials),
+        "expected_trials": len(cases) * len(trials),
         "valid_trials": sum(r.status == "scored" for r in rows),
         "rows": [r.model_dump() for r in rows],
         "cost_usd": journal.spent - spent,

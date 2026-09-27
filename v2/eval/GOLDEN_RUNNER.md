@@ -42,7 +42,7 @@ require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-Contract 3.3.20 / harness 2.3.20 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.21 / harness 2.3.21 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -202,3 +202,12 @@ active corpus or reuse a historical budget as new spending authorization.
 
 The [production gate](GOLDEN_RELEASE.md) requires separate protected evidence and
 approvals. A source-checkout development baseline cannot qualify a release.
+
+The runner and comparison helpers derive execution slots from the recorded
+`trials_per_case` (1 or 3). This contract still activates three repetitions.
+Single-pass reports use all expected slots for overall pass rate and record
+Pass³ fields as `null` (inapplicable). Missing slots remain in the denominator;
+inconclusives remain explicit. Comparisons reject missing or duplicate slots,
+unsupported harness contracts, mismatched repetition counts, and inconsistent
+aggregate usage. Historical three-trial reports retain their recorded scoring rules.
+The repetition contract requires fresh reviewed calibration before paid execution.

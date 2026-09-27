@@ -1,10 +1,10 @@
 {
-  "status": "approved",
-  "corpus_sha256": "7290e132b41e91b92f5f245ba6f457dda97c2504abf7f34700079863deafbf1e",
+  "status": "pending",
+  "corpus_sha256": "431f9bf7f84310f78509a4ace638ec5475f25622063bfea80d19ba2d12edb836",
   "human_trajectory_adjudication": false,
-  "reviewer": "Codex supervisor with independent eval_reviewer contract_3319_preflight",
-  "evidence": "Supervisor and independent eval_reviewer contract_3319_preflight reviewed 153 references, 459 known calls and all 140 disclosure citations. Agreement: 444/447 criterion labels, 153/153 actor labels and 148/149 overall verdicts. Accepted bounded Rules ordering false failure and Grounding/Rules wrong-rounding false passes under explicit user allowance for imperfect label agreement. Outcome plus the deterministic money check rejects wrong rounding. No relabels, retries or claimed human inspection.",
-  "authorization": "Ryan explicitly authorized judge repairs, calibration and hill climbing, allowed imperfect label agreement, and waived the merge prerequisite for the local campaign.",
-  "contract_commit": "8ab9ecc4fb1af353334f4ce9bbd4b3f20a1f60e2",
-  "reviewed_at": "2026-09-26T19:13:52-04:00"
+  "evidence": "Repetition contract 3.3.21 retains three active trials. Scheduling and reporting now use recorded trials_per_case; offline checks cover one and three trials. Fresh calibration and independent review are required before paid application runs.",
+  "authorization": "Ryan explicitly authorized the stacked measurement changes and deferred paid calibration until the complete contract is ready.",
+  "reviewer": null,
+  "contract_commit": null,
+  "reviewed_at": null
 }

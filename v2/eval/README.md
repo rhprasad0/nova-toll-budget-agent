@@ -1,6 +1,6 @@
 # TollChat evaluation
 
-**Current contract: 3.3.20 / harness 2.3.20.** Future development climbs optimize
+**Current contract: 3.3.21 / harness 2.3.21.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
@@ -88,3 +88,12 @@ Historical golden demonstrations and calibrations are summarized in the
 Exact approval records and release policies retain their original identities.
 Offline regression checks use focused synthetic inputs; historical run archives
 remain recoverable through the Git commit linked in the journal.
+
+The runner and comparison helpers derive execution slots from the recorded
+`trials_per_case` (1 or 3). This contract still activates three repetitions.
+Single-pass reports use all expected slots for overall pass rate and record
+Pass³ fields as `null` (inapplicable). Missing slots remain in the denominator;
+inconclusives remain explicit. Comparisons reject missing or duplicate slots,
+unsupported harness contracts, mismatched repetition counts, and inconsistent
+aggregate usage. Historical three-trial reports retain their recorded scoring rules.
+The repetition contract requires fresh reviewed calibration before paid execution.

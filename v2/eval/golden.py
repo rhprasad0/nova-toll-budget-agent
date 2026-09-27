@@ -20,6 +20,7 @@ from agent_tools import current_price_domain as current
 from agent_tools import get_annual_toll_ballpark as annual
 from agent_tools import validate_toll_route as routes
 from agent_tools.currency import CURRENCY_PATTERN, currency_decimal
+from eval.repetition import trial_numbers
 
 if TYPE_CHECKING:
     from strands.models import Model
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.20"
+CORPUS_VERSION = "3.3.21"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -46,6 +47,7 @@ COVERAGE = {
 SOURCE_FILES = (
     "uv.lock",
     "eval/golden.py",
+    "eval/repetition.py",
     "agent_tools/currency.py",
     "eval/simulated.py",
     "eval/run_evaluation.py",
@@ -1060,12 +1062,12 @@ def validate(root: Path | None = None) -> None:
         manifest["version"] != CORPUS_VERSION
         or manifest.get("case_count") != CASE_COUNT
         or manifest.get("evaluation_scope") != "development"
-        or manifest["trials_per_case"] != 3
         or manifest["actor_model"] != "gpt-6-luna"
         or manifest["judge_model"] != "gpt-6-luna"
         or manifest.get("tool_description_policy") != TOOL_DESCRIPTION_POLICY
     ):
         raise ValueError("unsupported corpus configuration")
+    trial_numbers(manifest)
     actual = hashes(root)
     if manifest["hashes"] != actual or manifest["corpus_sha256"] != digest(actual):
         raise ValueError("corpus or grader hash drift")

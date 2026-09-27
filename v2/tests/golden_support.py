@@ -28,6 +28,7 @@ def report_manifest(
             "harness_sha256": digest,
             "corpus": {
                 "case_count": len(cases),
+                "trials_per_case": 3,
                 "hashes": hashes,
                 "corpus_sha256": golden.digest(hashes),
             },

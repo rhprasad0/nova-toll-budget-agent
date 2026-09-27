@@ -29,6 +29,7 @@ def report() -> dict[str, Any]:
             "corpus_sha256": digest(hashes),
         },
         cases=[{"id": cid, "held_out": False, "contract_version": 2} for cid in ids],
+        harness_version="2.1.2",
         model="gpt-6-luna",
         prompt_hashes={cid: "a" * 64 for cid in ids},
         tool_schema_hashes={"tool": "b" * 64},
@@ -436,6 +437,93 @@ class FixedPassCubedTest(unittest.TestCase):
         )
         self.update(right)
         self.assertFalse(compare(left, right)["candidate"]["development_target_met"])
+
+
+class RepetitionContractTest(unittest.TestCase):
+    def current(self, repetitions: int) -> dict[str, Any]:
+        value = report()
+        value["manifest"]["identity"]["harness_version"] = "2.3.21"
+        value["manifest"]["identity"]["corpus"]["trials_per_case"] = repetitions
+        value["attempts"] = [
+            row for row in value["attempts"] if row["trial"] <= repetitions
+        ]
+        self.update(value)
+        return value
+
+    def update(self, value: dict[str, Any]) -> None:
+        refresh(value)
+        repetitions = value["manifest"]["identity"]["corpus"]["trials_per_case"]
+        rows = value["attempts"]
+        overall = value["overall"]
+        overall.update(
+            expected_trials=100 * repetitions,
+            attempted_trials=len(rows),
+            inconclusive_trials=len(rows) - overall["scored_trials"],
+            overall_pass_rate=overall["successful_trials"] / (100 * repetitions),
+            pass_cubed=0 if repetitions == 3 else None,
+            passing_all_three_cases=0 if repetitions == 3 else None,
+            pass_cubed_case_denominator=100 if repetitions == 3 else None,
+            cost_usd={},
+            usage={},
+        )
+        for role in ("agent", "actor", "judge"):
+            measurements = [
+                m for row in rows for m in row["measurements"] if m["role"] == role
+            ]
+            overall["cost_usd"][role] = sum(m["cost_usd"] for m in measurements)
+            overall["usage"][role] = {
+                "calls": len(measurements),
+                **{
+                    key: sum(m[key] for m in measurements)
+                    for key in ("input_tokens", "output_tokens")
+                },
+            }
+
+    def test_single_and_three_pass_contracts(self) -> None:
+        for repetitions in (1, 3):
+            left = self.current(repetitions)
+            right = copy.deepcopy(left)
+            right["attempts"][0]["verdicts"]["outcome"]["passed"] = True
+            self.update(right)
+            result = compare(left, right)
+            self.assertTrue(result["numeric_eligible"])
+            self.assertEqual(
+                result["candidate"]["overall_pass_rate"], 1 / (100 * repetitions)
+            )
+            right["attempts"][-1].update(
+                status="inconclusive", actor_validity={"status": "uncertain"}
+            )
+            self.update(right)
+            self.assertEqual(
+                compare(left, right)["candidate"]["inconclusive_trials"], 1
+            )
+            mutations: tuple[Callable[[dict[str, Any]], Any], ...] = (
+                lambda r: r["attempts"].pop(),
+                lambda r: r["attempts"].append(copy.deepcopy(r["attempts"][0])),
+                lambda r: r["attempts"][0].update(trial=4),
+                lambda r: r["overall"]["cost_usd"].update(agent=0),
+                lambda r: r["overall"].update(overall_pass_rate=1),
+            )
+            for mutation in mutations:
+                broken = copy.deepcopy(right)
+                mutation(broken)
+                with self.assertRaises(ValueError):
+                    compare(left, broken)
+
+    def test_unknown_contracts_do_not_fall_back(self) -> None:
+        for version, repetitions in (
+            ("1.2.10", 1),
+            ("2.3.99", 3),
+            ("garbage", 3),
+            ("2.3.20", 1),
+            ("2.3.21", 2),
+            ("2.3.21", True),
+        ):
+            value = self.current(3)
+            value["manifest"]["identity"].update(harness_version=version)
+            value["manifest"]["identity"]["corpus"].update(trials_per_case=repetitions)
+            with self.assertRaises(ValueError):
+                compare(value, value)
 
 
 if __name__ == "__main__":

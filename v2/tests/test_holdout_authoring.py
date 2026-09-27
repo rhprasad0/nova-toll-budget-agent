@@ -203,6 +203,7 @@ def test_archive_is_allowlisted_and_runs_without_repo_credentials_or_network(
         kit.export_kit(archive)
     isolated = tmp_path / "isolated"
     expected = set(kit.EXPORT_FILES) | {
+        "eval/repetition.py",
         "START_HERE.md",
         "kit.json",
         "public/prompt-points.json",
