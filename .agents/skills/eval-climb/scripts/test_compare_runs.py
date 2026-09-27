@@ -512,6 +512,7 @@ class RepetitionContractTest(unittest.TestCase):
 
     def test_unknown_contracts_do_not_fall_back(self) -> None:
         for version, repetitions in (
+            ("1.2.10", 1),
             ("2.3.99", 3),
             ("garbage", 3),
             ("2.3.20", 1),

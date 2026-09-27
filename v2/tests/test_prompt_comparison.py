@@ -59,7 +59,8 @@ def test_paired_comparison_excludes_invalid_actor_case(repetitions: int) -> None
         paired(baseline, candidate, {"complete"})
 
 
-def test_recovery_preserves_scored_trials_and_all_costs() -> None:
+@pytest.mark.parametrize("version", ["1.2.10", "2.3.21"])
+def test_recovery_preserves_scored_trials_and_all_costs(version: str) -> None:
     cases = golden.load_cases()[:2]
     cases[1] = cases[1].model_copy(update={"held_out": True})
     attempts = [
@@ -93,7 +94,7 @@ def test_recovery_preserves_scored_trials_and_all_costs() -> None:
     original: dict[str, Any] = {
         "manifest": {
             "identity": {
-                "harness_version": "2.3.21",
+                "harness_version": version,
                 "corpus": {"trials_per_case": 3},
                 "cases": [c.model_dump(mode="json") for c in cases],
             },

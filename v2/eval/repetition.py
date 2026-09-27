@@ -17,6 +17,7 @@ def report_trials(identity: dict[str, Any]) -> range:
         "1.1.0",
         "1.2.0",
         "1.2.1",
+        "1.2.10",
         *(f"2.0.{n}" for n in range(14)),
         "2.1.0",
         "2.1.1",

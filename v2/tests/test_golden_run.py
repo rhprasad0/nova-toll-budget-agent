@@ -1474,6 +1474,7 @@ def test_v2_explicit_calibration_labels_ignore_names_and_missing_verdicts(
             {"actor_validity", "failure_phase", "application_stop", "rejected_tools"},
         ),
         ("1.2.1", {"actor_validity", "failure_phase", "application_stop"}),
+        ("1.2.10", {"actor_validity", "failure_phase", "application_stop"}),
         ("2.0.10", {"application_stop"}),
         ("2.0.11", set[str]()),
     ],
