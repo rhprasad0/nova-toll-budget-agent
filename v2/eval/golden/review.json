@@ -1,10 +1,10 @@
 {
   "status": "pending",
-  "corpus_sha256": "431f9bf7f84310f78509a4ace638ec5475f25622063bfea80d19ba2d12edb836",
+  "corpus_sha256": "2cb567c0c5c51f13b0f12a778aeed5fe8beec79c12f4841f4c80427a34fdec93",
   "human_trajectory_adjudication": false,
-  "evidence": "Repetition contract 3.3.21 retains three active trials. Scheduling and reporting now use recorded trials_per_case; offline checks cover one and three trials. Fresh calibration and independent review are required before paid application runs.",
-  "authorization": "Ryan explicitly authorized the stacked measurement changes and deferred paid calibration until the complete contract is ready.",
   "reviewer": null,
+  "evidence": "Contract 3.3.22 changes annual qualification judging and adds eight synthetic paired calibration references. Historical grades remain unchanged; fresh calibration and independent review are required after the complete measurement changes.",
+  "authorization": "Ryan explicitly authorized the stacked measurement changes and $25 additional eval API spending; this layer ran offline checks only.",
   "contract_commit": null,
   "reviewed_at": null
 }

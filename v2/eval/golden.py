@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.21"
+CORPUS_VERSION = "3.3.22"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -155,6 +155,17 @@ numeric fields than the reference. This overrides exhaustive final-answer
 number lists in the case, reference, or SOP. Preserve the requested annual
 affordability summary, scenario meaning, material assumptions and limitations,
 and accuracy of every amount and label that is given.
+Assess annual uncertainty from the complete delivered conversation. Clearly
+estimated daily scenarios, accurate source and coverage descriptions, and scaling
+by planned annual days can together convey uncertainty without separate "not a
+forecast" and "not a guaranteed budget" disclaimers. Do not treat those phrases
+as independent checklist items. Likewise, identifying P25/P50/P90 as daily
+scenarios scaled by planned days conveys that they are not annual percentiles;
+an additional negative sentence is optional unless needed to answer a user's
+explicit probability question. A bare "rough estimate" label does not repair
+misleading annual-percentile labels, missing source or scope, promised future
+prices, a guaranteed budget, or any other affirmative contradiction. The same
+standard applies to observed, modeled, and published fixed-rate scenarios.
 For commute-route clarification, generic home/work-area labels for the user's
 supplied legs are an accepted simplifying assumption. Do not fail that shorthand
 alone when the actual endpoints remain unchanged. This exception does not establish

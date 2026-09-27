@@ -1,6 +1,6 @@
 # Golden corpus authoring
 
-The active corpus is **3.3.20: 100 development cases**, with **153 labeled
+The active corpus is **3.3.22: 100 development cases**, with **161 labeled
 references** and **107 frozen synthetic tool fixtures**. It covers 40 current,
 55 annual, and five mixed workflows. The executable schema and validation rules
 live in [golden.py](golden.py); the inputs live in [golden/](golden/).
@@ -48,6 +48,15 @@ Grade meaning rather than exact formatting, emoji, headings, or wording. For
 annual affordability, a P50 daily/annual toll summary with P25/P50/P90 combined-cost
 scenarios is sufficient; additional P25/P90 toll-only figures are optional unless
 requested. Historical-source descriptions need not use an exact keyword.
+
+Judge annual uncertainty across the complete conversation. Estimated daily
+scenarios, accurate sources and coverage, and annual scaling can convey the
+limits without separate forecast or guarantee disclaimers. Daily scenario
+labels and scaling also distinguish them from annual percentiles; answer explicit
+probability questions directly. Promised future prices, guaranteed budgets,
+false annual probabilities and source contradictions still fail. Four synthetic
+positive/negative pairs exercise this boundary, including earlier-turn context
+and observed, modeled and published fixed-rate sources.
 
 Financial amounts and labels, route identity, material scope/assumptions,
 source accuracy, and consent remain strict. A correct table does not excuse a
