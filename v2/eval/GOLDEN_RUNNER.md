@@ -1,6 +1,6 @@
 # Running the frozen golden corpus
 
-The current development corpus has **100 cases and 161 calibration references**.
+The current development corpus has **100 cases and 176 calibration references**.
 Development application runs and actor checks use one trial per case. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
@@ -42,7 +42,7 @@ require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-Contract 3.3.23 / harness 2.3.23 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.27 / harness 2.3.27 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -85,6 +85,18 @@ spending authorization.
 Judges return cited unmet requirements; an empty list determines success.
 The stored `passed`/`evidence` interface remains stable. Calibration must still
 check semantic errors; explanations are never regex-relabelled.
+
+Grounding classifies each numerically unsupported currency occurrence as an
+assertion, qualified whole-dollar restatement, or nonasserted mention. The money
+guard then verifies support and rounding for assertions; denying or rejecting a
+price does not assert that price. Classification must cover every occurrence
+exactly once, so a denied amount cannot exempt a separate assertion of the same
+amount. Missing, duplicate, or unknown IDs invalidate the measurement. This uses
+the existing Grounding call; three judge calls remain required per trial.
+Authored money classifications in calibration references are used only for
+offline validation and are never supplied to judges. Phrase-specific denial
+exceptions are not part of the active contract. Semantic classification can still
+err; inspect both classifications and final grades during calibration review.
 
 After foundational measurement changes, preparation is one fresh full-reference
 calibration, independent review, one full scripted actor check and one full

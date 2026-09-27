@@ -1,6 +1,6 @@
 # Golden corpus authoring
 
-The active corpus is **3.3.23: 100 development cases**, with **161 labeled
+The active corpus is **3.3.27: 100 development cases**, with **176 labeled
 references** and **107 frozen synthetic tool fixtures**. It covers 40 current,
 55 annual, and five mixed workflows. The executable schema and validation rules
 live in [golden.py](golden.py); the inputs live in [golden/](golden/).

@@ -232,9 +232,17 @@ def test_negated_zero_is_not_an_invented_price() -> None:
     ):
         turns = deepcopy(example.turns)
         turns[-1].response += " " + wording
-        assert "unsupported_money" not in golden.grade_assertions(case, turns)
+        catalog: list[golden.MoneyMention] = []
+        golden.grade_assertions(case, turns, money_catalog=catalog)
+        # The authored nonclaim meaning stands in for Grounding in this offline test.
+        nonclaims = [m.id for m in catalog]
+        assert "unsupported_money" not in golden.grade_assertions(
+            case, turns, non_asserted_money=nonclaims
+        )
         turns[-1].response += " The toll is $0.00."
-        assert "unsupported_money" in golden.grade_assertions(case, turns)
+        assert "unsupported_money" in golden.grade_assertions(
+            case, turns, non_asserted_money=nonclaims
+        )
 
 
 def test_salary_suggestions_do_not_pass_the_current_contract() -> None:

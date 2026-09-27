@@ -485,7 +485,13 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         for key, passed in criteria.items()
         if not passed and key != "successful_trials_increased"
     ]
-    if left_identity["harness_version"] == "2.3.23":
+    if left_identity["harness_version"] in {
+        "2.3.23",
+        "2.3.24",
+        "2.3.25",
+        "2.3.26",
+        "2.3.27",
+    }:
         criteria = {
             "successful_trials_increased": criteria["successful_trials_increased"]
         }

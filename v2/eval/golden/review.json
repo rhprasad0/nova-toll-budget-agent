@@ -1,10 +1,10 @@
 {
-  "status": "pending",
-  "corpus_sha256": "56c69e572cace45403bcfc47e830beb4be56cd9734274e61b83dec5ec1b147f1",
+  "status": "approved",
+  "corpus_sha256": "a3c960438b2fdb4fccc37e4949aec56fd38308f3cdc64ae99baf83f6214510f1",
   "human_trajectory_adjudication": false,
-  "reviewer": null,
-  "evidence": "Post-review compatibility fix adds historical harness 1.2.10 to the three-trial whitelist. Active 2.3.23 execution and judging are unchanged, but the pinned repetition helper and corpus hashes changed. Prior calibration approval belongs to corpus hash 9f324029980a73c53a0a6f4a75d4562f9afaa224915f5b433b5d6273c28b5b00 and commit f700aa3bec8daadad5a4d2bcda99ddf0a2edf9e5; its results remain in the experiment journal. This revised identity needs fresh reviewed calibration before future paid application runs.",
-  "authorization": "Ryan explicitly authorized the stacked measurement changes, $25 additional eval API spending, and addressing PR feedback before merging. This compatibility revision used offline checks only.",
-  "contract_commit": null,
-  "reviewed_at": null
+  "evidence": "Parent accepts independent review under authorized imperfect-calibration allowance:176/176 references,528 known calls,511/516 criterion labels,176/176 actor labels,171/172 effective overall agreement and51/51 negative controls rejected. All13 nonempty money catalogs and15 occurrences correctly classified and numerically checked; wrong rounding remains rejected. One localized false failure: Outcome/Rules invent user attribution for an explicitly rejected price quotation; Grounding correctly treats it as a nonclaim. Preserve all grades and audit quotation-based score changes. No human adjudication claimed.",
+  "reviewer": "Codex parent with independent measurement_review recommendation; Ryan-authorized continuation",
+  "contract_commit": "8be9a66cffec04f7e48382225114e9ce7110d3e6",
+  "reviewed_at": "2026-09-27T14:01:23.152671+00:00",
+  "authorization": "Ryan explicitly authorized further hill climbing for testing and inspection of needed harness tweaks under the remaining existing evaluation allowance."
 }

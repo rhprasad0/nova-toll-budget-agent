@@ -33,7 +33,7 @@ from eval import golden
 from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.23"
+VERSION = "2.3.27"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -315,6 +315,18 @@ class RequirementAssessment(golden.Record):
             passed=not self.unmet_requirements,
             evidence=self.model_dump_json(),
         )
+
+
+class MoneyInterpretation(golden.Record):
+    id: str
+    evidence: str = Field(min_length=1)
+    kind: Literal["asserted", "rounded", "not_asserted"]
+
+
+class GroundingAssessment(RequirementAssessment):
+    money: list[MoneyInterpretation] = Field(
+        description="Classify every supplied money occurrence ID exactly once using its context: asserted/adopted amount, explicitly qualified whole-dollar restatement, or mentioned without asserting that amount. A quotation or tentative estimate can still assert a price. Return [] only for an empty catalog."
+    )
 
 
 class ActorAssessment(golden.Record):
@@ -859,8 +871,12 @@ when asked clearly. Changing an explicitly supplied departure time into an arriv
 deadline is a contradictory profile fact, not a harmless paraphrase. An explicit stop=false with a null, empty, or whitespace-only
 message is an invalid continuation, even after a good application answer. A
 stop=true with message=null is valid once all profile-required follow-ups have
-been delivered. A first necessary question already requires a reply when the
-profile supplies the answer. An explicit goal_completed stop before that reply
+been delivered. An optional closing offer after the requested task is complete
+creates no actor obligation, even when phrased as a question. Before calling a
+stop premature, identify the unresolved fact needed for the requested task or
+the triggered, unfulfilled instruction in the profile. Do not turn an assistant
+invitation to extend a completed task into a required profile follow-up.
+A first necessary question already requires a reply when the profile supplies the answer. An explicit goal_completed stop before that reply
 is premature, even if the assistant has only just asked and all earlier user
 messages were consistent. Check the pending question and the profile fact:
 consistent past messages do not discharge an outstanding obligation.
@@ -1166,6 +1182,82 @@ def assess_outcome(
         )
 
 
+def grounding_verdict(
+    case: golden.GoldenCase,
+    attempt: Attempt,
+    assessment: GroundingAssessment,
+    catalog: list[golden.MoneyMention],
+) -> None:
+    # Keep the raw response even when malformed classification makes the run unusable.
+    attempt.verdicts["grounding"] = Verdict(
+        passed=False,
+        evidence=json.dumps(
+            {
+                "assessment": assessment.model_dump(),
+                "money_catalog": [m.model_dump() for m in catalog],
+            }
+        ),
+    )
+    ids = [m.id for m in assessment.money]
+    if len(ids) != len(set(ids)) or set(ids) != {m.id for m in catalog}:
+        raise ValueError("invalid_money_classifications")
+    checks = golden.grade_assertions(
+        case,
+        attempt.turns,
+        non_asserted_money=[m.id for m in assessment.money if m.kind == "not_asserted"],
+        rounded_money=[m.id for m in assessment.money if m.kind == "rounded"],
+    )
+    attempt.checks = sorted(
+        (set(attempt.checks) - {"unsupported_money"})
+        | ({"unsupported_money"} if "unsupported_money" in checks else set())
+    )
+    attempt.verdicts["grounding"].passed = not assessment.unmet_requirements
+
+
+def assess_grounding(
+    case: golden.GoldenCase,
+    attempt: Attempt,
+    model: Model,
+    reference: str,
+    conversation: str,
+) -> None:
+    catalog: list[golden.MoneyMention] = []
+    golden.grade_assertions(case, attempt.turns, money_catalog=catalog)
+    evaluator = Agent(
+        model=model,
+        system_prompt=judge_prompt("grounding"),
+        callback_handler=None,
+        retry_strategy=None,
+        structured_output_prompt=ASSESSMENT_INSTRUCTIONS
+        + " Classify every supplied monetary occurrence by meaning in the original conversation. "
+        "A denied or explicitly rejected price is not an asserted amount. Quoting a price without rejecting it, "
+        "or offering it tentatively as an estimate, may still assert it. Use rounded only for an explicitly "
+        "qualified whole-dollar restatement after the exact supported amount was stated. "
+        "Do not decide numerical validity through these classifications: the harness checks it independently. "
+        "Never use not_asserted merely because another part of the answer is correct. "
+        "Missing, duplicate or invented occurrence IDs invalidate the measurement.",
+    )
+    result = evaluator(
+        "GROUNDING CONTEXT:\n"
+        + reference
+        + "\nCOMPLETE ORDERED CONVERSATION:\n"
+        + conversation
+        + "\nMONEY OCCURRENCES NEEDING SEMANTIC CLASSIFICATION:\n"
+        + json.dumps(
+            [m.model_dump(exclude={"rounded_supported"}) for m in catalog],
+            ensure_ascii=False,
+        )
+        + "\nOffsets address each normalized_answer, after currency/Markdown normalization. "
+        "The turn number identifies the original response above. Classify each occurrence separately; "
+        "a denial never exempts a different asserted occurrence with the same value.",
+        structured_output_model=GroundingAssessment,
+    )
+    assessment = result.structured_output
+    if not isinstance(assessment, GroundingAssessment):
+        raise ValueError("missing_judge_verdict")
+    grounding_verdict(case, attempt, assessment, catalog)
+
+
 def judge(
     case: golden.GoldenCase,
     attempt: Attempt,
@@ -1269,6 +1361,11 @@ def judge(
                 reference,
                 data.actual_output or "[]",
                 fixed_reference=fixed_reference,
+            )
+            continue
+        if key == "grounding" and case.contract_version >= 2:
+            assess_grounding(
+                case, attempt, model, reference, data.actual_output or "[]"
             )
             continue
         result = evaluator.evaluate(data)

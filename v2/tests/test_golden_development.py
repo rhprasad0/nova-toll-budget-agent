@@ -101,12 +101,12 @@ def test_complete_development_contract_and_reference_labels() -> None:
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 161
+    assert len(examples) == 176
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 61,
+        False: 76,
     }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 157, "invalid": 4}
+    assert Counter(e.actor_validity for e in examples) == {"valid": 172, "invalid": 4}
     assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5
@@ -477,3 +477,200 @@ def test_income_suggestion_and_adoption_have_distinct_grounding_labels() -> None
     }
     assert suggestion.turns[0].calls == adoption.turns[0].calls == []
     assert suggestion.turns[1:] == adoption.turns[1:]
+
+
+def test_grading_boundary_references_preserve_existing_evidence() -> None:
+    raw = [
+        {k: v for k, v in e.items() if k not in {"non_asserted_money", "rounded_money"}}
+        for e in json.loads((golden.ROOT / "examples.json").read_text())
+    ]
+    assert golden.digest(raw[:161]) == (
+        "b5b82100f3d4f8236e2afb1a2c207d500456c3685bfb5bb938033ef77fb0d334"
+    )
+    references = {(e.case_id, e.label): e for e in run.development_examples()}
+    optional = references[
+        "dev3-adjust-annual-count-downward", "optional-closing-offer-complete"
+    ]
+    required = references[
+        "dev3-beltway-endpoints-together", "baseline-1-2-actor-invalid"
+    ]
+    assert optional.actor_replies[-1] == required.actor_replies[-1]
+    assert optional.actor_validity == "valid" and required.actor_validity == "invalid"
+    assert optional.expected is not None and all(
+        optional.expected.model_dump().values()
+    )
+    assert optional.turns[-1].calls and not required.turns[-1].calls
+
+    days = references[
+        "dev3-supply-missing-weekdays", "supplied-days-background-example"
+    ]
+    original = references[days.case_id, "good"]
+    replacement = references[days.case_id, "supplied-days-replacement-demand"]
+    assert days.turns[-1] == original.turns[-1]
+    assert days.turns[:-1] == replacement.turns[:-1]
+    assert days.expected == original.expected
+    assert replacement.expected is not None
+    assert replacement.expected.model_dump() == {
+        "outcome": False,
+        "grounding": True,
+        "rules": False,
+    }
+    assert replacement.expected_failures == ["missing_call"]
+    assert not replacement.turns[-1].calls
+
+    inequality = references[
+        "dev3-supply-annual-salary", "fixed-scenarios-false-inequality"
+    ]
+    original = references[inequality.case_id, "good"]
+    assert inequality.turns[:-1] == original.turns[:-1]
+    assert [t.calls for t in inequality.turns] == [t.calls for t in original.turns]
+    assert inequality.turns[-1].response.startswith(original.turns[-1].response + "\n")
+    assert inequality.expected is not None
+    assert not any(inequality.expected.model_dump().values())
+
+
+def test_optional_refinement_and_sampling_window_boundaries() -> None:
+    raw = [
+        {k: v for k, v in e.items() if k not in {"non_asserted_money", "rounded_money"}}
+        for e in json.loads((golden.ROOT / "examples.json").read_text())
+    ]
+    assert golden.digest(raw[:165]) == (
+        "37cf335943234591f123a877847c80b77aeb5cf14aef351d63f68fa2fcc195a6"
+    )
+    references = {(e.case_id, e.label): e for e in run.development_examples()}
+    for case_id, label in (
+        ("dev3-reverse-dulles-road-offer", "optional-future-office-days"),
+        ("dev3-hunter-mill-four-day-job", "sampling-target-window"),
+        ("dev3-hunter-mill-four-day-job", "false-last-sample-date"),
+    ):
+        example = references[case_id, label]
+        original = references[case_id, "good"]
+        assert example.turns[-1].calls == original.turns[-1].calls
+        assert example.turns[-1].response.startswith(original.turns[-1].response + "\n")
+        assert example.expected is not None
+        assert set(example.expected.model_dump().values()) == {
+            label != "false-last-sample-date"
+        }
+    sample = references["dev3-hunter-mill-four-day-job", "sampling-target-window"]
+    result = sample.turns[-1].calls[0].result
+    available, target = result["available_date_range"], result["target_window"]
+    assert isinstance(available, dict) and isinstance(target, dict)
+    assert available["end_date"] == "2026-09-22"
+    assert target["end_date"] == "2026-09-23"
+
+
+def test_cancellation_and_zero_denial_reference_boundaries() -> None:
+    raw = [
+        {k: v for k, v in e.items() if k not in {"non_asserted_money", "rounded_money"}}
+        for e in json.loads((golden.ROOT / "examples.json").read_text())
+    ]
+    assert golden.digest(raw[:168]) == (
+        "8c0103b3d6d3f352fd891d9272ff45366b8737f030ad9754449fdec7b0fdc4fa"
+    )
+    cases = {c.id: c for c in golden.load_cases()}
+    refs = {e.label: e for e in run.development_examples()}
+    for positive, negative in (
+        ("missing-history-denies-zero", "missing-history-asserts-zero"),
+        ("cancel-request-acknowledged", "unsupported-external-cancellation"),
+    ):
+        good, bad = refs[positive], refs[negative]
+        assert good.turns[:-1] == bad.turns[:-1]
+        assert good.turns[-1].calls == bad.turns[-1].calls
+        assert good.turns[-1].user == bad.turns[-1].user
+        assert good.expected is not None and all(good.expected.model_dump().values())
+        assert bad.expected is not None and not any(bad.expected.model_dump().values())
+        assert (
+            golden.grade_assertions(
+                cases[good.case_id],
+                good.turns,
+                non_asserted_money=good.non_asserted_money,
+            )
+            == []
+        )
+    bad = refs["missing-history-asserts-zero"]
+    assert golden.grade_assertions(cases[bad.case_id], bad.turns) == [
+        "unsupported_money"
+    ]
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "missing-history-denies-zero",
+        "zero-denial-paraphrase",
+        "rejected-price-quotation",
+        "denial-then-asserted-zero",
+        "missing-history-asserts-zero",
+        "qualified-whole-dollar-restatement",
+        "rounded-restatement-paraphrase",
+        "incorrect-whole-dollar-restatement",
+    ],
+)
+def test_semantic_money_classification_preserves_numeric_guard(label: str) -> None:
+    example = next(e for e in run.development_examples() if e.label == label)
+    case = next(c for c in golden.load_cases() if c.id == example.case_id)
+    catalog: list[golden.MoneyMention] = []
+    checks = golden.grade_assertions(case, example.turns, money_catalog=catalog)
+    assert catalog and "unsupported_money" in checks
+    assessment = run.GroundingAssessment(
+        evidence="Synthetic semantic verdict passes; the numeric guard acts independently.",
+        unmet_requirements=[],
+        money=[
+            run.MoneyInterpretation(
+                id=m.id,
+                evidence="Authored occurrence meaning for offline validation only.",
+                kind="not_asserted"
+                if m.id in example.non_asserted_money
+                else "rounded"
+                if m.id in example.rounded_money
+                or label == "incorrect-whole-dollar-restatement"
+                else "asserted",
+            )
+            for m in catalog
+        ],
+    )
+    attempt = run.Attempt(
+        id="test", case_id=case.id, trial=1, turns=example.turns, checks=checks
+    )
+    run.grounding_verdict(case, attempt, assessment, catalog)
+    assert attempt.verdicts["grounding"].passed
+    assert attempt.checks == example.expected_failures
+
+
+@pytest.mark.parametrize("malformation", ["missing", "duplicate", "foreign"])
+def test_money_classification_requires_exact_occurrence_coverage(
+    malformation: str,
+) -> None:
+    example = next(
+        e for e in run.development_examples() if e.label == "denial-then-asserted-zero"
+    )
+    case = next(c for c in golden.load_cases() if c.id == example.case_id)
+    catalog: list[golden.MoneyMention] = []
+    checks = golden.grade_assertions(case, example.turns, money_catalog=catalog)
+    assert len(catalog) == 2 and catalog[0].amount == catalog[1].amount == "0"
+    items = [
+        run.MoneyInterpretation(id=m.id, kind="not_asserted", evidence="Test")
+        for m in catalog
+    ]
+    if malformation == "missing":
+        items.pop()
+    elif malformation == "duplicate":
+        items.append(items[0])
+    else:
+        items[-1] = run.MoneyInterpretation(
+            id="foreign", kind="not_asserted", evidence="Test"
+        )
+    attempt = run.Attempt(
+        id="test", case_id=case.id, trial=1, turns=example.turns, checks=checks
+    )
+    with pytest.raises(ValueError, match="invalid_money_classifications"):
+        run.grounding_verdict(
+            case,
+            attempt,
+            run.GroundingAssessment(
+                evidence="Test", unmet_requirements=[], money=items
+            ),
+            catalog,
+        )
+    assert "unsupported_money" in attempt.checks
+    assert not attempt.verdicts["grounding"].passed

@@ -11,7 +11,7 @@ this skill alone grants no spending, push, PR, merge or deployment permission.
 
 ## Contract and roles
 
-Development uses **100 cases × one repetition** on corpus 3.3.23 / harness 2.3.23.
+Development uses **100 cases × one repetition** on corpus 3.3.27 / harness 2.3.27.
 The objective is successful trials divided by all **100 slots**. Fully measured
 actor inconclusives stay visible and do not count as successes. Pass³ is
 inapplicable. **90/100 is a soft milestone**, not a stop or production qualification.
