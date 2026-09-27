@@ -2159,6 +2159,7 @@ def test_development_delivery_selected_input_digests_match_reviewed_manifest() -
         ".github/workflows/v2-development-delivery.yml",
         ".github/workflows/v2-development-delivery-privileged.yml",
         "infra/delivery_plan_validator.py",
+        "infra/golden_eval.tf",
         "infra/iam.tf",
         "infra/release_manifest.py",
         "v2/scripts/development_deployment_status.py",
