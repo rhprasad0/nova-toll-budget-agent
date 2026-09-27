@@ -101,18 +101,51 @@ def test_complete_development_contract_and_reference_labels() -> None:
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 147
+    assert len(examples) == 153
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 47,
+        False: 53,
     }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 144, "invalid": 3}
+    assert Counter(e.actor_validity for e in examples) == {"valid": 149, "invalid": 4}
     assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5
         assert "three_axle" not in case.model_dump_json()
         assert "adversarial_direct" not in case.coverage_tags
         assert "adversarial_tool" not in case.coverage_tags
+
+
+@pytest.mark.parametrize(
+    "text,source,unsupported",
+    [
+        ("$125.20, about $125", "125.20", False),
+        ("**$125.20**, approximately **$125**.", "125.20", False),
+        ("USD 125.20, roughly 125 dollars", "125.20", False),
+        ("$125.50, around $126", "125.50", False),
+        ("-$125.50, about -$126", "-125.50", False),
+        ("A $125.50 decrease, about $126 decrease", "-125.50", False),
+        ("$125.20, about $126", "125.20", True),
+        ("$125.20, $125", "125.20", True),
+        ("About $125, then $125.20", "125.20", True),
+        ("About $125", "125.20", True),
+        ("$125.20, about $125.00", "125.20", True),
+        ("$125.20, about $125k", "125.20", True),
+        ("$125.20, about $125 decrease", "125.20", True),
+        ("-$125.20, about $125", "-125.20", True),
+        ("$0.20, about $0", "0.20", True),
+        ("$125.20, about $125, but exactly $125", "125.20", True),
+    ],
+)
+def test_qualified_rounding_preserves_exact_money_checks(
+    text: str, source: str, unsupported: bool
+) -> None:
+    assert bool(golden.unsupported_money(text, {golden.Decimal(source)})) == unsupported
+
+
+def test_rounding_can_restate_prior_answer_but_not_superseded_evidence() -> None:
+    previous = {golden.Decimal("125.20")}
+    assert not golden.unsupported_money("About $125", previous, previous)
+    assert golden.unsupported_money("About $125", {golden.Decimal("140.20")}, previous)
 
 
 def test_annual_day_proposal_is_grounded_but_premature_use_is_not() -> None:

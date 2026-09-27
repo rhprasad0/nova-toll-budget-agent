@@ -1,6 +1,6 @@
 # TollChat evaluation
 
-**Current contract: 3.3.18 / harness 2.3.18.** Future development climbs optimize
+**Current contract: 3.3.20 / harness 2.3.20.** Future development climbs optimize
 overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
 three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
 never count as success. The separate 80% blind-holdout production standard does
@@ -10,14 +10,13 @@ and fully measured.
 Peak pricing requires a peak qualification; off-peak labels are optional.
 The authored references and SOP now match that rule. The harness checks
 tool-contract failures mechanically and requires verified
-assistant quotes for applicable schedule and vehicle-cost disclosures. Code
-locates every matching assistant turn. Disclosure requirements appear beside the
-original assistant answers; replay failures identify the differing fields.
-The Tysons round-trip contract distinguishes route-ID mapping from user consent.
-The three-calibration sequence is accepted. Ryan adjudicated the documented
-exceptions in runs 1 and 2; run 3 passed independent review with full label
-agreement. The experiment journal preserves the findings and limits.
-Earlier approvals do not transfer.
+assistant line IDs for applicable schedule and vehicle-cost disclosures. Code
+resolves IDs to the original text, preserving Markdown and assistant-only
+provenance. The judge selects all lines needed to convey the requirement;
+unknown IDs make the measurement unusable. Replay failures identify differing
+fields. Missing disclosures and contradictory claims still fail their rubrics.
+Calibration review records material disagreements without requiring perfect
+label agreement. See the experiment journal for accepted limitations.
 Before search, complete the runner guide's preparation and trajectory audit,
 human-reviewed merge and verified development migration/catalog parity. See the
 [experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.
@@ -33,7 +32,7 @@ output in ignored `eval/private/` or the existing private workflow store.
 ## Frozen golden evaluation
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
-  147 labeled references, 107 synthetic fixtures, and five-turn actors.
+  153 labeled references, 107 synthetic fixtures, and five-turn actors.
 - [Private authoring kit](HOLDOUT_AUTHORING.md): public instructions and an offline
   validator for independently authored private cases; no held-out data is included.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, three-trial application

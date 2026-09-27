@@ -363,6 +363,8 @@ class FixedPassCubedTest(unittest.TestCase):
             "2.3.16",
             "2.3.17",
             "2.3.18",
+            "2.3.19",
+            "2.3.20",
         ):
             left = self.current()
             right = self.current()
