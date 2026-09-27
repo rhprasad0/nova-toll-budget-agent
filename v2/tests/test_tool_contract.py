@@ -115,6 +115,38 @@ def test_manifest_accepts_additive_version_advance() -> None:
     version_check.validate_manifest_update(previous, current)
 
 
+@pytest.mark.parametrize(
+    ("base", "added"),
+    [
+        ("2.3.12", []),
+        ("2.3.12", ["2.3.13", "2.3.14", "2.3.15"]),
+        ("2.3.9", ["2.3.10", "2.4.0", "3.0.0"]),
+    ],
+)
+def test_manifest_accepts_accumulated_forward_releases(
+    base: str, added: list[str]
+) -> None:
+    previous: dict[str, Release] = {
+        "example": {"current": base, "releases": {base: "a" * 64}}
+    }
+    current = copy.deepcopy(previous)
+    for version in added:
+        current["example"]["releases"][version] = "b" * 64
+        current["example"]["current"] = version
+    version_check.validate_manifest_update(previous, current)
+
+
+def test_manifest_rejects_backfill_even_when_current_advances() -> None:
+    previous = _manifest()
+    current = copy.deepcopy(previous)
+    current["get_current_toll_price"]["current"] = "1.6.0"
+    current["get_current_toll_price"]["releases"].update(
+        {"1.4.1": "b" * 64, "1.6.0": "c" * 64}
+    )
+    with pytest.raises(ValueError, match="must advance beyond"):
+        version_check.validate_manifest_update(previous, current)
+
+
 def test_zero_base_ref_uses_head_parent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[list[str], dict[str, object]]] = []
 

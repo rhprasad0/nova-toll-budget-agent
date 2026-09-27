@@ -429,7 +429,7 @@ def test_system_prompt_manifest_rejects_invalid_contract(
         version_check.validate_manifest_update(previous, current)
 
 
-def test_system_prompt_manifest_rejects_rewrites_removals_and_extra_releases() -> None:
+def test_system_prompt_manifest_rejects_rewrites_and_removals() -> None:
     previous = _contract_manifest()
 
     rewritten = copy.deepcopy(previous)
@@ -440,11 +440,13 @@ def test_system_prompt_manifest_rejects_rewrites_removals_and_extra_releases() -
     with pytest.raises(ValueError, match="removes contracts: system_prompt"):
         version_check.validate_manifest_update(previous, {})
 
+
+def test_system_prompt_manifest_accepts_multiple_forward_releases() -> None:
+    previous = _contract_manifest()
     advanced = copy.deepcopy(previous)
     advanced["system_prompt"]["current"] = "2.5.0"
     advanced["system_prompt"]["releases"].update({"2.4.0": "b" * 64, "2.5.0": "c" * 64})
-    with pytest.raises(ValueError, match="exactly the new current release"):
-        version_check.validate_manifest_update(previous, advanced)
+    version_check.validate_manifest_update(previous, advanced)
 
 
 def _before_tool(

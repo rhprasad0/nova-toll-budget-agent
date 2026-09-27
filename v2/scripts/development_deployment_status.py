@@ -230,7 +230,15 @@ def _outputs(job: dict[str, Any]) -> dict[str, Any]:
 
 
 def _record(needs: dict[str, Any]) -> int:
-    return _positive(_outputs(_job(needs, "release-record")).get("deployment_id"))
+    job = _job(needs, "release-record")
+    record = _outputs(job).get("deployment_id")
+    if record in (None, "") and job.get("result") in (
+        "failure",
+        "cancelled",
+        "skipped",
+    ):
+        raise DeploymentStatusError("upstream_failed")
+    return _positive(record)
 
 
 def _prerequisites(
