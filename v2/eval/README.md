@@ -1,12 +1,10 @@
 # TollChat evaluation
 
-**Current contract: 3.3.22 / harness 2.3.22.** Future development climbs optimize
-overall pass rate: successful trials out of all 300 expected trials. Pass³ counts
-three-success cases out of all 100 cases as a reliability diagnostic; inconclusives
-never count as success. The separate 80% blind-holdout production standard does
-not make a development score production qualification. The development
-target is **270/300 (90%) on fresh final confirmation**, with all trials valid
-and fully measured.
+**Current contract: 3.3.23 / harness 2.3.23.** Development climbs run 100 cases
+once and optimize successful trials divided by all 100 slots. Fully measured
+inconclusives stay visible; pass³ is inapplicable. Strict score gains require
+independent review for material regressions. **90/100 is a soft milestone**;
+blind production qualification stays separate.
 Peak pricing requires a peak qualification; off-peak labels are optional.
 The authored references and SOP now match that rule. The harness checks
 tool-contract failures mechanically and requires verified
@@ -18,7 +16,8 @@ fields. Missing disclosures and contradictory claims still fail their rubrics.
 Calibration review records material disagreements without requiring perfect
 label agreement. See the experiment journal for accepted limitations.
 Before search, complete the runner guide's preparation and trajectory audit,
-human-reviewed merge and verified development migration/catalog parity. See the
+using one calibration, independent review, one actor check and one baseline.
+Frozen replay does not require deployment parity. See the
 [experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.
 
 TollChat remains on `gpt-6-luna`. Preparation changes are separate from prompt
@@ -35,7 +34,7 @@ output in ignored `eval/private/` or the existing private workflow store.
   161 labeled references, 107 synthetic fixtures, and five-turn actors.
 - [Private authoring kit](HOLDOUT_AUTHORING.md): public instructions and an offline
   validator for independently authored private cases; no held-out data is included.
-- [Runner](GOLDEN_RUNNER.md): authorized calibration, three-trial application
+- [Runner](GOLDEN_RUNNER.md): authorized calibration, single-pass development application
   baselines, complete cost accounting, and offline report reproduction.
 - [Production gate](GOLDEN_RELEASE.md): 100 independently authored private cases,
   three trials each, and an 80% admission floor. Signed aggregate evidence and

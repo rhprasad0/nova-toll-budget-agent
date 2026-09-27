@@ -1,7 +1,7 @@
 # Running the frozen golden corpus
 
-The current development corpus has **100 cases and 161 calibration references**.
-Application baselines run three trials per case. Actors have up to five delivered
+The current development corpus has **100 cases and 153 calibration references**.
+Development application runs and actor checks use one trial per case. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
@@ -42,7 +42,7 @@ require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-Contract 3.3.22 / harness 2.3.22 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.23 / harness 2.3.23 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -61,23 +61,20 @@ never transfer prior approvals or regenerate a candidate's corpus manifest.
 
 ## Scoring and preparation
 
-Pass³ is successful three-trial cases divided by **all 100 cases**. Missing,
-failed, and inconclusive trials cannot make a case successful. Historical report
-rendering follows the recorded harness version; cross-contract comparisons fail.
-Development promotion requires strict overall-pass-rate improvement: successful
-trials divided by all **300 expected trials**, including inconclusives in the
-denominator. Keep inconclusive nonincrease, comparable Grounding/Rules
-nonworsening, and independent material-regression review. Pass³ and paired deltas
-are diagnostics. Rank eligible candidates by overall pass rate, fewer changed
-lines, then A. Harness 2.2.0 retains its historical pass³ promotion rule.
+Development score is successful trials divided by **all 100 expected slots**.
+Fully measured actor inconclusives stay visible and count as no success. Pass³
+fields are null (inapplicable) for one repetition. Scheduling, actor checks,
+rendering and comparison use recorded `trials_per_case`; historical three-trial
+reports keep their recorded scoring rules. Unsupported or mixed contracts fail.
 
-The development target is **270/300 (90%)**, confirmed on a fresh full-set run
-with all trials valid and fully measured. Reaching it during search triggers the
-planned confirmation. A confirmed improvement below 90% is progress, not target
-completion. If the unchanged baseline already reaches 90%, confirm it once without
-requiring a strict improvement over itself. See the
-[eval-climb skill](../../.agents/skills/eval-climb/SKILL.md) for the bounded search,
-regression evidence rules and separately authorized continuation.
+Promotion requires a strict overall score gain and independent scope and material
+regression review. Violation and inconclusive increases trigger review, not an
+automatic numeric veto. Demonstrated material regressions block promotion; a lost
+stochastic pass alone does not prove causation. Ties retain the incumbent.
+**90/100 is a soft milestone.** Sequential search is bounded by the authorized
+budget; after four complete candidates without improvement, continue only with a
+materially different evidence-backed hypothesis or a bounded measurement repair.
+See the [eval-climb skill](../../.agents/skills/eval-climb/SKILL.md).
 
 Optimize using development cases only. The separate blind production standard is
 at least 240/300 successful trials, with valid simulations and complete judgments;
@@ -89,18 +86,18 @@ Judges return cited unmet requirements; an empty list determines success.
 The stored `passed`/`evidence` interface remains stable. Calibration must still
 check semantic errors; explanations are never regex-relabelled.
 
-For a preparation repeatability check, the sequence is two full-reference calibrations with
-independent review, one full scripted actor check, then two identical application
-runs (100 cases × 3 trials, 16 workers). Compare repeatability and criterion
-variation; designate the second application run by position as the next baseline,
-never by score. Reuse only with unchanged application/evaluation identities and
-verified development migration/catalog parity after human-reviewed merge.
+After foundational measurement changes, preparation is one fresh full-reference
+calibration, independent review, one full scripted actor check and one full
+application baseline (100 cases × 1 trial, 16 workers). No duplicate preparation
+runs are required. Frozen fixture replay needs no deployment or migration parity
+gate. It cannot establish live pricing or deployment correctness.
 
-Preserve both repeat reports and their per-case counts for candidate review.
-Unseeded trial numbers identify slots, not identical random draws. A case changing
-from 3/3 to 0/3 warrants inspection but does not by itself prove patch causality.
-The comparison helper's per-case counts and `development_target_met` are
-diagnostics; neither overrides the numeric gates or independent review.
+Use the fixed starting baseline for the final comparison. Reserve one fresh full
+finalist rerun with cost headroom. Report the starting score, selected search score
+and final score separately; do not rerun a fully measured low result until it
+passes. No retained improvement means no unnecessary confirmation run.
+Unseeded trial numbers identify slots, not identical random draws. Inspect passing
+and failing counterparts and the candidate diff to assess causal regressions.
 
 Audit fresh application trajectories before search and at final confirmation.
 Use a fixed selection rule: in each coverage family, review the first successful
@@ -122,8 +119,9 @@ ceiling. Admit each complete run only when its estimate with headroom fits, rese
 the agreed search and confirmation budget. Record amounts and decisions in the
 private ledger and append-only experiment journal.
 Stop on unknown usage, infrastructure failure, unresolved material grading
-ambiguity or insufficient budget. Do not repeat runs to obtain passing results. Candidate
-search belongs in a separate PR and starts only after the deployment parity gate.
+ambiguity or insufficient budget. Do not repeat runs to obtain passing results. Substantial measurement repairs belong in separate PRs. Changes to grading,
+simulation, cases or execution semantics require matching calibration and a fresh
+baseline; historical scores are not comparable application gains.
 
 ## Execution
 

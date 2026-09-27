@@ -1,5 +1,5 @@
 name = "eval_cluster"
-description = "Diagnose TollChat development eval failures, propose two SOP or tool-description fixes for one mechanism, and flag deferred improvements."
+description = "Diagnose TollChat development eval failures, rank evidence-backed SOP or tool-description hypotheses, and flag deferred improvements."
 model = "gpt-6-luna"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
@@ -13,20 +13,21 @@ Read actual user turns, tool calls/results, deterministic checks, and judge
 verdicts; inspect relevant application code and passing sibling cases. Cluster by
 causal mechanism rather than judge label alone. Distinguish application failures
 from actor/judge/infrastructure defects. Do not suggest weakening a rubric or
-hard-coding fixture answers. Identify one high-value cause that can plausibly be
+hard-coding fixture answers. Rank high-value causes that can plausibly be
 fixed in the SOP or allowed literal tool descriptions, with implementation,
 schema structure, validation, models, and all other contract inputs unchanged.
 Read the skill's exact allowlist; description changes need its supported policy.
 
 Return JSON: failure_class, evidence (case/trial IDs and report references),
-hypotheses (exactly two distinct alternatives for that cause), allowed_files,
+hypotheses (ranked; no required count), allowed_files,
 permitted_edits (text regions, not whole-file permission), invariants, and checks
 (existing focused offline commands), and deferred_improvements. Each deferred
 idea names the location, failure evidence, proposed benefit, and scope/contract
 reason it cannot be tested. Surface such ideas for the parent's user notification,
 including when no allowed fix is justified; do not claim an unmeasured gain.
-Each hypothesis needs its mechanism,
-expected benefit, and likely regression. No scope expansion or implementation.
+Each hypothesis needs affected cases, passing counterexamples, predicted behavior,
+disconfirming evidence, mechanism, expected benefit, and likely regression.
+Respect prior rejected hypotheses as negative evidence. No scope expansion or implementation.
 If evidence is insufficient, scope is vague, or only code/scoring changes could
 fix the cause, return status=stop with reason, evidence, and any deferred ideas.
 The parent, not you, admits the plan.
