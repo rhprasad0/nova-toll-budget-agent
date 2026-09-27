@@ -335,6 +335,7 @@ def _render_prompt_points(points: list[_PromptPoint]) -> str:
         "greenway": ("1", "2A", "2B", "3", "4", "5", "6", "7", "8", "28"),
     }
     records = [point.model_dump(mode="json") for point in points]
+    # ponytail: bounded 500-point scan; index exits if the catalog limit grows.
     for point, record in zip(points, records, strict=True):
         order = eastbound.get(point.network_id, ())
         if (
