@@ -65,7 +65,8 @@ The separately authorized three-trial campaign may use
 `compare_runs.py BASELINE_REPORT CANDIDATE_REPORT --campaign-policy directed-catalog-v1`.
 This opt-in policy is limited to harness 2.3.27, three repetitions and renderer
 versions 1.0.0 and 1.0.2. It pins both Dulles route source graphs and application
-code outside the named renderer functions to the campaign's starting commit.
+code outside the supplemental catalog helper, its render expression and the
+renderer version literal to the campaign's starting commit.
 The usual identity checks still pin tools, corpus, actors, judges and model
 settings. Default and historical comparisons retain their original behavior.
 

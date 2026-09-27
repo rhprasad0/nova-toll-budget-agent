@@ -853,3 +853,23 @@ It scored **274/300 with 83% pass³**, gaining 23 slots and losing 14 against th
 Independent review inspected all 26 failures and successful controls for cancellation, wrong-role alternatives, cross-facility handling and separate returns. It found no demonstrated material regression. Two source-versus-sampling wording disputes remain recorded as failures and do not change selection. Three recurring direction cases still failed all repetitions, and returned-alternative scenarios scored **5/9**, versus **7/9** in the fixed baseline; the aggregate gain does not establish that those weaknesses were fixed. We selected this candidate for one final verification and deferred a direct location-pair lookup proposal without testing or claiming its benefit.
 
 Candidate `46476e87` cost **$1.183361570** across **2,017 known calls**. Cumulative spending reached **$31.275390280**, leaving **$9.291054240** under the unchanged ceiling. The search result exceeds the 271/300 target; only the separate final verification determines the delivery claim. Original grades and detailed evidence remain private.
+
+### 2026-09-27 — Final verification of the catalog candidate
+
+The selected application received one separate run on all 300 slots, with the same evaluated commit, corpus 3.3.27 / harness 2.3.27, model settings and calibration. It scored **269/300 with 78% pass³**: twelve successes above the fixed baseline, five below its selected search result, and two short of the **271/300** target. All 300 trials scored, with no inconclusives, **0 Grounding and 31 Rules violations**. The completed result was preserved without a retry; Ryan accepted this outcome.
+
+| Measure | Fixed baseline | Selected search | Final verification |
+| --- | ---: | ---: | ---: |
+| Successes | 257/300 | 274/300 | 269/300 |
+| Pass³ | 68% | 83% | 78% |
+| Scored Grounding violations | 3/299 | 2/300 | 0/300 |
+| Scored Rules violations | 39/299 | 25/300 | 31/300 |
+| Inconclusives | 1 | 0 | 0 |
+
+The baseline inconclusive carried one additional observed Rules finding. Final family successes were annual complete **57/60**, annual inputs **42/45**, annual interpretation **28/30**, annual routes **23/30**, current complete **46/60**, current evidence **30/30**, current state **28/30**, and mixed **15/15**. Annual routes remain weaker than the fixed baseline's **26/30**. Whole-trial latency was **25.98 seconds p50 / 42.84 seconds p95**. The final run gained 31 slots and lost 19 against baseline; trial numbers do not identify paired random draws.
+
+Final verification cost **$1.158477940** across **2,004 known calls**. The three candidates and final run cost **$4.651209190** across **7,981 known calls**, bringing cumulative spending to **$32.433868220** and leaving **$8.132576300** under the unchanged **$40.566444520** ceiling. All started calls were reconciled. Reused preparation incurred no additional cost; Codex agent usage is separate.
+
+Independent final review covered all 31 failures, passing counterparts for lost slots, and the prescribed first passing and failing trajectory in every coverage family. It found no decision-changing grading ambiguity or demonstrated material regression attributable to the change. Genuine route failures remain: two trials chose the wrong Jones Branch variant and another changed a separately supplied return route. Returned-alternative scenarios finished **6/9**, versus baseline **7/9** and search **5/9**. All seven other coverage families equaled or improved on baseline. We retain the application under the agreed above-baseline rule, with the target explicitly unmet.
+
+Publication advances prompt metadata to **2.3.15** and renderer **1.0.2**, preserving historical release hashes. All 100 rendered prompt hashes, full tool schemas, model settings, measurement inputs and SOP bytes match evaluated commit `46476e87`; application source differs only in the prompt version literal. The ordinary one-repetition default is restored. Validation passed 87 focused application/development tests, 16 comparison tests, corpus validation, contract-version checks, lint and type checks; earlier campaign preparation also passed the relevant runner/accounting checks. Detailed evidence stays private. These results measure the exposed development set under frozen replay and do not establish live pricing correctness or production qualification.
