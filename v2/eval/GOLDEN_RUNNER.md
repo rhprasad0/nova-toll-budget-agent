@@ -59,6 +59,39 @@ reports retain their original hash rules and cannot be compared with this contra
 Corpus review and fresh matching calibration are required before the next climb;
 never transfer prior approvals or regenerate a candidate's corpus manifest.
 
+## Directed-catalog campaign comparison
+
+The separately authorized three-trial campaign may use
+`compare_runs.py BASELINE_REPORT CANDIDATE_REPORT --campaign-policy directed-catalog-v1`.
+This opt-in policy is limited to harness 2.3.27, three repetitions and renderer
+versions 1.0.0 and 1.0.2. It pins both Dulles route source graphs and application
+code outside the supplemental catalog helper, its render expression and the
+renderer version literal to the campaign's starting commit.
+The usual identity checks still pin tools, corpus, actors, judges and model
+settings. Default and historical comparisons retain their original behavior.
+
+Independent review must verify that supplemental entry-to-exit relationships
+match all 189 canonical same-facility pairs, preserve every catalog record and
+field, and introduce no pricing, availability, consent or cross-facility claims.
+This evaluates the rendered application prompt. A pricing-runtime resolver
+requires a separate measurement repair because frozen replay replaces that code.
+The campaign's isolated manifest uses three repetitions; the ordinary development
+default stays at one. Results belong in the experiment journal.
+
+Retain evaluated source commits with the private reports in a self-contained
+`evaluated-sources.bundle`; temporary worktrees alone do not preserve them.
+The campaign archive contains this bundle and its SHA-256 receipt. In a fresh
+checkout, verify the receipt and import those commits before comparing reports:
+
+```bash
+git bundle verify /absolute/private-campaign/evaluated-sources.bundle
+git fetch /absolute/private-campaign/evaluated-sources.bundle \
+  'refs/tags/eval/three-trial-20260927/*:refs/tags/eval/three-trial-20260927/*'
+```
+
+These refs cover the fixed baseline and every candidate; the selected candidate
+also supplies final verification. Keep the bundle and raw reports private.
+
 ## Scoring and preparation
 
 Development score is successful trials divided by **all 100 expected slots**.
@@ -215,7 +248,8 @@ approvals. A source-checkout development baseline cannot qualify a release.
 
 The runner and comparison helpers derive execution slots from the recorded
 `trials_per_case` (1 or 3). The active development contract uses one repetition;
-three repetitions belong to historical development contracts.
+three repetitions are available for explicitly authorized campaigns and historical
+development contracts.
 Single-pass reports use all expected slots for overall pass rate and record
 Pass³ fields as `null` (inapplicable). Missing slots remain in the denominator;
 inconclusives remain explicit. Comparisons reject missing or duplicate slots,
