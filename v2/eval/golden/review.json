@@ -1,10 +1,10 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "920112acec9230b1c2212771eb16b1145d252aa3b47a5cab046e77ed6a94e67d",
   "human_trajectory_adjudication": false,
-  "reviewer": null,
-  "evidence": "Corpus 3.3.24 clarifies optional actor offers, background annual-day arithmetic and equal-valued scenario labels. Four focused calibration controls supplement the unchanged 161 prior references. Fresh calibration and independent review are required before application search.",
+  "reviewer": "Codex parent with independent measurement_review recommendation; Ryan-authorized continuation",
+  "evidence": "Parent accepts independent review:165/165 references,495 known calls,480/483 criterion labels,165/165 actor labels,161/161 effective overall verdicts and47/47 negative controls rejected. All four new controls and eight prior uncertainty controls match. All three semantic judges miss the known incorrect nearest-dollar restatement; deterministic unsupported_money rejects it overall. Preserve all grades and this bounded limitation; no human adjudication claimed.",
   "authorization": "Ryan explicitly authorized further hill climbing for testing and inspection of needed harness tweaks under the remaining existing evaluation allowance.",
-  "contract_commit": null,
-  "reviewed_at": null
+  "contract_commit": "45bfb292937e0998c8742145a951492b5f3db9c3",
+  "reviewed_at": "2026-09-27T13:13:40.181079+00:00"
 }
