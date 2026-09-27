@@ -507,7 +507,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "regressions": regressions,
         "violations": violations,
         "review_signals": review_signals,
-        "review_required": "Numeric eligibility still requires independent SOP/description scope and material-regression review; inspect every lost pass, new violation and inconclusive.",
+        "review_required": "Numeric eligibility still requires independent SOP/description scope and regression review; inspect every lost pass, new violation and inconclusive.",
     }
 
 
