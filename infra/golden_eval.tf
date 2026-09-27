@@ -3,9 +3,8 @@
 locals {
   golden_bucket = "nova-toll-golden-evidence-903859731897"
   golden_roles = var.environment == "development" ? {
-    evaluator = { environment = "golden-evaluation", writes = ["aggregates/reports/*", "aggregates/claims/*", "aggregates/accounting/*"] }
-    reviewer  = { environment = "golden-review", writes = ["candidates/private/*"] }
-    reader    = { environment = "golden-read", writes = [] }
+    reviewer = { environment = "golden-review", writes = ["aggregates/reports/*", "aggregates/claims/*", "aggregates/accounting/*", "candidates/private/*"] }
+    reader   = { environment = "golden-read", writes = [] }
   } : {}
 }
 

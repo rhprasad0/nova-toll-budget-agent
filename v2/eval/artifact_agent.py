@@ -30,10 +30,14 @@ class ArtifactAgent:
         journal: run.Journal | None = None,
         messages: list[str] | None = None,
         expected: dict[str, Any] | None = None,
+        *,
+        corpus_root: Path | None = None,
     ) -> None:
+        if corpus_root is not None and case is None:
+            raise ValueError("private artifact execution requires its current case")
         self.case, self.attempt, self.journal = case, attempt, journal
         self.messages = messages if messages is not None else []
-        self.replay = golden.Replay(case) if case else None
+        self.replay = golden.Replay(case, corpus_root) if case else None
         self.reserved: float | None = None
         self.calls = 0
         self.buffer = b""
@@ -48,21 +52,43 @@ class ArtifactAgent:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            env={"PATH": os.defpath, "LANG": "C.UTF-8"},
+            env={
+                "PATH": os.defpath,
+                "LANG": "C.UTF-8",
+                "OTEL_SDK_DISABLED": "true",
+                **{
+                    name: os.environ[name]
+                    for name in (
+                        "HTTPS_PROXY",
+                        "HTTP_PROXY",
+                        "NO_PROXY",
+                        "https_proxy",
+                        "http_proxy",
+                        "no_proxy",
+                        "SSL_CERT_FILE",
+                    )
+                    if name in os.environ
+                },
+            },
             cwd=bundle,
         )
         try:
             if self.receive() != {"event": "ready"}:
                 raise run.StopRun("artifact_bootstrap")
-            cases = golden.load_cases()
+            root = corpus_root if corpus_root is not None else golden.ROOT
+            dates = (
+                {"current": case.frozen_time.date().isoformat()}
+                if corpus_root is not None and case is not None
+                else {
+                    c.id: c.frozen_time.date().isoformat() for c in golden.load_cases()
+                }
+            )
             self.send(
                 {
                     "event": "init",
                     "api_key": api_key,
-                    "points": json.loads(
-                        (golden.ROOT / "prompt-points.json").read_text()
-                    ),
-                    "dates": {c.id: c.frozen_time.date().isoformat() for c in cases},
+                    "points": json.loads((root / "prompt-points.json").read_text()),
+                    "dates": dates,
                 }
             )
             value = self.receive()
@@ -119,6 +145,20 @@ class ArtifactAgent:
         return cast(dict[str, Any], value)
 
     def __call__(self, message: str) -> Answer:
+        started = time.monotonic()
+        try:
+            return self.turn(message)
+        finally:
+            if self.journal is not None and self.attempt is not None:
+                self.journal.append(
+                    {
+                        "event": "application_turn_finished",
+                        "attempt": self.attempt.id,
+                        "seconds": time.monotonic() - started,
+                    }
+                )
+
+    def turn(self, message: str) -> Answer:
         case, attempt, journal = self.case, self.attempt, self.journal
         assert (
             case is not None

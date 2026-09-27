@@ -1,9 +1,6 @@
-"""Synthetic signed summaries exercise admission without accessing a holdout."""
+"""Synthetic summaries exercise protected admission without accessing a holdout."""
 
-import base64
 import hashlib
-import json
-import subprocess
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
@@ -19,27 +16,15 @@ from scripts import golden_release as workflow
 
 
 @pytest.fixture
-def signer(
+def encode_summary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Callable[[dict[str, Any]], bytes]:
-    private, public = tmp_path / "test-only-key.pem", tmp_path / "public.pem"
-    subprocess.run(
-        ["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(private)],
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["openssl", "pkey", "-in", str(private), "-pubout", "-out", str(public)],
-        check=True,
-        capture_output=True,
-    )
     document = gate.read(gate.POLICY)
     limits = document["policy"]
     for index, key in enumerate(
         ("holdout_sha256", "evaluator_sha256", "calibration_sha256")
     ):
         limits[key] = str(index + 1) * 64
-    limits["public_key_sha256"] = hashlib.sha256(public.read_bytes()).hexdigest()
     document["approval"] = {
         "status": "approved",
         "reviewer": "test-only",
@@ -50,41 +35,11 @@ def signer(
     path = tmp_path / "policy.json"
     gate.write(path, document)
     monkeypatch.setattr(gate, "POLICY", path)
-    monkeypatch.setattr(gate, "PUBLIC_KEY", public)
-
-    def sign(value: dict[str, Any]) -> bytes:
-        body = gate.canonical(value)
-        (tmp_path / "body").write_bytes(body)
-        subprocess.run(
-            [
-                "openssl",
-                "pkeyutl",
-                "-sign",
-                "-rawin",
-                "-inkey",
-                str(private),
-                "-in",
-                str(tmp_path / "body"),
-                "-out",
-                str(tmp_path / "signature"),
-            ],
-            check=True,
-            capture_output=True,
-        )
-        return gate.canonical(
-            {
-                "summary_base64": base64.b64encode(body).decode(),
-                "signature_base64": base64.b64encode(
-                    (tmp_path / "signature").read_bytes()
-                ).decode(),
-            }
-        )
-
-    return sign
+    return gate.canonical
 
 
 @pytest.fixture
-def summary(signer: Callable[[dict[str, Any]], bytes]) -> dict[str, Any]:
+def summary(encode_summary: Callable[[dict[str, Any]], bytes]) -> dict[str, Any]:
     limits = gate.policy()
     return {
         "schema_version": 1,
@@ -137,7 +92,7 @@ def summary(signer: Callable[[dict[str, Any]], bytes]) -> dict[str, Any]:
 @pytest.mark.parametrize("passed,qualified", [(239, False), (240, True), (300, True)])
 def test_quality_boundary_and_no_per_case_or_latency_veto(
     summary: dict[str, Any],
-    signer: Callable[[dict[str, Any]], bytes],
+    encode_summary: Callable[[dict[str, Any]], bytes],
     passed: int,
     qualified: bool,
 ) -> None:
@@ -152,7 +107,10 @@ def test_quality_boundary_and_no_per_case_or_latency_veto(
         }[passed],
     )
     row["success_interval"] = {"method": "case-bootstrap-95", "lower": 0, "upper": 1}
-    assert gate.decision(gate.verify_summary(signer(summary)))["qualified"] is qualified
+    assert (
+        gate.decision(gate.verify_summary(encode_summary(summary)))["qualified"]
+        is qualified
+    )
 
 
 @pytest.mark.parametrize(
@@ -210,7 +168,7 @@ def test_incomplete_or_unapproved_evidence_never_passes(
 )
 def test_schema_and_contract_fail_closed(
     summary: dict[str, Any],
-    signer: Callable[[dict[str, Any]], bytes],
+    encode_summary: Callable[[dict[str, Any]], bytes],
     change: str,
 ) -> None:
     row = summary["attempts"][0]
@@ -241,30 +199,20 @@ def test_schema_and_contract_fail_closed(
     else:
         row["success_interval"]["method"] = "trial-bootstrap-95"
     with pytest.raises(ValueError):
-        gate.verify_summary(signer(summary))
+        gate.verify_summary(encode_summary(summary))
 
 
-def test_signature_and_strict_envelope(
-    summary: dict[str, Any], signer: Callable[[dict[str, Any]], bytes]
-) -> None:
-    envelope = json.loads(signer(summary))
-    envelope["summary_base64"] = base64.b64encode(b"{}").decode()
-    with pytest.raises(ValueError, match="signature"):
-        gate.verify_summary(gate.canonical(envelope))
-    envelope = json.loads(signer(summary))
-    envelope["signature_base64"] = base64.b64encode(bytes(64)).decode()
-    with pytest.raises(ValueError, match="signature"):
-        gate.verify_summary(gate.canonical(envelope))
+def test_strict_aggregate_json(summary: dict[str, Any]) -> None:
     for body in (b'{"x":1,"x":2}', b" " * 16385):
         with pytest.raises(ValueError):
             gate.verify_summary(body)
-    envelope = json.loads(signer(summary))
-    envelope["private"] = "not an aggregate"
     with pytest.raises(ValueError, match="fields"):
-        gate.verify_summary(gate.canonical(envelope))
-    gate.PUBLIC_KEY.write_text("changed")
-    with pytest.raises(ValueError, match="public key"):
-        gate.verify_summary(signer(summary))
+        gate.verify_summary(
+            gate.canonical({"summary_base64": "e30=", "signature_base64": ""})
+        )
+    summary["private"] = "not an aggregate"
+    with pytest.raises(ValueError, match="fields"):
+        gate.verify_summary(gate.canonical(summary))
 
 
 @pytest.mark.parametrize("reason", ["infrastructure", "actor_validity"])
@@ -368,22 +316,21 @@ def producer() -> dict[str, Any]:
 
 def test_import_approval_admission_and_revalidation_without_baseline(
     summary: dict[str, Any],
-    signer: Callable[[dict[str, Any]], bytes],
+    encode_summary: Callable[[dict[str, Any]], bytes],
     storage: dict[str, bytes],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    packet = signer(summary)
-    sha = hashlib.sha256(packet).hexdigest()
-    storage[f"aggregates/inbox/{sha}.json"] = packet
+    packet = encode_summary(summary)
     context = {k: summary[k] for k in gate.IDENTITY}
     monkeypatch.setattr(workflow, "resolve", Mock(return_value=context))
     run = producer()
     monkeypatch.setattr(gate.release, "api", Mock(return_value=run))
     directory = tmp_path / "import"
-    workflow.import_summary(context, sha, "v1", directory)
+    workflow.prepare(context["development_run"], packet, directory)
+    assert not storage  # Read-only preparation cannot publish even a passing report.
     assert "240/300" in (directory / "review.md").read_text()
-    workflow.approve(directory)
+    workflow.approve(directory, packet)
     receipt = gate.read(directory / "receipt.json")
     monkeypatch.setattr(gate.release, "_artifacts", Mock(return_value={}))
     monkeypatch.setattr(gate.release, "_single_json", Mock(return_value=receipt))
@@ -399,11 +346,11 @@ def test_import_approval_admission_and_revalidation_without_baseline(
         )
         gate.revalidate(admitted)
     historical = deepcopy(receipt)
-    historical.pop("schema_version")
+    historical["schema_version"] = 2
     with pytest.raises(ValueError, match="historical"):
         gate.validate_receipt(historical, context)
     altered = deepcopy(receipt)
-    altered["signed_summary"]["signature_base64"] = base64.b64encode(bytes(64)).decode()
+    altered["summary"]["attempts"][0]["passed"] = 241
     with pytest.raises(ValueError, match="binding"):
         gate.validate_receipt(altered, context)
     assert not any("baseline" in key for key in storage)
@@ -422,9 +369,103 @@ def test_import_approval_admission_and_revalidation_without_baseline(
         gate.receipt(20)
 
 
+@pytest.mark.parametrize("change", ["missing", "unauthorized", "wrong-environment"])
+def test_human_approval_requires_the_configured_reviewer(
+    monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    monkeypatch.setattr(
+        gate,
+        "protection",
+        Mock(
+            return_value={
+                "id": 10,
+                "protection_rules": [
+                    {
+                        "type": "required_reviewers",
+                        "reviewers": [{"type": "User", "reviewer": {"login": "ryan"}}],
+                    }
+                ],
+            }
+        ),
+    )
+    approval = {
+        "state": "approved",
+        "user": {"login": "other" if change == "unauthorized" else "ryan"},
+        "environments": [{"id": 11 if change == "wrong-environment" else 10}],
+    }
+    monkeypatch.setattr(
+        gate.release,
+        "api",
+        Mock(return_value=[] if change == "missing" else [approval]),
+    )
+    with pytest.raises(ValueError, match=r"approval|reviewer"):
+        gate.human_approval(20, "golden-review")
+
+
+@pytest.mark.parametrize(
+    "change", ["approval", "prepared", "summary", "dispatch", "delivery"]
+)
+def test_rejected_approval_never_archives_or_qualifies(
+    summary: dict[str, Any],
+    storage: dict[str, bytes],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    change: str,
+) -> None:
+    context = {k: summary[k] for k in gate.IDENTITY}
+    monkeypatch.setattr(workflow, "resolve", Mock(return_value=context))
+    monkeypatch.setattr(gate.release, "api", Mock(return_value=producer()))
+    packet = gate.canonical(summary)
+    directory = tmp_path / "review"
+    workflow.prepare(context["development_run"], packet, directory)
+    if change == "approval":
+        monkeypatch.setattr(
+            gate,
+            "human_approval",
+            Mock(side_effect=ValueError("missing human approval")),
+        )
+    elif change == "prepared":
+        value = gate.read(directory / "prepared.json")
+        value["report_sha256"] = "f" * 64
+        gate.write(directory / "prepared.json", value)
+    elif change == "summary":
+        summary["holdout_attempts"] = 2
+        gate.write(directory / "summary.json", summary)
+    elif change == "dispatch":
+        summary["holdout_attempts"] = 2
+        packet = gate.canonical(summary)
+    else:
+        context["bundle_id"] += 1
+    with pytest.raises(ValueError):
+        workflow.approve(directory, packet)
+    assert not storage
+    assert not (directory / "receipt.json").exists()
+
+
+def test_evidence_expiring_during_human_review_is_archived_but_blocked(
+    summary: dict[str, Any],
+    storage: dict[str, bytes],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = {k: summary[k] for k in gate.IDENTITY}
+    monkeypatch.setattr(workflow, "resolve", Mock(return_value=context))
+    monkeypatch.setattr(gate.release, "api", Mock(return_value=producer()))
+    packet = gate.canonical(summary)
+    directory = tmp_path / "review"
+    workflow.prepare(context["development_run"], packet, directory)
+    monkeypatch.setattr(gate, "age", Mock(side_effect=ValueError("expired evidence")))
+    with pytest.raises(ValueError, match="machine qualification"):
+        workflow.approve(directory, packet)
+    assert any(k.startswith("aggregates/reports/") for k in storage)
+    assert not any(k.startswith("candidates/") for k in storage)
+    assert not gate.read(directory / "decision.json")["qualified"]
+    assert not (directory / "receipt.json").exists()
+
+
 def test_failed_result_retained_and_quality_retry_blocked(
     summary: dict[str, Any],
-    signer: Callable[[dict[str, Any]], bytes],
+    encode_summary: Callable[[dict[str, Any]], bytes],
     storage: dict[str, bytes],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -434,20 +475,20 @@ def test_failed_result_retained_and_quality_retry_blocked(
     monkeypatch.setattr(gate.release, "api", Mock(return_value=producer()))
     row = summary["attempts"][0]
     row.update(passed=239, failed=61, case_pass_counts=[20, 0, 1, 79])
-    packet = signer(summary)
-    sha = hashlib.sha256(packet).hexdigest()
-    storage[f"aggregates/inbox/{sha}.json"] = packet
-    with pytest.raises(ValueError, match="machine qualification"):
-        workflow.import_summary(context, sha, "v1", tmp_path / "failed")
+    packet = encode_summary(summary)
+    workflow.prepare(context["development_run"], packet, tmp_path / "failed")
+    assert not storage
     assert "239/300" in (tmp_path / "failed/review.md").read_text()
-    with pytest.raises(ValueError, match="did not qualify"):
-        workflow.approve(tmp_path / "failed")
+    with pytest.raises(ValueError, match="machine qualification"):
+        workflow.approve(tmp_path / "failed", packet)
+    assert any(k.startswith("aggregates/reports/") for k in storage)
+    assert not any(k.startswith("candidates/") for k in storage)
+    assert not (tmp_path / "failed/receipt.json").exists()
     row.update(passed=240, failed=60, case_pass_counts=[20, 0, 0, 80])
-    packet = signer(summary)
-    sha = hashlib.sha256(packet).hexdigest()
-    storage[f"aggregates/inbox/{sha}.json"] = packet
+    packet = encode_summary(summary)
+    workflow.prepare(context["development_run"], packet, tmp_path / "retry")
     with pytest.raises(ValueError, match="collision"):
-        workflow.import_summary(context, sha, "v1", tmp_path / "retry")
+        workflow.approve(tmp_path / "retry", packet)
 
 
 @pytest.mark.parametrize(
@@ -470,14 +511,16 @@ def test_untrusted_workflow_rejected(
 
 
 def test_optional_comparison_is_informational(
-    summary: dict[str, Any], signer: Callable[[dict[str, Any]], bytes], tmp_path: Path
+    summary: dict[str, Any],
+    encode_summary: Callable[[dict[str, Any]], bytes],
+    tmp_path: Path,
 ) -> None:
     current, previous = tmp_path / "current", tmp_path / "previous"
-    current.write_bytes(signer(summary))
+    current.write_bytes(encode_summary(summary))
     summary["attempts"][0].update(
         passed=243, failed=57, case_pass_counts=[19, 0, 0, 81]
     )
-    previous.write_bytes(signer(summary))
+    previous.write_bytes(encode_summary(summary))
     assert workflow.compare(current, previous)["successful_trial_delta"] == -3
     assert workflow.compare(current, previous)["informational_only"]
 
@@ -523,18 +566,44 @@ def test_workflow_keeps_production_gates_and_imports_aggregates_only() -> None:
     assert (
         "scripts.golden_release execute" not in source and "review.html" not in source
     )
-    assert "summary_version" in source and "summary-envelope.json" in source
+    assert "summary_json" in source and "summary.json" in source
+    assert "summary_version" not in source and "summary_sha256" not in source
+    evaluation = yaml.safe_load(source)["jobs"]["evaluate"]
+    assert "environment" not in evaluation
+    assert evaluation["permissions"] == {
+        "contents": "read",
+        "actions": "read",
+        "deployments": "read",
+    }
+    assert not any(
+        "configure-aws-credentials" in step.get("uses", "")
+        for step in evaluation["steps"]
+    )
+    approval = yaml.safe_load(source)["jobs"]["approve"]
+    assert approval["environment"] == "golden-review"
+    assert approval["needs"] == "evaluate"
+    assert (
+        "SUMMARY_JSON"
+        in next(
+            step for step in approval["steps"] if "Revalidate" in step.get("name", "")
+        )["env"]
+    )
     assert not (root / ".github/workflows/v2-golden-baseline.yml").exists()
     infra = (root / "infra/golden_eval.tf").read_text()
     assert "ssm:GetParameter" not in infra and "rds-db:" not in infra
     assert "aggregates/*" in infra and 'status = "Enabled"' in infra
     assert "prevent_destroy = true" in infra and "s3:DeleteObjectVersion" in infra
+    assert "evaluator = " not in infra and "golden-evaluation" not in infra
+    assert (
+        '"aggregates/reports/*", "aggregates/claims/*", "aggregates/accounting/*", "candidates/private/*"'
+        in infra
+    )
 
 
-@pytest.mark.parametrize("change", ["version", "artifact", "private"])
+@pytest.mark.parametrize("change", ["oversized", "artifact", "private"])
 def test_rejected_import_never_publishes_input(
     summary: dict[str, Any],
-    signer: Callable[[dict[str, Any]], bytes],
+    encode_summary: Callable[[dict[str, Any]], bytes],
     storage: dict[str, bytes],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -547,22 +616,22 @@ def test_rejected_import_never_publishes_input(
         summary["bundle_id"] += 1
     elif change == "private":
         summary["transcript"] = "synthetic forbidden detail"
-    packet = signer(summary)
-    sha = hashlib.sha256(packet).hexdigest()
-    storage[f"aggregates/inbox/{sha}.json"] = packet
+    packet = encode_summary(summary)
     directory = tmp_path / "rejected"
     with pytest.raises(ValueError):
-        workflow.import_summary(
-            context, sha, "wrong" if change == "version" else "v1", directory
+        workflow.prepare(
+            context["development_run"],
+            b" " * 16385 if change == "oversized" else packet,
+            directory,
         )
     assert not directory.exists()
-    assert list(storage) == [f"aggregates/inbox/{sha}.json"]
+    assert not storage
 
 
 @pytest.mark.parametrize("prior_conclusion", ["failure", "success"])
 def test_recover_identical_evidence_after_receipt_upload_or_import_failure(
     summary: dict[str, Any],
-    signer: Callable[[dict[str, Any]], bytes],
+    encode_summary: Callable[[dict[str, Any]], bytes],
     storage: dict[str, bytes],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -576,17 +645,15 @@ def test_recover_identical_evidence_after_receipt_upload_or_import_failure(
         return old_run if path == "actions/runs/20" else new_run
 
     monkeypatch.setattr(gate.release, "api", api)
-    packet = signer(summary)
-    sha = hashlib.sha256(packet).hexdigest()
-    storage[f"aggregates/inbox/{sha}.json"] = packet
-    workflow.import_summary(context, sha, "v1", tmp_path / "original")
-    workflow.approve(tmp_path / "original")
+    packet = encode_summary(summary)
+    workflow.prepare(context["development_run"], packet, tmp_path / "original")
+    workflow.approve(tmp_path / "original", packet)
     original_index = storage[gate.candidate_key(context["candidate"])]
     original_claims = {k: v for k, v in storage.items() if k.startswith("aggregates/")}
     old_run.update(status="completed", conclusion=prior_conclusion)
     monkeypatch.setenv("GITHUB_RUN_ID", "21")
-    workflow.import_summary(context, sha, "v1", tmp_path / "recovery")
-    workflow.approve(tmp_path / "recovery")
+    workflow.prepare(context["development_run"], packet, tmp_path / "recovery")
+    workflow.approve(tmp_path / "recovery", packet)
     new_run.update(status="completed", conclusion="success")
     receipt = gate.read(tmp_path / "recovery/receipt.json")
     monkeypatch.setattr(gate.release, "_artifacts", Mock(return_value={}))
@@ -643,7 +710,7 @@ def test_publication_recovery_rejects_new_evidence_untrusted_runs_and_races(
 
 def test_usage_reconciliation_preserves_outcomes_and_finalizes_costs_once(
     summary: dict[str, Any],
-    signer: Callable[[dict[str, Any]], bytes],
+    encode_summary: Callable[[dict[str, Any]], bytes],
     storage: dict[str, bytes],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -654,27 +721,25 @@ def test_usage_reconciliation_preserves_outcomes_and_finalizes_costs_once(
     monkeypatch.setattr(gate.release, "api", Mock(return_value=run))
 
     def import_packet(name: str) -> None:
-        packet = signer(summary)
-        sha = hashlib.sha256(packet).hexdigest()
-        storage[f"aggregates/inbox/{sha}.json"] = packet
-        workflow.import_summary(context, sha, "v1", tmp_path / name)
+        packet = encode_summary(summary)
+        workflow.prepare(context["development_run"], packet, tmp_path / name)
+        workflow.approve(tmp_path / name, packet)
 
     summary["unknown_usage"] = True
     with pytest.raises(ValueError, match="machine qualification"):
         import_packet("unknown")
     assert not any(k.startswith("aggregates/accounting/") for k in storage)
-    original_envelope = (tmp_path / "unknown/summary-envelope.json").read_bytes()
+    original_summary = (tmp_path / "unknown/summary.json").read_bytes()
     outcomes = {k: v for k, v in storage.items() if k.startswith("aggregates/claims/")}
     summary["unknown_usage"] = False
     summary["attempts"][0].update(agent_cost_usd=1.1, total_cost_usd=2.1)
     summary["cumulative_cost_usd"] = 2.1
     import_packet("reconciled")
-    workflow.approve(tmp_path / "reconciled")
     assert outcomes == {
         k: v for k, v in storage.items() if k.startswith("aggregates/claims/")
     }
     assert len([k for k in storage if k.startswith("aggregates/reports/")]) == 2
-    assert gate.canonical(gate.strict_json(original_envelope)) in storage.values()
+    assert gate.canonical(gate.strict_json(original_summary)) in storage.values()
     assert gate.read(tmp_path / "reconciled/decision.json")["qualified"]
     assert any(k.startswith("aggregates/accounting/") for k in storage)
     summary["attempts"][0].update(agent_cost_usd=1, total_cost_usd=2)

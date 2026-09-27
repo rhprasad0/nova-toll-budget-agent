@@ -6,6 +6,18 @@ not eligible holdout cases. No actual holdout has been authored or approved here
 
 ## Prepare the private session
 
+**In the author container**, the kit is already installed at `/opt/kit`. Read
+`/opt/kit/START_HERE.md`, `public/`, and `teaching/`; create the new corpus at
+`/private/corpus`. Dependencies are installed. Validate without downloads:
+
+```sh
+python -m eval.holdout_authoring validate /private/corpus
+python -m eval.holdout_authoring validate /private/corpus --final
+```
+
+The remaining setup commands are for using the standalone archive outside the
+container. Container operators follow the separately transferred setup guide.
+
 In the repository, export the reviewed public kit from `v2/`:
 
 ```sh
@@ -219,7 +231,8 @@ the original. Never change expectations based on candidate answers or scores.
 Later, the independent evaluator must adopt this exact input identity and pin
 its own runner, actor/judge configuration and calibration identity separately.
 Only the approved aggregate holdout digest goes back for policy activation.
-Signing keys, evaluator provisioning, paid calibration, and production approval
-remain separate prerequisites. The gate remains 100 cases × three trials, at
+Evaluator setup, paid calibration, and protected human production approval
+remain separate prerequisites. Only an aggregate report and approved identities
+return to the release gate. The gate remains 100 cases × three trials, at
 least 240/300 successes, all trials valid/scored, with the existing spending and
 provenance controls. This kit grants no authorization to execute those runs.

@@ -1,6 +1,6 @@
 # TollChat evaluation
 
-**Current contract: 3.3.27 / harness 2.3.27.** Development climbs run 100 cases
+**Current contract: 3.3.28 / harness 2.3.28; calibration review pending.** Development climbs run 100 cases
 once and optimize successful trials divided by all 100 slots. Fully measured
 inconclusives stay visible; pass³ is inapplicable. Strict score gains require
 independent review for material regressions. **90/100 is a soft milestone**;
@@ -40,8 +40,9 @@ output in ignored `eval/private/` or the existing private workflow store.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, single-pass development application
   baselines, complete cost accounting, and offline report reproduction.
 - [Production gate](GOLDEN_RELEASE.md): 100 independently authored private cases,
-  three trials each, and an 80% admission floor. Signed aggregate evidence and
-  protected review bind the exact artifact. Activation awaits the external evaluator;
+  three trials each, and an 80% admission floor. An aggregate report and protected
+  human approval bind the exact artifact. The [container kit](HOLDOUT_SETUP.md)
+  prepares private authoring and execution. Activation awaits private review;
   development scores and historical approvals cannot qualify production.
 
 From `v2/`, validate without model calls:

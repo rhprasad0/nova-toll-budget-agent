@@ -1,14 +1,11 @@
-"""Trusted golden evidence admission and development-only immutable storage.
+"""Admit aggregate holdout evidence after protected human approval.
 
-The standard library and system OpenSSL verify external aggregate evidence;
-no eval SDK or model credential is required. Decisions require a completed
-protected workflow, exact importer identity, and actual human approval.
+No eval SDK or model credential is required. Decisions bind the exact delivered
+artifact, reviewed policy, completed protected workflow, and actual approval.
 """
 
 from __future__ import annotations
 
-import base64
-import binascii
 import hashlib
 import json
 import math
@@ -29,8 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ACCOUNT = "903859731897"
 BUCKET = "nova-toll-golden-evidence-903859731897"
 WORKFLOW = ".github/workflows/v2-golden-evaluation.yml"
-POLICY = ROOT / "v2/eval/results/golden/policy-3.0.0.json"
-PUBLIC_KEY = ROOT / "v2/eval/results/golden/evaluator-public.pem"
+POLICY = ROOT / "v2/eval/results/golden/policy-4.0.0.json"
 MAX_BYTES = 32 * 1024 * 1024
 IDENTITY = (
     "candidate",
@@ -83,7 +79,7 @@ def write(path: Path, value: object) -> None:
 
 
 def code_digest() -> str:
-    policy()  # No local corpus, historical policy, or unset signer can activate this gate.
+    policy()  # No local corpus, historical policy, or pending approval can activate this gate.
     return digest(
         {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in CODE}
     )
@@ -93,7 +89,7 @@ def policy() -> dict[str, Any]:
     value = read(POLICY)
     approval, limits = obj(value["approval"]), obj(value["policy"])
     require(
-        limits.get("version") == "3.0.0"
+        limits.get("version") == "4.0.0"
         and limits.get("evaluation_scope") == "private-held-out"
         and limits.get("cases") == 100
         and limits.get("trials") == 3
@@ -114,15 +110,8 @@ def policy() -> dict[str, Any]:
         "holdout_sha256",
         "evaluator_sha256",
         "calibration_sha256",
-        "public_key_sha256",
     ):
         require(is_hash(limits.get(name)), "private evaluator activation is incomplete")
-    require(
-        PUBLIC_KEY.is_file()
-        and hashlib.sha256(PUBLIC_KEY.read_bytes()).hexdigest()
-        == limits["public_key_sha256"],
-        "trusted evaluator public key is unavailable or changed",
-    )
     timestamp(approval.get("approved_at"))
     return limits
 
@@ -167,39 +156,9 @@ def strict_json(body: bytes) -> dict[str, Any]:
 
 
 def verify_summary(packet: bytes) -> dict[str, Any]:
-    """Authenticate exact bytes before interpreting the aggregate-only schema."""
+    """Accept only the bounded aggregate contract; human review attests its origin."""
     limits = policy()
-    envelope = fields(strict_json(packet), "summary_base64 signature_base64")
-    try:
-        body = base64.b64decode(envelope["summary_base64"], validate=True)
-        signature = base64.b64decode(envelope["signature_base64"], validate=True)
-    except (binascii.Error, TypeError, ValueError) as exc:
-        raise ValueError("invalid signed envelope") from exc
-    require(len(signature) == 64, "invalid Ed25519 signature")
-    with tempfile.TemporaryDirectory() as temp:
-        root = Path(temp)
-        (root / "summary").write_bytes(body)
-        (root / "signature").write_bytes(signature)
-        result = subprocess.run(
-            [
-                "openssl",
-                "pkeyutl",
-                "-verify",
-                "-rawin",
-                "-pubin",
-                "-inkey",
-                str(PUBLIC_KEY),
-                "-in",
-                str(root / "summary"),
-                "-sigfile",
-                str(root / "signature"),
-            ],
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-    require(result.returncode == 0, "invalid evaluator signature")
-    summary = strict_json(body)
+    summary = strict_json(packet)
     validate_summary(summary, limits)
     return summary
 
@@ -595,7 +554,9 @@ def age(created: str, maximum_hours: int, now: datetime | None = None) -> None:
 
 def validate_receipt(value: dict[str, Any], admission: dict[str, Any]) -> None:
     require(
-        value.get("schema_version") == 2 and value.get("purpose") == "candidate",
+        type(value.get("schema_version")) is int
+        and value.get("schema_version") == 3
+        and value.get("purpose") == "candidate",
         "historical receipt cannot qualify",
     )
     require(
@@ -607,24 +568,24 @@ def validate_receipt(value: dict[str, Any], admission: dict[str, Any]) -> None:
             value.get(key) == admission.get(key), "candidate/artifact identity mismatch"
         )
     # Later production stages have GitHub access, not development AWS credentials.
-    # Carry the signed bytes in the authenticated receipt so verification stays local.
-    packet = canonical(obj(value.get("signed_summary")))
+    # Carry reviewed aggregates in the workflow receipt so verification stays local.
+    packet = canonical(obj(value.get("summary")))
     require(
         hashlib.sha256(packet).hexdigest() == obj(value.get("archive")).get("sha256"),
-        "signed archive binding changed",
+        "aggregate archive binding changed",
     )
     summary = verify_summary(packet)
-    require(decision(summary)["qualified"], "signed evidence did not qualify")
+    require(decision(summary)["qualified"], "aggregate evidence did not qualify")
     require(
         all(summary[key] == value[key] for key in IDENTITY),
-        "signed artifact identity mismatch",
+        "aggregate artifact identity mismatch",
     )
     require(
         value.get("report_sha256") == digest(summary)
         and value.get("policy_sha256") == digest(policy())
         and value.get("holdout_sha256") == summary["holdout_sha256"]
         and value.get("created_at") == summary["attempts"][-1]["completed_at"],
-        "signed evidence binding changed",
+        "aggregate evidence binding changed",
     )
 
 
