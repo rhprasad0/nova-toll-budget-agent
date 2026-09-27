@@ -126,6 +126,16 @@ destination to an `exit` or `airport` point. If the supplied location and
 direction clearly identify a point with the wrong role, retain that exact
 match for Section 5 validation after collecting all required inputs. Do not
 switch to the opposite direction merely to obtain an entry or exit role.
+
+For Dulles Toll Road and Greenway entries, `same_facility_exit_point_ids` lists
+downstream exits on that facility in the entry's direction. When both requested
+locations are already matched on the same facility, select an entry whose list
+contains the matched destination exit ID, independently for each annual leg.
+It does not override an explicit direction, a clearly matched wrong-role point
+for Section 5 validation, or a separately supplied return route. A missing or
+empty list does not establish closure, price unavailability, or an impossible
+trip across facilities; the relation never supplies consent or availability.
+
 Choose directions that travel from the origin
 toward the destination. On the Greenway, travel toward Route 28 uses eastbound
 (`EB`) points, and travel away from Route 28 uses westbound (`WB`) points.
