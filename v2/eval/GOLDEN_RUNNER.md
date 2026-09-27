@@ -78,6 +78,20 @@ requires a separate measurement repair because frozen replay replaces that code.
 The campaign's isolated manifest uses three repetitions; the ordinary development
 default stays at one. Results belong in the experiment journal.
 
+Retain evaluated source commits with the private reports in a self-contained
+`evaluated-sources.bundle`; temporary worktrees alone do not preserve them.
+The campaign archive contains this bundle and its SHA-256 receipt. In a fresh
+checkout, verify the receipt and import those commits before comparing reports:
+
+```bash
+git bundle verify /absolute/private-campaign/evaluated-sources.bundle
+git fetch /absolute/private-campaign/evaluated-sources.bundle \
+  'refs/tags/eval/three-trial-20260927/*:refs/tags/eval/three-trial-20260927/*'
+```
+
+These refs cover the fixed baseline and every candidate; the selected candidate
+also supplies final verification. Keep the bundle and raw reports private.
+
 ## Scoring and preparation
 
 Development score is successful trials divided by **all 100 expected slots**.
