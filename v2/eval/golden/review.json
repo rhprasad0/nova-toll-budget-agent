@@ -1,10 +1,10 @@
 {
-  "status": "approved",
-  "corpus_sha256": "9f324029980a73c53a0a6f4a75d4562f9afaa224915f5b433b5d6273c28b5b00",
+  "status": "pending",
+  "corpus_sha256": "56c69e572cace45403bcfc47e830beb4be56cd9734274e61b83dec5ec1b147f1",
   "human_trajectory_adjudication": false,
-  "reviewer": "Codex parent with independent measurement_review recommendation; Ryan-authorized campaign",
-  "evidence": "Parent accepted independent measurement_review recommendation under Ryan authorization:161/161 references,483 known calls,468/471 criterion labels,156/157 overall verdicts,161/161 actor labels,24/24 new paired criteria and45/45 negative controls rejected overall. Preserve bounded Rules scenario-name false failure and Outcome/Rules wrong-rounding false passes; Grounding and deterministic money check reject the incorrect amount. No relabeling, repeated calibration or claimed human adjudication.",
-  "authorization": "Ryan explicitly authorized the stacked measurement changes and $25 additional eval API spending; this layer ran offline checks only.",
-  "contract_commit": "f700aa3bec8daadad5a4d2bcda99ddf0a2edf9e5",
-  "reviewed_at": "2026-09-27T11:46:36.222852+00:00"
+  "reviewer": null,
+  "evidence": "Post-review compatibility fix adds historical harness 1.2.10 to the three-trial whitelist. Active 2.3.23 execution and judging are unchanged, but the pinned repetition helper and corpus hashes changed. Prior calibration approval belongs to corpus hash 9f324029980a73c53a0a6f4a75d4562f9afaa224915f5b433b5d6273c28b5b00 and commit f700aa3bec8daadad5a4d2bcda99ddf0a2edf9e5; its results remain in the experiment journal. This revised identity needs fresh reviewed calibration before future paid application runs.",
+  "authorization": "Ryan explicitly authorized the stacked measurement changes, $25 additional eval API spending, and addressing PR feedback before merging. This compatibility revision used offline checks only.",
+  "contract_commit": null,
+  "reviewed_at": null
 }
