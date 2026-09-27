@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.25"
+CORPUS_VERSION = "3.3.26"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -129,6 +129,10 @@ plain text instead of Markdown, different headings, emoji choices or omission,
 table versus prose, ordering, and harmless verbosity are not failures. An exact
 prescribed response may be paraphrased if its material meaning is preserved.
 Assess the whole conversation; do not demand repeated disclosures.
+Acknowledging that a user-canceled request is canceled or stopped is supported
+when the assistant honors the withdrawal without further calls. It need not
+claim that a tool ran or an external operation was canceled. A claim of canceling
+an external payment, booking, or other completed action still requires evidence.
 Generic background arithmetic, such as a 52-week example, does not propose or
 adopt replacement annual days when the assistant clearly retains the supplied
 count. Check the actual proposal, required confirmation and call arguments.
@@ -737,6 +741,16 @@ def unsupported_money(
     text: str, allowed: set[Decimal], reported: set[Decimal] | None = None
 ) -> set[Decimal]:
     text = _money_text(text)
+    # ponytail: recognize explicit zero-price denials only; broader negation needs
+    # labeled contrasts before relaxing the deterministic money guard.
+    text = re.sub(
+        r"\b(?:does not|doesn['\u2019]t|do not|don['\u2019]t) mean (?:that )?"
+        r"(?:the )?(?:tolls?|prices?|costs?) (?:is|was|are|were) "
+        r"\$0(?:\.0{1,2})?(?!\w|[,.]\d)",
+        "[zero-price denial]",
+        text,
+        flags=re.IGNORECASE,
+    )
 
     def restatement(match: re.Match[str]) -> str:
         amount = currency_decimal(match)

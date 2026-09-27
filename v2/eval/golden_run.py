@@ -33,7 +33,7 @@ from eval import golden
 from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.25"
+VERSION = "2.3.26"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",

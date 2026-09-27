@@ -101,12 +101,12 @@ def test_complete_development_contract_and_reference_labels() -> None:
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 168
+    assert len(examples) == 172
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 68,
+        False: 72,
     }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 164, "invalid": 4}
+    assert Counter(e.actor_validity for e in examples) == {"valid": 168, "invalid": 4}
     assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5
@@ -551,3 +551,50 @@ def test_optional_refinement_and_sampling_window_boundaries() -> None:
     assert isinstance(available, dict) and isinstance(target, dict)
     assert available["end_date"] == "2026-09-22"
     assert target["end_date"] == "2026-09-23"
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("This doesn\u2019t mean tolls were $0.", set[golden.Decimal]()),
+        ("This does not mean the price is **$0.00**.", set[golden.Decimal]()),
+        ("These do not mean that costs are USD 0.", set[golden.Decimal]()),
+        ("The tolls were $0.", {golden.Decimal("0")}),
+        ("This does not mean tolls were $0,000.", {golden.Decimal("0")}),
+        ("This doesn't mean tolls were $0.01.", {golden.Decimal("0.01")}),
+        ("This doesn't mean tolls were $0k.", {golden.Decimal("0")}),
+        ("This doesn't mean tolls were $0. Tolls are $0.", {golden.Decimal("0")}),
+        (
+            "This doesn't mean tolls were $0, but the price is $5.",
+            {golden.Decimal("5")},
+        ),
+    ],
+)
+def test_zero_price_denial_keeps_affirmative_money_checks(
+    text: str, expected: set[golden.Decimal]
+) -> None:
+    assert golden.unsupported_money(text, set()) == expected
+
+
+def test_cancellation_and_zero_denial_reference_boundaries() -> None:
+    raw = json.loads((golden.ROOT / "examples.json").read_text())
+    assert golden.digest(raw[:168]) == (
+        "8c0103b3d6d3f352fd891d9272ff45366b8737f030ad9754449fdec7b0fdc4fa"
+    )
+    cases = {c.id: c for c in golden.load_cases()}
+    refs = {e.label: e for e in run.development_examples()}
+    for positive, negative in (
+        ("missing-history-denies-zero", "missing-history-asserts-zero"),
+        ("cancel-request-acknowledged", "unsupported-external-cancellation"),
+    ):
+        good, bad = refs[positive], refs[negative]
+        assert good.turns[:-1] == bad.turns[:-1]
+        assert good.turns[-1].calls == bad.turns[-1].calls
+        assert good.turns[-1].user == bad.turns[-1].user
+        assert good.expected is not None and all(good.expected.model_dump().values())
+        assert bad.expected is not None and not any(bad.expected.model_dump().values())
+        assert golden.grade_assertions(cases[good.case_id], good.turns) == []
+    bad = refs["missing-history-asserts-zero"]
+    assert golden.grade_assertions(cases[bad.case_id], bad.turns) == [
+        "unsupported_money"
+    ]

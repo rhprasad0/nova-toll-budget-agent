@@ -1,10 +1,10 @@
 {
-  "status": "approved",
-  "corpus_sha256": "0945d462aab8d8e8fd2b1912939a538ef0e8b6de530b8525d4887c84faca5fba",
+  "status": "pending",
+  "corpus_sha256": "d89dc7ab7c7d946e02574a508e1f2a4e30a530e087819d794f1a97df4cbbb494",
   "human_trajectory_adjudication": false,
-  "evidence": "Parent accepts independent review under authorized imperfect-calibration allowance:168/168 references,504 known calls,488/492 criterion labels,168/168 actor labels,163/164 effective overall agreement and47/48 negative controls rejected. All three new controls match. All semantic judges miss incorrect rounding but unsupported_money rejects it overall. One unguarded Outcome false pass misses required peak disclosure; preserve all grades and explicitly audit peak disclosures in subsequent comparisons. No human adjudication claimed.",
-  "reviewer": "Codex parent with independent measurement_review recommendation; Ryan-authorized continuation",
-  "contract_commit": "a54fce7ebefc1fd868d1508d9d866889975952f8",
-  "reviewed_at": "2026-09-27T13:30:30.159433+00:00",
+  "evidence": "Four paired zero-price denial and cancellation controls require fresh calibration.",
+  "reviewer": "",
+  "contract_commit": null,
+  "reviewed_at": null,
   "authorization": "Ryan explicitly authorized further hill climbing for testing and inspection of needed harness tweaks under the remaining existing evaluation allowance."
 }

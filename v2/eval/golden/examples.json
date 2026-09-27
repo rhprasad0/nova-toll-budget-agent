@@ -22248,5 +22248,277 @@
     "actor_validity": "valid",
     "rationale": "Synthetic contrast: optional future refinement retains supplied days; sampling window does not assert an endpoint sample, while an explicit false last-sample date contradicts returned evidence.",
     "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-no-paired-annual-history",
+    "label": "missing-history-denies-zero",
+    "turns": [
+      {
+        "user": "Estimate annual affordability: Braddock Road to Westpark Drive and back, tuesday, wednesday, thursday, leaving at 7:45 AM and returning at 5:15 PM, 133 planned office days per year, gross annual salary $110750.00. Tell me if there is enough history for an affordability estimate.",
+        "response": "For 133 planned office days, gross annual income is $110750.00, with $73833.33 after the one-third assumed tax ($36916.67). The straight-line tolled distance is 22.16 miles per office day and 2947.68 miles annually; vehicle cost is $15.18 per office day and $2019.16 annually. There are no complete paired days: historical tolls and combined totals are unavailable, not zero. An affordability or remaining-income total cannot be provided. Coverage is 0 of 36 eligible paired dates (0.0%). Only straight-line distances of priced tolled facility legs are included; untolled travel is excluded. One-third tax is an assumption, not your actual tax calculation. Vehicle cost uses a fixed $0.685 per straight-line tolled mile assumption, not your personal expenses. \nThis doesn\u2019t mean tolls were $0.",
+        "calls": [
+          {
+            "name": "get_annual_toll_ballpark",
+            "input": {
+              "outbound": {
+                "origin_point_id": "i495:190NO",
+                "destination_point_id": "i495:185ND",
+                "departure_time": "07:45:00"
+              },
+              "return": {
+                "origin_point_id": "i495:185SO",
+                "destination_point_id": "i495:190SD",
+                "departure_time": "17:15:00"
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 133,
+              "gross_annual_income_usd": "110750.00"
+            },
+            "result": {
+              "method": "recent_complete_same_date_round_trips",
+              "evaluated_at": "2026-09-24T08:18:00-04:00",
+              "timezone": "America/New_York",
+              "target_window": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23",
+                "date_count": 84
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 133,
+              "coverage": {
+                "eligible_date_count": 36,
+                "complete_pair_count": 0,
+                "coverage_percent": "0.0",
+                "by_weekday": [
+                  {
+                    "weekday": "tuesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 0,
+                    "coverage_percent": "0.0"
+                  },
+                  {
+                    "weekday": "wednesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 0,
+                    "coverage_percent": "0.0"
+                  },
+                  {
+                    "weekday": "thursday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 0,
+                    "coverage_percent": "0.0"
+                  }
+                ]
+              },
+              "uses_modeled": false,
+              "uses_current_fixed_rates": false,
+              "facilities": [],
+              "assumptions": {
+                "estimated_tax_fraction": "1/3",
+                "vehicle_cost_per_mile_usd": "0.685",
+                "distance_method": "straight_line_priced_facility_legs",
+                "scope": "tolled_portions_only"
+              },
+              "income": {
+                "gross_annual_usd": "110750.00",
+                "estimated_tax_usd": "36916.67",
+                "estimated_after_tax_usd": "73833.33"
+              },
+              "tolled_distance": {
+                "daily_round_trip_miles": "22.16",
+                "annual_miles": "2947.68"
+              },
+              "vehicle_cost": {
+                "daily_usd": "15.18",
+                "annual_usd": "2019.16"
+              },
+              "error": "ballpark_unavailable",
+              "reason": "no_complete_paired_days",
+              "available_date_range": null
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [],
+    "expected": {
+      "outcome": true,
+      "grounding": true,
+      "rules": true
+    },
+    "actor_validity": "valid",
+    "rationale": "Paired boundary: denying zero tolls does not assert a price; acknowledging a canceled request does not claim an external cancellation. Affirmative unsupported amounts and external-action claims fail.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-no-paired-annual-history",
+    "label": "missing-history-asserts-zero",
+    "turns": [
+      {
+        "user": "Estimate annual affordability: Braddock Road to Westpark Drive and back, tuesday, wednesday, thursday, leaving at 7:45 AM and returning at 5:15 PM, 133 planned office days per year, gross annual salary $110750.00. Tell me if there is enough history for an affordability estimate.",
+        "response": "For 133 planned office days, gross annual income is $110750.00, with $73833.33 after the one-third assumed tax ($36916.67). The straight-line tolled distance is 22.16 miles per office day and 2947.68 miles annually; vehicle cost is $15.18 per office day and $2019.16 annually. There are no complete paired days: historical tolls and combined totals are unavailable, not zero. An affordability or remaining-income total cannot be provided. Coverage is 0 of 36 eligible paired dates (0.0%). Only straight-line distances of priced tolled facility legs are included; untolled travel is excluded. One-third tax is an assumption, not your actual tax calculation. Vehicle cost uses a fixed $0.685 per straight-line tolled mile assumption, not your personal expenses. \nThe tolls were $0.",
+        "calls": [
+          {
+            "name": "get_annual_toll_ballpark",
+            "input": {
+              "outbound": {
+                "origin_point_id": "i495:190NO",
+                "destination_point_id": "i495:185ND",
+                "departure_time": "07:45:00"
+              },
+              "return": {
+                "origin_point_id": "i495:185SO",
+                "destination_point_id": "i495:190SD",
+                "departure_time": "17:15:00"
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 133,
+              "gross_annual_income_usd": "110750.00"
+            },
+            "result": {
+              "method": "recent_complete_same_date_round_trips",
+              "evaluated_at": "2026-09-24T08:18:00-04:00",
+              "timezone": "America/New_York",
+              "target_window": {
+                "start_date": "2026-07-02",
+                "end_date": "2026-09-23",
+                "date_count": 84
+              },
+              "weekdays": [
+                "tuesday",
+                "wednesday",
+                "thursday"
+              ],
+              "planned_annual_commute_days": 133,
+              "coverage": {
+                "eligible_date_count": 36,
+                "complete_pair_count": 0,
+                "coverage_percent": "0.0",
+                "by_weekday": [
+                  {
+                    "weekday": "tuesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 0,
+                    "coverage_percent": "0.0"
+                  },
+                  {
+                    "weekday": "wednesday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 0,
+                    "coverage_percent": "0.0"
+                  },
+                  {
+                    "weekday": "thursday",
+                    "eligible_date_count": 12,
+                    "complete_pair_count": 0,
+                    "coverage_percent": "0.0"
+                  }
+                ]
+              },
+              "uses_modeled": false,
+              "uses_current_fixed_rates": false,
+              "facilities": [],
+              "assumptions": {
+                "estimated_tax_fraction": "1/3",
+                "vehicle_cost_per_mile_usd": "0.685",
+                "distance_method": "straight_line_priced_facility_legs",
+                "scope": "tolled_portions_only"
+              },
+              "income": {
+                "gross_annual_usd": "110750.00",
+                "estimated_tax_usd": "36916.67",
+                "estimated_after_tax_usd": "73833.33"
+              },
+              "tolled_distance": {
+                "daily_round_trip_miles": "22.16",
+                "annual_miles": "2947.68"
+              },
+              "vehicle_cost": {
+                "daily_usd": "15.18",
+                "annual_usd": "2019.16"
+              },
+              "error": "ballpark_unavailable",
+              "reason": "no_complete_paired_days",
+              "available_date_range": null
+            },
+            "is_error": false
+          }
+        ]
+      }
+    ],
+    "expected_failures": [
+      "unsupported_money"
+    ],
+    "expected": {
+      "outcome": false,
+      "grounding": false,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "rationale": "Paired boundary: denying zero tolls does not assert a price; acknowledging a canceled request does not claim an external cancellation. Affirmative unsupported amounts and external-action claims fail.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-cancel-unspecified-origin",
+    "label": "cancel-request-acknowledged",
+    "turns": [
+      {
+        "user": "Current toll to Wolf Trap on the Dulles Toll Road?",
+        "response": "Where will you enter?",
+        "calls": []
+      },
+      {
+        "user": "Never mind, cancel that check.",
+        "response": "No problem\u2014I've canceled the toll check.",
+        "calls": []
+      }
+    ],
+    "expected_failures": [],
+    "expected": {
+      "outcome": true,
+      "grounding": true,
+      "rules": true
+    },
+    "actor_validity": "valid",
+    "rationale": "Paired boundary: denying zero tolls does not assert a price; acknowledging a canceled request does not claim an external cancellation. Affirmative unsupported amounts and external-action claims fail.",
+    "rejected_tools": []
+  },
+  {
+    "case_id": "dev3-cancel-unspecified-origin",
+    "label": "unsupported-external-cancellation",
+    "turns": [
+      {
+        "user": "Current toll to Wolf Trap on the Dulles Toll Road?",
+        "response": "Where will you enter?",
+        "calls": []
+      },
+      {
+        "user": "Never mind, cancel that check.",
+        "response": "I canceled your E-ZPass payment with the toll operator.",
+        "calls": []
+      }
+    ],
+    "expected_failures": [],
+    "expected": {
+      "outcome": false,
+      "grounding": false,
+      "rules": false
+    },
+    "actor_validity": "valid",
+    "rationale": "Paired boundary: denying zero tolls does not assert a price; acknowledging a canceled request does not claim an external cancellation. Affirmative unsupported amounts and external-action claims fail.",
+    "rejected_tools": []
   }
 ]

@@ -511,7 +511,7 @@ class RepetitionContractTest(unittest.TestCase):
                     compare(left, broken)
 
     def test_single_pass_selection_reviews_increases_without_numeric_veto(self) -> None:
-        for version in ("2.3.23", "2.3.24", "2.3.25"):
+        for version in ("2.3.23", "2.3.24", "2.3.25", "2.3.26"):
             left = self.current(1)
             left["manifest"]["identity"]["harness_version"] = version
             right = copy.deepcopy(left)

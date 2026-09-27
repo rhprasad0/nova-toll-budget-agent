@@ -1,6 +1,6 @@
 # Running the frozen golden corpus
 
-The current development corpus has **100 cases and 168 calibration references**.
+The current development corpus has **100 cases and 172 calibration references**.
 Development application runs and actor checks use one trial per case. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
@@ -42,7 +42,7 @@ require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-Contract 3.3.25 / harness 2.3.25 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.26 / harness 2.3.26 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
