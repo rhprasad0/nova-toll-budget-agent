@@ -128,7 +128,9 @@ def test_outcome_places_original_answers_beside_disclosure_requirements(
         case, attempt, Mock(spec=Model), "contract", "FULL TOOL EVIDENCE"
     )
     prompt = evaluator.call_args.args[0]
-    block = prompt.split("ASSISTANT ANSWER LINES", 1)[1].split("DISCLOSURE ASSESSMENT", 1)[0]
+    block = prompt.split("ASSISTANT ANSWER LINES", 1)[1].split(
+        "DISCLOSURE ASSESSMENT", 1
+    )[0]
     assert (
         all(json.dumps(line) in block for line in answer.splitlines())
         and "USER ONLY" not in block
