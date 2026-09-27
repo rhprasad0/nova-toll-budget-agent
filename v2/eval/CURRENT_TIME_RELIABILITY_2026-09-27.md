@@ -126,44 +126,7 @@ The runner's primary failure labels partition the 43 non-successful slots: **37 
 
 The largest deficit is in complete current-price requests: **19 of 60 attempts do not succeed**, and only half the cases pass all three. Annual answers have a higher pooled success rate, but 15 of 55 annual cases still fail at least once.
 
-### Cases that did not pass all three
-
-`P` = recorded success; `F` = scored failure; `I` = actor-inconclusive. Trial patterns are shown in slot order. The other 68 cases are P/P/P. These aggregate labels preserve original grades, including any limitations discussed below; no transcripts are published.
-
-| Scenario | Successes | Slots 1 / 2 / 3 | Primary failure labels |
-| --- | ---: | --- | --- |
-| ryan road afternoon return | 0/3 | F / F / F | tool_use |
-| spring hill to reston | 0/3 | F / F / F | tool_use |
-| wiehle to fairfax parkway | 0/3 | F / F / F | tool_use |
-| battlefield weekend return | 1/3 | P / F / F | tool_use |
-| jones branch to gallows | 1/3 | F / F / P | tool_use |
-| ryan road reverse commute | 1/3 | F / F / P | tool_use |
-| supply missing weekdays | 1/3 | F / F / P | tool_use |
-| tysons jones branch selection | 1/3 | F / I / P | actor_validity, tool_use |
-| annual route cannot use current restart | 2/3 | F / P / P | grounding |
-| assumed tax meaning | 2/3 | P / F / P | tool_use |
-| belmont westbound pickup | 2/3 | F / P / P | tool_use |
-| beltway endpoints together | 2/3 | P / P / F | tool_use |
-| beltway to wiehle | 2/3 | P / P / F | tool_use |
-| cancel unspecified destination | 2/3 | P / F / P | tool_use |
-| collect salary before route alternatives | 2/3 | P / F / P | tool_use |
-| collect weekdays then propose days | 2/3 | F / P / P | grounding |
-| daily scenarios are not forecasts | 2/3 | F / P / P | tool_use |
-| decline returned beltway entries | 2/3 | P / P / F | tool_use |
-| five day ryan offer | 2/3 | P / P / F | tool_use |
-| gallows to jones branch | 2/3 | P / F / P | tool_use |
-| independent nearby office ramps | 2/3 | F / P / P | tool_use |
-| modeled beltway estimate | 2/3 | P / F / P | tool_use |
-| reston hybrid offer | 2/3 | P / P / F | tool_use |
-| revise hybrid office requirement | 2/3 | P / F / P | tool_use |
-| rising braddock quote | 2/3 | F / P / P | tool_use |
-| stale beltway observation | 2/3 | F / P / P | grounding |
-| supply both departure times | 2/3 | F / P / P | outcome |
-| sycamore washington offer | 2/3 | P / P / F | tool_use |
-| three day loudoun offer | 2/3 | F / P / P | tool_use |
-| tolled distance scope | 2/3 | P / F / P | tool_use |
-| washington corridor selection | 2/3 | F / P / P | clarification |
-| westpark to braddock | 2/3 | F / P / P | tool_use |
+Case-level trial patterns and failure labels remain in the private campaign archive.
 
 ## Cost, usage and latency
 
