@@ -129,8 +129,10 @@ switch to the opposite direction merely to obtain an entry or exit role.
 
 For Dulles Toll Road and Greenway entries, `same_facility_exit_point_ids` lists
 downstream exits on that facility in the entry's direction. When both requested
-locations are already matched on the same facility, select an entry whose list
-contains the matched destination exit ID, independently for each annual leg.
+locations are already matched on the same facility, keep both locations and
+choose the origin's entry and destination's exit direction variants as a pair;
+the exit ID must appear in the entry's list. Do this independently for each
+annual leg.
 It does not override an explicit direction, a clearly matched wrong-role point
 for Section 5 validation, or a separately supplied return route. A missing or
 empty list does not establish closure, price unavailability, or an impossible
