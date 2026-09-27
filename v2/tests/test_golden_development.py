@@ -101,12 +101,12 @@ def test_complete_development_contract_and_reference_labels() -> None:
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 165
+    assert len(examples) == 168
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 65,
+        False: 68,
     }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 161, "invalid": 4}
+    assert Counter(e.actor_validity for e in examples) == {"valid": 164, "invalid": 4}
     assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5
@@ -524,3 +524,30 @@ def test_grading_boundary_references_preserve_existing_evidence() -> None:
     assert inequality.turns[-1].response.startswith(original.turns[-1].response + "\n")
     assert inequality.expected is not None
     assert not any(inequality.expected.model_dump().values())
+
+
+def test_optional_refinement_and_sampling_window_boundaries() -> None:
+    raw = json.loads((golden.ROOT / "examples.json").read_text())
+    assert golden.digest(raw[:165]) == (
+        "37cf335943234591f123a877847c80b77aeb5cf14aef351d63f68fa2fcc195a6"
+    )
+    references = {(e.case_id, e.label): e for e in run.development_examples()}
+    for case_id, label in (
+        ("dev3-reverse-dulles-road-offer", "optional-future-office-days"),
+        ("dev3-hunter-mill-four-day-job", "sampling-target-window"),
+        ("dev3-hunter-mill-four-day-job", "false-last-sample-date"),
+    ):
+        example = references[case_id, label]
+        original = references[case_id, "good"]
+        assert example.turns[-1].calls == original.turns[-1].calls
+        assert example.turns[-1].response.startswith(original.turns[-1].response + "\n")
+        assert example.expected is not None
+        assert set(example.expected.model_dump().values()) == {
+            label != "false-last-sample-date"
+        }
+    sample = references["dev3-hunter-mill-four-day-job", "sampling-target-window"]
+    result = sample.turns[-1].calls[0].result
+    available, target = result["available_date_range"], result["target_window"]
+    assert isinstance(available, dict) and isinstance(target, dict)
+    assert available["end_date"] == "2026-09-22"
+    assert target["end_date"] == "2026-09-23"

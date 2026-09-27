@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.24"
+CORPUS_VERSION = "3.3.25"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -134,6 +134,15 @@ adopt replacement annual days when the assistant clearly retains the supplied
 count. Check the actual proposal, required confirmation and call arguments.
 Still fail substituting an unapproved count, proposing replacement days, or
 requiring reconfirmation of a count the user already supplied.
+After completing the requested estimate with supplied days, an optional offer
+to refine it later or discuss confirmed office days with a recruiter does not
+propose a replacement count or require reconfirmation. Fail an actual replacement
+proposal, required reconfirmation, or unauthorized new call, not that closing offer.
+Describing samples as drawn across the returned target window does not assert
+that every date or the window endpoint has an available sample. Keep coverage
+counts and source claims accurate. Explicit false first/last available-sample
+claims or invented observations on unavailable dates still fail; distinguish
+them from a description of the sampling window.
 Recognizable road abbreviations, including DTR/dtr for Dulles Toll Road, are
 acceptable when the route is clear, including lowercase and omitted hyphens.
 A recognizable road abbreviation alone is not an opaque internal endpoint ID.

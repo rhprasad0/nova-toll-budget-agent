@@ -34,7 +34,7 @@ consent, financial accuracy, security or route correctness. Carry ordinary
 sampling uncertainty into the single planned confirmation without imposing a
 per-case veto. Stop on substantive grading ambiguity. Never
 rewrite a verdict, retry a trial, or ignore a violation to promote a candidate.
-Under harness 2.3.24, violation and inconclusive increases trigger review;
+Under harness 2.3.25, violation and inconclusive increases trigger review;
 only strict overall score improvement is the numeric selection objective.
 Preserve historical gates when reviewing historical contracts. Independently
 inspect calibration disagreements and distinguish them from application failures. At final confirmation,

@@ -1,10 +1,10 @@
 {
-  "status": "approved",
-  "corpus_sha256": "920112acec9230b1c2212771eb16b1145d252aa3b47a5cab046e77ed6a94e67d",
+  "status": "pending",
+  "corpus_sha256": "0945d462aab8d8e8fd2b1912939a538ef0e8b6de530b8525d4887c84faca5fba",
   "human_trajectory_adjudication": false,
-  "reviewer": "Codex parent with independent measurement_review recommendation; Ryan-authorized continuation",
-  "evidence": "Parent accepts independent review:165/165 references,495 known calls,480/483 criterion labels,165/165 actor labels,161/161 effective overall verdicts and47/47 negative controls rejected. All four new controls and eight prior uncertainty controls match. All three semantic judges miss the known incorrect nearest-dollar restatement; deterministic unsupported_money rejects it overall. Preserve all grades and this bounded limitation; no human adjudication claimed.",
-  "authorization": "Ryan explicitly authorized further hill climbing for testing and inspection of needed harness tweaks under the remaining existing evaluation allowance.",
-  "contract_commit": "45bfb292937e0998c8742145a951492b5f3db9c3",
-  "reviewed_at": "2026-09-27T13:13:40.181079+00:00"
+  "evidence": "Three new paired boundary controls require fresh calibration before search.",
+  "reviewer": "",
+  "contract_commit": null,
+  "reviewed_at": null,
+  "authorization": "Ryan explicitly authorized further hill climbing for testing and inspection of needed harness tweaks under the remaining existing evaluation allowance."
 }
