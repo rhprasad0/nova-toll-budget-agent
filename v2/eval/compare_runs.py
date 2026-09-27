@@ -106,6 +106,8 @@ def paired(
         expected = {(cid, trial) for cid in cases for trial in trials}
         if len(slots) != len(set(slots)) or set(slots) - expected:
             raise ValueError("duplicate or unexpected trial")
+        if expected - set(slots):
+            raise ValueError("missing trial")
         for row in report["attempts"]:
             if row["status"] == "scored" and row["actor_validity"]["status"] == "valid":
                 rows[row["case_id"]].append(row)

@@ -43,6 +43,17 @@ def test_paired_comparison_excludes_invalid_actor_case(repetitions: int) -> None
     assert result["delta"] == 1
     assert result["ci95"] == [1, 1]
     assert paired(baseline, candidate, {"incomplete"})["delta"] is None
+    candidate["attempts"][-1]["status"] = "inconclusive"
+    assert (
+        paired(baseline, candidate, {"complete", "incomplete"})["excluded_cases"] == 1
+    )
+    with pytest.raises(ValueError, match="unknown comparison case"):
+        paired(baseline, candidate, {"unknown"})
+    for label in ("baseline", "candidate"):
+        left, right = deepcopy(baseline), deepcopy(candidate)
+        (left if label == "baseline" else right)["attempts"].pop()
+        with pytest.raises(ValueError, match="missing trial"):
+            paired(left, right, {"complete"})
     candidate["attempts"].append(candidate["attempts"][0])
     with pytest.raises(ValueError, match="duplicate"):
         paired(baseline, candidate, {"complete"})
