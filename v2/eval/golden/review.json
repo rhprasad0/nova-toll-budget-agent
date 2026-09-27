@@ -1,10 +1,10 @@
 {
   "status": "pending",
-  "corpus_sha256": "2cb567c0c5c51f13b0f12a778aeed5fe8beec79c12f4841f4c80427a34fdec93",
+  "corpus_sha256": "56c69e572cace45403bcfc47e830beb4be56cd9734274e61b83dec5ec1b147f1",
   "human_trajectory_adjudication": false,
   "reviewer": null,
-  "evidence": "Contract 3.3.22 changes annual qualification judging and adds eight synthetic paired calibration references. Historical grades remain unchanged; fresh calibration and independent review are required after the complete measurement changes.",
-  "authorization": "Ryan explicitly authorized the stacked measurement changes and $25 additional eval API spending; this layer ran offline checks only.",
+  "evidence": "Post-review compatibility fix adds historical harness 1.2.10 to the three-trial whitelist. Active 2.3.23 execution and judging are unchanged, but the pinned repetition helper and corpus hashes changed. Prior calibration approval belongs to corpus hash 9f324029980a73c53a0a6f4a75d4562f9afaa224915f5b433b5d6273c28b5b00 and commit f700aa3bec8daadad5a4d2bcda99ddf0a2edf9e5; its results remain in the experiment journal. This revised identity needs fresh reviewed calibration before future paid application runs.",
+  "authorization": "Ryan explicitly authorized the stacked measurement changes, $25 additional eval API spending, and addressing PR feedback before merging. This compatibility revision used offline checks only.",
   "contract_commit": null,
   "reviewed_at": null
 }

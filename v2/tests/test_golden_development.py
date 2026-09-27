@@ -322,12 +322,12 @@ def test_corrupted_corpus_is_rejected(
 
 def test_planned_trials_and_empty_holdout_have_no_success_rate() -> None:
     cases = golden.load_cases()
-    development = run.summary([], cases)
-    assert development["expected_trials"] == 300
+    development = run.summary([], cases, trials_per_case=1)
+    assert development["expected_trials"] == 100
     assert development["attempted_trials"] == 0
     assert development["pass_at_1"] is None
-    assert development["pass_cubed"] == 0
-    assert development["pass_cubed_case_denominator"] == 100
+    assert development["pass_cubed"] is None
+    assert development["pass_cubed_case_denominator"] is None
     assert not development["complete"]
     holdout = run.summary([], [case for case in cases if case.held_out])
     assert holdout["case_count"] == holdout["expected_trials"] == 0

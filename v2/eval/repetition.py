@@ -23,7 +23,7 @@ def report_trials(identity: dict[str, Any]) -> range:
         "2.1.1",
         "2.1.2",
         "2.2.0",
-        *(f"2.3.{n}" for n in range(23)),
+        *(f"2.3.{n}" for n in range(24)),
     }
     if version not in supported:
         raise ValueError(f"unsupported harness contract: {version}")

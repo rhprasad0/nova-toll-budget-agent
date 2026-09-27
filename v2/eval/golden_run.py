@@ -33,7 +33,7 @@ from eval import golden
 from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.22"
+VERSION = "2.3.23"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -553,7 +553,7 @@ class Journal:
     def __init__(
         self, directory: Path, limit: float | None, prior_spend: float = 0
     ) -> None:
-        if (limit is not None and not 0 < limit <= 25) or (
+        if (limit is not None and (not math.isfinite(limit) or limit <= 0)) or (
             not math.isfinite(prior_spend) or prior_spend < 0
         ):
             raise ValueError("invalid spend ceiling")

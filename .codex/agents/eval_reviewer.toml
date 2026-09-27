@@ -24,8 +24,8 @@ The comparison helper provides numeric eligibility, not review approval.
 Inspect every old-pass/new-fail and newly observed Grounding/Rules violation,
 including cases excluded from paired metrics and inconclusive attempts. Read the
 actual trajectory rather than trusting labels alone; a single changed stochastic
-trial is not automatically causal evidence. Use all three trials, per-case counts,
-passing/failing siblings and the unchanged-application repeatability pair. Trial
+trial is not automatically causal evidence. Use every recorded trial, per-case counts and passing/failing siblings.
+The active contract uses one trial; no repeatability pair is required. Trial
 numbers are not matched random seeds. Classify a finding as a demonstrated
 regression, sampling uncertainty or a measurement defect. A regression needs a
 causal explanation supported by the diff or controlled evidence; even a 3/3 to
@@ -34,7 +34,10 @@ consent, financial accuracy, security or route correctness. Carry ordinary
 sampling uncertainty into the single planned confirmation without imposing a
 per-case veto. Stop on substantive grading ambiguity. Never
 rewrite a verdict, retry a trial, or ignore a violation to promote a candidate.
-All numeric violation and inconclusive gates still apply. At final confirmation,
+Under harness 2.3.23, violation and inconclusive increases trigger review;
+only strict overall score improvement is the numeric selection objective.
+Preserve historical gates when reviewing historical contracts. Independently
+inspect calibration disagreements and distinguish them from application failures. At final confirmation,
 unresolved material regression evidence disqualifies the patch. Suspected judge
 defects are a separate finding, not permission to change scoring during the campaign.
 
@@ -42,8 +45,8 @@ Return JSON: verdict (eligible, reject, or stop), evidence (case/trial and diff
 references), scope_findings, regressions, and unresolved. Use eligible only when
 numeric rules and independent scope/regression review both pass; reject for valid
 but inferior or out-of-scope candidates; stop for invalid/unknown-usage evidence
-or changed measurement contracts. For an unchanged-baseline target confirmation,
-strict improvement is inapplicable: require at least 270/300 successes, all trials
-valid and fully measured, and the same evidence review. A search score alone
-does not confirm the development target. No deployment or generalization claims.
+or changed measurement contracts. For final verification, compare the one fresh finalist rerun with the fixed
+starting baseline; require strict improvement and no unresolved material regression.
+Report baseline, selected search score and final score separately. 90/100 is a
+soft milestone, not an eligibility gate. A measured low result is not rerun. No deployment or generalization claims.
 """

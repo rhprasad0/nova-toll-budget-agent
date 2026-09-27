@@ -20,7 +20,7 @@ behavior. Preserve consent, grounding, money, and route requirements.
 Never embed case IDs, fixture answers, or benchmark-specific branches. If the
 hypothesis needs broader changes, return blocked with the cause; do not improvise.
 
-Make the smallest coherent patch for your one alternative. Run the admitted
+Make the smallest coherent patch for your one admitted hypothesis. Run the admitted
 existing offline checks, including `uv run python -m eval.golden` from v2.
 Keep the corpus and normalized tool-source hashes unchanged; full schema hashes
 record candidate wording and may differ under the supported description policy.

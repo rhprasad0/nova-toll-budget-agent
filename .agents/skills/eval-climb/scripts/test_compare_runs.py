@@ -510,6 +510,37 @@ class RepetitionContractTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     compare(left, broken)
 
+    def test_single_pass_selection_reviews_increases_without_numeric_veto(self) -> None:
+        left = self.current(1)
+        left["manifest"]["identity"]["harness_version"] = "2.3.23"
+        right = copy.deepcopy(left)
+        right["attempts"][0]["verdicts"]["outcome"]["passed"] = True
+        right["attempts"][1]["verdicts"]["grounding"]["passed"] = False
+        right["attempts"][2]["verdicts"]["rules"]["passed"] = False
+        right["attempts"][-1].update(
+            status="inconclusive", actor_validity={"status": "uncertain"}
+        )
+        self.update(right)
+        result = compare(left, right)
+        self.assertTrue(result["numeric_eligible"])
+        self.assertEqual(result["criteria"], {"successful_trials_increased": True})
+        self.assertEqual(
+            set(result["review_signals"]),
+            {
+                "grounding_rate_not_worse",
+                "rules_rate_not_worse",
+                "inconclusive_not_increased",
+            },
+        )
+        self.assertEqual(result["candidate"]["overall_pass_rate"], 0.01)
+        self.assertEqual(result["candidate"]["inconclusive_trials"], 1)
+        self.assertIsNone(result["candidate"]["pass_cubed"])
+        self.assertFalse(compare(right, right)["numeric_eligible"])
+        # The prior grading layer keeps its historical nonincrease gates.
+        for value in (left, right):
+            value["manifest"]["identity"]["harness_version"] = "2.3.22"
+        self.assertFalse(compare(left, right)["numeric_eligible"])
+
     def test_unknown_contracts_do_not_fall_back(self) -> None:
         for version, repetitions in (
             ("1.2.10", 1),

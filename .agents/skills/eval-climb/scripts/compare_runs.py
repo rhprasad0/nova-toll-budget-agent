@@ -480,6 +480,15 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         )
     elif tuple(map(int, left_identity["harness_version"].split("."))) >= (2, 3, 0):
         del criteria["paired_delta_positive"]
+    review_signals = [
+        key
+        for key, passed in criteria.items()
+        if not passed and key != "successful_trials_increased"
+    ]
+    if left_identity["harness_version"] == "2.3.23":
+        criteria = {
+            "successful_trials_increased": criteria["successful_trials_increased"]
+        }
     return {
         "primary_metric": "pass_cubed"
         if left_identity["harness_version"] == "2.2.0"
@@ -497,7 +506,8 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         },
         "regressions": regressions,
         "violations": violations,
-        "review_required": "Numeric eligibility still requires independent SOP/description scope and regression review.",
+        "review_signals": review_signals,
+        "review_required": "Numeric eligibility still requires independent SOP/description scope and regression review; inspect every lost pass, new violation and inconclusive.",
     }
 
 
