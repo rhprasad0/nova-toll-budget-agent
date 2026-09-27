@@ -1,6 +1,6 @@
 {
   "system_prompt": {
-    "current": "2.3.14",
+    "current": "2.3.15",
     "releases": {
       "1.0.0": "45c5b073823ebbc4892a0535f301b9528be390ff7d6c8c4b5510f790cffd3438",
       "2.0.0": "151c16ab7cc3c09a3528f2176fbf88f205f8a390bff3780eb5a6a9174b81454c",
@@ -14,13 +14,15 @@
       "2.3.10": "ab577662ed29339360307b1111b0083b74527f3ea03f59b61a7d51888af3bbf4",
       "2.3.12": "c251d3fb2470e9d8aa5691a58f4bc5ddefc560b57930ac27c837edaf2e07a0a5",
       "2.3.13": "dac951c230cbcad5c68bea8794de2af6f59c314302485fe7593e85d81b5dd00b",
-      "2.3.14": "de845f47c5b19e53dd04823134be8f19c5f44704b256018998b12ca3909231bf"
+      "2.3.14": "de845f47c5b19e53dd04823134be8f19c5f44704b256018998b12ca3909231bf",
+      "2.3.15": "81655abe04a59479b04fa24ab8a5b443cf37efd8170828fb94986b7484ef013a"
     }
   },
   "system_prompt_renderer": {
-    "current": "1.0.0",
+    "current": "1.0.2",
     "releases": {
-      "1.0.0": "0a5ab4e47818ececb81ff5c408146ab5ce59e729d4cd82769e81709f1d8663f3"
+      "1.0.0": "0a5ab4e47818ececb81ff5c408146ab5ce59e729d4cd82769e81709f1d8663f3",
+      "1.0.2": "695a02e9a378ca79f6bdc62829e1a2aa0fa95b9c331767752f235877bc104871"
     }
   }
 }

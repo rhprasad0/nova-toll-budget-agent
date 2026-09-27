@@ -628,6 +628,7 @@ class CatalogCampaignTest(unittest.TestCase):
                 with self.subTest(changed=changed), self.assertRaises(ValueError):
                     compare(left, right, campaign_policy=CATALOG_POLICY)
             edited = admitted
+
         def changed_graph(commit: str, path: str) -> str:
             if commit == "b" * 40 and path.endswith(".json"):
                 return '{"pairs": [1]}'

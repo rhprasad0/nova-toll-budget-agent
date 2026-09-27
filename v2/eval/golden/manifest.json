@@ -2,7 +2,7 @@
   "version": "3.3.27",
   "evaluation_scope": "development",
   "case_count": 100,
-  "trials_per_case": 3,
+  "trials_per_case": 1,
   "actor_model": "gpt-6-luna",
   "judge_model": "gpt-6-luna",
   "hashes": {
