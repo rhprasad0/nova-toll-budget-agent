@@ -30,9 +30,10 @@ from strands_evals.types.trace import Session, TraceLevelInput
 
 from agent import toll_agent
 from eval import golden
+from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.20"
+VERSION = "2.3.21"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -1566,6 +1567,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
                 ).hexdigest()
                 for name in (
                     "golden.py",
+                    "repetition.py",
                     "../agent_tools/currency.py",
                     "golden_run.py",
                     "golden_actor_check.py",
@@ -1721,10 +1723,12 @@ def summary(
     legacy: bool | None = None,
     fixed_denominator: bool = True,
     overall_rate: bool = True,
+    trials_per_case: int = 3,
 ) -> dict[str, Any]:
     if legacy is None:
         legacy = all(c.contract_version < 2 for c in cases)
-    expected = {(c.id, n) for c in cases for n in (1, 2, 3)}
+    trials = trial_numbers({"trials_per_case": trials_per_case})
+    expected = {(c.id, n) for c in cases for n in trials}
     observed = [(a.case_id, a.trial) for a in attempts]
     if len(observed) != len(set(observed)) or set(observed) - expected:
         raise ValueError("duplicate or unexpected trial")
@@ -1762,7 +1766,7 @@ def summary(
         if legacy:
             samples = [
                 sum(
-                    sum(a.passed for a in g) / 3
+                    sum(a.passed for a in g) / trials_per_case
                     for g in rng.choices(groups, k=len(groups))
                 )
                 / len(groups)
@@ -1848,7 +1852,7 @@ def summary(
     if overall_rate:
         result["overall_pass_rate"] = passed / len(expected) if expected else None
     if not legacy:
-        complete_cases = sum(len(group) == 3 for group in groups)
+        complete_cases = sum(len(group) == trials_per_case for group in groups)
         result.update(
             {
                 "inconclusive_trials": len(attempts) - len(scored),
@@ -1876,7 +1880,7 @@ def summary(
                 "families": {
                     family: {
                         "cases": sum(c.coverage_family == family for c in cases),
-                        "expected_trials": 3
+                        "expected_trials": trials_per_case
                         * sum(c.coverage_family == family for c in cases),
                         "scored_trials": sum(a.case_id in ids for a in scored),
                         "successful_trials": sum(
@@ -1906,6 +1910,13 @@ def summary(
                 },
             }
         )
+    if trials_per_case == 1:
+        for key in (
+            "pass_cubed",
+            "passing_all_three_cases",
+            "pass_cubed_case_denominator",
+        ):
+            result[key] = None
     return result
 
 
@@ -1948,6 +1959,7 @@ def validate_identity(value: dict[str, Any]) -> None:
             raise ValueError("invalid identity digest")
     if not golden.re.fullmatch("[0-9a-f]{40}", value["commit"]):
         raise ValueError("invalid candidate commit")
+    report_trials(value)
     corpus = value["corpus"]
     if golden.digest(corpus["hashes"]) != corpus["corpus_sha256"]:
         raise ValueError("invalid corpus identity")
@@ -2188,6 +2200,7 @@ def render(directory: Path) -> dict[str, Any]:
                 legacy=legacy,
                 fixed_denominator=fixed_denominator,
                 overall_rate=overall_rate,
+                trials_per_case=len(report_trials(manifest["identity"])),
             ),
             "subsets": {},
             "attempts": [a.model_dump() for a in attempts],
@@ -2231,6 +2244,7 @@ def render(directory: Path) -> dict[str, Any]:
                 legacy=legacy,
                 fixed_denominator=fixed_denominator,
                 overall_rate=overall_rate,
+                trials_per_case=len(report_trials(manifest["identity"])),
             )
         lines = [
             "# Golden conversation report",
@@ -2389,7 +2403,7 @@ def main() -> None:
             futures = [
                 pool.submit(execute, case, number, journal)
                 for case in cases
-                for number in (1, 2, 3)
+                for number in report_trials(pinned)
             ]
             for future in as_completed(futures):
                 attempt = future.result()

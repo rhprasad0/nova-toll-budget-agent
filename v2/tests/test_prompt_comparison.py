@@ -9,14 +9,17 @@ from eval import golden, golden_run
 from eval.compare_runs import paired, with_recovery
 
 
-def test_paired_comparison_excludes_invalid_actor_case() -> None:
+@pytest.mark.parametrize("repetitions", [1, 3])
+def test_paired_comparison_excludes_invalid_actor_case(repetitions: int) -> None:
     baseline: dict[str, Any] = {
         "manifest": {
             "identity": {
+                "harness_version": "2.3.21",
+                "corpus": {"trials_per_case": repetitions},
                 "cases": [
                     {"id": cid, "split_group": "same"}
                     for cid in ("complete", "incomplete")
-                ]
+                ],
             }
         },
         "attempts": [
@@ -28,7 +31,7 @@ def test_paired_comparison_excludes_invalid_actor_case() -> None:
                 "overall_success": False,
             }
             for cid in ("complete", "incomplete")
-            for trial in (1, 2, 3)
+            for trial in range(1, repetitions + 1)
         ],
     }
     candidate = deepcopy(baseline)
@@ -40,6 +43,9 @@ def test_paired_comparison_excludes_invalid_actor_case() -> None:
     assert result["delta"] == 1
     assert result["ci95"] == [1, 1]
     assert paired(baseline, candidate, {"incomplete"})["delta"] is None
+    candidate["attempts"].append(candidate["attempts"][0])
+    with pytest.raises(ValueError, match="duplicate"):
+        paired(baseline, candidate, {"complete"})
 
 
 def test_recovery_preserves_scored_trials_and_all_costs() -> None:
@@ -75,7 +81,11 @@ def test_recovery_preserves_scored_trials_and_all_costs() -> None:
     attempts[-1].error = "TokenRetrievalError"
     original: dict[str, Any] = {
         "manifest": {
-            "identity": {"cases": [c.model_dump(mode="json") for c in cases]},
+            "identity": {
+                "harness_version": "2.3.21",
+                "corpus": {"trials_per_case": 3},
+                "cases": [c.model_dump(mode="json") for c in cases],
+            },
             "workers": 1,
         },
         "attempts": [a.model_dump(mode="json") for a in attempts],

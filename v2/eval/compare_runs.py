@@ -6,6 +6,8 @@ from collections import defaultdict
 from copy import deepcopy
 from typing import Any
 
+from eval.repetition import report_trials
+
 
 def with_recovery(original: dict[str, Any], recovery: dict[str, Any]) -> dict[str, Any]:
     """Resolve authentication-failed slots only; preserve all incurred usage."""
@@ -46,7 +48,14 @@ def with_recovery(original: dict[str, Any], recovery: dict[str, Any]) -> dict[st
         golden.GoldenCase.model_validate_json(json.dumps(case))
         for case in left["cases"]
     ]
-    result["overall"] = golden_run.summary(attempts, cases)
+    version = tuple(map(int, left["harness_version"].split(".")))
+    summary_options: dict[str, Any] = {
+        "legacy": version < (2, 0, 0),
+        "fixed_denominator": version >= (2, 2, 0),
+        "overall_rate": version >= (2, 3, 0),
+        "trials_per_case": len(report_trials(left)),
+    }
+    result["overall"] = golden_run.summary(attempts, cases, **summary_options)
     for name in original["subsets"]:
         subset = [
             c
@@ -61,7 +70,9 @@ def with_recovery(original: dict[str, Any], recovery: dict[str, Any]) -> dict[st
         ]
         ids = {c.id for c in subset}
         result["subsets"][name] = golden_run.summary(
-            [a for a in attempts if a.case_id in ids], subset
+            [a for a in attempts if a.case_id in ids],
+            subset,
+            **summary_options,
         )
     result["recovery"] = {
         "evidence_sha256": recovery["evidence_sha256"],
@@ -76,11 +87,25 @@ def with_recovery(original: dict[str, Any], recovery: dict[str, Any]) -> dict[st
 def paired(
     baseline: dict[str, Any], candidate: dict[str, Any], ids: set[str]
 ) -> dict[str, Any]:
-    """Pair complete three-trial cases; resample shared scenario groups."""
+    """Pair complete cases using their recorded trials; resample scenario groups."""
+    left_identity = baseline["manifest"]["identity"]
+    right_identity = candidate["manifest"]["identity"]
+    trials = report_trials(left_identity)
+    if report_trials(right_identity) != trials or any(
+        left_identity[key] != right_identity[key]
+        for key in ("harness_version", "corpus", "cases")
+    ):
+        raise ValueError("incompatible evaluation contract")
     cases = {c["id"]: c for c in baseline["manifest"]["identity"]["cases"]}
+    if ids - cases.keys():
+        raise ValueError("unknown comparison case")
     grouped: list[dict[str, list[dict[str, Any]]]] = []
     for report in (baseline, candidate):
         rows: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        slots = [(row["case_id"], row["trial"]) for row in report["attempts"]]
+        expected = {(cid, trial) for cid in cases for trial in trials}
+        if len(slots) != len(set(slots)) or set(slots) - expected:
+            raise ValueError("duplicate or unexpected trial")
         for row in report["attempts"]:
             if row["status"] == "scored" and row["actor_validity"]["status"] == "valid":
                 rows[row["case_id"]].append(row)
@@ -89,16 +114,14 @@ def paired(
     clusters: defaultdict[str, list[float]] = defaultdict(list)
     for cid in sorted(ids):
         left, right = (rows[cid] for rows in grouped)
-        if {r["trial"] for r in left} != {1, 2, 3} or {r["trial"] for r in right} != {
-            1,
-            2,
-            3,
-        }:
+        if {r["trial"] for r in left} != set(trials) or {
+            r["trial"] for r in right
+        } != set(trials):
             continue
         delta = (
             sum(r["overall_success"] for r in right)
             - sum(r["overall_success"] for r in left)
-        ) / 3
+        ) / len(trials)
         differences[cid] = delta
         clusters[cases[cid]["split_group"] or cid].append(delta)
     interval = None

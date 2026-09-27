@@ -7,6 +7,10 @@ import sys
 from pathlib import Path
 from typing import Any, TypeGuard, cast
 
+# Keep the command runnable from any checkout without application dependencies.
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "v2"))
+from eval.repetition import report_trials
+
 IDENTITY_KEYS = {
     "harness_version",
     "harness_sha256",
@@ -95,9 +99,8 @@ def identity(report: dict[str, Any], name: str) -> tuple[dict[str, Any], set[str
     require(
         is_record(corpus)
         and corpus.get("evaluation_scope") == "development"
-        and corpus.get("case_count") == 100
-        and corpus.get("trials_per_case") == 3,
-        f"{name}: expected 100 development cases with three trials",
+        and corpus.get("case_count") == 100,
+        f"{name}: expected 100 development cases",
     )
     require(
         is_record(corpus.get("hashes"))
@@ -123,6 +126,7 @@ def identity(report: dict[str, Any], name: str) -> tuple[dict[str, Any], set[str
         and corpus.get("judge_model") == "gpt-6-luna",
         f"{name}: wrong model",
     )
+    report_trials(value)
     cases = value["cases"]
     require(is_array(cases) and len(cases) == 100, f"{name}: expected 100 cases")
     ids = [c.get("id") for c in cases if is_record(c)]
@@ -158,6 +162,8 @@ def violation(row: dict[str, Any], key: str) -> bool:
 def attempts(
     report: dict[str, Any], ids: set[str], name: str
 ) -> tuple[dict[tuple[str, int], dict[str, Any]], dict[str, Any]]:
+    trials = report_trials(report["manifest"]["identity"])
+    expected_count = len(ids) * len(trials)
     rows = cast(list[dict[str, Any]], report.get("attempts"))
     require(is_array(rows), f"{name}: missing attempts")
     by_slot: dict[tuple[str, int], dict[str, Any]] = {}
@@ -165,7 +171,7 @@ def attempts(
         require(is_record(row), f"{name}: malformed attempt")
         cid, trial = row.get("case_id"), row.get("trial")
         require(
-            cid in ids and type(trial) is int and trial in (1, 2, 3),
+            cid in ids and type(trial) is int and trial in trials,
             f"{name}: unexpected trial {cid}/{trial}",
         )
         slot = cast(str, cid), cast(int, trial)
@@ -273,7 +279,7 @@ def attempts(
             "scored": status == "scored",
             "violations": {k: violation(row, k) for k in ("grounding", "rules")},
         }
-    expected = {(cid, trial) for cid in ids for trial in (1, 2, 3)}
+    expected = {(cid, trial) for cid in ids for trial in trials}
     require(
         set(by_slot) == expected,
         f"{name}: missing trials ({len(expected - set(by_slot))})",
@@ -283,11 +289,11 @@ def attempts(
     overall = cast(dict[str, Any], report.get("overall"))
     require(
         is_record(overall)
-        and overall.get("expected_trials") == 300
-        and overall.get("attempted_trials") == 300
+        and overall.get("expected_trials") == expected_count
+        and overall.get("attempted_trials") == expected_count
         and overall.get("scored_trials") == scored
         and overall.get("successful_trials") == successful
-        and overall.get("inconclusive_trials") == 300 - scored,
+        and overall.get("inconclusive_trials") == expected_count - scored,
         f"{name}: inconsistent overall counts",
     )
     for key in ("grounding", "rules"):
@@ -297,80 +303,74 @@ def attempts(
             aggregate.get("count") == count and aggregate.get("denominator") == scored,
             f"{name}: inconsistent {key} total",
         )
-    triples = sum(all(by_slot[cid, n]["passed"] for n in (1, 2, 3)) for cid in ids)
+    triples = sum(all(by_slot[cid, n]["passed"] for n in trials) for cid in ids)
     version = report["manifest"]["identity"]["harness_version"]
-    fixed = version in {
-        "2.2.0",
-        "2.3.0",
-        "2.3.1",
-        "2.3.2",
-        "2.3.3",
-        "2.3.4",
-        "2.3.5",
-        "2.3.6",
-        "2.3.7",
-        "2.3.8",
-        "2.3.9",
-        "2.3.10",
-        "2.3.11",
-        "2.3.12",
-        "2.3.13",
-        "2.3.14",
-        "2.3.15",
-        "2.3.16",
-        "2.3.17",
-        "2.3.18",
-        "2.3.19",
-        "2.3.20",
-    }
+    fixed = tuple(map(int, version.split("."))) >= (2, 2, 0)
     denominator = (
         100
         if fixed
-        else sum(all(by_slot[cid, n]["scored"] for n in (1, 2, 3)) for cid in ids)
+        else sum(all(by_slot[cid, n]["scored"] for n in trials) for cid in ids)
     )
-    if fixed:
+    if len(trials) == 1:
+        require(
+            all(
+                key in overall and overall[key] is None
+                for key in (
+                    "pass_cubed",
+                    "passing_all_three_cases",
+                    "pass_cubed_case_denominator",
+                )
+            ),
+            f"{name}: pass cubed is inapplicable to a single pass",
+        )
+    elif fixed:
         require(
             overall.get("pass_cubed") == triples / 100
             and overall.get("passing_all_three_cases") == triples
             and overall.get("pass_cubed_case_denominator") == 100,
             f"{name}: inconsistent fixed-denominator pass cubed",
         )
-    if version in {
-        "2.3.0",
-        "2.3.1",
-        "2.3.2",
-        "2.3.3",
-        "2.3.4",
-        "2.3.5",
-        "2.3.6",
-        "2.3.7",
-        "2.3.8",
-        "2.3.9",
-        "2.3.10",
-        "2.3.11",
-        "2.3.12",
-        "2.3.13",
-        "2.3.14",
-        "2.3.15",
-        "2.3.16",
-        "2.3.17",
-        "2.3.18",
-        "2.3.19",
-        "2.3.20",
-    }:
+    if tuple(map(int, version.split("."))) >= (2, 3, 0):
         require(
-            overall.get("overall_pass_rate") == successful / 300,
+            overall.get("overall_pass_rate") == successful / expected_count,
             f"{name}: inconsistent fixed-denominator overall pass rate",
         )
+    if tuple(map(int, version.split("."))) >= (2, 3, 21):
+        for role in ("agent", "actor", "judge"):
+            measurements = [
+                m for row in rows for m in row["measurements"] if m["role"] == role
+            ]
+            expected_usage = {
+                "calls": len(measurements),
+                **{
+                    key: sum(m[key] for m in measurements)
+                    for key in ("input_tokens", "output_tokens")
+                },
+            }
+            cost = overall.get("cost_usd", {}).get(role)
+            require(
+                overall.get("usage", {}).get(role) == expected_usage
+                and type(cost) in (int, float)
+                and math.isclose(
+                    cost,
+                    sum(m["cost_usd"] for m in measurements),
+                    rel_tol=1e-9,
+                    abs_tol=1e-12,
+                ),
+                f"{name}: inconsistent {role} usage accounting",
+            )
     return by_slot, {
-        "overall_pass_rate": successful / 300,
-        "pass_cubed": triples / denominator if denominator else None,
-        "passing_all_three_cases": triples,
-        "pass_cubed_case_denominator": denominator,
+        "overall_pass_rate": successful / expected_count,
+        "pass_cubed": triples / denominator
+        if denominator and len(trials) == 3
+        else None,
+        "passing_all_three_cases": triples if len(trials) == 3 else None,
+        "pass_cubed_case_denominator": denominator if len(trials) == 3 else None,
         "successful_trials": successful,
         "scored_trials": scored,
-        "inconclusive_trials": 300 - scored,
-        "development_target_met": successful >= 270 and scored == 300,
+        "inconclusive_trials": expected_count - scored,
+        "development_target_met": successful >= 0.9 * expected_count
+        and scored == expected_count,
         "inconclusive_slots": [
             {"case_id": cid, "trial": trial}
             for cid, trial in sorted(by_slot)
@@ -404,6 +404,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
             )
     left, left_totals = attempts(baseline, ids, "baseline")
     right, right_totals = attempts(candidate, ids, "candidate")
+    trials = report_trials(left_identity)
     case_results: list[dict[str, Any]] = []
     for case in sorted(left_identity["cases"], key=lambda case: case["id"]):
         cid = case["id"]
@@ -412,7 +413,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
             "coverage_family": case.get("coverage_family", ""),
         }
         for label, slots in (("baseline", left), ("candidate", right)):
-            rows = [slots[cid, n] for n in (1, 2, 3)]
+            rows = [slots[cid, n] for n in trials]
             result[label] = {
                 "successful_trials": sum(row["passed"] for row in rows),
                 "scored_trials": sum(row["scored"] for row in rows),
@@ -423,15 +424,15 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
             }
         case_results.append(result)
     common = {slot for slot in left if left[slot]["scored"] and right[slot]["scored"]}
-    paired = [cid for cid in sorted(ids) if all((cid, n) in common for n in (1, 2, 3))]
+    paired = [cid for cid in sorted(ids) if all((cid, n) in common for n in trials)]
     excluded = sorted(ids - set(paired))
     delta = (
         (
             sum(
-                sum(right[cid, n]["passed"] - left[cid, n]["passed"] for n in (1, 2, 3))
+                sum(right[cid, n]["passed"] - left[cid, n]["passed"] for n in trials)
                 for cid in paired
             )
-            / (3 * len(paired))
+            / (len(trials) * len(paired))
         )
         if paired
         else None
@@ -477,29 +478,7 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         criteria["pass_cubed_increased"] = (
             right_totals["pass_cubed"] > left_totals["pass_cubed"]
         )
-    elif left_identity["harness_version"] in {
-        "2.3.0",
-        "2.3.1",
-        "2.3.2",
-        "2.3.3",
-        "2.3.4",
-        "2.3.5",
-        "2.3.6",
-        "2.3.7",
-        "2.3.8",
-        "2.3.9",
-        "2.3.10",
-        "2.3.11",
-        "2.3.12",
-        "2.3.13",
-        "2.3.14",
-        "2.3.15",
-        "2.3.16",
-        "2.3.17",
-        "2.3.18",
-        "2.3.19",
-        "2.3.20",
-    }:
+    elif tuple(map(int, left_identity["harness_version"].split("."))) >= (2, 3, 0):
         del criteria["paired_delta_positive"]
     return {
         "primary_metric": "pass_cubed"

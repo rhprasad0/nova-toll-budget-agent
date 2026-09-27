@@ -27,12 +27,14 @@ pytestmark = pytest.mark.usefixtures("golden_test_data")
 @pytest.mark.parametrize("mode", ["calibrate", "run"])
 @pytest.mark.parametrize("workers", [3, 16])
 @pytest.mark.parametrize("uncapped", [False, True])
+@pytest.mark.parametrize("repetitions", [1, 3])
 def test_cli_runs_independent_work_in_parallel(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     mode: str,
     workers: int,
     uncapped: bool,
+    repetitions: int,
 ) -> None:
     root = tmp_path / "corpus"
     shutil.copytree(golden.ROOT, root)
@@ -41,7 +43,7 @@ def test_cli_runs_independent_work_in_parallel(
     barrier = Barrier(3, timeout=5)
     directory = tmp_path / mode
     calibration = tmp_path / "approved-calibration"
-    pinned = dict.fromkeys(
+    pinned: dict[str, Any] = dict.fromkeys(
         (
             "corpus",
             "judge_prompt_sha256",
@@ -55,6 +57,7 @@ def test_cli_runs_independent_work_in_parallel(
         ),
         "offline",
     )
+    pinned.update(harness_version=run.VERSION, corpus={"trials_per_case": repetitions})
     monkeypatch.setattr(run, "identity", Mock(return_value=pinned))
     monkeypatch.setattr(
         run,
@@ -105,7 +108,7 @@ def test_cli_runs_independent_work_in_parallel(
             "--calibration",
             str(calibration),
             "--cases",
-            golden_case(1).id,
+            *[golden_case(n).id for n in range(1, 4 if repetitions == 1 else 2)],
         ]
     monkeypatch.setattr("sys.argv", args)
     run.main()
@@ -1774,8 +1777,9 @@ def test_actor_check_uses_high_judge_and_medium_actor(
     assert factory.call_count == 2
 
 
+@pytest.mark.parametrize("repetitions", [1, 3])
 def test_actor_check_uncapped_cli_preserves_prior_spend(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, repetitions: int
 ) -> None:
     from eval import golden_actor_check
 
@@ -1784,8 +1788,32 @@ def test_actor_check_uncapped_cli_preserves_prior_spend(
         "sys.argv",
         ["actor-check", "--output", str(output), "--no-budget-limit", "--workers", "1"],
     )
-    monkeypatch.setattr(run, "identity", Mock(return_value={}))
-    monkeypatch.setattr(run, "development_examples", Mock(return_value=[]))
+    case = golden_case(1)
+    example = next(
+        e
+        for e in run.development_examples()
+        if e.case_id == case.id and e.label == "good"
+    )
+    monkeypatch.setattr(golden, "load_cases", lambda: [case])
+    monkeypatch.setattr(
+        run,
+        "identity",
+        Mock(
+            return_value={
+                "harness_version": run.VERSION,
+                "corpus": {"trials_per_case": repetitions},
+            }
+        ),
+    )
+    monkeypatch.setattr(run, "development_examples", Mock(return_value=[example]))
+
+    def scripted_check(
+        example: golden.Example, trial: int, journal: run.Journal
+    ) -> run.Attempt:
+        return attempt(case, trial)
+
+    check = Mock(side_effect=scripted_check)
+    monkeypatch.setattr(golden_actor_check, "check", check)
     monkeypatch.setattr(
         run, "prior_accounting", Mock(return_value=({"run_id": "prior"}, 30))
     )
@@ -1794,6 +1822,11 @@ def test_actor_check_uncapped_cli_preserves_prior_spend(
     assert manifest["budget_usd"] is None
     assert manifest["prior_spend_usd"] == 30
     assert manifest["prior_run_id"] == "prior"
+    assert [call.args[1] for call in check.call_args_list] == list(
+        range(1, repetitions + 1)
+    )
+    report = json.loads((output / "report.json").read_text())
+    assert report["expected_trials"] == report["valid_trials"] == repetitions
 
 
 @pytest.mark.parametrize("pending_reply", [False, True])
@@ -1875,3 +1908,51 @@ def test_judge_tool_schemas_emit_evidence_before_decisions() -> None:
         ],
     )
     assert not contradictory.verdict().passed
+
+
+@pytest.mark.parametrize("repetitions", [1, 3])
+def test_recorded_repetitions_control_summary_and_render(
+    tmp_path: Path, repetitions: int
+) -> None:
+    cases = [golden_case(1), golden_case(2)]
+    rows = [attempt(case, n) for case in cases for n in range(1, repetitions + 1)]
+    rows[-1].status = "inconclusive"
+    rows[-1].actor_validity = run.ActorAssessment(
+        status="uncertain", evidence="offline"
+    )
+    journal = run.Journal(tmp_path / "recorded", 25)
+    manifest = report_manifest(cases, harness_version=run.VERSION)
+    manifest["identity"]["tool_description_policy"] = golden.TOOL_DESCRIPTION_POLICY
+    manifest["identity"]["corpus"].update(
+        trials_per_case=repetitions,
+        tool_description_policy=golden.TOOL_DESCRIPTION_POLICY,
+    )
+    (journal.directory / "manifest.json").write_text(json.dumps(manifest))
+    for row in rows:
+        journal.append({"event": "attempt_finished", **row.model_dump()})
+    result = run.render(journal.directory)["overall"]
+    assert result["expected_trials"] == 2 * repetitions
+    assert result["overall_pass_rate"] == (2 * repetitions - 1) / (2 * repetitions)
+    assert result["inconclusive_trials"] == 1
+    assert result["cost_usd"]["agent"] == pytest.approx(0.02 * repetitions)
+    assert result["usage"]["agent"]["calls"] == 2 * repetitions
+    if repetitions == 1:
+        assert all(
+            result[key] is None
+            for key in (
+                "pass_cubed",
+                "passing_all_three_cases",
+                "pass_cubed_case_denominator",
+            )
+        )
+    partial = run.summary(rows[:-1], cases, trials_per_case=repetitions)
+    assert partial["overall_pass_rate"] == result["overall_pass_rate"]
+    assert not partial["complete"]
+    with pytest.raises(ValueError, match="duplicate"):
+        run.summary(rows + rows[:1], cases, trials_per_case=repetitions)
+    with pytest.raises(ValueError, match="unexpected"):
+        run.summary(
+            [attempt(cases[0], 2 if repetitions == 1 else 3)],
+            cases[1:],
+            trials_per_case=repetitions,
+        )
