@@ -39,7 +39,7 @@ _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _PROMPT_POINTS_SQL = "SELECT oracle.get_toll_route_prompt_points() AS points"
 SYSTEM_PROMPT_VERSION = "2.3.14"
-SYSTEM_PROMPT_RENDERER_VERSION = "1.0.0"
+SYSTEM_PROMPT_RENDERER_VERSION = "1.0.2"
 _EASTERN = ZoneInfo("America/New_York")
 _DUPLICATE_TOOL_STATE_KEY = "tollchat_v2_duplicate_tool_calls"
 _DUPLICATE_HOOK_ORDER = HookOrder.SDK_LAST + 1
@@ -327,6 +327,39 @@ def _agent_tools() -> list[Any]:
     return tools
 
 
+def _render_prompt_points(points: list[_PromptPoint]) -> str:
+    """Supplement endpoint records with same-facility directed topology only."""
+    # Source-node order from oracle/sources; exact pair equivalence is tested.
+    eastbound = {
+        "dtr": ("28", "10", "11", "12", "13", "14", "15", "16", "17", "1819", "66"),
+        "greenway": ("1", "2A", "2B", "3", "4", "5", "6", "7", "8", "28"),
+    }
+    records = [point.model_dump(mode="json") for point in points]
+    for point, record in zip(points, records, strict=True):
+        order = eastbound.get(point.network_id, ())
+        if (
+            point.point_type != "entry"
+            or point.direction not in ("EB", "WB")
+            or point.source_node_id not in order
+        ):
+            continue
+        entry_index = order.index(point.source_node_id)
+        record["same_facility_exit_point_ids"] = [
+            exit_point.point_id
+            for exit_point in points
+            if exit_point.network_id == point.network_id
+            and exit_point.direction == point.direction
+            and exit_point.point_type == "exit"
+            and exit_point.source_node_id in order
+            and (
+                order.index(exit_point.source_node_id) > entry_index
+                if point.direction == "EB"
+                else order.index(exit_point.source_node_id) < entry_index
+            )
+        ]
+    return json.dumps(records, indent=2)
+
+
 def _render_system_prompt_values(
     prompt_points: list[dict[str, object]] | list[_PromptPoint] | None = None,
     *,
@@ -345,9 +378,7 @@ def _render_system_prompt_values(
         )
     )
     return {
-        "PROMPT_POINTS_JSON": json.dumps(
-            [point.model_dump(mode="json") for point in points], indent=2
-        ),
+        "PROMPT_POINTS_JSON": _render_prompt_points(points),
         "CURRENT_DATE": current_date.strftime("%-m/%-d/%Y"),
     }
 
