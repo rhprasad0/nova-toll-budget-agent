@@ -23,11 +23,11 @@ def report_trials(identity: dict[str, Any]) -> range:
         "2.1.1",
         "2.1.2",
         "2.2.0",
-        *(f"2.3.{n}" for n in range(22)),
+        *(f"2.3.{n}" for n in range(23)),
     }
     if version not in supported:
         raise ValueError(f"unsupported harness contract: {version}")
     trials = trial_numbers(identity["corpus"])
-    if version != "2.3.21" and len(trials) != 3:
+    if tuple(map(int, version.split("."))) < (2, 3, 21) and len(trials) != 3:
         raise ValueError("historical harness contracts require three trials")
     return trials

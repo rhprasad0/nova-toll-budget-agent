@@ -101,12 +101,12 @@ def test_complete_development_contract_and_reference_labels() -> None:
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 153
+    assert len(examples) == 161
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 53,
+        False: 61,
     }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 149, "invalid": 4}
+    assert Counter(e.actor_validity for e in examples) == {"valid": 157, "invalid": 4}
     assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5
@@ -420,6 +420,40 @@ def test_schedule_provenance_contrast_preserves_price_and_calls() -> None:
         "rules": True,
     }
     assert passing.expected_failures == omitted.expected_failures == []
+
+
+@pytest.mark.parametrize(
+    "positive,negative",
+    [
+        ("material-fixed-estimate", "material-guaranteed-budget"),
+        ("material-observed-estimate", "material-promised-future-price"),
+        ("material-modeled-estimate", "material-false-modeled-source"),
+        ("material-earlier-uncertainty", "material-false-annual-percentile"),
+    ],
+)
+def test_material_uncertainty_pairs_keep_supported_evidence(
+    positive: str,
+    negative: str,
+) -> None:
+    examples = {e.label: e for e in run.development_examples()}
+    good, bad = examples[positive], examples[negative]
+    case = next(c for c in golden.load_cases() if c.id == good.case_id)
+    assert good.case_id == bad.case_id
+    assert good.expected is not None and all(good.expected.model_dump().values())
+    assert bad.expected is not None and not any(bad.expected.model_dump().values())
+    assert good.turns[:-1] == bad.turns[:-1]
+    assert [t.calls for t in good.turns] == [t.calls for t in bad.turns]
+    assert bad.turns[-1].response.startswith(good.turns[-1].response + "\n")
+    for example in (good, bad):
+        assert golden.grade_assertions(case, example.turns) == []
+        attempt = run.Attempt(
+            id=example.label, case_id=case.id, trial=1, turns=example.turns
+        )
+        assert run.mechanical_rules(case, attempt) == []
+    # These contrasts require semantic judgments: supported numbers alone cannot
+    # detect promised future prices, false probabilities, or source contradictions.
+    answer = " ".join(t.response for t in good.turns).lower()
+    assert "forecast" not in answer and "guarantee" not in answer
 
 
 def test_income_suggestion_and_adoption_have_distinct_grounding_labels() -> None:
