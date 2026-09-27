@@ -628,15 +628,13 @@ class CatalogCampaignTest(unittest.TestCase):
                 with self.subTest(changed=changed), self.assertRaises(ValueError):
                     compare(left, right, campaign_policy=CATALOG_POLICY)
             edited = admitted
+        def changed_graph(commit: str, path: str) -> str:
+            if commit == "b" * 40 and path.endswith(".json"):
+                return '{"pairs": [1]}'
+            return source(commit, path)
+
         with (
-            patch(
-                "compare_runs.source_at",
-                side_effect=lambda commit, path: (
-                    '{"pairs": [1]}'
-                    if commit == "b" * 40 and path.endswith(".json")
-                    else source(commit, path)
-                ),
-            ),
+            patch("compare_runs.source_at", side_effect=changed_graph),
             self.assertRaisesRegex(ValueError, "route graph changed"),
         ):
             compare(left, right, campaign_policy=CATALOG_POLICY)
