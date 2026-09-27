@@ -33,7 +33,7 @@ from eval import golden
 from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.23"
+VERSION = "2.3.24"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -859,8 +859,12 @@ when asked clearly. Changing an explicitly supplied departure time into an arriv
 deadline is a contradictory profile fact, not a harmless paraphrase. An explicit stop=false with a null, empty, or whitespace-only
 message is an invalid continuation, even after a good application answer. A
 stop=true with message=null is valid once all profile-required follow-ups have
-been delivered. A first necessary question already requires a reply when the
-profile supplies the answer. An explicit goal_completed stop before that reply
+been delivered. An optional closing offer after the requested task is complete
+creates no actor obligation, even when phrased as a question. Before calling a
+stop premature, identify the unresolved fact needed for the requested task or
+the triggered, unfulfilled instruction in the profile. Do not turn an assistant
+invitation to extend a completed task into a required profile follow-up.
+A first necessary question already requires a reply when the profile supplies the answer. An explicit goal_completed stop before that reply
 is premature, even if the assistant has only just asked and all earlier user
 messages were consistent. Check the pending question and the profile fact:
 consistent past messages do not discharge an outstanding obligation.

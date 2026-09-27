@@ -101,12 +101,12 @@ def test_complete_development_contract_and_reference_labels() -> None:
     assert len(cases) == 100
     assert not any(case.held_out for case in cases)
     examples = run.development_examples()
-    assert len(examples) == 161
+    assert len(examples) == 165
     assert Counter(example.label == "good" for example in examples) == {
         True: 100,
-        False: 61,
+        False: 65,
     }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 157, "invalid": 4}
+    assert Counter(e.actor_validity for e in examples) == {"valid": 161, "invalid": 4}
     assert sum(e.application_stop is not None for e in examples) == 9
     for case in cases:
         assert case.actor.max_turns == 5
@@ -477,3 +477,50 @@ def test_income_suggestion_and_adoption_have_distinct_grounding_labels() -> None
     }
     assert suggestion.turns[0].calls == adoption.turns[0].calls == []
     assert suggestion.turns[1:] == adoption.turns[1:]
+
+
+def test_grading_boundary_references_preserve_existing_evidence() -> None:
+    raw = json.loads((golden.ROOT / "examples.json").read_text())
+    assert golden.digest(raw[:161]) == (
+        "b5b82100f3d4f8236e2afb1a2c207d500456c3685bfb5bb938033ef77fb0d334"
+    )
+    references = {(e.case_id, e.label): e for e in run.development_examples()}
+    optional = references[
+        "dev3-adjust-annual-count-downward", "optional-closing-offer-complete"
+    ]
+    required = references[
+        "dev3-beltway-endpoints-together", "baseline-1-2-actor-invalid"
+    ]
+    assert optional.actor_replies[-1] == required.actor_replies[-1]
+    assert optional.actor_validity == "valid" and required.actor_validity == "invalid"
+    assert optional.expected is not None and all(
+        optional.expected.model_dump().values()
+    )
+    assert optional.turns[-1].calls and not required.turns[-1].calls
+
+    days = references[
+        "dev3-supply-missing-weekdays", "supplied-days-background-example"
+    ]
+    original = references[days.case_id, "good"]
+    replacement = references[days.case_id, "supplied-days-replacement-demand"]
+    assert days.turns[-1] == original.turns[-1]
+    assert days.turns[:-1] == replacement.turns[:-1]
+    assert days.expected == original.expected
+    assert replacement.expected is not None
+    assert replacement.expected.model_dump() == {
+        "outcome": False,
+        "grounding": True,
+        "rules": False,
+    }
+    assert replacement.expected_failures == ["missing_call"]
+    assert not replacement.turns[-1].calls
+
+    inequality = references[
+        "dev3-supply-annual-salary", "fixed-scenarios-false-inequality"
+    ]
+    original = references[inequality.case_id, "good"]
+    assert inequality.turns[:-1] == original.turns[:-1]
+    assert [t.calls for t in inequality.turns] == [t.calls for t in original.turns]
+    assert inequality.turns[-1].response.startswith(original.turns[-1].response + "\n")
+    assert inequality.expected is not None
+    assert not any(inequality.expected.model_dump().values())

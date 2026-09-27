@@ -1,6 +1,6 @@
 # TollChat evaluation
 
-**Current contract: 3.3.23 / harness 2.3.23.** Development climbs run 100 cases
+**Current contract: 3.3.24 / harness 2.3.24.** Development climbs run 100 cases
 once and optimize successful trials divided by all 100 slots. Fully measured
 inconclusives stay visible; pass³ is inapplicable. Strict score gains require
 independent review for material regressions. **90/100 is a soft milestone**;
@@ -14,7 +14,10 @@ provenance. The judge selects all lines needed to convey the requirement;
 unknown IDs make the measurement unusable. Replay failures identify differing
 fields. Missing disclosures and contradictory claims still fail their rubrics.
 Calibration review records material disagreements without requiring perfect
-label agreement. See the experiment journal for accepted limitations.
+label agreement. Optional closing offers do not require actor replies after
+the profile goal is complete. Generic annual-day arithmetic does not replace
+a supplied count, and conventional percentile names may describe equal amounts.
+Actual unapproved counts, unresolved required replies and false inequalities still fail. See the experiment journal for accepted limitations.
 Before search, complete the runner guide's preparation and trajectory audit,
 using one calibration, independent review, one actor check and one baseline.
 Frozen replay does not require deployment parity. See the
@@ -31,7 +34,7 @@ output in ignored `eval/private/` or the existing private workflow store.
 ## Frozen golden evaluation
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
-  161 labeled references, 107 synthetic fixtures, and five-turn actors.
+  165 labeled references, 107 synthetic fixtures, and five-turn actors.
 - [Private authoring kit](HOLDOUT_AUTHORING.md): public instructions and an offline
   validator for independently authored private cases; no held-out data is included.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, single-pass development application

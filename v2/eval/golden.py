@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.23"
+CORPUS_VERSION = "3.3.24"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -129,6 +129,11 @@ plain text instead of Markdown, different headings, emoji choices or omission,
 table versus prose, ordering, and harmless verbosity are not failures. An exact
 prescribed response may be paraphrased if its material meaning is preserved.
 Assess the whole conversation; do not demand repeated disclosures.
+Generic background arithmetic, such as a 52-week example, does not propose or
+adopt replacement annual days when the assistant clearly retains the supplied
+count. Check the actual proposal, required confirmation and call arguments.
+Still fail substituting an unapproved count, proposing replacement days, or
+requiring reconfirmation of a count the user already supplied.
 Recognizable road abbreviations, including DTR/dtr for Dulles Toll Road, are
 acceptable when the route is clear, including lowercase and omitted hyphens.
 A recognizable road abbreviation alone is not an opaque internal endpoint ID.
@@ -166,6 +171,10 @@ explicit probability question. A bare "rough estimate" label does not repair
 misleading annual-percentile labels, missing source or scope, promised future
 prices, a guaranteed budget, or any other affirmative contradiction. The same
 standard applies to observed, modeled, and published fixed-rate scenarios.
+Conventional lower/middle/higher names for P25/P50/P90 do not assert unequal
+costs when the displayed amounts clearly coincide. No extra equality disclaimer
+is required. A false claim of unequal values, an invented spread, or swapped
+scenario amounts still fails the applicable criteria.
 For commute-route clarification, generic home/work-area labels for the user's
 supplied legs are an accepted simplifying assumption. Do not fail that shorthand
 alone when the actual endpoints remain unchanged. This exception does not establish
