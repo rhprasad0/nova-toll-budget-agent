@@ -1701,11 +1701,25 @@ def test_prior_accounting_rejects_unknown_usage(tmp_path: Path) -> None:
         run.prior_accounting(tmp_path)
 
 
-@pytest.mark.parametrize("limit", [0, -1, 26, float("inf"), float("nan")])
+@pytest.mark.parametrize("limit", [0, -1, float("inf"), float("nan")])
 def test_invalid_spend_ceiling_is_rejected(tmp_path: Path, limit: float) -> None:
     with pytest.raises(ValueError, match="invalid spend ceiling"):
         run.Journal(tmp_path / "invalid", limit)
     assert not (tmp_path / "invalid").exists()
+
+
+def test_explicit_cumulative_ceiling_above_25_preserves_reservations(
+    tmp_path: Path,
+) -> None:
+    journal = run.Journal(tmp_path / "cumulative", 30.01, prior_spend=30)
+    row = run.Attempt(id="bounded", case_id="synthetic", trial=1)
+    reserved = journal.reserve(row, "judge", 1000)
+    assert journal.spent == 30 and journal.reserved == reserved
+    with pytest.raises(run.StopRun, match="spend_budget"):
+        journal.reserve(row, "judge", 1000)
+    journal.finish(row, "judge", reserved, {"inputTokens": 100, "outputTokens": 20}, 1)
+    assert journal.spent == 30 + run.cost({"inputTokens": 100, "outputTokens": 20})
+    assert journal.reserved == 0
 
 
 def test_uncapped_accounting_still_stops_on_unknown_usage(tmp_path: Path) -> None:

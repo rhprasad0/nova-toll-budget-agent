@@ -1,6 +1,6 @@
 {
   "status": "pending",
-  "corpus_sha256": "87e180bc06414628e698f469e93c111ca076734eb2efc42ad36430c5ed8ff45d",
+  "corpus_sha256": "9f324029980a73c53a0a6f4a75d4562f9afaa224915f5b433b5d6273c28b5b00",
   "human_trajectory_adjudication": false,
   "reviewer": null,
   "evidence": "Contract3.3.23 activates100 cases with one repetition after material judging changes. Offline validation and independent review precede paid calibration; no prior approval is transferred.",
