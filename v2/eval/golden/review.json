@@ -1,8 +1,8 @@
 {
   "status": "pending",
-  "corpus_sha256": "d89dc7ab7c7d946e02574a508e1f2a4e30a530e087819d794f1a97df4cbbb494",
+  "corpus_sha256": "a3c960438b2fdb4fccc37e4949aec56fd38308f3cdc64ae99baf83f6214510f1",
   "human_trajectory_adjudication": false,
-  "evidence": "Four paired zero-price denial and cancellation controls require fresh calibration.",
+  "evidence": "Semantic per-occurrence money classification replaces phrase-specific denial handling; fresh calibration required.",
   "reviewer": "",
   "contract_commit": null,
   "reviewed_at": null,

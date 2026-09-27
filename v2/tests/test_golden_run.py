@@ -1191,6 +1191,15 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
     diagnostic_prompts: list[str] = []
 
     def outcome(prompt: str, **kwargs: object) -> SimpleNamespace:
+        if kwargs["structured_output_model"] is run.GroundingAssessment:
+            diagnostic_prompts.append(
+                factory.call_args.kwargs["system_prompt"] + prompt
+            )
+            return SimpleNamespace(
+                structured_output=run.GroundingAssessment(
+                    evidence="Delivered evidence only.", unmet_requirements=[], money=[]
+                )
+            )
         outcome_prompts.append(prompt)
         assert kwargs["structured_output_model"] is run.OutcomeAssessment
         return SimpleNamespace(
@@ -1232,7 +1241,7 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
     assert all(
         "PRIVATE_PROFILE_SENTINEL" not in prompt for prompt in diagnostic_prompts
     )
-    prefix = factory.call_args.kwargs["system_prompt"]
+    prefix = factory.call_args_list[0].kwargs["system_prompt"]
     assert (run.FIXED_REFERENCE_PROMPT in prefix) is fixed_reference
     for prompt in [prefix, *diagnostic_prompts]:
         assert "greenway:2A:entry:EB" in prompt and "Battlefield Pkwy" in prompt

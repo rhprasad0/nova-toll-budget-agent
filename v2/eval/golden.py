@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).with_name("golden")
 V2 = ROOT.parent.parent
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.26"
+CORPUS_VERSION = "3.3.27"
 CASE_COUNT = 100
 COVERAGE = {
     "current_complete": 20,
@@ -385,10 +385,22 @@ class ExpectedVerdicts(Record):
     rules: bool
 
 
+class MoneyMention(Record):
+    id: str
+    turn: int
+    start: int
+    end: int
+    amount: str
+    normalized_answer: str
+    rounded_supported: bool
+
+
 class Example(Record):
     case_id: str
     label: str
     expected_failures: list[str]
+    non_asserted_money: list[str] = Field(default_factory=list[str])
+    rounded_money: list[str] = Field(default_factory=list[str])
     expected: ExpectedVerdicts | None
     actor_validity: Literal["valid", "invalid", "uncertain"] = "valid"
     actor_replies: list[dict[str, JsonValue]] = Field(default_factory=lambda: [])
@@ -737,32 +749,25 @@ def money(text: str) -> set[Decimal]:
     }
 
 
-def unsupported_money(
-    text: str, allowed: set[Decimal], reported: set[Decimal] | None = None
-) -> set[Decimal]:
+def unsupported_money_occurrences(
+    text: str,
+    allowed: set[Decimal],
+    reported: set[Decimal] | None = None,
+    *,
+    allow_qualified_rounding: bool = True,
+) -> list[tuple[int, int, Decimal]]:
     text = _money_text(text)
-    # ponytail: recognize explicit zero-price denials only; broader negation needs
-    # labeled contrasts before relaxing the deterministic money guard.
-    text = re.sub(
-        r"\b(?:does not|doesn['\u2019]t|do not|don['\u2019]t) mean (?:that )?"
-        r"(?:the )?(?:tolls?|prices?|costs?) (?:is|was|are|were) "
-        r"\$0(?:\.0{1,2})?(?!\w|[,.]\d)",
-        "[zero-price denial]",
-        text,
-        flags=re.IGNORECASE,
-    )
 
     def restatement(match: re.Match[str]) -> str:
         amount = currency_decimal(match)
-        # ponytail: only explicit whole-dollar restatements after an exact amount;
-        # broader rounding needs labeled examples and a separate policy decision.
+        # Only explicit whole-dollar restatements after an exact amount.
         if "." not in match["amount"] and amount != 0:
             quoted = (money(text[: match.start()]) | (reported or set())) & allowed
             if any(
                 v.quantize(Decimal("1"), rounding=ROUND_HALF_UP) == amount
                 for v in quoted
             ):
-                return "[rounded restatement]"
+                return " " * len(match[0])
         return match[0]
 
     remaining = re.sub(
@@ -773,7 +778,24 @@ def unsupported_money(
         text,
         flags=re.IGNORECASE,
     )
-    return money(remaining) - allowed
+    if not allow_qualified_rounding:
+        remaining = text
+    occurrences: list[tuple[int, int, Decimal]] = []
+    for match in CURRENCY_PATTERN.finditer(remaining):
+        shorthand = remaining[match.end() : match.end() + 1].lower() == "k"
+        amount = currency_decimal(match) * (1000 if shorthand else 1)
+        if amount not in allowed:
+            occurrences.append((match.start(), match.end() + int(shorthand), amount))
+    return occurrences
+
+
+def unsupported_money(
+    text: str, allowed: set[Decimal], reported: set[Decimal] | None = None
+) -> set[Decimal]:
+    return {
+        amount
+        for _, _, amount in unsupported_money_occurrences(text, allowed, reported)
+    }
 
 
 def evidence_money(value: JsonValue) -> set[Decimal]:
@@ -791,7 +813,13 @@ def evidence_money(value: JsonValue) -> set[Decimal]:
 
 
 def grade_assertions(
-    case: GoldenCase, turns: list[Turn], root: Path | None = None
+    case: GoldenCase,
+    turns: list[Turn],
+    root: Path | None = None,
+    *,
+    non_asserted_money: list[str] | None = None,
+    rounded_money: list[str] | None = None,
+    money_catalog: list[MoneyMention] | None = None,
 ) -> list[str]:
     """Mechanical checks only; a clean result still requires the semantic judge."""
     failures: list[str] = []
@@ -805,7 +833,10 @@ def grade_assertions(
     messages: list[str] = []
     retained_money: set[Decimal] = set()
     reported_money: set[Decimal] = set()
-    for turn in turns:
+    catalog: list[MoneyMention] = []
+    nonclaims = set(non_asserted_money or [])
+    rounded = set(rounded_money or [])
+    for turn_number, turn in enumerate(turns, 1):
         messages.append(turn.user)
         if turn.calls:
             retained_money = set()
@@ -820,14 +851,7 @@ def grade_assertions(
                 allowed_money.update(amounts)
             except ValueError as error:
                 failures.append(str(error))
-        # Explicitly denying a zero toll is not a quoted zero price.
-        # Other wording still goes through the semantic grounding judge.
-        monetary_claims = re.sub(
-            r"\b(?:not|never)\s+(?:treat\s+[^$.\n!?]{1,120}\s+as\s+|(?:treated\s+as|assumed\s+to\s+be)\s+)?(?:\*\*)?\$0(?:\.0{1,2})?(?!\w|\.\d)",
-            "[negated zero toll]",
-            turn.response,
-            flags=re.IGNORECASE,
-        )
+        monetary_claims = turn.response
         # Only explicit proposals can introduce the midpoint before consent.
         amounts = money("\n".join(messages))
         if case.contract_version == 1 and not turn.calls and len(amounts) == 2:
@@ -880,9 +904,44 @@ def grade_assertions(
                         proposal.group(), "[conditional income choices]"
                     )
             monetary_claims = plain
-        if unsupported_money(monetary_claims, allowed_money, reported_money):
-            failures.append("unsupported_money")
+        for start, end, amount in unsupported_money_occurrences(
+            monetary_claims,
+            allowed_money,
+            reported_money,
+            allow_qualified_rounding=case.contract_version < 2,
+        ):
+            mention = MoneyMention(
+                id=f"turn_{turn_number}.money_{start}_{end}",
+                turn=turn_number,
+                start=start,
+                end=end,
+                amount=str(amount),
+                normalized_answer=_money_text(monetary_claims),
+                rounded_supported=amount != 0
+                and amount == amount.to_integral_value()
+                and any(
+                    v.quantize(Decimal("1"), rounding=ROUND_HALF_UP) == amount
+                    for v in (
+                        money(_money_text(monetary_claims)[:start]) | reported_money
+                    )
+                    & allowed_money
+                ),
+            )
+            catalog.append(mention)
+            if mention.id not in nonclaims and not (
+                mention.id in rounded and mention.rounded_supported
+            ):
+                failures.append("unsupported_money")
         reported_money.update(money(turn.response) & allowed_money)
+    if (
+        len(nonclaims) != len(non_asserted_money or [])
+        or len(rounded) != len(rounded_money or [])
+        or nonclaims & rounded
+        or (nonclaims | rounded) - {m.id for m in catalog}
+    ):
+        raise ValueError("invalid_money_classifications")
+    if money_catalog is not None:
+        money_catalog.extend(catalog)
     if sum(len(t.calls) for t in turns) > case.max_tool_calls:
         failures.append("tool_budget")
     if any(not step.optional for step in case.steps[replay.index :]):
@@ -1072,7 +1131,13 @@ def validate_payload(
             raise ValueError("only valid measurements have application labels")
         if any(c.turn > len(example.turns) for c in example.rejected_tools):
             raise ValueError("rejected call outside conversation")
-        observed = grade_assertions(by_id[example.case_id], example.turns, root)
+        observed = grade_assertions(
+            by_id[example.case_id],
+            example.turns,
+            root,
+            non_asserted_money=example.non_asserted_money,
+            rounded_money=example.rounded_money,
+        )
         if observed != sorted(example.expected_failures):
             raise ValueError(f"example {example.label}: {observed}")
     if complete and {

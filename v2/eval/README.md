@@ -1,6 +1,6 @@
 # TollChat evaluation
 
-**Current contract: 3.3.26 / harness 2.3.26.** Development climbs run 100 cases
+**Current contract: 3.3.27 / harness 2.3.27.** Development climbs run 100 cases
 once and optimize successful trials divided by all 100 slots. Fully measured
 inconclusives stay visible; pass³ is inapplicable. Strict score gains require
 independent review for material regressions. **90/100 is a soft milestone**;
@@ -34,7 +34,7 @@ output in ignored `eval/private/` or the existing private workflow store.
 ## Frozen golden evaluation
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
-  172 labeled references, 107 synthetic fixtures, and five-turn actors.
+  176 labeled references, 107 synthetic fixtures, and five-turn actors.
 - [Private authoring kit](HOLDOUT_AUTHORING.md): public instructions and an offline
   validator for independently authored private cases; no held-out data is included.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, single-pass development application
