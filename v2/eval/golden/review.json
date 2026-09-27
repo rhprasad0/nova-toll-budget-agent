@@ -1,9 +1,9 @@
 {
   "status": "pending",
-  "corpus_sha256": "2cb567c0c5c51f13b0f12a778aeed5fe8beec79c12f4841f4c80427a34fdec93",
+  "corpus_sha256": "87e180bc06414628e698f469e93c111ca076734eb2efc42ad36430c5ed8ff45d",
   "human_trajectory_adjudication": false,
   "reviewer": null,
-  "evidence": "Contract 3.3.22 changes annual qualification judging and adds eight synthetic paired calibration references. Historical grades remain unchanged; fresh calibration and independent review are required after the complete measurement changes.",
+  "evidence": "Contract3.3.23 activates100 cases with one repetition after material judging changes. Offline validation and independent review precede paid calibration; no prior approval is transferred.",
   "authorization": "Ryan explicitly authorized the stacked measurement changes and $25 additional eval API spending; this layer ran offline checks only.",
   "contract_commit": null,
   "reviewed_at": null
