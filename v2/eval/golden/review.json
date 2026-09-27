@@ -2,5 +2,9 @@
   "status": "pending",
   "corpus_sha256": "ed8b59273e0c2f4a7be8fcad04dc039e8fbf16aee7460a195cb8a96a2c3048e5",
   "human_trajectory_adjudication": false,
-  "evidence": "Repetition contract 3.3.21 retains three active trials. Scheduling and reporting now use recorded trials_per_case; offline checks cover one and three trials. Fresh calibration and independent review are required before paid application runs."
+  "evidence": "Repetition contract 3.3.21 retains three active trials. Scheduling and reporting now use recorded trials_per_case; offline checks cover one and three trials. Fresh calibration and independent review are required before paid application runs.",
+  "authorization": "Ryan explicitly authorized the stacked measurement changes and deferred paid calibration until the complete contract is ready.",
+  "reviewer": null,
+  "contract_commit": null,
+  "reviewed_at": null
 }
