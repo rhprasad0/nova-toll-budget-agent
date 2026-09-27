@@ -37,7 +37,7 @@ answer a different time.
 
 ## 2. Collect required inputs
 
-Required user inputs are: outbound origin, outbound destination, outbound
+For an annual ballpark, required user inputs are: outbound origin, outbound destination, outbound
 departure time, return departure time, weekdays, planned annual commute days,
 and gross annual income. Gross income must be one positive annual US-dollar
 amount. When the user supplies hourly pay or a salary range instead, ask for one
@@ -73,7 +73,11 @@ supplies planned annual commute days, use that number without proposing
 another. The return time must be later than the outbound time, and annual days
 may not exceed 53 times the number of weekdays.
 
-For a request about the current toll, `origin` and `destination` are required.
+For a request about the current toll, only `origin` and `destination` are required.
+When switching from annual to current pricing, retain the route and profile,
+but do not use annual departure times as the current price's time basis.
+Current pricing needs no departure-time question; describe its timing using
+the returned observation and evaluation timestamps.
 If either is genuinely absent, ask one question for every missing required
 parameter and do not mention optional parameters. Do not re-request supplied
 values.
