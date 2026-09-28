@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import subprocess
@@ -30,7 +31,29 @@ EVALUATOR_FILES = (
     "eval/golden/prompt-points.json",
     "agent/toll_agent.py",
     "eval/run_evaluation.py",
+    "scripts/golden_gate.py",
+    "scripts/check_production_release.py",
+    "scripts/check_development_release.py",
+    "scripts/release_blue_green.py",
+    "scripts/blue_green.py",
+    "scripts/classify_deployment_error.py",
+    "scripts/shared_packages.py",
 )
+AUTHOR_TOOLS = {
+    **{
+        f"opt/{name}": name
+        for name in (
+            "runtime.py",
+            "guide_data.py",
+            "guide_client.py",
+            "PRIVATE_GUIDE.md",
+        )
+    },
+    **{
+        f"workspace/.vscode/{name}": f"workspace/.vscode/{name}"
+        for name in ("tasks.json", "settings.json")
+    },
+}
 
 
 def copy_files(names: tuple[str, ...], source: Path, target: Path) -> None:
@@ -45,6 +68,7 @@ def audit_author(image: Path, kit: Path) -> None:
     with zipfile.ZipFile(kit) as source:
         expected = set(source.namelist())
     seen: set[str] = set()
+    seen_tools: set[str] = set()
     with tarfile.open(image) as archive:
         manifest = archive.extractfile("manifest.json")
         assert manifest is not None
@@ -66,6 +90,29 @@ def audit_author(image: Path, kit: Path) -> None:
                             )
                         if entry.isfile() and entry.name.startswith("opt/kit/"):
                             seen.add(entry.name.removeprefix("opt/kit/"))
+                        if entry.isfile() and entry.name in AUTHOR_TOOLS:
+                            tool = layer.extractfile(entry)
+                            assert tool is not None
+                            if hashlib.sha256(tool.read()).hexdigest() != checksum(
+                                SOURCE / AUTHOR_TOOLS[entry.name]
+                            ):
+                                raise ValueError(
+                                    "author image tool differs from its allowlisted source"
+                                )
+                            seen_tools.add(entry.name)
+                        if (
+                            entry.isfile()
+                            and entry.name.startswith("opt/")
+                            and not (
+                                entry.name.startswith(
+                                    ("opt/kit/", "opt/site/", "opt/codex/")
+                                )
+                                or entry.name in AUTHOR_TOOLS
+                            )
+                        ):
+                            raise ValueError(
+                                "author image contains a non-allowlisted tool"
+                            )
                         if (
                             path.name == "cases.jsonl"
                             and entry.name != "opt/kit/teaching/cases.jsonl"
@@ -73,6 +120,8 @@ def audit_author(image: Path, kit: Path) -> None:
                             raise ValueError("author image contains evaluation cases")
     if seen != expected:
         raise ValueError("author image kit differs from the allowlisted export")
+    if seen_tools != set(AUTHOR_TOOLS):
+        raise ValueError("author image is missing an allowlisted guide tool")
 
 
 def build(destination: Path, roles: list[str]) -> None:
@@ -89,9 +138,9 @@ def build(destination: Path, roles: list[str]) -> None:
             context = Path(temporary)
             shutil.copyfile(SOURCE / f"Dockerfile.{role}", context / "Dockerfile")
             if role == "proxy":
-                shutil.copyfile(SOURCE / "squid.conf", context / "squid.conf")
+                copy_files(("squid.conf", "squid-author.conf"), SOURCE, context)
             else:
-                shutil.copyfile(SOURCE / "runtime.py", context / "runtime.py")
+                copy_files(("runtime.py", "guide_data.py"), SOURCE, context)
                 requirements = context / "requirements.txt"
                 subprocess.run(
                     [
@@ -135,6 +184,16 @@ def build(destination: Path, roles: list[str]) -> None:
                     with zipfile.ZipFile(archive) as kit:
                         kit.extractall(context / "kit")
                     copy_files(("config.toml", "requirements.toml"), SOURCE, context)
+                    copy_files(
+                        (
+                            "guide_client.py",
+                            "PRIVATE_GUIDE.md",
+                            "workspace/.vscode/tasks.json",
+                            "workspace/.vscode/settings.json",
+                        ),
+                        SOURCE,
+                        context,
+                    )
                 else:
                     (context / "empty").mkdir()
                     names = tuple(
@@ -159,6 +218,7 @@ def build(destination: Path, roles: list[str]) -> None:
         if role == "author":
             audit_author(destination / "author.tar", archive)
     shutil.copyfile(SOURCE / "holdout.py", destination / "holdout.py")
+    shutil.copyfile(SOURCE / "guide.py", destination / "guide.py")
     operator = V2 / "eval/HOLDOUT_SETUP.md"
     if operator.exists():
         shutil.copyfile(operator, destination / "HOLDOUT_SETUP.md")

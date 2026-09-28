@@ -16,6 +16,7 @@ __pycache__/
 /.agents/skills/*
 !/.agents/skills/query-dev-postgres/
 !/.agents/skills/eval-climb/
+!/.agents/skills/holdout-release/
 node_modules/
 test-results/
 /.worktrees/

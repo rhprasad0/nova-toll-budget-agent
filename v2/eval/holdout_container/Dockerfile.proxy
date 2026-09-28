@@ -1,5 +1,7 @@
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install --yes --no-install-recommends squid ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY squid.conf /etc/squid/squid.conf
+COPY squid-author.conf /etc/squid/squid-author.conf
 USER 1000:1000
-ENTRYPOINT ["squid", "-N", "-f", "/etc/squid/squid.conf"]
+ENTRYPOINT ["squid", "-N"]
+CMD ["-f", "/etc/squid/squid.conf"]

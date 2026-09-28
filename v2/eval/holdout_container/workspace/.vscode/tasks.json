@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start/Resume Holdout",
+      "type": "process",
+      "command": "python",
+      "args": ["/opt/runtime.py", "guide"],
+      "problemMatcher": [],
+      "presentation": {"reveal": "always", "focus": true, "panel": "dedicated"},
+      "runOptions": {"instanceLimit": 1}
+    }
+  ]
+}

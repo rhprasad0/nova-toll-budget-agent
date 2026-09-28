@@ -18,6 +18,7 @@ IMAGES = {
 }
 CORPUS = "tollchat-holdout-corpus"
 OUTPUT = "tollchat-holdout-results"
+AUTH = "tollchat-holdout-auth"
 HARDEN = [
     "--read-only",
     "--cap-drop=ALL",
@@ -110,11 +111,18 @@ def run(
     elif input_data is not None:
         options += ["--interactive"]
     if credentials:
+        if role != "evaluator" or arguments[:2] not in (
+            ["evaluate", "prepare"],
+            ["evaluate", "run"],
+        ):
+            raise ValueError("API credentials are only for evaluator prepare/run")
         if not os.environ.get("OPENAI_API_KEY"):
             raise ValueError(
                 "set OPENAI_API_KEY privately; it is never saved in the packet"
             )
         options += ["--env", "OPENAI_API_KEY"]
+    if role == "author" and arguments and arguments[0] in {"login", "logout", "author"}:
+        options += ["--mount", f"type=volume,source={AUTH},target=/auth"]
     if private:
         options += [
             "--mount",
@@ -153,6 +161,10 @@ def run(
                 "--network",
                 "bridge",
                 IMAGES["proxy"],
+                "-f",
+                "/etc/squid/squid-author.conf"
+                if role == "author"
+                else "/etc/squid/squid.conf",
                 capture=True,
             )
             proxy_created = True
@@ -207,13 +219,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--packet", type=Path, default=Path(__file__).parent)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("guide", help="start the private VS Code holdout workstation")
     loader = commands.add_parser(
         "load", help="verify checksums and load images from transfer folder"
     )
     loader.add_argument(
         "directory", type=Path, nargs="?", default=Path(__file__).parent
     )
-    for command in ("check", "network-check", "preflight"):
+    for command in ("check", "network-check", "preflight", "login", "logout"):
         commands.add_parser(command)
     author = commands.add_parser("author")
     author.add_argument("--model", required=True)
@@ -241,6 +254,14 @@ def main() -> None:
         export.add_argument("--run", required=True)
         export.add_argument("destination", type=Path)
     args = parser.parse_args()
+    if args.command == "guide":
+        if __package__:
+            from .guide import main as guide_main
+        else:
+            from guide import main as guide_main
+
+        guide_main(args.packet)
+        return
     if args.command != "load":
         role = (
             "evaluator"
@@ -255,7 +276,9 @@ def main() -> None:
             else "author"
         )
         roles = [role]
-        if args.command in {"author", "network-check", "evaluate"}:
+        if args.command == "network-check":
+            roles.append("evaluator")
+        if args.command in {"login", "author", "network-check", "evaluate"}:
             roles.append("proxy")
         verify_images(args.packet, roles)
     if args.command == "load":
@@ -263,9 +286,17 @@ def main() -> None:
     elif args.command == "check":
         run("author", ["selfcheck"])
     elif args.command == "network-check":
-        run("author", ["network-check"], online=True)
+        for role in ("author", "evaluator"):
+            run(role, ["network-check", role], online=True)
     elif args.command == "preflight":
         run("evaluator", ["preflight"])
+    elif args.command in {"login", "logout"}:
+        run(
+            "author",
+            [args.command],
+            online=args.command == "login",
+            interactive=args.command == "login",
+        )
     elif args.command == "author":
         if not re.fullmatch(r"[a-zA-Z0-9_.:-]+", args.model):
             parser.error("invalid model name")
@@ -275,7 +306,6 @@ def main() -> None:
             online=True,
             private=True,
             interactive=True,
-            credentials=True,
         )
     elif args.command == "validate":
         run("author", ["validate", *(["--final"] if args.final else [])], private=True)

@@ -4,6 +4,12 @@
 activation remain pending.** Development scores and historical receipts cannot
 qualify production.
 
+Start with the [guided private VS Code workspace](HOLDOUT_SETUP.md). The repository
+Codex session uses the [holdout-release skill](../../.agents/skills/holdout-release/SKILL.md)
+for candidate handoffs, policy activation, aggregate import, and delivery. The
+human reviews private evidence and uses the existing protected GitHub approvals.
+The public kit's build and synthetic rehearsal do not activate this gate.
+
 ## The release decision
 
 ```mermaid
@@ -43,8 +49,8 @@ Terraform plan retains its separate **24-hour** expiry.
 
 ## Trust and privacy
 
-The author and evaluator run on a separate machine outside this repository agent's
-access. Use the [container setup](HOLDOUT_SETUP.md) and
+The author and evaluator run in the private workspace outside this repository
+agent's access. Use the [workspace setup](HOLDOUT_SETUP.md) and
 [authoring contract](HOLDOUT_AUTHORING.md). Keep private cases, fixtures,
 references, transcripts, detailed grading, credentials, and model traces there.
 The public repository contains tooling and synthetic checks only.
@@ -128,6 +134,14 @@ inputs; protected human approval attests the private evaluation.
 
 Complete preparation before the real candidate evaluation. These instructions
 do not grant model-spending or deployment authorization.
+
+The repository Codex session performs the commands below under the user's existing
+authorization and supplies the real approval links. After the policy and required
+source changes merge and complete development delivery, export the **final scored
+candidate**. Earlier preparation can use a different candidate; its calibration
+remains valid only while the frozen holdout, evaluator, evidence, and review match.
+Return the exact approved policy through exchange `policy.json`. Keep the reviewed
+private kit fixed during this roundtrip.
 
 1. Export the reviewed images and public kit, rehearse the teaching examples, and
    privately author, review, and freeze the corpus. Follow

@@ -1,14 +1,23 @@
 FROM node:22-bookworm-slim AS codex
 RUN npm install --global @openai/codex@0.157.1
 FROM python:3.13-slim-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libstdc++6 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 1000 --create-home --shell /bin/bash author
 COPY --from=codex /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/ /opt/codex/
 COPY site/ /opt/site/
 COPY kit/ /opt/kit/
 COPY config.toml requirements.toml /etc/codex/
-COPY runtime.py /opt/runtime.py
-RUN mkdir /private /output && chown 1000:1000 /private /output
-ENV PATH="/opt/codex/bin:${PATH}" PYTHONPATH=/opt/kit:/opt/site PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OTEL_SDK_DISABLED=true
-USER 1000:1000
-WORKDIR /private
+COPY runtime.py guide_data.py guide_client.py PRIVATE_GUIDE.md /opt/
+COPY workspace/ /workspace/
+RUN mkdir /private /output /auth /guide /notes /control /home/author/.vscode-server \
+    && chown 1000:1000 /private /output /auth /guide /notes /home/author/.vscode-server \
+    && chmod 700 /auth /guide /notes \
+    && ln -s /private/corpus /workspace/corpus && ln -s /opt/kit /workspace/toolkit \
+    && ln -s /guide /workspace/guide && ln -s /notes /workspace/notes \
+    && ln -s /output /workspace/results
+ENV PATH="/opt/codex/bin:${PATH}" PYTHONPATH=/opt/kit:/opt/site PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OTEL_SDK_DISABLED=true HOME=/home/author CODEX_HOME=/home/author/.codex SHELL=/bin/bash
+USER author
+WORKDIR /workspace
 ENTRYPOINT ["python", "/opt/runtime.py"]
 CMD ["selfcheck"]

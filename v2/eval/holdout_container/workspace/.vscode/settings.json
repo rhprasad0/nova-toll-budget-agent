@@ -1,0 +1,6 @@
+{
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "extensions.ignoreRecommendations": true,
+  "files.autoSave": "off",
+  "telemetry.telemetryLevel": "off"
+}

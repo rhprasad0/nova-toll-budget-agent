@@ -1,210 +1,178 @@
-# Private holdout workstation
+# Private holdout workspace
 
-Use a separate **x86 Linux machine with Python 3.10+, Docker, and working ARM64
-binfmt/QEMU support**. Prepare Docker and emulation before restricting its network.
-The author runs natively; the evaluator runs ARM64 Python 3.13 to load the delivered
-application unchanged. Emulated latency is useful for this benchmark, not a
-production latency prediction.
+**Work with Codex in a private VS Code workspace.** Codex leads authoring, review,
+calibration, and evaluation; you make the review and spending decisions. The
+connected repository session handles public tooling, policy activation, aggregate
+import, and production delivery. GitHub's protected approvals remain your clicks.
 
-This guide prepares the workflow. Paid authoring, calibration, evaluation, policy
-approval, and deployment each require the operator's existing authorization.
-No real holdout or production qualification is included in the public packet.
+The kit contains public tools and synthetic examples. Building and rehearsing it
+does not author a real holdout, spend on models, activate policy, or qualify a
+release. Those are later authorized steps.
 
-## 1. Build and transfer
+## 1. Open the private workspace
 
-On the repository machine, from a reviewed checkout's `v2/` directory:
+Use an **x86 Linux workstation with Python 3.10+, Docker, Microsoft's native Linux
+VS Code 1.138+ package with Dev
+Containers, and working ARM64 binfmt/QEMU support**. Prepare these before
+restricting network access. Native Codex handles the conversation; the separate
+ARM64 Python 3.13 evaluator loads the delivered application unchanged.
+The launcher installs the tested Dev Containers extension version, 0.469.0.
+Use the native package's `code` command on `PATH`; repository Codex can prepare it
+during host setup. The Snap launcher is unsupported for this isolated profile.
 
-```sh
-uv run --locked python -m eval.holdout_container.build \
-  --output eval/private/holdout-packet --images all
-```
+Ask the repository Codex session to use the `holdout-release` skill to build and
+rehearse the reviewed transfer kit. Copy the complete packet to the private
+workstation, preserving `transfer.json`, its checksums, and image archives. Do not
+copy the repository, development cases, host Codex profile, connectors, or memory.
 
-The output contains `authoring-kit.zip`, three image archives, `holdout.py`, this
-guide, and `transfer.json` with checksums and immutable image IDs. Keep the whole
-directory together. Its build needs network access; loading it does not. Rebuild
-after any change to exported sources. Preserve the original export for the run.
-
-Transfer that directory to the private machine. **Keep the candidate bundle away
-from the author until the 100 cases have been reviewed and frozen.** Do not copy
-the repository, development runs, host Codex profile, connectors, or memory.
-
-From the transferred directory:
+From the transferred directory, the host bootstrap is:
 
 ```sh
-python3 holdout.py load
-python3 holdout.py check
-python3 holdout.py network-check
-python3 holdout.py preflight
+python3 holdout.py guide
 ```
 
-`load` verifies checksums and image IDs; every later command checks IDs again.
-`check` validates only synthetic teaching files and the disabled Codex integrations.
-`network-check` makes an unauthenticated API request and verifies repository,
-package, and direct outbound access are denied. It makes no inference calls.
-`preflight` must confirm ARM64 Python 3.13 and evaluator imports. An `exec format
-error` means the host's ARM64 emulation is missing; fix that before proceeding.
+In VS Code, select **Dev Containers: Attach to Running Container…**, choose
+**tollchat-holdout-workspace**, and open the workspace's **Start/Resume Holdout**
+task from `/workspace`. Keep the host launcher open. Choose the private Codex
+model on first launch, then copy its subscription sign-in URL into your ordinary
+host browser; automatic external HTTP links are disabled in the private editor.
+Use the terminal conversation, Explorer, and the review
+links Codex supplies in VS Code's integrated browser through its remote proxy.
+This is the normal workflow; the command reference below is for diagnosis.
 
-The launcher gives online containers only an internal Docker network and a Squid
-proxy allowing `api.openai.com:443`. Use a host firewall consistent with this
-restriction. The containers have no Docker socket, host profile, or repository
-mount. This is reviewed-code isolation; the host operator remains trusted.
+Private Codex subscription login and evaluator API access are separate. When
+authorizing evaluation, enter `key` at the host launcher's prompt and supply the
+API key privately there. It stays in launcher memory and is passed only to the
+evaluator as `OPENAI_API_KEY`. Use an account/project whose traces the repository
+session cannot access.
+Do not put credentials in the exchange folder, packet, or conversation. Codex
+usage is separate from the evaluator's $5 execution/$25 cumulative accounting.
 
-## 2. Author, review, and freeze privately
+The private workspace has no repository mount or Docker socket. Its bounded guide
+can ask the host to perform fixed holdout actions; it cannot execute host shell
+commands. Network access uses the reviewed role-specific proxy rules. The host
+operator, desktop editor, native URI handlers, and reviewed code remain trusted.
 
-Set `OPENAI_API_KEY` privately on the operator host for authorized model calls.
-The launcher passes its value without saving it in the packet. Use a private
-account/project whose traces are inaccessible to the repository agent. Choose
-the author model explicitly, then start:
+## 2. Review every case batch and freeze
 
-```sh
-python3 holdout.py author --model YOUR_AUTHOR_MODEL
-python3 holdout.py validate
-```
+Tell private Codex to start or resume the holdout. It shows the current stage,
+what it can do next, and the decision it needs from you. It authors independent
+cases using only the public contract and teaching examples. Candidate bundles
+and evaluation results remain unavailable during authoring.
 
-The author reads `/opt/kit/START_HERE.md`, `/opt/kit/public/`, and teaching examples.
-It writes new cases to `/private/corpus` and notes to `/private/review`. Dependencies
-are already installed; package downloads are blocked. Each invocation has fresh
-Codex configuration/history; files persist in `tollchat-holdout-corpus`.
-Give a follow-up prompt as the optional final argument to `author` when needed.
+Codex completes the full draft before asking you to approve ten-case batches.
+Review **every case batch** in the local pages: scenario allocation, independence,
+route plausibility, fixture arithmetic, references, actor behavior, and labels.
+Use Explorer for the complete files. Any corpus edit invalidates all batch
+approvals; finish corrections before reviewing every batch again. When all 100
+cases are approved, explicitly approve **freeze**. The guide stops writable
+authoring, validates and hashes the corpus, and continues with a read-only corpus.
+Reconnect VS Code after that workspace restart and run **Start/Resume Holdout**.
+Keep the frozen manifest unchanged; a correction requires a new reviewed identity.
 
-Ryan reviews the scenario allocation, independence, route plausibility, fixture
-arithmetic, references, actor behavior, and labels using the authoring checklist.
-To inspect files on the private host, export a new private backup directory:
+## 3. Prepare and approve calibration
 
-```sh
-python3 holdout.py export-private private-review-001
-```
+The guide now requests a candidate from the repository session. The fixed exchange
+folder is **`~/Documents/private-holdout/exchange/`** on the private workstation:
 
-The backup has `authoring/` and `evaluation/`. Keep it on the private machine.
-After review:
-
-```sh
-python3 holdout.py validate --final
-python3 holdout.py export-private private-frozen-001
-python3 -c 'import json; print(json.load(open("private-frozen-001/authoring/corpus/manifest.json"))["holdout_sha256"])'
-```
-
-Final validation creates `/private/corpus/manifest.json`; the last command prints
-only its aggregate `holdout_sha256`. The manifest stays private. Its `review_status: pending` is a
-fixed validator marker; human approval belongs in separate notes and the release
-policy. Do not edit the frozen manifest. Correcting frozen inputs requires a new
-reviewed corpus identity, retaining the original privately.
-
-## 3. Introduce the candidate and prepare the evaluator
-
-Only after freeze, transfer a separate input directory containing **exactly**:
-
-| File | Source |
+| Handoff | Contents |
 | --- | --- |
-| `release.zip` | Immutable successful development release artifact |
-| `context.json` | Exact candidate, artifact ID/digest, delivery run/attempt/deployment |
-| `policy.json` | Reviewed policy 4 file; pending identities are allowed during preparation |
+| Repository → `candidate/` | Exactly `release.zip`, `context.json`, `policy.json` |
+| Repository → `policy.json` | The exact approved policy after the policy review |
+| Private → `identities.json` | Only the holdout, evaluator, calibration SHA-256 digests |
+| Private → `summary.json` | Only the validated release aggregate |
 
-The packet's candidate handoff must identify all six fields in `context.json`.
-The evaluator checks the ZIP digest, release manifest, inventory, and application
-package before spending. It does not rebuild or patch the delivered application.
-Use an absolute path for this directory below; it mounts read-only at `/input`.
+Ask the repository Codex session to prepare the packet in `exchange/candidate/`.
+Tell private Codex it is ready; `import_candidate` takes
+a private snapshot of those exact files. The evaluator checks the original ZIP,
+manifest, inventory, and application package. It does not rebuild the candidate.
+A pending policy is allowed for preparation.
 
-Record the evaluator identity and initialize the persistent spending ledger once:
+Codex checks the persistent spending history and asks for explicit **preparation
+authorization**. Carry forward earlier calibration/evaluation spending and unknown
+usage; zero is valid only for an unused authorization. Preparation calibrates
+judges against the references and rehearses each actor three times. It does not
+measure candidate quality.
 
-```sh
-python3 holdout.py evaluate -- identity
-python3 holdout.py evaluate -- init-history --history /output/history.json \
-  --prior-cost-usd 0 --prior-unknown-usage false
-```
+Review the flagged disagreements, invalid actors, and incomplete measurements;
+all evidence remains available privately. Explicitly approve **calibration** only
+after resolving the review. Codex records the decision against the exact evidence
+and exports `identities.json`. Successful execution alone is not review approval.
 
-Use zero only for a genuinely unused evaluation authorization. Carry earlier
-evaluation/calibration spending and unknown usage when applicable. The ledger
-refuses overwrites and locks concurrent runs. Keep its volume and every recorded
-run; deleting them does not reset the spending authorization. Authoring Codex
-usage is separate from the evaluator's model-call ledger.
+## 4. Complete the policy roundtrip and score
 
-Once private model spending is authorized:
+Tell the repository session that `identities.json` is ready in the exchange.
+Ask it to complete the reviewed policy/source changes and authorized activation. It verifies
+actual IAM, protected environments, golden-reader access, bootstrap, and schema
+prerequisites. The kit rehearsal alone establishes none of these.
 
-```sh
-python3 holdout.py evaluate --inputs /ABSOLUTE/PATH/candidate -- prepare \
-  --corpus /private/corpus --bundle /input/release.zip \
-  --context /input/context.json --policy /input/policy.json \
-  --output /output/prep-001 --history /output/history.json
-python3 holdout.py export-report --run prep-001 preparation-report.json
-```
+**Choose the scored candidate after the final changes have completed development
+delivery.** The repository session exports that candidate's exact original bundle
+and six-field delivery identity. The preparation candidate may have an earlier
+commit; calibration remains reusable when the frozen holdout, evaluator, evidence,
+and review identities match. Keep the reviewed kit fixed during this roundtrip.
 
-Preparation calibrates judges against every supplied reference and rehearses
-actors three times per case. It does not measure candidate quality. Review
-disagreements and all incomplete/invalid measurements privately; `complete: true`
-alone is not semantic approval. The $5 execution and $25 cumulative ceilings
-include preparation and failed calls. Unknown usage blocks further paid calls.
+Repository Codex retains the earlier packet, writes the final one to
+`exchange/candidate/`, and writes the approved policy to `exchange/policy.json`.
+Tell private Codex to import them; `import_policy` reads that one policy file.
+Importing verifies the artifact and policy structure and saves private snapshots.
+After your explicit **scoring authorization**, the guide checks active identities,
+calibration review, spending history, and approval time before starting paid calls.
+Do not replace the candidate merely because `main` later advances.
 
-Create `calibration-review.json` on the private host after Ryan's review:
+After scoring, review the flagged failures, disagreements, invalid/incomplete
+measurements, provenance, and accounting. Open any complete private evidence you
+need. Explicit **final review approval** lets Codex render and export `summary.json`.
+It retains failures and raw grades. Qualification requires **240/300 successful
+trials with all 300 measured and valid**, known usage, and the spending limits;
+approval cannot waive a failed gate. Emulated latency describes this benchmark,
+not production latency.
 
-```json
-{
-  "status": "approved",
-  "evidence_sha256": "COPY_FROM_PREPARATION_REPORT",
-  "reviewer": "Ryan",
-  "evidence": "Describe the private review, disagreements, and decision."
-}
-```
+Tell the repository session that `summary.json` is ready in the exchange. It
+imports it and guides the real `golden-review`, preparation, and cutover approvals.
+See [the production qualification contract](GOLDEN_RELEASE.md). Private reports,
+reviews, backups, manifests, cases, and transcripts stay on the private workstation.
 
-```sh
-python3 holdout.py import-review calibration-review.json
-python3 holdout.py evaluate -- render --output /output/prep-001 \
-  --history /output/history.json --review /output/reviews/calibration-review.json
-```
+## Resume and interruptions
 
-The command prints the approved `calibration_sha256`. Return **only the three
-aggregate identity digests** (holdout, evaluator, calibration) for policy review.
-Follow `GOLDEN_RELEASE.md` in the connected repository to approve policy 4, ship
-the workflow, apply the separate foundation IAM change, and verify protected
-`golden-review`. Transfer the exact approved policy back as `candidate/policy.json`
-before evaluating the candidate.
+Reopen **Start/Resume Holdout** and ask Codex to continue. The guide uses existing
+manifests, ledger, run directories, and reviews to discover progress; conversation
+notes do not authorize work. If an evaluator is still running, reconnect to its
+status. Never start another paid run or render a completion marker while it runs.
 
-## 4. Evaluate and review the frozen candidate
+For interrupted or incomplete preparation, Codex presents the existing evidence
+before asking explicitly to run paid preparation again. Complete, usable
+preparation is reused. All runs and costs stay in the same history.
 
-After the policy approval and paid-run authorization:
+Unknown usage blocks further spending. Reviewing a run does not reconcile usage;
+the guide has no accounting reconciliation action. One original scored execution
+is allowed per artifact/holdout. After an infrastructure or actor-validity failure,
+Ryan may explicitly authorize the existing one-replacement procedure after
+reviewing the original evidence. Quality-only retries are forbidden. Keep the
+same history and all attempts; deleting files does not reset authorization.
 
-```sh
-python3 holdout.py evaluate --inputs /ABSOLUTE/PATH/candidate -- run \
-  --corpus /private/corpus --bundle /input/release.zip \
-  --context /input/context.json --policy /input/policy.json \
-  --output /output/run-001 --history /output/history.json \
-  --calibration /output/prep-001 \
-  --calibration-review /output/reviews/calibration-review.json
-python3 holdout.py export-report --run run-001 candidate-report.json
-python3 holdout.py export-private private-review-002
-```
+Policy has no maximum private evaluation age. The connected release still needs
+its retained workflow artifacts (90 days), and a saved Terraform preparation plan
+expires after 24 hours. Codex inspects existing GitHub runs and claims before any
+recovery; it does not automatically retry imports, evaluations, or releases.
 
-Review the complete private evidence under `evaluation/run-001/`, including
-`events.jsonl`, against the frozen corpus and references. Review provenance,
-grading, actor validity, spending, and completeness. Preserve failures and raw
-grades; do not change cases or select a better quality retry.
+## Lower-level reference
 
-Create `candidate-review.json` with the same four review fields above, using
-`candidate-report.json`'s evidence digest and the actual private review decision.
-Then:
+From a reviewed repository checkout's `v2/` directory, these commands build the
+public packet and export a verified preparation/final candidate respectively:
 
 ```sh
-python3 holdout.py import-review candidate-review.json
-python3 holdout.py evaluate -- render --output /output/run-001 \
-  --history /output/history.json --review /output/reviews/candidate-review.json
-python3 holdout.py export-summary --run run-001 summary.json
+uv run --locked python -m eval.holdout_container.build --output eval/private/holdout-packet --images all
+uv run --locked python -m scripts.holdout_candidate --development-run RUN_ID --output eval/private/candidate
 ```
 
-Only `summary.json` returns to the connected release operator. It contains
-aggregate counts, timing, cost, uncertainty, and opaque identities. Private
-reports, reviews, backups, manifests, cases, and transcripts stay private.
-The protected workflow archives valid results and qualifies only **240/300 or
-better with all 300 trials valid and measured**, within the spending limits.
-The qualification policy has no maximum evaluation age; evidence remains bound
-to the exact artifact, active policy, and approval. Release verification requires
-workflow artifacts retained for 90 days; see [GOLDEN_RELEASE.md](GOLDEN_RELEASE.md).
-Approval cannot waive failures.
+The exporter refuses overwrite; its optional `--policy PATH` selects the reviewed
+policy bytes. Output must be under ignored `v2/eval/private/` or at the fixed
+exchange `candidate/`. Keep the packet's original ZIP unchanged.
 
-There is one original execution per artifact/holdout. For an infrastructure or
-actor-validity interruption, Ryan may explicitly authorize one replacement by
-reviewing the original evidence and adding `replacement_reason: infrastructure`
-or `actor_validity` to a separate review JSON. Import that file and add
-`--replacement-review /output/reviews/NAME.json` to `run`, with a new output
-directory. Quality-only retries are rejected. Keep the same ledger; both attempts
-remain in the aggregate. After interruption, `render` conservatively uses the
-original start time when no completion marker exists.
+On the private host, `holdout.py load`, `check`, `network-check`, and `preflight`
+verify transfer/image identities, synthetic teaching inputs, permitted connectivity,
+and ARM64 imports. An `exec format error` means host emulation needs repair.
+`holdout.py --help` retains direct author/validate/evaluate and export commands for
+diagnosis. Direct commands retain the same authorization and privacy requirements.
+`export-private` creates a private backup; never send that backup to the repository.
