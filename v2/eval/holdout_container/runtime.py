@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import fcntl
+import http.client
 import json
 import os
 import platform
@@ -11,9 +13,13 @@ import socket
 import subprocess
 import sys
 import tempfile
+import tomllib
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
+
+AUTH_DIRECTORY = Path("/auth")
 
 
 def selfcheck() -> None:
@@ -56,17 +62,16 @@ def selfcheck() -> None:
         flags[name] == "false"
         for name in ("apps", "plugins", "remote_plugin", "hooks", "memories")
     )
+    config = tomllib.loads(Path("/etc/codex/config.toml").read_text())
+    assert config["model_provider"] == "openai"
+    assert config["forced_login_method"] == "chatgpt"
+    assert config["cli_auth_credentials_store"] == "file"
     startup = subprocess.run(
         [
             "codex",
             "--no-daemon",
-            "--strict-config",
-            "exec",
-            "--skip-git-repo-check",
-            "--ephemeral",
-            "--model",
-            "gpt-6-astra",
-            "offline configuration check",
+            "login",
+            "status",
         ],
         env={
             key: value for key, value in os.environ.items() if key != "OPENAI_API_KEY"
@@ -76,20 +81,28 @@ def selfcheck() -> None:
         timeout=20,
     )
     assert startup.returncode == 1
-    assert "provider: private_openai" in startup.stderr
-    assert "Missing environment variable: `OPENAI_API_KEY`" in startup.stderr
+    assert "not logged in" in (startup.stdout + startup.stderr).lower()
     print("Synthetic teaching corpus, frozen kit and Codex configuration passed.")
 
 
-def network_check() -> None:
+def network_check(role: str) -> None:
+    if role not in {"author", "evaluator"}:
+        raise ValueError("unknown network policy")
     proxy = os.environ["HTTPS_PROXY"]
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({"https": proxy}))
+    allowed = (
+        ("auth.openai.com", "chatgpt.com") if role == "author" else ("api.openai.com",)
+    )
+    denied = (
+        ("api.openai.com",) if role == "author" else ("auth.openai.com", "chatgpt.com")
+    )
     for host in (
         "github.com",
         "raw.githubusercontent.com",
         "pypi.org",
         "registry.npmjs.org",
         "example.com",
+        *denied,
     ):
         try:
             opener.open(f"https://{host}/", timeout=8)
@@ -102,14 +115,69 @@ def network_check() -> None:
             raise AssertionError("direct outbound connectivity is enabled")
     except OSError:
         pass
-    # Unauthenticated metadata GET checks TLS/proxy routing without inference.
-    try:
-        opener.open("https://api.openai.com/v1/models", timeout=15)
-    except urllib.error.HTTPError as error:
-        assert error.code == 401, f"unexpected API connectivity status: {error.code}"
-    else:
-        raise AssertionError("expected unauthenticated API response")
-    print("Model API reachable; repository/package hosts and direct egress denied.")
+    # CONNECT plus TLS verifies the allowed hosts without login or inference.
+    address = urllib.parse.urlsplit(proxy)
+    assert address.hostname and address.port
+    for host in allowed:
+        connection = http.client.HTTPSConnection(
+            address.hostname, address.port, timeout=15
+        )
+        try:
+            connection.set_tunnel(host, 443)
+            connection.connect()
+        finally:
+            connection.close()
+    print(
+        f"{role}: allowed hosts reachable; other policy, repository/package hosts and direct egress denied."
+    )
+
+
+def author_session(command: str, arguments: list[str]) -> None:
+    """Persist only auth.json; Codex sessions and configuration stay on tmpfs."""
+    saved = AUTH_DIRECTORY / "auth.json"
+    current = Path(os.environ["CODEX_HOME"]) / "auth.json"
+    for key in ("OPENAI_API_KEY", "CODEX_API_KEY", "CODEX_ACCESS_TOKEN"):
+        os.environ.pop(key, None)
+    base = ["codex", "--no-daemon"]
+    # ponytail: one author at a time; separate auth volumes if concurrent authors are needed.
+    with (saved.parent / ".lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError(
+                "another author/login session is active; close it first"
+            ) from None
+        if saved.exists():
+            shutil.copyfile(saved, current)
+            current.chmod(0o600)
+        try:
+            if command == "login":
+                subprocess.run([*base, "login", "--device-auth"], check=True)
+            elif command == "logout":
+                subprocess.run([*base, "logout"], check=True)
+                current.unlink(missing_ok=True)
+            else:
+                if (
+                    not current.exists()
+                    or json.loads(current.read_text()).get("auth_mode") != "chatgpt"
+                ):
+                    raise ValueError(
+                        "author needs ChatGPT sign-in; run python3 holdout.py login"
+                    )
+                status = subprocess.run([*base, "login", "status"], capture_output=True)
+                if status.returncode:
+                    raise ValueError(
+                        "author needs ChatGPT sign-in; run python3 holdout.py login"
+                    )
+                subprocess.run([*base, "--strict-config", *arguments], check=True)
+        finally:
+            if current.exists():
+                temporary = saved.with_suffix(".tmp")
+                shutil.copyfile(current, temporary)
+                temporary.chmod(0o600)
+                temporary.replace(saved)
+            else:
+                saved.unlink(missing_ok=True)
 
 
 def main() -> None:
@@ -122,19 +190,18 @@ def main() -> None:
     if command == "selfcheck":
         selfcheck()
     elif command == "network-check":
-        network_check()
+        network_check(arguments[0])
+    elif command in {"login", "logout"}:
+        author_session(command, [])
     elif command == "author":
         if Path("/private/corpus/manifest.json").exists():
             raise ValueError("this corpus is frozen; authoring is closed")
-        if not arguments or not os.environ.get("OPENAI_API_KEY"):
-            raise ValueError("author requires a model argument and OPENAI_API_KEY")
+        if not arguments:
+            raise ValueError("author requires a model argument")
         model, *prompt = arguments
-        os.execvp(
-            "codex",
+        author_session(
+            "author",
             [
-                "codex",
-                "--no-daemon",
-                "--strict-config",
                 "--model",
                 model,
                 "--cd",

@@ -6,7 +6,7 @@ COPY site/ /opt/site/
 COPY kit/ /opt/kit/
 COPY config.toml requirements.toml /etc/codex/
 COPY runtime.py /opt/runtime.py
-RUN mkdir /private /output && chown 1000:1000 /private /output
+RUN mkdir /private /output /auth && chown 1000:1000 /private /output /auth && chmod 700 /auth
 ENV PATH="/opt/codex/bin:${PATH}" PYTHONPATH=/opt/kit:/opt/site PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OTEL_SDK_DISABLED=true
 USER 1000:1000
 WORKDIR /private

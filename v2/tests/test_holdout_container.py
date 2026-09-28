@@ -1,7 +1,9 @@
 """Synthetic checks for transfer integrity and container containment."""
 
+import fcntl
 import io
 import json
+import subprocess
 import tarfile
 import zipfile
 from pathlib import Path
@@ -69,7 +71,165 @@ def test_online_evaluator_uses_readonly_corpus_and_proxy(tmp_path: Path) -> None
     assert "OPENAI_API_KEY" in command
     assert "private-test-value" not in repr(calls)
     assert "HTTPS_PROXY=http://model-proxy:3128" in command
+    assert not any(holdout.AUTH in argument for argument in command)
+    assert "/etc/squid/squid.conf" in calls[1]
     assert calls[-1][:2] == ("network", "rm")
+
+
+@pytest.mark.parametrize("action", ["login", "logout", "author"])
+def test_subscription_commands_mount_only_their_own_credentials(action: str) -> None:
+    with (
+        patch.object(holdout, "docker") as docker,
+        patch.object(holdout, "verify_images"),
+        patch.object(
+            holdout.sys,
+            "argv",
+            [
+                "holdout.py",
+                action,
+                *(["--model", "gpt-6-astra"] if action == "author" else []),
+            ],
+        ),
+        patch.dict("os.environ", {"OPENAI_API_KEY": "synthetic-unused-key"}),
+    ):
+        holdout.main()
+    calls = [call.args for call in docker.call_args_list]
+    command = next(call for call in calls if call[0] == "run")
+    assert f"type=volume,source={holdout.AUTH},target=/auth" in command
+    assert "OPENAI_API_KEY" not in command
+    assert "synthetic-unused-key" not in repr(calls)
+    assert not any("type=bind" in argument for argument in command)
+    if action == "logout":
+        assert command[command.index("--network") + 1] == "none"
+    else:
+        assert "/etc/squid/squid-author.conf" in calls[1]
+    assert any(holdout.CORPUS in argument for argument in command) == (
+        action == "author"
+    )
+
+
+def test_author_api_credentials_are_rejected_before_launch() -> None:
+    with (
+        patch.object(holdout, "docker") as docker,
+        pytest.raises(ValueError, match="only for evaluator"),
+    ):
+        holdout.run("author", ["author"], credentials=True)
+    docker.assert_not_called()
+
+
+def test_subscription_login_refresh_and_logout(tmp_path: Path) -> None:
+    auth, home = tmp_path / "auth", tmp_path / "home"
+    auth.mkdir()
+    home.mkdir()
+    current = home / "auth.json"
+
+    def codex(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert "OPENAI_API_KEY" not in runtime.os.environ
+        assert "CODEX_API_KEY" not in runtime.os.environ
+        if "login" in command or "logout" in command:
+            assert "--strict-config" not in command
+        if command[-2:] == ["login", "--device-auth"]:
+            current.write_text(
+                json.dumps({"auth_mode": "chatgpt", "tokens": "synthetic-original"})
+            )
+        elif command[-1] == "synthetic-author-prompt":
+            assert "--strict-config" in command
+            assert "synthetic-original" in current.read_text()
+            current.write_text(
+                json.dumps({"auth_mode": "chatgpt", "tokens": "synthetic-refreshed"})
+            )
+            (home / "session.json").write_text("temporary session")
+            raise subprocess.CalledProcessError(1, command)
+        return subprocess.CompletedProcess(command, 0)
+
+    with (
+        patch.object(runtime, "AUTH_DIRECTORY", auth),
+        patch.dict(
+            runtime.os.environ,
+            {
+                "CODEX_HOME": str(home),
+                "OPENAI_API_KEY": "synthetic",
+                "CODEX_API_KEY": "synthetic",
+            },
+        ),
+        patch.object(runtime.subprocess, "run", side_effect=codex),
+    ):
+        runtime.author_session("login", [])
+        current.unlink()
+        with pytest.raises(subprocess.CalledProcessError):
+            runtime.author_session("author", ["synthetic-author-prompt"])
+        saved = auth / "auth.json"
+        assert "synthetic-refreshed" in saved.read_text()
+        assert saved.stat().st_mode & 0o777 == 0o600
+        assert {p.name for p in auth.iterdir()} == {".lock", "auth.json"}
+        runtime.author_session("logout", [])
+        assert not saved.exists()
+
+
+@pytest.mark.parametrize(
+    "stored", [None, {"auth_mode": "apikey", "OPENAI_API_KEY": "synthetic"}]
+)
+def test_author_requires_subscription_login(
+    tmp_path: Path, stored: dict[str, str] | None
+) -> None:
+    auth, home = tmp_path / "auth", tmp_path / "home"
+    auth.mkdir()
+    home.mkdir()
+    if stored is not None:
+        (auth / "auth.json").write_text(json.dumps(stored))
+    with (
+        patch.object(runtime, "AUTH_DIRECTORY", auth),
+        patch.dict(runtime.os.environ, {"CODEX_HOME": str(home)}),
+        patch.object(runtime.subprocess, "run") as execute,
+        pytest.raises(ValueError, match=r"holdout\.py login"),
+    ):
+        runtime.author_session("author", ["synthetic"])
+    execute.assert_not_called()
+
+
+def test_concurrent_login_fails_without_changing_credentials(tmp_path: Path) -> None:
+    with (
+        (tmp_path / ".lock").open("a") as lock,
+        patch.object(runtime, "AUTH_DIRECTORY", tmp_path),
+        patch.dict(runtime.os.environ, {"CODEX_HOME": str(tmp_path / "home")}),
+        patch.object(runtime.subprocess, "run") as execute,
+    ):
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(ValueError, match="session is active"):
+            runtime.author_session("login", [])
+    execute.assert_not_called()
+
+
+def test_private_export_never_mounts_login_volume(tmp_path: Path) -> None:
+    with patch.object(holdout, "docker") as docker:
+        holdout.export_private(tmp_path / "backup")
+    assert f"source={holdout.AUTH}," not in repr(docker.call_args_list)
+
+
+@pytest.mark.parametrize(
+    "role,allowed",
+    [("author", ["auth.openai.com", "chatgpt.com"]), ("evaluator", ["api.openai.com"])],
+)
+def test_network_check_probes_both_policies_without_auth(
+    role: str, allowed: list[str]
+) -> None:
+    with (
+        patch.dict(runtime.os.environ, {"HTTPS_PROXY": "http://model-proxy:3128"}),
+        patch.object(runtime.urllib.request, "build_opener") as opener,
+        patch.object(runtime.socket, "create_connection", side_effect=OSError),
+        patch.object(runtime.http.client, "HTTPSConnection") as connection,
+    ):
+        opener.return_value.open.side_effect = runtime.urllib.error.URLError(
+            "Tunnel connection failed: 403 Forbidden"
+        )
+        runtime.network_check(role)
+    assert [
+        call.args[0] for call in connection.return_value.set_tunnel.call_args_list
+    ] == allowed
+    denied = [call.args[0] for call in opener.return_value.open.call_args_list]
+    assert "https://github.com/" in denied
+    assert ("https://api.openai.com/" in denied) == (role == "author")
+    assert ("https://chatgpt.com/" in denied) == (role == "evaluator")
 
 
 def test_evaluator_rejects_unrelated_input_mount(tmp_path: Path) -> None:

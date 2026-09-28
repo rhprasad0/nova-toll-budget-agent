@@ -1,13 +1,18 @@
 # Private holdout workstation
 
-Use a separate **x86 Linux machine with Python 3.10+, Docker, and working ARM64
-binfmt/QEMU support**. Prepare Docker and emulation before restricting its network.
+Use an **x86 Linux host with Python 3.10+, Docker, and working ARM64
+binfmt/QEMU support**. Run the packet from a directory outside the repository.
+The containers isolate the author from repository files and host Codex state;
+the host operator remains trusted and can access Docker volumes. Keep private
+cases and credentials out of repository sessions. Prepare Docker and emulation
+before restricting its network.
 The author runs natively; the evaluator runs ARM64 Python 3.13 to load the delivered
 application unchanged. Emulated latency is useful for this benchmark, not a
 production latency prediction.
 
-This guide prepares the workflow. Paid authoring, calibration, evaluation, policy
-approval, and deployment each require the operator's existing authorization.
+This guide prepares the workflow. Subscription authoring, paid calibration,
+evaluation, policy approval, and deployment each require the operator's existing
+authorization.
 No real holdout or production qualification is included in the public packet.
 
 ## 1. Build and transfer
@@ -24,37 +29,50 @@ guide, and `transfer.json` with checksums and immutable image IDs. Keep the whol
 directory together. Its build needs network access; loading it does not. Rebuild
 after any change to exported sources. Preserve the original export for the run.
 
-Transfer that directory to the private machine. **Keep the candidate bundle away
-from the author until the 100 cases have been reviewed and frozen.** Do not copy
-the repository, development runs, host Codex profile, connectors, or memory.
+Copy the complete directory to the private host, outside the repository. **Keep
+the candidate bundle away from the author until the 100 cases have been reviewed
+and frozen.** Do not copy the repository, development runs, host Codex profile,
+connectors, or memory.
 
 From the transferred directory:
 
 ```sh
 python3 holdout.py load
 python3 holdout.py check
-python3 holdout.py network-check
 python3 holdout.py preflight
+python3 holdout.py network-check
 ```
 
 `load` verifies checksums and image IDs; every later command checks IDs again.
 `check` validates only synthetic teaching files and the disabled Codex integrations.
-`network-check` makes an unauthenticated API request and verifies repository,
-package, and direct outbound access are denied. It makes no inference calls.
+`network-check` checks both proxy policies with unauthenticated TLS connections
+and verifies repository, package, cross-policy, and direct outbound access are
+denied. It makes no inference calls and mounts no login credentials.
 `preflight` must confirm ARM64 Python 3.13 and evaluator imports. An `exec format
 error` means the host's ARM64 emulation is missing; fix that before proceeding.
 
 The launcher gives online containers only an internal Docker network and a Squid
-proxy allowing `api.openai.com:443`. Use a host firewall consistent with this
-restriction. The containers have no Docker socket, host profile, or repository
+proxy. Author/login sessions can reach only `auth.openai.com:443` and
+`chatgpt.com:443`; evaluator sessions can reach only `api.openai.com:443`.
+Use a host firewall consistent with these restrictions. The containers have no
+Docker socket, host profile, or repository
 mount. This is reviewed-code isolation; the host operator remains trusted.
 
 ## 2. Author, review, and freeze privately
 
-Set `OPENAI_API_KEY` privately on the operator host for authorized model calls.
-The launcher passes its value without saving it in the packet. Use a private
-account/project whose traces are inaccessible to the repository agent. Choose
-the author model explicitly, then start:
+Codex is installed in the author image. Authoring uses your ChatGPT subscription;
+the launcher never passes an API key to the author and has no API fallback.
+Enable device-code login in your ChatGPT security settings (or through your
+workspace administrator), then run on the host:
+
+```sh
+python3 holdout.py login
+```
+
+Open the printed sign-in link in your browser and enter its one-time code. Use
+an account/workspace whose authoring content is inaccessible to the repository
+agent. See the [Codex authentication guide](https://developers.openai.com/codex/auth).
+Choose a model available through your subscription, then start:
 
 ```sh
 python3 holdout.py author --model YOUR_AUTHOR_MODEL
@@ -65,6 +83,12 @@ The author reads `/opt/kit/START_HERE.md`, `/opt/kit/public/`, and teaching exam
 It writes new cases to `/private/corpus` and notes to `/private/review`. Dependencies
 are already installed; package downloads are blocked. Each invocation has fresh
 Codex configuration/history; files persist in `tollchat-holdout-corpus`.
+Only the login credentials persist in the separate `tollchat-holdout-auth` volume.
+This volume is never mounted into evaluation, validation, or export commands.
+One author/login/logout session can use it at a time. Expired sign-in requires
+`python3 holdout.py login` again. To remove saved credentials without deleting
+cases or results, run `python3 holdout.py logout`. Private backups exclude login
+credentials; sign in again when moving to a new host.
 Give a follow-up prompt as the optional final argument to `author` when needed.
 
 Ryan reviews the scenario allocation, independence, route plausibility, fixture
@@ -119,7 +143,10 @@ refuses overwrites and locks concurrent runs. Keep its volume and every recorded
 run; deleting them does not reset the spending authorization. Authoring Codex
 usage is separate from the evaluator's model-call ledger.
 
-Once private model spending is authorized:
+Once private model spending is authorized, set `OPENAI_API_KEY` privately on the
+operator host using the private evaluation account/project. Only evaluator
+`prepare` and `run` receive it; the key is never saved in the packet. Preparation
+includes paid calibration and actor checks. Then run:
 
 ```sh
 python3 holdout.py evaluate --inputs /ABSOLUTE/PATH/candidate -- prepare \
@@ -208,3 +235,15 @@ or `actor_validity` to a separate review JSON. Import that file and add
 directory. Quality-only retries are rejected. Keep the same ledger; both attempts
 remain in the aggregate. After interruption, `render` conservatively uses the
 original start time when no completion marker exists.
+
+## Updating the packet
+
+Build a new complete packet from the reviewed source into a new ignored output
+directory. Keep the original packet, and copy the new directory alongside it
+outside the repository. Do not mix launchers, archives, or manifests from
+different packets. From the new directory, rerun `load`, `check`, `preflight`,
+and `network-check`, then `login` when needed. The existing named corpus, results,
+and auth volumes persist; never delete them to install a packet update.
+Loading a packet changes the local image tags, so reload an older packet before
+using its launcher. Frozen corpus inputs and their existing kit identity remain
+binding; an update is not permission to rewrite a frozen manifest.

@@ -89,7 +89,7 @@ def build(destination: Path, roles: list[str]) -> None:
             context = Path(temporary)
             shutil.copyfile(SOURCE / f"Dockerfile.{role}", context / "Dockerfile")
             if role == "proxy":
-                shutil.copyfile(SOURCE / "squid.conf", context / "squid.conf")
+                copy_files(("squid.conf", "squid-author.conf"), SOURCE, context)
             else:
                 shutil.copyfile(SOURCE / "runtime.py", context / "runtime.py")
                 requirements = context / "requirements.txt"
