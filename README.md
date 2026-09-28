@@ -95,8 +95,10 @@ accuracy.
 
 The [production qualification gate](v2/eval/GOLDEN_RELEASE.md) is prepared for a
 separate, independently authored private set of 100 cases, with three trials each
-and an 80% overall admission floor. It accepts signed aggregate results and human
-review; private cases must remain outside coding-agent access. **Activation and
+and an 80% overall admission floor. It accepts aggregate results and protected human
+approval tied to the exact delivered artifact. Private cases stay outside the
+development agent's access. The [container kit](v2/eval/HOLDOUT_SETUP.md) supports
+authoring and execution on a separate machine. **Activation and
 private evaluation are still pending.** Reports will include failures, uncertainty,
 consistency, latency, cost, and repeat-attempt counts.
 

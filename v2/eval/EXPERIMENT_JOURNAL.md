@@ -873,3 +873,31 @@ Final verification cost **$1.158477940** across **2,004 known calls**. The three
 Independent final review covered all 31 failures, passing counterparts for lost slots, and the prescribed first passing and failing trajectory in every coverage family. It found no decision-changing grading ambiguity or demonstrated material regression attributable to the change. Genuine route failures remain: two trials chose the wrong Jones Branch variant and another changed a separately supplied return route. Returned-alternative scenarios finished **6/9**, versus baseline **7/9** and search **5/9**. All seven other coverage families equaled or improved on baseline. We retain the application under the agreed above-baseline rule, with the target explicitly unmet.
 
 Publication advances prompt metadata to **2.3.15** and renderer **1.0.2**, preserving historical release hashes. All 100 rendered prompt hashes, full tool schemas, model settings, measurement inputs and SOP bytes match evaluated commit `46476e87`; application source differs only in the prompt version literal. The ordinary one-repetition default is restored. Validation passed 87 focused application/development tests, 16 comparison tests, corpus validation, contract-version checks, lint and type checks; earlier campaign preparation also passed the relevant runner/accounting checks. Detailed evidence stays private. These results measure the exposed development set under frozen replay and do not establish live pricing correctness or production qualification.
+
+### 2026-09-27 — Private holdout transfer and release tooling
+
+Prepared authoring kit **1.0.2**, separate author/evaluator containers, and a private
+100-case, three-trial evaluator for the exact delivered ARM64 application. The
+author sees public contracts and synthetic teaching examples. The evaluator
+calibrates all authored references, rehearses actors, preserves cumulative
+spending and unsuccessful attempts, and exports aggregate evidence only. Policy
+**4.0.0** uses protected GitHub review of that aggregate instead of an external
+signer, retaining the 240/300 threshold, complete-measurement requirement,
+$5 execution/$25 cumulative limits, and 24-hour freshness window.
+
+Shared transport and reference-calibration changes advance the development
+contract to **3.3.28 / harness 2.3.28**. Development cases, application SOP, and
+application model are unchanged. The previous calibration approval remains
+historical; the new contract's review is pending. Focused offline tests, corpus
+validation, type/lint checks, and workflow checks passed. Container checks verified
+the author image's allowlist and blocked repository/package/direct network access
+while permitting the model API. The delivered candidate's checksum and package
+inventory also passed validation. ARM64 execution still requires the private
+machine's emulation preflight; these checks establish no candidate quality score.
+
+No real holdout was authored or evaluated, no paid inference was used, and no
+cloud changes were applied. Private authorship/review, calibration, approval of
+the three exact policy identities, workflow delivery, and a separate foundation
+IAM apply remain prerequisites to production qualification. The transfer files
+and granular verification output stay in ignored local storage; current operation
+is documented in [HOLDOUT_SETUP.md](HOLDOUT_SETUP.md).

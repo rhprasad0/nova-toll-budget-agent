@@ -79,7 +79,7 @@ def test_release_blocks_even_with_historical_approval(
         gate.revalidate({"candidate": "a" * 40, "golden": {"run_id": "old-run"}})
     receipt.assert_not_called()
     with pytest.raises(ValueError, match="unsupported private"):
-        release.import_summary({}, "0" * 64, "v1", tmp_path / "prepared")
+        release.prepare(10, b"{}", tmp_path / "prepared")
     account.assert_not_called()
     assert not (tmp_path / "prepared").exists()
 

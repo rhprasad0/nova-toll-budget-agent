@@ -1,9 +1,10 @@
 # Golden release metadata
 
 This directory retains versioned policies and historical approval/registry records.
-The active [private production gate](../../GOLDEN_RELEASE.md) uses `policy-3.0.0.json`,
-which remains pending until independent evaluator activation. Its public key will
-be supplied here after review; no private key or held-out cases belong here.
+The active [private production gate](../../GOLDEN_RELEASE.md) uses `policy-4.0.0.json`,
+which remains pending until private authoring, calibration, and human approval.
+Protected GitHub approval attests the result; no signing key or held-out cases
+belong here. Historical signed policies and receipts remain unchanged.
 The historical initial archive is summarized in the journal; focused synthetic
 fixtures cover offline report compatibility. The retired `golden_baseline` CLI
 is no longer part of the release path. A production reference is not required.
@@ -11,7 +12,7 @@ is no longer part of the release path. A production reference is not required.
 The [experiment journal](../../EXPERIMENT_JOURNAL.md) records prior results and
 decisions. Keep development output in ignored `eval/private/` or the existing
 private workflow artifact store. The external evaluator retains held-out details;
-only aggregate signed summaries cross into the release workflow. Publish only
+only aggregate JSON reports cross into the release workflow. Publish only
 journal summaries, never new per-run review packets in this directory.
 
 Earlier retired artifacts remain recoverable from commit

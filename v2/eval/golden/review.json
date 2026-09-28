@@ -1,10 +1,10 @@
 {
-  "status": "approved",
-  "corpus_sha256": "a3c960438b2fdb4fccc37e4949aec56fd38308f3cdc64ae99baf83f6214510f1",
+  "status": "pending",
+  "corpus_sha256": "337ce9ce3edb2969cd5e05ab5917a9cfb5dd5c8a4fc945897aaa73c299e2fe53",
   "human_trajectory_adjudication": false,
-  "evidence": "Parent accepts independent review under authorized imperfect-calibration allowance:176/176 references,528 known calls,511/516 criterion labels,176/176 actor labels,171/172 effective overall agreement and51/51 negative controls rejected. All13 nonempty money catalogs and15 occurrences correctly classified and numerically checked; wrong rounding remains rejected. One localized false failure: Outcome/Rules invent user attribution for an explicitly rejected price quotation; Grounding correctly treats it as a nonclaim. Preserve all grades and audit quotation-based score changes. No human adjudication claimed.",
-  "reviewer": "Codex parent with independent measurement_review recommendation; Ryan-authorized continuation",
-  "contract_commit": "8be9a66cffec04f7e48382225114e9ce7110d3e6",
-  "reviewed_at": "2026-09-27T14:01:23.152671+00:00",
-  "authorization": "Ryan explicitly authorized further hill climbing for testing and inspection of needed harness tweaks under the remaining existing evaluation allowance."
+  "evidence": "Private holdout support changes the packaged-agent transport and adds explicit reference calibration. Synthetic checks pass; the previous development calibration approval belongs to contract 3.3.27 and is not transferred. Historical results remain in EXPERIMENT_JOURNAL.md.",
+  "reviewer": null,
+  "contract_commit": null,
+  "reviewed_at": null,
+  "authorization": "Ryan explicitly authorized implementation of the private holdout packet and release gate. New development calibration remains pending."
 }

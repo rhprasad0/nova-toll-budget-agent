@@ -33,7 +33,7 @@ from eval import golden
 from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.27"
+VERSION = "2.3.28"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -1721,7 +1721,11 @@ def development_examples() -> list[golden.Example]:
     ]
 
 
-def calibrate(journal: Journal, pool: ThreadPoolExecutor) -> list[dict[str, Any]]:
+def calibrate(
+    journal: Journal,
+    pool: ThreadPoolExecutor,
+    examples: list[golden.Example] | None = None,
+) -> list[dict[str, Any]]:
     cases = {c.id: c for c in golden.load_cases()}
 
     def evaluate(example: golden.Example) -> dict[str, Any]:
@@ -1794,7 +1798,9 @@ def calibrate(journal: Journal, pool: ThreadPoolExecutor) -> list[dict[str, Any]
         print(f"calibration {attempt.id}: {row['disagreements']}", flush=True)
         return row
 
-    return list(pool.map(evaluate, development_examples()))
+    return list(
+        pool.map(evaluate, development_examples() if examples is None else examples)
+    )
 
 
 def percentile(values: list[float], p: float) -> float | None:

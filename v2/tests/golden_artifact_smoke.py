@@ -101,7 +101,19 @@ def main(bundle: Path) -> None:
 
     def process(args: list[str], **kwargs: Any) -> subprocess.Popen[bytes]:  # noqa: ANN401
         assert args[1:3] == ["-I", "-S"]
-        assert set(kwargs["env"]) == {"PATH", "LANG"}
+        assert kwargs["env"]["OTEL_SDK_DISABLED"] == "true"
+        assert set(kwargs["env"]) <= {
+            "PATH",
+            "LANG",
+            "OTEL_SDK_DISABLED",
+            "HTTPS_PROXY",
+            "HTTP_PROXY",
+            "NO_PROXY",
+            "https_proxy",
+            "http_proxy",
+            "no_proxy",
+            "SSL_CERT_FILE",
+        }
         args[3] = str(Path(__file__).resolve())
         kwargs["stderr"] = None
         return cast("subprocess.Popen[bytes]", popen([*args, "--child"], **kwargs))

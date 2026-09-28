@@ -42,7 +42,7 @@ require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-Contract 3.3.27 / harness 2.3.27 uses `literal-input-prose-v1`. The corpus hashes
+Contract 3.3.28 / harness 2.3.28 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including

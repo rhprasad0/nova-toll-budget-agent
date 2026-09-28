@@ -1,9 +1,8 @@
-"""Import externally signed aggregate evidence; never execute private evals here."""
+"""Review bounded aggregate evidence; never execute private evals here."""
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import subprocess
 from pathlib import Path
@@ -66,36 +65,47 @@ def review_text(summary: dict[str, Any], result: dict[str, Any]) -> str:
     )
 
 
-def import_summary(
-    context: dict[str, Any], sha256: str, version: str, directory: Path
-) -> None:
+def prepared(summary: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    """Bind the dispatch input to trusted code and the exact delivered artifact."""
     code = gate.code_digest()
-    gate.require(
-        gate.is_hash(sha256) and bool(version) and version != "null",
-        "exact summary object required",
-    )
-    gate.development_account()
-    gate.protection("golden-evaluation")
-    gate.protection("golden-review")
     producer = gate.trusted_run(int(os.environ["GITHUB_RUN_ID"]), completed=False)
     gate.require(
         producer["head_sha"] == os.environ["GITHUB_SHA"], "trusted checkout mismatch"
     )
     gate.require(
-        context == resolve(context["development_run"]), "development provenance changed"
-    )
-    packet, metadata = gate.get_object(f"aggregates/inbox/{sha256}.json", version)
-    gate.require(
-        metadata["VersionId"] == version
-        and hashlib.sha256(packet).hexdigest() == sha256,
-        "imported summary object mismatch",
-    )
-    summary = gate.verify_summary(packet)
-    gate.require(
         all(summary[k] == context[k] for k in gate.IDENTITY),
-        "signed artifact identity mismatch",
+        "aggregate artifact identity mismatch",
     )
-    # Changing policy or importer code cannot create a fresh quality retry.
+    return {
+        **context,
+        "schema_version": 3,
+        "purpose": "candidate",
+        "run_id": producer["id"],
+        "attempt": 1,
+        "trusted_sha": producer["head_sha"],
+        "evaluation_code_sha256": code,
+        "summary": summary,
+        "created_at": summary["attempts"][-1]["completed_at"],
+        "report_sha256": gate.digest(summary),
+        "policy_sha256": summary["policy_sha256"],
+        "holdout_sha256": summary["holdout_sha256"],
+    }
+
+
+def prepare(development_run: int, packet: bytes, directory: Path) -> None:
+    """Read-only admission. Reject raw/private input before writing any artifact."""
+    summary = gate.verify_summary(packet)
+    value = prepared(summary, resolve(development_run))
+    result = gate.decision(summary)
+    directory.mkdir(parents=True, exist_ok=False)
+    gate.write(directory / "summary.json", summary)
+    gate.write(directory / "prepared.json", value)
+    gate.write(directory / "decision.json", result)
+    (directory / "review.md").write_text(review_text(summary, result))
+
+
+def archive_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    # Changing policy or workflow code cannot create a fresh quality retry.
     for index, attempt in enumerate(summary["attempts"]):
         claim = gate.digest(
             {
@@ -109,55 +119,30 @@ def import_summary(
         gate.immutable(f"aggregates/claims/{claim}.json", gate.canonical(outcomes))
         if not summary["unknown_usage"]:
             gate.immutable(f"aggregates/accounting/{claim}.json", gate.canonical(costs))
-    clean = gate.canonical(gate.strict_json(packet))
-    reference = gate.immutable(
-        f"aggregates/reports/{hashlib.sha256(clean).hexdigest()}.json", clean
+    return gate.immutable(
+        f"aggregates/reports/{gate.digest(summary)}.json", gate.canonical(summary)
     )
+
+
+def approve(directory: Path, packet: bytes) -> None:
+    summary = gate.verify_summary(packet)
+    value = gate.read(directory / "prepared.json")
+    gate.require(
+        value == prepared(summary, resolve(summary["development_run"]))
+        and gate.read(directory / "summary.json") == summary,
+        "approved aggregate or workflow binding changed",
+    )
+    value["review"] = gate.human_approval(value["run_id"], "golden-review")
+    gate.development_account()
+    value["archive"] = archive_summary(summary)
     result = gate.decision(summary)
-    directory.mkdir(parents=True, exist_ok=False)
-    gate.write(directory / "summary-envelope.json", gate.strict_json(clean))
+    value.update(result)
     gate.write(directory / "decision.json", result)
     (directory / "review.md").write_text(review_text(summary, result))
-    gate.write(
-        directory / "prepared.json",
-        {
-            **context,
-            "schema_version": 2,
-            "purpose": "candidate",
-            "run_id": producer["id"],
-            "attempt": 1,
-            "trusted_sha": producer["head_sha"],
-            "evaluation_code_sha256": code,
-            "archive": reference,
-            "signed_summary": gate.strict_json(clean),
-            "created_at": summary["attempts"][-1]["completed_at"],
-            "report_sha256": gate.digest(summary),
-            "policy_sha256": summary["policy_sha256"],
-            "holdout_sha256": summary["holdout_sha256"],
-            **result,
-        },
-    )
     gate.require(
         result["qualified"], "machine qualification failed; aggregate evidence retained"
     )
-
-
-def approve(directory: Path) -> None:
-    gate.development_account()
-    value = gate.read(directory / "prepared.json")
-    gate.require(
-        value["evaluation_code_sha256"] == gate.code_digest(), "importer changed"
-    )
-    producer = gate.trusted_run(int(os.environ["GITHUB_RUN_ID"]), completed=False)
-    gate.require(
-        value["run_id"] == producer["id"]
-        and value["attempt"] == 1
-        and value["trusted_sha"] == producer["head_sha"] == os.environ["GITHUB_SHA"],
-        "approval workflow mismatch",
-    )
-    gate.validate_receipt(value, resolve(value["development_run"]))
-    gate.fetch(gate.obj(value["archive"]))
-    value["review"] = gate.human_approval(value["run_id"], "golden-review")
+    gate.validate_receipt(value, resolve(summary["development_run"]))
     gate.write(directory / "receipt.json", value)
     publish_candidate(value)
 
@@ -212,39 +197,29 @@ def compare(current: Path, previous: Path) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("resolve", "import", "approve", "compare"))
+    parser.add_argument("mode", choices=("prepare", "approve", "compare"))
     parser.add_argument("--development-run", type=int, default=0)
-    parser.add_argument("--summary-sha256", default="")
-    parser.add_argument("--summary-version", default="")
     parser.add_argument("--directory", type=Path, required=True)
-    parser.add_argument("--context", type=Path)
     parser.add_argument("--previous", type=Path)
     args = parser.parse_args()
     try:
-        if args.mode == "resolve":
-            gate.code_digest()
-            args.directory.mkdir(parents=True, exist_ok=True)
-            gate.write(args.directory / "context.json", resolve(args.development_run))
-        elif args.mode == "import":
-            gate.require(args.context is not None, "import requires resolved context")
-            assert args.context is not None
-            import_summary(
-                gate.read(args.context),
-                args.summary_sha256,
-                args.summary_version,
+        if args.mode == "prepare":
+            prepare(
+                args.development_run,
+                os.environ["SUMMARY_JSON"].encode(),
                 args.directory,
             )
         elif args.mode == "approve":
-            approve(args.directory)
+            approve(args.directory, os.environ["SUMMARY_JSON"].encode())
         else:
             gate.require(
                 args.previous is not None,
-                "comparison requires a previous signed envelope",
+                "comparison requires a previous aggregate summary",
             )
             assert args.previous is not None
             gate.write(
                 args.directory / "comparison.json",
-                compare(args.directory / "summary-envelope.json", args.previous),
+                compare(args.directory / "summary.json", args.previous),
             )
     except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError):
         raise SystemExit(

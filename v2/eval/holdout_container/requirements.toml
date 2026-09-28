@@ -1,0 +1,24 @@
+allowed_web_search_modes = ["disabled"]
+allowed_approval_policies = ["never"]
+allow_managed_hooks_only = true
+check_for_update_on_startup = false
+mcp_servers = {}
+
+[features]
+apps = false
+plugins = false
+remote_plugin = false
+plugin_sharing = false
+hooks = false
+memories = false
+external_agent_memory_import = false
+multi_agent = false
+browser_use = false
+computer_use = false
+image_generation = false
+in_app_browser = false
+in_app_chat = false
+skill_search = false
+skill_mcp_dependency_install = false
+[feedback]
+enabled = false
