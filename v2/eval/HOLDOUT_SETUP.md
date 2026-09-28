@@ -116,6 +116,10 @@ reviewed corpus identity, retaining the original privately.
 
 ## 3. Introduce the candidate and prepare the evaluator
 
+The **candidate is the TollChat application release being tested**. Its package
+comes from a successful development delivery in GitHub Actions. The frozen
+corpus supplies the test cases and stays in its private Docker volume.
+
 Only after freeze, transfer a separate input directory containing **exactly**:
 
 | File | Source |
@@ -128,6 +132,68 @@ The packet's candidate handoff must identify all six fields in `context.json`.
 The evaluator checks the ZIP digest, release manifest, inventory, and application
 package before spending. It does not rebuild or patch the delivered application.
 Use an absolute path for this directory below; it mounts read-only at `/input`.
+
+### Assemble the candidate on the repository host
+
+From a reviewed checkout's `v2/` directory, with GitHub CLI authentication that
+can read the repository's Actions artifacts, list successful deliveries:
+
+```sh
+gh run list --repo rhprasad0/nova-toll-budget-agent \
+  --workflow v2-development-delivery.yml --branch main --status success \
+  --limit 5 --json databaseId,headSha,createdAt,url
+```
+
+Choose the release you intend to test. If none was specified, use the latest
+successful main delivery and record its run ID and commit. Replace the placeholder
+below with its `databaseId`. The existing release resolver verifies the delivery,
+deployment, canary evidence, and artifact provenance before generating context.
+
+```sh
+export HOLDOUT_DEVELOPMENT_RUN=REPLACE_WITH_RUN_ID
+uv run --locked python - <<'PY'
+import json
+import os
+import shutil
+import tempfile
+from pathlib import Path
+
+from eval.private_holdout import context_identity, extract_agent, policy_limits
+from scripts.check_production_release import download
+from scripts.golden_release import resolve
+
+run = int(os.environ["HOLDOUT_DEVELOPMENT_RUN"])
+context = resolve(run)
+destination = Path(f"eval/private/candidate-{run}")
+destination.mkdir(parents=True, exist_ok=False)
+(destination / "context.json").write_text(json.dumps(context, indent=2) + "\n")
+shutil.copyfile("eval/results/golden/policy-4.0.0.json", destination / "policy.json")
+download(context["bundle_id"], destination / "release.zip")
+context_identity(destination / "context.json")
+policy_limits(destination / "policy.json")
+with tempfile.TemporaryDirectory(dir=destination.parent) as scratch:
+    extract_agent(destination / "release.zip", context, Path(scratch) / "agent")
+print(f"Verified candidate {context['candidate']}: {destination.resolve()}")
+PY
+```
+
+This downloads the original artifact ZIP and verifies its digest, release
+manifest, inventory, and packaged application without calling models or reading
+the holdout. Preserve the ZIP bytes; unpacking and re-zipping changes its identity.
+The command refuses to overwrite an existing candidate directory. Transfer only
+after it prints `Verified candidate`; an interrupted download is not a usable
+package. Keep these generated files ignored and out of commits and PRs.
+
+After corpus review and freeze, copy the complete verified `candidate-RUN_ID`
+folder outside the project, for example under `~/Documents/private-holdout/`.
+Use its absolute path as `--inputs`, such as
+`/home/ryan/Documents/private-holdout/candidate-RUN_ID`. Keep GitHub credentials
+on the repository host; the evaluator needs only the three packaged files.
+Pending policy identities are allowed for `prepare`. After private calibration
+review, replace `policy.json` with the exact approved policy before the scored
+`run`, as described below. Creating this package does not start an evaluation.
+
+### Initialize and prepare on the private host
 
 Record the evaluator identity and initialize the persistent spending ledger once:
 
