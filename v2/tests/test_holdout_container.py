@@ -3,6 +3,7 @@
 import fcntl
 import io
 import json
+import signal
 import subprocess
 import tarfile
 import zipfile
@@ -134,6 +135,7 @@ def test_subscription_login_refresh_and_logout(tmp_path: Path) -> None:
             )
         elif command[-1] == "synthetic-author-prompt":
             assert "--strict-config" in command
+            signal.raise_signal(signal.SIGINT)
             assert "synthetic-original" in current.read_text()
             current.write_text(
                 json.dumps({"auth_mode": "chatgpt", "tokens": "synthetic-refreshed"})
@@ -164,6 +166,7 @@ def test_subscription_login_refresh_and_logout(tmp_path: Path) -> None:
         assert {p.name for p in auth.iterdir()} == {".lock", "auth.json"}
         runtime.author_session("logout", [])
         assert not saved.exists()
+        assert signal.getsignal(signal.SIGINT) == signal.default_int_handler
 
 
 @pytest.mark.parametrize(

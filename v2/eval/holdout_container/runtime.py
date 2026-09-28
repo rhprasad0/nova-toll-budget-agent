@@ -9,6 +9,7 @@ import os
 import platform
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -150,6 +151,8 @@ def author_session(command: str, arguments: list[str]) -> None:
         if saved.exists():
             shutil.copyfile(saved, current)
             current.chmod(0o600)
+        # Codex handles terminal interrupts; keep the wrapper alive to save auth.
+        previous_interrupt = signal.signal(signal.SIGINT, lambda _signum, _frame: None)
         try:
             if command == "login":
                 subprocess.run([*base, "login", "--device-auth"], check=True)
@@ -171,6 +174,7 @@ def author_session(command: str, arguments: list[str]) -> None:
                     )
                 subprocess.run([*base, "--strict-config", *arguments], check=True)
         finally:
+            signal.signal(signal.SIGINT, previous_interrupt)
             if current.exists():
                 temporary = saved.with_suffix(".tmp")
                 shutil.copyfile(current, temporary)
