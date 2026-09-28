@@ -195,8 +195,10 @@ aggregate counts, timing, cost, uncertainty, and opaque identities. Private
 reports, reviews, backups, manifests, cases, and transcripts stay private.
 The protected workflow archives valid results and qualifies only **240/300 or
 better with all 300 trials valid and measured**, within the spending limits.
-Private evaluation evidence has no time-based expiry; it remains bound to the exact
-artifact, active policy, and approval. Approval cannot waive failures.
+The qualification policy has no maximum evaluation age; evidence remains bound
+to the exact artifact, active policy, and approval. Release verification requires
+workflow artifacts retained for 90 days; see [GOLDEN_RELEASE.md](GOLDEN_RELEASE.md).
+Approval cannot waive failures.
 
 There is one original execution per artifact/holdout. For an infrastructure or
 actor-validity interruption, Ryan may explicitly authorize one replacement by

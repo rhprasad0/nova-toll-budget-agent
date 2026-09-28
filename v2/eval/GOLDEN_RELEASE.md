@@ -31,11 +31,15 @@ regression veto, or latency/cost-per-success quality threshold.
 
 Spending remains bounded by **$5 per execution and $25 cumulative authorization**,
 including calibration, evaluator overhead, and failed/replacement executions.
-Reconcile unknown usage before qualifying. Private evaluation evidence has **no
-time-based expiry**. Planning, migration, and promotion recheck the exact artifact,
-active policy, evidence, and approval. Reimporting a report never changes its
-completion time or resets spending. The saved Terraform plan remains valid for
-24 hours.
+Reconcile unknown usage before qualifying. The qualification policy imposes **no
+maximum age on the private evaluation**. Planning, migration, and promotion
+recheck the exact artifact, active policy, evidence, and approval. Reimporting a
+report never changes its completion time or resets spending.
+
+Release verification still requires the development and qualification workflow
+artifacts, which are retained for **90 days**. The durable aggregate archive alone
+cannot replace those artifacts after they expire or are deleted. The saved
+Terraform plan retains its separate **24-hour** expiry.
 
 ## Trust and privacy
 
