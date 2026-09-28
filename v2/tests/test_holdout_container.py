@@ -230,9 +230,17 @@ def test_network_check_probes_both_policies_without_auth(
         call.args[0] for call in connection.return_value.set_tunnel.call_args_list
     ] == allowed
     denied = [call.args[0] for call in opener.return_value.open.call_args_list]
-    assert "https://github.com/" in denied
-    assert ("https://api.openai.com/" in denied) == (role == "author")
-    assert ("https://chatgpt.com/" in denied) == (role == "evaluator")
+    assert denied == [
+        "https://github.com/",
+        "https://raw.githubusercontent.com/",
+        "https://pypi.org/",
+        "https://registry.npmjs.org/",
+        "https://example.com/",
+    ] + (
+        ["https://api.openai.com/"]
+        if role == "author"
+        else ["https://auth.openai.com/", "https://chatgpt.com/"]
+    )
 
 
 def test_evaluator_rejects_unrelated_input_mount(tmp_path: Path) -> None:
