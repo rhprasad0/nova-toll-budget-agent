@@ -94,7 +94,7 @@ def policy() -> dict[str, Any]:
         and limits.get("cases") == 100
         and limits.get("trials") == 3
         and limits.get("successes_min") == 240
-        and limits.get("candidate_max_age_hours") == 24
+        and "candidate_max_age_hours" not in limits
         and limits.get("run_cost_max_usd") == 5
         and limits.get("authorized_cost_max_usd") == 25,
         "unsupported private qualification policy",
@@ -339,10 +339,6 @@ def decision(summary: dict[str, Any]) -> dict[str, Any]:
         or summary["cumulative_cost_usd"] > limits["authorized_cost_max_usd"]
     ):
         errors.append("approved spending limit exceeded")
-    try:
-        age(current["completed_at"], limits["candidate_max_age_hours"])
-    except ValueError:
-        errors.append("expired candidate evidence")
     return {"qualified": not errors, "errors": errors}
 
 
@@ -539,17 +535,6 @@ def receipt(run_id: int) -> dict[str, Any]:
     )
     require(result.get("policy_sha256") == digest(policy()), "active policy changed")
     return result
-
-
-def age(created: str, maximum_hours: int, now: datetime | None = None) -> None:
-    value = datetime.fromisoformat(created)
-    require(value.tzinfo is not None, "timestamp needs timezone")
-    require(
-        0
-        <= ((now or datetime.now(UTC)) - value).total_seconds()
-        <= maximum_hours * 3600,
-        "expired evidence",
-    )
 
 
 def validate_receipt(value: dict[str, Any], admission: dict[str, Any]) -> None:

@@ -465,6 +465,7 @@ def test_exported_summary_matches_release_gate(
     }
     policy_path = tmp_path / "policy.json"
     private.write(policy_path, policy)
+    assert private.policy_limits(policy_path) == limits
     monkeypatch.setattr(gate, "POLICY", policy_path)
     manifest = private.read(tmp_path / "original/manifest.json")
     manifest["policy_sha256"] = golden.digest(limits)
@@ -474,7 +475,7 @@ def test_exported_summary_matches_release_gate(
     )
     summary = private.summary(tmp_path / "original", [entry], approval)
     gate.validate_summary(summary, limits)
-    assert gate.decision(summary)["qualified"]
+    assert gate.decision(summary) == {"qualified": True, "errors": []}
 
 
 def test_private_corpus_rejects_another_kit_before_reading_cases(
@@ -488,7 +489,7 @@ def test_private_corpus_rejects_another_kit_before_reading_cases(
         raise AssertionError("mismatched kit admitted")
 
 
-def test_recovered_completion_never_refreshes_release_freshness(tmp_path: Path) -> None:
+def test_recovered_completion_preserves_known_start_time(tmp_path: Path) -> None:
     entry = execution(tmp_path / "original", count=300)
     (tmp_path / "original/completed.json").unlink()
     private.render(tmp_path / "original", [entry], None)

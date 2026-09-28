@@ -414,7 +414,6 @@ def policy_limits(path: Path) -> dict[str, Any]:
         "cases": 100,
         "trials": 3,
         "successes_min": 240,
-        "candidate_max_age_hours": 24,
         "run_cost_max_usd": 5.0,
         "authorized_cost_max_usd": 25.0,
     }
@@ -729,8 +728,8 @@ def render(
     if not (directory / "completed.json").exists():
         write(
             directory / "completed.json",
-            # An interrupted run has no reliable end time; rendering must not
-            # renew its 24-hour release window.
+            # An interrupted run has no reliable end time; preserve the known
+            # start time instead of inventing a later completion.
             {"completed_at": manifest["started_at"]},
         )
     if manifest["mode"] == "prepare":

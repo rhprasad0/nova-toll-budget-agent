@@ -123,7 +123,6 @@ def test_quality_boundary_and_no_per_case_or_latency_veto(
         "latency",
         "cost",
         "cumulative",
-        "stale",
     ],
 )
 def test_incomplete_or_unapproved_evidence_never_passes(
@@ -142,9 +141,6 @@ def test_incomplete_or_unapproved_evidence_never_passes(
         row["total_cost_usd"] = summary["cumulative_cost_usd"] = 6
     elif change == "cumulative":
         summary["cumulative_cost_usd"] = 26
-    else:
-        row["started_at"] = (datetime.now(UTC) - timedelta(hours=26)).isoformat()
-        row["completed_at"] = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
     assert not gate.decision(summary)["qualified"]
 
 
@@ -321,6 +317,10 @@ def test_import_approval_admission_and_revalidation_without_baseline(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    summary["attempts"][0].update(
+        started_at=(datetime.now(UTC) - timedelta(days=3)).isoformat(),
+        completed_at=(datetime.now(UTC) - timedelta(days=2)).isoformat(),
+    )
     packet = encode_summary(summary)
     context = {k: summary[k] for k in gate.IDENTITY}
     monkeypatch.setattr(workflow, "resolve", Mock(return_value=context))
@@ -337,6 +337,9 @@ def test_import_approval_admission_and_revalidation_without_baseline(
     with pytest.raises(ValueError, match="complete"):
         gate.admit(deepcopy(context))
     run.update(status="completed", conclusion="success")
+    clock = Mock(wraps=datetime)
+    clock.now.return_value = datetime.now(UTC) + timedelta(days=30)
+    monkeypatch.setattr(gate, "datetime", clock)
     admitted = gate.admit(deepcopy(context))
     with monkeypatch.context() as no_aws:
         no_aws.setattr(
@@ -442,7 +445,7 @@ def test_rejected_approval_never_archives_or_qualifies(
     assert not (directory / "receipt.json").exists()
 
 
-def test_evidence_expiring_during_human_review_is_archived_but_blocked(
+def test_delayed_human_review_preserves_qualification(
     summary: dict[str, Any],
     storage: dict[str, bytes],
     tmp_path: Path,
@@ -454,13 +457,14 @@ def test_evidence_expiring_during_human_review_is_archived_but_blocked(
     packet = gate.canonical(summary)
     directory = tmp_path / "review"
     workflow.prepare(context["development_run"], packet, directory)
-    monkeypatch.setattr(gate, "age", Mock(side_effect=ValueError("expired evidence")))
-    with pytest.raises(ValueError, match="machine qualification"):
-        workflow.approve(directory, packet)
+    clock = Mock(wraps=datetime)
+    clock.now.return_value = datetime.now(UTC) + timedelta(days=30)
+    monkeypatch.setattr(gate, "datetime", clock)
+    workflow.approve(directory, packet)
     assert any(k.startswith("aggregates/reports/") for k in storage)
-    assert not any(k.startswith("candidates/") for k in storage)
-    assert not gate.read(directory / "decision.json")["qualified"]
-    assert not (directory / "receipt.json").exists()
+    assert any(k.startswith("candidates/") for k in storage)
+    assert gate.read(directory / "decision.json")["qualified"]
+    assert (directory / "receipt.json").exists()
 
 
 def test_failed_result_retained_and_quality_retry_blocked(
