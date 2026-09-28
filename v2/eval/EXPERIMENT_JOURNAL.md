@@ -901,3 +901,12 @@ the three exact policy identities, workflow delivery, and a separate foundation
 IAM apply remain prerequisites to production qualification. The transfer files
 and granular verification output stay in ignored local storage; current operation
 is documented in [HOLDOUT_SETUP.md](HOLDOUT_SETUP.md).
+
+### 2026-09-28 — Remove private evidence expiry
+
+Corrected the pending **4.0.0** release policy to remove the 24-hour expiry on
+private evaluation evidence. The previous entry describes the original policy;
+qualification now remains bound to the exact artifact, active policy, and human
+approval without a time limit. Synthetic checks cover delayed import, approval,
+and production revalidation; no private evaluation or deployment was run. The
+saved Terraform plan retains its separate 24-hour expiry.

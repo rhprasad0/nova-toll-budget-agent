@@ -156,8 +156,8 @@ The command prints the approved `calibration_sha256`. Return **only the three
 aggregate identity digests** (holdout, evaluator, calibration) for policy review.
 Follow `GOLDEN_RELEASE.md` in the connected repository to approve policy 4, ship
 the workflow, apply the separate foundation IAM change, and verify protected
-`golden-review`. These steps must be ready before starting the 24-hour release
-window. Transfer the exact approved policy back as `candidate/policy.json`.
+`golden-review`. Transfer the exact approved policy back as `candidate/policy.json`
+before evaluating the candidate.
 
 ## 4. Evaluate and review the frozen candidate
 
@@ -194,8 +194,9 @@ Only `summary.json` returns to the connected release operator. It contains
 aggregate counts, timing, cost, uncertainty, and opaque identities. Private
 reports, reviews, backups, manifests, cases, and transcripts stay private.
 The protected workflow archives valid results and qualifies only **240/300 or
-better with all 300 trials valid and measured**, within the freshness/spending
-limits. Approval cannot waive failures.
+better with all 300 trials valid and measured**, within the spending limits.
+Private evaluation evidence has no time-based expiry; it remains bound to the exact
+artifact, active policy, and approval. Approval cannot waive failures.
 
 There is one original execution per artifact/holdout. For an infrastructure or
 actor-validity interruption, Ryan may explicitly authorize one replacement by
@@ -204,4 +205,4 @@ or `actor_validity` to a separate review JSON. Import that file and add
 `--replacement-review /output/reviews/NAME.json` to `run`, with a new output
 directory. Quality-only retries are rejected. Keep the same ledger; both attempts
 remain in the aggregate. After interruption, `render` conservatively uses the
-original start time when no completion marker exists; it cannot renew freshness.
+original start time when no completion marker exists.

@@ -31,9 +31,11 @@ regression veto, or latency/cost-per-success quality threshold.
 
 Spending remains bounded by **$5 per execution and $25 cumulative authorization**,
 including calibration, evaluator overhead, and failed/replacement executions.
-Reconcile unknown usage before qualifying. Evidence expires **24 hours after
-completion**, checked again before migration and promotion. Reimporting a report
-never refreshes its completion time or resets spending.
+Reconcile unknown usage before qualifying. Private evaluation evidence has **no
+time-based expiry**. Planning, migration, and promotion recheck the exact artifact,
+active policy, evidence, and approval. Reimporting a report never changes its
+completion time or resets spending. The saved Terraform plan remains valid for
+24 hours.
 
 ## Trust and privacy
 
@@ -120,9 +122,8 @@ inputs; protected human approval attests the private evaluation.
 
 ## Activation and operation
 
-Complete preparation before the real candidate evaluation so the 24-hour evidence
-window can cover the release. These instructions do not grant model-spending or
-deployment authorization.
+Complete preparation before the real candidate evaluation. These instructions
+do not grant model-spending or deployment authorization.
 
 1. Export the reviewed images and public kit, rehearse the teaching examples, and
    privately author, review, and freeze the corpus. Follow
@@ -157,7 +158,7 @@ deployment authorization.
    reports get a receipt and candidate index. Below-threshold results stay
    archived and the workflow fails; approval cannot override the threshold.
 8. Production planning, migration, and promotion recheck the receipt, actual
-   approval, trusted workflow, active policy, candidate, and freshness. Normal
+   approval, trusted workflow, active policy, and candidate. Normal
    release approval, saved-plan, migration, and canary checks still apply.
    Schema-3 receipts embed the aggregate. Historical signed receipts remain
    stored but cannot satisfy policy 4.
