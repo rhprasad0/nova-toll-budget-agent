@@ -348,7 +348,7 @@ def result_directory(
     directory = output / run_name(name)
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError("unknown run")
-    manifest = private.read(directory / "manifest.json")
+    manifest = private.execution_manifest(directory)
     if (
         kind is not None
         and manifest["mode"] != {"calibration": "prepare", "candidate": "run"}[kind]
@@ -856,6 +856,7 @@ def dispatch(
                             "one explicitly reviewed validity replacement only"
                         )
                     original = Path(previous[0]["directory"])
+                    private.execution_manifest(original)
                     original_review = review_path(output, "candidate", original.name)
                     private.reviewed(original_review, private.report_evidence(original))
                     aggregate = private.aggregate(original)

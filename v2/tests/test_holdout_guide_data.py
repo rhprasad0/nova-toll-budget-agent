@@ -208,14 +208,30 @@ def test_complete_synthetic_journey_and_validity_replacement(tmp_path: Path) -> 
                 "note": "Repeat scored evaluation.",
             }
         )
-    replacement = dispatch(
-        {
-            "action": "evaluation_plan",
-            "mode": "run",
-            "replacement_reason": "infrastructure",
-            "note": "Authorize the one validity replacement for missing measurements.",
-        }
-    )
+    replacement_request = {
+        "action": "evaluation_plan",
+        "mode": "run",
+        "replacement_reason": "infrastructure",
+        "note": "Authorize the one validity replacement for missing measurements.",
+    }
+    replacement_receipt = paths["output"] / "reviews/replacement-run-002.json"
+    private.write(manifest_path, {**manifest, "evaluator_sha256": "0" * 64})
+    ledger["executions"][-1]["evaluator_sha256"] = "0" * 64
+    private.write(paths["output"] / "history.json", ledger)
+    with pytest.raises(ValueError, match="original reviewed packet"):
+        dispatch(replacement_request)
+    assert not replacement_receipt.exists()
+    private.write(manifest_path, manifest)
+    ledger["executions"][-1]["evaluator_sha256"] = manifest["evaluator_sha256"]
+    private.write(paths["output"] / "history.json", ledger)
+    original_review = guide.review_path(paths["output"], "candidate", "run-001")
+    approved = private.read(original_review)
+    private.write(original_review, {**approved, "status": "rejected"})
+    with pytest.raises(ValueError, match="human review must approve"):
+        dispatch(replacement_request)
+    assert not replacement_receipt.exists()
+    private.write(original_review, approved)
+    replacement = dispatch(replacement_request)
     assert (
         replacement["run"] == "run-002"
         and "--replacement-review" in replacement["arguments"]

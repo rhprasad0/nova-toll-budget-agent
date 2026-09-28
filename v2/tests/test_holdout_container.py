@@ -5,6 +5,7 @@ import io
 import json
 import signal
 import subprocess
+import sys
 import tarfile
 import zipfile
 from pathlib import Path
@@ -12,6 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
+from eval import holdout_authoring, private_holdout
 from eval.holdout_container import build, holdout, runtime
 
 
@@ -258,11 +260,57 @@ def test_build_export_stays_private_and_allowlisted(tmp_path: Path) -> None:
         build.build(tmp_path / "packet", ["author"])
     assert not any(
         name.startswith(("agent/", "agent-sops/", "eval/golden/cases"))
-        for name in build.EXPORT_FILES
+        for name in holdout_authoring.EXPORT_FILES
     )
     author_dockerfile = (build.SOURCE / "Dockerfile.author").read_text()
     assert "COPY . " not in author_dockerfile
     assert "@openai/codex@0.157.1" in author_dockerfile
+
+
+def test_evaluator_payload_matches_identity_and_imports_without_repository(
+    tmp_path: Path,
+) -> None:
+    assert build.EVALUATOR_FILES == private_holdout.SOURCES
+    build.copy_files(build.EVALUATOR_FILES, build.V2, tmp_path)
+    code = """
+import sys
+from pathlib import Path
+from unittest.mock import patch
+from eval import private_holdout
+from eval.holdout_container import runtime, guide_data
+from scripts import golden_gate
+assert private_holdout.evaluator_identity() == sys.argv[1]
+assert Path(runtime.__file__).resolve() == Path('eval/holdout_container/runtime.py').resolve()
+assert Path(guide_data.__file__).resolve() == Path(runtime.__file__).with_name('guide_data.py')
+with patch.object(runtime.sys, 'argv', ['runtime.py', 'preflight']), patch.object(runtime.platform, 'machine', return_value='aarch64'), patch.object(Path, 'mkdir'):
+    runtime.main()
+with patch.object(runtime.sys, 'argv', ['runtime.py', 'guide-data']), patch.object(Path, 'mkdir'), patch.object(runtime.os, 'execv') as execute:
+    runtime.main()
+assert execute.call_args.args[1] == [sys.executable, str(Path(guide_data.__file__))]
+Path('eval/holdout_container/guide_data.py').unlink()
+try:
+    with patch.object(runtime.sys, 'argv', ['runtime.py', 'preflight']), patch.object(runtime.platform, 'machine', return_value='aarch64'), patch.object(Path, 'mkdir'):
+        runtime.main()
+except FileNotFoundError:
+    pass
+else:
+    raise AssertionError('preflight accepted a missing identity source')
+"""
+    subprocess.run(
+        [sys.executable, "-c", code, private_holdout.evaluator_identity()],
+        cwd=tmp_path,
+        check=True,
+        timeout=30,
+    )
+    dockerfile = (build.SOURCE / "Dockerfile.evaluator").read_text()
+    entrypoint = next(
+        line for line in dockerfile.splitlines() if line.startswith("ENTRYPOINT ")
+    )
+    assert json.loads(entrypoint.removeprefix("ENTRYPOINT ")) == [
+        "python",
+        "/opt/evaluator/eval/holdout_container/runtime.py",
+    ]
+    assert "COPY runtime.py guide_data.py /opt/" not in dockerfile
 
 
 def test_image_retag_is_rejected(tmp_path: Path) -> None:

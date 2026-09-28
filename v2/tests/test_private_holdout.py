@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 import stat
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -53,7 +54,7 @@ def execution(root: Path, *, count: int = 240, reason: str = "none") -> dict[str
         "context": context(),
         "bundle_digest": context()["bundle_digest"],
         "holdout_sha256": "c" * 64,
-        "evaluator_sha256": "d" * 64,
+        "evaluator_sha256": private.evaluator_identity(),
         "calibration_sha256": "e" * 64,
         "policy_sha256": "f" * 64,
         "replacement_reason": reason,
@@ -454,7 +455,9 @@ def test_exported_summary_matches_release_gate(
     policy = private.read(golden.V2 / "eval/results/golden/policy-4.0.0.json")
     limits = policy["policy"]
     limits.update(
-        holdout_sha256="c" * 64, evaluator_sha256="d" * 64, calibration_sha256="e" * 64
+        holdout_sha256="c" * 64,
+        evaluator_sha256=private.evaluator_identity(),
+        calibration_sha256="e" * 64,
     )
     policy["approval"] = {
         "status": "approved",
@@ -497,3 +500,63 @@ def test_recovered_completion_preserves_known_start_time(tmp_path: Path) -> None
     assert (
         summary["attempts"][0]["completed_at"] == summary["attempts"][0]["started_at"]
     )
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        "eval/holdout_container/guide_data.py",
+        "eval/holdout_container/runtime.py",
+        "scripts/golden_gate.py",
+        "scripts/cost_dashboard_release.py",
+        "agent_tools/get_current_toll_price.py",
+    ],
+)
+def test_changed_evaluator_source_cannot_reinterpret_prior_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: str
+) -> None:
+    from eval.holdout_container import guide_data
+
+    source = tmp_path / "evaluator"
+    for name in private.SOURCES:
+        target = source / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(golden.V2 / name, target)
+    monkeypatch.setattr(golden, "V2", source)
+    before = private.evaluator_identity()
+    output = tmp_path / "output"
+    output.mkdir()
+    entry = execution(output / "original", count=0)
+    private.write(
+        output / "history.json",
+        {
+            "version": 1,
+            "prior_cost_usd": 0,
+            "prior_unknown_usage": False,
+            "executions": [entry],
+        },
+    )
+    with (source / changed).open("a") as stream:
+        stream.write("\n# Synthetic code revision.\n")
+    assert private.evaluator_identity() != before
+    assert private.load_history(output / "history.json") == [entry]
+    assert private.spending([entry]) == (0, False)
+    with pytest.raises(ValueError, match="original reviewed packet"):
+        private.summary(output / "original", [entry], None)
+    approval = review(
+        tmp_path / "replacement-review.json",
+        private.report_evidence(output / "original"),
+        replacement_reason="infrastructure",
+    )
+    with pytest.raises(ValueError, match="original reviewed packet"):
+        private.replacement_reason([entry], context(), "c" * 64, approval)
+    replacement = execution(output / "replacement", count=0, reason="infrastructure")
+    with pytest.raises(ValueError, match="original reviewed packet"):
+        private.summary(output / "replacement", [entry, replacement], None)
+    (output / "original/completed.json").unlink()
+    with pytest.raises(ValueError, match="original reviewed packet"):
+        private.render(output / "original", [entry], None)
+    with pytest.raises(ValueError, match="original reviewed packet"):
+        guide_data.result_directory(output, "original", "candidate", recover=True)
+    assert not (output / "original/completed.json").exists()
+    assert not (output / "original/summary.json").exists()

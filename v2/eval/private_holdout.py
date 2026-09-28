@@ -40,6 +40,8 @@ IDENTITY = (
     "development_attempt",
     "development_deployment",
 )
+# This is also the evaluator image's complete source allowlist. Execute guide
+# entrypoints from this tree so their reviewed identity covers the actual code.
 SOURCES = tuple(
     sorted(
         {
@@ -47,8 +49,20 @@ SOURCES = tuple(
             *holdout_authoring.EXPORT_FILES,
             "pyproject.toml",
             "agent/toll_agent.py",
+            "agent_tools/get_current_toll_price.py",
             "eval/private_holdout.py",
             "eval/holdout_authoring.py",
+            "eval/golden/prompt-points.json",
+            "eval/holdout_container/guide_data.py",
+            "eval/holdout_container/runtime.py",
+            "scripts/golden_gate.py",
+            "scripts/check_production_release.py",
+            "scripts/check_development_release.py",
+            "scripts/release_blue_green.py",
+            "scripts/blue_green.py",
+            "scripts/cost_dashboard_release.py",
+            "scripts/classify_deployment_error.py",
+            "scripts/shared_packages.py",
         }
     )
 )
@@ -75,8 +89,17 @@ def sha(path: Path) -> str:
 
 
 def evaluator_identity() -> str:
-    """Pin grading, transport, accounting, schemas and the locked dependencies."""
+    """Pin the installed evaluator, guide, validation and locked dependencies."""
     return golden.digest({name: sha(golden.V2 / name) for name in SOURCES})
+
+
+def execution_manifest(directory: Path) -> dict[str, Any]:
+    manifest = read(directory / "manifest.json")
+    if manifest.get("evaluator_sha256") != evaluator_identity():
+        raise ValueError(
+            "evaluator changed; resume this run with its original reviewed packet"
+        )
+    return manifest
 
 
 def context_identity(path: Path) -> dict[str, Any]:
@@ -497,6 +520,7 @@ def replacement_reason(
             "one original and one explicitly reviewed validity replacement only"
         )
     directory = Path(previous[0]["directory"])
+    execution_manifest(directory)
     if not reviewed(review, report_evidence(directory)):
         raise ValueError("replacement approval missing")
     reason = read(review).get("replacement_reason")
@@ -515,7 +539,7 @@ def summary(
     review: Path | None,
     carried: tuple[float, bool] = (0, False),
 ) -> dict[str, Any]:
-    manifest = read(directory / "manifest.json")
+    manifest = execution_manifest(directory)
     selected = [
         row
         for row in history
@@ -523,6 +547,8 @@ def summary(
         and row["bundle_digest"] == manifest["bundle_digest"]
         and row["holdout_sha256"] == manifest["holdout_sha256"]
     ]
+    for row in selected:
+        execution_manifest(Path(row["directory"]))
     attempts = [aggregate(Path(row["directory"])) for row in selected]
     if (
         not selected
@@ -724,7 +750,7 @@ def render(
     review: Path | None,
     carried: tuple[float, bool] = (0, False),
 ) -> None:
-    manifest = read(directory / "manifest.json")
+    manifest = execution_manifest(directory)
     if not (directory / "completed.json").exists():
         write(
             directory / "completed.json",

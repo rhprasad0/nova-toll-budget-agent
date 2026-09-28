@@ -13,32 +13,13 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from eval.holdout_authoring import EXPORT_FILES, export_kit
+from eval.holdout_authoring import export_kit
 from eval.holdout_container.holdout import IMAGES, checksum, docker
+from eval.private_holdout import SOURCES
 
 SOURCE = Path(__file__).parent
 V2 = SOURCE.parents[1]
-EVALUATOR_FILES = (
-    "eval/golden.py",
-    "eval/golden_run.py",
-    "eval/golden_actor_check.py",
-    "eval/simulated.py",
-    "eval/repetition.py",
-    "eval/artifact_agent.py",
-    "eval/artifact_worker.py",
-    "eval/private_holdout.py",
-    "eval/holdout_authoring.py",
-    "eval/golden/prompt-points.json",
-    "agent/toll_agent.py",
-    "eval/run_evaluation.py",
-    "scripts/golden_gate.py",
-    "scripts/check_production_release.py",
-    "scripts/check_development_release.py",
-    "scripts/release_blue_green.py",
-    "scripts/blue_green.py",
-    "scripts/classify_deployment_error.py",
-    "scripts/shared_packages.py",
-)
+EVALUATOR_FILES = SOURCES
 AUTHOR_TOOLS = {
     **{
         f"opt/{name}": name
@@ -140,7 +121,6 @@ def build(destination: Path, roles: list[str]) -> None:
             if role == "proxy":
                 copy_files(("squid.conf", "squid-author.conf"), SOURCE, context)
             else:
-                copy_files(("runtime.py", "guide_data.py"), SOURCE, context)
                 requirements = context / "requirements.txt"
                 subprocess.run(
                     [
@@ -181,6 +161,7 @@ def build(destination: Path, roles: list[str]) -> None:
                     check=True,
                 )
                 if role == "author":
+                    copy_files(("runtime.py", "guide_data.py"), SOURCE, context)
                     with zipfile.ZipFile(archive) as kit:
                         kit.extractall(context / "kit")
                     copy_files(("config.toml", "requirements.toml"), SOURCE, context)
@@ -196,16 +177,7 @@ def build(destination: Path, roles: list[str]) -> None:
                     )
                 else:
                     (context / "empty").mkdir()
-                    names = tuple(
-                        sorted(
-                            set(EVALUATOR_FILES + EXPORT_FILES)
-                            | {
-                                path.relative_to(V2).as_posix()
-                                for path in (V2 / "agent_tools").glob("*.py")
-                            }
-                        )
-                    )
-                    copy_files(names, V2, context / "evaluator")
+                    copy_files(EVALUATOR_FILES, V2, context / "evaluator")
             docker(
                 "build",
                 "--platform",

@@ -349,7 +349,10 @@ def main() -> None:
     elif command == "guide":
         guide_session()
     elif command == "guide-data":
-        os.execv(sys.executable, [sys.executable, "/opt/guide_data.py"])
+        os.execv(
+            sys.executable,
+            [sys.executable, str(Path(__file__).with_name("guide_data.py"))],
+        )
     elif command == "selfcheck":
         selfcheck()
     elif command == "network-check":
@@ -393,9 +396,17 @@ def main() -> None:
         import strands
 
         from eval import private_holdout
+        from eval.holdout_container import guide_data
+        from scripts import golden_gate
 
-        assert pydantic and strands and private_holdout
-        print("ARM64 Python 3.13 and private evaluator imports passed.")
+        assert pydantic and strands and golden_gate
+        source = private_holdout.golden.V2 / "eval/holdout_container"
+        assert Path(__file__).resolve() == source / "runtime.py"
+        assert Path(guide_data.__file__).resolve() == source / "guide_data.py"
+        assert re.fullmatch(r"[0-9a-f]{64}", private_holdout.evaluator_identity())
+        print(
+            "ARM64 Python 3.13, evaluator imports and installed identity sources passed."
+        )
     elif command == "evaluate":
         os.execv(
             sys.executable, [sys.executable, "-m", "eval.private_holdout", *arguments]

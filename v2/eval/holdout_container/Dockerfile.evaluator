@@ -2,12 +2,11 @@
 FROM --platform=linux/arm64 python:3.13-slim-bookworm
 COPY site/ /opt/site/
 COPY evaluator/ /opt/evaluator/
-COPY runtime.py guide_data.py /opt/
 COPY --chown=1000:1000 empty/ /private/
 COPY --chown=1000:1000 empty/ /output/
 COPY --chown=1000:1000 empty/ /guide/
 ENV PYTHONPATH=/opt/evaluator:/opt/site PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OTEL_SDK_DISABLED=true AWS_EC2_METADATA_DISABLED=true
 USER 1000:1000
 WORKDIR /output
-ENTRYPOINT ["python", "/opt/runtime.py"]
+ENTRYPOINT ["python", "/opt/evaluator/eval/holdout_container/runtime.py"]
 CMD ["preflight"]
