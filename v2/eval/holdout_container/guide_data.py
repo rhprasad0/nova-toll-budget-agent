@@ -405,8 +405,10 @@ def approved_calibration(
     from eval import golden
     from eval import private_holdout as private
 
+    rows = history(output)
+    private.strict_history(rows)
     evaluator = private.evaluator_identity()
-    for row in reversed(history(output)):
+    for row in reversed(rows):
         if (
             row["mode"] != "prepare"
             or row["holdout_sha256"] != corpus["holdout_sha256"]
@@ -451,7 +453,7 @@ def dispatch(
     required = {"action", *ACTIONS[action]}
     allowed = required.copy()
     if action == "evaluation_plan":
-        allowed.add("replacement_reason")
+        allowed.update({"replacement_reason", "diagnostic"})
     if not required <= request.keys() or not request.keys() <= allowed:
         raise ValueError("unexpected or missing action fields")
     if "note" in request:
@@ -542,6 +544,11 @@ def dispatch(
                 {
                     "run": Path(r["directory"]).name,
                     "mode": r["mode"],
+                    "diagnostic": bool(
+                        private.read(Path(r["directory"]) / "manifest.json").get(
+                            "diagnostic"
+                        )
+                    ),
                     "completed": (Path(r["directory"]) / "completed.json").is_file(),
                     "reviewed": review_path(
                         output,
@@ -752,6 +759,9 @@ def dispatch(
             return safe
         if action == "evaluation_plan":
             mode = request["mode"]
+            diagnostic = request.get("diagnostic", False)
+            if type(diagnostic) is not bool or (diagnostic and mode != "prepare"):
+                raise ValueError("diagnostic continuation is preparation-only")
             if (
                 not isinstance(mode, str)
                 or mode not in {"prepare", "run"}
@@ -759,13 +769,11 @@ def dispatch(
             ):
                 raise ValueError("invalid paid operation")
             identity = input_identity(inputs)
-            spent, unknown = private.spending(
-                rows, private.carried_accounting(output / "history.json")
+            spent, unknown = private.preparation_spending(
+                rows,
+                private.carried_accounting(output / "history.json"),
+                diagnostic=diagnostic,
             )
-            if unknown or spent >= 25:
-                raise ValueError(
-                    "unknown prior usage or cumulative $25 authorization exhausted"
-                )
             if any(
                 not (Path(row["directory"]) / "completed.json").is_file()
                 for row in rows
@@ -794,6 +802,8 @@ def dispatch(
                 "--history",
                 str(output / "history.json"),
             ]
+            if diagnostic:
+                arguments.append("--diagnostic")
             if mode == "prepare":
                 same = [
                     row
@@ -883,6 +893,8 @@ def dispatch(
                 "run": name,
                 "arguments": arguments,
                 "spent_usd": spent,
+                "diagnostic": diagnostic,
+                "unknown_usage": unknown,
                 "execution_limit_usd": min(5, 25 - spent),
                 "authorization": note(request["note"]),
             }

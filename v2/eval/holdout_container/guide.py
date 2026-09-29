@@ -74,8 +74,12 @@ def request_action(request: dict[str, Any]) -> str:
     action = request.get("action")
     if not isinstance(action, str) or action not in ACTIONS:
         raise ValueError("unknown guide action")
-    allowed = ACTIONS[action]
+    allowed = ACTIONS[action].copy()
     required = allowed - ({"replacement_reason"} if action == "run" else set())
+    if action == "prepare":
+        allowed.add("diagnostic")
+    if "diagnostic" in request and type(request["diagnostic"]) is not bool:
+        raise ValueError("diagnostic must be a boolean")
     if not required <= request.keys() or set(request) - {"action"} - allowed:
         raise ValueError("incorrect action fields")
     if "note" in request and (

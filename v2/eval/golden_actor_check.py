@@ -106,7 +106,7 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
                     status="invalid", evidence=row.error or "actor_invalid"
                 )
         row.failure_class = run.failure_class(row)
-        if row.status == "infrastructure":
+        if row.status == "infrastructure" and not journal.soft_fail:
             with journal.lock:
                 journal.stop_requested = True
     journal.append({"event": "actor_check", **row.model_dump()})

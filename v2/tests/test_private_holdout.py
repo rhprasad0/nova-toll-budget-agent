@@ -6,6 +6,7 @@ import io
 import json
 import shutil
 import stat
+import sys
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -19,6 +20,29 @@ from eval import golden_run as run
 from eval import private_holdout as private
 from eval.artifact_agent import ArtifactAgent
 from tests.golden_support import case as golden_case
+
+
+@pytest.mark.parametrize("workers", [None, 1, 16, 17])
+def test_worker_cli_bounds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, workers: int | None
+) -> None:
+    argv = ["private_holdout", "prepare"]
+    for name in ("corpus", "bundle", "context", "policy", "output", "history"):
+        argv.extend(["--" + name, str(tmp_path / name)])
+    if workers is not None:
+        argv.extend(["--workers", str(workers)])
+    monkeypatch.setattr(sys, "argv", argv)
+    monkeypatch.setattr(private, "load_history", Mock(return_value=[]))
+    execute = Mock()
+    monkeypatch.setattr(private, "execute", execute)
+    if workers == 17:
+        with pytest.raises(SystemExit) as error:
+            private.main()
+        assert error.value.code == 2
+        execute.assert_not_called()
+    else:
+        private.main()
+        assert execute.call_args.args[0].workers == (workers or 16)
 
 
 def context() -> dict[str, Any]:

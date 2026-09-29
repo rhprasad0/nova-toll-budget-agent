@@ -7,6 +7,7 @@ import inspect
 import json
 import math
 import random
+import re
 import subprocess
 import time
 import uuid
@@ -563,7 +564,12 @@ class Journal:
     """Exclusive run directory, append-only evidence and shared spend accounting."""
 
     def __init__(
-        self, directory: Path, limit: float | None, prior_spend: float = 0
+        self,
+        directory: Path,
+        limit: float | None,
+        prior_spend: float = 0,
+        *,
+        soft_fail: bool = False,
     ) -> None:
         if (limit is not None and (not math.isfinite(limit) or limit <= 0)) or (
             not math.isfinite(prior_spend) or prior_spend < 0
@@ -576,6 +582,7 @@ class Journal:
         self.reserved = 0.0
         self.unknown_usage = False
         self.stop_requested = False
+        self.soft_fail = soft_fail
         self.lock = RLock()
         (directory / "events.jsonl").touch()
 
@@ -622,6 +629,25 @@ class Journal:
                     if "metadata" in event and "usage" in event["metadata"]:
                         usage = event["metadata"]["usage"]
                     yield event
+            except Exception as error:
+                status = getattr(error, "status_code", None)
+                request_id = getattr(error, "request_id", None)
+                self.append(
+                    {
+                        "event": "model_failed",
+                        "attempt": attempt.id,
+                        "role": role,
+                        "error": error_code(error),
+                        "http_status": status
+                        if type(status) is int and 100 <= status <= 599
+                        else None,
+                        "request_id": request_id
+                        if isinstance(request_id, str)
+                        and re.fullmatch(r"req_[A-Za-z0-9_-]{1,128}", request_id)
+                        else None,
+                    }
+                )
+                raise
             finally:
                 self.finish(attempt, role, reserve, usage, time.monotonic() - started)
 
@@ -643,7 +669,7 @@ class Journal:
         with self.lock:
             if (
                 self.stop_requested
-                or self.unknown_usage
+                or (self.unknown_usage and not self.soft_fail)
                 or (
                     self.limit is not None
                     and self.spent + self.reserved + reserve > self.limit
@@ -1752,8 +1778,9 @@ def calibrate(
         except Exception as error:
             attempt.status = "infrastructure"
             attempt.error = error_code(error)
-            with journal.lock:
-                journal.stop_requested = True
+            if not journal.soft_fail:
+                with journal.lock:
+                    journal.stop_requested = True
         if (
             attempt.actor_validity is not None
             and attempt.actor_validity.status == "valid"

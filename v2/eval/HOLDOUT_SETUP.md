@@ -94,6 +94,11 @@ usage; zero is valid only for an unused authorization. Preparation calibrates
 judges against the references and rehearses each actor three times. It does not
 measure candidate quality.
 
+Preparation and scoring default to **16 parallel workers**. The evaluator CLI
+accepts `--workers 1` through `--workers 16` for a smaller pool and records the
+selected count in each run manifest. Calibration finishes before actor rehearsals
+start; both use the same pool. Spending limits apply across all workers.
+
 Review the flagged disagreements, invalid actors, and incomplete measurements;
 all evidence remains available privately. Explicitly approve **calibration** only
 after resolving the review. Codex records the decision against the exact evidence
@@ -144,9 +149,17 @@ For interrupted or incomplete preparation, Codex presents the existing evidence
 before asking explicitly to run paid preparation again. Complete, usable
 preparation is reused. All runs and costs stay in the same history.
 
-Unknown usage blocks further spending. Reviewing a run does not reconcile usage;
-the guide has no accounting reconciliation action. One original scored execution
-is allowed per artifact/holdout. After an infrastructure or actor-validity failure,
+Unknown usage blocks further strict spending. Reviewing a run does not reconcile
+usage; the guide has no accounting reconciliation action. For an explicitly
+authorized disposable smoke test, private Codex may send `prepare` with
+`"diagnostic": true` and the human authorization in `note`. This retains every
+unknown-cost reservation, keeps the $5 execution/$25 cumulative limits, and
+continues other preparation cases after individual failures. Unmatched calls or
+unknown prior spending without reservations still block execution. All attempts,
+errors, and costs remain in history. Diagnostic preparation and its entire history
+cannot qualify a release or export calibration identities. It does not retry a
+failed call automatically or support diagnostic scored runs. One original scored
+execution is allowed per artifact/holdout. After an infrastructure or actor-validity failure,
 Ryan may explicitly authorize the existing one-replacement procedure after
 reviewing the original evidence. Quality-only retries are forbidden. Keep the
 same history and all attempts; deleting files does not reset authorization.

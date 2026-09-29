@@ -20,7 +20,7 @@ import sys
 import tempfile
 import uuid
 import zipfile
-from collections import Counter
+from collections import Counter, defaultdict, deque
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -309,6 +309,57 @@ def spending(
     )
 
 
+def strict_history(history: list[dict[str, Any]]) -> None:
+    if any(
+        read(Path(row["directory"]) / "manifest.json").get("diagnostic")
+        for row in history
+    ):
+        raise ValueError("diagnostic history cannot qualify a release")
+
+
+def preparation_spending(
+    history: list[dict[str, Any]], carried: tuple[float, bool], *, diagnostic: bool
+) -> tuple[float, bool]:
+    spent, unknown = spending(history, carried)
+    if not diagnostic:
+        strict_history(history)
+    elif carried[1]:
+        raise ValueError("unbounded prior unknown usage cannot be continued")
+    elif unknown:
+        # Every unmeasured call must retain its full, finite reservation.
+        for row in history:
+            pending: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+            for event in events(Path(row["directory"])):
+                if event["event"] not in {"model_started", "model_finished"}:
+                    continue
+                key = (event["attempt"], event["role"])
+                if event["event"] == "model_started":
+                    reserve = event.get("reserved_usd")
+                    if (
+                        not isinstance(reserve, (int, float))
+                        or isinstance(reserve, bool)
+                        or not math.isfinite(reserve)
+                        or reserve <= 0
+                    ):
+                        raise ValueError("missing or invalid unknown-usage reservation")
+                    pending[key].append(reserve)
+                else:
+                    if not pending[key]:
+                        raise ValueError("unmatched usage event cannot be continued")
+                    reserve = pending[key].popleft()
+                    if not event["complete"] and event["cost_usd"] != reserve:
+                        raise ValueError(
+                            "unknown usage must retain its full reservation"
+                        )
+            if any(pending.values()):
+                raise ValueError("unfinished calls need accounting recovery first")
+    if (unknown and not diagnostic) or spent >= 25:
+        raise ValueError(
+            "unknown prior usage or cumulative $25 authorization exhausted"
+        )
+    return spent, unknown
+
+
 def reviewed(path: Path | None, evidence: str) -> bool:
     if path is None:
         return False
@@ -420,6 +471,8 @@ def preparation_report(directory: Path) -> dict[str, Any]:
         and not accounting(rows)[1]
     )
     return {
+        "diagnostic": bool(manifest.get("diagnostic")),
+        "prior_unknown_usage": bool(manifest.get("prior_unknown_usage")),
         "complete": complete,
         "evidence_sha256": report_evidence(directory),
         "calibration": calibration,
@@ -468,6 +521,7 @@ def calibration_admission(
     manifest = read(directory / "manifest.json")
     if (
         not report["complete"]
+        or manifest.get("diagnostic")
         or manifest["holdout_sha256"] != holdout
         or manifest["evaluator_sha256"] != evaluator
         or not reviewed(review, report["evidence_sha256"])
@@ -539,6 +593,7 @@ def summary(
     review: Path | None,
     carried: tuple[float, bool] = (0, False),
 ) -> dict[str, Any]:
+    strict_history(history)
     manifest = execution_manifest(directory)
     selected = [
         row
@@ -584,6 +639,9 @@ def summary(
 
 
 def execute(args: argparse.Namespace, history: list[dict[str, Any]]) -> None:
+    diagnostic = getattr(args, "diagnostic", False)
+    if type(diagnostic) is not bool or (diagnostic and args.mode != "prepare"):
+        raise ValueError("diagnostic continuation is preparation-only")
     context = context_identity(args.context)
     limits = policy_limits(args.policy)
     evaluator = evaluator_identity()
@@ -622,11 +680,7 @@ def execute(args: argparse.Namespace, history: list[dict[str, Any]]) -> None:
                 history, context, corpus["holdout_sha256"], args.replacement_review
             )
         carried = carried_accounting(args.history)
-        spent, unknown = spending(history, carried)
-        if unknown:
-            raise ValueError("prior execution has unknown usage; no more paid calls")
-        if spent >= 25:
-            raise ValueError("cumulative $25 authorization exhausted")
+        spent, unknown = preparation_spending(history, carried, diagnostic=diagnostic)
         api_key = os.environ.get("OPENAI_API_KEY", "")
         if not api_key:
             raise ValueError(
@@ -641,10 +695,16 @@ def execute(args: argparse.Namespace, history: list[dict[str, Any]]) -> None:
         with tempfile.TemporaryDirectory() as temp:
             package = Path(temp) / "agent"
             extract_agent(args.bundle, context, package)
-            journal = run.Journal(args.output, min(25, spent + 5), spent)
+            journal = run.Journal(
+                args.output, min(25, spent + 5), spent, soft_fail=diagnostic
+            )
+            journal.unknown_usage = unknown
             manifest = {
                 "run_id": str(uuid.uuid4()),
                 "mode": args.mode,
+                "workers": args.workers,
+                "diagnostic": diagnostic,
+                "prior_unknown_usage": unknown,
                 "started_at": datetime.now(UTC).isoformat(),
                 "context": context,
                 "bundle_digest": context["bundle_digest"],
@@ -798,7 +858,12 @@ def main() -> None:
         "replacement-review",
     ):
         parser.add_argument("--" + name, type=Path)
-    parser.add_argument("--workers", type=int, choices=range(1, 5), default=4)
+    parser.add_argument(
+        "--diagnostic",
+        action="store_true",
+        help="Preparation only: retain unknown reservations and continue; never release evidence",
+    )
+    parser.add_argument("--workers", type=int, choices=range(1, 17), default=16)
     parser.add_argument("--prior-cost-usd", type=float)
     parser.add_argument("--prior-unknown-usage", choices=("true", "false"))
     args = parser.parse_args()

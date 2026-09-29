@@ -67,8 +67,15 @@ Read the complete returned evidence, highlight disagreements, failures and
 incomplete measurements, and open its local review page. Reuse complete, usable
 preparation. For incomplete preparation, review the existing evidence first, then
 ask explicitly before submitting a new `prepare` request with the human's answer
-in `note`. Retain all runs and spending. Unknown usage is a hard stop: review does
-not reconcile it, and the guide has no accounting reconciliation action.
+in `note`. Retain all runs and spending. Unknown usage blocks strict runs; review
+does not reconcile it. Only when the human explicitly authorizes disposable
+diagnostic preparation, submit `prepare`
+with `"diagnostic": true` and the actual authorization in `note`. Keep the original
+spending history and all reservations. Unbounded unknown usage still blocks.
+Diagnostic results may be reviewed but cannot qualify a release or export
+calibration identities; that history stays diagnostic. Never use this option
+merely to make a failing run pass. Capture `model_failed` error class, HTTP status,
+and request ID when present; never copy credentials or provider response bodies.
 
 For complete calibration, ask for approval and record the actual answer with
 `{"action":"approve_result","kind":"calibration","run":"<run>","digest":"<shown evidence digest>","note":"<human answer>"}`.
