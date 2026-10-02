@@ -1,10 +1,10 @@
 {
   "baseline": "4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe",
-  "development_baseline": "2467f5d65d1889530edf01a1cf2c56795a8e0712",
+  "development_baseline": "2480412ecc87e0ae8e020ad6dd1220bc32bf2fd8",
   "packages": {
-    "loader.zip": "089969a77cd61816f1471656ad6dfda793b595c3f9244a1027c2e11ad71054fb",
-    "publisher.zip": "0376194d6234dcd122529efc90e3f6e5eb1ff4a9705a271b11ffa2b5ba434bf9",
-    "timed-checks.zip": "9bf64bc9482e741376f09162c4f6f6e876b908d54109d5d2bff1602caca2f194"
+    "loader.zip": "634973e9579a4d8dbe28cf1b6031ef32def9b9b2a450ced1d726719304b4a51b",
+    "publisher.zip": "a0f050ec8ee8b534db7c1706cda16171022ee94f3fd364934e8c108322bcd0bd",
+    "timed-checks.zip": "b3788b52ff98df34a99645cc270c734e80a6a24536d960f5f95611cab3137c4a"
   },
   "schemas": {
     "application-schemas.json": "7db6fcb374162aaa157116b4107dab3160854ffeb5603557771043faf0dce85d",

@@ -959,3 +959,10 @@ migration, or infrastructure deployment was performed.
 The manifest was revalidated using CI's fixed managed interpreter. Restoring the
 previous CA bytes reproduces all four original package checksums, confirming that
 the CA update is their only content change.
+
+Shared-package compatibility now binds the rebuilt checksums and the development
+release reported by CI's read-only plan, `2480412ecc87e0ae8e020ad6dd1220bc32bf2fd8`.
+Five additional checks passed for mixed retained/candidate loader, publisher, and
+timed-check handlers, unchanged costs and schema contracts, and rejection of
+incorrect serving identities or package hashes. The existing production baseline
+remains pinned, and the release manifest passed verification again.
