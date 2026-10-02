@@ -631,7 +631,9 @@ def assets(slot: dict[str, Any], *, document: bool = False) -> None:
                 == (200, "text/html", release_page),
                 "candidate_release_document",
             )
-        references = set(re.findall(rb'(?:src|href)="(/releases/[^"?#]+)', release_page))
+        references = set(
+            re.findall(rb'(?:src|href)="(/releases/[^"?#]+)', release_page)
+        )
         gate.require(
             bool(references)
             and all(path.startswith((prefix + "/").encode()) for path in references),
