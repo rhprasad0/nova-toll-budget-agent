@@ -39,11 +39,11 @@ ASSET_SHA256: dict[str, str] = {
     "costs.css": "36b86fbc8d0ace7b303d25cfa4aac02d7e158a03fc7d3bc8fcade098b241fff4",
     "costs.mjs": "962cbafcfeed7a6746841eb03c0bd770f162ed47e8981643b9baefd2ca51c2c8",
     "evals.css": "35b65eaa463083b1bdcf167ae6a5436556f82aed92ceb1c9e25a45db51f851fa",
-    "public-report-routes.js": "a3a436e0f34f493030ebe787884f1b033dfba2a031c2a5cb4a88688e1ff0a799",
-    "development/costs.html": "181e609a9655bce44cfcca0ff1acd653321670a8d3c78166776d5c443abbd21c",
-    "development/evals.html": "4af04cdb88add277c545a6c40200db4f52a9a28ff73b8707a40b1972d7b3b4e1",
-    "production/costs.html": "419ca77230b4a1a8c9448391dc7ab66358bdd80192c281504e667039e4501d04",
-    "production/evals.html": "ec1f3246b081e2a4cc42c305feb254889eaddc7330d09dc82a59b2a41cc80745",
+    "public-report-routes.js": "6fed7315c23648f4423059300f47ec901b56d88cd8d8a2a7962d3a586c323bc9",
+    "development/costs.html": "82dee510402e3ebec1b20120f550f3321c505f98d18765d22626a151f0f882b8",
+    "development/evals.html": "837320a607c7eb2bac8e507eb4d24400662523b92edb9e6202815cc721c1b1dd",
+    "production/costs.html": "502c0cfe42e468e6fb9943ccee8224b78140d7b98747a366f2c0c36191896a53",
+    "production/evals.html": "4fecf038987fd5fc018ec04eecb2e2f4166446effb62fcec5f68ecc76eea3677",
 }
 
 

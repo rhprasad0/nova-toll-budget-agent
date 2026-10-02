@@ -538,6 +538,104 @@ def test_existing_upload_requires_browser_metadata(
         delivery.upload(source, "bucket", "key", "text/javascript", "immutable")
 
 
+@pytest.mark.parametrize("has_scorecard", [False, True])
+def test_scorecard_is_checked_with_its_retained_release(
+    monkeypatch: pytest.MonkeyPatch, has_scorecard: bool
+) -> None:
+    prefix = "/releases/release2"
+    index = f'<link href="{prefix}/assets/evals.css">'.encode()
+    if has_scorecard:
+        index += b'<a href="/release-dashboard">Release</a>'
+    scorecard = f'<link href="{prefix}/assets/releases.css">'.encode()
+    payloads = {
+        prefix + "/index.html": index,
+        prefix + "/releases.html": scorecard,
+        prefix + "/assets/evals.css": b"body {}",
+        prefix + "/assets/releases.css": b"svg {}",
+    }
+    observed: list[str] = []
+    wrong_route = False
+
+    def request(jar: object, path: str) -> tuple[int, str, bytes]:
+        observed.append(path)
+        source = (
+            prefix + "/index.html"
+            if path == "/"
+            else prefix + "/releases.html"
+            if path == "/release-dashboard"
+            else path
+        )
+        body = (
+            b"wrong"
+            if wrong_route and path == "/release-dashboard"
+            else payloads[source]
+        )
+        return 200, "text/html" if source.endswith(".html") else "text/css", body
+
+    def head(*args: str) -> dict[str, str]:
+        body = payloads["/" + args[args.index("--key") + 1]]
+        return {
+            "ChecksumSHA256": base64.b64encode(hashlib.sha256(body).digest()).decode()
+        }
+
+    monkeypatch.setattr(delivery.checks, "request", request)
+    monkeypatch.setattr(delivery, "aws", head)
+    delivery.assets(slot("green", "release2"), document=True)
+    assert ("/release-dashboard" in observed) == has_scorecard
+    assert (prefix + "/assets/releases.css" in observed) == has_scorecard
+    if has_scorecard:
+        wrong_route = True
+        with pytest.raises(gate.Rejected, match="candidate_release_document"):
+            delivery.assets(slot("green", "release2"), document=True)
+
+
+def test_scorecard_is_uploaded_to_the_immutable_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commit = "a" * 40
+    sources = {
+        "v2/infra/build/agentcore.zip": b"runtime",
+        "v2/infra/build/chat-proxy.zip": b"proxy",
+        "v2/agent/releases.html": b'<link href="/assets/releases.css">',
+        "v2/agent/assets/releases.css": b"svg {}",
+    }
+    for name, body in sources.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+    delivery.write(
+        tmp_path / "release-manifest.json",
+        {
+            "commit_sha": commit,
+            "files": [
+                {"path": name, "sha256": hashlib.sha256(body).hexdigest()}
+                for name, body in sources.items()
+            ],
+        },
+    )
+    uploaded: dict[str, bytes] = {}
+
+    def upload(
+        path: Path, bucket: str, key: str, kind: str, cache: str
+    ) -> dict[str, str]:
+        uploaded[key] = path.read_bytes()
+        return {
+            "VersionId": "version1",
+            "ChecksumSHA256": base64.b64encode(
+                hashlib.sha256(uploaded[key]).digest()
+            ).decode(),
+        }
+
+    monkeypatch.setenv("GITHUB_SHA", commit)
+    monkeypatch.setattr(delivery, "upload", upload)
+    delivery.prepare_descriptor(tmp_path, previous())
+    assert (
+        uploaded[f"releases/{commit}/releases.html"]
+        == f'<link href="/releases/{commit}/assets/releases.css">'.encode()
+    )
+    assert uploaded[f"releases/{commit}/assets/releases.css"] == b"svg {}"
+
+
 def test_assets_reject_correct_bytes_with_wrong_mime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

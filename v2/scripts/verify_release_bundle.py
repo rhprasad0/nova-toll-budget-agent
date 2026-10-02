@@ -30,6 +30,7 @@ FIXED_PATHS = (
     "v2/agent/costs.html",
     "v2/agent/public_chat.mjs",
     "v2/agent/faq.html",
+    "v2/agent/releases.html",
     "v2/agent/privacy.txt",
     "v2/agent/terms.txt",
     "v2/agent/robots.txt",
