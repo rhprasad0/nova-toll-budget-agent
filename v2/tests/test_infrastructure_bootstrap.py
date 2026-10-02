@@ -1882,7 +1882,7 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
         in DEVELOPMENT_MIGRATIONS_WORKFLOW
     )
     assert (
-        "tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888"
+        "tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd"
         in DEVELOPMENT_MIGRATIONS_WORKFLOW
     )
     assert (

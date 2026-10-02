@@ -705,7 +705,7 @@ def test_third_party_actions_follow_explicit_deploy_credential_clears() -> None:
     steps = workflow["jobs"]["migrate"]["steps"]
     names = [step.get("name", step.get("uses", "")) for step in steps]
     assert names.index("Clear deploy credentials before Tailscale") < names.index(
-        "tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888"
+        "tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd"
     )
     assert names.index("Clear deploy credentials before evidence upload") < names.index(
         "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"

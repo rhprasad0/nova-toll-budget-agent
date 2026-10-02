@@ -38,7 +38,7 @@ jobs:
           echo "fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c  infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status
           chmod 600 infra/build/ca/rds-ca-bundle.pem
 
-      - uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+      - uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
         with:
           oauth-client-id: ${{ secrets.TS_DEVELOPMENT_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_DEVELOPMENT_OAUTH_SECRET }}
