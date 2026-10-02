@@ -98,3 +98,82 @@ run_private_stage plan "$RUNNER_TEMP/out" "$RUNNER_TEMP/err" fail
 )
 def test_unknown_or_partial_markers_are_not_exposed(text: str) -> None:
     assert diagnostics.classify_text(text) == "unclassified"
+
+
+@pytest.mark.parametrize(
+    "error,reason",
+    [
+        (release.checks.CheckFailure("canary_grounding"), "canary_grounding"),
+        (gate.Rejected("serving_identity"), "serving_identity"),
+        (
+            release.checks.CheckFailure("private-secret\ncanary_grounding"),
+            "unclassified",
+        ),
+    ],
+)
+def test_canary_stage_preserves_only_fixed_failure_reasons(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    error: ValueError,
+    reason: str,
+) -> None:
+    summary = tmp_path / "summary"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    monkeypatch.setattr(release.time, "monotonic", lambda: 0.0)
+    with pytest.raises(type(error)), release.timed_stage("candidate-canary"):
+        raise error
+    output = capsys.readouterr().err
+    assert f"status=fail elapsed=0 exit=1 reason={reason}" in summary.read_text()
+    assert diagnostics.classify_text(output) == reason
+    assert "private-secret" not in output + summary.read_text()
+
+
+@pytest.mark.parametrize(
+    "error,reason",
+    [
+        (release.checks.CheckFailure("canary_evidence"), "canary_evidence"),
+        (gate.Rejected("invoked_release"), "invoked_release"),
+        (RuntimeError("private-secret\ncanary_evidence"), "observation_failed"),
+    ],
+)
+def test_observation_retains_bounded_reasons_and_recovers_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    error: Exception,
+    reason: str,
+) -> None:
+    summary = tmp_path / "summary"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    elapsed = 0.0
+    monkeypatch.setattr(release.time, "monotonic", lambda: elapsed)
+    recovered = []
+
+    def probe() -> bool:
+        nonlocal elapsed
+        elapsed += 7
+        raise error
+
+    def recover() -> bool:
+        recovered.append(True)
+        return True
+
+    result = release.observe(
+        probe, recover, clock=lambda: elapsed, sleep=lambda _: None
+    )
+    assert result == {
+        "deployment": "failed",
+        "recovery": "recovered",
+        "probes": [False, False],
+    }
+    assert recovered == [True]
+    output = capsys.readouterr().err
+    assert diagnostics.classify_text(output) == reason
+    for index in (1, 2):
+        assert (
+            f"stage=observation-probe-{index} status=fail elapsed=7 exit=1 reason={reason}"
+            in summary.read_text()
+        )
+    assert "observation-probe-3" not in summary.read_text()
+    assert "private-secret" not in output + summary.read_text()

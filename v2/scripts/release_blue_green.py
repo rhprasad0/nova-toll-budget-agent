@@ -72,22 +72,27 @@ TIMING_STAGES = {
     "observation",
     "observation-recovery",
     "recovery",
+    *(f"observation-probe-{index}" for index in range(1, 6)),
 }
 
 
 @contextmanager
-def timed_stage(stage: str) -> Generator[dict[str, bool]]:
+def timed_stage(stage: str) -> Generator[dict[str, bool | str]]:
     """Diagnostic-only timings; fixed tokens are safe for the public summary."""
     stage = stage if stage in TIMING_STAGES else "unknown"
     started = time.monotonic()
-    outcome = {"ok": True}
+    outcome: dict[str, bool | str] = {"ok": True, "reason": "unclassified"}
 
     def emit(status: str) -> None:
         elapsed = max(int(time.monotonic() - started), 0)
         exit_code = 1 if status == "fail" else 0
-        event = f"stage={stage} status={status} elapsed={elapsed} exit={exit_code} reason=unclassified"
+        reason = outcome["reason"]
+        reason = reason if reason in diagnostics.OBSERVATION_REASONS else "unclassified"
+        event = f"stage={stage} status={status} elapsed={elapsed} exit={exit_code} reason={reason}"
         with suppress(OSError, ValueError):
             print(event, file=sys.stderr, flush=True)
+            if status == "fail" and reason != "unclassified":
+                print(f"deployment_gate_reason={reason}", file=sys.stderr, flush=True)
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
             try:
@@ -101,6 +106,9 @@ def timed_stage(stage: str) -> Generator[dict[str, bool]]:
     try:
         yield outcome
         completed = True
+    except (checks.CheckFailure, gate.Rejected) as error:
+        outcome["reason"] = str(error)
+        raise
     finally:
         emit("pass" if completed and outcome["ok"] else "fail")
 
@@ -760,10 +768,22 @@ def observe(
         results: list[bool] = []
         for index in range(5):
             started = clock()
-            try:
-                ok = probe_once() is True and clock() - started <= 60
-            except Exception:
-                ok = False
+            with timed_stage(f"observation-probe-{index + 1}") as probe_timing:
+                reason = "observation_failed"
+                try:
+                    ok = probe_once() is True
+                    if ok:
+                        ok = clock() - started <= 60
+                        if not ok:
+                            reason = "observation_timeout"
+                except Exception as error:
+                    ok = False
+                    if isinstance(error, (checks.CheckFailure, gate.Rejected)):
+                        candidate_reason = str(error)
+                        if candidate_reason in diagnostics.OBSERVATION_REASONS:
+                            reason = candidate_reason
+                probe_timing["ok"] = ok
+                probe_timing["reason"] = "unclassified" if ok else reason
             results.append(ok)
             failures = 0 if ok else failures + 1
             # Completing observation also requires a healthy ending.

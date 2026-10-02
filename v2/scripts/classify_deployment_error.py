@@ -8,6 +8,24 @@ import sys
 from pathlib import Path
 
 MAX_BYTES = 64 * 1024
+OBSERVATION_REASONS = (
+    "canary_answer",
+    "canary_contract",
+    "canary_disclaimer",
+    "canary_event",
+    "canary_evidence",
+    "canary_grounding",
+    "canary_http",
+    "canary_terminal",
+    "canary_timeout",
+    "invoked_release",
+    "serving_identity",
+    "http",
+    "timeout",
+    "response_size",
+    "observation_failed",
+    "observation_timeout",
+)
 GATE_REASONS = (
     "release_reused",
     "resume_claim",
@@ -33,6 +51,7 @@ GATE_REASONS = (
     "action",
     "release_output",
     "gate_rejected",
+    *OBSERVATION_REASONS,
 )
 REASONS = (
     "access_denied",

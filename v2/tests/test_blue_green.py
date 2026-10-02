@@ -1176,7 +1176,9 @@ def test_recovery_record_keys_reject_arbitrary_paths(release: str, claim: str) -
         delivery.recovery_key(release, claim)
 
 
-def test_probe_deadline_counts_as_failure_even_if_http_completed() -> None:
+def test_probe_deadline_counts_as_failure_even_if_http_completed(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     clock_values = iter([0, 61, 61, 61, 122])
     result = delivery.observe(
         lambda: True,
@@ -1187,6 +1189,10 @@ def test_probe_deadline_counts_as_failure_even_if_http_completed() -> None:
     assert result["probes"] == [False, False]
     assert result["deployment"] == "failed"
     assert result["recovery"] == "recovered"
+    assert (
+        delivery.diagnostics.classify_text(capsys.readouterr().err)
+        == "observation_timeout"
+    )
 
 
 def test_manual_recovery_rechecks_reviewed_identity_before_planning(
