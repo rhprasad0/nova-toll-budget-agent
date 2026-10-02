@@ -8,8 +8,10 @@ live in [golden.py](golden.py); the inputs live in [golden/](golden/).
 Use the [experiment journal](EXPERIMENT_JOURNAL.md) for prior attempts, measured
 results, and decisions. The retired 200 cases must not be reused as fresh cases.
 This exposed development set is not an independent holdout. The private holdout
-environment and qualification gate are retired; a replacement approach will be
-designed separately. Production uses the [existing delivery checks](../RUNBOOK.md#production-release-checks).
+environment and qualification gate are retired. The standalone
+[evaluation factory](factory/README.md) provides the next authoring workflow;
+it does not reuse this exposed corpus as a holdout. Production uses the
+[existing delivery checks](../RUNBOOK.md#production-release-checks).
 
 ## Required artifacts
 
