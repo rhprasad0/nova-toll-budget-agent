@@ -82,7 +82,6 @@ EXACT_INPUTS = {
     "v2/agent/agentcore_entrypoint.py",
     "v2/agent/dev_chat.html",
     "v2/agent/faq.html",
-    "v2/agent/releases.html",
     "v2/agent/privacy.txt",
     "v2/agent/public-api-gate.js",
     "v2/agent/public-report-routes.js",

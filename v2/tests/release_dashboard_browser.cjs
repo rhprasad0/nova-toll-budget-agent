@@ -39,11 +39,14 @@ const { chromium } = require("playwright");
     const page = await context.newPage();
     for (const source of ["/", "/faq.html", "/cost-dashboard", "/eval-dashboard"]) {
       await page.goto(origin + source);
+      await page.setViewportSize({ width: 320, height: 740 });
+      assert.equal(await page.locator(".nav-links").evaluate(node => node.scrollWidth <= node.clientWidth), true, `navigation overflows on ${source}`);
       const link = page.getByRole("navigation", { name: "Project pages" }).getByRole("link", { name: "Release", exact: true });
       await link.click();
       assert.equal(new URL(page.url()).pathname, "/release-dashboard");
       await page.getByRole("heading", { name: "A measured step forward." }).waitFor();
     }
+    await page.setViewportSize({ width: 1440, height: 1000 });
     assert.equal(await page.locator('nav a[aria-current="page"]').innerText(), "Release");
     assert.equal(await page.locator("script").count(), 0);
     assert.match(await page.locator(".score-grid").innerText(), /269\/300/);

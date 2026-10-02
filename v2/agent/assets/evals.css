@@ -65,7 +65,7 @@ summary, select { cursor: pointer; }
 }
 .brand-name { font-size: 23px; font-weight: 750; letter-spacing: -1.1px; }
 .nav-caption { font-size: 11px; border-left: 1px solid var(--line); padding-left: 16px; margin-left: 3px; color: var(--muted); }
-.nav-links { display: flex; gap: 5px; font-size: 12px; font-weight: 600; align-items: center; }
+.nav-links { display: flex; flex-wrap: wrap; gap: 5px; font-size: 12px; font-weight: 600; align-items: center; }
 .nav-links a { text-decoration: none; color: var(--muted); padding: 8px 13px; border: 1px solid transparent; border-radius: 8px; white-space: nowrap; }
 .nav-links a:hover { color: var(--ink); background: #edf1eb; }
 .nav-links a[aria-current="page"] { color: var(--blue); background: white; border-color: var(--line); box-shadow: 0 2px 5px #20332f04; }

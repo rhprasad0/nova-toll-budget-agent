@@ -246,7 +246,6 @@ def prepare_descriptor(bundle: Path, previous: dict[str, Any]) -> dict[str, Any]
                     "dev_chat.html",
                     "public_chat.mjs",
                     "faq.html",
-                    "releases.html",
                     "privacy.txt",
                     "terms.txt",
                 )
@@ -623,7 +622,7 @@ def assets(slot: dict[str, Any], *, document: bool = False) -> None:
     paths.add((prefix + "/index.html").encode())
     # Older retained releases predate the scorecard and must remain recoverable.
     if b'href="/release-dashboard"' in page:
-        release_path = prefix + "/releases.html"
+        release_path = prefix + "/assets/releases.html"
         code, content_type, release_page = checks.request(jar, release_path)
         gate.require(code == 200 and content_type == "text/html", "release_document")
         if document:

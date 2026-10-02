@@ -549,7 +549,7 @@ def test_scorecard_is_checked_with_its_retained_release(
     scorecard = f'<link href="{prefix}/assets/releases.css">'.encode()
     payloads = {
         prefix + "/index.html": index,
-        prefix + "/releases.html": scorecard,
+        prefix + "/assets/releases.html": scorecard,
         prefix + "/assets/evals.css": b"body {}",
         prefix + "/assets/releases.css": b"svg {}",
     }
@@ -561,7 +561,7 @@ def test_scorecard_is_checked_with_its_retained_release(
         source = (
             prefix + "/index.html"
             if path == "/"
-            else prefix + "/releases.html"
+            else prefix + "/assets/releases.html"
             if path == "/release-dashboard"
             else path
         )
@@ -596,7 +596,7 @@ def test_scorecard_is_uploaded_to_the_immutable_release(
     sources = {
         "v2/infra/build/agentcore.zip": b"runtime",
         "v2/infra/build/chat-proxy.zip": b"proxy",
-        "v2/agent/releases.html": b'<link href="/assets/releases.css">',
+        "v2/agent/assets/releases.html": b'<link href="/assets/releases.css">',
         "v2/agent/assets/releases.css": b"svg {}",
     }
     for name, body in sources.items():
@@ -630,7 +630,7 @@ def test_scorecard_is_uploaded_to_the_immutable_release(
     monkeypatch.setattr(delivery, "upload", upload)
     delivery.prepare_descriptor(tmp_path, previous())
     assert (
-        uploaded[f"releases/{commit}/releases.html"]
+        uploaded[f"releases/{commit}/assets/releases.html"]
         == f'<link href="/releases/{commit}/assets/releases.css">'.encode()
     )
     assert uploaded[f"releases/{commit}/assets/releases.css"] == b"svg {}"

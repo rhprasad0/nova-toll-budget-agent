@@ -26,7 +26,7 @@ plans, state evidence, or documentation.
 
 The public `/release-dashboard` page is a static scorecard shipped with each
 immutable site release. Add future releases as dated, anchored sections in
-`agent/releases.html`; preserve historical metrics and their measured contract
+`agent/assets/releases.html`; preserve historical metrics and their measured contract
 versions. Publish curated aggregates, keeping raw evaluation evidence private.
 The [experiment journal](eval/EXPERIMENT_JOURNAL.md) records release decisions.
 
