@@ -911,3 +911,27 @@ approval without an evaluation-age limit. Release verification still depends on
 workflow artifacts retained for 90 days. Synthetic checks cover delayed import, approval,
 and production revalidation; no private evaluation or deployment was run. The
 saved Terraform plan retains its separate 24-hour expiry.
+
+
+## 2026-10-02 — Retire the private holdout approach
+
+Ryan chose to discard the private holdout environment and defer a new container
+and evaluation approach to a future conversation. The guided workspace and
+worker/diagnostic stack (#636 and #639) are closed unmerged. The retirement removes
+the existing container kit, standalone authoring and evaluation tools, and aggregate
+production qualification gate. No new model evaluation or spending is authorized.
+
+Production delivery continues through development artifact provenance, protected
+human approval, saved-plan verification, fixed-target migrations, and canary checks.
+These controls do not establish independent agent accuracy. New saved plans use
+schema version 2; historical recovery archives, policy records, cloud evidence, and
+this journal retain their original history. Local private workspace and runtime
+cleanup is authorized without a backup; cloud role retirement requires a later
+reviewed infrastructure apply.
+
+Validation passed 269 focused production delivery, recovery, retirement, and
+infrastructure tests, repository static checks, Terraform formatting/validation,
+and development corpus validation. The holdout Docker assets and generated
+transfer packets were deleted. The external host workspace still requires manual
+deletion because the local deletion guard rejected that path; no infrastructure
+was applied and no cloud evidence was deleted.

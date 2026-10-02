@@ -1,4 +1,4 @@
-"""Retired inputs and a development-only approval cannot qualify a release."""
+"""Retired fixtures cannot activate development evaluations or transfer approval."""
 
 import json
 import shutil
@@ -9,8 +9,6 @@ import pytest
 
 from eval import golden, golden_actor_check
 from eval import golden_run as run
-from scripts import golden_gate as gate
-from scripts import golden_release as release
 from tests.golden_support import ROOT as TEST_DATA
 
 
@@ -61,27 +59,6 @@ def test_paid_entrypoints_stop_before_credentials_or_output(
         (golden_actor_check.main if mode == "actor-check" else run.main)()
     credentials.assert_not_called()
     assert not output.exists()
-
-
-def test_release_blocks_even_with_historical_approval(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    account = Mock(side_effect=AssertionError("must fail before AWS access"))
-    monkeypatch.setattr(gate, "development_account", account)
-    monkeypatch.setattr(gate, "POLICY", gate.POLICY.with_name("policy-1.0.2.json"))
-    with pytest.raises(ValueError, match="unsupported private"):
-        gate.policy()
-    with pytest.raises(ValueError, match="unsupported private"):
-        gate.admit({"candidate": "a" * 40})
-    receipt = Mock(side_effect=AssertionError("must fail before receipt lookup"))
-    monkeypatch.setattr(gate, "receipt", receipt)
-    with pytest.raises(ValueError, match="unsupported private"):
-        gate.revalidate({"candidate": "a" * 40, "golden": {"run_id": "old-run"}})
-    receipt.assert_not_called()
-    with pytest.raises(ValueError, match="unsupported private"):
-        release.prepare(10, b"{}", tmp_path / "prepared")
-    account.assert_not_called()
-    assert not (tmp_path / "prepared").exists()
 
 
 def test_application_run_requires_new_corpus_approval(

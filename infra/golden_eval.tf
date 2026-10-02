@@ -1,11 +1,7 @@
-# This repository imports aggregates only. Private evaluation runs elsewhere.
-# No role here can read private cases, call a model, or access a database.
+# Retained historical evaluation evidence. The holdout reader/reviewer roles
+# are retired; keep the bucket and its data protections.
 locals {
   golden_bucket = "nova-toll-golden-evidence-903859731897"
-  golden_roles = var.environment == "development" ? {
-    reviewer = { environment = "golden-review", writes = ["aggregates/reports/*", "aggregates/claims/*", "aggregates/accounting/*", "candidates/private/*"] }
-    reader   = { environment = "golden-read", writes = [] }
-  } : {}
 }
 
 resource "aws_s3_bucket" "golden" {
@@ -42,40 +38,6 @@ resource "aws_s3_bucket_public_access_block" "golden" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
-}
-
-resource "aws_iam_role" "golden" {
-  for_each             = local.golden_roles
-  name                 = "nova-toll-golden-${each.key}"
-  max_session_duration = 3600
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
-      Condition = { StringEquals = {
-        "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-        "token.actions.githubusercontent.com:sub" = "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:${each.value.environment}"
-        "token.actions.githubusercontent.com:ref" = "refs/heads/main"
-      } }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "golden" {
-  for_each = local.golden_roles
-  name     = "fixed-golden-evidence"
-  role     = aws_iam_role.golden[each.key].id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = concat([
-      { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = ["arn:aws:s3:::${local.golden_bucket}/aggregates/*", "arn:aws:s3:::${local.golden_bucket}/candidates/private/*"] },
-      { Effect = "Deny", Action = ["s3:DeleteObject", "s3:DeleteObjectVersion", "s3:PutBucketVersioning"], Resource = ["arn:aws:s3:::${local.golden_bucket}", "arn:aws:s3:::${local.golden_bucket}/*"] }
-      ], length(each.value.writes) == 0 ? [] : [
-      { Effect = "Allow", Action = ["s3:PutObject"], Resource = [for prefix in each.value.writes : "arn:aws:s3:::${local.golden_bucket}/${prefix}"] }
-    ])
-  })
 }
 
 resource "aws_s3_bucket_policy" "golden" {

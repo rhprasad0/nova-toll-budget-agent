@@ -35,15 +35,13 @@ output in ignored `eval/private/` or the existing private workflow store.
 
 - [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
   176 labeled references, 107 synthetic fixtures, and five-turn actors.
-- [Private authoring kit](HOLDOUT_AUTHORING.md): public instructions and an offline
-  validator for independently authored private cases; no held-out data is included.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, single-pass development application
   baselines, complete cost accounting, and offline report reproduction.
-- [Production gate](GOLDEN_RELEASE.md): 100 independently authored private cases,
-  three trials each, and an 80% admission floor. An aggregate report and protected
-  human approval bind the exact artifact. The [container kit](HOLDOUT_SETUP.md)
-  prepares private authoring and execution. Activation awaits private review;
-  development scores and historical approvals cannot qualify production.
+
+The private holdout tooling and production qualification gate are retired. A
+replacement container and evaluation approach will be designed separately.
+Production delivery uses the existing [release checks](../RUNBOOK.md#production-release-checks).
+Development scores do not establish independent agent accuracy.
 
 From `v2/`, validate without model calls:
 

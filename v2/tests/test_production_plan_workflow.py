@@ -59,6 +59,19 @@ def test_production_cutover_requires_a_separate_human_gate_after_preparation() -
     assert protection < first_credentials
 
 
+def test_release_claim_uses_development_admission_directly() -> None:
+    jobs = yaml.safe_load(WORKFLOW.read_text())["jobs"]
+    assert jobs["claim"]["needs"] == "admission"
+    assert jobs["claim"]["if"] == "needs.admission.result == 'success'"
+    claim_step = next(
+        step for step in jobs["claim"]["steps"] if step.get("id") == "claim"
+    )
+    assert claim_step["env"]["ADMISSION"] == "${{ needs.admission.outputs.admission }}"
+    migration_jobs = yaml.safe_load(MIGRATION_WORKFLOW.read_text())["jobs"]
+    assert set(migration_jobs) == {"migrate"}
+    assert migration_jobs["migrate"]["environment"] == "production"
+
+
 def _step(name: str) -> str:
     workflow: dict[str, Any] = yaml.safe_load(WORKFLOW.read_text())
     return next(
@@ -604,7 +617,7 @@ def test_finalizer_upload_is_always_required_and_terminal_status_is_always_run()
     assert terminal["if"] == "${{ always() }}"
 
 
-@pytest.mark.parametrize("blocked", ["admission", "golden", "claim"])
+@pytest.mark.parametrize("blocked", ["admission", "claim"])
 def test_preclaim_rejection_retains_evidence_without_status_write(
     tmp_path: Path, blocked: str
 ) -> None:
@@ -619,7 +632,6 @@ def test_preclaim_rejection_retains_evidence_without_status_write(
         "ADMISSION": "",
         "INITIAL_ADMISSION": json.dumps(initial) if initial else "",
         "ADMISSION_RESULT": "failure" if blocked == "admission" else "success",
-        "GOLDEN_RESULT": "success" if blocked == "claim" else "failure",
         "CLAIM_RESULT": "failure" if blocked == "claim" else "skipped",
         "PLANNER": "skipped",
         "MIGRATE": "skipped",
