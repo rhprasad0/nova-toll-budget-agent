@@ -939,3 +939,19 @@ was applied and no cloud evidence was deleted.
 An additional 74 migration checks passed, with two opt-in readiness checks skipped.
 GitHub CI remains blocked by the unchanged RDS CA bundle pin and existing
 PyJWT/urllib3 dependency advisories; those require separate maintenance before merge.
+
+### 2026-10-02 — Refresh the reviewed RDS CA bundle
+
+Reviewed AWS's September 29 global trust bundle after its published bytes changed
+and package builds rejected the old checksum. All 108 original certificates remain
+unchanged; the bundle adds three `me-west-1` roots with verified self-signatures.
+Updated build, migration, and runbook pins to SHA-256
+`fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c`, preserving
+HTTPS verification and exact checksum rejection.
+
+All five deployment packages built, including a deterministic timed-checks rebuild
+and import check. The release manifest now records the four changed package
+checksums and passed verification against the rebuilt artifacts; 323 focused tests
+passed. This resolves the CA build blocker recorded above. Dependency advisories
+still require separate maintenance. No model evaluation, paid inference, database
+migration, or infrastructure deployment was performed.

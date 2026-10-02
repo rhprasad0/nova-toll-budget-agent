@@ -3,7 +3,7 @@
 download_rds_ca_bundle() {
   local destination="$1"
   local ca_url="https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
-  local ca_sha256="e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
+  local ca_sha256="fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c"
   curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
     "$ca_url" -o "$destination" || return
   echo "$ca_sha256  $destination" | sha256sum --check --status || {
