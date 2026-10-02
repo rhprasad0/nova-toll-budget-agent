@@ -955,3 +955,7 @@ checksums and passed verification against the rebuilt artifacts; 323 focused tes
 passed. This resolves the CA build blocker recorded above. Dependency advisories
 still require separate maintenance. No model evaluation, paid inference, database
 migration, or infrastructure deployment was performed.
+
+The manifest was revalidated using CI's fixed managed interpreter. Restoring the
+previous CA bytes reproduces all four original package checksums, confirming that
+the CA update is their only content change.
