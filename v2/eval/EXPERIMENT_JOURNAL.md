@@ -966,3 +966,17 @@ Five additional checks passed for mixed retained/candidate loader, publisher, an
 timed-check handlers, unchanged costs and schema contracts, and rejection of
 incorrect serving identities or package hashes. The existing production baseline
 remains pinned, and the release manifest passed verification again.
+
+### 2026-10-02 — Update vulnerable runtime dependencies
+
+Merged the reviewed dependency updates in #641 and #642: PyJWT **2.15.0** replaces
+**2.13.0**, and urllib3 **2.8.0** replaces **2.7.0** in the application lock and
+hash-locked timed-checks requirements. Both PRs passed required CI; the combined
+updates cleared Trivy's eight findings. Their build repairs also incorporated the
+reviewed CA update above and refreshed release and compatibility checksums.
+
+The retirement branch now includes both merged updates. Its package inventory
+passed checksum verification, 97 focused compatibility, eval-isolation, and
+manifest checks passed, and the 100-case development corpus validated offline.
+The application model, prompts, cases, and schemas are unchanged; development
+eval approval remains pending. No model evaluation or paid inference was used.
