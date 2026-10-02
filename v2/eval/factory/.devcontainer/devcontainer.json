@@ -1,0 +1,22 @@
+{
+  "name": "TollChat Evaluation Factory",
+  "build": { "dockerfile": "../Dockerfile", "context": ".." },
+  "workspaceMount": "source=tollchat-factory-private,target=/private,type=volume",
+  "workspaceFolder": "/private/work",
+  "containerUser": "factory",
+  "remoteUser": "factory",
+  "updateRemoteUserUID": false,
+  "containerEnv": {
+    "CODEX_HOME": "/private/agent-state/codex",
+    "HOME": "/private/agent-state/home",
+    "FACTORY_ROOT": "/private/work"
+  },
+  "runArgs": ["--cap-drop=ALL", "--security-opt=no-new-privileges"],
+  "postCreateCommand": "mkdir -p /private/work /private/agent-state/home /private/agent-state/codex",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "openai.chatgpt"],
+      "settings": { "python.defaultInterpreterPath": "/opt/factory/v2/.venv/bin/python" }
+    }
+  }
+}
