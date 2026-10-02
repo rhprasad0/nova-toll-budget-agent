@@ -148,7 +148,7 @@ def test_observation_retains_bounded_reasons_and_recovers_once(
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
     elapsed = 0.0
     monkeypatch.setattr(release.time, "monotonic", lambda: elapsed)
-    recovered = []
+    recovered: list[bool] = []
 
     def probe() -> bool:
         nonlocal elapsed
