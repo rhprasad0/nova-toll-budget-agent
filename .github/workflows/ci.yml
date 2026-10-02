@@ -148,7 +148,7 @@ jobs:
         if: steps.changes.outputs.frontend == 'true'
         run: |
           status=0
-          for check in eval_dashboard cost_dashboard public_chat_scroll commute_map frontend_e2e; do
+          for check in eval_dashboard cost_dashboard release_dashboard public_chat_scroll commute_map frontend_e2e; do
             node "tests/${check}_browser.cjs" || status=1
           done
           exit "$status"

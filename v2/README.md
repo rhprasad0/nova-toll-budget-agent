@@ -22,6 +22,19 @@ Pull-request checks remain credential-free. Load any runtime-only credentials
 from SSM into the process environment; never place them in Terraform variables,
 plans, state evidence, or documentation.
 
+## Release scorecard
+
+The public `/release-dashboard` page is a static scorecard shipped with each
+immutable site release. Add future releases as dated, anchored sections in
+`agent/assets/releases.html`; preserve historical metrics and their measured contract
+versions. Publish curated aggregates, keeping raw evaluation evidence private.
+The [experiment journal](eval/EXPERIMENT_JOURNAL.md) records release decisions.
+
+Reproduce the descriptive intervals and repetition spread from two private
+three-repetition reports with
+`python scripts/release_statistics.py BASELINE_REPORT FINAL_REPORT`.
+Run `node tests/release_dashboard_browser.cjs` for the static page checks.
+
 ## Runtime boundaries
 
 - [Current-price tool](agent_tools/get_current_toll_price.py) and its

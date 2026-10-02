@@ -620,6 +620,27 @@ def assets(slot: dict[str, Any], *, document: bool = False) -> None:
         "asset_prefix",
     )
     paths.add((prefix + "/index.html").encode())
+    # Older retained releases predate the scorecard and must remain recoverable.
+    if b'href="/release-dashboard"' in page:
+        release_path = prefix + "/assets/releases.html"
+        code, content_type, release_page = checks.request(jar, release_path)
+        gate.require(code == 200 and content_type == "text/html", "release_document")
+        if document:
+            gate.require(
+                checks.request(jar, "/release-dashboard")
+                == (200, "text/html", release_page),
+                "candidate_release_document",
+            )
+        references = set(
+            re.findall(rb'(?:src|href)="(/releases/[^"?#]+)', release_page)
+        )
+        gate.require(
+            bool(references)
+            and all(path.startswith((prefix + "/").encode()) for path in references),
+            "release_asset_prefix",
+        )
+        paths.update(references)
+        paths.add(release_path.encode())
     for raw in paths:
         path = raw.decode()
         code, content_type, body = checks.request(jar, path)

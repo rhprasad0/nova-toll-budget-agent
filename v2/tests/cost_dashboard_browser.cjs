@@ -46,7 +46,7 @@ const { chromium } = require('playwright');
     });
     assert.equal(await page.locator('#aws').innerText(), '$4.76');
     assert.equal(await page.locator('#openai').innerText(), '$6.80');
-    assert.deepEqual(await page.locator('.nav-links a').allTextContents(), ['Chat', 'Cost', 'Evaluation results']);
+    assert.deepEqual(await page.locator('.nav-links a').allTextContents(), ['Chat', 'Cost', 'Evaluation results', 'Release']);
     assert.equal(await page.locator('.nav-links a[aria-current]').getAttribute('href'), '/cost-dashboard');
     await page.reload();
     await page.waitForFunction(() => {

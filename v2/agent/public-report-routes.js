@@ -1,6 +1,9 @@
 /** @param {{ request: { method: string, uri: string, headers?: Record<string, {value: string}> } }} event */
 function handler(event) {
   var request = event.request;
+  if (request.uri === "/release-dashboard" || request.uri === "/release-dashboard/") {
+    request.uri = "/assets/releases.html";
+  }
   if (request.uri === "/eval-dashboard" || request.uri === "/eval-dashboard/") {
     request.uri = "/evals.html";
   }

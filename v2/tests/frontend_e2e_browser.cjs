@@ -108,11 +108,11 @@ const { chromium } = require('playwright');
         return ['--ink', '--blue', '--paper'].map(name => style.getPropertyValue(name).trim());
       });
       const expected = await palette(); assert.deepEqual(expected, ['#20332f', '#087f83', '#f7f8f4']);
-      for (const href of ['/cost-dashboard', '/eval-dashboard', '/', '/faq.html', '/']) {
+      for (const href of ['/cost-dashboard', '/eval-dashboard', '/release-dashboard', '/', '/faq.html', '/']) {
         await page.locator(`${href === '/faq.html' ? '.footer-links' : '.nav-links'} a[href="${href}"]`).click();
         await page.waitForURL(origin + href);
         assert.deepEqual(await palette(), expected);
-        assert.deepEqual(await page.locator('.nav-links a').allTextContents(), ['Chat', 'Cost', 'Evaluation results']);
+        assert.deepEqual(await page.locator('.nav-links a').allTextContents(), ['Chat', 'Cost', 'Evaluation results', 'Release']);
         if (href === '/cost-dashboard') { await page.getByText('No valid billing snapshot', { exact: true }).waitFor(); assert.equal(await page.locator('#total').innerText(), 'Unavailable'); }
         if (href === '/eval-dashboard') { await page.getByText('No verified snapshot could be loaded. No scores are shown.', { exact: true }).waitFor(); assert.equal(await page.locator('#metrics').innerText(), ''); }
         if (href === '/faq.html') { assert.equal(await page.locator('.faq-list section').count(), 10); await page.locator('.contents a[href="#map-title"]').click(); await page.waitForURL(origin + '/faq.html#map-title'); }

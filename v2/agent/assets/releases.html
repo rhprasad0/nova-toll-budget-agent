@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="TollChat release evidence: measured gains, repeatability, uncertainty, cost, and remaining weaknesses.">
+  <title>TollChat · Release scorecard</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png">
+  <link rel="stylesheet" href="/assets/evals.css">
+  <link rel="stylesheet" href="/assets/releases.css">
+</head>
+<body class="release-page">
+  <a class="skip" href="#main">Skip to release evidence</a>
+  <div class="demo"><strong>Development evidence</strong> · Holdout not evaluated · Frozen replay, not live pricing</div>
+  <div class="wrap">
+    <header class="nav">
+      <a class="brand" href="/" aria-label="TollChat home"><span class="mark" aria-hidden="true">T</span><span class="brand-name">tollchat<span style="color:var(--blue)">.</span></span><span class="nav-caption">An applied AI project</span></a>
+      <nav class="nav-links" aria-label="Project pages"><a href="/">Chat</a><a href="/cost-dashboard">Cost</a><a href="/eval-dashboard">Evaluation results</a><a href="/release-dashboard" aria-current="page">Release</a></nav>
+    </header>
+    <main id="main">
+      <nav class="release-history" aria-label="Release history"><span>RELEASE HISTORY · 1 candidate</span><a href="#prompt-2-3-15">Prompt 2.3.15 / renderer 1.0.2 ↓</a></nav>
+      <!-- Append future dated release sections; preserve this candidate's measured contracts and evidence. -->
+      <article id="prompt-2-3-15" aria-labelledby="release-title">
+        <header class="release-hero">
+          <div>
+            <p class="eyebrow">Release scorecard · September 27, 2026</p>
+            <h1 id="release-title">A measured<br><span>step forward.</span></h1>
+            <p class="intro">More successful attempts. More cases that work three times in a row. A retained candidate with observed gains. We cannot yet separate the improvement confidently from noise.</p>
+          </div>
+          <aside class="release-id" aria-label="Candidate identity">
+            <strong>Catalog guidance + cancellation</strong>
+            <p>Prompt 2.3.15 · Renderer 1.0.2<br>Application model: gpt-6-luna</p>
+            <p><span class="badge">Retained candidate</span> <span class="badge pending">Target missed</span></p>
+            <p>100 development cases × 3 attempts<br>Separate final verification · 300/300 scored</p>
+          </aside>
+        </header>
+
+        <section class="score-grid" aria-label="Final verification at a glance">
+          <div class="score-card"><p class="score-label">Successful attempts</p><p class="score-value">89.7%</p><small class="change">+4.0 percentage points</small><small>269/300 final · 257/300 baseline</small></div>
+          <div class="score-card"><p class="score-label">Cases passing all 3 attempts</p><p class="score-value">78%</p><small class="change">+10 percentage points</small><small>78/100 final · 68/100 baseline</small></div>
+          <div class="score-card"><p class="score-label">Repeat-score spread · sample SD</p><p class="score-value">0.58<span style="font-size:18px"> pp</span></p><small>Baseline: 4.04 pp</small><small>Three observed repetitions per version</small></div>
+          <div class="score-card"><p class="score-label">Development target</p><p class="score-value">−2<span style="font-size:18px"> attempts</span></p><small class="miss">269 successes · 271 required</small><small>Retained under the above-baseline rule</small></div>
+        </section>
+
+        <section class="verdict-panel" aria-labelledby="verdict-title">
+          <div class="verdict">
+            <p class="eyebrow">The engineering verdict</p>
+            <h2 id="verdict-title">Observed gains.<br>Still an open question.</h2>
+            <p>The final run gained 12 successful attempts over baseline. Its 95% interval for the change includes zero. The evidence supports an observed improvement, not a conclusive claim that the candidate is better.</p>
+            <p class="decision"><strong>Decision: retain the candidate.</strong><br>Ryan accepted the completed final run. The target remains unmet; annual route handling remains weaker. No retry was used to seek a passing score.</p>
+          </div>
+          <div class="uncertainty">
+            <h3>Does the gain clear the noise?</h3>
+            <p>Change in success rate · percentage points · descriptive 95% interval</p>
+            <svg class="interval" viewBox="0 0 500 175" role="img" aria-labelledby="gain-title gain-desc">
+              <title id="gain-title">Observed gain of 4.0 percentage points, with a 95% interval from 0.0 to 8.4 points</title>
+              <desc id="gain-desc">The interval reaches the zero-change line. It does not clearly distinguish improvement from noise on this exposed development set.</desc>
+              <line class="axis" x1="28" y1="120" x2="472" y2="120"/>
+              <line class="zero" x1="102" y1="25" x2="102" y2="134"/>
+              <line class="range" x1="102" y1="85" x2="413.45" y2="85"/>
+              <circle class="point" cx="250" cy="85" r="8"/>
+              <text class="estimate" x="250" y="52" text-anchor="middle">+4.0 pp</text>
+              <text class="endpoint" x="102" y="108" text-anchor="middle">0.0</text><text class="endpoint" x="413.45" y="108" text-anchor="middle">+8.4</text>
+              <text x="28" y="151" text-anchor="middle">−2</text><text x="102" y="151" text-anchor="middle">0</text><text x="176" y="151" text-anchor="middle">+2</text><text x="250" y="151" text-anchor="middle">+4</text><text x="324" y="151" text-anchor="middle">+6</text><text x="398" y="151" text-anchor="middle">+8</text><text x="472" y="151" text-anchor="middle">+10</text>
+            </svg>
+            <p><strong>Zero means no improvement.</strong> Resampling keeps linked scenarios and all three attempts together. It pairs scenarios across versions, not random draws.</p>
+            <p style="margin-top:12px">Final score interval: <strong>85.1%–93.7%</strong><br>Baseline descriptive interval: <strong>80.7%–90.3%</strong><br>Consistency gain interval: <strong>0.0 to +20.8 pp</strong></p>
+          </div>
+        </section>
+
+        <section class="release-section" aria-labelledby="family-title">
+          <div class="section-top"><div><h2 id="family-title">Where the gains landed.</h2><p>Seven coverage families equaled or improved on baseline. Annual routing moved backward.</p></div><span class="sample-note">Successful attempts / planned attempts</span></div>
+          <p class="mobile-table-note">Scroll the table sideways to compare baseline, final, and change.</p>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Coverage family comparison">
+            <table id="family-results">
+              <thead><tr><th scope="col">Coverage family</th><th scope="col">Baseline</th><th scope="col">Final verification</th><th scope="col">Change</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">Complete current requests</th><td>41/60 · 68.3%</td><td><div class="family-rate"><span>46/60 · 76.7%</span><meter min="0" max="60" value="46" aria-label="Complete current requests: 46 of 60 successful">46/60</meter></div></td><td class="positive">+8.3 pp</td></tr>
+                <tr><th scope="row">Current clarification / state</th><td>25/30 · 83.3%</td><td><div class="family-rate"><span>28/30 · 93.3%</span><meter min="0" max="30" value="28" aria-label="Current clarification and state: 28 of 30 successful">28/30</meter></div></td><td class="positive">+10.0 pp</td></tr>
+                <tr><th scope="row">Current evidence interpretation</th><td>27/30 · 90.0%</td><td><div class="family-rate"><span>30/30 · 100%</span><meter min="0" max="30" value="30" aria-label="Current evidence interpretation: 30 of 30 successful">30/30</meter></div></td><td class="positive">+10.0 pp</td></tr>
+                <tr><th scope="row">Complete annual requests</th><td>56/60 · 93.3%</td><td><div class="family-rate"><span>57/60 · 95.0%</span><meter min="0" max="60" value="57" aria-label="Complete annual requests: 57 of 60 successful">57/60</meter></div></td><td class="positive">+1.7 pp</td></tr>
+                <tr><th scope="row">Annual input collection</th><td>40/45 · 88.9%</td><td><div class="family-rate"><span>42/45 · 93.3%</span><meter min="0" max="45" value="42" aria-label="Annual input collection: 42 of 45 successful">42/45</meter></div></td><td class="positive">+4.4 pp</td></tr>
+                <tr class="regression"><th scope="row">Annual route handling</th><td>26/30 · 86.7%</td><td><div class="family-rate"><span>23/30 · 76.7%</span><meter min="0" max="30" value="23" aria-label="Annual route handling: 23 of 30 successful">23/30</meter></div></td><td class="negative">−10.0 pp</td></tr>
+                <tr><th scope="row">Annual interpretation</th><td>27/30 · 90.0%</td><td><div class="family-rate"><span>28/30 · 93.3%</span><meter min="0" max="30" value="28" aria-label="Annual interpretation: 28 of 30 successful">28/30</meter></div></td><td class="positive">+3.3 pp</td></tr>
+                <tr><th scope="row">Switching workflows</th><td>15/15 · 100%</td><td><div class="family-rate"><span>15/15 · 100%</span><meter min="0" max="15" value="15" aria-label="Switching workflows: 15 of 15 successful">15/15</meter></div></td><td>0.0 pp</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="release-section" aria-labelledby="repeat-title">
+          <div class="section-top"><div><h2 id="repeat-title">A good answer once is not enough.</h2><p>Repeatability measures how often the same case succeeds across three fresh attempts.</p></div></div>
+          <div class="two-column">
+            <div class="detail-card">
+              <h3>Three repetitions, all included</h3><p>Each repetition covers the same 100 cases.</p>
+              <div class="repeat-row"><span class="repeat-label">Baseline</span><div class="repeat-values" aria-label="Baseline repetition scores"><span>82%</span><span>85%</span><span>90%</span></div><span class="sd">SD 4.04 pp</span></div>
+              <div class="repeat-row final"><span class="repeat-label">Final</span><div class="repeat-values" aria-label="Final repetition scores"><span>90%</span><span>90%</span><span>89%</span></div><span class="sd">SD 0.58 pp</span></div>
+              <p class="footnote">The final scores clustered more tightly in this sample. Three unseeded repetitions do not establish stable variance or production reliability.</p>
+            </div>
+            <div class="detail-card">
+              <h3>Consistency across cases</h3><p>Successful attempts per case, counted directly.</p>
+              <div class="case-bars">
+                <p>Baseline · 68 of 100 cases passed all three</p>
+                <div class="case-bar" role="img" aria-label="Baseline: 3 cases passed zero attempts, 5 passed one, 24 passed two, and 68 passed all three"><span class="case-zero" style="width:3%">3</span><span class="case-one" style="width:5%">5</span><span class="case-two" style="width:24%">24</span><span class="case-three" style="width:68%">68</span></div>
+                <p>Final · 78 of 100 cases passed all three</p>
+                <div class="case-bar" role="img" aria-label="Final: 3 cases passed zero attempts, 3 passed one, 16 passed two, and 78 passed all three"><span class="case-zero" style="width:3%">3</span><span class="case-one" style="width:3%">3</span><span class="case-two" style="width:16%">16</span><span class="case-three" style="width:78%">78</span></div>
+              </div>
+              <div class="case-legend"><span><i class="case-zero" aria-hidden="true"></i>0 of 3</span><span><i class="case-one" aria-hidden="true"></i>1 of 3</span><span><i class="case-two" aria-hidden="true"></i>2 of 3</span><span><i class="case-three" aria-hidden="true"></i>3 of 3</span></div>
+              <p class="footnote">Final consistency interval: 69.9%–85.9%. Three cases still never succeeded in this sample.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="release-section" aria-labelledby="tradeoff-title">
+          <div class="section-top"><div><h2 id="tradeoff-title">The tradeoffs behind the score.</h2><p>Remaining errors, model cost, and evaluation time belong in the release decision.</p></div></div>
+          <div class="two-column">
+            <div class="detail-card">
+              <h3>Fewer recorded violations; route failures remain</h3>
+              <table class="reliability-table"><thead><tr><th scope="col">Measure</th><th scope="col">Baseline</th><th scope="col">Final</th></tr></thead><tbody>
+                <tr><th scope="row">Grounding violations · scored trials</th><td>3/299</td><td>0/300</td></tr>
+                <tr><th scope="row">Rules violations · scored trials</th><td>39/299</td><td>31/300</td></tr>
+                <tr><th scope="row">Inconclusive attempts</th><td>1/300</td><td>0/300</td></tr>
+                <tr><th scope="row">Returned-alternative scenarios</th><td>7/9 passed</td><td>6/9 passed</td></tr>
+              </tbody></table>
+              <p class="footnote">The baseline inconclusive had one additional observed Rules finding. Violation categories can overlap; zero observed Grounding violations does not establish zero risk. Wrong endpoint variants and changed return routes remain.</p>
+            </div>
+            <div class="detail-card">
+              <h3>Model spend stays small</h3>
+              <table class="reliability-table"><thead><tr><th scope="col">Measure</th><th scope="col">Baseline</th><th scope="col">Final</th></tr></thead><tbody>
+                <tr><th scope="row">Application cost / attempt</th><td>$0.001201</td><td>$0.001247</td></tr>
+                <tr><th scope="row">Application cost / success</th><td>$0.001402</td><td>$0.001391</td></tr>
+                <tr><th scope="row">Whole evaluation trial · p50</th><td>25.65 s</td><td>25.98 s</td></tr>
+                <tr><th scope="row">Whole evaluation trial · p95</th><td>40.63 s</td><td>42.84 s</td></tr>
+              </tbody></table>
+              <p class="footnote">Application cost excludes actors, judges, hosting, and engineering. Evaluation times include actors and judges; they are not measured user response times. Final verification cost $1.1585 across all model roles.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="release-section" aria-labelledby="evidence-title">
+          <div class="section-top"><div><h2 id="evidence-title">The evidence behind this release.</h2><p>Measured contracts are pinned to this candidate, not today’s repository defaults.</p></div><span class="badge">Development evidence · Holdout not evaluated</span></div>
+          <p class="mobile-table-note">Scroll the table sideways to compare all three runs.</p>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Baseline, search, and final verification"><table><caption>Search selected the candidate; separate final verification determines the delivery claim.</caption><thead><tr><th scope="col">Measure</th><th scope="col">Fixed baseline</th><th scope="col">Selected search</th><th scope="col">Final verification</th></tr></thead><tbody>
+            <tr><th scope="row">Successful attempts</th><td>257/300 · 85.7%</td><td>274/300 · 91.3%</td><td>269/300 · 89.7%</td></tr>
+            <tr><th scope="row">Cases passing all 3</th><td>68/100</td><td>83/100</td><td>78/100</td></tr>
+            <tr><th scope="row">Inconclusive attempts</th><td>1</td><td>0</td><td>0</td></tr>
+          </tbody></table></div>
+          <dl class="contracts">
+            <div><dt>Published prompt contract</dt><dd>2.3.15 · baseline 2.3.14</dd></div><div><dt>Prompt renderer</dt><dd>1.0.2 · baseline 1.0.0</dd></div>
+            <div><dt>Evaluated corpus / harness</dt><dd>3.3.27 / 2.3.27</dd></div><div><dt>Case contract</dt><dd>2 · 100 cases / 99 groups</dd></div>
+            <div><dt>Current-price tool contract</dt><dd>1.5.1</dd></div><div><dt>Annual-estimate tool contract</dt><dd>3.0.1</dd></div>
+            <div><dt>Application configuration</dt><dd>gpt-6-luna · low reasoning</dd></div><div><dt>Application output limit</dt><dd>2,048 tokens</dd></div>
+          </dl>
+          <details id="methodology"><summary>How to read these numbers</summary>
+            <p><strong>Success:</strong> all required Outcome, Grounding, Rules, and mechanical checks must pass on a valid scored attempt. Headline success uses all 300 planned slots. The baseline’s one inconclusive receives no success credit; its scored-only rate is 257/299 (86.0%), distinct from the headline 257/300 (85.7%). Nothing was dropped or replaced.</p>
+            <p><strong>Uncertainty:</strong> descriptive 95% percentile intervals use 10,000 bootstrap draws, seed 360, resampling the 99 scenario groups in sorted order. Linked cases and all three attempts stay together. The change interval resamples the same groups across baseline and final, compares their success rates using each draw’s slot count, and does not treat attempt numbers as paired random seeds. The baseline interval is supplemental: its canonical runner interval is null because of the inconclusive. The final success interval matches the recorded runner result.</p>
+            <p><strong>Consistency and dispersion:</strong> cases passing all three attempts are counted directly. Their intervals preserve the same scenario groups and use each draw’s case count. SD is the sample standard deviation of the three repetition success rates, in percentage points. These repetitions share cases and unseeded model sampling; a narrow observed spread is not a guarantee.</p>
+            <p><strong>What changed:</strong> an explicit cancellation instruction stops clarification and pricing after cancellation. Directed entry-to-exit relationships in the location catalog, with selection guidance, help choose direction variants together. The combined candidate’s aggregate gain does not prove which edit caused which change.</p>
+            <p><strong>Limits:</strong> these are exposed development cases under frozen tool replay, after candidate search on the same set. They do not estimate unseen-production accuracy, execute live pricing, or establish production qualification. Recorded grades are preserved, including known grading limitations. The selected search run is subject to selection bias and is not pooled with final verification.</p>
+            <p><strong>Provenance:</strong> final verification evaluated commit <a href="https://github.com/rhprasad0/nova-toll-budget-agent/commit/46476e870de6c3e092521da0af68596d7c2cb9bb">46476e87</a>. It recorded prompt metadata 2.3.14 with the candidate SOP; publication advanced only that version literal to 2.3.15. All 100 rendered prompt hashes, tool schemas, model settings, and measurement inputs matched. The normal development workflow still defaults to one repetition. No holdout was evaluated for this entry.</p>
+          </details>
+          <div class="source-links"><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/eval/EXPERIMENT_JOURNAL.md#2026-09-27--final-verification-of-the-catalog-candidate">Experiment journal ↗</a><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/eval/CURRENT_TIME_RELIABILITY_2026-09-27.md">Baseline reliability report ↗</a><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/scripts/release_statistics.py">Reproduce the aggregate calculation ↗</a></div>
+        </section>
+      </article>
+    </main>
+    <footer><span>TollChat · An applied AI reference implementation</span><span>Static release evidence · measured September 27, 2026 · <a href="/">Back to chat</a></span></footer>
+  </div>
+</body>
+</html>
