@@ -15,7 +15,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/v2-production-migrations.yml"
-CA_SHA = "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
+CA_SHA = "fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c"
 FAKE = r"""
 import json, os, pathlib, subprocess, sys
 from datetime import UTC, datetime, timedelta

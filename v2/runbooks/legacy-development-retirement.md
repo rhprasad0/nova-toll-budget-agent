@@ -764,7 +764,7 @@ four retained addresses, and no shared-bucket deletion.
    a standalone target or ambient `PG*` variables; it uses only the two
    short-lived `RETIRE_LEGACY_DB_*` credential variables set by this wrapper.
    The script pins the reviewed CA SHA-256
-   `e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3` and
+   `fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c` and
    requires both the handoff digest and actual CA file digest to equal it.
 
    ```sh
@@ -780,7 +780,7 @@ four retained addresses, and no shared-bucket deletion.
    PROJECT_ROOT="$(dirname "$GIT_COMMON_DIR")"
    DB_INSTANCE=nova-toll-db
    CA_URL=https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
-   CA_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
+   CA_SHA256=fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c
    mkdir -p "$PROJECT_ROOT/.worktrees"
    WORK_DIR="$(mktemp -d "$PROJECT_ROOT/.worktrees/nova-toll-333-db-XXXXXX")"
    CA_FILE="$WORK_DIR/global-bundle.pem"
