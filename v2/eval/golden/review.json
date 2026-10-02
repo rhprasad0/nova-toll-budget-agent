@@ -1,6 +1,6 @@
 {
   "status": "pending",
-  "corpus_sha256": "12d7ce8dac9497f12abfcaccf76d0f2023bf09aa9fc9a1f1478b5a10b7469413",
+  "corpus_sha256": "0661152c3edef8a1abcd1761133a218093cf496fe6e2cbd6877f5b5e3914252e",
   "human_trajectory_adjudication": false,
   "evidence": "Private holdout support changes the packaged-agent transport and adds explicit reference calibration. Synthetic checks pass; the previous development calibration approval belongs to contract 3.3.27 and is not transferred. Historical results remain in EXPERIMENT_JOURNAL.md.",
   "reviewer": null,
