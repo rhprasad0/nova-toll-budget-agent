@@ -70,7 +70,7 @@ Before preparation apply, the trusted gate requires the reviewed package hashes,
 unchanged schema contracts and serving baseline in
 `v2/scripts/shared-package-compatibility.json`. This record covers the development
 transition from `2480412ecc87e0ae8e020ad6dd1220bc32bf2fd8` and retains the production
-baseline `4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe`. Preparation checks compatibility
+baseline `537a4aa480bc95de704a4af5998e376c05689887`. Preparation checks compatibility
 before migrations and repeats the check before applying the saved plan.
 An already-completed preparation retains these verified packages without needing
 to repeat that transition from the original baseline. Extending it requires

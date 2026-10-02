@@ -45,9 +45,10 @@ Confirm all of the following before creating the release:
   SELECT to_regrole('eval_writer') IS NOT NULL AS evaluation_writer_exists;
   ```
 
-For this release, production advances through **033**, targeting pricing **1.4.0**
-and Oracle **1.15.0**. Migration 033 adds `pricing.evaluation_runs` and its writer
-permissions. Complete and verify the [fixed production writer prerequisite](../runbooks/eval-dashboard.md#fixed-production-role-prerequisite)
+For this release, production advances through **034**, targeting pricing **1.4.0**
+and Oracle **1.15.1**. Migration 034 updates 24 route labels and aliases while
+preserving route connections and all other point fields. Migration 033 adds
+`pricing.evaluation_runs` and its writer permissions. Complete and verify the [fixed production writer prerequisite](../runbooks/eval-dashboard.md#fixed-production-role-prerequisite)
 before publishing. A missing writer causes the migration transaction to roll back.
 Do not run migration 033 manually or use the administrator to bypass the protected
 migration workflow.
