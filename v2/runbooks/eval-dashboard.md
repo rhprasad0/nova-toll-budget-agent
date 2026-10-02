@@ -51,8 +51,8 @@ user chat sessions. Postgres retains history; the public window is seven days.
    until then the page correctly shows no results. Inspect its environment,
    occurrence timestamp, three verdicts, conversation, and tool evidence.
 
-The production migration boundary now includes 033, targeting pricing 1.4.0 and
-Oracle 1.15.0. Before publishing a production release, complete the
+The production migration boundary includes 034, targeting pricing 1.4.0 and
+Oracle 1.15.1. Before publishing a production release, complete the
 [release schema preflight](../manual-releases/README.md#2-check-schemas-before-publishing)
 and the fixed writer prerequisite below. Complete the production runtime activation
 below before treating the dashboard as ready. Development data is never copied there.

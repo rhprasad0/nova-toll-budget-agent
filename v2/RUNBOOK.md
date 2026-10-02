@@ -503,8 +503,9 @@ Before publishing a release, complete the
 Compare candidate/development schema evidence, the production wrapper's expected
 versions, and the reviewed production migration cap. Verify the installed
 production versions and each migration's role prerequisites. Development success
-alone is insufficient. The current cap is 033: pricing 1.4.0 and Oracle 1.15.0;
-033 requires the separately provisioned production `eval_writer` role.
+alone is insufficient. The current cap is 034: pricing 1.4.0 and Oracle 1.15.1.
+Migration 033 requires the separately provisioned production `eval_writer` role;
+034 updates 24 route labels and aliases without changing route connections.
 
 The only production path is the guarded published-release flow. A verified
 development candidate/bundle reaches a stable published `vX.Y.Z` event, whose

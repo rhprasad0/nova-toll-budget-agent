@@ -88,12 +88,12 @@ def test_production_migration_gate_matches_cap() -> None:
         )
     schemas, _ = runner._registry()
     migrations: Any = runner._production_migrations(
-        (*runner._migration_candidates(schemas), _migration(number=34))
+        (*runner._migration_candidates(schemas), _migration(number=35))
     )
     assert migrations[-1].path == (
-        "v2/db/migrations/033_upgrade_pricing_1_3_0_to_1_4_0.sql"
+        "v2/db/migrations/034_upgrade_oracle_1_15_0_to_1_15_1.sql"
     )
-    assert all(migration.number <= 33 for migration in migrations)
+    assert all(migration.number <= 34 for migration in migrations)
     versions = {migration.schema: migration.target for migration in migrations}
 
     wrapper = (SCRIPTS / "run_production_migrations_workflow.sh").read_text()
@@ -124,8 +124,12 @@ def test_production_migration_gate_matches_cap() -> None:
         capture_output=True,
     )
     assert result.returncode == 0, result.stderr
-    for schema in versions:
-        admission["schema_versions"] = {**versions, schema: "0.0.0"}
+    for schema, invalid in (
+        ("pricing", "0.0.0"),
+        ("oracle", "0.0.0"),
+        ("oracle", "1.15.0"),
+    ):
+        admission["schema_versions"] = {**versions, schema: invalid}
         rejected = subprocess.run(
             ["jq", "-e", "--arg", "candidate", admission["candidate"], gate],
             input=json.dumps(admission),

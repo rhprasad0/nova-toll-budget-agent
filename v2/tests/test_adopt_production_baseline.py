@@ -2007,3 +2007,12 @@ COMMIT;
     )
     assert privileges.returncode == 0, privileges.stderr
     assert privileges.stdout.strip() == "t"
+
+    monkeypatch.setattr(runner, "PRODUCTION_MAX_MIGRATION_NUMBER", 34)
+    labeled = runner.run_production()
+    assert labeled["before"] == {"pricing": "1.4.0", "oracle": "1.15.0"}
+    assert labeled["after"] == {"pricing": "1.4.0", "oracle": "1.15.1"}
+    assert labeled["applied"] == [
+        "v2/db/migrations/034_upgrade_oracle_1_15_0_to_1_15_1.sql",
+    ]
+    assert runner.run_production()["applied"] == []

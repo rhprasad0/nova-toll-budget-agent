@@ -115,8 +115,9 @@ def test_compatibility_gate_binds_the_serving_baseline_and_built_packages(
         shared_packages.compatibility(tmp_path, expected, baseline)["status"]
         == "reviewed"
     )
-    with pytest.raises(ValueError, match="shared_compatibility"):
-        shared_packages.compatibility(tmp_path, expected, "b" * 40)
+    for unreviewed in ("b" * 40, "4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe"):
+        with pytest.raises(ValueError, match="shared_compatibility"):
+            shared_packages.compatibility(tmp_path, expected, unreviewed)
     assert (
         shared_packages.compatibility(tmp_path, expected, "b" * 40, changing=False)[
             "status"
