@@ -935,3 +935,7 @@ and development corpus validation. The holdout Docker assets and generated
 transfer packets were deleted. The external host workspace still requires manual
 deletion because the local deletion guard rejected that path; no infrastructure
 was applied and no cloud evidence was deleted.
+
+An additional 74 migration checks passed, with two opt-in readiness checks skipped.
+GitHub CI remains blocked by the unchanged RDS CA bundle pin and existing
+PyJWT/urllib3 dependency advisories; those require separate maintenance before merge.
