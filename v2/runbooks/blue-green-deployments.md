@@ -173,10 +173,9 @@ These objects have no automatic expiry; retain them while either slot is recover
 Releases predating archival retain the original GitHub-artifact recovery path and
 its retention limit. This change does not backfill historical releases.
 
-After merging pipeline or IAM changes, run the main-only `v2-golden-read` workflow
-manually to verify the protected reader's OIDC assumption before publishing a
-production release. The smoke check creates no release claim and deploys nothing;
-normal release calls still require qualified golden evidence.
+Production admission uses the exact successful development artifact and its
+provenance checks. The private holdout qualification workflows are retired. New
+saved plans use schema version 2; version 1 plans must be replaced with a fresh plan.
 
 The existing `production` environment still protects preparation and migration.
 A separate `production-cutover` environment protects the later approval job,

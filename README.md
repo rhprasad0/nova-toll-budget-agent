@@ -33,7 +33,7 @@ Each row links a claim to its implementation and a way to inspect or verify it. 
 | Guardrails check inputs and completed answers | [Runtime checks](v2/agent/agentcore_entrypoint.py) and [versioned guardrail policy](v2/infra/agentcore.tf) | [Input/output blocking and safe-failure tests](v2/tests/test_agentcore_entrypoint.py) and [live release gates](v2/scripts/check_development_release.py) | Configured content, prompt-attack, and credential protections reduce abuse risk; they do not guarantee prevention. |
 | Detected PII is redacted from telemetry before export | [Telemetry exporter](v2/agent/telemetry.py) and [additional masking and alarms](v2/infra/trace_redaction.tf) | [Redaction and failure-path tests](v2/tests/test_telemetry_redaction.py), [observed trace example](#observed-trace-redaction), and [verification runbook](v2/runbooks/telemetry-pii-redaction.md) | Detection can miss information. Redaction failures omit affected content; the screenshot demonstrates one address-redaction example. |
 | Runtime access and credentials have explicit boundaries | [Runtime IAM permissions](v2/infra/agentcore.tf), [database roles](v2/db/roles.sql), and [security policy](SECURITY.md) | [IAM contract tests](v2/tests/test_infrastructure_iam.py) and [database validation instructions](v2/README.md#verify-the-build) | IAM-authenticated database access; deployed credentials live in SSM Parameter Store. |
-| Agent behavior has executable evaluation checks | [Scheduled simulation and judges](v2/eval/simulated.py), [evaluation runner](v2/eval/run_evaluation.py), and [evaluation guide](v2/eval/README.md) | [Simulation contract tests](v2/tests/test_simulated_evaluation.py), [dashboard runbook](v2/runbooks/eval-dashboard.md), and [recorded experiments](#evaluation-status) | Six scheduled current-toll scenarios; development dashboard publication first, production activation pending. Golden corpus retirement documented; historical calibration retained; production qualification remains outstanding. |
+| Agent behavior has executable evaluation checks | [Scheduled simulation and judges](v2/eval/simulated.py), [evaluation runner](v2/eval/run_evaluation.py), and [evaluation guide](v2/eval/README.md) | [Simulation contract tests](v2/tests/test_simulated_evaluation.py), [dashboard runbook](v2/runbooks/eval-dashboard.md), and [recorded experiments](#evaluation-status) | Six scheduled current-toll scenarios; development dashboard publication first, production activation pending. 100-case development corpus; historical calibration retained; private holdout approach retired. |
 
 ## Architecture and safety
 
@@ -93,14 +93,11 @@ bounded prompt experiments are recorded in the experiment journal. These exposed
 development measurements do not qualify production or establish whole-agent
 accuracy.
 
-The [production qualification gate](v2/eval/GOLDEN_RELEASE.md) is prepared for a
-separate, independently authored private set of 100 cases, with three trials each
-and an 80% overall admission floor. It accepts aggregate results and protected human
-approval tied to the exact delivered artifact. Private cases stay outside the
-development agent's access. The [container kit](v2/eval/HOLDOUT_SETUP.md) supports
-authoring and execution on a separate machine. **Activation and
-private evaluation are still pending.** Reports will include failures, uncertainty,
-consistency, latency, cost, and repeat-attempt counts.
+**The private holdout environment and qualification gate are retired.** A new
+container and evaluation approach will be designed separately. Production delivery
+uses the existing artifact provenance, protected human approvals, saved-plan,
+migration, and canary checks described in the [runbook](v2/RUNBOOK.md#production-release-checks).
+These delivery checks do not establish independently measured agent accuracy.
 
 The [experiment journal](v2/eval/EXPERIMENT_JOURNAL.md) records what was tried,
 results, limitations, costs, and decisions. The [evaluation guide](v2/eval/README.md)

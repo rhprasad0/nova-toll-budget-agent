@@ -1602,7 +1602,6 @@ def test_production_release_plan_workflows_keep_trust_before_credentials_and_app
     jobs = cast(dict[str, dict[str, object]], planner["jobs"])
     assert set(jobs) == {
         "admission",
-        "golden",
         "claim",
         "planner",
         "prepare",
@@ -3327,3 +3326,21 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc() -> None
         "- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
         "- uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd",
     )
+
+
+def test_retired_holdout_storage_keeps_data_protections() -> None:
+    storage = (REPO_ROOT / "infra/golden_eval.tf").read_text()
+    assert 'resource "aws_iam_role"' not in storage
+    assert 'resource "aws_iam_role_policy"' not in storage
+    for protection in (
+        "prevent_destroy = true",
+        "force_destroy = false",
+        'status = "Enabled"',
+        'sse_algorithm = "AES256"',
+        "block_public_acls       = true",
+        "block_public_policy     = true",
+        "ignore_public_acls      = true",
+        "restrict_public_buckets = true",
+        '"aws:SecureTransport" = "false"',
+    ):
+        assert protection in storage

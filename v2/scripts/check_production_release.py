@@ -646,11 +646,6 @@ def revalidate(admission: dict[str, Any]) -> dict[str, Any]:
         or _mapping(claim_payload) != required_claim
     ):
         raise AdmissionError("revalidation")
-    if __package__ in {None, ""}:
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from scripts.golden_gate import revalidate as golden_revalidate
-
-    golden_revalidate(admission)
     return admission
 
 
@@ -789,7 +784,6 @@ def validate_saved_plan(
     """Accept only the bounded plan description passed between protected jobs."""
     expected = {
         "schema_version",
-        "golden",
         "release_id",
         "tag",
         "candidate",
@@ -814,7 +808,7 @@ def validate_saved_plan(
         "created_at",
         "expires_at",
     }
-    if set(saved) != expected or saved.get("schema_version") != 1:
+    if set(saved) != expected or saved.get("schema_version") != 2:
         raise AdmissionError("malformed")
     for key in expected - {
         "schema_version",

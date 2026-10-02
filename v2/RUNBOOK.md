@@ -1100,12 +1100,20 @@ reviewed saved Terraform plan.
 Database and shared polling/storage infrastructure are not part of application
 rollback.
 
-## Golden evaluation gate
+## Production release checks
 
-Production planning requires the exact development artifact to pass the
-[protected golden evaluation workflow](eval/GOLDEN_RELEASE.md). The private gate requires 240 successful trials out of 300 across 100 independently
-authored cases, a bounded aggregate report, and protected human approval. Activation
-awaits privately reviewed holdout/evaluator/calibration identities and the
-aggregate-only reviewer storage permissions. The application and evaluator code
-are trusted; a separate machine keeps cases outside developer access. No production baseline is required;
-existing migration, saved-plan, cutover, and canary controls still apply.
+Production planning admits the exact successful development artifact and records
+one durable release claim. Protected human approval, exact saved-plan and state
+verification, fixed-target migration checks, and canary checks remain required.
+Private holdout evaluation is no longer a production admission requirement; the
+former environment and qualification workflows are retired. A replacement approach
+will be designed separately.
+
+New saved-plan records use schema version 2 and omit holdout qualification fields.
+Version 1 plans are rejected; create a fresh plan after this change ships. Retained
+recovery archives remain available through the protected recovery procedure.
+
+The Terraform configuration retires the holdout reader/reviewer roles while
+preserving the encrypted, versioned evidence bucket and deletion protections.
+This code change does not apply shared infrastructure. Existing cloud evidence
+and unused GitHub evaluation environments remain retained.

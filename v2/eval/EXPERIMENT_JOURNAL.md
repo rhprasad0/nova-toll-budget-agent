@@ -911,3 +911,72 @@ approval without an evaluation-age limit. Release verification still depends on
 workflow artifacts retained for 90 days. Synthetic checks cover delayed import, approval,
 and production revalidation; no private evaluation or deployment was run. The
 saved Terraform plan retains its separate 24-hour expiry.
+
+
+## 2026-10-02 — Retire the private holdout approach
+
+Ryan chose to discard the private holdout environment and defer a new container
+and evaluation approach to a future conversation. The guided workspace and
+worker/diagnostic stack (#636 and #639) are closed unmerged. The retirement removes
+the existing container kit, standalone authoring and evaluation tools, and aggregate
+production qualification gate. No new model evaluation or spending is authorized.
+
+Production delivery continues through development artifact provenance, protected
+human approval, saved-plan verification, fixed-target migrations, and canary checks.
+These controls do not establish independent agent accuracy. New saved plans use
+schema version 2; historical recovery archives, policy records, cloud evidence, and
+this journal retain their original history. Local private workspace and runtime
+cleanup is authorized without a backup; cloud role retirement requires a later
+reviewed infrastructure apply.
+
+Validation passed 269 focused production delivery, recovery, retirement, and
+infrastructure tests, repository static checks, Terraform formatting/validation,
+and development corpus validation. The holdout Docker assets and generated
+transfer packets were deleted. The external host workspace still requires manual
+deletion because the local deletion guard rejected that path; no infrastructure
+was applied and no cloud evidence was deleted.
+
+An additional 74 migration checks passed, with two opt-in readiness checks skipped.
+GitHub CI remains blocked by the unchanged RDS CA bundle pin and existing
+PyJWT/urllib3 dependency advisories; those require separate maintenance before merge.
+
+### 2026-10-02 — Refresh the reviewed RDS CA bundle
+
+Reviewed AWS's September 29 global trust bundle after its published bytes changed
+and package builds rejected the old checksum. All 108 original certificates remain
+unchanged; the bundle adds three `me-west-1` roots with verified self-signatures.
+Updated build, migration, and runbook pins to SHA-256
+`fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c`, preserving
+HTTPS verification and exact checksum rejection.
+
+All five deployment packages built, including a deterministic timed-checks rebuild
+and import check. The release manifest now records the four changed package
+checksums and passed verification against the rebuilt artifacts; 323 focused tests
+passed. This resolves the CA build blocker recorded above. Dependency advisories
+still require separate maintenance. No model evaluation, paid inference, database
+migration, or infrastructure deployment was performed.
+
+The manifest was revalidated using CI's fixed managed interpreter. Restoring the
+previous CA bytes reproduces all four original package checksums, confirming that
+the CA update is their only content change.
+
+Shared-package compatibility now binds the rebuilt checksums and the development
+release reported by CI's read-only plan, `2480412ecc87e0ae8e020ad6dd1220bc32bf2fd8`.
+Five additional checks passed for mixed retained/candidate loader, publisher, and
+timed-check handlers, unchanged costs and schema contracts, and rejection of
+incorrect serving identities or package hashes. The existing production baseline
+remains pinned, and the release manifest passed verification again.
+
+### 2026-10-02 — Update vulnerable runtime dependencies
+
+Merged the reviewed dependency updates in #641 and #642: PyJWT **2.15.0** replaces
+**2.13.0**, and urllib3 **2.8.0** replaces **2.7.0** in the application lock and
+hash-locked timed-checks requirements. Both PRs passed required CI; the combined
+updates cleared Trivy's eight findings. Their build repairs also incorporated the
+reviewed CA update above and refreshed release and compatibility checksums.
+
+The retirement branch now includes both merged updates. Its package inventory
+passed checksum verification, 97 focused compatibility, eval-isolation, and
+manifest checks passed, and the 100-case development corpus validated offline.
+The application model, prompts, cases, and schemas are unchanged; development
+eval approval remains pending. No model evaluation or paid inference was used.

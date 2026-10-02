@@ -187,14 +187,6 @@ def test_fixed_private_api_preflight_stops_before_production_mutations(
 
 def _admission() -> dict[str, object]:
     return {
-        "golden": {
-            "run_id": 100,
-            "receipt_sha256": "e" * 64,
-            "policy_sha256": "f" * 64,
-            "holdout_sha256": "a" * 64,
-            "report_sha256": "b" * 64,
-            "created_at": "2026-09-20T20:00:00+00:00",
-        },
         "release_id": 7,
         "tag": "v1.2.3",
         "candidate": "b" * 40,
@@ -214,7 +206,7 @@ def _admission() -> dict[str, object]:
 
 
 @pytest.mark.parametrize(
-    "invalid", ["", "candidate", "missing-golden", "malformed-golden"]
+    "invalid", ["", "candidate", "missing-development", "unexpected-field"]
 )
 def test_actual_workflow_admission_binds_object_and_sanitizes_failure(
     tmp_path: Path, invalid: str
@@ -225,10 +217,10 @@ def test_actual_workflow_admission_binds_object_and_sanitizes_failure(
     admission = _admission()
     if invalid == "candidate":
         admission["candidate"] = "not-a-sha"
-    elif invalid == "missing-golden":
-        del admission["golden"]
-    elif invalid == "malformed-golden":
-        admission["golden"] = {"receipt_sha256": "e" * 64}
+    elif invalid == "missing-development":
+        del admission["development_run"]
+    elif invalid == "unexpected-field":
+        admission["unexpected"] = True
     env = {
         "PATH": os.defpath,
         "ADMISSION": json.dumps(admission),
@@ -736,8 +728,8 @@ def test_third_party_actions_follow_explicit_deploy_credential_clears() -> None:
         ("role", "migration-identity"),
         ("arn-account", "migration-identity"),
         ("schema-version", "migration-identity"),
-        ("missing-golden", "migration-identity"),
-        ("malformed-golden", "migration-identity"),
+        ("missing-development", "migration-identity"),
+        ("unexpected-field", "migration-identity"),
         ("public", "migration-database"),
         ("resource", "migration-database"),
         ("region", "migration-database"),
@@ -803,12 +795,12 @@ def test_actual_production_wrapper_boundaries(
         admission = json.loads(env["PRODUCTION_MIGRATION_ADMISSION"])
         admission["schema_versions"]["oracle"] = "1.14.1"
         env["PRODUCTION_MIGRATION_ADMISSION"] = json.dumps(admission)
-    if failure in {"missing-golden", "malformed-golden"}:
+    if failure in {"missing-development", "unexpected-field"}:
         admission = json.loads(env["PRODUCTION_MIGRATION_ADMISSION"])
-        if failure == "missing-golden":
-            del admission["golden"]
+        if failure == "missing-development":
+            del admission["development_run"]
         else:
-            admission["golden"]["receipt_sha256"] = "invalid"
+            admission["unexpected"] = True
         env["PRODUCTION_MIGRATION_ADMISSION"] = json.dumps(admission)
     result = subprocess.run(
         ["bash", str(scripts / "run_production_migrations_workflow.sh")],
@@ -994,7 +986,6 @@ def test_actual_cutover_shell_resumes_without_reapplying_preparation(
 def _saved_contract() -> tuple[dict[str, Any], dict[str, Any]]:
     now = datetime.now(UTC).replace(microsecond=0)
     admission: dict[str, Any] = {
-        "golden": _admission()["golden"],
         "release_id": 7,
         "tag": "v1.2.3",
         "candidate": "b" * 40,
@@ -1013,7 +1004,7 @@ def _saved_contract() -> tuple[dict[str, Any], dict[str, Any]]:
     }
     saved: dict[str, Any] = {
         **admission,
-        "schema_version": 1,
+        "schema_version": 2,
         "evidence_digest": admission["evidence_artifact"]["digest"],
         "planner_run": 14,
         "planner_attempt": 1,
@@ -1141,6 +1132,7 @@ def test_actual_saved_plan_emits_and_enforces_exact_session_policy(
     "mutation",
     [
         "malformed",
+        "legacy-schema",
         "candidate",
         "claim",
         "planner-run",
@@ -1162,7 +1154,9 @@ def test_actual_saved_plan_validation_stops_before_aws(
         saved_input = "{}"
     else:
         changed = json.loads(json.dumps(saved))
-        if mutation == "candidate":
+        if mutation == "legacy-schema":
+            changed["schema_version"] = 1
+        elif mutation == "candidate":
             changed["candidate"] = "a" * 40
         elif mutation == "claim":
             changed["claim_id"] = 99

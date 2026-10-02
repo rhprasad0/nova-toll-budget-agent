@@ -109,11 +109,9 @@ budget; after four complete candidates without improvement, continue only with a
 materially different evidence-backed hypothesis or a bounded measurement repair.
 See the [eval-climb skill](../../.agents/skills/eval-climb/SKILL.md).
 
-Optimize using development cases only. The separate blind production standard is
-at least 240/300 successful trials, with valid simulations and complete judgments;
-80% on this exposed set cannot qualify production. Keep holdout cases and feedback
-out of candidate search. The separate gate work does not increase the development
-spending authorization.
+Optimize using development cases only. These measurements do not establish
+independent agent accuracy. The retired private holdout approach grants no new
+development spending authorization.
 
 Judges return cited unmet requirements; an empty list determines success.
 The stored `passed`/`evidence` interface remains stable. Calibration must still
@@ -243,8 +241,9 @@ Historical output removed from the working tree is recoverable at Git commit
 or use its recorded source revision for reproduction; do not restore it as an
 active corpus or reuse a historical budget as new spending authorization.
 
-The [production gate](GOLDEN_RELEASE.md) requires separate protected evidence and
-approvals. A source-checkout development baseline cannot qualify a release.
+The private holdout environment and qualification gate are retired. Production
+uses the [existing delivery checks](../RUNBOOK.md#production-release-checks); development
+baselines do not establish independently measured agent accuracy.
 
 The runner and comparison helpers derive execution slots from the recorded
 `trials_per_case` (1 or 3). The active development contract uses one repetition;
