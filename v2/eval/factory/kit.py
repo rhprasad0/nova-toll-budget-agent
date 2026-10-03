@@ -25,6 +25,12 @@ APPLICATION = (
     "pyproject.toml",
     "uv.lock",
 )
+DATABASE_REFERENCES = (
+    "db/schema.sql",
+    "db/analysis.sql",
+    "db/oracle/schema.sql",
+    "db/oracle/CONTRACT.md",
+)
 
 
 def sha(data: bytes) -> str:
@@ -144,6 +150,8 @@ def build(output: Path) -> None:
         HERE / "contract.json",
         HERE / "AGENTS.md",
         HERE / "README.md",
+        HERE / "DATABASE.md",
+        HERE / "start-tailscale.sh",
         *HERE.glob("examples/*.json"),
         *HERE.glob("examples/*.jsonl"),
     ]
@@ -151,10 +159,29 @@ def build(output: Path) -> None:
         target = output / "runtime/v2/eval/factory" / path.relative_to(HERE)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(path.read_bytes())
-    for name in ("Dockerfile", ".devcontainer/devcontainer.json", "README.md"):
+    reference_commit = git(repo, "rev-parse", "HEAD").decode().strip()
+    reference_hashes: dict[str, str] = {}
+    for name in DATABASE_REFERENCES:
+        blob = git(repo, "show", f"{reference_commit}:v2/{name}")
+        target = output / "runtime/v2/eval/factory/database" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(blob)
+        reference_hashes[name] = sha(blob)
+    write(
+        output / "runtime/v2/eval/factory/database/manifest.json",
+        {"source_commit": reference_commit, "files": reference_hashes},
+    )
+    for name in (
+        "Dockerfile",
+        ".devcontainer/devcontainer.json",
+        ".devcontainer/seccomp.json",
+        "README.md",
+        "DATABASE.md",
+    ):
         target = output / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes((HERE / name).read_bytes())
+    (output / "LICENSE").write_bytes((repo / "LICENSE").read_bytes())
     write(
         output / "kit-manifest.json",
         {
