@@ -60,12 +60,14 @@ ENV PATH="/opt/factory/v2/.venv/bin:/usr/local/codex-path:$PATH" \
     HOME="/private/agent-state/home" \
     CODEX_HOME="/private/agent-state/codex" \
     AWS_CONFIG_FILE="/private/agent-state/aws/config" \
-    AWS_SHARED_CREDENTIALS_FILE="/private/agent-state/aws/credentials" \
     AWS_PROFILE="nova-toll-dev" \
     AWS_REGION="us-east-1" \
     AWS_DEFAULT_REGION="us-east-1" \
     AWS_EC2_METADATA_DISABLED="true" \
     AWS_PAGER=""
+# This is a runtime file path; the image contains no AWS credentials.
+# trivy:ignore:AVD-DS-0031
+ENV AWS_SHARED_CREDENTIALS_FILE="/private/agent-state/aws/credentials"
 USER factory
 WORKDIR /private/work
 CMD ["sleep", "infinity"]
