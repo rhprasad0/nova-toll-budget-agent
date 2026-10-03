@@ -2,6 +2,7 @@
 
 import io
 import json
+import logging
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -406,6 +407,7 @@ def test_redirect_origin_duplicate_fields_and_oversized_body_rejected() -> None:
 
 def test_handler_preserves_data_and_sanitizes_provider_failure(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     previous = fixture(
         "development",
@@ -441,6 +443,16 @@ def test_handler_preserves_data_and_sanitizes_provider_failure(
     assert result["published_at"] == previous["published_at"]
     assert result["daily"] == previous["daily"]
     assert "secret" not in json.dumps(result)
+    assert [record.getMessage() for record in caplog.records] == [
+        "COST_SOURCE_FAILED source=aws_development error=RuntimeError",
+        "COST_SOURCE_FAILED source=openai error=RuntimeError",
+    ]
+    assert all(
+        record.levelno == logging.WARNING and record.exc_info is None
+        for record in caplog.records
+    )
+    assert "secret" not in caplog.text
+    assert "private error" not in caplog.text
     assert clients == ["s3", "ce", "ssm"]
     s3.get_object.side_effect = ClientError(
         {"Error": {"Code": "AccessDenied"}}, "GetObject"

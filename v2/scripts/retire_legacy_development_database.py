@@ -37,7 +37,6 @@ PRODUCTION_REGION = "us-east-1"
 PRODUCTION_PROFILE = "nova-toll-prod"
 DB_INSTANCE = "nova-toll-db"
 HANDOFF_MANIFEST = "legacy-db-handoff-v1"
-APPROVED_EXTENSIONS = ("plpgsql", "postgis")
 REQUIRED_RDS_ENGINE = "postgres"
 REQUIRED_POSTGRES_MAJOR = "17"
 APPROVED_EXTENSION_OWNER = "rdsadmin"

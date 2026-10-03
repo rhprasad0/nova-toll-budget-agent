@@ -89,7 +89,6 @@ RUNTIME_ROLES = (
     "report_publisher",
 )
 DATABASE_ROLES = (*RUNTIME_ROLES, "oracle_owner")
-OWNER_ROLES = ("pricing_owner", "oracle_owner")
 ORACLE_APPLICATION_RELATIONS = (
     "schema_version",
     "toll_route_point",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import os
 import re
 import urllib.parse
@@ -17,6 +18,8 @@ from typing import Any, cast
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
+
+logger = logging.getLogger(__name__)
 
 getcontext().prec = 80
 DEVELOPMENT_URL = "https://dev.tollchat.ai/costs.json"
@@ -646,8 +649,11 @@ def handler(_event: dict[str, Any], context: object) -> dict[str, str]:
             if name != "aws_development" or environment == "development":
                 sources[name]["retrieved_at"] = utc_text(completed)
             build_snapshot(environment, now, sources, published_at=completed)
-        except Exception:
+        except Exception as error:
             # Provider exceptions can contain credentials, URLs, IDs, or raw bodies.
+            logger.warning(
+                "COST_SOURCE_FAILED source=%s error=%s", name, type(error).__name__
+            )
             sources[name] = blank_source(name, period)
     result = build_snapshot(
         environment,
