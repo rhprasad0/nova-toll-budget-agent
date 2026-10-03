@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import getpass
 import json
 import math
 import os
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 import uuid
+import warnings
 from collections import Counter
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
@@ -40,6 +44,66 @@ from scripts.release_statistics import case_results, compare
 
 SPLITS = ("training", "holdout", "shadow")
 DIMENSIONS = ("outcome", "grounding", "rules")
+
+
+def api_key_path(root: Path) -> Path:
+    return root.resolve().parent / "agent-state/openai-api-key"
+
+
+def set_api_key(root: Path) -> None:
+    if not sys.stdin.isatty():
+        raise ValueError("run factory set-api-key in an interactive terminal")
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", getpass.GetPassWarning)
+            key = getpass.getpass("Evaluation OpenAI API key (hidden): ").strip()
+    except getpass.GetPassWarning:
+        raise ValueError("terminal does not support hidden API key entry") from None
+    if not key:
+        raise ValueError("API key must not be empty")
+    path = api_key_path(root)
+    if path.parent.is_symlink():
+        raise ValueError("agent-state must be a private directory, not a symlink")
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.parent.chmod(0o700)
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            os.fchmod(stream.fileno(), 0o600)
+            stream.write(key + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def load_api_key(root: Path) -> str:
+    key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if key:
+        return key
+    path = api_key_path(root)
+    try:
+        with os.fdopen(
+            os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        ) as stream:
+            info = os.fstat(stream.fileno())
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_mode & 0o077
+                or info.st_uid != os.getuid()
+            ):
+                raise ValueError(
+                    "evaluation API key requires an owner-only regular file"
+                )
+            key = stream.read().strip()
+    except OSError:
+        raise ValueError(
+            "evaluation API key unavailable; run factory set-api-key"
+        ) from None
+    if not key:
+        raise ValueError("evaluation API key empty; run factory set-api-key")
+    return key
 
 
 def read(path: Path) -> dict[str, Any]:
@@ -464,6 +528,7 @@ def calibrate(
 ) -> dict[str, Any]:
     directory, manifest = suite(root, suite_version)
     paid_guard(manifest, mock, budget, authorization)
+    key = "synthetic-no-credential" if mock else load_api_key(root)
     output = directory / "calibration"
     journal = run.Journal(output, budget if not mock else 1)
     append(
@@ -478,7 +543,6 @@ def calibrate(
     actors: list[dict[str, Any]] = []
     error = None
     try:
-        key = os.environ["OPENAI_API_KEY"] if not mock else "synthetic-no-credential"
         with patch.object(run.toll_agent, "load_openai_api_key", lambda: key):
             for split in SPLITS:
                 with corpus(directory / split), workers(journal) as pool:
@@ -854,6 +918,7 @@ def evaluate(
             raise ValueError(
                 "holdout reuse requires a fresh approval for this source and current ledger"
             )
+    key = "synthetic-no-credential" if mock else load_api_key(root)
     run_id = uuid.uuid4().hex
     output = root / "runs" / run_id
     journal = run.Journal(output, budget if not mock else 1)
@@ -903,7 +968,6 @@ def evaluate(
         else:
             from eval.factory.source_agent import SourceAgent
 
-            key = os.environ["OPENAI_API_KEY"]
             with (
                 patch.object(run.toll_agent, "load_openai_api_key", lambda: key),
                 corpus(directory / "holdout"),
@@ -1509,6 +1573,9 @@ def main() -> None:
     parser.add_argument("--root", type=Path, default=Path("/private/work"))
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("init")
+    commands.add_parser("set-api-key")
+    validate_parser = commands.add_parser("validate")
+    validate_parser.add_argument("--inputs", type=Path, required=True)
     freeze_parser = commands.add_parser("freeze")
     freeze_parser.add_argument("--inputs", type=Path, required=True)
     freeze_parser.add_argument("--suite", required=True)
@@ -1558,6 +1625,21 @@ def main() -> None:
         command = commands.add_parser(name)
         command.add_argument("--archive", type=Path, required=True)
     args = parser.parse_args()
+    if args.command == "set-api-key":
+        set_api_key(args.root)
+        print("Evaluation API key saved privately. Codex login is unchanged.")
+        return
+    if args.command == "validate":
+        validate_splits(args.inputs)
+        print(
+            json.dumps(
+                {
+                    "valid": True,
+                    "cases": {s: CONTRACT["splits"][s]["count"] for s in SPLITS},
+                }
+            )
+        )
+        return
     with locked(args.root):
         result = None
         if args.command == "init":

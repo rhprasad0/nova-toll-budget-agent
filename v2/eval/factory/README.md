@@ -1,10 +1,14 @@
 # Evaluation factory
 
-This portable VS Code container authors and freezes **100 training, 50 private
-holdout, and 10 public shadow cases**. It starts at 4.0.0 and wraps the pinned
-golden evaluator without changing the public runner or application model/prompt.
-Real case authoring, paid execution, hill-climbing integration, shadow CI, and
-deployment are separate work. Experiment history stays in the
+Log into Codex inside this portable VS Code container and ask it to author and
+validate **100 training, 50 private holdout, and 10 public shadow cases**. With
+your explicit budget, the agent can also freeze the suite and run calibration
+and candidate evaluations through the existing factory commands. You retain
+review, holdout-reuse, and release decisions. The suite starts at 4.0.0 and wraps
+the pinned golden evaluator without changing the public runner or application
+model/prompt. The kit contains teaching examples; the real suite still needs
+authoring. Hill-climbing integration, shadow CI, and deployment remain separate
+work. Experiment history stays in the
 [journal](../EXPERIMENT_JOURNAL.md).
 
 ## Build and open
@@ -21,16 +25,109 @@ The devcontainer replaces the default repository bind mount with the persistent
 `tollchat-factory-private` volume at `/private`. There is no Docker socket mount.
 The [workspace mount configuration](https://github.com/devcontainers/spec/blob/main/docs/specs/devcontainerjson-reference.md)
 is explicit. The kit can be copied to another host/account; it needs no repository.
-The image contains Python 3.13, Git, a pinned uv, the existing dependency lock,
-verified evaluator sources, schemas, and three historical teaching examples.
+The image contains Python 3.13, Git, a pinned uv, checksum-verified Codex CLI
+0.160.0 (the complete package, including `codex-code-mode-host`) and AWS CLI
+2.36.32 for AMD64/ARM64, PostgreSQL client tools, the existing
+dependency lock, verified evaluator sources, database/tool schemas, and three
+historical teaching examples. Tailscale 1.102.4 runs without root or a TUN device;
+the PostgreSQL SOCKS wrapper reaches the development route even with rootless
+Docker. See
+[development database authoring](DATABASE.md) for login, transport, and bounded
+read-only queries.
 Teaching examples and synthetic smoke data are never fresh holdout cases.
 
-In the container:
+## Log in, enter the evaluation key, and start the agent
+
+The image already places the virtual environment on `PATH`; no activation
+command is needed. Python terminal auto-activation is disabled, including for
+the default `/bin/sh` terminal.
+
+In the container terminal, initialize once, then sign into your factory Codex
+account and enter the separate evaluation API key:
 
 ```bash
-factory() { python -m eval.factory.factory "$@"; }
 factory init
+codex login --device-auth
+codex login status
+factory set-api-key
+codex
 ```
+
+Enable device code login in your ChatGPT security settings (or ask your workspace
+admin), open the printed link in your host browser, and enter the one-time code.
+The browser does not need to run inside the container. See the official
+[Codex authentication guide](https://developers.openai.com/codex/auth/).
+Use the container's Codex VS Code extension instead if you prefer its interface;
+ensure it runs in the container with `/private/work` as its workspace.
+
+Codex defaults to **YOLO mode inside this container**. The image's
+`/etc/codex/config.toml` sets `approval_policy = "never"` and
+`sandbox_mode = "danger-full-access"`, so plain `codex` can use container files
+and networking without command approval prompts. User settings and explicit CLI
+flags can override these defaults; see the official
+[configuration precedence](https://learn.chatgpt.com/docs/config-file/config-basic).
+Paid evaluations still require your explicit budget and authorization record.
+
+For optional Codex sandboxing, the image includes bubblewrap. The devcontainer uses
+the bundled `.devcontainer/seccomp.json`, based on
+[Docker's default profile at 2ceae35](https://github.com/moby/profiles/blob/2ceae35d351c156cb5a8efc0fdc4a08cf94569d8/seccomp/default.json).
+It retains default syscall restrictions and adds only user-namespace creation
+(`clone`/`unshare` with `CLONE_NEWUSER`) and the three mount operations bubblewrap
+needs inside that namespace. The non-root user, dropped capabilities, and
+`no-new-privileges` remain. Choosing `codex --sandbox workspace-write` requires
+the host to permit unprivileged user namespaces.
+
+Codex authentication persists under `/private/agent-state/codex/`, separate from
+your application workspace and memories. The hidden key prompt writes an
+owner-only file at `/private/agent-state/openai-api-key`. Paid factory commands
+load it directly; it is not exported into Codex's environment or stored in
+`/private/work`, Git, reports, kits, or backups. Runtime `OPENAI_API_KEY` explicitly
+overrides the saved key. Run `factory set-api-key` again to replace it. Reopening
+or rebuilding with the same private volume preserves login and the saved key.
+After a backup restore into a fresh volume, log in and enter the key again.
+ChatGPT login pays for Codex access according to your account; evaluation model
+calls use the separate API key and authorized factory budgets.
+
+For database-grounded authoring, log this container into Tailscale and configure
+`nova-toll-dev` AWS SSO following [DATABASE.md](DATABASE.md). Verify the fixed
+development reader before authoring. Tailscale state, AWS configuration, and
+login caches persist only under `/private/agent-state/`; no host credential
+directory or Tailscale socket is mounted. Database reads
+are authoring inputs, and eval runs continue using frozen fixture replay.
+
+Start Codex in `/private/work` and give it this prompt:
+
+> Follow AGENTS.md and the frozen factory contract. Author a fresh 4.0.0 suite
+> with 100 training, 50 private holdout, and 10 public shadow cases. First read
+> /opt/factory/v2/eval/factory/DATABASE.md and its committed schema references.
+> Use nova-toll-dev, account 903859731897, and pricing_reader_development to
+> inspect only bounded development route/pricing data through the verified
+> Tailscale SOCKS route using DATABASE.md's PostgreSQL wrapper. If login, reader
+> access, or connectivity is missing, tell me
+> which setup step is needed; do not change permissions or substitute another
+> database. Use these observations to author realistic synthetic fixtures,
+> recording relevant retrieval times and provenance without credentials or
+> connection details. Plan coverage and scenario groups, generate reconciled
+> fixtures and complete passing
+> references plus at least 20 labeled negative references, then run factory
+> validate and repair drafts. Review novelty and split leakage, summarize the
+> coverage and limitations, and freeze the suite. Ask for an explicit budget
+> before paid calibration or evaluation. Prepare review evidence for me and
+> retain my holdout-reuse and release decisions. Do not read credentials or
+> application repository memories. Keep all database reads in authoring; freeze
+> their evidence before calibration and use fixture replay for every eval run.
+
+When updating an already initialized factory, use this prompt in a new Codex
+session after rebuilding the container. The private volume retains its existing
+`AGENTS.md`; reconcile it with the new image's factory instructions, preserving
+any local edits. Do not rerun `factory init` or reset private history.
+
+No paid budget is implied by this prompt. When ready, authorize a particular
+calibration/evaluation command with a dollar ceiling and record; the agent uses
+that evidence with `--budget-usd` and `--authorization`. Review the full calibration
+report before approving it. Hand over a candidate snapshot explicitly, then
+review the blinded audit before revealing its scores. The agent may prepare
+review files, but must never invent your decisions or claim human inspection.
 
 Author only in `/private/work/drafts/{training,holdout,shadow}/`, using
 `cases.jsonl`, `fixtures/*.json`, `examples.json`, and `prompt-points.json`.
@@ -40,6 +137,12 @@ the complete suite requires at least 20 labeled negative references. Validation
 checks allocations, replay, arithmetic, known endpoints, timestamps, actor
 boundaries, duplicate openings, equivalent fixture evidence, and split groups.
 Human review must also check paraphrases and case novelty.
+
+Validate drafts without freezing them or calling models:
+
+```bash
+factory validate --inputs /private/work/drafts
+```
 
 | Split | Current | Annual | Mixed |
 | --- | ---: | ---: | ---: |
@@ -62,9 +165,10 @@ factory calibrate --suite 4.0.0 --budget-usd 25 \
   --authorization 'Ryan approved this calibration budget in <record>'
 ```
 
-Only run the paid command after explicit budget authorization. Supply
-`OPENAI_API_KEY` at runtime with a separate factory identity; do not put it in
-work files. Credentials/authentication and Codex state belong outside `work`,
+Only run the paid command after explicit budget authorization. Use the saved
+evaluation key from `factory set-api-key`, or explicitly supply `OPENAI_API_KEY`
+at runtime with a separate factory identity; do not put it in work files.
+Credentials/authentication and Codex state belong outside `work`,
 under `/private/agent-state/`. The container does not load deployed SSM secrets.
 All calls use the existing reservation/usage accounting; unknown usage stops
 further work. The budget is a per-command ceiling. Costs and interrupted attempts
@@ -227,14 +331,20 @@ From the generated kit on the host, run the complete smoke and restore in two
 fresh volumes, with networking disabled:
 
 ```bash
+docker run --rm --network none --cap-drop=ALL --security-opt=no-new-privileges \
+  --security-opt=seccomp=.devcontainer/seccomp.json \
+  tollchat-eval-factory codex sandbox -c 'sandbox_mode="workspace-write"' \
+  timeout 20s python -m eval.factory.container_check
 docker volume create tollchat-factory-smoke
 docker run --rm --network none --mount type=volume,source=tollchat-factory-smoke,target=/private \
+  --cap-drop=ALL --security-opt=no-new-privileges --security-opt=seccomp=.devcontainer/seccomp.json \
   tollchat-eval-factory python -m eval.factory.smoke --directory /private
 docker create --name factory-backup-copy --mount type=volume,source=tollchat-factory-smoke,target=/private tollchat-eval-factory
 docker cp factory-backup-copy:/private/backup.tar.gz ./backup.tar.gz
 docker rm factory-backup-copy
 docker volume create tollchat-factory-restore
 docker create --name factory-restore --network none --mount type=volume,source=tollchat-factory-restore,target=/private \
+  --cap-drop=ALL --security-opt=no-new-privileges --security-opt=seccomp=.devcontainer/seccomp.json \
   tollchat-eval-factory python -m eval.factory.smoke --directory /private --restore /private/backup.tar.gz
 docker cp ./backup.tar.gz factory-restore:/private/backup.tar.gz
 docker start -a factory-restore

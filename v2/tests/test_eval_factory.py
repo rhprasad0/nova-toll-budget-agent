@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import pty
 import shutil
+import signal
 import socket
 import subprocess
 import tarfile
+import time
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -21,6 +25,243 @@ from eval import golden_run as run
 from eval.factory import factory as f
 from eval.factory import kit, smoke
 from eval.factory.source_agent import SourceAgent
+
+
+def test_kit_retains_default_seccomp_and_packages_namespace_exceptions(
+    tmp_path: Path,
+) -> None:
+    profile = json.loads((kit.HERE / ".devcontainer/seccomp.json").read_text())
+    mount_rule, namespace_rule = profile["syscalls"][-2:]
+    assert mount_rule["names"] == ["mount", "pivot_root", "umount2"]
+    assert mount_rule["action"] == "SCMP_ACT_ALLOW"
+    assert namespace_rule["names"] == ["clone", "unshare"]
+    assert namespace_rule["action"] == "SCMP_ACT_ALLOW"
+    assert namespace_rule["args"] == [
+        {
+            "index": 0,
+            "value": 268435456,
+            "valueTwo": 268435456,
+            "op": "SCMP_CMP_MASKED_EQ",
+        }
+    ]
+    # All upstream Docker restrictions remain exactly as pinned at 2ceae35.
+    profile["syscalls"] = profile["syscalls"][:-2]
+    assert profile["defaultAction"] == "SCMP_ACT_ERRNO"
+    assert (
+        kit.digest(profile)
+        == "a894b5730caa168d88da7fffe8ace974ad05fb84547e1766fa879d75d3ac6ba2"
+    )
+    output = tmp_path / "kit"
+    kit.build(output)
+    manifest = json.loads((output / "kit-manifest.json").read_text())
+    assert (output / "LICENSE").read_bytes() == (
+        kit.HERE.parents[2] / "LICENSE"
+    ).read_bytes()
+    assert manifest["files"][".devcontainer/seccomp.json"] == kit.sha(
+        (kit.HERE / ".devcontainer/seccomp.json").read_bytes()
+    )
+    settings = json.loads((output / ".devcontainer/devcontainer.json").read_text())
+    assert "--network=host" not in settings["runArgs"]
+    assert (
+        settings["postStartCommand"]
+        == "sh /opt/factory/v2/eval/factory/start-tailscale.sh"
+    )
+    assert settings["waitFor"] == "postStartCommand"
+    assert (output / "runtime/v2/eval/factory/start-tailscale.sh").read_bytes() == (
+        kit.HERE / "start-tailscale.sh"
+    ).read_bytes()
+    assert "--cap-drop=ALL" in settings["runArgs"]
+    assert "--security-opt=no-new-privileges" in settings["runArgs"]
+    assert (
+        "--security-opt=seccomp=${localWorkspaceFolder}/.devcontainer/seccomp.json"
+        in settings["runArgs"]
+    )
+    references = output / "runtime/v2/eval/factory/database"
+    provenance = json.loads((references / "manifest.json").read_text())
+    assert set(provenance["files"]) == set(kit.DATABASE_REFERENCES)
+    assert all(
+        provenance["files"][name] == kit.sha((references / name).read_bytes())
+        for name in kit.DATABASE_REFERENCES
+    )
+    assert (output / "DATABASE.md").is_file()
+    recipe = (
+        (output / "DATABASE.md")
+        .read_text()
+        .split("bash <<'SH'\n", 1)[1]
+        .split("\nSH\n", 1)[0]
+    )
+    subprocess.run(["bash", "-n"], input=recipe, text=True, check=True)
+
+
+def test_tailscale_startup_survives_terminal_hangup(tmp_path: Path) -> None:
+    state = tmp_path / "state"
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    cli = tools / "tailscale"
+    cli.write_text(f'#!/bin/sh\ntest -s "{state}/ready"\n')
+    daemon = tools / "tailscaled"
+    daemon.write_text(
+        f"#!{f.sys.executable}\n"
+        "import json, os, signal, time\nfrom pathlib import Path\n"
+        f"state = Path({str(state)!r})\n"
+        "(state / 'heartbeat').write_text('.')\n"
+        "(state / 'ready').write_text(json.dumps({'pid': os.getpid(), "
+        "'hangup_ignored': signal.getsignal(signal.SIGHUP) == signal.SIG_IGN}))\n"
+        "while True:\n"
+        "    with (state / 'heartbeat').open('a') as stream: stream.write('.')\n"
+        "    time.sleep(0.02)\n"
+    )
+    cli.chmod(0o755)
+    daemon.chmod(0o755)
+    startup = tmp_path / "start.sh"
+    startup.write_text(
+        (kit.HERE / "start-tailscale.sh")
+        .read_text()
+        .replace("/private/agent-state/tailscale", str(state))
+    )
+    environment = {**os.environ, "PATH": f"{tools}:{os.environ['PATH']}"}
+    child, terminal = pty.fork()
+    if child == 0:
+        os.execve("/bin/sh", ["sh", str(startup)], environment)
+    try:
+        _, status = os.waitpid(child, 0)
+        assert os.waitstatus_to_exitcode(status) == 0
+        ready = json.loads((state / "ready").read_text())
+        daemon_pid = ready["pid"]
+        try:
+            assert ready["hangup_ignored"]
+            os.close(terminal)
+            terminal = -1
+            os.kill(daemon_pid, signal.SIGHUP)
+            heartbeat = state / "heartbeat"
+            before = heartbeat.stat().st_size
+            deadline = time.monotonic() + 2
+            while heartbeat.stat().st_size == before and time.monotonic() < deadline:
+                time.sleep(0.02)
+            assert heartbeat.stat().st_size > before
+            subprocess.run(["sh", str(startup)], env=environment, check=True)
+            assert json.loads((state / "ready").read_text())["pid"] == daemon_pid
+        finally:
+            os.kill(daemon_pid, signal.SIGTERM)
+    finally:
+        if terminal >= 0:
+            os.close(terminal)
+
+
+@pytest.mark.parametrize(
+    ("state", "online", "route", "address", "allowed"),
+    [
+        ("Running", True, "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112", "172.31.1.2", True),
+        ("NeedsLogin", True, "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112", "172.31.1.2", False),
+        ("Running", False, "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112", "172.31.1.2", False),
+        ("Running", True, "10.0.0.0/16", "172.31.1.2", False),
+        ("Running", True, "fd7a:115c:a1e0:b1a:0:2:ac1f:0/112", "172.31.1.2", False),
+        ("Running", True, "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112", "10.0.1.2", False),
+        ("Running", True, "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112", "8.8.8.8", False),
+    ],
+)
+def test_database_recipe_requires_connected_development_route(
+    state: str,
+    online: bool,
+    route: str,
+    address: str,
+    allowed: bool,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    program = (
+        (kit.HERE / "DATABASE.md")
+        .read_text()
+        .split("<<'PY'\n", 1)[1]
+        .split("\nPY\n", 1)[0]
+    )
+    status = {
+        "BackendState": state,
+        "Peer": {"router": {"Online": online, "PrimaryRoutes": [route]}},
+    }
+    with (
+        patch.object(
+            f.sys, "argv", ["recipe", "synthetic.invalid", json.dumps(status)]
+        ),
+        patch.object(
+            socket, "getaddrinfo", return_value=[(0, 0, 0, "", (address, 5432))]
+        ),
+    ):
+        if allowed:
+            exec(compile(program, "DATABASE.md", "exec"), {})
+            assert capsys.readouterr().out.strip() == "fd7a:115c:a1e0:b1a:0:1:ac1f:102"
+        else:
+            with pytest.raises(SystemExit, match="1"):
+                exec(compile(program, "DATABASE.md", "exec"), {})
+            assert capsys.readouterr().out == ""
+
+
+def test_private_api_key_entry_rotation_and_loading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "work"
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with (
+        patch.object(f.sys.stdin, "isatty", return_value=True),
+        patch.object(
+            f.getpass, "getpass", side_effect=[" synthetic-first ", "synthetic-next"]
+        ) as prompt,
+    ):
+        f.set_api_key(root)
+        assert f.load_api_key(root) == "synthetic-first"
+        f.set_api_key(root)
+        assert prompt.call_count == 2
+    key_path = f.api_key_path(root)
+    assert f.load_api_key(root) == "synthetic-next"
+    assert key_path.stat().st_mode & 0o777 == 0o600
+    assert key_path.parent.stat().st_mode & 0o777 == 0o700
+    assert list(key_path.parent.iterdir()) == [key_path]
+    assert not root.exists()
+    assert "OPENAI_API_KEY" not in os.environ
+    assert "synthetic" not in capsys.readouterr().out
+    monkeypatch.setenv("OPENAI_API_KEY", " synthetic-override ")
+    assert f.load_api_key(root) == "synthetic-override"
+
+
+def test_api_key_rejects_noninteractive_and_empty_entry(tmp_path: Path) -> None:
+    root = tmp_path / "work"
+    with (
+        patch.object(f.sys.stdin, "isatty", return_value=False),
+        pytest.raises(ValueError, match="interactive terminal"),
+    ):
+        f.set_api_key(root)
+    with (
+        patch.object(f.sys.stdin, "isatty", return_value=True),
+        patch.object(f.getpass, "getpass", return_value="  "),
+        pytest.raises(ValueError, match="empty"),
+    ):
+        f.set_api_key(root)
+    with (
+        patch.object(f.sys.stdin, "isatty", return_value=True),
+        patch.object(f.getpass, "getpass", side_effect=f.getpass.GetPassWarning()),
+        pytest.raises(ValueError, match="hidden API key entry"),
+    ):
+        f.set_api_key(root)
+    assert not f.api_key_path(root).exists()
+
+
+@pytest.mark.parametrize("invalid", ["empty", "permissions", "symlink", "fifo"])
+def test_api_key_rejects_unsafe_or_empty_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, invalid: str
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    path = f.api_key_path(tmp_path / "work")
+    path.parent.mkdir()
+    if invalid == "symlink":
+        target = tmp_path / "other"
+        target.write_text("synthetic-key")
+        path.symlink_to(target)
+    elif invalid == "fifo":
+        os.mkfifo(path, mode=0o600)
+    else:
+        path.write_text("" if invalid == "empty" else "synthetic-key")
+        path.chmod(0o600 if invalid == "empty" else 0o644)
+    with pytest.raises(ValueError, match="API key"):
+        f.load_api_key(tmp_path / "work")
 
 
 @pytest.fixture(scope="module")
@@ -45,6 +286,59 @@ def application(
     root, source_id = factory
     run_id = f.evaluate(root, "4.0.0", source_id, role, mock=True)
     return root, run_id, f.application(root, run_id)[1]
+
+
+@pytest.mark.parametrize("command", ["calibrate", "evaluate"])
+def test_missing_api_key_stops_before_paid_attempt(
+    factory: tuple[Path, str], monkeypatch: pytest.MonkeyPatch, command: str
+) -> None:
+    root, source_id = factory
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    before = (root / "ledger.jsonl").read_bytes()
+    existing_runs = list((root / "runs").iterdir())
+    # The fixture is synthetic; bypass only that guard to exercise real key loading.
+    with (
+        patch.object(f, "paid_guard"),
+        patch.object(
+            socket.socket, "connect", side_effect=AssertionError("network forbidden")
+        ),
+        pytest.raises(ValueError, match="run factory set-api-key"),
+    ):
+        if command == "calibrate":
+            f.calibrate(root, "4.0.0", budget=1, authorization="Test")
+        else:
+            f.evaluate(
+                root, "4.0.0", source_id, "candidate", budget=1, authorization="Test"
+            )
+    assert (root / "ledger.jsonl").read_bytes() == before
+    assert list((root / "runs").iterdir()) == existing_runs
+
+
+def test_validate_cli_does_not_freeze_or_change_history(
+    factory: tuple[Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root, _ = factory
+    before = {
+        str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()
+    }
+    monkeypatch.setattr(
+        f.sys,
+        "argv",
+        ["factory", "--root", str(root), "validate", "--inputs", str(root / "drafts")],
+    )
+    with patch.object(
+        socket.socket, "connect", side_effect=AssertionError("network forbidden")
+    ):
+        f.main()
+    assert json.loads(capsys.readouterr().out) == {
+        "valid": True,
+        "cases": {"training": 100, "holdout": 50, "shadow": 10},
+    }
+    assert {
+        str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()
+    } == before
 
 
 def replace_report(root: Path, run_id: str, report: dict[str, Any]) -> None:
@@ -483,6 +777,15 @@ def test_backup_restore_excludes_agent_auth_and_rejects_traversal(
     auth = root.parent / "agent-state"
     auth.mkdir()
     (auth / "auth.json").write_text("synthetic authentication sentinel")
+    (auth / "openai-api-key").write_text("synthetic evaluation key sentinel")
+    for name in (
+        "aws/config",
+        "home/.aws/sso/cache/login.json",
+        "tailscale/tailscaled.state",
+    ):
+        path = auth / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("synthetic database authentication sentinel")
     archive = tmp_path / "backup.tar.gz"
     f.backup(root, archive)
     with tarfile.open(archive) as packed:
@@ -490,6 +793,14 @@ def test_backup_restore_excludes_agent_auth_and_rejects_traversal(
             "agent-state" not in member.name and "auth.json" not in member.name
             for member in packed
         )
+        contents = b"".join(
+            stream.read()
+            for member in packed
+            if member.isfile()
+            if (stream := packed.extractfile(member)) is not None
+        )
+        assert b"synthetic evaluation key sentinel" not in contents
+        assert b"synthetic database authentication sentinel" not in contents
     restored = tmp_path / "restored"
     restored.mkdir()
     f.restore(restored, archive)
