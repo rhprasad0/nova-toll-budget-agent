@@ -121,7 +121,9 @@ def test_timed_lambda_scheduler_and_failure_contract() -> None:
         "bedrock-agentcore:InvokeAgentRuntime",
     ):
         assert action in lambda_policy
-    assert '"aws:SourceVpce" = var.foundation.agentcore_vpc_endpoint_id' in lambda_policy
+    assert (
+        '"aws:SourceVpce" = var.foundation.agentcore_vpc_endpoint_id' in lambda_policy
+    )
     assert "Resource = [aws_cloudfront_distribution.site.arn]" in lambda_policy
     assert "values(local.agentcore_policy_resources)" in lambda_policy
     assert (
