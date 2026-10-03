@@ -58,7 +58,9 @@ During the first transition, or after rollback to a runtime predating this
 protocol, evaluations record execution errors until a compatible application
 serves chat. Do not relabel prior runs or restore the local application fallback.
 Verify the application identity and low-actor/xhigh-judge metadata in the next
-real scheduled run in each environment; PR tests never invoke deployed models.
+real scheduled run in each environment. The focused eval tests use synthetic
+runtime responses; the existing CI chat browser smoke invokes the deployed
+development application.
 
 ## Development delivery order
 
