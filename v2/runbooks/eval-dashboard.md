@@ -23,6 +23,51 @@ diagnostics are omitted; common credential and infrastructure identifiers are
 redacted from text. The source is this controlled synthetic suite, never real
 user chat sessions. Postgres retains history; the public window is seven days.
 
+## Application and evaluation models
+
+Scheduled runs invoke the live application through the private AgentCore endpoint.
+The runner resolves the deployed CloudFront `public-chat` origin, the matching
+blue/green proxy's `live` alias, and that published version's runtime configuration.
+It rechecks routing and the endpoint version throughout the conversation; a
+cutover, rollback, missing private evidence, blocked answer, or tool failure is an
+execution error, not a grade. Each scenario has a fresh runtime session and at
+most three simulated user turns. There is no bundled-application fallback.
+
+The simulated user is pinned to `gpt-6-luna`, low reasoning, and 2,048 output
+tokens. Both model-based judges use `gpt-6-luna`, xhigh reasoning, and 8,192 output
+tokens. New evidence records these roles separately, alongside the actual
+application model/reasoning settings, application release, and runtime version.
+Older rows retain their recorded model labels; absent metadata reads “not recorded.”
+
+The runtime accepts `evaluation_marker: scheduled-evaluation-v1` only on the
+private IAM invocation path. Before its final answer it emits one versioned
+`evaluation` event containing session/release identity, actual model settings,
+and this turn's tool calls and correlated results. Ordinary chat does not emit
+this event. The public proxy rejects additional request fields and private
+evidence events. Publication still uses the existing pricing-fact allowlist.
+
+Release the runtime protocol and private IAM/network prerequisites before
+activating the live eval consumer. Deliver through the protected development
+sequence, verify the next scheduled run against `/api/config`, then promote to
+production. Review the shared-package compatibility record against the observed
+serving release and deterministic package hashes. Deployment of this PR's new
+infra resources and policies requires the reviewed infrastructure prerequisite;
+ordinary release delivery retains its existing finite plan scope.
+
+After applying the prerequisite, reconcile the eval role's cached inline policy
+with a separately reviewed saved refresh-only plan. Confirm the live policy
+matches the approved prerequisite and that the refresh changes only cached policy
+state. The subsequent full release plan must have no IAM drift or permission
+changes.
+
+During the first transition, or after rollback to a runtime predating this
+protocol, evaluations record execution errors until a compatible application
+serves chat. Do not relabel prior runs or restore the local application fallback.
+Verify the application identity and low-actor/xhigh-judge metadata in the next
+real scheduled run in each environment. The focused eval tests use synthetic
+runtime responses; the existing CI chat browser smoke invokes the deployed
+development application.
+
 ## Development delivery order
 
 1. Land the fixed dashboard site/release inventory prerequisite (#519).

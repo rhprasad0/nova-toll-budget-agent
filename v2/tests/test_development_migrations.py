@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
-import inspect
 import json
 import os
 import re
@@ -342,10 +341,6 @@ def test_production_preflight_recognizes_each_immutable_oracle_baseline() -> Non
         ),
     }
     assert all(baseline.source_sha256 in sql for baseline in baselines)
-
-
-def test_runner_keeps_psql_cwd_at_repository_root() -> None:
-    assert "cwd=ROOT" in inspect.getsource(runner.run)
 
 
 def test_registry_rejects_dirty_canonical_before_psql(
@@ -908,6 +903,7 @@ def test_main_uses_one_psql_boundary_for_noop(
     calls: list[list[str]] = []
 
     def fake_psql(args: list[str], **kwargs: object) -> SimpleNamespace:
+        assert kwargs["cwd"] == runner.ROOT
         calls.append(args)
         session = cast(str, kwargs["input"])
         match = re.search(r"\\echo TOLLCHAT_RESULT_([0-9a-f-]+)", session)

@@ -27,7 +27,15 @@ from strands_evals.types.trace import (
     TraceLevelInput,
 )
 
-from agent.toll_agent import build_agent, load_openai_api_key
+from agent.toll_agent import load_openai_api_key
+from eval.live_runtime import LiveRuntime, ModelSettings
+
+ACTOR_SETTINGS = ModelSettings(
+    model="gpt-6-luna", reasoning_effort="low", max_output_tokens=2048
+)
+JUDGE_SETTINGS = ModelSettings(
+    model="gpt-6-luna", reasoning_effort="xhigh", max_output_tokens=8192
+)
 
 _ACTOR_PROMPT = """Simulate the user described below, speaking in first person.
 {actor_profile}
@@ -53,15 +61,18 @@ Markdown, exact phrases, or the actor's satisfaction.
 """
 
 
-def build_eval_model() -> OpenAIResponsesModel:
+def build_eval_model(settings: ModelSettings = ACTOR_SETTINGS) -> OpenAIResponsesModel:
     """Use the existing SSM credential without a default Bedrock model call."""
     return OpenAIResponsesModel(
-        model_id="gpt-6-luna",
+        model_id=settings.model,
         client_args={
             "api_key": load_openai_api_key(),
             "base_url": "https://api.openai.com/v1",
         },
-        params={"max_output_tokens": 2048, "reasoning": {"effort": "low"}},
+        params={
+            "max_output_tokens": settings.max_output_tokens,
+            "reasoning": {"effort": settings.reasoning_effort},
+        },
         stateful=False,
     )
 
@@ -119,7 +130,7 @@ def evaluators() -> list[Evaluator[str, str]]:
     return [
         SingleToolCallEvaluator(name="ToolCallCount"),
         GoalSuccessRateEvaluator(
-            model=build_eval_model(),
+            model=build_eval_model(JUDGE_SETTINGS),
             name="Completeness",
             assertion_system_prompt=(
                 "Assess whether the conversation satisfies every applicable success "
@@ -133,7 +144,7 @@ def evaluators() -> list[Evaluator[str, str]]:
             ),
         ),
         GroundedCorrectnessEvaluator(
-            model=build_eval_model(),
+            model=build_eval_model(JUDGE_SETTINGS),
             name="Correctness",
             reference_system_prompt=_CORRECTNESS_PROMPT,
         ),
@@ -141,8 +152,7 @@ def evaluators() -> list[Evaluator[str, str]]:
 
 
 def task_function(case: Case[str, str]) -> dict[str, Any]:
-    from eval.run_evaluation import _calls  # pyright: ignore[reportPrivateUsage]
-
+    runtime = LiveRuntime()
     metadata = case.metadata or {}
     actor = ActorSimulator(
         actor_profile=ActorProfile(
@@ -159,23 +169,12 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
     # The SDK's default completion tool creates an unconfigured Bedrock agent.
     # The actor's structured stop field already covers completion without tools.
     actor.agent.tool_registry = ToolRegistry()
-    agent = build_agent()
     message = case.input
     answer = ""
     session = Session(session_id=case.session_id, traces=[])
-    previous_call_count = 0
     while actor.has_next():
         started = datetime.now(UTC)
-        response = agent(message)
-        answer = str(response)
-        all_calls = _calls(response)
-        calls = all_calls[previous_call_count:]
-        if any(
-            call.get("is_error") or not isinstance(call.get("tool_result"), dict)
-            for call in calls
-        ):
-            raise RuntimeError("Scheduled pricing tool failed or returned no evidence")
-        previous_call_count = len(all_calls)
+        answer, evidence = runtime.invoke(message)
         trace_id = str(len(session.traces))
         span_info = SpanInfo(
             session_id=case.session_id,
@@ -196,6 +195,14 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
                         user_prompt=message,
                         agent_response=answer,
                         available_tools=[],
+                        metadata={
+                            "models": {
+                                "application": evidence.application.model_dump(),
+                                "actor": ACTOR_SETTINGS.model_dump(),
+                                "judge": JUDGE_SETTINGS.model_dump(),
+                            },
+                            "deployment": runtime.metadata(),
+                        },
                     ),
                     *[
                         ToolExecutionSpan(
@@ -206,15 +213,12 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
                                 }
                             ),
                             agent_span_id="agent",
-                            tool_call=ToolCall(
-                                name=call["name"], arguments=call["input"]
-                            ),
+                            tool_call=ToolCall(name=call.name, arguments=call.input),
                             tool_result=ToolResult(
-                                content=json.dumps(call.get("tool_result")),
-                                error="tool_error" if call.get("is_error") else None,
+                                content=json.dumps(call.tool_result),
                             ),
                         )
-                        for index, call in enumerate(calls)
+                        for index, call in enumerate(evidence.calls)
                     ],
                 ],
             )
@@ -225,4 +229,5 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
         if not isinstance(result.message, str) or not result.message.strip():
             raise ValueError("simulated user returned no follow-up message")
         message = result.message
+    runtime.verify()
     return {"output": answer, "trajectory": session}

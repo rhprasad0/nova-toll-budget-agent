@@ -94,6 +94,25 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator(".scenario details[open]").count(), 1);
     assert.equal(await page.locator(".bubble img").count(), 0);
     assert.match(await page.locator(".bubble").first().innerText(), /<img/);
+    assert.match(await page.locator(".scenario .tool-evidence").last().innerText(), /not recorded/);
+    Object.assign(snapshot.runs[0].evidence, { model: "gpt-5.6-luna" });
+    await page.reload();
+    await page.locator(".scenario").first().waitFor();
+    await page.locator(".scenario summary").first().click();
+    assert.match(await page.locator(".scenario .tool-evidence").last().innerText(), /gpt-5.6-luna/);
+    Object.assign(snapshot.runs[0].evidence, { models: {
+      application: {model: "deployed-model", reasoning_effort: "low", max_output_tokens: 2048},
+      actor: {model: "gpt-6-luna", reasoning_effort: "low", max_output_tokens: 2048},
+      judge: {model: "gpt-6-luna", reasoning_effort: "xhigh", max_output_tokens: 8192},
+    } });
+    await page.reload();
+    await page.locator(".scenario").first().waitFor();
+    await page.locator(".scenario summary").first().click();
+    const modelLabels = await page.locator(".scenario .tool-evidence").last().innerText();
+    assert.match(modelLabels, /Application: deployed-model \(low reasoning\)/);
+    assert.match(modelLabels, /Simulated user: gpt-6-luna \(low reasoning\)/);
+    assert.match(modelLabels, /Judges: gpt-6-luna \(xhigh reasoning\)/);
+    assert.doesNotMatch(modelLabels, /gpt-5.6-luna/);
     await page.selectOption("#outcome", "error");
     assert.equal(await page.locator(".run").count(), 1);
     status = 503;

@@ -77,66 +77,89 @@ resource "aws_iam_role_policy_attachment" "timed_checks_lambda_vpc" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-data "aws_iam_policy_document" "timed_checks_lambda" {
-  statement {
-    sid       = "ConnectEvaluationHistory"
-    actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.eval_db_user}"]
-  }
-  statement {
-    sid       = "PublishEvaluationSnapshot"
-    actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.site.arn}/evals.json"]
-  }
-  statement {
-    sid       = "EncryptEvaluationSnapshot"
-    actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
-    resources = [aws_kms_key.site.arn]
-  }
-  statement {
-    sid       = "DescribeRdsEndpoint"
-    actions   = ["rds:DescribeDBInstances"]
-    resources = ["arn:aws:rds:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:db:${var.foundation.db_instance.identifier}"]
-  }
-
-  statement {
-    sid     = "ConnectRdsIam"
-    actions = ["rds-db:connect"]
-    resources = [
-      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.agent}",
-      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.pricing_caller}",
-    ]
-  }
-
-  statement {
-    sid       = "ReadOpenAiApiKey"
-    actions   = ["ssm:GetParameter"]
-    resources = ["arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/nova-toll/openai_api_key"]
-  }
-
-  statement {
-    sid       = "SendInvokeFailure"
-    actions   = ["sqs:SendMessage"]
-    resources = [aws_sqs_queue.timed_checks_invoke_failure.arn]
-  }
-
-  statement {
-    sid       = "PublishEvaluationFailureAlert"
-    actions   = ["sns:Publish"]
-    resources = [var.foundation.alerts_topic_arn]
-  }
-
-  statement {
-    sid       = "UseEvaluationFailureAlertKey"
-    actions   = ["kms:Decrypt", "kms:GenerateDataKey*"]
-    resources = [data.aws_kms_alias.alerts.target_key_arn]
-  }
-}
-
 resource "aws_iam_role_policy" "timed_checks_lambda" {
-  name   = "nova-toll-v2-timed-checks-lambda${local.suffix}"
-  role   = aws_iam_role.timed_checks_lambda.id
-  policy = data.aws_iam_policy_document.timed_checks_lambda.json
+  name = "nova-toll-v2-timed-checks-lambda${local.suffix}"
+  role = aws_iam_role.timed_checks_lambda.id
+  # Keep unchanged permissions known while the runtime, proxy, or routing changes.
+  # A policy-document data source defers its read when those dependencies update.
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ConnectEvaluationHistory"
+        Effect   = "Allow"
+        Action   = ["rds-db:connect"]
+        Resource = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.eval_db_user}"]
+      },
+      {
+        Sid      = "PublishEvaluationSnapshot"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = ["${aws_s3_bucket.site.arn}/evals.json"]
+      },
+      {
+        Sid      = "EncryptEvaluationSnapshot"
+        Effect   = "Allow"
+        Action   = ["kms:GenerateDataKey", "kms:Decrypt"]
+        Resource = [aws_kms_key.site.arn]
+      },
+      {
+        Sid      = "DescribeRdsEndpoint"
+        Effect   = "Allow"
+        Action   = ["rds:DescribeDBInstances"]
+        Resource = ["arn:aws:rds:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:db:${var.foundation.db_instance.identifier}"]
+      },
+      {
+        Sid      = "ReadLiveChatRouting"
+        Effect   = "Allow"
+        Action   = ["cloudfront:GetDistribution"]
+        Resource = [aws_cloudfront_distribution.site.arn]
+      },
+      {
+        Sid      = "ReadPublishedChatProxy"
+        Effect   = "Allow"
+        Action   = ["lambda:GetFunctionUrlConfig", "lambda:GetAlias", "lambda:GetFunctionConfiguration"]
+        Resource = flatten([for function in aws_lambda_function.tollchat_proxy : [function.arn, "${function.arn}:*"]])
+      },
+      {
+        Sid      = "ReadLiveRuntimeVersion"
+        Effect   = "Allow"
+        Action   = ["bedrock-agentcore:GetAgentRuntimeEndpoint"]
+        Resource = values(local.agentcore_policy_resources)
+      },
+      {
+        Sid       = "InvokeLiveApplication"
+        Effect    = "Allow"
+        Action    = ["bedrock-agentcore:InvokeAgentRuntime"]
+        Resource  = values(local.agentcore_policy_resources)
+        Condition = { StringEquals = { "aws:SourceVpce" = var.foundation.agentcore_vpc_endpoint_id } }
+      },
+      {
+        Sid      = "ReadOpenAiApiKey"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = ["arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/nova-toll/openai_api_key"]
+      },
+      {
+        Sid      = "SendInvokeFailure"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = [aws_sqs_queue.timed_checks_invoke_failure.arn]
+      },
+      {
+        Sid      = "PublishEvaluationFailureAlert"
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = [var.foundation.alerts_topic_arn]
+      },
+      {
+        Sid      = "UseEvaluationFailureAlertKey"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey*"]
+        Resource = [data.aws_kms_alias.alerts.target_key_arn]
+      },
+    ]
+  })
 }
 
 data "aws_iam_policy_document" "timed_checks_scheduler_assume" {
@@ -222,6 +245,15 @@ resource "aws_cloudwatch_log_group" "timed_checks" {
   retention_in_days = local.log_retention_days
 }
 
+resource "aws_vpc_security_group_ingress_rule" "agentcore_from_timed_checks" {
+  security_group_id            = var.foundation.agentcore_endpoint_security_group_id
+  description                  = "TollChat scheduled evaluations of the live runtime"
+  referenced_security_group_id = aws_security_group.timed_checks.id
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+}
+
 resource "aws_lambda_function" "timed_checks" {
   function_name = "nova-toll-v2-timed-checks${local.suffix}"
   role          = aws_iam_role.timed_checks_lambda.arn
@@ -248,13 +280,13 @@ resource "aws_lambda_function" "timed_checks" {
       DB_HOST                    = var.foundation.db_instance.address
       DB_PORT                    = tostring(var.foundation.db_instance.port)
       DB_NAME                    = local.database_name
-      DB_USER                    = local.database_roles.agent
-      PRICING_DB_USER            = local.database_roles.pricing_caller
       DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"
       TIMED_CHECK_ALERTS_ENABLED = tostring(local.timed_check_alerts_enabled)
       ENVIRONMENT                = var.environment
       EVAL_DASHBOARD_BUCKET      = aws_s3_bucket.site.id
       EVAL_DB_USER               = local.eval_db_user
+      EVAL_SITE_DISTRIBUTION_ID  = aws_cloudfront_distribution.site.id
+      AGENTCORE_VPCE_URL         = "https://${var.foundation.agentcore_vpc_endpoint_dns_name}"
       }, local.timed_check_alerts_enabled ? {
       ALERTS_TOPIC_ARN = var.foundation.alerts_topic_arn
     } : {})

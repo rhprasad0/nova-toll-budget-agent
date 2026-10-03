@@ -160,24 +160,6 @@ LOG_GROUPS = tuple(
         "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
     )
 )
-ALARM_NAMES = (
-    "toll-v2-pricing-freshness-i66-dev",
-    "toll-v2-pricing-freshness-i95-dev",
-    "toll-v2-pricing-loader-delivery-failure-queue-dev",
-    "toll-v2-pricing-loader-errors-dev",
-    "toll-v2-pricing-loader-invoke-failure-queue-dev",
-    "toll-v2-report-generation-freshness-dev",
-    "toll-v2-report-publisher-delivery-failure-queue-dev",
-    "toll-v2-report-publisher-errors-dev",
-    "toll-v2-report-publisher-invoke-failure-queue-dev",
-    "tollchat-v2-agentcore-active-sessions-dev",
-    "tollchat-v2-chat-proxy-errors-dev",
-    "tollchat-v2-chat-proxy-failures-dev",
-    "tollchat-v2-chat-proxy-latency-dev",
-)
-ALARMS = tuple(
-    f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{name}" for name in ALARM_NAMES
-)
 SITE_OBJECT = f"arn:aws:s3:::{SITE_BUCKET_NAME}/*"
 ARTIFACT_OBJECTS = (
     "arn:aws:s3:::nova-toll-agentcore-903859731897/runtime/v2/*",
@@ -968,7 +950,6 @@ def _build_contract() -> dict[str, Mutation]:
 
 
 CONTRACT = MappingProxyType(_build_contract())
-SUPPORTED_ADDRESSES = frozenset(CONTRACT)
 TIMED_ADDRESSES = frozenset(
     {
         "aws_s3_object.timed_checks",

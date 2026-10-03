@@ -1,7 +1,6 @@
 """toll-fetcher Lambda.
 
-Polls the two VDOT SmarterRoads feeds and lands raw payloads in S3. Per spec
-(docs/poller-spec.md, §Lambda details / §Data sources):
+Polls the two VDOT SmarterRoads feeds and lands raw payloads in S3.
 
 - One attempt per feed per tick, no retries — WAF etiquette.
 - Each feed is fetched, uploaded, and metriced independently: one feed
@@ -29,8 +28,8 @@ _DRILL_ID = re.compile(r"[a-f0-9]{16}\Z")
 
 
 # tick_minutes is each feed's own publish cadence, measured against prod rather
-# than assumed (docs/oracle-findings.md section 9): I-95 publishes a new interval every
-# 10 minutes exactly, I-66 every 6 with a real 6-minute interval window. They
+# than assumed: I-95 publishes a new interval every 10 minutes exactly, I-66
+# every 6 with a real 6-minute interval window. They
 # ride separate EventBridge rules in infra/triggers.tf, and this is also the
 # S3 key's bucket size -- keep the two in step or two polls of the same feed
 # will floor into one key and overwrite each other.
@@ -227,7 +226,7 @@ def handler(event: dict[str, Any] | None, _context: object) -> dict[str, list[st
             logger.error("feed=%s poll failed: %s", feed, type(exc).__name__)
             failed_feeds.append(feed)
     if failed_feeds:
-        # Surfaces as a Lambda Errors metric (spec Observability alarm #1)
+        # Surfaces as a Lambda Errors metric
         # without ever touching the other feed's attempt above.
         raise RuntimeError(f"poll failed for feed(s): {', '.join(failed_feeds)}")
     return {"keys": keys}
