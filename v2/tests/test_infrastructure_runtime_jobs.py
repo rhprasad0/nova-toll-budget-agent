@@ -109,9 +109,27 @@ def test_timed_lambda_scheduler_and_failure_contract() -> None:
         'data "aws_iam_policy_document" "timed_checks_lambda"',
     )
     assert 'actions   = ["rds:DescribeDBInstances"]' in lambda_policy
-    assert 'actions = ["rds-db:connect"]' in lambda_policy
-    assert "/${local.database_roles.agent}" in lambda_policy
-    assert "/${local.database_roles.pricing_caller}" in lambda_policy
+    assert "/${local.eval_db_user}" in lambda_policy
+    assert "/${local.database_roles.agent}" not in lambda_policy
+    assert "/${local.database_roles.pricing_caller}" not in lambda_policy
+    for action in (
+        "cloudfront:GetDistribution",
+        "lambda:GetFunctionUrlConfig",
+        "lambda:GetAlias",
+        "lambda:GetFunctionConfiguration",
+        "bedrock-agentcore:GetAgentRuntimeEndpoint",
+        "bedrock-agentcore:InvokeAgentRuntime",
+    ):
+        assert action in lambda_policy
+    assert 'variable = "aws:SourceVpce"' in lambda_policy
+    assert "resources = [aws_cloudfront_distribution.site.arn]" in lambda_policy
+    assert "values(local.agentcore_policy_resources)" in lambda_policy
+    assert (
+        'resource "aws_vpc_security_group_ingress_rule" "agentcore_from_timed_checks"'
+        in TIMED_CHECKS_TF
+    )
+    assert "EVAL_SITE_DISTRIBUTION_ID" in lambda_block
+    assert "AGENTCORE_VPCE_URL" in lambda_block
     assert 'actions   = ["ssm:GetParameter"]' in lambda_policy
     assert 'actions   = ["sqs:SendMessage"]' in lambda_policy
     assert 'actions   = ["sns:Publish"]' in lambda_policy

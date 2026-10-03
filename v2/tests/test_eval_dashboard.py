@@ -6,11 +6,12 @@ from typing import Any, cast
 import pytest
 
 from eval import dashboard
+from eval.simulated import ACTOR_SETTINGS, JUDGE_SETTINGS
 from lambdas.timed_checks import handler
 
 
 def test_projection_publishes_evidence_once_and_omits_internal_fields() -> None:
-    trajectory = {
+    trajectory: dict[str, Any] = {
         "traces": [
             {
                 "spans": [
@@ -53,6 +54,32 @@ def test_projection_publishes_evidence_once_and_omits_internal_fields() -> None:
     }
     assert "private" not in str(result)
     assert "user@example.com" not in str(result)
+    assert "model" not in result and "models" not in result
+    trajectory["traces"][0]["spans"][0]["metadata"] = {
+        "models": {
+            "application": {
+                "model": "deployed-model",
+                "reasoning_effort": "low",
+                "max_output_tokens": 2048,
+            },
+            "actor": ACTOR_SETTINGS.model_dump(),
+            "judge": JUDGE_SETTINGS.model_dump(),
+        },
+        "deployment": {
+            "release_id": "application-release",
+            "runtime_version": "7",
+            "api_key": "private",
+        },
+    }
+    recorded = dashboard.project_report(report)
+    assert recorded["models"]["application"]["model"] == "deployed-model"
+    assert recorded["models"]["actor"]["reasoning_effort"] == "low"
+    assert recorded["models"]["judge"]["reasoning_effort"] == "xhigh"
+    assert recorded["deployment"] == {
+        "release_id": "application-release",
+        "runtime_version": "7",
+    }
+    assert "private" not in str(recorded)
     report.detailed_results[1] = []
     with pytest.raises(ValueError, match="incomplete"):
         dashboard.project_report(report)

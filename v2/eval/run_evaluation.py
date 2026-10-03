@@ -1921,7 +1921,8 @@ def main(
     )
     if suite == "scheduled" and len(cases) != 1:
         raise EvaluationExecutionError("Scheduled evaluation requires exactly one case")
-    _configure_database()
+    if suite != "scheduled":
+        _configure_database()
     evaluators: list[Evaluator[str, str]] = [TollChatEvaluator()]
     task = task_function
     if suite == "scheduled":

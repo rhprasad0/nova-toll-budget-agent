@@ -13,6 +13,7 @@ import boto3
 from agent_tools.validate_toll_route import (
     _connect_to_database,  # pyright: ignore[reportPrivateUsage]
 )
+from eval.live_runtime import ModelSettings
 from eval.run_evaluation import load_cases
 from timed_checks import NEW_YORK, SCHEDULE_WINDOW_PAIRS
 
@@ -181,7 +182,27 @@ def project_report(report: object) -> dict[str, Any]:
                     }
                 )
         turns.append(turn)
-    return {"checks": checks, "turns": turns, "model": "gpt-6-luna"}
+    evidence: dict[str, Any] = {"checks": checks, "turns": turns}
+    metadata = cast(
+        dict[str, Any], trajectory["traces"][0]["spans"][0].get("metadata") or {}
+    )
+    if "models" in metadata:
+        evidence["models"] = {
+            role: {
+                key: public_text(value) if isinstance(value, str) else value
+                for key, value in ModelSettings.model_validate(metadata["models"][role])
+                .model_dump()
+                .items()
+            }
+            for role in ("application", "actor", "judge")
+        }
+        deployment = metadata.get("deployment", {})
+        evidence["deployment"] = {
+            key: public_text(deployment[key])
+            for key in ("release_id", "runtime_version")
+            if key in deployment
+        }
+    return evidence
 
 
 def scenario_id(window: str, scheduled: datetime) -> str:
