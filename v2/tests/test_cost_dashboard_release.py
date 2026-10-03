@@ -328,22 +328,6 @@ locals {{
             (ROOT / "infra/development-release-manifest.json").read_text()
         )
         manifest["packages"] = dict.fromkeys(manifest["packages"], "0" * 64)
-        # Extend the synthetic release declaration for this one new fixed asset;
-        # the committed historical deployment manifest remains unchanged.
-        for field in ("mutations", "permissions"):
-            benchmark = deepcopy(
-                next(
-                    row
-                    for row in manifest[field]
-                    if row["address"] == 'aws_s3_object.cost_assets["costs.mjs"]'
-                )
-            )
-            benchmark["address"] = 'aws_s3_object.cost_assets["costs-benchmark.json"]'
-            if "resource" in benchmark:
-                benchmark["resource"] = benchmark["resource"].replace(
-                    "costs.mjs", "costs-benchmark.json"
-                )
-            manifest[field].append(benchmark)
         # Retain fresh-account coverage; the committed manifest now lists updates.
         creation_manifest = deepcopy(manifest)
         by_address = {record["address"]: record for record in records}
