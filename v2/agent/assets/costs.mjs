@@ -4,6 +4,8 @@
 /** @typedef {Totals & {date: string}} Day */
 /** @typedef {{status: string, scope: string, currency: string, requested: Period, retrieved_at: string, finalized_through: null, estimated: boolean | null, daily: {date: string, usd: string}[], aws_services: Amount[], aws_environments: Amount[]}} Source */
 /** @typedef {{schema_version: number, kind: string, environment: string, scope: string, currency: string, periods: Record<string, Period>, requested: Period, published_at: string, attempt: {at: string, status: string, sources: Record<string, string>}, sources: Record<string, Source>, month_to_date: Totals, daily: Day[], aws_services: Amount[], aws_environments: Amount[]}} Snapshot */
+/** @typedef {{calls: number, input_tokens: number, cached_tokens: number, written_tokens: number, output_tokens: number, cost_usd: string}} RoleUsage */
+/** @typedef {{schema_version: number, kind: string, status: string, currency: string, measured_at: string, model: string, reasoning_effort: Record<string, string>, max_output_tokens: Record<string, number>, budget_usd: string, rates: {verified_at: string, source: string, input_per_million: string, cached_per_million: string, write_per_million: string, output_per_million: string, long_context_threshold: number, long_input_multiplier: string, long_output_multiplier: string}, provenance: {source_commit: string, source_sha256: string, corpus_version: string, cases_sha256: string, harness_version: string, benchmark_version: string, tool_data: string, processing: string}, sample: {case_count: number, repetitions: number, expected_conversations: number, attempted_conversations: number, completed_turns: number, failed_conversations: number, inconclusive_conversations: number}, roles: Record<string, RoleUsage>, total_cost_usd: string}} Benchmark */
 /** @param {string} id */
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 /** @param {string} id @param {string} value */
@@ -63,6 +65,78 @@ const money = (value) => {
 const when = (value) => new Date(value).toLocaleString('en-US', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC';
 /** @param {Period} period */
 const range = (period) => period.start === period.end_exclusive ? 'No completed days this month' : `${period.start} to ${dayText(Date.parse(period.end_exclusive) - 86400000)}`;
+
+/** @param {unknown} input @returns {Benchmark} */
+export function validateBenchmark(input) {
+  const data = /** @type {Benchmark} */ (input);
+  keys(data, 'schema_version kind status currency measured_at model reasoning_effort max_output_tokens budget_usd rates provenance sample roles total_cost_usd');
+  require(data.schema_version === 1 && data.kind === 'controlled-inference-benchmark' && data.status === 'complete' && data.currency === 'USD' && data.model === 'gpt-6-luna');
+  require(instant(data.measured_at) <= Date.now());
+  keys(data.reasoning_effort, 'agent actor judge'); keys(data.max_output_tokens, 'agent actor judge'); keys(data.roles, 'agent actor judge');
+  const efforts = { agent: 'medium', actor: 'low', judge: 'xhigh' }, limits = { agent: 2048, actor: 2048, judge: 8192 };
+  /** @param {unknown} value */
+  const count = (value) => require(typeof value === 'number' && Number.isSafeInteger(value) && value >= 0);
+  for (const role of ['agent', 'actor', 'judge']) {
+    require(data.reasoning_effort[role] === efforts[/** @type {keyof typeof efforts} */ (role)] && data.max_output_tokens[role] === limits[/** @type {keyof typeof limits} */ (role)]);
+    const usage = data.roles[role]; keys(usage, 'calls input_tokens cached_tokens written_tokens output_tokens cost_usd');
+    for (const field of ['calls', 'input_tokens', 'cached_tokens', 'written_tokens', 'output_tokens']) count(usage[/** @type {keyof RoleUsage} */ (field)]);
+    require(usage.cached_tokens + usage.written_tokens <= usage.input_tokens && units(usage.cost_usd) >= 0n);
+    if (!usage.calls) require(!usage.input_tokens && !usage.output_tokens && units(usage.cost_usd) === 0n);
+  }
+  keys(data.sample, 'case_count repetitions expected_conversations attempted_conversations completed_turns failed_conversations inconclusive_conversations');
+  Object.values(data.sample).forEach(count);
+  require(data.sample.case_count === 12 && data.sample.repetitions === 3 && data.sample.expected_conversations === 36 && data.sample.attempted_conversations === 36);
+  require(data.sample.completed_turns <= 180 && data.sample.failed_conversations <= 36 && data.sample.inconclusive_conversations <= 36);
+  matches(data.total_cost_usd, sum(Object.values(data.roles).map(role => role.cost_usd)));
+  require(units(data.budget_usd) === units('2') && units(data.total_cost_usd) <= units(data.budget_usd));
+  keys(data.rates, 'verified_at source input_per_million cached_per_million write_per_million output_per_million long_context_threshold long_input_multiplier long_output_multiplier');
+  require(data.rates.source === 'https://developers.openai.com/api/docs/models/gpt-6-luna');
+  require(instant(data.rates.verified_at + 'T00:00:00Z') <= instant(data.measured_at));
+  for (const [field, value] of [['input_per_million', '0.10'], ['cached_per_million', '0.01'], ['write_per_million', '0.125'], ['output_per_million', '0.50'], ['long_input_multiplier', '2'], ['long_output_multiplier', '1.5']]) matches(/** @type {string} */ (data.rates[/** @type {keyof Benchmark['rates']} */ (field)]), units(value));
+  require(data.rates.long_context_threshold === 272000);
+  keys(data.provenance, 'source_commit source_sha256 corpus_version cases_sha256 harness_version benchmark_version tool_data processing');
+  require(/^[a-f0-9]{40}$/.test(data.provenance.source_commit) && /^[a-f0-9]{64}$/.test(data.provenance.source_sha256) && /^[a-f0-9]{64}$/.test(data.provenance.cases_sha256));
+  require([data.provenance.corpus_version, data.provenance.harness_version, data.provenance.benchmark_version].every(value => /^\d+\.\d+\.\d+$/.test(value)));
+  require(data.provenance.tool_data === 'frozen' && data.provenance.processing === 'standard');
+  return data;
+}
+
+/** @param {number | null} value */
+const inferenceMoney = (value) => {
+  if (value === null) return 'Unavailable';
+  if (value > 0 && value < .000001) return '<$0.000001';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(value);
+};
+
+async function loadBenchmark() {
+  // Older HTML can be present while these unversioned public assets update.
+  if (!$('benchmark-notice')) return;
+  try {
+    const response = await fetch('/assets/costs-benchmark.json', { cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15000) });
+    require(response.ok);
+    const body = await response.text(); require(body.length <= 16384);
+    const data = validateBenchmark(JSON.parse(body)), sample = data.sample;
+    const perTurn = sample.completed_turns ? Number(data.roles.agent.cost_usd) / sample.completed_turns : null;
+    set('answer-cost', inferenceMoney(perTurn));
+    set('thousand-answers', perTurn === null ? 'No completed assistant turns in this sample.' : inferenceMoney(perTurn * 1000) + ' per 1,000 completed answers at this measured average');
+    set('evaluation-cost', inferenceMoney(Number(data.total_cost_usd) / sample.attempted_conversations));
+    set('benchmark-sample', `${sample.case_count} cases × ${sample.repetitions} repetitions · ${sample.attempted_conversations} attempted conversations · ${sample.completed_turns} completed answers · ${sample.failed_conversations} interrupted conversations · ${sample.inconclusive_conversations} inconclusive conversations`);
+    $('benchmark-roles').replaceChildren();
+    const labels = { agent: 'TollChat', actor: 'Simulated user', judge: 'Evaluation judges' };
+    for (const role of ['agent', 'actor', 'judge']) {
+      const usage = data.roles[role], row = element('tr'), label = element('th', labels[/** @type {keyof typeof labels} */ (role)] + ' · ' + data.reasoning_effort[role]);
+      label.scope = 'row'; row.append(label, element('td', String(usage.calls)), element('td', inferenceMoney(Number(usage.cost_usd))), element('td', inferenceMoney(Number(usage.cost_usd) / sample.attempted_conversations)));
+      $('benchmark-roles').append(row);
+    }
+    set('benchmark-date', 'Measured ' + when(data.measured_at) + ' · Manual refresh · Frozen tool fixtures');
+    const rates = data.rates;
+    set('benchmark-rates', `USD per million tokens: uncached input $${rates.input_per_million}; cached input $${rates.cached_per_million}; cache writes $${rates.write_per_million}; output $${rates.output_per_million}. Reasoning is included in output. Requests above 272,000 input tokens use 2× input/cache and 1.5× output rates. Verified ${rates.verified_at}. `);
+    const source = element('a', 'Official Luna pricing'); source.href = rates.source; $('benchmark-rates').append(source);
+    $('benchmark-results').hidden = false; $('benchmark-notice').hidden = true;
+  } catch {
+    set('benchmark-notice', 'Controlled benchmark unavailable. Missing measurements are not zero cost.');
+  }
+}
 
 /** @param {unknown} input @param {string} environment @returns {Snapshot} */
 export function validate(input, environment = expectedEnvironment) {
@@ -266,4 +340,4 @@ window.addEventListener('focus', refresh);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 setInterval(refresh, 5 * 60000);
 const serviceLabels = ["AWS CloudTrail", "AWS Cost Explorer", "AWS Glue", "AWS Key Management Service", "AWS Lambda", "AWS Systems Manager", "AWS WAF", "Amazon API Gateway", "Amazon Athena", "Amazon Bedrock", "Amazon Bedrock AgentCore", "Amazon CloudFront", "Amazon Data Firehose", "Amazon DynamoDB", "Amazon Elastic Compute Cloud - Compute", "Amazon EventBridge", "Amazon Kinesis Firehose", "Amazon Relational Database Service", "Amazon Route 53", "Amazon Simple Notification Service", "Amazon Simple Queue Service", "Amazon Simple Storage Service", "Amazon Virtual Private Cloud", "AmazonCloudWatch", "EC2 - Other", "Other AWS services", "Tax"];
-await refresh();
+await Promise.all([refresh(), loadBenchmark()]);

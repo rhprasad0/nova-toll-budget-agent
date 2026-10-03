@@ -323,11 +323,27 @@ locals {{
             "configuration": plan["configuration"],
         }
         records = legacy._parse_plan(plan, package_evidence)
-        assert len(records) == 11
+        assert len(records) == 12
         manifest = json.loads(
             (ROOT / "infra/development-release-manifest.json").read_text()
         )
         manifest["packages"] = dict.fromkeys(manifest["packages"], "0" * 64)
+        # Extend the synthetic release declaration for this one new fixed asset;
+        # the committed historical deployment manifest remains unchanged.
+        for field in ("mutations", "permissions"):
+            benchmark = deepcopy(
+                next(
+                    row
+                    for row in manifest[field]
+                    if row["address"] == 'aws_s3_object.cost_assets["costs.mjs"]'
+                )
+            )
+            benchmark["address"] = 'aws_s3_object.cost_assets["costs-benchmark.json"]'
+            if "resource" in benchmark:
+                benchmark["resource"] = benchmark["resource"].replace(
+                    "costs.mjs", "costs-benchmark.json"
+                )
+            manifest[field].append(benchmark)
         # Retain fresh-account coverage; the committed manifest now lists updates.
         creation_manifest = deepcopy(manifest)
         by_address = {record["address"]: record for record in records}
@@ -611,7 +627,13 @@ def test_first_billing_refresh_preserves_release_authority(
             "status": "IN_PROGRESS",
         },
     }
-    for asset in ("costs.html", "costs.css", "costs.mjs", "evals.css"):
+    for asset in (
+        "costs.html",
+        "costs.css",
+        "costs.mjs",
+        "costs-benchmark.json",
+        "evals.css",
+    ):
         address = (
             "aws_s3_object.cost_dashboard"
             if asset.endswith("html")
@@ -627,6 +649,7 @@ def test_first_billing_refresh_preserves_release_authority(
                 "html": "text/html",
                 "css": "text/css",
                 "mjs": "text/javascript",
+                "json": "application/json",
             }[asset.split(".")[-1]]
             + "; charset=utf-8",
         }
