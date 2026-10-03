@@ -38,8 +38,9 @@ output in ignored `eval/private/` or the existing private workflow store.
 - [Runner](GOLDEN_RUNNER.md): authorized calibration, single-pass development application
   baselines, complete cost accounting, and offline report reproduction.
 
-The private holdout tooling and production qualification gate are retired. A
-replacement container and evaluation approach will be designed separately.
+The former private holdout tooling and production qualification gate are retired.
+The standalone [evaluation factory](factory/README.md) authors versioned training,
+private holdout, and public shadow splits in its own container and private volume.
 Production delivery uses the existing [release checks](../RUNBOOK.md#production-release-checks).
 Development scores do not establish independent agent accuracy.
 

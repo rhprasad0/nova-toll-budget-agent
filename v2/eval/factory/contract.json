@@ -1,0 +1,113 @@
+{
+  "version": "4.0.0",
+  "splits": {
+    "training": {
+      "count": 100,
+      "workflow": {
+        "current": 40,
+        "annual": 55,
+        "mixed": 5
+      },
+      "coverage": {
+        "current_complete": 20,
+        "current_state": 10,
+        "current_evidence": 10,
+        "annual_complete": 20,
+        "annual_inputs": 15,
+        "annual_routes": 10,
+        "annual_interpretation": 10,
+        "mixed": 5
+      }
+    },
+    "holdout": {
+      "count": 50,
+      "workflow": {
+        "current": 20,
+        "annual": 28,
+        "mixed": 2
+      },
+      "coverage": {
+        "current_complete": 10,
+        "current_state": 5,
+        "current_evidence": 5,
+        "annual_complete": 10,
+        "annual_inputs": 8,
+        "annual_routes": 5,
+        "annual_interpretation": 5,
+        "mixed": 2
+      }
+    },
+    "shadow": {
+      "count": 10,
+      "workflow": {
+        "current": 4,
+        "annual": 5,
+        "mixed": 1
+      },
+      "coverage": {
+        "current_complete": 2,
+        "current_state": 1,
+        "current_evidence": 1,
+        "annual_complete": 2,
+        "annual_inputs": 1,
+        "annual_routes": 1,
+        "annual_interpretation": 1,
+        "mixed": 1
+      }
+    }
+  },
+  "settings": {
+    "trials_per_case": 3,
+    "calibration_trials_per_reference": 1,
+    "actor_check_trials_per_case": 1,
+    "application_model_config": {
+      "model_id": "gpt-6-luna",
+      "params": {
+        "max_output_tokens": 2048,
+        "reasoning": { "effort": "low" },
+        "prompt_cache_key": "tollchat-agent-v2",
+        "prompt_cache_options": { "mode": "explicit", "ttl": "30m" }
+      },
+      "stateful": false
+    },
+    "actor_model": "gpt-6-luna",
+    "judge_model": "gpt-6-luna",
+    "actor_params": {
+      "max_output_tokens": 2048,
+      "reasoning": {
+        "effort": "medium"
+      },
+      "prompt_cache_key": "tollchat-eval-v2",
+      "prompt_cache_options": {
+        "mode": "explicit",
+        "ttl": "30m"
+      }
+    },
+    "judge_params": {
+      "max_output_tokens": 8192,
+      "reasoning": {
+        "effort": "xhigh"
+      },
+      "prompt_cache_key": "tollchat-eval-v2",
+      "prompt_cache_options": {
+        "mode": "explicit",
+        "ttl": "30m"
+      }
+    },
+    "transport": {
+      "timeout_seconds": 60,
+      "max_retries": 0
+    },
+    "bootstrap_samples": 10000,
+    "bootstrap_seed": 360,
+    "prices": {
+      "model": "gpt-6-luna",
+      "date": "2026-09-22",
+      "source": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+      "input_per_million": 0.1,
+      "cached_per_million": 0.01,
+      "write_per_million": 0.125,
+      "output_per_million": 0.5
+    }
+  }
+}
