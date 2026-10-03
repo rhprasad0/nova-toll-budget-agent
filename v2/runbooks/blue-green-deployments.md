@@ -69,14 +69,14 @@ migrations; the later production cutover approval authorizes application routing
 Before preparation apply, the trusted gate requires the reviewed package hashes,
 unchanged schema contracts and serving baseline in
 `v2/scripts/shared-package-compatibility.json`. This record covers the development
-transition from `2480412ecc87e0ae8e020ad6dd1220bc32bf2fd8` and retains the production
+transition from `20e341ca0bb40b92509a69ce3d60e2c0044bb2fe` and retains the production
 baseline `537a4aa480bc95de704a4af5998e376c05689887`. Preparation checks compatibility
 before migrations and repeats the check before applying the saved plan.
 An already-completed preparation retains these verified packages without needing
 to repeat that transition from the original baseline. Extending it requires
 review and focused compatibility tests; do not replace the baseline merely to
 silence a gate. Credential-free CI exercises old/new loader events, publishers,
-timed-check contracts, the unchanged independent costs handler, and the retained
+timed-check contracts, the independently scheduled costs handler, and the retained
 database contracts against the disposable upgraded schema.
 
 The trusted PR plan, initial preparation and saved-plan revalidation share the
