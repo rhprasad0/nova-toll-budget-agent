@@ -28,14 +28,14 @@ function permanentRedirect(location) {
 function handler(event) {
   var request = event.request;
   if (request.uri === "/tolls" || request.uri === "/tolls/") {
-    return permanentRedirect("https://tollchat.ai/#toll-reports");
+    return permanentRedirect("/#toll-reports");
   }
   var legacy = request.uri.match(/^\/tolls\/i95-i495\/([^/]+)\/([^/]+)(?:\/(index\.html|report\.json))?\/?$/);
   var endpointSlug = /-(northbound|southbound)(?:-i(?:95|495)-[a-z0-9]+)?$/;
   if (legacy && endpointSlug.test(legacy[1]) && endpointSlug.test(legacy[2])) {
     var target = legacyReportRedirects[legacy[1] + "/" + legacy[2]];
     if (target) {
-      return permanentRedirect("https://tollchat.ai/tolls/i95-i495/" + target + (legacy[3] === "report.json" ? "report.json" : ""));
+      return permanentRedirect("/tolls/i95-i495/" + target + (legacy[3] === "report.json" ? "report.json" : ""));
     }
     // The detailed-report namespace is retired; absent S3 keys otherwise look forbidden.
     return {
@@ -48,7 +48,7 @@ function handler(event) {
       },
       body: {
         encoding: "text",
-        data: "This detailed entrance/exit report has been retired. Current area reports are at https://tollchat.ai/tolls/i95-i495/.",
+        data: "This detailed entrance/exit report has been retired. Current area reports are at /tolls/i95-i495/.",
       },
     };
   }

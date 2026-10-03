@@ -624,7 +624,7 @@ indexes, homepage discovery links, retired-route responses, both hostnames,
 crawler policy, representative agent families, and API isolation:
 
 Detailed entrance/exit URLs are retired. Verified replacements return 301 to the
-matching area report; other URLs in that retired namespace return 410. After
+matching area report on the same host; other URLs in that retired namespace return 410. After
 deployment and these checks, resubmit the sitemap and start Search Console
 validation for the forbidden URLs. Redirected and removed URLs can remain
 excluded; indexing of the current reports is Google's decision.
@@ -669,12 +669,12 @@ curl --fail-with-body --silent --show-error "$SITE_URL/" \
 for legacy in /tolls /tolls/; do
   test "$(curl --silent --show-error --output /dev/null --dump-header "$REPORT_PAGE" \
     --write-out '%{http_code}' "$SITE_URL$legacy")" -eq 301
-  grep -iFx $'location: https://tollchat.ai/#toll-reports\r' "$REPORT_PAGE"
+  grep -iFx $'location: /#toll-reports\r' "$REPORT_PAGE"
 done
 LEGACY_REPORT="$SITE_URL/tolls/i95-i495/woodburn-gallows-road-merrifield-northbound/tysons-route-7-leesburg-pike-northbound/"
 test "$(curl --silent --show-error --output /dev/null --dump-header "$REPORT_PAGE" \
   --write-out '%{http_code}' "$LEGACY_REPORT")" -eq 301
-grep -iFx $'location: https://tollchat.ai/tolls/i95-i495/northbound/woodburn-to-tysons/\r' "$REPORT_PAGE"
+grep -iFx $'location: /tolls/i95-i495/northbound/woodburn-to-tysons/\r' "$REPORT_PAGE"
 curl --fail-with-body --silent --show-error --location "$LEGACY_REPORT" \
   | grep -F '<link rel="canonical" href="https://tollchat.ai/tolls/i95-i495/northbound/woodburn-to-tysons/">' >/dev/null
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \

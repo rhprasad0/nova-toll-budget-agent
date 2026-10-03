@@ -286,7 +286,7 @@ test("public report routes rewrite toll directories with or without trailing sla
   }
 });
 
-test("retired reports redirect only to verified replacements and otherwise return Gone", async () => {
+test("retired reports keep redirects on the same origin and otherwise return Gone", async () => {
   const source = await readFile(new URL("../agent/public-report-routes.js", import.meta.url), "utf8");
   const context = /** @type {{route(event: {request: {method: string, uri: string}}): {statusCode: number, headers: Record<string, {value: string}>, body?: {data: string}}}} */ ({});
   vm.runInNewContext(`${source}\nthis.route = handler;`, context);
@@ -309,7 +309,10 @@ test("retired reports redirect only to verified replacements and otherwise retur
         const response = context.route({ request: { method, uri: `/tolls/i95-i495/${legacy}${suffix}` } });
         assert.equal(response.statusCode, 301);
         assert.equal(response.headers.location.value,
-          `https://tollchat.ai/tolls/i95-i495/${target}${suffix === "/report.json" ? "report.json" : ""}`);
+          `/tolls/i95-i495/${target}${suffix === "/report.json" ? "report.json" : ""}`);
+        for (const origin of ["https://dev.tollchat.ai", "https://tollchat.ai"]) {
+          assert.equal(new URL(response.headers.location.value, origin).origin, origin);
+        }
       }
       for (const legacy of [removed, "unknown-northbound/unknown-northbound"]) {
         const response = context.route({ request: { method, uri: `/tolls/i95-i495/${legacy}${suffix}` } });
@@ -321,7 +324,10 @@ test("retired reports redirect only to verified replacements and otherwise retur
     for (const uri of ["/tolls", "/tolls/"]) {
       const response = context.route({ request: { method, uri } });
       assert.equal(response.statusCode, 301);
-      assert.equal(response.headers.location.value, "https://tollchat.ai/#toll-reports");
+      assert.equal(response.headers.location.value, "/#toll-reports");
+      for (const origin of ["https://dev.tollchat.ai", "https://tollchat.ai"]) {
+        assert.equal(new URL(response.headers.location.value, origin).origin, origin);
+      }
     }
   }
 });

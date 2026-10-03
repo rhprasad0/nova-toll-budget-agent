@@ -4192,6 +4192,27 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         plan = lambda_plan(runtime="python3.13")
         self.assert_reason("unsupported_field_delta", plan=plan)
 
+    def test_candidate_report_routes_do_not_target_production(self) -> None:
+        code = (
+            Path(__file__).resolve().parents[1] / "v2/agent/public-report-routes.js"
+        ).read_text()
+        value: dict[str, JSON] = {
+            "name": "tollchat-v2-public-report-routes-dev",
+            "code": code,
+        }
+        plan = _plan(
+            [
+                _resource_change(
+                    "aws_cloudfront_function.public_report_routes",
+                    "no-op",
+                    value,
+                    value,
+                )
+            ]
+        )
+        result = validate_plan(plan, lambda_manifest())
+        self.assertEqual(result["status"], "accepted", result)
+
     def test_accepts_dormant_production_configuration_and_development_resources(
         self,
     ) -> None:
