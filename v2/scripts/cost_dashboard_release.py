@@ -30,12 +30,14 @@ RESOURCES = {
     "aws_s3_object.cost_dashboard",
     'aws_s3_object.cost_assets["costs.css"]',
     'aws_s3_object.cost_assets["costs.mjs"]',
+    'aws_s3_object.cost_assets["costs-benchmark.json"]',
     'aws_s3_object.cost_assets["evals.css"]',
     "aws_s3_object.evals",
     "aws_cloudfront_function.public_report_routes",
 }
 # Reviewed public bytes. Update these pins when changing these public assets.
 ASSET_SHA256: dict[str, str] = {
+    "costs-benchmark.json": "c2fa682ebddc230ac74c6b13176d39cc002c53bf189e3d0f1c61249c9f1bae06",
     "costs.css": "36b86fbc8d0ace7b303d25cfa4aac02d7e158a03fc7d3bc8fcade098b241fff4",
     "costs.mjs": "962cbafcfeed7a6746841eb03c0bd770f162ed47e8981643b9baefd2ca51c2c8",
     "evals.css": "a769365269ebde99103a56e6ce64a619f1a728c137aeeeca93ea04023db85688",
@@ -157,6 +159,7 @@ def validate_drift(item: dict[str, Any], environment: str) -> None:
         "aws_s3_object.cost_dashboard": {"tags", "metadata"},
         'aws_s3_object.cost_assets["costs.css"]': {"tags", "metadata"},
         'aws_s3_object.cost_assets["costs.mjs"]': {"tags", "metadata"},
+        'aws_s3_object.cost_assets["costs-benchmark.json"]': {"tags", "metadata"},
         'aws_s3_object.cost_assets["evals.css"]': {"tags", "metadata"},
     }
     require(address in fields and environment in ACCOUNTS)
@@ -445,6 +448,8 @@ def validate(
                 if asset.endswith(".html")
                 else "text/css"
                 if asset.endswith(".css")
+                else "application/json"
+                if asset.endswith(".json")
                 else "text/javascript"
             )
             + "; charset=utf-8",
