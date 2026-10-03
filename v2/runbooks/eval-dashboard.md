@@ -54,6 +54,12 @@ serving release and deterministic package hashes. Deployment of this PR's new
 infra resources and policies requires the reviewed infrastructure prerequisite;
 ordinary release delivery retains its existing finite plan scope.
 
+After applying the prerequisite, reconcile the eval role's cached inline policy
+with a separately reviewed saved refresh-only plan. Confirm the live policy
+matches the approved prerequisite and that the refresh changes only cached policy
+state. The subsequent full release plan must have no IAM drift or permission
+changes.
+
 During the first transition, or after rollback to a runtime predating this
 protocol, evaluations record execution errors until a compatible application
 serves chat. Do not relabel prior runs or restore the local application fallback.

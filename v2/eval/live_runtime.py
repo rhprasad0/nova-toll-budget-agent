@@ -165,7 +165,7 @@ class LiveRuntime:
         )
         if (
             endpoint["status"] != "READY"
-            or endpoint["agentRuntimeVersion"] != target.runtime_version
+            or endpoint["liveVersion"] != target.runtime_version
         ):
             raise RuntimeError(
                 "Evaluation runtime version does not match the live proxy"

@@ -106,9 +106,9 @@ def test_timed_lambda_scheduler_and_failure_contract() -> None:
 
     lambda_policy = terraform_block(
         TIMED_CHECKS_TF,
-        'data "aws_iam_policy_document" "timed_checks_lambda"',
+        'resource "aws_iam_role_policy" "timed_checks_lambda"',
     )
-    assert 'actions   = ["rds:DescribeDBInstances"]' in lambda_policy
+    assert 'Action   = ["rds:DescribeDBInstances"]' in lambda_policy
     assert "/${local.eval_db_user}" in lambda_policy
     assert "/${local.database_roles.agent}" not in lambda_policy
     assert "/${local.database_roles.pricing_caller}" not in lambda_policy
@@ -121,8 +121,10 @@ def test_timed_lambda_scheduler_and_failure_contract() -> None:
         "bedrock-agentcore:InvokeAgentRuntime",
     ):
         assert action in lambda_policy
-    assert 'variable = "aws:SourceVpce"' in lambda_policy
-    assert "resources = [aws_cloudfront_distribution.site.arn]" in lambda_policy
+    assert (
+        '"aws:SourceVpce" = var.foundation.agentcore_vpc_endpoint_id' in lambda_policy
+    )
+    assert "Resource = [aws_cloudfront_distribution.site.arn]" in lambda_policy
     assert "values(local.agentcore_policy_resources)" in lambda_policy
     assert (
         'resource "aws_vpc_security_group_ingress_rule" "agentcore_from_timed_checks"'
@@ -130,13 +132,13 @@ def test_timed_lambda_scheduler_and_failure_contract() -> None:
     )
     assert "EVAL_SITE_DISTRIBUTION_ID" in lambda_block
     assert "AGENTCORE_VPCE_URL" in lambda_block
-    assert 'actions   = ["ssm:GetParameter"]' in lambda_policy
-    assert 'actions   = ["sqs:SendMessage"]' in lambda_policy
-    assert 'actions   = ["sns:Publish"]' in lambda_policy
-    assert "resources = [var.foundation.alerts_topic_arn]" in lambda_policy
-    assert 'actions   = ["kms:Decrypt", "kms:GenerateDataKey*"]' in lambda_policy
-    assert "resources = [data.aws_kms_alias.alerts.target_key_arn]" in lambda_policy
-    assert 'resources = ["*"]' not in lambda_policy
+    assert 'Action   = ["ssm:GetParameter"]' in lambda_policy
+    assert 'Action   = ["sqs:SendMessage"]' in lambda_policy
+    assert 'Action   = ["sns:Publish"]' in lambda_policy
+    assert "Resource = [var.foundation.alerts_topic_arn]" in lambda_policy
+    assert 'Action   = ["kms:Decrypt", "kms:GenerateDataKey*"]' in lambda_policy
+    assert "Resource = [data.aws_kms_alias.alerts.target_key_arn]" in lambda_policy
+    assert 'Resource = ["*"]' not in lambda_policy
     assert (
         "local.is_production || var.enable_development_timed_check_alerts"
         in TIMED_CHECKS_TF
