@@ -3608,9 +3608,13 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                     ),
                     None,
                 )
-                if deferred_asset and f'"{deferred_asset}"' not in (
-                    Path(__file__).parent.parent / "v2/infra/costs.tf"
-                ).read_text():
+                if (
+                    deferred_asset
+                    and f'"{deferred_asset}"'
+                    not in (
+                        Path(__file__).parent.parent / "v2/infra/costs.tf"
+                    ).read_text()
+                ):
                     continue  # Policy is admitted before the frontend adds this asset.
                 expected_mutations[address] = (
                     spec.operation_class,
