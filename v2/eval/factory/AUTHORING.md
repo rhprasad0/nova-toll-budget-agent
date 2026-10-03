@@ -46,8 +46,11 @@ variations of one underlying scenario together in one scenario group and split.
 
 Reserve route pairs before authoring. `factory validate` rejects a current,
 outbound or return pair shared across splits, including reversed legs and
-entry/exit or direction variants. It strips catalog access suffixes, including
-the alternate `9ND` approach, and treats I-495 access 180/181 as the same boundary.
+entry/exit or direction variants. It uses explicit I-95 catalog counterparts,
+preserving distinct accesses that happen to share a numeric stem. For I-495 it
+strips access suffixes, including the alternate `9ND` approach, and treats
+180/181 and 183/184 as shared boundaries. Other networks retain their facility
+and access number across entry/exit and direction variants.
 Network identity remains significant; reuse within one split is allowed.
 Prices, observation times, schedules, case names and group names cannot make a
 shared pair independent. This is a conservative route check, not proof of

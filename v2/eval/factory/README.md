@@ -150,6 +150,8 @@ boundaries, five-turn budgets (including the opening), duplicate openings,
 equivalent fixture evidence, split groups and canonical route pairs across
 current/outbound/return legs. Reversed legs and role/direction variants count as
 reuse, including the I-495 180/181 boundary; within-split reuse is allowed.
+I-95 counterparts use explicit catalog aliases; numeric stems alone do not
+establish equivalence. I-495's 183/184 boundary also shares one identity.
 Human review must also check semantic independence and reference labels.
 
 Validate drafts without freezing them or calling models:

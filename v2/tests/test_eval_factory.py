@@ -456,10 +456,14 @@ def test_factory_requires_five_turns_including_opening(
         ("i495:1819ND", "i495:181"),
         ("i495:180SO", "i495:181"),
         ("i495:182SD", "i495:182"),
-        ("i95:211NO", "i95:211"),
-        ("i95:211SD", "i95:211"),
-        ("i95:219NO", "i95:219"),
-        ("i95:22329ND", "i95:2232"),
+        ("i495:184SD", "i495:183"),
+        ("i95:211NO", "i95:211ND"),
+        ("i95:211SD", "i95:211ND"),
+        ("i95:219NO", "i95:219NO"),
+        ("i95:220SD", "i95:219NO"),
+        ("i95:226SD", "i95:2229ND"),
+        ("i95:235SD", "i95:234NO"),
+        ("i95:22329ND", "i95:22329ND"),
         ("airport_iad", "airport_iad"),
     ],
 )
@@ -630,6 +634,10 @@ def add_route_case(
         ),
         ("current", [("i495:182NO", "i495:181ND")], [("i495:180SO", "i495:182SD")]),
         ("current", [("i495:182NO", "i495:181ND")], [("i495:182NO", "i495:1819ND")]),
+        ("current", [("i495:183NO", "i495:181ND")], [("i495:180SO", "i495:184SD")]),
+        ("current", [("i95:219NO", "i495:181ND")], [("i495:180SO", "i95:220SD")]),
+        ("current", [("i95:222NO", "i495:181ND")], [("i495:180SO", "i95:226SD")]),
+        ("current", [("i95:234NO", "i495:181ND")], [("i495:180SO", "i95:235SD")]),
         ("current", [("i95:211NO", "i495:182ND")], [("i495:182SO", "i95:211SD")]),
         (
             "current",
@@ -701,6 +709,23 @@ def test_distinct_routes_and_within_split_reuse_are_valid(
     add_route_case(drafts, "training", route, number=21)
     add_route_case(drafts, "training", route, number=22)
     add_route_case(drafts, split, distinct)
+    assert set(f.validate_splits(drafts)) == set(f.SPLITS)
+
+
+@pytest.mark.parametrize(
+    ("north", "south"),
+    [("209NO", "209SO"), ("217NO", "217SD"), ("218NO", "218SD"), ("216SD", "236SO")],
+)
+def test_distinct_i95_accesses_with_shared_stems_or_labels_remain_valid(
+    factory: tuple[Path, str],
+    north: str,
+    south: str,
+) -> None:
+    root, _ = factory
+    drafts = root / "drafts"
+    add_route_case(drafts, "training", [(f"i95:{north}", "i95:222ND")])
+    add_route_case(drafts, "holdout", [(f"i95:{south}", "i95:2229ND")])
+    assert f.canonical_access(f"i95:{north}") != f.canonical_access(f"i95:{south}")
     assert set(f.validate_splits(drafts)) == set(f.SPLITS)
 
 
