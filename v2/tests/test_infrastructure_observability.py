@@ -549,7 +549,7 @@ def test_eval_dashboard_is_configured_in_both_environments() -> None:
         'local.is_production ? "eval_writer" : "eval_writer_development"',
     )
     policy = terraform_block(
-        TIMED_CHECKS_TF, 'data "aws_iam_policy_document" "timed_checks_lambda"'
+        TIMED_CHECKS_TF, 'resource "aws_iam_role_policy" "timed_checks_lambda"'
     )
     for sid, actions, resources in (
         (
@@ -569,10 +569,10 @@ def test_eval_dashboard_is_configured_in_both_environments() -> None:
         ),
     ):
         statement = next(
-            block for block in policy.split("statement {")[1:] if f'"{sid}"' in block
+            block for block in re.split(r"\n\s+\{\n", policy)[1:] if f'"{sid}"' in block
         )
-        assert_assignment(statement, "actions", actions)
-        assert_assignment(statement, "resources", resources)
+        assert_assignment(statement, "Action", actions)
+        assert_assignment(statement, "Resource", resources)
     assert 'dynamic "statement"' not in policy
     function = terraform_block(
         TIMED_CHECKS_TF, 'resource "aws_lambda_function" "timed_checks"'

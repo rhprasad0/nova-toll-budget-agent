@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from botocore.session import get_session
+from botocore.validate import validate_parameters
 
 from eval import live_runtime
 
@@ -97,8 +100,19 @@ class AWS:
             },
         }
 
-    def get_agent_runtime_endpoint(self, **_: object) -> dict[str, str]:
-        return {"status": "READY", "agentRuntimeVersion": self.endpoint_version}
+    def get_agent_runtime_endpoint(self, **_: object) -> dict[str, Any]:
+        green = "_green" if self.slot == "green" else ""
+        arn = f"arn:aws:bedrock-agentcore:us-east-1:{self.account}:runtime/{self.prefix}{green}-ABC"
+        return {
+            "status": "READY",
+            "liveVersion": self.endpoint_version,
+            "agentRuntimeArn": arn,
+            "agentRuntimeEndpointArn": f"{arn}/runtime-endpoint/preview",
+            "createdAt": datetime(2026, 1, 1, tzinfo=UTC),
+            "lastUpdatedAt": datetime(2026, 1, 1, tzinfo=UTC),
+            "name": "preview",
+            "id": "preview-ABC1234567",
+        }
 
     def invoke_agent_runtime(self, **kwargs: object) -> dict[str, Any]:
         self.calls.append(dict(kwargs))
@@ -138,6 +152,13 @@ class AWS:
             "runtimeSessionId": kwargs["runtimeSessionId"],
             "response": self.body,
         }
+
+
+def test_endpoint_fixture_matches_aws_response_contract() -> None:
+    service = get_session().get_service_model("bedrock-agentcore-control")
+    shape = service.operation_model("GetAgentRuntimeEndpoint").output_shape
+    assert shape is not None
+    validate_parameters(AWS().get_agent_runtime_endpoint(), shape)
 
 
 def runtime(monkeypatch: pytest.MonkeyPatch, aws: AWS) -> live_runtime.LiveRuntime:
