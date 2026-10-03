@@ -40,7 +40,7 @@ executionEnvironments = [
 ]
 reportMissingTypeStubs = false
 reportUnnecessaryTypeIgnoreComment = true
-exclude = ["**/__pycache__", ".venv", "infra/build", "**/node_modules"]
+exclude = ["**/__pycache__", ".venv", "infra/build", "../infra/build", "**/node_modules"]
 
 [tool.ruff]
 # Resolve application and shared infrastructure imports when invoked from v2.

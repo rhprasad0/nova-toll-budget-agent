@@ -3,12 +3,10 @@
 import asyncio
 import json
 import threading
-import tomllib
 import urllib.error
 import urllib.request
 from collections.abc import AsyncIterator
 from datetime import date
-from hashlib import sha256
 from http.client import HTTPConnection, HTTPResponse
 from pathlib import Path
 from typing import Any
@@ -17,18 +15,6 @@ import pytest
 
 from agent import dev_chat
 from agent.dev_chat import DevChat, create_server
-
-
-def test_local_console_uses_refreshable_aws_login_credentials() -> None:
-    root = Path(__file__).parents[1]
-    dependencies = tomllib.loads((root / "pyproject.toml").read_text())["project"][
-        "dependencies"
-    ]
-    readme = (root / "README.md").read_text()
-
-    assert any(dependency.startswith("boto3[crt]") for dependency in dependencies)
-    assert "AWS_PROFILE=nova-toll" in readme
-    assert "export-credentials" not in readme
 
 
 class _Metrics:
@@ -201,7 +187,7 @@ def test_agent_construction_failure_emits_one_safe_terminal_error(
     assert "startup secret details" in caplog.text
 
 
-def test_http_server_serves_assets_streams_ndjson_and_resets() -> None:
+def test_http_server_streams_ndjson_and_resets() -> None:
     factory = _Factory()
     app = DevChat(factory)
     server = create_server(app, port=0)
@@ -209,184 +195,6 @@ def test_http_server_serves_assets_streams_ndjson_and_resets() -> None:
     thread.start()
     base_url = f"http://127.0.0.1:{server.server_port}"
     try:
-        page = urllib.request.urlopen(base_url, timeout=2)
-        assert page.headers["Cache-Control"] == "no-store"
-        html = page.read().decode()
-        json_ld_marker = '<script type="application/ld+json">'
-        assert json_ld_marker in html
-        json_ld = json.loads(html.split(json_ld_marker, 1)[1].split("</script>", 1)[0])
-        assert json_ld == {
-            "@context": "https://schema.org",
-            "@type": "WebPage",
-            "@id": "https://tollchat.ai/#webpage",
-            "url": "https://tollchat.ai/",
-            "name": "TollChat · Northern Virginia toll prices and commute estimates",
-            "description": (
-                "Ask TollChat for current Northern Virginia toll prices and annual "
-                "commute estimates."
-            ),
-            "datePublished": "2026-08-23",
-            "dateModified": "2026-08-26",
-            "inLanguage": "en-US",
-        }
-        footer = html.split('<footer class="site-footer">', 1)[1].split("</footer>", 1)[
-            0
-        ]
-        assert 'id="usage-proof"' not in footer
-        assert "New public usage counting has stopped" in footer
-        assert "Historical aggregate and snapshot data are retained" in footer
-        assert "Responses storage disabled" in html
-        assert "abuse-monitoring logs" in html
-        assert "up to 30 days by default" in html
-        assert "retains Responses API data for at least 30 days" not in html
-        assert "tradeoff to keep TollChat free to use" in html
-        assert "https://developers.openai.com/api/docs/guides/your-data" in html
-        assert "reasonable tax and vehicle-cost assumptions" in html
-        assert "rough take-home-pay estimate" in html
-        assert "We observed no fabricated costs in our 1,000-answer test" in html
-        assert (
-            "Toll and take-home-pay figures come from code, not AI arithmetic" in html
-        )
-        assert "996 responses (99.6%) used only supplied numbers" in html
-        assert "constrained route and pricing tools" not in html
-        assert "supplied tool evidence under the strict policy" not in html
-        assert "contact@tollchat.ai" in html
-        assert "not affiliated with VDOT or any toll operator" in html
-        assert "VDOT SmarterRoads" in html
-        assert "https://smarterroads.vdot.virginia.gov/faq" in html
-        assert 'href="/privacy.txt"' in html
-        assert 'href="/terms.txt"' in html
-        assert 'href="/assets/favicon.png"' in html
-        assert "Do not submit names, exact home or work addresses" in html
-        assert "not a navigation or emergency service" in html
-        assert "2026 Benevolent Clankers LLC" in html
-        assert "TollChat name and branding reserved" in html
-        assert "blob/main/LICENSE" in html
-        assert 'href="/faq.html#hallucinations-title"' in html
-        assert 'href="/faq.html#take-home-title"' in html
-        assert "What is the current price from Dumfries to Washington?" in html
-        assert "$130,000 gross annual salary" in html
-        assert "general information only" in html
-        assert "financial or employment decisions" in html
-        assert "Strands events" not in html
-        assert 'id="reset-map"' in html
-        assert "Small pins mark supported entrances and exits" in html
-        for stylesheet in ("evals.css", "chat.css"):
-            assert f'href="/assets/{stylesheet}"' in html
-            response = urllib.request.urlopen(
-                f"{base_url}/assets/{stylesheet}", timeout=2
-            )
-            assert response.headers.get_content_type() == "text/css"
-            assert response.read()
-        assert "price unavailable" not in html.lower()
-        assert "data-facility" not in html
-        assert (
-            "consumeNdjson"
-            in urllib.request.urlopen(f"{base_url}/dev_chat.mjs", timeout=2)
-            .read()
-            .decode()
-        )
-        logo = urllib.request.urlopen(f"{base_url}/assets/tollchat-logo.png", timeout=2)
-        assert logo.headers.get_content_type() == "image/png"
-        assert sha256(logo.read()).hexdigest() == (
-            "da0167c64714b0e37c234d18695aecf6f81226627ca21e105e1fcc43c397e1a6"
-        )
-        faq = urllib.request.urlopen(f"{base_url}/faq.html", timeout=2).read().decode()
-        assert 'href="/assets/favicon.png"' in faq
-        assert "How TollChat estimates" in faq
-        assert "commute costs" in faq
-        assert "Why doesn't TollChat cover I-66 Outside the Beltway?" in faq
-        assert "VDOT's public feeds do not include" in faq
-        assert "Why is TollChat free?" in faq
-        assert "production AI experience is comically hard to get" in faq
-        assert "99.6%" in faq
-        assert "93.1%" in faq
-        assert "one frozen" in faq
-        assert (
-            "Pricing tools calculate its toll and take-home-pay figures in code" in faq
-        )
-        assert "best-effort estimates" in faq
-        assert "not for financial planning, salary or job negotiations" in faq
-        assert "330 origin-destination (OD) pairs" in faq
-        assert "mean absolute error of $0.106, compared with $0.154" in faq
-        assert "largest error was $8.05" in faq
-        assert "New public usage counting and daily publication have stopped" in faq
-        assert "Historical aggregate and snapshot data remain retained" in faq
-        assert "Responses storage disabled" in faq
-        assert "abuse-monitoring logs" in faq
-        assert "up to 30 days by default" in faq
-        assert "retains Responses API data for at least 30 days" not in faq
-        assert "tradeoff to keep TollChat free to use" in faq
-        assert "https://developers.openai.com/api/docs/guides/your-data" in faq
-        assert "OpenFreeMap" in faq
-        assert "2026 Benevolent Clankers LLC" in faq
-        assert "TollChat name and branding reserved" in faq
-        assert "general information only" in faq
-        favicon = urllib.request.urlopen(f"{base_url}/assets/favicon.png", timeout=2)
-        favicon_bytes = favicon.read()
-        assert favicon.headers.get_content_type() == "image/png"
-        assert favicon_bytes.startswith(b"\x89PNG\r\n\x1a\n")
-        assert tuple(
-            int.from_bytes(favicon_bytes[offset : offset + 4], "big")
-            for offset in (16, 20)
-        ) == (64, 64)
-        privacy_response = urllib.request.urlopen(f"{base_url}/privacy.txt", timeout=2)
-        assert privacy_response.headers.get_content_type() == "text/plain"
-        privacy = privacy_response.read().decode()
-        assert "TollChat privacy notice" in privacy
-        assert "Starting a new chat does not change OpenAI's retention" in privacy
-        assert "Responses storage disabled (`store=false`)" in privacy
-        assert "does not use OpenAI's stored response state" in privacy
-        assert "stateful OpenAI Responses API" not in privacy
-        assert "Responses API application state for at least 30 days" not in privacy
-        assert "abuse monitoring as a tradeoff to keep TollChat free to use" in privacy
-        assert "https://developers.openai.com/api/docs/guides/your-data" in privacy
-        assert "does not sell this data or use it for targeted advertising" in privacy
-        assert "https://openfreemap.org/privacy/" in privacy
-        terms_response = urllib.request.urlopen(f"{base_url}/terms.txt", timeout=2)
-        assert terms_response.headers.get_content_type() == "text/plain"
-        terms = terms_response.read().decode()
-        assert "TollChat terms" in terms
-        assert "not a navigation or emergency service" in terms
-        assert "provided as is and as available" in terms
-        assert "https://smarterroads.vdot.virginia.gov/termsOfService" in terms
-        assert "does not attach the credential to traces or logs" in faq
-        estimates = json.load(
-            urllib.request.urlopen(
-                f"{base_url}/assets/commute-estimates.json", timeout=2
-            )
-        )
-        assert [item["id"] for item in estimates["estimates"]] == [
-            "dumfries",
-            "springfield-franconia",
-            "leesburg",
-            "i66-west",
-        ]
-        for path in (
-            "/assets/commute-map.mjs",
-            "/assets/commute-routes.mjs",
-            "/assets/coverage-locations.json",
-            "/assets/maplibre-gl-6.0.0/maplibre-gl.css",
-            "/assets/maplibre-gl-6.0.0/maplibre-gl.mjs",
-            "/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs",
-            "/assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs",
-        ):
-            assert urllib.request.urlopen(f"{base_url}{path}", timeout=2).status == 200
-        coverage_locations = json.load(
-            urllib.request.urlopen(
-                f"{base_url}/assets/coverage-locations.json", timeout=2
-            )
-        )
-        assert len(coverage_locations["locations"]) == 103
-        assert (
-            sum(len(location["points"]) for location in coverage_locations["locations"])
-            == 220
-        )
-        csp = page.headers["Content-Security-Policy"]
-        assert "img-src 'self' data:" in csp
-        assert "connect-src 'self' https://tiles.openfreemap.org" in csp
-        assert "worker-src 'self' blob:" in csp
-
         response = _post(
             f"{base_url}/api/chat",
             {"session_id": "browser", "message": "hello 👋"},

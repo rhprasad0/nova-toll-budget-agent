@@ -762,7 +762,7 @@ The next continuation kept the selected application, corpus 3.3.27 / harness 2.3
 
 The candidate scored **87/100**, with all 100 slots scored, no inconclusives, two Grounding violations and eleven Rules violations. It gained three passes and lost nine against the search incumbent. The targeted Gallows origin was correct in all three sibling cases; two completed successfully, while the cancellation case failed on a different return-origin ID. Other losses involved directions, endpoint roles, changed return endpoints and premature Washington pricing. This supports the local hypothesis but does not establish an overall gain or causal attribution for the losses.
 
-Independent review found two nondecisive Grounding limitations: conditional offer-related advice was mistaken for an asserted personal circumstance, and returned restart metadata was mistaken for permission to offer the prohibited annual restart workflow. Correcting both hypothetically would yield only 89/100, so all grades remain unchanged. All six peak-bearing responses disclosed peak, and the sole suspect money occurrence was correctly classified as qualified rounding. No further distinct hypothesis was supported. We rejected the edit, skipped a finalist rerun and retained prompt 2.3.14. The trial evaluated `ba396e7c` and cost **$0.387398700** across 665 known calls, bringing cumulative spending to **$23.494607990** under the unchanged **$40.566444520** ceiling. This findings layer changes only the journal; raw evidence remains private and CI monitoring remains stopped.
+Independent review found two nondecisive Grounding limitations: conditional offer-related advice was mistaken for an asserted personal circumstance, and returned restart metadata was mistaken for permission to offer the prohibited annual restart workflow. Correcting both hypothetically would yield only 89/100, so all grades remain unchanged. All six peak-bearing responses disclosed peak, and the sole suspect money occurrence was correctly classified as qualified rounding. No further distinct hypothesis was supported. We rejected the edit, skipped a finalist rerun and retained prompt 2.3.14. The trial evaluated `ba396e7c` and cost **$0.387398700** across 665 known calls, bringing cumulative spending to **$23.494607990** under the unchanged **$40.566444520** ceiling.
 
 ### 2026-09-27 — Test consistent itinerary confirmation
 
@@ -776,7 +776,7 @@ A separate SOP trial inferred direction from the catalog longitude for distinct,
 
 The trial scored **86/100** against the 93/100 search incumbent, with one gain and eight lost passes. All 100 slots were scored, with no inconclusives, one Grounding violation and fourteen Rules violations. Spring Hill to Reston improved, while two other recurring westbound Dulles trips still selected eastbound points. Passing controls covered eastbound trips, corrected origins, explicit westbound annual legs and cross-facility annual routes. One Greenway request invented Dulles Toll Road point IDs; this could reflect interference, but the single run does not establish causation. Other losses involved wrong endpoints and missed clarification. Independent review found no new decision-changing actor or harness defect. The known cancellation-wording disagreement remained nondecisive, all six peak-bearing responses disclosed peak, and no money-classification issue appeared.
 
-We rejected the edit and retained the application confirmed at 91/100, with no finalist rerun. The trial evaluated `1c6a2546`, cost **$0.386419630** across 659 known calls and brought cumulative spending to **$24.279063700** under the unchanged **$40.566444520** ceiling. Together, these two trials cost **$0.784455710** across 1,327 known calls. No further prose hypothesis was supported. A concrete deferred experiment would constrain endpoint IDs to the actual catalog while preserving valid wrong-role IDs for validation; it requires separate schema/runtime scope and baseline planning, and cannot fix selection of a wrong but valid endpoint. This publication changes only the journal, preserves the selected application, and leaves raw evidence private. CI monitoring remains stopped.
+We rejected the edit and retained the application confirmed at 91/100, with no finalist rerun. The trial evaluated `1c6a2546`, cost **$0.386419630** across 659 known calls and brought cumulative spending to **$24.279063700** under the unchanged **$40.566444520** ceiling. Together, these two trials cost **$0.784455710** across 1,327 known calls. No further prose hypothesis was supported. A concrete deferred experiment would constrain endpoint IDs to the actual catalog while preserving valid wrong-role IDs for validation; it requires separate schema/runtime scope and baseline planning, and cannot fix selection of a wrong but valid endpoint.
 
 ### 2026-09-27 — Research-guided record selection and plateau review
 
@@ -784,7 +784,7 @@ Ryan requested continued search on the same PR and suggested Exa. Research suppl
 
 The first candidate added five SOP lines directing the model to select a whole catalog record and copy its ID unchanged. It scored **83/100** against the 93/100 search incumbent, with one gained pass and eleven lost passes. All 100 slots were scored, with no inconclusives, one Grounding violation and sixteen Rules violations. The motivating invented Gallows Road entry persisted, and valid-ID direction errors remained. Independent review confirmed an actual unsupported source claim and an attempted call with a guessed missing origin. The known false failure for an annual restart refusal could not change rejection. All six peak-bearing responses disclosed peak, with no suspect money occurrences. We rejected the edit and did not run a finalist.
 
-This fourth consecutive rejection triggered an offline plateau review. Both reviewers supported one distinct test of the complete ten-location Greenway order from authoritative route data: it supplies spatial relationships instead of repeating ID checks, a landmark mnemonic or longitude arithmetic. The proposed scope preserves catalog role availability, explicit directions, exact IDs, separate annual legs and consent, and excludes cross-facility routing. The record-copy trial evaluated `47466ed3`, cost **$0.397221470** across 651 known calls and brought cumulative spending to **$24.676285170**. Detailed research notes and raw evidence remain private; PR #629 remains the publication vehicle.
+This fourth consecutive rejection triggered an offline plateau review. Both reviewers supported one distinct test of the complete ten-location Greenway order from authoritative route data: it supplies spatial relationships instead of repeating ID checks, a landmark mnemonic or longitude arithmetic. The proposed scope preserves catalog role availability, explicit directions, exact IDs, separate annual legs and consent, and excludes cross-facility routing. The record-copy trial evaluated `47466ed3`, cost **$0.397221470** across 651 known calls and brought cumulative spending to **$24.676285170**.
 
 ### 2026-09-27 — Complete Greenway order
 
@@ -798,7 +798,7 @@ A separate SOP trial supplied all eleven Dulles Toll Road locations in authorita
 
 Independent review confirmed the inconclusive classification: the assistant offered an incorrect direction and the actor adopted it contrary to its profile. The unnecessary clarification and wrong direction remain observable application errors. Two debatable Rules failures concern wording about fixed-rate sampling and a conditional request to confirm an already stated round trip; even crediting both and the inconclusive slot would only yield 91, below the required 94. All six peak-bearing responses disclosed peak. All money catalogs reproduced, and both classified amounts were valid qualified whole-dollar approximations. Review found no decision-changing measurement defect. We preserved all grades and rejected the edit without a finalist rerun.
 
-The trial evaluated `a8c07e24`, cost **$0.391493420** across 670 known calls and brought cumulative spending to **$25.461381370**. The three research-led trials cost **$1.182317670** across 1,998 known calls. All five trials documented in PR #629 cost **$1.966773380** across 3,325 known calls, leaving **$15.105063150** under the unchanged ceiling. Both reviewers recommend ending this prose-search batch: the mnemonic, longitude, record-copy and complete-order results do not support another nearby wording variant. A broader structured catalog or route-record selection experiment remains deferred pending separate implementation scope and measurement-baseline planning. We retain the application with its prior 93/100 search score and 91/100 confirmation, update the same PR with findings only, and keep detailed evidence private.
+The trial evaluated `a8c07e24`, cost **$0.391493420** across 670 known calls and brought cumulative spending to **$25.461381370**. The three research-led trials cost **$1.182317670** across 1,998 known calls. All five trials documented in PR #629 cost **$1.966773380** across 3,325 known calls, leaving **$15.105063150** under the unchanged ceiling. Both reviewers recommend ending this prose-search batch: the mnemonic, longitude, record-copy and complete-order results do not support another nearby wording variant. A broader structured catalog or route-record selection experiment remains deferred pending separate implementation scope and measurement-baseline planning. We retain the application with its prior 93/100 search score and 91/100 confirmation.
 
 ### 2026-09-27 — Lossless catalog rendering: fresh baseline
 
@@ -814,7 +814,7 @@ The lossless record-line renderer scored **86/100** against the fresh baseline's
 
 Independent review found persistent route and workflow mistakes: wrong directions, premature Tysons pricing, an invented missing origin and an unsupported claim that an excluded midday trip was untolled. Two gained passes concern the baseline's judging disagreements and do not establish a renderer benefit. One reverse-Greenway loss has uncertain attribution because the actor selected a Dulles Toll Road origin after unnecessary clarification, conflicting with the frozen Greenway route; its recorded grade remains unchanged. All four returned peak components were disclosed. All money catalogs reproduced, including the correctly classified denial of a zero-dollar toll. No decision-changing measurement repair was required.
 
-Candidate `b61da24a` cost **$0.358741040** across 656 known calls. Including the fresh baseline, this exploration cost **$0.749717280** across 1,309 known calls; cumulative spending is **$26.211098650**, leaving **$14.355345870** under the existing ceiling. The candidate passed corpus validation, 83 focused checks, 15 comparison checks and formatting/lint checks, with the expected unpublished renderer-version snapshot mismatch. Tests verified semantic round-trip equality rather than exact catalog whitespace. The compact-format search stops here: this run does not justify another representation variant, and token savings alone do not satisfy the accuracy objective. The selected application, its prior 93/100 search and 91/100 confirmation, and all historical grades remain unchanged. PR #629 publishes these findings only; prototype branches and detailed evidence remain private.
+Candidate `b61da24a` cost **$0.358741040** across 656 known calls. Including the fresh baseline, this exploration cost **$0.749717280** across 1,309 known calls; cumulative spending is **$26.211098650**, leaving **$14.355345870** under the existing ceiling. The candidate passed corpus validation, 83 focused checks, 15 comparison checks and formatting/lint checks, with the expected unpublished renderer-version snapshot mismatch. Tests verified semantic round-trip equality rather than exact catalog whitespace. The compact-format search stops here: this run does not justify another representation variant, and token savings alone do not satisfy the accuracy objective. The selected application, its prior 93/100 search and 91/100 confirmation, and all historical grades remain unchanged.
 
 ### 2026-09-27 — Three-trial reliability report for the 93-point candidate
 
@@ -824,7 +824,7 @@ The diagnostic scored **257/300 (85.7%)**, with **68/100 cases passing all three
 
 The result misses the former 90% success, 75% pass³ and critical-case 3/3 requirements. Numerical cost and latency limits are met, but historical qualification conditions and relative promotion gates are not established by this diagnostic. Current-price requests were weakest at 93/120 successes; annual requests scored 149/165 and mixed workflows 15/15. The actor-inconclusive judgment is debatable, and the known annual-restart grading disagreement remains visible. No replacement run, application change or production qualification followed. The [detailed report](CURRENT_TIME_RELIABILITY_2026-09-27.md) includes case consistency, family breakdowns, former-gate interpretation, costs, latency, uncertainty and review limitations.
 
-Diagnostic commit `5d7bce6d` cost **$1.156873140** across 1,999 known calls. Matching calibration cost **$0.414687240**, making this task **$1.571560380** across 2,527 calls. Cumulative spending is **$27.782659030**, leaving **$12.783785490** under the existing ceiling. The application and active single-pass defaults stay unchanged; only the requested aggregate report and this journal summary are published, with raw evidence private. CI monitoring remains stopped.
+Diagnostic commit `5d7bce6d` cost **$1.156873140** across 1,999 known calls. Matching calibration cost **$0.414687240**, making this task **$1.571560380** across 2,527 calls. Cumulative spending is **$27.782659030**, leaving **$12.783785490** under the existing ceiling. The application and active single-pass defaults stay unchanged; only the requested aggregate report and this journal summary are published, with raw evidence private.
 
 ### 2026-09-27 — Three-trial climb: cancellation candidate
 
@@ -899,8 +899,9 @@ No real holdout was authored or evaluated, no paid inference was used, and no
 cloud changes were applied. Private authorship/review, calibration, approval of
 the three exact policy identities, workflow delivery, and a separate foundation
 IAM apply remain prerequisites to production qualification. The transfer files
-and granular verification output stay in ignored local storage; current operation
-is documented in [HOLDOUT_SETUP.md](HOLDOUT_SETUP.md).
+and granular verification output stay in ignored local storage. The
+[historical holdout setup guide](https://github.com/rhprasad0/nova-toll-budget-agent/blob/96e6ff57ac035ad1de076ee9b8de81d25011a144/v2/eval/HOLDOUT_SETUP.md)
+records that procedure; the approach was retired on October 2, as recorded below.
 
 ### 2026-09-28 — Remove private evidence expiry
 
@@ -980,3 +981,53 @@ passed checksum verification, 97 focused compatibility, eval-isolation, and
 manifest checks passed, and the 100-case development corpus validated offline.
 The application model, prompts, cases, and schemas are unchanged; development
 eval approval remains pending. No model evaluation or paid inference was used.
+
+## 2026-10-03 — Summarize historical delivery experiments
+
+This retrospective moves granular simulated results and local timing history out
+of the deployment runbook. No new rehearsal, deployment, measurement, or paid
+inference was performed. The original controller JSON is retained byte-for-byte
+in ignored private storage; the outcomes and timing table below preserve its
+useful findings and the runbook's original measurements.
+
+### September 16 — Simulated controller outcomes
+
+The controller sample was first committed on September 16 in
+[3214a5ed](https://github.com/rhprasad0/nova-toll-budget-agent/commit/3214a5edeeae47b8b9e526b0956fb3f90e646545)
+([#525](https://github.com/rhprasad0/nova-toll-budget-agent/pull/525)). It records
+`python -m pytest tests/test_blue_green.py -q` from `v2/`, with mocked
+AWS/Terraform I/O. The sample has no measurement timestamp or application/controller
+version; the commit identifies its first recorded implementation, not a live
+rehearsal date.
+
+| Scenario | Observation | Active slot | Deployment | Recovery |
+| --- | --- | --- | --- | --- |
+| Healthy | Five probes passed after preparation and promotion | green | succeeded | not_attempted |
+| Invalid candidate | Preparation only; no observation probes | blue | failed | not_attempted |
+| Post-promotion failure | Two consecutive failed probes; restore applied | blue | failed | recovered |
+| Partial switch | Restore applied before observation probes | blue | failed | recovered |
+| Restore failure | Two consecutive failed probes; restore attempted | green | failed | failed |
+
+The sample demonstrates separate deployment and recovery outcomes: restoring blue
+does not turn a failed deployment into a success. It does not prove live AWS
+routing, public/private propagation, browser behavior, or recovery from failures
+shared by both releases or their packages/database. Keep the focused executable
+controller tests and require protected live rehearsal evidence for rollout claims.
+
+### September 21 — Local IAM test timings
+
+Provider reuse and a shared delivery-policy fixture were introduced in
+[b7c581c9](https://github.com/rhprasad0/nova-toll-budget-agent/commit/b7c581c9d7f72360eecd5f4d7af1204ebb2077cd)
+([#580](https://github.com/rhprasad0/nova-toll-budget-agent/pull/580)). The runbook
+recorded these local measurements on September 21 for the three IAM policy tests:
+
+| Configuration | Elapsed |
+| --- | --- |
+| Before provider reuse and the shared fixture | 39.74 seconds |
+| Updated, initially empty provider cache | 23.54 seconds |
+| Updated, populated provider cache | 13.24 seconds |
+
+Each row is one local run, not a hosted estimate or statistical evidence. All
+three tests passed, and fixture setup confirmed one delivery-policy rendering for
+both consumers. Retain provider reuse and the shared fixture; use comparable
+hosted measurements before further CI scheduling or caching changes.

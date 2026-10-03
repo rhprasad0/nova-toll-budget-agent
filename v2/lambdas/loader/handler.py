@@ -8,7 +8,7 @@ import logging
 import os
 import re
 import urllib.parse
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC
 from typing import Any, LiteralString, cast
 
@@ -76,7 +76,7 @@ WHERE (trip_pricing_i66.calculated_at, trip_pricing_i66.s3_key)
     < (EXCLUDED.calculated_at, EXCLUDED.s3_key)
 """
 
-_FEED_CONFIG: dict[str, tuple[Any, str]] = {
+_FEED_CONFIG: dict[str, tuple[Callable[[str], list[I95Row] | list[I66Row]], str]] = {
     "i95": (parse_trip_pricing_csv, UPSERT_I95_SQL),
     "i66": (parse_trip_pricing_xml, UPSERT_I66_SQL),
 }

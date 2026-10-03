@@ -45,7 +45,7 @@ weaken that story.
 
 | Area | Existing evidence | Limit to preserve |
 | --- | --- | --- |
-| Delivery and isolation | [Technical guide](../README.md), [blue-green runbook](../runbooks/blue-green-deployments.md), and [completed release/recovery record](https://github.com/rhprasad0/nova-toll-budget-agent/issues/522#issuecomment-5750028330) | Production blue-green activation and development recovery rehearsals have occurred. The runbook's “not run” statement is stale. |
+| Delivery and isolation | [Technical guide](../README.md), [blue-green runbook](../runbooks/blue-green-deployments.md), and [completed release/recovery record](https://github.com/rhprasad0/nova-toll-budget-agent/issues/522#issuecomment-5750028330) | Production blue-green activation and development recovery rehearsals have occurred. |
 | Recovery | The closure record links candidate rejection, recovery, and healthy cleanup; [PR #533](https://github.com/rhprasad0/nova-toll-budget-agent/pull/533) explains the retained frontend defect | The earlier rehearsal demonstrated routing/API recovery, not frontend health. Do not discard that proof or claim it covered the browser. |
 | Streaming and sessions | [Runtime](../agent/agentcore_entrypoint.py) and [proxy](../lambdas/chat_proxy/handler.mjs) implement checked streaming, release fencing, and request leases | Streaming exists. Session metadata is stored, but conversation state is in runtime memory; releases intentionally require a new chat. |
 | Data and security | [Loader](../lambdas/loader/handler.py), [pricing SQL](../db/analysis.sql), [security policy](../../SECURITY.md), and [telemetry runbook](../runbooks/telemetry-pii-redaction.md) | Code and tests establish specific contracts; live observations retain their narrower scope. |

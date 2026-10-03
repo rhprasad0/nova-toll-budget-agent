@@ -6,10 +6,11 @@ import inspect
 import json
 import re
 from collections.abc import Callable
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Self, TypedDict, cast
+from zoneinfo import ZoneInfo
 
 import pytest
 from pydantic import ValidationError
@@ -183,165 +184,53 @@ def test_prompt_point_loader_fails_closed_and_still_closes(
     assert connection.closed
 
 
-def test_system_prompt_contains_rds_points_and_v2_behavior() -> None:
-    prompt = build_system_prompt([_point()], current_date=date(2026, 8, 21))
-    normalized = " ".join(prompt.split())
+def test_system_prompt_renders_explicit_catalog_and_date_without_loading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        toll_agent,
+        "load_prompt_points",
+        lambda: pytest.fail("explicit catalog must not load RDS"),
+    )
+    point = _point(label='Exit "Leesburg" — café 🛣️')
 
-    assert '"point_id": "greenway:1:entry:EB"' in prompt
-    assert '"coordinates"' in prompt
-    assert "get_current_toll_price" in prompt
-    assert "get_annual_toll_ballpark" in prompt
-    assert "exactly two registered tools" in prompt
-    assert "present only the alternatives returned by the tool" in normalized
-    assert "Never silently substitute an alternative" in normalized
-    assert "reverse the outbound endpoints" in normalized
-    assert "outbound departure time, return departure time, weekdays" in normalized
-    assert "gross annual income" in normalized
-    assert "52 times the number of supplied weekdays" in normalized
-    assert "Monday through Friday is 260" in normalized
-    assert "wait for the user to accept or adjust" in normalized
-    assert "confirmation question MUST explicitly offer both choices" in normalized
-    assert "holidays, paid time off, or remote-work days" in normalized
-    assert "toll-commute affordability assistant" in normalized
-    assert "tolled portion only" in normalized
-    assert "straight-line" in normalized
-    assert "$0.685" in prompt
-    assert "one-third" in normalized
-    assert "annualized daily-P50 toll scenario" in normalized
-    assert "middle daily scenario" in normalized
-    assert "middle historical scenario" not in normalized
-    assert (
-        "combined cost as a share of after-tax income, never tolls alone" in normalized
-    )
-    assert "both daily and annual vehicle costs" in normalized
-    assert (
-        "Do not subtract vehicle costs from income or add a remaining-income figure"
-        in normalized
-    )
-    assert "both its daily and annual toll amounts" in normalized
-    assert "P50 annual toll" not in normalized
-    assert "fixed TollChat vehicle-cost assumption" in normalized
-    assert "AAA" not in prompt
-    assert "P50" in prompt and "P25" in prompt and "P90" in prompt
-    assert "Markdown table" in normalized
-    assert "bold" in normalized and "emoji" in normalized
-    assert "Additional gross salary needed to offset" in normalized
-    assert "HOV" not in prompt
-    assert 'ask exactly "**🛣️ Do you mean I-66 or I-395?**"' in normalized
-    assert "Washington D.C. I-66" in normalized
-    assert "Washington D.C. I-95/I-395 Northbound" in normalized
-    assert "Washington D.C. from I-495 Southbound via I-395" in normalized
-    assert "Washington D.C. I-395 Southbound" in normalized
-    assert "required-input acquisition takes precedence" in normalized
-    assert "one corrective retry" in normalized
-    assert "Never make a third call" in normalized
-    assert "exact point_id returned in that alternative" in normalized
-    assert "use the required endpoint role as the tie-breaker" in normalized
-    assert "travel toward Route 28 uses eastbound (`EB`) points" in normalized
-    assert "travel away from Route 28 uses westbound (`WB`) points" in normalized
-    assert "Recheck this direction after an origin correction" in normalized
-    assert "MUST immediately make one corrective retry" in normalized
-    assert "non-Washington annual route validation failure" in normalized
-    assert (
-        "If an annual route is unavailable and the tool returns no alternatives"
-        in normalized
-    )
-    assert "following the tool-returned alternative-selection flow above" in normalized
-    assert (
-        "qualified-Washington single-alternative immediate corrective retry above"
-        " remains higher precedence" in normalized
-    )
-    assert "prices only the current toll" in normalized
-    assert "offer to check the current toll" in normalized
-    assert "not affiliated with, endorsed by, or acting for VDOT" in normalized
-    assert "Every user-facing response MUST use Markdown" in normalized
-    assert "include at least one relevant emoji" in normalized
-    assert "### 🚧 Express Lanes unavailable" in prompt
-    assert "h:MM AM/PM EST or EDT" in prompt
-    assert "9:30 AM EDT" in prompt
-    assert "9:30 AM EST" in prompt
-    assert "actual zone abbreviation" in normalized
-    assert "preserve that timestamp's clock time" in normalized
-    assert "use the literal `EST` suffix year-round" not in normalized
-    assert "For every observed or modeled component" in normalized
-    assert (
-        "Only an actual `observed_at` supports an observation-time label" in normalized
-    )
-    assert "Annualized daily scenarios" in normalized
-    assert (
-        "without suggesting a midpoint, example salary, or converted income"
-        in normalized
-    )
-    assert (
-        "does not make fixed or modeled prices historically observed tolls"
-        in normalized
-    )
-    assert "recent_movement" in prompt
-    assert "net_change_usd" in prompt
-    assert "unchanged component must still show its `$0.00` net change" in normalized
-    assert "`rising`: 📈" in prompt
-    assert "`falling`: 📉" in prompt
-    assert "`unchanged`: ➡️" in prompt
-    assert "`mixed`: 🔄" in prompt
-    assert "prior_week_comparison" in prompt
-    assert "lower than, equal to, or higher than" in normalized
-    assert "⚠️ Higher than the recent median" in prompt
-    assert "🎉 You're getting a deal — below the recent median" in prompt
-    assert "✅ At the recent median" in prompt
-    assert "typical recent price only when all 3 of 3" in normalized
-    assert "Never combine component comparisons" in normalized
-    assert "omit that comparison" in normalized
-    assert "data is stale or too old to use" in normalized
-    assert "Do not state an observation's age" in normalized
-    assert (
-        "For a successful `facility: i95_i495` component, treat `source_status` "
-        "`NO_DETERMINATION` as non-material source-feed metadata and do not "
-        "mention or qualify the price with it." in normalized
-    )
-    assert "I-95 closure fallback offer" in prompt
-    assert "`fallback_required` is `true`" in normalized
-    assert "`i95_opposite_direction_open` or `i95_fully_closed`" in normalized
-    assert "I-495 Express northbound start at I-95 (TP1NB)" in normalized
-    assert "I-495 Express southbound end at I-95 (TP1SB)" in normalized
-    assert "Wait for the user to accept the offer" in normalized
-    assert "preserve the original other endpoint and pricing profile" in normalized
-    assert "general-purpose lanes and is not included" in normalized
-    assert "Do not offer this fallback for `unknown`" in normalized
-    assert "Reagan Airport or a southbound I-395 entry" in normalized
-    assert "select `i495:1859ND`" in normalized
-    assert "select `i95:206NO` as the origin. Westpark Drive uses `i495:185ND`" in (
-        normalized
-    )
-    assert "Jones Branch/Route 123 uses `i495:183ND`" in normalized
-    assert "Route 7 uses `i495:186ND`" in normalized
-    assert "Westpark uses `i495:185SO`" in normalized
-    assert "Jones Branch/Route 123 uses `i495:183SO`" in normalized
-    assert "Route 7 uses `i495:186SO`" in normalized
-    assert "The complete endpoint `Leesburg`, case-insensitively, means" in normalized
-    assert (
-        "For a retained current-price trip from bare Leesburg to bare Washington"
-        in normalized
-    )
-    assert "`greenway:1:entry:EB` and `i95:2249ND`" in normalized
-    assert (
-        "For a retained annual trip from bare Leesburg to bare Washington" in normalized
-    )
-    assert "`i95:2232SO` to `greenway:1:exit:WB`" in normalized
-    assert "do not first try `i95:224ND` or a Springfield endpoint" in normalized
-    assert "For bare Leesburg to Route 28, stay on the Greenway" in normalized
-    assert "`greenway:1:entry:EB` to `greenway:28:exit:EB` outbound" in normalized
-    assert "`greenway:28:entry:WB` to `greenway:1:exit:WB`" in normalized
-    assert "i95_northbound_requires_i495_restart" in normalized
-    assert "suggested_destination_point_id" in normalized
-    assert "`prefix` with boundary `i495:192NO`" in normalized
-    assert "`suffix` with boundary `i495:192SD`" in normalized
-    assert "qualifying accepted I-95 fallback" in normalized
-    assert "Today in America/New_York is 8/21/2026" in normalized
-    assert "final roadside sign" not in normalized
-    assert "30 minutes" not in normalized
-    assert "maximum_observation_age_minutes" not in prompt
-    assert "plan_toll_route" not in prompt
-    assert "i95_route" not in prompt
+    prompt = build_system_prompt([point], current_date=date(2026, 8, 21))
+    catalog = json.loads(prompt.rsplit("```json\n", 1)[1].split("\n```", 1)[0])
+
+    assert len(catalog) == 1
+    assert {key: catalog[0][key] for key in point} == point
+    assert prompt.count('"point_id": "greenway:1:entry:EB"') == 1
+    assert "8/21/2026" in prompt
+    assert "{CURRENT_DATE}" not in prompt
+    assert "{PROMPT_POINTS_JSON}" not in prompt
+
+
+def test_system_prompt_loads_catalog_once_and_uses_new_york_date(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    points = [_point()]
+    calls = 0
+
+    def load_points() -> object:
+        nonlocal calls
+        calls += 1
+        return toll_agent.parse_prompt_points(points)
+
+    def now(tz: ZoneInfo) -> datetime:
+        assert tz.key == "America/New_York"
+        return datetime(2027, 1, 1, 4, 30, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(toll_agent, "load_prompt_points", load_points)
+    monkeypatch.setattr(toll_agent, "datetime", SimpleNamespace(now=now))
+
+    prompt = build_system_prompt()
+    catalog = json.loads(prompt.rsplit("```json\n", 1)[1].split("\n```", 1)[0])
+
+    assert calls == 1
+    assert {key: catalog[0][key] for key in points[0]} == points[0]
+    assert "12/31/2026" in prompt
+    assert "{CURRENT_DATE}" not in prompt
+    assert "{PROMPT_POINTS_JSON}" not in prompt
 
 
 def test_system_prompt_matches_its_versioned_contract() -> None:

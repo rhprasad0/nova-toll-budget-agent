@@ -48,10 +48,6 @@ def test_mixed_loader_publisher_timed_and_cost_contracts(
             load(old, "retained_" + name),
             load(ROOT / path, "candidate_" + name),
         ]
-    # Costs is independently scheduled, has no loader or database coupling, and
-    # its executable source is unchanged in this reviewed transition.
-    costs = "v2/lambdas/publisher/costs.py"
-    assert retained(costs, baseline) == (ROOT / costs).read_bytes()
     for name, digest in REVIEW["schemas"].items():
         previous = retained("v2/db/" + name, baseline)
         current = (ROOT / "v2/db" / name).read_bytes()

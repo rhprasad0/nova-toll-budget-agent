@@ -69,14 +69,14 @@ migrations; the later production cutover approval authorizes application routing
 Before preparation apply, the trusted gate requires the reviewed package hashes,
 unchanged schema contracts and serving baseline in
 `v2/scripts/shared-package-compatibility.json`. This record covers the development
-transition from `2480412ecc87e0ae8e020ad6dd1220bc32bf2fd8` and retains the production
+transition from `20e341ca0bb40b92509a69ce3d60e2c0044bb2fe` and retains the production
 baseline `537a4aa480bc95de704a4af5998e376c05689887`. Preparation checks compatibility
 before migrations and repeats the check before applying the saved plan.
 An already-completed preparation retains these verified packages without needing
 to repeat that transition from the original baseline. Extending it requires
 review and focused compatibility tests; do not replace the baseline merely to
 silence a gate. Credential-free CI exercises old/new loader events, publishers,
-timed-check contracts, the unchanged independent costs handler, and the retained
+timed-check contracts, the independently scheduled costs handler, and the retained
 database contracts against the disposable upgraded schema.
 
 The trusted PR plan, initial preparation and saved-plan revalidation share the
@@ -469,16 +469,8 @@ contract, trusted builds, canary pacing and five observation probes retain their
 existing behavior. Use hosted measurements before splitting jobs, parallelizing
 tests, consolidating builds or adding caches shared across runs.
 
-Local measurements on 2026-09-21 for the three IAM policy tests:
-
-| Configuration | Elapsed |
-| --- | --- |
-| Before provider reuse and the shared fixture | 39.74 seconds |
-| Updated, initially empty provider cache | 23.54 seconds |
-| Updated, populated provider cache | 13.24 seconds |
-
-Each row is one local run, not a hosted estimate. All three tests passed, and
-fixture setup output confirmed one delivery-policy rendering for both consumers.
+The [experiment journal](../eval/EXPERIMENT_JOURNAL.md#september-21--local-iam-test-timings)
+preserves the September 21 local provider-cache comparison and its limitations.
 
 ## Rehearsal and evidence
 
@@ -492,8 +484,8 @@ compatibility evidence for both retained applications. A new shared-package
 transition requires updating the reviewed record and its focused tests together.
 **These tests do not prove a live deployment.**
 
-The [sanitized simulated rollback record](evidence/blue-green-simulated-rollback.json)
-records the executed controller-test outcomes separately from live evidence.
+The [experiment journal](../eval/EXPERIMENT_JOURNAL.md#september-16--simulated-controller-outcomes)
+summarizes the historical mocked controller outcomes separately from live evidence.
 
 After bootstrap review, rehearse through protected exact-release delivery:
 
