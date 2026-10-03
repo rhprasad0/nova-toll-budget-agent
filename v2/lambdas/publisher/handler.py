@@ -35,6 +35,7 @@ CA_BUNDLE_PATH = str(Path(__file__).with_name("rds-ca-bundle.pem"))
 PUBLIC_PREFIX = "tolls/i95-i495"
 I66_PUBLIC_PREFIX = "tolls/i66"
 _PREFIXES = {FACILITY: PUBLIC_PREFIX, I66_FACILITY: I66_PUBLIC_PREFIX}
+_FACILITY_NAMES = {FACILITY: "I-95/I-495", I66_FACILITY: "I-66"}
 MANIFEST_KEY = f"{PUBLIC_PREFIX}/manifest.json"
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://tollchat.ai").rstrip("/")
 PUBLICATION_FORMAT_VERSION = "3.0.0"
@@ -709,6 +710,8 @@ def _report_document(
 
 def _render_report_html(document: dict[str, Any], canonical_url: str) -> str:
     route = cast(dict[str, str], document["route"])
+    facility = cast(str, document["facility"])
+    facility_name = _FACILITY_NAMES[facility]
     cells = (
         "local_start",
         "status",
@@ -727,9 +730,44 @@ def _render_report_html(document: dict[str, Any], canonical_url: str) -> str:
         + "</tr>"
         for row in cast(list[dict[str, Any]], document["hours"])
     )
-    title = f"{route['origin_area']} to {route['destination_area']} tolls"
+    title = (
+        f"{facility_name} {route['direction']}: "
+        f"{route['origin_area']} to {route['destination_area']} tolls"
+    )
     week = cast(dict[str, str], document["week"])
-    return f'<!doctype html><html lang="en"><head><meta charset="utf-8"><link rel="canonical" href="{escape(canonical_url, quote=True)}"><title>{escape(title)}</title></head><body><main><h1>{escape(title)}</h1><p>{escape(week["start_local"])} to {escape(week["end_local"])}</p><table><thead><tr><th>Date/hour</th><th>Status</th><th>Observed</th><th>Expected</th><th>Min</th><th>Median</th><th>Max</th></tr></thead><tbody>{rows}</tbody></table></main></body></html>\n'
+    period = f"{week['start_local']} to {week['end_local']}"
+    description = f"Historical hourly tolls in USD for {title}, {period}."
+    coverage_note = (
+        "Some I-95/I-495 prices use modeled proxy observations for missing source routes."
+        if facility == FACILITY
+        else "I-66 rows cover scheduled tolled hours only."
+    )
+    return (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        f'<meta name="description" content="{escape(description, quote=True)}">'
+        f'<link rel="canonical" href="{escape(canonical_url, quote=True)}">'
+        f"<title>{escape(title)}</title></head><body><main>"
+        f'<nav><a href="/">TollChat</a> · <a href="/{_PREFIXES[facility]}/">'
+        f"{facility_name} toll reports</a></nav><h1>{escape(title)}</h1>"
+        f"<p>Reporting period: {escape(period)} (end exclusive). "
+        "All hours use America/New_York (Eastern time), including daylight saving time.</p>"
+        "<p>Amounts are US dollars (USD). Hourly minimum, median, and maximum "
+        "summarize complete, time-aligned route totals across "
+        f"{escape(str(document['path_count']))} supported paths, sampled every "
+        f"{escape(str(document['cadence_minutes']))} minutes. "
+        "Observed and expected counts describe sample coverage across those paths. "
+        "Missing means no complete observation; it does not mean a zero toll.</p>"
+        f"<p>{coverage_note} These are historical observations, not current toll quotes.</p>"
+        '<p>Source: public <a href="https://smarterroads.vdot.virginia.gov/faq">'
+        "VDOT SmarterRoads</a> toll data, summarized by TollChat. "
+        f'<a href="{escape(canonical_url + "report.json", quote=True)}" '
+        'type="application/json">Download report JSON</a>.</p>'
+        "<table><thead><tr><th>Date/hour (Eastern time)</th><th>Status</th>"
+        "<th>Observed</th><th>Expected</th><th>Min (USD)</th><th>Median (USD)</th>"
+        f"<th>Max (USD)</th></tr></thead><tbody>{rows}</tbody></table>"
+        "</main></body></html>\n"
+    )
 
 
 def _render_index(paths: tuple[_Path, ...]) -> str:
@@ -737,14 +775,34 @@ def _render_index(paths: tuple[_Path, ...]) -> str:
         f'<li><a href="/{escape(_route_key(path), quote=True)}/">{escape(path.origin_area)} to {escape(path.destination_area)} ({escape(path.direction)})</a></li>'
         for path in paths
     )
-    facility_name = "I-66" if paths[0].facility == I66_FACILITY else "I-95/I-495"
-    return f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{facility_name} toll reports</title></head><body><main><h1>{facility_name} toll reports</h1><ul>{links}</ul></main></body></html>\n'
+    facility = paths[0].facility
+    facility_name = _FACILITY_NAMES[facility]
+    canonical_url = f"{PUBLIC_BASE_URL}/{_PREFIXES[facility]}/"
+    return (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        f'<meta name="description" content="Historical {facility_name} hourly toll '
+        'reports for the prior completed week, by route and direction, in USD.">'
+        f'<link rel="canonical" href="{escape(canonical_url, quote=True)}">'
+        f"<title>{facility_name} toll reports</title></head><body><main>"
+        '<nav><a href="/">TollChat</a></nav>'
+        f"<h1>{facility_name} toll reports</h1>"
+        "<p>Reports cover the prior completed week. Each report states its reporting "
+        "period, Eastern timezone, and observation coverage. Amounts are in US "
+        f"dollars (USD), not current toll quotes.</p><ul>{links}</ul>"
+        "</main></body></html>\n"
+    )
 
 
 def _render_sitemap(paths: tuple[_Path, ...]) -> str:
+    index_urls = tuple(
+        f"{PUBLIC_BASE_URL}/{prefix}/"
+        for prefix in dict.fromkeys(_PREFIXES[path.facility] for path in paths)
+    )
+    report_urls = tuple(f"{PUBLIC_BASE_URL}/{_route_key(path)}/" for path in paths)
     urls = "".join(
-        f"<url><loc>{escape(PUBLIC_BASE_URL + '/' + _route_key(path) + '/', quote=False)}</loc></url>"
-        for path in paths
+        f"<url><loc>{escape(url, quote=False)}</loc></url>"
+        for url in (*index_urls, *report_urls)
     )
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'

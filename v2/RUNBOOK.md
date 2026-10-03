@@ -618,9 +618,16 @@ report_manifest_is_valid i66 16 "$REPORT_MANIFEST_I66"
 unset REPORT_RESULT REPORT_SMOKE_ID REPORT_STARTED_MS PUBLISHER_LOG_GROUP
 ```
 
-Check every canonical report and JSON sibling with bounded concurrency, then
-deep-check both hostnames, the crawler policy, representative agent families,
-and API isolation:
+The sitemap contains 262 route reports and two facility indexes. Check every
+canonical report and JSON sibling with bounded concurrency, then check the
+indexes, homepage discovery links, retired-route responses, both hostnames,
+crawler policy, representative agent families, and API isolation:
+
+Detailed entrance/exit URLs are retired. Verified replacements return 301 to the
+matching area report; other URLs in that retired namespace return 410. After
+deployment and these checks, resubmit the sitemap and start Search Console
+validation for the forbidden URLs. Redirected and removed URLs can remain
+excluded; indexing of the current reports is Google's decision.
 
 ```sh
 set -euo pipefail
@@ -641,39 +648,85 @@ test -n "$SITE_DISTRIBUTION"
 [[ "$SITE_DISTRIBUTION" =~ ^[A-Z0-9]+$ ]]
 test "$SITE_URL" = "https://tollchat.ai"
 REPORT_URLS="$(mktemp)"
+SITEMAP_URLS="$(mktemp)"
+REPORT_PAGE="$(mktemp)"
+trap 'rm -f -- "$REPORT_PAGE" "$REPORT_URLS" "$SITEMAP_URLS"' EXIT
 curl --fail-with-body --silent --show-error "$SITE_URL/sitemap.xml" \
-  | grep -o '<loc>[^<]*</loc>' | sed 's#</\?loc>##g' >"$REPORT_URLS"
+  | python3 -c 'import sys, xml.etree.ElementTree as ET; root = ET.parse(sys.stdin).getroot(); assert root.tag == "{http://www.sitemaps.org/schemas/sitemap/0.9}urlset"; urls = [node.text for node in root.findall("{*}url/{*}loc")]; assert len(urls) == len(set(urls)) == 264; assert all(url.startswith("https://tollchat.ai/tolls/") and url.endswith("/") for url in urls); print("\n".join(urls))' >"$SITEMAP_URLS"
+for facility in i95-i495 i66; do
+  index_url="$SITE_URL/tolls/$facility/"
+  grep -Fx "$index_url" "$SITEMAP_URLS"
+  curl --fail-with-body --silent --show-error "$index_url" >"$REPORT_PAGE"
+  grep -F '<link rel="canonical" href="'"$index_url"'">' "$REPORT_PAGE" >/dev/null
+  if grep -qi 'noindex\|<script' "$REPORT_PAGE"; then exit 1; fi
+  curl --fail-with-body --silent --show-error "https://www.tollchat.ai/tolls/$facility/" \
+    | grep -F '<link rel="canonical" href="'"$index_url"'">' >/dev/null
+  curl --fail-with-body --silent --show-error "$SITE_URL/" \
+    | grep -F 'href="'"$index_url"'"' >/dev/null
+done
+curl --fail-with-body --silent --show-error "$SITE_URL/" \
+  | grep -F '<link rel="canonical" href="https://tollchat.ai/">' >/dev/null
+for legacy in /tolls /tolls/; do
+  test "$(curl --silent --show-error --output /dev/null --dump-header "$REPORT_PAGE" \
+    --write-out '%{http_code}' "$SITE_URL$legacy")" -eq 301
+  grep -iFx $'location: https://tollchat.ai/#toll-reports\r' "$REPORT_PAGE"
+done
+LEGACY_REPORT="$SITE_URL/tolls/i95-i495/woodburn-gallows-road-merrifield-northbound/tysons-route-7-leesburg-pike-northbound/"
+test "$(curl --silent --show-error --output /dev/null --dump-header "$REPORT_PAGE" \
+  --write-out '%{http_code}' "$LEGACY_REPORT")" -eq 301
+grep -iFx $'location: https://tollchat.ai/tolls/i95-i495/northbound/woodburn-to-tysons/\r' "$REPORT_PAGE"
+curl --fail-with-body --silent --show-error --location "$LEGACY_REPORT" \
+  | grep -F '<link rel="canonical" href="https://tollchat.ai/tolls/i95-i495/northbound/woodburn-to-tysons/">' >/dev/null
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  "$SITE_URL/tolls/i95-i495/arlington-pentagon-pentagon-city-southbound/quantico-joplin-road-southbound/")" -eq 410
+grep -vFx -e "$SITE_URL/tolls/i95-i495/" -e "$SITE_URL/tolls/i66/" \
+  "$SITEMAP_URLS" >"$REPORT_URLS"
 test "$(wc -l <"$REPORT_URLS")" -eq 262
 xargs -P 8 -n 1 sh -c '
+  set -eu
   html="$1"
-  curl --fail --silent --show-error --head "$html" \
-    | grep -qi "^content-type: text/html"
-  curl --fail --silent --show-error --head "${html}report.json" \
-    | grep -qi "^content-type: application/json"
+  page="$(mktemp)"
+  headers="$(mktemp)"
+  trap "rm -f -- \"$page\" \"$headers\"" EXIT
+  curl --fail --silent --show-error --dump-header "$headers" "$html" >"$page"
+  grep -qi "^content-type: text/html" "$headers"
+  if grep -qi "^x-robots-tag:.*noindex" "$headers" \
+    || grep -qi "noindex\|<script" "$page"; then exit 1; fi
+  grep -F "<link rel=\"canonical\" href=\"$html\">" "$page" >/dev/null
+  grep -F "<table>" "$page" >/dev/null
+  grep -F "USD" "$page" >/dev/null
+  grep -F "America/New_York" "$page" >/dev/null
+  curl --fail --silent --show-error --dump-header "$headers" \
+    "${html}report.json" >"$page"
+  grep -qi "^content-type: application/json" "$headers"
+  python3 -c "import json, sys; json.load(sys.stdin)" <"$page"
 ' _ <"$REPORT_URLS"
 
 REPORT_URL="$SITE_URL/tolls/i95-i495/northbound/dumfries-to-tysons/"
 I66_REPORT_URL="$(grep '/tolls/i66/' "$REPORT_URLS" | head -n 1)"
 test -n "$I66_REPORT_URL"
-REPORT_PAGE="$(mktemp)"
 curl --fail-with-body --silent --show-error "$REPORT_URL" >"$REPORT_PAGE"
 grep -F '<link rel="canonical" href="'"$REPORT_URL"'">' "$REPORT_PAGE"
 grep -F '<table>' "$REPORT_PAGE"
-! grep -qi 'noindex\|<script' "$REPORT_PAGE"
+if grep -qi 'noindex\|<script' "$REPORT_PAGE"; then exit 1; fi
 curl --fail-with-body --silent --show-error "$I66_REPORT_URL" >"$REPORT_PAGE"
 grep -F '<table>' "$REPORT_PAGE"
 curl --fail-with-body --silent --show-error "$SITE_URL/robots.txt" \
   | grep -F "Sitemap: $SITE_URL/sitemap.xml"
-for agent in OAI-SearchBot Googlebot Claude-SearchBot PerplexityBot bingbot \
-  Amzn-SearchBot Applebot DuckAssistBot; do
-  curl --fail-with-body --silent --show-error --user-agent "$agent" \
-    "$REPORT_URL" >/dev/null
+for agent in OAI-SearchBot ChatGPT-User Googlebot Claude-SearchBot Claude-User \
+  PerplexityBot bingbot Amzn-SearchBot Applebot DuckAssistBot; do
+  for path in /robots.txt /sitemap.xml "${REPORT_URL#"$SITE_URL"}" \
+    "${I66_REPORT_URL#"$SITE_URL"}"; do
+    curl --fail-with-body --silent --show-error --user-agent "$agent" \
+      "$SITE_URL$path" >/dev/null
+  done
 done
 curl --fail-with-body --silent --show-error "$SITE_URL/api/config" >/dev/null
 test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
   "$SITE_URL/api/chat")" -eq 404
-rm -f -- "$REPORT_PAGE" "$REPORT_URLS"
-unset REPORT_PAGE REPORT_URL I66_REPORT_URL REPORT_URLS SITE_URL
+rm -f -- "$REPORT_PAGE" "$REPORT_URLS" "$SITEMAP_URLS"
+trap - EXIT
+unset REPORT_PAGE REPORT_URL I66_REPORT_URL REPORT_URLS SITEMAP_URLS SITE_URL LEGACY_REPORT
 ```
 
 Terraform uploads both application packages to versioned S3 keys and pins the
