@@ -248,6 +248,15 @@ test("public API gate allows only the deployed operations", async () => {
   assert.equal(blocked.statusCode, 404);
 });
 
+test("homepage links to production reports without running JavaScript", async () => {
+  const source = await readFile(new URL("../agent/dev_chat.html", import.meta.url), "utf8");
+  assert.ok(source.includes('<link rel="canonical" href="https://tollchat.ai/">'));
+  assert.ok(source.includes('id="toll-reports"'));
+  for (const facility of ["i95-i495", "i66"]) {
+    assert.ok(source.includes(`href="https://tollchat.ai/tolls/${facility}/"`));
+  }
+});
+
 test("public report routes rewrite toll directories with or without trailing slashes", async () => {
   const source = await readFile(new URL("../agent/public-report-routes.js", import.meta.url), "utf8");
   const context = /** @type {{rewrite(event: {request: {method: string, uri: string}}): {uri: string}}} */ ({});
@@ -255,6 +264,10 @@ test("public report routes rewrite toll directories with or without trailing sla
 
   for (const [uri, expected] of [
     ["/tolls/i95-i495/", "/tolls/i95-i495/index.html"],
+    ["/tolls/i66/", "/tolls/i66/index.html"],
+    ["/tolls/i66", "/tolls/i66/index.html"],
+    ["/tolls/i95-i495/southbound/tysons-to-stafford/", "/tolls/i95-i495/southbound/tysons-to-stafford/index.html"],
+    ["/tolls/i95-i495/southbound/tysons-to-stafford/report.json", "/tolls/i95-i495/southbound/tysons-to-stafford/report.json"],
     ["/tolls/i95-i495/origin/destination/", "/tolls/i95-i495/origin/destination/index.html"],
     ["/tolls/i95-i495/origin/destination", "/tolls/i95-i495/origin/destination/index.html"],
     ["/tolls/i95-i495/origin/destination/report.json", "/tolls/i95-i495/origin/destination/report.json"],
@@ -270,6 +283,46 @@ test("public report routes rewrite toll directories with or without trailing sla
     ["/api/config", "/api/config"],
   ]) {
     assert.equal(context.rewrite({ request: { method: "GET", uri } }).uri, expected);
+  }
+});
+
+test("retired reports redirect only to verified replacements and otherwise return Gone", async () => {
+  const source = await readFile(new URL("../agent/public-report-routes.js", import.meta.url), "utf8");
+  const context = /** @type {{route(event: {request: {method: string, uri: string}}): {statusCode: number, headers: Record<string, {value: string}>, body?: {data: string}}}} */ ({});
+  vm.runInNewContext(`${source}\nthis.route = handler;`, context);
+
+  const replacements = [
+    ["woodburn-gallows-road-merrifield-northbound/tysons-route-7-leesburg-pike-northbound", "northbound/woodburn-to-tysons/"],
+    ["lorton-gordon-boulevard-route-123-northbound-i95-211no/idylwood-lee-highway-route-29-northbound", "northbound/lorton-to-idylwood/"],
+    ["tysons-jones-branch-drive-route-123-southbound/stafford-courthouse-road-route-630-southbound", "southbound/tysons-to-stafford/"],
+    ["tysons-westpark-drive-tysons-corner-southbound-i495-185so/stafford-courthouse-road-route-630-southbound", "southbound/tysons-to-stafford/"],
+    ["tysons-route-7-leesburg-pike-southbound/woodburn-gallows-road-merrifield-southbound", "southbound/tysons-to-woodburn/"],
+    ["washington-washington-d-c-district-of-columbia-southbound/fredericksburg-i-95-near-route-17-route-17-southbound-exit-southbound", "southbound/washington-to-fredericksburg/"],
+    ["fredericksburg-i-95-near-route-17-route-17-northbound-entrance-northbound/tysons-jones-branch-drive-route-123-northbound", "northbound/fredericksburg-to-tysons/"],
+    ["tysons-dulles-toll-road-dulles-access-road-southbound-i495-182so/lorton-route-1-richmond-highway-southbound-i95-210sd", "southbound/tysons-to-lorton/"],
+    ["tysons-jones-branch-drive-route-123-southbound/arlington-washington-d-c-washington-northbound", "southbound/tysons-to-arlington/"],
+  ];
+  const removed = "arlington-pentagon-pentagon-city-southbound/quantico-joplin-road-southbound";
+  for (const method of ["GET", "HEAD"]) {
+    for (const suffix of ["", "/", "/index.html", "/report.json"]) {
+      for (const [legacy, target] of replacements) {
+        const response = context.route({ request: { method, uri: `/tolls/i95-i495/${legacy}${suffix}` } });
+        assert.equal(response.statusCode, 301);
+        assert.equal(response.headers.location.value,
+          `https://tollchat.ai/tolls/i95-i495/${target}${suffix === "/report.json" ? "report.json" : ""}`);
+      }
+      for (const legacy of [removed, "unknown-northbound/unknown-northbound"]) {
+        const response = context.route({ request: { method, uri: `/tolls/i95-i495/${legacy}${suffix}` } });
+        assert.equal(response.statusCode, 410);
+        assert.equal(response.headers.location, undefined);
+        assert.match(response.body?.data ?? "", /retired/);
+      }
+    }
+    for (const uri of ["/tolls", "/tolls/"]) {
+      const response = context.route({ request: { method, uri } });
+      assert.equal(response.statusCode, 301);
+      assert.equal(response.headers.location.value, "https://tollchat.ai/#toll-reports");
+    }
   }
 });
 

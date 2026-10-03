@@ -365,6 +365,9 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated() -> None:
     assert "cloudfront wait distribution-deployed" in DEPLOYMENT
     assert "aws_lambda_function.publisher" in DEPLOYMENT
     assert 'test "$(wc -l <"$REPORT_URLS")" -eq 262' in DEPLOYMENT
+    assert "len(set(urls)) == 264" in DEPLOYMENT
+    assert "for facility in i95-i495 i66; do" in DEPLOYMENT
+    assert "ChatGPT-User Googlebot Claude-SearchBot Claude-User" in DEPLOYMENT
     assert (
         "Disabling publication does not withdraw existing report objects" in DEPLOYMENT
     )

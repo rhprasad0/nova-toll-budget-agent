@@ -1,9 +1,12 @@
 import json
 from collections.abc import Iterator, Sequence
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from html.parser import HTMLParser
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, NoReturn, Self, cast
+from xml.etree import ElementTree
 
 import pytest
 
@@ -15,6 +18,20 @@ else:
 type JSON = str | int | float | bool | list[JSON] | dict[str, JSON] | None
 
 EASTERN = publisher._EASTERN
+
+
+class _PublicPage(HTMLParser):
+    def __init__(self, html: str) -> None:
+        super().__init__()
+        self.elements: list[tuple[str, dict[str, str | None]]] = []
+        self.text: list[str] = []
+        self.feed(html)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.elements.append((tag, dict(attrs)))
+
+    def handle_data(self, data: str) -> None:
+        self.text.append(data)
 
 
 def _row(
@@ -352,6 +369,67 @@ def test_public_document_and_html_contain_only_broad_data_and_escape_text() -> N
         document, "https://example.invalid/?x=<unsafe>"
     )
     assert "&lt;unsafe&gt;" in html and "?x=&lt;unsafe&gt;" in html
+    page = _PublicPage(html)
+    assert not {"unsafe", "script", "iframe"} & {tag for tag, _ in page.elements}
+    canonical = [attrs for tag, attrs in page.elements if tag == "link"]
+    assert canonical == [
+        {"rel": "canonical", "href": "https://example.invalid/?x=<unsafe>"}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("facility", "direction", "facility_name", "prefix"),
+    [
+        ("i95_i495", "northbound", "I-95/I-495", "tolls/i95-i495"),
+        ("i95_i495", "southbound", "I-95/I-495", "tolls/i95-i495"),
+        ("i66", "eastbound", "I-66", "tolls/i66"),
+        ("i66", "westbound", "I-66", "tolls/i66"),
+    ],
+)
+def test_report_html_explains_history_coverage_and_links_to_discovery(
+    facility: str, direction: str, facility_name: str, prefix: str
+) -> None:
+    path = replace(_path("x"), facility=facility, direction=direction)
+    start, end = (
+        datetime(2026, 1, 5, tzinfo=EASTERN),
+        datetime(2026, 1, 12, tzinfo=EASTERN),
+    )
+    document = publisher._report_document(path, 2, start, end, [])
+    canonical = f"https://tollchat.ai/{publisher._route_key(path)}/"
+    page = _PublicPage(publisher._render_report_html(document, canonical))
+    text = " ".join(page.text)
+    for expected in (
+        f"{facility_name} {direction}",
+        "Origin A to Destination A",
+        start.isoformat(),
+        end.isoformat(),
+        "end exclusive",
+        "America/New_York",
+        "USD",
+        "2 supported paths",
+        f"every {document['cadence_minutes']} minutes",
+        "minimum, median, and maximum",
+        "Observed and expected",
+        "does not mean a zero toll",
+        "not current toll quotes",
+        "VDOT SmarterRoads",
+    ):
+        assert expected in text
+    assert ("modeled proxy" in text) == (facility == "i95_i495")
+    assert ("scheduled tolled hours only" in text) == (facility == "i66")
+    hrefs = {attrs.get("href") for tag, attrs in page.elements if tag == "a"}
+    assert f"/{prefix}/" in hrefs
+    # Absolute JSON URLs also resolve when the page was fetched without a slash.
+    assert canonical + "report.json" in hrefs
+    assert "https://smarterroads.vdot.virginia.gov/faq" in hrefs
+    descriptions = [
+        attrs.get("content")
+        for tag, attrs in page.elements
+        if tag == "meta" and attrs.get("name") == "description"
+    ]
+    assert len(descriptions) == 1
+    assert descriptions[0] and start.isoformat() in descriptions[0]
+    assert "script" not in {tag for tag, _ in page.elements}
 
 
 def test_publish_is_manifest_last_then_paginates_and_deletes_only_stale(
@@ -1741,10 +1819,35 @@ def test_i66_descriptor_direction_collision_and_two_facility_output_are_rejected
     )
     assert len(s3.bodies) == 529
     sitemap = s3.bodies["sitemap.xml"]
-    assert sitemap.count("<url><loc>") == 262
-    assert "/tolls/i66/" in sitemap and "/tolls/i95-i495/" in sitemap
+    root = ElementTree.fromstring(sitemap)
+    assert root.tag == "{http://www.sitemaps.org/schemas/sitemap/0.9}urlset"
+    urls = [element.text for element in root.findall("{*}url/{*}loc")]
+    assert len(urls) == len(set(urls)) == 264
+    assert all(
+        url and url.startswith(publisher.PUBLIC_BASE_URL + "/tolls/") for url in urls
+    )
     assert "EB:" not in "".join(s3.bodies.values())
     for facility, count in (("i95-i495", 246), ("i66", 16)):
+        canonical = f"{publisher.PUBLIC_BASE_URL}/tolls/{facility}/"
+        assert canonical in urls
+        index = _PublicPage(s3.bodies[f"tolls/{facility}/index.html"])
+        assert ("link", {"rel": "canonical", "href": canonical}) in index.elements
+        route_links = {
+            publisher.PUBLIC_BASE_URL + cast(str, attrs["href"])
+            for tag, attrs in index.elements
+            if tag == "a" and cast(str, attrs.get("href", "")).startswith("/tolls/")
+        }
+        assert len(route_links) == count
+        assert route_links <= set(urls)
+        for url in route_links:
+            key = url.removeprefix(publisher.PUBLIC_BASE_URL + "/")
+            page = _PublicPage(s3.bodies[key + "index.html"])
+            assert ("link", {"rel": "canonical", "href": url}) in page.elements
+            assert any(
+                tag == "a" and attrs.get("href") == url + "report.json"
+                for tag, attrs in page.elements
+            )
+            assert key + "report.json" in s3.bodies
         manifest = json.loads(s3.bodies[f"tolls/{facility}/manifest.json"])
         assert manifest["schema_version"] == "3.0.0"
         assert manifest["route_count"] == count
