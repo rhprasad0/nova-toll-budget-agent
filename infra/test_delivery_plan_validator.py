@@ -3600,9 +3600,17 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         )
         for address, spec in CONTRACT.items():
             if spec.operation_class in {"cost-publication", "cost-routing"}:
+                deferred_asset = next(
+                    (
+                        asset
+                        for asset in ("evals.css", "costs-benchmark.json")
+                        if address == f'aws_s3_object.cost_assets["{asset}"]'
+                    ),
+                    None,
+                )
                 if (
-                    address == 'aws_s3_object.cost_assets["evals.css"]'
-                    and '"evals.css"'
+                    deferred_asset
+                    and f'"{deferred_asset}"'
                     not in (
                         Path(__file__).parent.parent / "v2/infra/costs.tf"
                     ).read_text()
