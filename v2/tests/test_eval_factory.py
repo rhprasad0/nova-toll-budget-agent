@@ -106,6 +106,9 @@ def test_kit_retains_default_seccomp_and_packages_namespace_exceptions(
         for name in kit.DATABASE_REFERENCES
     )
     assert (output / "DATABASE.md").is_file()
+    for name in ("AUTHORING.md", "runtime/v2/eval/factory/AUTHORING.md"):
+        assert (output / name).read_bytes() == (kit.HERE / "AUTHORING.md").read_bytes()
+        assert manifest["files"][name] == kit.sha((output / name).read_bytes())
     recipe = (
         (output / "DATABASE.md")
         .read_text()
@@ -424,6 +427,281 @@ def test_input_validation(factory: tuple[Path, str], change: str) -> None:
     path.write_text("".join(json.dumps(c) + "\n" for c in cases))
     with pytest.raises(ValueError):
         f.validate_splits(root / "drafts")
+
+
+@pytest.mark.parametrize("budget", [1, 2, 3, 4, 5])
+def test_factory_requires_five_turns_including_opening(
+    factory: tuple[Path, str], budget: int
+) -> None:
+    root, _ = factory
+    path = root / "drafts/holdout/cases.jsonl"
+    cases = [json.loads(line) for line in path.read_text().splitlines()]
+    cases[0]["actor"]["max_turns"] = budget
+    # A one-turn reference and minimum do not justify reducing the actor budget.
+    assert cases[0]["minimum_user_turns"] == 1
+    path.write_text("".join(json.dumps(c) + "\n" for c in cases))
+    if budget == 5:
+        assert set(f.validate_splits(root / "drafts")) == set(f.SPLITS)
+    else:
+        with pytest.raises(ValueError, match="five turns including the opening"):
+            f.validate_splits(root / "drafts")
+
+
+@pytest.mark.parametrize(
+    ("point", "canonical"),
+    [
+        ("greenway:7:entry:EB", "greenway:7"),
+        ("greenway:7:exit:WB", "greenway:7"),
+        ("dtr:1819:exit:WB", "dtr:1819"),
+        ("i495:1819ND", "i495:181"),
+        ("i495:180SO", "i495:181"),
+        ("i495:182SD", "i495:182"),
+        ("i95:211NO", "i95:211"),
+        ("i95:211SD", "i95:211"),
+        ("i95:219NO", "i95:219"),
+        ("i95:22329ND", "i95:2232"),
+        ("airport_iad", "airport_iad"),
+    ],
+)
+def test_canonical_catalog_access(point: str, canonical: str) -> None:
+    assert f.canonical_access(point) == canonical
+
+
+def add_route_case(
+    drafts: Path,
+    split: str,
+    legs: list[tuple[str, str]],
+    *,
+    kind: str = "current",
+    number: int | None = None,
+) -> None:
+    """Independently authored receipts in an allocated synthetic smoke case."""
+    directory = drafts / split
+    cases_path = directory / "cases.jsonl"
+    cases = [json.loads(line) for line in cases_path.read_text().splitlines()]
+    case = next(
+        c
+        for c in cases
+        if c["kind"] == kind
+        and (split != "training" or c["number"] > 20)
+        and (number is None or c["number"] == number)
+    )
+    case["max_tool_calls"] = 1
+    name = case["id"] + ".json"
+    case["steps"] = [{"fixture": name, "min_turn": 1, "required_user_patterns": []}]
+    time = (
+        "2026-10-01T08:00:00-04:00"
+        if split == "training"
+        else "2026-10-02T08:00:00-04:00"
+    )
+    case["frozen_time"] = time
+    labels = {
+        p.point_id: p.label
+        for p in f.parse_prompt_points(
+            json.loads((directory / "prompt-points.json").read_text())
+        )
+    }
+    origin, destination = legs[0]
+    case["prompt"] = (
+        f"Please check {labels[origin]} to {labels[destination]} for my synthetic {split} trip {case['number']}."
+    )
+    case["actor"]["facts"] = (
+        "You drive a two-axle passenger car with E-ZPass in toll mode. The supplied endpoints are intentional."
+    )
+    case["actor"]["goal"] = (
+        "Get the requested estimate, or learn why pricing is unavailable."
+    )
+    provenance = {
+        "kind": "synthetic",
+        "source": "route guard regression",
+        "note": "No packet or benchmark case used.",
+    }
+    arguments: dict[str, Any]
+    if kind == "annual":
+        case["prompt"] += (
+            f" Return from {labels[legs[1][0]]} to {labels[legs[1][1]]}; Mondays, leaving at 7 AM and returning at 5 PM, 40 annual days, gross salary $90,000."
+        )
+        arguments = {
+            role: {
+                "origin_point_id": origin,
+                "destination_point_id": destination,
+                "departure_time": departure,
+            }
+            for role, (origin, destination), departure in zip(
+                ("outbound", "return"), legs, ("07:00:00", "17:00:00"), strict=True
+            )
+        }
+        arguments.update(
+            weekdays=["monday"],
+            planned_annual_commute_days=40,
+            gross_annual_income_usd="90000.00",
+        )
+        tool = "get_annual_toll_ballpark"
+        error_text = (
+            f"Unable to calculate the annual toll ballpark. Reference: {case['id']}."
+        )
+    else:
+        origin, destination = legs[0]
+        arguments = {
+            "origin_point_id": origin,
+            "destination_point_id": destination,
+            "pricing_profile": {
+                "vehicle_class": "two_axle_passenger",
+                "payment_method": "e_zpass",
+                "transponder_mode": "toll",
+            },
+        }
+        tool = "get_current_toll_price"
+        error_text = f"Unable to get the current toll price. Reference: {case['id']}."
+    fixture: dict[str, Any] = {
+        "tool": tool,
+        "input": arguments,
+        "result": {
+            "toolUseId": case["id"],
+            "status": "error",
+            "content": [{"text": error_text}],
+        },
+        "is_error": True,
+        "provenance": provenance,
+    }
+    response = "Pricing failed, so I cannot give an estimate."
+    if kind == "current" and legs[0][0].startswith("i66:"):
+        price = "3.00" if split == "training" else "4.00"
+        fixture["is_error"] = False
+        fixture["result"] = {
+            **arguments,
+            "method": "latest_complete_current_facility_prices",
+            "evaluated_at": time,
+            "maximum_observation_age_minutes": 30,
+            "source_kind": "observed",
+            "total_usd": price,
+            "components": [
+                {
+                    "route_step_id": "step-1",
+                    "price_usd": price,
+                    "source_kind": "observed",
+                    "pricing_method": "source_observation",
+                    "facility": "i66",
+                    "component_evaluated_at": time,
+                    "bin_minutes": 6,
+                    "bin_start": time,
+                    "bin_end": time.replace("08:00:00", "08:06:00"),
+                    "interval_end_at": time,
+                    "observed_at": time,
+                }
+            ],
+        }
+        response = f"The current toll is ${price}, using a recent I-66 observation."
+    (directory / "fixtures" / name).write_text(json.dumps(fixture))
+    case["terminal_objective"] = "unavailable" if fixture["is_error"] else "answer"
+    case["expected_assertion"] = response
+    cases_path.write_text("".join(json.dumps(c) + "\n" for c in cases))
+    examples_path = directory / "examples.json"
+    examples = json.loads(examples_path.read_text())
+    example = next(e for e in examples if e["case_id"] == case["id"])
+    example["turns"] = [
+        {
+            "user": case["prompt"],
+            "response": response,
+            "calls": [
+                {
+                    "name": tool,
+                    **{k: fixture[k] for k in ("input", "result", "is_error")},
+                }
+            ],
+        }
+    ]
+    examples_path.write_text(json.dumps(examples))
+
+
+@pytest.mark.parametrize("split", ["holdout", "shadow"])
+@pytest.mark.parametrize(
+    ("kind", "training", "holdout"),
+    [
+        (
+            "current",
+            [("greenway:7:entry:EB", "greenway:28:exit:EB")],
+            [("greenway:7:entry:EB", "greenway:28:exit:EB")],
+        ),
+        (
+            "current",
+            [("greenway:7:entry:EB", "greenway:28:exit:EB")],
+            [("greenway:28:entry:WB", "greenway:7:exit:WB")],
+        ),
+        ("current", [("i495:182NO", "i495:181ND")], [("i495:180SO", "i495:182SD")]),
+        ("current", [("i495:182NO", "i495:181ND")], [("i495:182NO", "i495:1819ND")]),
+        ("current", [("i95:211NO", "i495:182ND")], [("i495:182SO", "i95:211SD")]),
+        (
+            "current",
+            [("i66:4:entry:EB", "i66:12:exit:EB")],
+            [("i66:12:entry:WB", "i66:4:exit:WB")],
+        ),
+        (
+            "annual",
+            [("greenway:7:entry:EB", "greenway:28:exit:EB")],
+            [
+                ("greenway:7:entry:EB", "greenway:28:exit:EB"),
+                ("dtr:17:entry:WB", "dtr:12:exit:WB"),
+            ],
+        ),
+        (
+            "annual",
+            [("greenway:7:entry:EB", "greenway:28:exit:EB")],
+            [
+                ("dtr:12:entry:EB", "dtr:17:exit:EB"),
+                ("greenway:28:entry:WB", "greenway:7:exit:WB"),
+            ],
+        ),
+    ],
+)
+def test_route_reuse_across_splits_ignores_evidence_and_groups(
+    factory: tuple[Path, str],
+    split: str,
+    kind: str,
+    training: list[tuple[str, str]],
+    holdout: list[tuple[str, str]],
+) -> None:
+    root, _ = factory
+    drafts = root / "drafts"
+    add_route_case(drafts, "training", training)
+    add_route_case(drafts, split, holdout, kind=kind)
+    # Each split passes the full offline receipt/reference checks independently.
+    for selected in ("training", split):
+        golden.validate_payload(
+            golden.load_cases(drafts / selected),
+            drafts / selected,
+            {
+                p.point_id
+                for p in f.parse_prompt_points(
+                    json.loads((drafts / selected / "prompt-points.json").read_text())
+                )
+            },
+            complete=False,
+        )
+    with pytest.raises(ValueError, match="canonical route pair crosses splits"):
+        f.validate_splits(drafts)
+
+
+@pytest.mark.parametrize("split", ["holdout", "shadow"])
+@pytest.mark.parametrize(
+    "distinct",
+    [
+        [("greenway:6:entry:EB", "greenway:28:exit:EB")],
+        [("dtr:12:entry:EB", "dtr:17:exit:EB")],
+    ],
+)
+def test_distinct_routes_and_within_split_reuse_are_valid(
+    factory: tuple[Path, str],
+    split: str,
+    distinct: list[tuple[str, str]],
+) -> None:
+    root, _ = factory
+    drafts = root / "drafts"
+    route = [("greenway:7:entry:EB", "greenway:28:exit:EB")]
+    add_route_case(drafts, "training", route, number=21)
+    add_route_case(drafts, "training", route, number=22)
+    add_route_case(drafts, split, distinct)
+    assert set(f.validate_splits(drafts)) == set(f.SPLITS)
 
 
 def test_frozen_file_and_calibration_review_bindings(factory: tuple[Path, str]) -> None:

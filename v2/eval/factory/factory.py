@@ -250,9 +250,38 @@ def input_hashes(root: Path) -> dict[str, str]:
     return {str(p.relative_to(root)): sha(p.read_bytes()) for p in files}
 
 
+def canonical_access(point_id: str) -> str:
+    """Group catalog access IDs across entry/exit and direction variants."""
+    network, _, access = point_id.partition(":")
+    access = access.split(":")[0]
+    if network in {"i95", "i495"}:
+        # 9ND is the catalog's alternate approach from I-495 southbound.
+        access = re.sub(r"(?:9ND|[NS][OD])$", "", access)
+        if network == "i495" and access == "180":
+            access = "181"  # Opposite roles at the George Washington Pkwy boundary.
+    return f"{network}:{access}" if access else network
+
+
+def route_pairs(fixture: golden.Fixture) -> set[tuple[str, ...]]:
+    """Current, outbound and return endpoint pairs, independent of evidence."""
+    pairs: set[tuple[str, ...]] = set()
+    for leg in (
+        fixture.input,
+        fixture.input.get("outbound"),
+        fixture.input.get("return"),
+    ):
+        if isinstance(leg, dict):
+            origin = leg.get("origin_point_id")
+            destination = leg.get("destination_point_id")
+            if isinstance(origin, str) and isinstance(destination, str):
+                pairs.add(tuple(sorted(map(canonical_access, (origin, destination)))))
+    return pairs
+
+
 def validate_splits(source: Path) -> dict[str, dict[str, str]]:
     groups: dict[str, str] = {}
     evidence: dict[str, str] = {}
+    routes: dict[tuple[str, ...], str] = {}
     prompts: set[str] = set()
     ids: set[str] = set()
     reference_ids: set[str] = set()
@@ -278,6 +307,10 @@ def validate_splits(source: Path) -> dict[str, dict[str, str]]:
         golden.validate_payload(
             cases, directory, {p.point_id for p in points}, complete=False
         )
+        if any(case.actor.max_turns != 5 for case in cases):
+            raise ValueError(
+                "factory actor budget must be five turns including the opening"
+            )
         examples = [
             golden.Example.model_validate(e)
             for e in json.loads((directory / "examples.json").read_text())
@@ -323,6 +356,9 @@ def validate_splits(source: Path) -> dict[str, dict[str, str]]:
                     pairs.setdefault(tag, []).append(case)
             for step in case.steps:
                 fixture = golden.load_fixture(step.fixture, directory)
+                for pair in route_pairs(fixture):
+                    if routes.setdefault(pair, split) != split:
+                        raise ValueError("canonical route pair crosses splits")
                 key = digest(
                     {k: v for k, v in fixture.model_dump().items() if k != "provenance"}
                 )
