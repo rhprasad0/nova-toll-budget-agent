@@ -38,13 +38,13 @@ RESOURCES = {
 # Reviewed public bytes. Update these pins when changing these public assets.
 ASSET_SHA256: dict[str, str] = {
     "costs-benchmark.json": "c2fa682ebddc230ac74c6b13176d39cc002c53bf189e3d0f1c61249c9f1bae06",
-    "costs.css": "36b86fbc8d0ace7b303d25cfa4aac02d7e158a03fc7d3bc8fcade098b241fff4",
-    "costs.mjs": "962cbafcfeed7a6746841eb03c0bd770f162ed47e8981643b9baefd2ca51c2c8",
+    "costs.css": "8578e3aa2939740c6010793662aa75ea99cac633e59853804e8d15e094bb0ce2",
+    "costs.mjs": "38964764c0202b1b4a35750359acd9db3ddb13020102ade803dbda383b38d153",
     "evals.css": "a769365269ebde99103a56e6ce64a619f1a728c137aeeeca93ea04023db85688",
     "public-report-routes.js": "ba6e8c5516dd63a058f58bbfc7a42829cdb61bbdb71446be65ffb027cffa392a",
-    "development/costs.html": "82dee510402e3ebec1b20120f550f3321c505f98d18765d22626a151f0f882b8",
+    "development/costs.html": "8c785f3cd1e365640ed00343acba2f9ce1c2db5166063ad4a1003f8e474c172b",
     "development/evals.html": "837320a607c7eb2bac8e507eb4d24400662523b92edb9e6202815cc721c1b1dd",
-    "production/costs.html": "502c0cfe42e468e6fb9943ccee8224b78140d7b98747a366f2c0c36191896a53",
+    "production/costs.html": "ad1f2d5f7e24cb383d1b98baf716173b6c7c7bdcc2bf5241b5e6cfe7b5d3da6b",
     "production/evals.html": "4fecf038987fd5fc018ec04eecb2e2f4166446effb62fcec5f68ecc76eea3677",
 }
 

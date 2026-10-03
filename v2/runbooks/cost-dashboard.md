@@ -93,9 +93,43 @@ successful snapshot attempt and publication, not retained data. Chat routing
 recovery does not undo billing resources or snapshots; retain valid data and
 correct billing failures through the reviewed release path.
 
-Inference collection and remaining issue #543 requirements stay open. Issue
-#542 probe integration, latency navigation, forecasting, and analytics are follow-up
-work.
+## Controlled inference benchmark
+
+The inference section reads `/assets/costs-benchmark.json`, a manually refreshed
+aggregate independent of `/costs.json`. It measures real Luna 6 calls with frozen
+tool results: actor low, TollChat medium, and judges xhigh. These settings apply
+only inside the benchmark process; application and eval defaults are unchanged.
+The 12 existing cases run three times, sequentially, with a $2 total ceiling.
+This cost-only sample does not establish evaluation reliability or public-chat
+costs. The existing scored-evaluation calibration gates are unchanged.
+
+From a clean, committed worktree's `v2/` directory, refresh with a new private
+output directory:
+
+```sh
+AWS_PROFILE=nova-toll-dev uv run python -m eval.cost_benchmark \
+  --output eval/private/costs-YYYYMMDD-HHMMSS
+```
+
+The command reads the application credential from development SSM directly into
+memory. It needs no database access. It retains detailed usage and conversations
+only under ignored `eval/private/`, then replaces the public aggregate and its
+release byte pin after all 36 attempts have complete usage. A budget stop, missing
+usage, or interrupted run retains the previous public aggregate. Review and ship
+the updated aggregate and pin through the usual PR and release process.
+
+Agent spend across all attempts, including measured failed calls, is divided by
+completed assistant turns. A truncated or interrupted response is not a completed
+turn; a completed refusal or unavailable answer is. Each role's conversation
+average uses all attempted conversations. Cached reads and writes are separated
+from uncached input; reasoning is already included in output. Pricing uses the
+recorded standard rates and per-call long-context adjustments. The sample includes
+its actual cache usage; it does not model a production traffic mix. Infrastructure
+and tool execution are excluded, and these estimates are never added to billing.
+
+See the [experiment journal](../eval/EXPERIMENT_JOURNAL.md) for measured results
+and limitations. Public-chat attribution and issue #542 probe integration,
+latency navigation, forecasting, and analytics remain follow-up work.
 
 ## Local checks
 
@@ -106,3 +140,5 @@ shared archive with `scripts/build_publisher_zip.sh` before its archive check.
 Run `node tests/cost_dashboard_browser.cjs` with Playwright available to check
 the deterministic fixtures, mobile layout, keyboard access, routes, and failure
 states. No captured billing snapshots are test inputs.
+Run `uv run pytest tests/test_cost_benchmark.py` for the credential-free benchmark
+accounting, budget, and model-setting checks.

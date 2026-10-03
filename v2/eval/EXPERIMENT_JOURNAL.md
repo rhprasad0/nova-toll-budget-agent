@@ -1031,3 +1031,39 @@ Each row is one local run, not a hosted estimate or statistical evidence. All
 three tests passed, and fixture setup confirmed one delivery-policy rendering for
 both consumers. Retain provider reuse and the shared fixture; use comparable
 hosted measurements before further CI scheduling or caching changes.
+
+### 2026-10-03 — Controlled inference cost benchmark
+
+Measured the cost dashboard's inference section using 12 existing development
+cases three times with frozen tool results, corpus **3.3.28**, harness **2.3.28**,
+and cost-benchmark runner **1.0.0**. Real Luna 6 calls used actor **low**, TollChat
+**medium**, and judges **xhigh**, with the existing prompts and output limits.
+These settings applied only inside this cost-only run; application and eval
+defaults and scored-evaluation calibration gates remain unchanged.
+
+All 36 conversations had complete usage accounting, producing 47 completed
+assistant turns. Three conversations stopped on tool-argument violations; their
+incurred inference charges remain in the totals. There were no unknown-usage
+calls or inconclusive conversations. Standard token rates verified on October 3
+give the following costs:
+
+| Role | Calls | Total inference cost | Average per attempted conversation |
+| --- | ---: | ---: | ---: |
+| TollChat agent | 85 | $0.052428 | $0.001456 |
+| Simulated user | 47 | $0.007546 | $0.000210 |
+| Evaluation judges | 108 | $0.089478 | $0.002485 |
+| Combined | 240 | **$0.149452** | **$0.004151** |
+
+Agent charges divided by completed turns were **$0.001115 per answer**, or
+**$1.115488 per 1,000 answers** at that measured average. The run stayed below its
+**$2 ceiling**, and an independent per-call calculation reconciled exactly with
+the public aggregate. Approximately 98% of agent input and 89% of judge input
+were cache reads. These repeated, frozen conversations do not establish a
+production traffic mix, cold-cache cost, evaluation reliability, or public-chat
+attribution; infrastructure and tool execution are excluded.
+
+Decision: publish this dated aggregate in the cost dashboard, with role costs,
+sample counts, interruptions, rate sources, and explicit controlled-benchmark
+labels. Refresh it manually through the cost runbook. Keep transcripts and
+granular usage in ignored private storage, and leave the separately scoped new
+eval set and runtime settings for their own change.

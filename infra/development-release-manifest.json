@@ -53,8 +53,8 @@
     "v2/agent/assets/commute-map.mjs": "6c630856b96c921b4408e6d957c53443e9b2e493281395ce843e652ee3a5de9b",
     "v2/agent/assets/commute-routes.mjs": "11ace26948706adabd14d3a995a9c8dcb117c21a4f089e56e238248b759b3cb3",
     "v2/agent/assets/costs-benchmark.json": "c2fa682ebddc230ac74c6b13176d39cc002c53bf189e3d0f1c61249c9f1bae06",
-    "v2/agent/assets/costs.css": "36b86fbc8d0ace7b303d25cfa4aac02d7e158a03fc7d3bc8fcade098b241fff4",
-    "v2/agent/assets/costs.mjs": "962cbafcfeed7a6746841eb03c0bd770f162ed47e8981643b9baefd2ca51c2c8",
+    "v2/agent/assets/costs.css": "8578e3aa2939740c6010793662aa75ea99cac633e59853804e8d15e094bb0ce2",
+    "v2/agent/assets/costs.mjs": "38964764c0202b1b4a35750359acd9db3ddb13020102ade803dbda383b38d153",
     "v2/agent/assets/coverage-locations.json": "d53fda712210689eecb7e723a00dc6800d24beb82ea05bc9bd1247456025f4c6",
     "v2/agent/assets/evals.css": "a769365269ebde99103a56e6ce64a619f1a728c137aeeeca93ea04023db85688",
     "v2/agent/assets/evals.mjs": "a702f9a953fd06ff5a6198a5435921ac777e35d9c0a86a59f2a584d5c9aa0db7",
@@ -71,7 +71,7 @@
     "v2/agent/assets/releases.html": "8236f2c55bec90913dd04a3dc397b8aa1c62810a8fd024e87299897a004cf635",
     "v2/agent/assets/tollchat-annual-commute-example.png": "c648fb2b4be4a8f4741d807a0b6e946aff6bcfbc20529bc288900e39beb6bb6a",
     "v2/agent/assets/tollchat-logo.png": "da0167c64714b0e37c234d18695aecf6f81226627ca21e105e1fcc43c397e1a6",
-    "v2/agent/costs.html": "6e5e31828ba6c2ca96d57d72c2549452b7343c19c2ad1c7d59dca57e94862e45",
+    "v2/agent/costs.html": "6d7deb55e3473d64ebdcf2ca36134f7887c924eb256041299c77ac1be944cc0a",
     "v2/agent/dev_chat.html": "2c16d441f91600c12093623ba21859d1f33399cd695f942df8157ab73926cc9a",
     "v2/agent/evals.html": "de52752d330b5298e17ed5a2c57bf92b22e358f799c3a18be79e7ae7130f7fca",
     "v2/agent/faq.html": "8561e7393285af1d9dbc122027c62831a45c1b4a43b1ecfac320e74f5e9852f1",
@@ -139,7 +139,7 @@
     "v2/infra/agent_measurement.tf": "4044474e5f57758fbd70b25cb53dc9a17ad00189761811d5ca2968e0e1576502",
     "v2/infra/agentcore.tf": "1b5d8ed19b6fa827521174a7e3a21d444b4425773a98e927a0ff5f2ae9d93bfa",
     "v2/infra/backend.development.hcl": "e9140a8f8120f479e04d22def7149d32e63fd34d5e82d04db9bda51e4ccbf313",
-    "v2/infra/costs.tf": "621d6adf25613fca79fe690b818178140a7b79a6f3b53c1ef6a08b735106bb8e",
+    "v2/infra/costs.tf": "a7408bb57e587a1f6ce145988fe02a8e149d21616159550abfab6f3ee3e13958",
     "v2/infra/data.tf": "6288fa2b14e10e503499a59a8cca7a763d4f23ea9d27f167d922ae41cd24569b",
     "v2/infra/development.tfvars": "73f91fa50c80c95491b83d664d7a7b1f9661198026b94977e10c63b36f475fff",
     "v2/infra/environment.tf": "ef2d5db8e58b72bf603b0c65fff677ffd0d7c956dc4241ac922d3e66db76d7dc",
@@ -176,7 +176,7 @@
     "v2/scripts/check_development_release.py": "c9d1b3920dff337fe3d38e69bf8e2bbbf1fc463dcbadfc21ffb2bc9f27a631dc",
     "v2/scripts/check_production_release.py": "1cefe222603d6bcf0d73630b0bf5daaed03bac6bcecf009bbd916bfd6aca84ef",
     "v2/scripts/classify_deployment_error.py": "8211c8395b88dc59107b1079308093a047a9ce240bb2d93073bd2dbde9ff3865",
-    "v2/scripts/cost_dashboard_release.py": "e22ab9d73db3d39ec3c73e59341e423bdca0a77b4ebf5d24ef26315d5c962807",
+    "v2/scripts/cost_dashboard_release.py": "bc0d230a236211a0dd5f6bf5273dc5df931110f59ca188d3098282bd28ab0a82",
     "v2/scripts/development_deployment_status.py": "41bbcb7f419483dc8d8a5b2cbb20f42e5f816d5fc2092b48c639aae4eaecc91b",
     "v2/scripts/loader-requirements.in": "38c314f1e9470587a6b566f2c8ed28cdf2ed3df2d87d349c3cbfc9f5a707230e",
     "v2/scripts/loader-requirements.txt": "7e35ab33589fae931d8bac07a7e32f868c02c4f37b629eb4208075a98fd918b4",
@@ -665,6 +665,19 @@
       "action": "update",
       "operation_class": "cost-publication",
       "changed_fields": [
+        "source_hash"
+      ]
+    },
+    {
+      "address": "aws_s3_object.cost_assets[\"costs-benchmark.json\"]",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "bucket",
+        "cache_control",
+        "content_type",
+        "key",
+        "source",
         "source_hash"
       ]
     },
@@ -1175,6 +1188,12 @@
       "address": "aws_s3_object.cost_assets[\"costs.mjs\"]",
       "action": "s3:PutObject",
       "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/assets/costs.mjs",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.cost_assets[\"costs-benchmark.json\"]",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/assets/costs-benchmark.json",
       "conditions": {}
     },
     {

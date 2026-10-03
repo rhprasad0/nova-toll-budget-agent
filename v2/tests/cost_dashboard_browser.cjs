@@ -11,6 +11,7 @@ const { chromium } = require('playwright');
   /** @type {Record<string, import("../agent/assets/costs.mjs").Snapshot>} */
   const fixtures = {};
   for (const env of ['production', 'development', 'development-legacy']) fixtures[env] = JSON.parse(await fs.readFile(path.join(__dirname, `fixtures/costs-${env}.json`), 'utf8'));
+  const benchmarkFixture = JSON.parse(await fs.readFile(path.join(__dirname, 'fixtures/costs-benchmark.json'), 'utf8'));
   const routing = /** @type {{handler(event: {request: {uri: string}}): {uri: string}}} */ ({});
   vm.runInNewContext(await fs.readFile(path.join(root, 'agent/public-report-routes.js'), 'utf8'), routing);
   const browser = await chromium.launch();
@@ -18,6 +19,7 @@ const { chromium } = require('playwright');
     const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
     await page.clock.install({ time: new Date('2026-09-18T12:00:00Z') });
     let environment = 'production', payload = fixtures.production, fail = false, legacyHtml = false;
+    let benchmark = structuredClone(benchmarkFixture), benchmarkFail = false;
     /** @type {string[]} */
     const errors = [];
     /** @type {string[]} */
@@ -27,6 +29,7 @@ const { chromium } = require('playwright');
       const url = new URL(route.request().url());
       if (url.origin !== 'https://cost.test') { external.push(url.origin); return route.abort(); }
       if (url.pathname === '/costs.json') return route.fulfill({ status: fail ? 503 : 200, contentType: 'application/json', body: fail ? '' : JSON.stringify(payload) });
+      if (url.pathname === '/assets/costs-benchmark.json') return route.fulfill({ status: benchmarkFail ? 503 : 200, contentType: 'application/json', body: JSON.stringify(benchmark) });
       const requested = routing.handler({ request: { uri: url.pathname } }).uri;
       const file = requested === '/' ? 'dev_chat.html' : requested.replace(/^\//, '');
       let body = await fs.readFile(path.join(root, 'agent', file));
@@ -39,6 +42,10 @@ const { chromium } = require('playwright');
       const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
       return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#total')).textContent !== '–';
     }); };
+    const unavailableBenchmark = () => page.waitForFunction(() => {
+      const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
+      return /** @type {HTMLElement & {textContent: string}} */ (browser.document.querySelector('#benchmark-notice')).textContent.includes('unavailable');
+    });
     await go();
     await page.waitForFunction(() => {
       const browser = /** @type {Window} */ (/** @type {unknown} */ (globalThis));
@@ -46,6 +53,33 @@ const { chromium } = require('playwright');
     });
     assert.equal(await page.locator('#aws').innerText(), '$4.76');
     assert.equal(await page.locator('#openai').innerText(), '$6.80');
+    await page.locator('#benchmark-results').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#answer-cost').innerText(), '$0.000087');
+    assert.match(await page.locator('#thousand-answers').innerText(), /^\$0.087083 per 1,000/);
+    assert.equal(await page.locator('#evaluation-cost').innerText(), '$0.000724');
+    assert.deepEqual(await page.locator('#benchmark-roles th').allTextContents(), ['TollChat · medium', 'Simulated user · low', 'Evaluation judges · xhigh']);
+    assert.match(await page.locator('#benchmark-sample').innerText(), /36 attempted conversations · 72 completed answers · 1 interrupted/);
+    assert.match(await page.locator('#benchmark-date').innerText(), /Sep 18, 2026.*Manual refresh/);
+    assert.equal(await page.locator('#benchmark-rates a').getAttribute('href'), 'https://developers.openai.com/api/docs/models/gpt-6-luna');
+    benchmark.sample.completed_turns = 0;
+    await go(); await page.locator('#benchmark-results').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#answer-cost').innerText(), 'Unavailable');
+    assert.match(await page.locator('#thousand-answers').innerText(), /No completed assistant turns/);
+    benchmark = structuredClone(benchmarkFixture); benchmark.reasoning_effort.agent = 'low';
+    await go(); await unavailableBenchmark();
+    assert.equal(await page.locator('#benchmark-results').isVisible(), false);
+    assert.equal(await page.locator('#total').innerText(), '$11.56');
+    benchmark = structuredClone(benchmarkFixture); benchmark.roles.agent.cached_tokens = 100000;
+    await go(); await unavailableBenchmark();
+    assert.equal(await page.locator('#benchmark-results').isVisible(), false);
+    benchmark = structuredClone(benchmarkFixture); benchmarkFail = true;
+    await go(); await unavailableBenchmark();
+    assert.equal(await page.locator('#total').innerText(), '$11.56');
+    benchmarkFail = false; fail = true;
+    await page.reload(); await page.locator('#benchmark-results').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#answer-cost').innerText(), '$0.000087');
+    fail = false;
+    await go();
     assert.deepEqual(await page.locator('.nav-links a').allTextContents(), ['Chat', 'Cost', 'Evaluation results', 'Release']);
     assert.equal(await page.locator('.nav-links a[aria-current]').getAttribute('href'), '/cost-dashboard');
     await page.reload();
