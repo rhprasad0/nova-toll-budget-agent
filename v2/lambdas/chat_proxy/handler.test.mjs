@@ -93,6 +93,27 @@ test("private same-origin chat streams only approved v2 events", async () => {
   assert.equal(new TextDecoder().decode(/** @type {{payload: Uint8Array}} */ (calls[0]).payload), '{"prompt":"Price it"}');
 });
 
+test("public requests cannot enable or receive private evaluation evidence", async () => {
+  let invoked = false;
+  const client = { async send() {
+    invoked = true;
+    return {
+      contentType: "text/event-stream",
+      response: chunks(
+        'data: {"type":"evaluation","calls":[{"private":"evidence"}]}\n\n',
+        'data: {"type":"answer","text":"$4.25","blocked":false}\n\n',
+      ),
+    };
+  } };
+  const injected = await route(publicEvent({ message: "Price it", evaluation_marker: "scheduled-evaluation-v1" }), dependencies(client));
+  assert.equal(injected.statusCode, 400);
+  assert.equal(invoked, false);
+  const response = await route(event("/api/chat", { message: "Price it" }), dependencies(client));
+  const text = await bodyText(response.body);
+  assert.match(text, /agent_unavailable/);
+  assert.doesNotMatch(text, /evaluation|private|evidence|4.25/);
+});
+
 test("forwards checked text before the upstream finishes, preserving split UTF-8", async () => {
   let upstreamFinished = false;
   const client = { async send() {

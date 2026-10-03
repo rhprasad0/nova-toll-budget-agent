@@ -100,12 +100,29 @@ data "aws_iam_policy_document" "timed_checks_lambda" {
   }
 
   statement {
-    sid     = "ConnectRdsIam"
-    actions = ["rds-db:connect"]
-    resources = [
-      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.agent}",
-      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.pricing_caller}",
-    ]
+    sid       = "ReadLiveChatRouting"
+    actions   = ["cloudfront:GetDistribution"]
+    resources = [aws_cloudfront_distribution.site.arn]
+  }
+  statement {
+    sid       = "ReadPublishedChatProxy"
+    actions   = ["lambda:GetFunctionUrlConfig", "lambda:GetAlias", "lambda:GetFunctionConfiguration"]
+    resources = flatten([for function in aws_lambda_function.tollchat_proxy : [function.arn, "${function.arn}:*"]])
+  }
+  statement {
+    sid       = "ReadLiveRuntimeVersion"
+    actions   = ["bedrock-agentcore:GetAgentRuntimeEndpoint"]
+    resources = values(local.agentcore_policy_resources)
+  }
+  statement {
+    sid       = "InvokeLiveApplication"
+    actions   = ["bedrock-agentcore:InvokeAgentRuntime"]
+    resources = values(local.agentcore_policy_resources)
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceVpce"
+      values   = [var.foundation.agentcore_vpc_endpoint_id]
+    }
   }
 
   statement {
@@ -222,6 +239,15 @@ resource "aws_cloudwatch_log_group" "timed_checks" {
   retention_in_days = local.log_retention_days
 }
 
+resource "aws_vpc_security_group_ingress_rule" "agentcore_from_timed_checks" {
+  security_group_id            = var.foundation.agentcore_endpoint_security_group_id
+  description                  = "TollChat scheduled evaluations of the live runtime"
+  referenced_security_group_id = aws_security_group.timed_checks.id
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+}
+
 resource "aws_lambda_function" "timed_checks" {
   function_name = "nova-toll-v2-timed-checks${local.suffix}"
   role          = aws_iam_role.timed_checks_lambda.arn
@@ -248,13 +274,13 @@ resource "aws_lambda_function" "timed_checks" {
       DB_HOST                    = var.foundation.db_instance.address
       DB_PORT                    = tostring(var.foundation.db_instance.port)
       DB_NAME                    = local.database_name
-      DB_USER                    = local.database_roles.agent
-      PRICING_DB_USER            = local.database_roles.pricing_caller
       DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"
       TIMED_CHECK_ALERTS_ENABLED = tostring(local.timed_check_alerts_enabled)
       ENVIRONMENT                = var.environment
       EVAL_DASHBOARD_BUCKET      = aws_s3_bucket.site.id
       EVAL_DB_USER               = local.eval_db_user
+      EVAL_SITE_DISTRIBUTION_ID  = aws_cloudfront_distribution.site.id
+      AGENTCORE_VPCE_URL         = "https://${var.foundation.agentcore_vpc_endpoint_dns_name}"
       }, local.timed_check_alerts_enabled ? {
       ALERTS_TOPIC_ARN = var.foundation.alerts_topic_arn
     } : {})

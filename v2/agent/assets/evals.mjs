@@ -1,5 +1,6 @@
 /** @typedef {{window_id: string, scheduled_at: string, scenario_id: string}} Scheduled */
-/** @typedef {{turns?: {user: string, assistant: string, tools: unknown[]}[], checks?: {name: string, passed: boolean, reason: string}[], model?: string}} Evidence */
+/** @typedef {{model: string, reasoning_effort: string, max_output_tokens: number}} ModelSettings */
+/** @typedef {{turns?: {user: string, assistant: string, tools: unknown[]}[], checks?: {name: string, passed: boolean, reason: string}[], model?: string, models?: {application: ModelSettings, actor: ModelSettings, judge: ModelSettings}, deployment?: {release_id?: string, runtime_version?: string}}} Evidence */
 /** @typedef {Scheduled & {status: string, evidence?: Evidence}} Run */
 /** @typedef {{schema_version: number, environment: string, generated_at: string, scenarios: {id: string, tag: string, title: string, description: string, route: string}[], runs: Run[], schedule: Scheduled[]}} Snapshot */
 /** @param {string} selector */
@@ -74,7 +75,20 @@ function evidence(r) {
         `<div class="check"><div class="check-line"><span>${checkLabels[c.name]}</span><span class="${c.passed ? "green" : "red"}">${c.passed ? "Passed" : "Failed"}</span></div><p>${escapeHtml(c.reason)}</p></div>`,
     )
     .join("");
-  return `<div class="evidence"><h4>Recorded conversation</h4>${turns || "<p>No completed conversation was recorded.</p>"}<h4>Checks</h4>${checks || "<p>Not scored. An interrupted or late run is not a passing evaluation.</p>"}<p class="tool-evidence">Application, simulated user, and judges: ${escapeHtml(e.model || "gpt-6-luna")}. Internal diagnostics are omitted from public evidence.</p></div>`;
+  const settings = e.models
+    ? [
+      ["Application", e.models.application],
+      ["Simulated user", e.models.actor],
+      ["Judges", e.models.judge],
+    ].map(([label, model]) => {
+      const value = /** @type {ModelSettings} */ (model);
+      return `${label}: ${escapeHtml(value.model)} (${escapeHtml(value.reasoning_effort)} reasoning)`;
+    }).join("; ")
+    : `Application, simulated user, and judges: ${escapeHtml(e.model || "not recorded")}`;
+  const deployment = e.deployment?.release_id
+    ? ` Application release: ${escapeHtml(e.deployment.release_id)}; runtime version: ${escapeHtml(e.deployment.runtime_version || "not recorded")}.`
+    : "";
+  return `<div class="evidence"><h4>Recorded conversation</h4>${turns || "<p>No completed conversation was recorded.</p>"}<h4>Checks</h4>${checks || "<p>Not scored. An interrupted or late run is not a passing evaluation.</p>"}<p class="tool-evidence">${settings}.${deployment} Internal diagnostics are omitted from public evidence.</p></div>`;
 }
 
 function render() {

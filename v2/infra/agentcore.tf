@@ -59,6 +59,14 @@ locals {
           Condition = { StringEquals = { "aws:SourceVpce" = var.foundation.agentcore_vpc_endpoint_id } }
         },
         {
+          Sid       = "AllowEvaluationsFromPrivateEndpoint"
+          Effect    = "Allow"
+          Principal = { AWS = aws_iam_role.timed_checks_lambda.arn }
+          Action    = "bedrock-agentcore:InvokeAgentRuntime"
+          Resource  = arn
+          Condition = { StringEquals = { "aws:SourceVpce" = var.foundation.agentcore_vpc_endpoint_id } }
+        },
+        {
           Sid       = "DenyOutsidePrivateEndpoint"
           Effect    = "Deny"
           Principal = "*"
