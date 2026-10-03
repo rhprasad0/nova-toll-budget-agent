@@ -35,10 +35,6 @@ OWNER_BY_SCHEMA: Final = {
     "pricing": "pricing_owner_development",
     "oracle": "oracle_owner_development",
 }
-CREATED_RUNTIME_ROLES: Final = {
-    "pricing_caller_development",
-    "report_publisher_development",
-}
 BOOTSTRAP_FILES: Final = {
     "001_create_pricing_schema.sql",
     "003_create_oracle_schema.sql",

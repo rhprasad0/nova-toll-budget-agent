@@ -29,7 +29,6 @@ DEVELOPMENT_WORKFLOW = ".github/workflows/v2-development-delivery.yml"
 PRODUCTION_ENVIRONMENT = "production-release"
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_BUNDLE_BYTES = 512 * 1024 * 1024
-MAX_BUNDLE_MEMBER_BYTES = 256 * 1024 * 1024
 MAX_JSON_BYTES = 64 * 1024
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")

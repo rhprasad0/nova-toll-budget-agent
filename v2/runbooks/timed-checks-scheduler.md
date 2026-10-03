@@ -96,6 +96,8 @@ aws --region us-east-1 logs tail /aws/lambda/nova-toll-v2-timed-checks-dev \
 ```
 
 Confirm **28 enabled schedules** and one successful terminal result for each of
-the five window IDs before treating development as verified. Production remains
-plan-only until the protected production delivery pipeline supports this exact
-resource set.
+the five window IDs before treating development as verified. The protected
+production delivery pipeline supports timed-check package delivery. Production
+runtime activation still requires the reviewed schema, configuration/IAM, and
+real scheduled publication checks in the
+[activation procedure](eval-dashboard.md#production-runtime-activation).

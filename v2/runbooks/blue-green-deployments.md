@@ -469,16 +469,8 @@ contract, trusted builds, canary pacing and five observation probes retain their
 existing behavior. Use hosted measurements before splitting jobs, parallelizing
 tests, consolidating builds or adding caches shared across runs.
 
-Local measurements on 2026-09-21 for the three IAM policy tests:
-
-| Configuration | Elapsed |
-| --- | --- |
-| Before provider reuse and the shared fixture | 39.74 seconds |
-| Updated, initially empty provider cache | 23.54 seconds |
-| Updated, populated provider cache | 13.24 seconds |
-
-Each row is one local run, not a hosted estimate. All three tests passed, and
-fixture setup output confirmed one delivery-policy rendering for both consumers.
+The [experiment journal](../eval/EXPERIMENT_JOURNAL.md#september-21--local-iam-test-timings)
+preserves the September 21 local provider-cache comparison and its limitations.
 
 ## Rehearsal and evidence
 
@@ -492,8 +484,8 @@ compatibility evidence for both retained applications. A new shared-package
 transition requires updating the reviewed record and its focused tests together.
 **These tests do not prove a live deployment.**
 
-The [sanitized simulated rollback record](evidence/blue-green-simulated-rollback.json)
-records the executed controller-test outcomes separately from live evidence.
+The [experiment journal](../eval/EXPERIMENT_JOURNAL.md#september-16--simulated-controller-outcomes)
+summarizes the historical mocked controller outcomes separately from live evidence.
 
 After bootstrap review, rehearse through protected exact-release delivery:
 
