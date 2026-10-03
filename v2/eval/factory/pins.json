@@ -1,5 +1,5 @@
 {
-  "commit": "f7a24f7327b08afef9dc9ca29bcc931cf4c94af4",
+  "commit": "8bb1292d2d449a7f3faa68edba7dcd6d423a8691",
   "files": {
     "agent/__init__.py": "9a7c5def20c27bee02ace31193aa0ab9b8548e1502db2f894fcf67d3b86a5e88",
     "agent/toll_agent.py": "69516b7f6a2dca16e943dfbfb0e66ff3a11b7c7192ac36fde31633998cc2d45d",
@@ -9,7 +9,7 @@
     "agent_tools/get_current_toll_price.py": "03560678deb79a8665b47de80793e744a6072419f09e4ec95401019ab23befcc",
     "agent_tools/get_annual_toll_ballpark.py": "510ced8f159a913d5f49c9f55211be3615aa5c419d3418e6a9571d087544a493",
     "agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e",
-    "pyproject.toml": "47dae07426c0d6bb77a03b30b339553143328c40c0a0ebede09ec01e2ecad0f1",
+    "pyproject.toml": "c2428ed9608ab151665f6e1578a24ba15800c6e51f88f25701f51a2097feb009",
     "uv.lock": "b7a2c24b78a17e1d6b19e12ef213c1341c02f283c992627941a791df2fb6b52b",
     "eval/golden.py": "a38aa9bec983b49ffa05e4c70afccdaca5898b5a165454d7f763f070712301e0",
     "eval/golden_run.py": "df566be5a0f75c76b64fd9d2ec1bd5dfdf062964c0d561673693cadf6059eddc",
@@ -17,9 +17,10 @@
     "eval/artifact_agent.py": "7e3b9d7d058a655fe848a3875aecea33ce1aa94f4aa45056e85ce4f0200b0f6b",
     "eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
     "eval/repetition.py": "b89398cefabb91d150823a055c49582e1c2d2350d3609278eed28afd6de858a4",
-    "eval/simulated.py": "b3b9c339a9696d0ba9615404717f86cc21de69f9a39e068f26325925404cb3fa",
-    "eval/run_evaluation.py": "1267150b08983b0754023b69bcfc0f704d32dabcfb710a759a69427a6bf3a727",
+    "eval/simulated.py": "c76b3efd8c58542804a683dca8abd05b9581f1a97ff8661527f578f5ec3a94e8",
+    "eval/run_evaluation.py": "b4a9abb3ccd913d747b4227466d3138af0b5b681c89438f5c50406f2473da18b",
     "eval/compare_runs.py": "8a96a4278dedec3b8f3895348786eb024381e3909a8750616f07c8727f108cf3",
-    "scripts/release_statistics.py": "91a49aa5e84f875b4f2ca222ce9fef5c9bd921c6d91694762bcc42d519eb3fad"
+    "scripts/release_statistics.py": "91a49aa5e84f875b4f2ca222ce9fef5c9bd921c6d91694762bcc42d519eb3fad",
+    "eval/live_runtime.py": "424ec15e3c0f85c88fab639e9db3c0fa3ecb25a7554cd6d23f769aeecf2bc178"
   }
 }

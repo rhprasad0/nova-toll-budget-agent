@@ -35,6 +35,7 @@ class SourceAgent(ArtifactAgent):
         self.process = subprocess.Popen(
             [
                 sys.executable,
+                "-B",
                 "-I",
                 str(Path(__file__).with_name("source_worker.py")),
                 str(bundle.resolve()),

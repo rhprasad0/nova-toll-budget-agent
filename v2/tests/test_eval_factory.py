@@ -10,6 +10,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import tarfile
 import time
 from copy import deepcopy
@@ -53,6 +54,27 @@ def test_kit_retains_default_seccomp_and_packages_namespace_exceptions(
     )
     output = tmp_path / "kit"
     kit.build(output)
+    runtime = output / "runtime/v2"
+    subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-I",
+            "-c",
+            "import socket, sys; "
+            "socket.socket.connect = lambda *a, **k: (_ for _ in ()).throw(AssertionError('network forbidden')); "
+            "sys.path.insert(0, sys.argv[1]); "
+            "from eval.factory import factory; "
+            "from eval.factory.kit import evaluator_identity; "
+            "assert factory.__file__.startswith(sys.argv[1]); "
+            "evaluator_identity()",
+            str(runtime),
+        ],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     manifest = json.loads((output / "kit-manifest.json").read_text())
     assert (output / "LICENSE").read_bytes() == (
         kit.HERE.parents[2] / "LICENSE"
@@ -752,15 +774,25 @@ def test_public_suite_export_excludes_holdout_evidence(
         )
 
 
+@pytest.mark.parametrize("tampering", ["changed", "extra", "bytecode", "symlink"])
 def test_clean_allowlisted_handoff_and_snapshot_tampering(
-    factory: tuple[Path, str], tmp_path: Path
+    factory: tuple[Path, str], tmp_path: Path, tampering: str
 ) -> None:
     root, source_id = factory
     directory, _ = f.source(root, source_id)
     assert {
         str(p.relative_to(directory)) for p in directory.rglob("*") if p.is_file()
     } == {*kit.APPLICATION, "snapshot.json"}
-    (directory / "agent/toll_agent.py").write_text("tampered")
+    if tampering == "changed":
+        (directory / "agent/toll_agent.py").write_text("tampered")
+    elif tampering == "extra":
+        (directory / "strands.py").write_text("raise RuntimeError('unreviewed module')")
+    elif tampering == "bytecode":
+        (directory / "strands.pyc").write_bytes(b"unreviewed bytecode")
+    else:
+        (directory / "unreviewed_package").symlink_to(
+            tmp_path, target_is_directory=True
+        )
     with pytest.raises(ValueError, match="snapshot changed"):
         f.source(root, source_id)
     repo = tmp_path / "repo"
@@ -957,3 +989,4 @@ def _build_model():
             )
         finally:
             worker.close()
+        assert not list(bundle.rglob("*.pyc"))

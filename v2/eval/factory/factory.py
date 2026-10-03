@@ -32,6 +32,7 @@ from agent.toll_agent import parse_prompt_points
 from eval import golden, golden_actor_check
 from eval import golden_run as run
 from eval.factory.kit import (
+    APPLICATION,
     CONTRACT,
     HERE,
     digest,
@@ -786,9 +787,19 @@ def import_source(root: Path, path: Path) -> str:
 def source(root: Path, source_id: str) -> tuple[Path, dict[str, Any]]:
     identifier(source_id)
     directory = root / "snapshots" / source_id
+    paths = list(directory.rglob("*"))
+    files = {str(p.relative_to(directory)): p for p in paths if not p.is_dir()}
+    if (
+        directory.is_symlink()
+        or any(p.is_symlink() for p in paths)
+        or set(files) != {*APPLICATION, "snapshot.json"}
+        or any(not p.is_file() for p in files.values())
+    ):
+        raise ValueError("source snapshot changed")
     identity = read(directory / "snapshot.json")
     if (
-        source_id != identity["source_sha256"]
+        set(identity["files"]) != set(APPLICATION)
+        or source_id != identity["source_sha256"]
         or source_id
         != digest({k: v for k, v in identity.items() if k != "source_sha256"})
         or any(
