@@ -46,6 +46,33 @@ from scripts.release_statistics import case_results, compare
 SPLITS = ("training", "holdout", "shadow")
 DIMENSIONS = ("outcome", "grounding", "rules")
 
+# Frozen catalog counterparts. I-95 numeric stems are not access identities:
+# 209NO/209SO, for example, are several miles apart. Keep other full IDs distinct.
+_I95_ACCESS_ALIASES = {
+    f"i95:{point}": f"i95:{group[0]}"
+    for group in (
+        ("200SO", "201ND", "201SD", "221NO", "227SD"),
+        ("202ND", "202NO", "202SD", "202SO"),
+        ("203NO", "203SD"),
+        ("206ND", "206NO", "206SD", "206SO"),
+        ("208ND", "208SO"),
+        ("210NO", "210SD"),
+        ("211ND", "211NO", "211SD"),
+        ("213NO", "213SD"),
+        ("214NO", "214SO", "215ND"),
+        ("2192NO", "2202SD"),
+        ("219NO", "220SD"),
+        ("2229ND", "222ND", "222NO", "226SD", "226SO"),
+        ("22329ND", "2232ND", "223SO"),
+        ("2233SO", "2239ND", "223ND"),
+        ("225NO", "225SD"),
+        ("228ND", "229SO"),
+        ("232NO", "233SD"),
+        ("234NO", "235SD"),
+    )
+    for point in group
+}
+
 
 def api_key_path(root: Path) -> Path:
     return root.resolve().parent / "agent-state/openai-api-key"
@@ -250,9 +277,40 @@ def input_hashes(root: Path) -> dict[str, str]:
     return {str(p.relative_to(root)): sha(p.read_bytes()) for p in files}
 
 
+def canonical_access(point_id: str) -> str:
+    """Group catalog access IDs across entry/exit and direction variants."""
+    if point_id.startswith("i95:"):
+        return _I95_ACCESS_ALIASES.get(point_id, point_id)
+    network, _, access = point_id.partition(":")
+    access = access.split(":")[0]
+    if network == "i495":
+        # 9ND is the catalog's alternate approach from I-495 southbound.
+        access = re.sub(r"(?:9ND|[NS][OD])$", "", access)
+        # Opposite roles at the GW Pkwy and Jones Branch boundaries.
+        access = {"180": "181", "184": "183"}.get(access, access)
+    return f"{network}:{access}" if access else network
+
+
+def route_pairs(fixture: golden.Fixture) -> set[tuple[str, ...]]:
+    """Current, outbound and return endpoint pairs, independent of evidence."""
+    pairs: set[tuple[str, ...]] = set()
+    for leg in (
+        fixture.input,
+        fixture.input.get("outbound"),
+        fixture.input.get("return"),
+    ):
+        if isinstance(leg, dict):
+            origin = leg.get("origin_point_id")
+            destination = leg.get("destination_point_id")
+            if isinstance(origin, str) and isinstance(destination, str):
+                pairs.add(tuple(sorted(map(canonical_access, (origin, destination)))))
+    return pairs
+
+
 def validate_splits(source: Path) -> dict[str, dict[str, str]]:
     groups: dict[str, str] = {}
     evidence: dict[str, str] = {}
+    routes: dict[tuple[str, ...], str] = {}
     prompts: set[str] = set()
     ids: set[str] = set()
     reference_ids: set[str] = set()
@@ -278,6 +336,10 @@ def validate_splits(source: Path) -> dict[str, dict[str, str]]:
         golden.validate_payload(
             cases, directory, {p.point_id for p in points}, complete=False
         )
+        if any(case.actor.max_turns != 5 for case in cases):
+            raise ValueError(
+                "factory actor budget must be five turns including the opening"
+            )
         examples = [
             golden.Example.model_validate(e)
             for e in json.loads((directory / "examples.json").read_text())
@@ -323,6 +385,9 @@ def validate_splits(source: Path) -> dict[str, dict[str, str]]:
                     pairs.setdefault(tag, []).append(case)
             for step in case.steps:
                 fixture = golden.load_fixture(step.fixture, directory)
+                for pair in route_pairs(fixture):
+                    if routes.setdefault(pair, split) != split:
+                        raise ValueError("canonical route pair crosses splits")
                 key = digest(
                     {k: v for k, v in fixture.model_dump().items() if k != "provenance"}
                 )

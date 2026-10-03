@@ -150,6 +150,7 @@ def build(output: Path) -> None:
         HERE / "contract.json",
         HERE / "AGENTS.md",
         HERE / "README.md",
+        HERE / "AUTHORING.md",
         HERE / "DATABASE.md",
         HERE / "start-tailscale.sh",
         *HERE.glob("examples/*.json"),
@@ -176,6 +177,7 @@ def build(output: Path) -> None:
         ".devcontainer/devcontainer.json",
         ".devcontainer/seccomp.json",
         "README.md",
+        "AUTHORING.md",
         "DATABASE.md",
     ):
         target = output / name

@@ -8,17 +8,32 @@ and review formats; it stays available after initialization and restore.
 
 ## Agent-driven authoring and execution
 
-1. Read the frozen `contract.json` and `examples/schemas.json` under
+1. Read the [authoring guide](AUTHORING.md) at
+   `/opt/factory/v2/eval/factory/AUTHORING.md`, the frozen `contract.json`, and
+   `examples/schemas.json` under
    `/opt/factory/v2/eval/factory/`. Inspect the historical teaching examples to
    understand shapes, not to seed fresh holdout cases. Plan coverage allocations
-   and scenario groups for all three splits before writing cases.
+   and scenario groups for all three splits before writing cases, preserving
+   the contract's counts and family allocations. Cover networks/directions,
+   observed/fixed/modeled sources, weekend schedules, I-95 availability/restart
+   decisions, clarifications, cancellations and workflow changes. Distribute
+   facilities and dynamic/fixed pricing across splits.
 2. Create `cases.jsonl`, `fixtures/*.json`, `examples.json`, and
    `prompt-points.json` in each draft split. Generate realistic cases, reconciled
    fixtures, a complete passing reference per case, and at least 20 labeled
-   negative references across the suite. Do not substitute lifecycle smoke data.
+   negative references across the suite. Include valid wording variants,
+   omission-only failures, grounded consent violations and actor-invalid controls;
+   assess Outcome, Grounding and Rules independently. References must show
+   achievable receipts and actor behavior. Set every actor budget to five turns
+   including the opening; derive minimum turns from necessary exchanges.
+   Do not substitute lifecycle smoke data.
 3. Run `factory validate --inputs /private/work/drafts`; repair drafts until it
    passes. Review novelty, paraphrases, behavioral pairs, and cross-split leakage
-   yourself; summarize coverage and limitations for Ryan.
+   yourself; keep a complete private case/reference assessment matrix outside the
+   split input directories and summarize aggregate coverage and limitations for
+   Ryan. Keep materially similar scenarios together; new endpoints or prices
+   alone do not establish independence. Canonical current/outbound/return route
+   pairs cannot cross splits, including reversed legs and role/direction variants.
 4. Freeze the validated suite with `factory freeze`. Use new suite and changed
    split versions for repairs; never overwrite a freeze. Do not change the
    pinned evaluator or model settings to make generated cases pass.

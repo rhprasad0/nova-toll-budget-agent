@@ -10,6 +10,8 @@ model/prompt. The kit contains teaching examples; the real suite still needs
 authoring. Hill-climbing integration, shadow CI, and deployment remain separate
 work. Experiment history stays in the
 [journal](../EXPERIMENT_JOURNAL.md).
+Read the [authoring guide](AUTHORING.md) before planning coverage, scenarios,
+actor exchanges and independently labeled references.
 
 ## Build and open
 
@@ -99,6 +101,8 @@ Start Codex in `/private/work` and give it this prompt:
 
 > Follow AGENTS.md and the frozen factory contract. Author a fresh 4.0.0 suite
 > with 100 training, 50 private holdout, and 10 public shadow cases. First read
+> /opt/factory/v2/eval/factory/AUTHORING.md, plan its coverage dimensions across
+> all splits while retaining the contract's family allocations, then read
 > /opt/factory/v2/eval/factory/DATABASE.md and its committed schema references.
 > Use nova-toll-dev, account 903859731897, and pricing_reader_development to
 > inspect only bounded development route/pricing data through the verified
@@ -109,9 +113,14 @@ Start Codex in `/private/work` and give it this prompt:
 > recording relevant retrieval times and provenance without credentials or
 > connection details. Plan coverage and scenario groups, generate reconciled
 > fixtures and complete passing
-> references plus at least 20 labeled negative references, then run factory
+> references plus valid wording variants, at least 20 independently labeled
+> negative references and actor-invalid controls. Use five-turn actor budgets,
+> including the opening, and derive minimum turns from necessary exchanges.
+> Keep related scenarios and canonical route pairs in one split; distribute
+> facilities/directions and dynamic/fixed pricing across splits. Then run factory
 > validate and repair drafts. Review novelty and split leakage, summarize the
-> coverage and limitations, and freeze the suite. Ask for an explicit budget
+> aggregate coverage and limitations, retain a complete private case/reference
+> assessment matrix outside the split inputs, and freeze the suite. Ask for an explicit budget
 > before paid calibration or evaluation. Prepare review evidence for me and
 > retain my holdout-reuse and release decisions. Do not read credentials or
 > application repository memories. Keep all database reads in authoring; freeze
@@ -121,6 +130,8 @@ When updating an already initialized factory, use this prompt in a new Codex
 session after rebuilding the container. The private volume retains its existing
 `AGENTS.md`; reconcile it with the new image's factory instructions, preserving
 any local edits. Do not rerun `factory init` or reset private history.
+This resumes that factory's history. For a fresh real run after exposed review
+material, use the new-volume procedure below instead.
 
 No paid budget is implied by this prompt. When ready, authorize a particular
 calibration/evaluation command with a dollar ceiling and record; the agent uses
@@ -135,8 +146,13 @@ Shapes match the golden evaluator; see `examples/schemas.json` and
 [factory agent instructions](AGENTS.md). Every case requires a passing reference;
 the complete suite requires at least 20 labeled negative references. Validation
 checks allocations, replay, arithmetic, known endpoints, timestamps, actor
-boundaries, duplicate openings, equivalent fixture evidence, and split groups.
-Human review must also check paraphrases and case novelty.
+boundaries, five-turn budgets (including the opening), duplicate openings,
+equivalent fixture evidence, split groups and canonical route pairs across
+current/outbound/return legs. Reversed legs and role/direction variants count as
+reuse, including the I-495 180/181 boundary; within-split reuse is allowed.
+I-95 counterparts use explicit catalog aliases; numeric stems alone do not
+establish equivalence. I-495's 183/184 boundary also shares one identity.
+Human review must also check semantic independence and reference labels.
 
 Validate drafts without freezing them or calling models:
 
@@ -156,6 +172,49 @@ pairs stay in one split. Private Git commits preserve all freezes and reviews.
 Frozen inputs cannot be edited: increment the suite and changed split versions;
 unchanged splits retain their versions/digests. Training/shadow changes do not
 reset holdout reuse history.
+
+## Fresh real run after exposed review material
+
+**Use a new private volume and a new authoring session.** Recreating or rebuilding
+the container preserves its existing named volume, including drafts, history,
+login state and memories. Docker volumes
+[persist beyond a container's lifecycle](https://docs.docker.com/engine/storage/volumes/).
+Keep the exposed packet and its assessment matrix as private, retired review
+material in the old volume or ignored `v2/eval/private/`; do not use them to seed
+the new suite or claim fresh holdout performance.
+
+From `v2/` in the revised worktree, build a new portable kit directory and change
+its existing mount setting to a unique volume name before opening it in VS Code:
+
+```bash
+python -m eval.factory.kit build --output eval/private/factory-kit-fresh
+python - <<'PY'
+import json
+import uuid
+from pathlib import Path
+
+path = Path("eval/private/factory-kit-fresh/.devcontainer/devcontainer.json")
+config = json.loads(path.read_text())
+volume = "tollchat-factory-private-" + uuid.uuid4().hex
+config["workspaceMount"] = f"source={volume},target=/private,type=volume"
+path.write_text(json.dumps(config, indent=2) + "\n")
+print("Fresh private volume:", volume)
+PY
+```
+
+Use another output directory if that kit directory already exists. Open the
+generated kit in VS Code and choose **Reopen in Container**; Docker creates the
+new volume on first use. Run `factory init` once in the new `/private/work`, log
+in independently, and follow the setup and authoring prompt above. Enter the
+evaluation key only when needed for explicitly budgeted paid work.
+
+Carry only the revised generic factory instructions and authoring guide into
+the clean session. Do not restore an old backup, copy drafts/references/review
+evidence, import old Codex history or memories, or mount the application repo.
+The bundled historical examples remain teaching material. Start with a new
+coverage plan and independent scenarios. Paid calibration and real generation
+are separate from tooling smoke checks; this setup does not authorize model
+calls or establish application performance.
 
 ## Freeze, calibrate, and review
 
