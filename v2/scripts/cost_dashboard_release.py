@@ -37,7 +37,7 @@ RESOURCES = {
 }
 # Reviewed public bytes. Update these pins when changing these public assets.
 ASSET_SHA256: dict[str, str] = {
-    "costs-benchmark.json": "1d3f728a95804ff298b3bcfdd6e08a86fd4d2fa7719d0717fc568fe64c7d8dda",
+    "costs-benchmark.json": "c2fa682ebddc230ac74c6b13176d39cc002c53bf189e3d0f1c61249c9f1bae06",
     "costs.css": "8578e3aa2939740c6010793662aa75ea99cac633e59853804e8d15e094bb0ce2",
     "costs.mjs": "38964764c0202b1b4a35750359acd9db3ddb13020102ade803dbda383b38d153",
     "evals.css": "a769365269ebde99103a56e6ce64a619f1a728c137aeeeca93ea04023db85688",
