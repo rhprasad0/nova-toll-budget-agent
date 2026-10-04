@@ -25,14 +25,14 @@ pytestmark = pytest.mark.usefixtures("golden_test_data")
 
 
 @pytest.mark.parametrize("mode", ["calibrate", "run"])
-@pytest.mark.parametrize("workers", [3, 16])
+@pytest.mark.parametrize("workers", [3, None])
 @pytest.mark.parametrize("uncapped", [False, True])
 @pytest.mark.parametrize("repetitions", [1, 3])
 def test_cli_runs_independent_work_in_parallel(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     mode: str,
-    workers: int,
+    workers: int | None,
     uncapped: bool,
     repetitions: int,
 ) -> None:
@@ -100,7 +100,9 @@ def test_cli_runs_independent_work_in_parallel(
 
     monkeypatch.setattr(run, "judge", judge)
     monkeypatch.setattr(run, "execute", execute)
-    args = ["golden_run", mode, "--output", str(directory), "--workers", str(workers)]
+    args = ["golden_run", mode, "--output", str(directory)]
+    if workers is not None:
+        args += ["--workers", str(workers)]
     if uncapped:
         args += ["--no-budget-limit"]
     if mode == "run":
@@ -113,7 +115,7 @@ def test_cli_runs_independent_work_in_parallel(
     monkeypatch.setattr("sys.argv", args)
     run.main()
     manifest = json.loads((directory / "manifest.json").read_text())
-    assert manifest["workers"] == workers
+    assert manifest["workers"] == (workers if workers is not None else 16)
     assert manifest["budget_usd"] == (None if uncapped else 25)
     events = [
         json.loads(line)

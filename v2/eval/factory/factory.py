@@ -534,7 +534,7 @@ def corpus(directory: Path) -> Generator[None]:
 
 @contextmanager
 def workers(journal: run.Journal) -> Generator[ThreadPoolExecutor]:
-    pool = ThreadPoolExecutor(max_workers=4)
+    pool = ThreadPoolExecutor(max_workers=16)
     try:
         yield pool
     except BaseException:

@@ -80,6 +80,7 @@ and networking without command approval prompts. User settings and explicit CLI
 flags can override these defaults; see the official
 [configuration precedence](https://learn.chatgpt.com/docs/config-file/config-basic).
 Paid evaluations still require your explicit budget and authorization record.
+Factory calibration and evaluation use 16 parallel workers.
 
 For optional Codex sandboxing, the image includes bubblewrap. The devcontainer uses
 the bundled `.devcontainer/seccomp.json`, based on
