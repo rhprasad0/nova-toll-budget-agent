@@ -137,7 +137,8 @@ def build(output: Path) -> None:
     pins = json.loads((HERE / "pins.json").read_text())
     output.mkdir(parents=True, exist_ok=False)
     for name, expected in pins["files"].items():
-        blob = git(repo, "show", f"{pins['commit']}:v2/{name}")
+        # Exact hashes remain available after the source commit is squash-merged.
+        blob = (repo / "v2" / name).read_bytes()
         if sha(blob) != expected:
             raise ValueError("pinned source hash mismatch")
         target = output / "runtime/v2" / name
