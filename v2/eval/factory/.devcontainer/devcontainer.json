@@ -1,5 +1,12 @@
 {
   "name": "TollChat Evaluation Factory",
+  "initializeCommand": [
+    "sh",
+    "-c",
+    "test -f \"$1/kit-manifest.json\" && test -f \"$1/runtime/v2/eval/factory/factory.py\" || { printf '%s\\n' 'Open the generated factory kit, not v2/eval/factory.' 'From v2/ in a worktree, run: python -m eval.factory.kit build --output eval/private/factory-kit' 'Then open eval/private/factory-kit in VS Code and choose Reopen in Container.' >&2; exit 1; }",
+    "factory-kit-check",
+    "${localWorkspaceFolder}"
+  ],
   "build": { "dockerfile": "../Dockerfile", "context": ".." },
   "workspaceMount": "source=tollchat-factory-private,target=/private,type=volume",
   "workspaceFolder": "/private/work",

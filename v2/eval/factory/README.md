@@ -22,7 +22,13 @@ python -m eval.factory.kit build --output eval/private/factory-kit
 docker build -t tollchat-eval-factory eval/private/factory-kit
 ```
 
-Open the **generated kit directory** in VS Code and choose **Reopen in Container**.
+In VS Code, choose **File → Open Folder**, open the generated
+`v2/eval/private/factory-kit` directory in that worktree, then choose
+**Dev Containers: Reopen in Container**. The source directory `v2/eval/factory`
+does not contain the generated `runtime/` build context. Opening it directly
+stops before the image build and prints the kit-generation command. If you see
+`COPY runtime ... file does not exist`, generate the kit and open its directory.
+
 The devcontainer replaces the default repository bind mount with the persistent
 `tollchat-factory-private` volume at `/private`. There is no Docker socket mount.
 The [workspace mount configuration](https://github.com/devcontainers/spec/blob/main/docs/specs/devcontainerjson-reference.md)

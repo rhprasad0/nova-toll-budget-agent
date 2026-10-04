@@ -118,6 +118,28 @@ def test_kit_retains_default_seccomp_and_packages_namespace_exceptions(
     subprocess.run(["bash", "-n"], input=recipe, text=True, check=True)
 
 
+def test_devcontainer_requires_generated_kit(tmp_path: Path) -> None:
+    output = tmp_path / "portable kit's workspace"
+    kit.build(output)
+    settings = json.loads((output / ".devcontainer/devcontainer.json").read_text())
+    for workspace, expected in ((kit.HERE, 1), (output, 0)):
+        command = [
+            argument.replace("${localWorkspaceFolder}", str(workspace))
+            for argument in settings["initializeCommand"]
+        ]
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        assert result.returncode == expected, result.stderr
+        if expected:
+            assert (
+                "Open the generated factory kit, not v2/eval/factory." in result.stderr
+            )
+            assert (
+                "python -m eval.factory.kit build --output eval/private/factory-kit"
+                in result.stderr
+            )
+            assert "choose Reopen in Container" in result.stderr
+
+
 def test_tailscale_startup_survives_terminal_hangup(tmp_path: Path) -> None:
     state = tmp_path / "state"
     tools = tmp_path / "bin"
