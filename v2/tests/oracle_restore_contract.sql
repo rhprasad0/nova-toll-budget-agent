@@ -54,8 +54,12 @@ END $$;
 DO $$
 BEGIN
     IF (SELECT count(*) FROM oracle.schema_version) <> 1
-       OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.15.1' THEN
+       OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.15.2' THEN
         RAISE EXCEPTION 'oracle schema version is invalid';
+    END IF;
+    IF current_database() <> 'nova_toll_development'
+       AND has_schema_privilege('pricing_reader', 'oracle', 'USAGE') THEN
+        RAISE EXCEPTION 'development catalog grants leaked to another database';
     END IF;
     IF (SELECT count(*) FROM oracle.toll_connection
         WHERE required_i95_direction IS NOT NULL) <> 311

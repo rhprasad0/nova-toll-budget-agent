@@ -262,6 +262,19 @@ if NOVA_TOLL_ADMIN_URL='postgresql://must-not-be-used@127.0.0.1:1/postgres' \
   exit 1
 fi
 v2/scripts/test_development_database_bootstrap.sh
+python3 - "$migration_source_dir" <<'PY'
+from pathlib import Path
+import sys
+from v2.scripts.bootstrap_development_database import render
+
+directory = Path(sys.argv[1]) / "catalog-grants"
+(directory / "tests").mkdir(parents=True)
+(directory / "db/migrations").mkdir(parents=True)
+render(Path("v2/tests/oracle_catalog_reader_contract.sql"), directory / "tests/contract.sql")
+render(Path("v2/db/migrations/035_upgrade_oracle_1_15_1_to_1_15_2.sql"),
+       directory / "db/migrations/035_upgrade_oracle_1_15_1_to_1_15_2.sql")
+PY
+psql --dbname "$development_db" --file "$migration_source_dir/catalog-grants/tests/contract.sql"
 development_verify_output="$(python3 v2/scripts/run_development_migrations.py --verify-only)"
 jq -e '.status == "ok" and .before == .after and .applied == []' \
   <<<"$development_verify_output" >/dev/null
@@ -277,7 +290,7 @@ assert set(result) == {
 }
 assert result["database"] == "nova_toll_development"
 assert result["user"] == "schema_migrator_development"
-assert result["before"] == result["after"] == {"pricing": "1.4.0", "oracle": "1.15.1"}
+assert result["before"] == result["after"] == {"pricing": "1.4.0", "oracle": "1.15.2"}
 assert result["applied"] == []
 assert re.fullmatch(r"[0-9a-f]{40}", result["commit"])
 assert re.fullmatch(
@@ -315,7 +328,7 @@ migration = runner.Migration(
     source_sha256=hashlib.sha256(Path(migration_path).read_bytes()).hexdigest(),
 )
 
-runner._registry = lambda: ((), {"pricing": "1.0.1", "oracle": "1.15.1"})
+runner._registry = lambda: ((), {"pricing": "1.0.1", "oracle": "1.15.2"})
 runner._migration_candidates = lambda _schemas: (migration,)
 runner._history_preflight_sql = lambda *_args, **_kwargs: ""
 

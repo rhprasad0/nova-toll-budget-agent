@@ -38,8 +38,8 @@ DECLARE
     distinct_routes integer;
     structural_components integer;
 BEGIN
-    IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.15.1' THEN
-        RAISE EXCEPTION 'Oracle report schema is not 1.15.1';
+    IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.15.2' THEN
+        RAISE EXCEPTION 'Oracle report schema is not 1.15.2';
     END IF;
     IF EXISTS (
         SELECT 1

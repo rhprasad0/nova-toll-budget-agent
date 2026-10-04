@@ -62,8 +62,9 @@ credentials in agent chat.
 
 Use only profile `nova-toll-dev`, region `us-east-1`, account `903859731897`, RDS
 instance `nova-toll-db`, database `nova_toll_development`, and database login
-`pricing_reader_development`. Stop on an identity, reader-grant, route, TLS, or
-query error. Do not substitute production, an administrator, a migration role,
+`pricing_reader_development`. Stop on an identity, required pricing-reader grant,
+route, TLS, or query error, except for the optional Oracle catalog denial below.
+Do not substitute production, an administrator, a migration role,
 or a deployed password, and do not change IAM or database grants.
 
 The kit includes committed schema references under
@@ -71,8 +72,38 @@ The kit includes committed schema references under
 `manifest.json`. Read those definitions and the frozen tool schemas before
 querying. They are documentation, not SQL to execute. If observed schemas differ,
 inspect bounded `information_schema` metadata and report the difference.
-Use the bundled prompt-point catalog when the reader cannot access oracle data;
-do not elevate its privileges.
+Migration 035 (Oracle 1.15.2) extends the fixed development reader with `USAGE`
+on `oracle` and `SELECT` on `oracle.schema_version`, `oracle.toll_route_point`,
+`oracle.toll_connection`, and `oracle.route_pricing_component`. This supports
+bounded catalog and route/pricing-key queries without writes, schema creation,
+or Oracle function execution. Existing pricing reads remain available.
+The grants take effect only after the reviewed development migration is delivered;
+the factory agent must never run the migration or change grants itself.
+
+Until those grants are installed, use the bundled
+`/opt/factory/v2/eval/factory/examples/prompt-points.json` for catalog points.
+No Oracle grant or administrator confirmation is required for this fallback.
+If an Oracle catalog query has already returned permission denied, stop that
+query and do not retry it; continue by verifying pricing access through the same
+fixed reader and connection procedure. A pricing permission failure still blocks
+database-grounded authoring. Do not elevate privileges or replace the reader.
+
+After verifying the database/user identity, inspect schema access before trying
+optional catalog queries. Use this SELECT in the bounded transaction recipe:
+
+```sql
+SELECT has_schema_privilege(current_user, 'pricing', 'USAGE') AS pricing_usage,
+       has_schema_privilege(current_user, 'oracle', 'USAGE') AS oracle_usage;
+```
+
+`pricing_usage` must be true. A false `oracle_usage` indicates the older
+pricing-only boundary; use the bundled catalog and report that migration 035
+is pending. Separately verify the needed pricing-table reads. When Oracle USAGE
+is available, verify SELECT on the four allowed catalog objects before querying;
+do not call Oracle or PostGIS functions under this reader.
+Schema USAGE alone does not establish SELECT access to a table. These are
+[PostgreSQL privilege inquiry functions](https://www.postgresql.org/docs/17/functions-info.html#FUNCTIONS-INFO-ACCESS-TABLE).
+Record the bundled catalog as the catalog source, not as a live database read.
 
 Run one bounded `SELECT`, read-only `WITH`, or non-executing `EXPLAIN` of a SELECT
 per connection, using explicit columns, stable ordering, and `LIMIT 100` for row

@@ -148,7 +148,7 @@ DECLARE
   ];
 BEGIN
   IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.4.0'
-     OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.15.1'
+     OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.15.2'
      OR (SELECT count(*) FROM oracle.toll_route_point) <> 220
      OR (SELECT count(*) FROM oracle.toll_connection) <> 996 THEN
     RAISE EXCEPTION 'development bootstrap data/version contract is wrong';
@@ -328,6 +328,20 @@ BEGIN
           'pricing.trip_pricing_i66', 'INSERT,UPDATE,DELETE') THEN
     RAISE EXCEPTION 'development pricing reader privileges are wrong';
   END IF;
+  IF NOT has_schema_privilege('pricing_reader_development', 'oracle', 'USAGE')
+     OR has_schema_privilege('pricing_reader_development', 'oracle', 'CREATE')
+     OR EXISTS (
+       SELECT 1 FROM unnest(ARRAY[
+         'oracle.schema_version', 'oracle.toll_route_point',
+         'oracle.toll_connection', 'oracle.route_pricing_component'
+       ]) AS allowed(object_name)
+       WHERE NOT has_table_privilege('pricing_reader_development', object_name, 'SELECT')
+          OR has_table_privilege('pricing_reader_development', object_name,
+               'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+     ) OR has_function_privilege('pricing_reader_development',
+          'oracle.get_toll_route_prompt_points()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'development Oracle catalog reader privileges are wrong';
+  END IF;
   IF NOT has_schema_privilege('tollchat_agent_development', 'oracle', 'USAGE')
      OR has_schema_privilege('tollchat_agent_development', 'oracle', 'CREATE')
      OR NOT has_function_privilege('tollchat_agent_development',
@@ -377,7 +391,7 @@ BEGIN
        WHERE NOT is_baseline OR migration_id <> 'baseline'
          OR (schema_name, schema_version, source_path) NOT IN (
            ('pricing', '1.4.0', 'v2/db/schema.sql'),
-           ('oracle', '1.15.1', 'v2/db/oracle/schema.sql')
+           ('oracle', '1.15.2', 'v2/db/oracle/schema.sql')
          )
          OR source_sha256 !~ '^[0-9a-f]{64}$'
          OR btrim(evidence) = ''

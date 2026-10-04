@@ -52,16 +52,33 @@ def test_mixed_loader_publisher_timed_and_cost_contracts(
         previous = retained("v2/db/" + name, baseline)
         current = (ROOT / "v2/db" / name).read_bytes()
         if name == "oracle/schema.sql" and previous != current:
-            # The reviewed 1.15.1 label migration changes only these schema markers.
+            # Label and development catalog grants preserve runtime SQL contracts.
             for marker in (
                 b"-- oracle schema version: 1.15.0\n",
                 b"INSERT INTO oracle.schema_version (version) VALUES ('1.15.0');",
             ):
                 assert previous.count(marker) == 1
                 previous = previous.replace(
-                    marker, marker.replace(b"1.15.0", b"1.15.1")
+                    marker, marker.replace(b"1.15.0", b"1.15.2")
                 )
-        assert previous == current
+        if name == "oracle/schema.sql":
+            catalog_grant = b"""-- The evaluation factory's fixed development reader can inspect catalog evidence.
+DO $catalog_reader$
+BEGIN
+    IF current_database() = 'nova_toll_development' THEN
+        GRANT USAGE ON SCHEMA oracle TO pricing_reader_development;
+        GRANT SELECT ON oracle.schema_version, oracle.toll_route_point,
+            oracle.toll_connection, oracle.route_pricing_component
+        TO pricing_reader_development;
+    END IF;
+END
+$catalog_reader$;
+
+"""
+            assert current.count(catalog_grant) == 1
+            assert previous == current.replace(catalog_grant, b"")
+        else:
+            assert previous == current
         assert hashlib.sha256(current).hexdigest() == digest
     for environment in shared_packages.ACCOUNTS:
         monkeypatch.setenv("TOLLCHAT_ENVIRONMENT", environment)
