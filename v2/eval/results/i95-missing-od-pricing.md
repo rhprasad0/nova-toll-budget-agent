@@ -5,7 +5,7 @@ OD IDs 1374–1389. Live pricing still uses `pricing.trip_pricing_i95` from VDOT
 Retained Transurban rows are historical evidence and are not restored or queried
 by the rewrite database.
 
-The [experiment journal](../EXPERIMENT_JOURNAL.md#i-95i-495-identity-proxy-validation)
+The [experiment journal](../journal/2026-09-21.md#i-95i-495-identity-proxy-validation)
 records the data gap, historical validation, measured error and unresolved limits.
 
 ## Proxy model

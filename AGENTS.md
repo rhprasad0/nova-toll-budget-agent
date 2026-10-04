@@ -24,10 +24,13 @@ app if it would actually help.
 
 # Repo rules
 
-- Preserve `v2/eval/EXPERIMENT_JOURNAL.md`: it is important permanent experiment
-  history. Do not delete, truncate, replace, or remove it during cleanup without
-  Ryan's explicit approval; append new results and dated corrections.
-- Keep `v2/eval/EXPERIMENT_JOURNAL.md` readable for people outside the project.
+- Preserve `v2/eval/EXPERIMENT_JOURNAL.md` and `v2/eval/journal/`: the index and
+  weekly pages are permanent experiment history. Do not delete, truncate,
+  replace, or remove their history during cleanup without Ryan's explicit
+  approval. Append experiments and dated corrections to the appropriate weekly
+  page; keep the index short and link each week there. Use Monday-start filenames
+  (`YYYY-MM-DD.md`) and preserve documented experiment and retrospective dates.
+- Keep the weekly journal readable for people outside the project.
   Give each experiment a few concise, plain-language sentences covering its
   purpose, relevant versions, aggregate result, limitations, cost when relevant,
   and decision; retain useful figures and tables as-is. Cut repeated process

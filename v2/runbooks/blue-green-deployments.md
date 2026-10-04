@@ -469,7 +469,7 @@ contract, trusted builds, canary pacing and five observation probes retain their
 existing behavior. Use hosted measurements before splitting jobs, parallelizing
 tests, consolidating builds or adding caches shared across runs.
 
-The [experiment journal](../eval/EXPERIMENT_JOURNAL.md#september-21--local-iam-test-timings)
+The [experiment journal](../eval/journal/2026-09-21.md#september-21-local-iam-test-timings)
 preserves the September 21 local provider-cache comparison and its limitations.
 
 ## Rehearsal and evidence
@@ -484,7 +484,7 @@ compatibility evidence for both retained applications. A new shared-package
 transition requires updating the reviewed record and its focused tests together.
 **These tests do not prove a live deployment.**
 
-The [experiment journal](../eval/EXPERIMENT_JOURNAL.md#september-16--simulated-controller-outcomes)
+The [experiment journal](../eval/journal/2026-09-14.md#september-16-simulated-controller-outcomes)
 summarizes the historical mocked controller outcomes separately from live evidence.
 
 After bootstrap review, rehearse through protected exact-release delivery:

@@ -230,7 +230,9 @@ uv run python -m eval.golden_run render --output eval/private/baseline-N
 ```
 
 Keep raw artifacts in ignored `eval/private/` or the existing private workflow
-store. Commit only an experiment-journal summary: purpose, relevant versions,
+store. Append summaries to the appropriate Monday-start page in `eval/journal/`
+and link new weeks from [the journal index](EXPERIMENT_JOURNAL.md).
+Commit only an experiment-journal summary: purpose, relevant versions,
 aggregate counts and denominators, actor/judge limitations, cost, and the decision.
 Do not publish full transcripts, per-round documents, generated review pages,
 receipts, or copied archives unless Ryan explicitly requests those artifacts.

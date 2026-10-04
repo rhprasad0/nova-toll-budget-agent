@@ -27,9 +27,10 @@ TollChat remains on `gpt-6-luna`. Preparation changes are separate from prompt
 search. Shared `_PricingProfile` and output descriptions remain frozen under
 `literal-input-prose-v1`. This development corpus cannot qualify production.
 
-The [experiment journal](EXPERIMENT_JOURNAL.md) is the record of what was tried,
-results, limitations, costs, and decisions. Publish summaries there; keep granular
-output in ignored `eval/private/` or the existing private workflow store.
+The [weekly experiment journal](EXPERIMENT_JOURNAL.md) records what was tried,
+results, limitations, costs, and decisions. Publish summaries in the appropriate
+weekly page; keep granular output in ignored `eval/private/` or the existing
+private workflow store.
 
 ## Frozen golden evaluation
 
@@ -82,11 +83,11 @@ submits, retrieves, and grades the frozen annual-ballpark Batch experiment.
 Its canonical input is [ballpark-hallucination-cases.jsonl](ballpark-hallucination-cases.jsonl);
 generated inputs and outputs belong in `eval/private/`. Inspect preparation and
 obtain authorization before submitting paid work. The
-[journal summary](EXPERIMENT_JOURNAL.md#annual-ballpark-grounding-experiment)
+[journal summary](journal/2026-09-21.md#annual-ballpark-grounding-experiment)
 records the result and limits.
 
 Historical golden demonstrations and calibrations are summarized in the
-[experiment journal](EXPERIMENT_JOURNAL.md#legacy-golden-demonstration-and-calibrations).
+[experiment journal](journal/2026-09-14.md#september-20-golden-demonstration-and-calibration).
 Exact approval records and release policies retain their original identities.
 Offline regression checks use focused synthetic inputs; historical run archives
 remain recoverable through the Git commit linked in the journal.
