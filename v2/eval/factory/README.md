@@ -1,7 +1,7 @@
 # Evaluation factory
 
 Log into Codex inside this portable VS Code container and ask it to author and
-validate **100 training, 50 private holdout, and 10 public shadow cases**. With
+validate **50 training, 25 private holdout, and 10 public shadow cases**. With
 your explicit budget, the agent can also freeze the suite and run calibration
 and candidate evaluations through the existing factory commands. You retain
 review, holdout-reuse, and release decisions. The suite starts at 4.0.0 and wraps
@@ -65,6 +65,11 @@ Enable device code login in your ChatGPT security settings (or ask your workspac
 admin), open the printed link in your host browser, and enter the one-time code.
 The browser does not need to run inside the container. See the official
 [Codex authentication guide](https://developers.openai.com/codex/auth/).
+
+If an older image reports `package contains a directory link`, use
+`codex --no-daemon` for the current session. Regenerate the kit and rebuild
+the container to pick up the separate Codex package directory.
+
 Use the container's Codex VS Code extension instead if you prefer its interface;
 ensure it runs in the container with `/private/work` as its workspace.
 
@@ -106,7 +111,7 @@ are authoring inputs, and eval runs continue using frozen fixture replay.
 Start Codex in `/private/work` and give it this prompt:
 
 > Follow AGENTS.md and the frozen factory contract. Author a fresh 4.0.0 suite
-> with 100 training, 50 private holdout, and 10 public shadow cases. First read
+> with 50 training, 25 private holdout, and 10 public shadow cases. First read
 > /opt/factory/v2/eval/factory/AUTHORING.md, plan its coverage dimensions across
 > all splits while retaining the contract's family allocations, then read
 > /opt/factory/v2/eval/factory/DATABASE.md and its committed schema references.
@@ -168,8 +173,8 @@ factory validate --inputs /private/work/drafts
 
 | Split | Current | Annual | Mixed |
 | --- | ---: | ---: | ---: |
-| Training | 40 | 55 | 5 |
-| Holdout | 20 | 28 | 2 |
+| Training | 20 | 27 | 3 |
+| Holdout | 10 | 14 | 1 |
 | Shadow | 4 | 5 | 1 |
 
 `contract.json` gives the coverage-family allocations. Case numbers are local to
@@ -240,7 +245,7 @@ further work. The budget is a per-command ceiling. Costs and interrupted attempt
 remain in the ledger and private events.
 
 Exactly one calibration evaluates **every authored reference** once across all
-160 cases, then performs one scripted actor check per case. Review the full
+85 cases, then performs one scripted actor check per case. Review the full
 private `suites/4.0.0/calibration/report.json`, including incomplete measurements
 and label/actor disagreements. Submit a JSON review:
 
@@ -294,8 +299,8 @@ factory evaluate --suite 4.0.0 --source <source-sha256> --role candidate \
   --budget-usd 25 --authorization '<explicit authorized budget record>'
 ```
 
-Holdout trials run three times per case. Every headline retains **150 slots** and
-50 cases; measured actor inconclusives count as unsuccessful slots. Missing,
+Holdout trials run three times per case. Every headline retains **75 slots** and
+25 cases; measured actor inconclusives count as unsuccessful slots. Missing,
 duplicate, or incompletely measured slots cannot support a comparison. No retries
 replace failures. The CLI prints the run ID; detailed reports remain private.
 
@@ -369,7 +374,7 @@ factory export-report --run <candidate-run> --incumbent <incumbent-run> \
 Compatible reports share the exact holdout, suite, calibration and review,
 evaluator, lock, installed dependency versions, Python/runtime architecture,
 settings, and three-trial budget. Comparison
-exports successful trials/150, cases passing all three/50, the zero/one/two/three
+exports successful trials/75, cases passing all three/25, the zero/one/two/three
 success histogram, aggregate improvements/regressions, paired case score deltas,
 and deterministic scenario-group bootstrap 95% intervals. Measured inconclusives
 remain unsuccessful; there are no excluded cases. Individual differences stay in

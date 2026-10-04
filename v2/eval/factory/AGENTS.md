@@ -2,8 +2,8 @@
 
 Author private inputs only in `/private/work/drafts/`; preserve revisions in the
 private Git repository. Use the frozen schemas and contract in
-`/opt/factory/v2/eval/factory/`. Start at suite/split version 4.0.0: 100 training,
-50 holdout, 10 shadow. Read `/opt/factory/v2/eval/factory/README.md` for commands
+`/opt/factory/v2/eval/factory/`. Start at suite/split version 4.0.0: 50 training,
+25 holdout, 10 shadow. Read `/opt/factory/v2/eval/factory/README.md` for commands
 and review formats; it stays available after initialization and restore.
 
 ## Agent-driven authoring and execution

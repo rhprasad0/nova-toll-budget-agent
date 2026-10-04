@@ -1,4 +1,4 @@
-"""Offline check of Codex's packaged JavaScript runtime and a nested file read."""
+"""Offline check of Codex's package tree, JavaScript runtime and nested file read."""
 
 from __future__ import annotations
 
@@ -13,6 +13,12 @@ from typing import Any
 def main() -> None:
     codex = shutil.which("codex")
     assert codex is not None, "Codex is missing"
+    assert shutil.which("ps") is not None, "Codex daemon requires ps (procps)"
+    package = Path(codex).resolve().parent.parent
+    assert (package / "codex-package.json").is_file(), "Codex package is incomplete"
+    assert not any(p.is_symlink() and p.is_dir() for p in package.rglob("*")), (
+        "Codex daemon rejects directory links; install the package in its own directory"
+    )
     host = subprocess.Popen(
         [str(Path(codex).with_name("codex-code-mode-host"))],
         stdin=subprocess.PIPE,

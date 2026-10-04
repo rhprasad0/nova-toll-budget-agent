@@ -2,39 +2,39 @@
   "version": "4.0.0",
   "splits": {
     "training": {
-      "count": 100,
-      "workflow": {
-        "current": 40,
-        "annual": 55,
-        "mixed": 5
-      },
-      "coverage": {
-        "current_complete": 20,
-        "current_state": 10,
-        "current_evidence": 10,
-        "annual_complete": 20,
-        "annual_inputs": 15,
-        "annual_routes": 10,
-        "annual_interpretation": 10,
-        "mixed": 5
-      }
-    },
-    "holdout": {
       "count": 50,
       "workflow": {
         "current": 20,
-        "annual": 28,
-        "mixed": 2
+        "annual": 27,
+        "mixed": 3
       },
       "coverage": {
         "current_complete": 10,
         "current_state": 5,
         "current_evidence": 5,
         "annual_complete": 10,
-        "annual_inputs": 8,
+        "annual_inputs": 7,
         "annual_routes": 5,
         "annual_interpretation": 5,
-        "mixed": 2
+        "mixed": 3
+      }
+    },
+    "holdout": {
+      "count": 25,
+      "workflow": {
+        "current": 10,
+        "annual": 14,
+        "mixed": 1
+      },
+      "coverage": {
+        "current_complete": 5,
+        "current_state": 3,
+        "current_evidence": 2,
+        "annual_complete": 5,
+        "annual_inputs": 4,
+        "annual_routes": 3,
+        "annual_interpretation": 2,
+        "mixed": 1
       }
     },
     "shadow": {

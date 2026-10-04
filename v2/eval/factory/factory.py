@@ -679,13 +679,14 @@ def calibrate(
             for split in SPLITS
             for e in json.loads((directory / split / "examples.json").read_text())
         }
+        expected_actor_cases = {case_id for case_id, _ in expected}
         observed = [(r["case_id"], r["example"]) for r in rows]
         complete = (
             len(observed) == len(set(observed))
             and set(observed) == expected
             and all(r["measurement_complete"] for r in rows)
-            and len(actors) == 160
-            and len({r["case_id"] for r in actors}) == 160
+            and len(actors) == len(expected_actor_cases)
+            and {r["case_id"] for r in actors} == expected_actor_cases
             and all(
                 r["status"] in {"scored", "inconclusive"}
                 and r["measurements"]
@@ -908,8 +909,9 @@ def reuse_status(root: Path, holdout_digest: str) -> dict[str, Any]:
 def summarize(
     cases: list[dict[str, Any]], rows: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    if len(cases) != 50 or len({c["id"] for c in cases}) != 50:
-        raise ValueError("holdout requires exactly 50 unique cases")
+    expected_cases = CONTRACT["splits"]["holdout"]["count"]
+    if len(cases) != expected_cases or len({c["id"] for c in cases}) != expected_cases:
+        raise ValueError(f"holdout requires exactly {expected_cases} unique cases")
     expected = {(c["id"], trial) for c in cases for trial in (1, 2, 3)}
     observed = [(r["case_id"], r["trial"]) for r in rows]
     if len(observed) != len(set(observed)) or set(observed) - expected:
@@ -921,10 +923,10 @@ def summarize(
     )
     return {
         "successful_trials": sum(successful.values()),
-        "expected_trials": 150,
-        "successful_trial_rate": sum(successful.values()) / 150,
+        "expected_trials": len(expected),
+        "successful_trial_rate": sum(successful.values()) / len(expected),
         "cases_passing_all_three": histogram[3],
-        "expected_cases": 50,
+        "expected_cases": expected_cases,
         "case_success_histogram": [histogram[n] for n in range(4)],
         "inconclusive_trials": sum(r["status"] == "inconclusive" for r in rows),
         "missing_trials": len(expected - set(observed)),
@@ -1445,13 +1447,13 @@ def comparison(root: Path, candidate_id: str, incumbent_id: str) -> dict[str, An
         aggregate[name]["cases_passing_all_three"] = report["overall"][
             "cases_passing_all_three"
         ]
-        aggregate[name]["expected_cases"] = 50
+        aggregate[name]["expected_cases"] = report["overall"]["expected_cases"]
     aggregate.update(
         successful_trial_delta=candidate["overall"]["successful_trials"]
         - incumbent["overall"]["successful_trials"],
         pass_all_case_delta=candidate["overall"]["cases_passing_all_three"]
         - incumbent["overall"]["cases_passing_all_three"],
-        mean_paired_case_delta=sum(deltas.values()) / 50,
+        mean_paired_case_delta=sum(deltas.values()) / len(deltas),
         improved_cases=sum(d > 0 for d in deltas.values()),
         regressed_cases=sum(d < 0 for d in deltas.values()),
         unchanged_cases=sum(d == 0 for d in deltas.values()),
