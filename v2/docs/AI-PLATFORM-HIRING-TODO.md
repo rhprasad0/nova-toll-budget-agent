@@ -55,7 +55,7 @@ weaken that story.
 | Recovery | The closure record links candidate rejection, recovery, and healthy cleanup; [PR #533](https://github.com/rhprasad0/nova-toll-budget-agent/pull/533) explains the retained frontend defect | The earlier rehearsal demonstrated routing/API recovery, not frontend health. Do not discard that proof or claim it covered the browser. |
 | Streaming and sessions | [Runtime](../agent/agentcore_entrypoint.py) and [proxy](../lambdas/chat_proxy/handler.mjs) implement checked streaming, release fencing, and request leases | Streaming exists. Session metadata is stored, but conversation state is in runtime memory; releases intentionally require a new chat. |
 | Data and security | [Loader](../lambdas/loader/handler.py), [pricing SQL](../db/analysis.sql), [security policy](../../SECURITY.md), and [telemetry runbook](../runbooks/telemetry-pii-redaction.md) | Code and tests establish specific contracts; live observations retain their narrower scope. |
-| Cost and evaluation | [Billing dashboard runbook](../runbooks/cost-dashboard.md), [controlled inference benchmark](../eval/EXPERIMENT_JOURNAL.md#2026-10-03--controlled-inference-cost-benchmark), and [evaluation guide](../eval/README.md) | Controlled per-turn inference cost is measured; deployed serving-path attribution remains missing. Evaluation timings that include actors and judges are not serving latency. Exposed development results do not qualify production. |
+| Cost and evaluation | [Billing dashboard runbook](../runbooks/cost-dashboard.md), [controlled inference benchmark](../eval/journal/2026-09-28.md#october-3-controlled-inference-cost-benchmark), and [evaluation guide](../eval/README.md) | Controlled per-turn inference cost is measured; deployed serving-path attribution remains missing. Evaluation timings that include actors and judges are not serving latency. Exposed development results do not qualify production. |
 
 ### October 3 checklist status
 
@@ -218,7 +218,7 @@ remains open for the full cost-dashboard scope.
 - [ ] Verify production publication of the benchmark and finish deployed
   workload attribution and tradeoff analysis.
 
-The [journal](../eval/EXPERIMENT_JOURNAL.md#2026-10-03--controlled-inference-cost-benchmark)
+The [journal](../eval/journal/2026-09-28.md#october-3-controlled-inference-cost-benchmark)
 records 36 attempted conversations, 47 completed assistant turns, and three
 tool-argument interruptions. Agent inference averaged **$0.001115 per completed
 turn**; total inference across the agent, simulated user, and judges was
