@@ -52,14 +52,14 @@ def test_mixed_loader_publisher_timed_and_cost_contracts(
         previous = retained("v2/db/" + name, baseline)
         current = (ROOT / "v2/db" / name).read_bytes()
         if name == "oracle/schema.sql" and previous != current:
-            # Label and development catalog grants preserve runtime SQL contracts.
+            # Development catalog grants preserve runtime SQL contracts.
             for marker in (
-                b"-- oracle schema version: 1.15.0\n",
-                b"INSERT INTO oracle.schema_version (version) VALUES ('1.15.0');",
+                b"-- oracle schema version: 1.15.1\n",
+                b"INSERT INTO oracle.schema_version (version) VALUES ('1.15.1');",
             ):
                 assert previous.count(marker) == 1
                 previous = previous.replace(
-                    marker, marker.replace(b"1.15.0", b"1.15.2")
+                    marker, marker.replace(b"1.15.1", b"1.15.2")
                 )
         if name == "oracle/schema.sql":
             catalog_grant = b"""-- The evaluation factory's fixed development reader can inspect catalog evidence.
