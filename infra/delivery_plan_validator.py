@@ -2263,6 +2263,40 @@ def _has_production_value(value: JSON) -> bool:
     )
 
 
+def _is_report_routes_repair(resource: dict[str, JSON]) -> bool:
+    """Only the reviewed legacy development bytes may be replaced by the fix."""
+    if resource.get("address") != "aws_cloudfront_function.public_report_routes":
+        return False
+    change = cast(dict[str, Any], resource["change"])
+    before, after = change.get("before"), change.get("after")
+    if (
+        change["actions"] != ["update"]
+        or not isinstance(before, dict)
+        or not isinstance(after, dict)
+    ):
+        return False
+    before, after = cast(dict[str, JSON], before), cast(dict[str, JSON], after)
+    code = before.get("code")
+    if (
+        not isinstance(code, str)
+        or hashlib.sha256(code.encode()).hexdigest()
+        != "cd35f0c58576a1d0aad5809f0356fb34385e2c6a0b8c95452296e727421cd277"
+        or any(
+            side.get("name") != "tollchat-v2-public-report-routes-dev"
+            or side.get("arn")
+            != f"arn:aws:cloudfront::{ACCOUNT}:function/tollchat-v2-public-report-routes-dev"
+            for side in (before, after)
+        )
+    ):
+        return False
+    try:
+        # Reuse the exact public-byte, runtime, publish and metadata contract.
+        cost_release.validate(cast(dict[str, Any], resource), "development")
+    except (ValueError, KeyError, TypeError):
+        return False
+    return True
+
+
 def _manifest_has_production_value(manifest: JSON) -> bool:
     if not isinstance(manifest, dict):
         return _has_production_value(manifest)
@@ -2674,6 +2708,10 @@ def _parse_plan(
         ):
             _reject("delete_not_permitted", address=address, action=action)
         production_candidate = copy.deepcopy(resource)
+        if _is_report_routes_repair(resource):
+            # The old code is evidence of the fixed bug, never a proposed target.
+            candidate_change = cast(dict[str, Any], production_candidate["change"])
+            candidate_change["before"].pop("code")
         if spec is not None and address in TRACE_NOTICE_DIGESTS:
             candidate_change = cast(dict[str, JSON], production_candidate["change"])
             for side in ("before", "after"):

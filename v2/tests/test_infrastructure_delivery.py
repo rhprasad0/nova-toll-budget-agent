@@ -1991,6 +1991,10 @@ def _assert_development_plan_workflow(source: str) -> None:
         in build_source
     )
     assert '>"$EVIDENCE_DIR/shared-package-compatibility.json"' in build_source
+    assert (
+        'git show "${CANDIDATE_SHA}:v2/agent/public-report-routes.js"' in build_source
+    )
+    assert '--report-routes "$EVIDENCE_DIR/public-report-routes.js"' in build_source
     assert "cp -P -- v2/infra/build/DEPLOYMENT_SHA256SUMS" in build_source
     assert (
         source.index("Build reviewed deployment packages")
@@ -2033,6 +2037,9 @@ def _assert_development_plan_workflow(source: str) -> None:
     assert "download-artifact" in source
     assert "trusted/infra/release_manifest.py" in plan_source
     assert "--evidence" in plan_source
+    assert '--report-routes "$STAGING/public-report-routes.js"' in plan_source
+    assert 'cp -P -- "$STAGING/public-report-routes.js"' in plan_source
+    assert '"$GITHUB_WORKSPACE/trusted/v2/agent/public-report-routes.js"' in plan_source
     assert "--repo-root" not in plan_source
     assert 'test ! -L "$MANIFEST"' in plan_source
     assert "isinstance(value, dict)" in plan_source
@@ -2059,6 +2066,11 @@ def _assert_development_plan_workflow(source: str) -> None:
     assert source.index(
         "Verify candidate release binding without credentials"
     ) < source.index("aws-actions/configure-aws-credentials@")
+    assert (
+        source.index('--report-routes "$STAGING/public-report-routes.js"')
+        < source.index('cp -P -- "$STAGING/public-report-routes.js"')
+        < source.index("aws-actions/configure-aws-credentials@")
+    )
     plan_start = source.index("\n  plan:\n")
     credential_index = source.index(
         "aws-actions/configure-aws-credentials@", plan_start

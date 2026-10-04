@@ -10,6 +10,17 @@ applies Terraform. The existing post-merge development application delivery
 also runs automatically from `main`, using exact CI admission, one saved plan,
 fixed development migrations, application apply, and readiness gates.
 
+The PR plan keeps Terraform and its checker on trusted `main`. It stages the
+candidate's `public-report-routes.js` as data only after checking its digest
+against the candidate manifest and binding that manifest to the commit and run.
+The development validator permits the exact legacy report-routing code to be
+replaced by the reviewed relative redirects on the fixed development function;
+it still rejects the old code as a proposed value and all production identities.
+Changes to the trusted workflow or validator take effect only after they reach
+`main`. A PR containing such a repair cannot activate its own privileged checker;
+rerunning the unchanged trusted baseline will still fail and grants no bypass of
+the required check.
+
 The `development-plan` environment remains reviewer-free with its custom
 `refs/pull/*/merge`, `gh-readonly-queue/main/*`, and `main` branch policies.
 The `development` environment remains reviewer-free with its `main` branch
@@ -624,7 +635,7 @@ indexes, homepage discovery links, retired-route responses, both hostnames,
 crawler policy, representative agent families, and API isolation:
 
 Detailed entrance/exit URLs are retired. Verified replacements return 301 to the
-matching area report; other URLs in that retired namespace return 410. After
+matching area report on the same host; other URLs in that retired namespace return 410. After
 deployment and these checks, resubmit the sitemap and start Search Console
 validation for the forbidden URLs. Redirected and removed URLs can remain
 excluded; indexing of the current reports is Google's decision.
@@ -669,12 +680,12 @@ curl --fail-with-body --silent --show-error "$SITE_URL/" \
 for legacy in /tolls /tolls/; do
   test "$(curl --silent --show-error --output /dev/null --dump-header "$REPORT_PAGE" \
     --write-out '%{http_code}' "$SITE_URL$legacy")" -eq 301
-  grep -iFx $'location: https://tollchat.ai/#toll-reports\r' "$REPORT_PAGE"
+  grep -iFx $'location: /#toll-reports\r' "$REPORT_PAGE"
 done
 LEGACY_REPORT="$SITE_URL/tolls/i95-i495/woodburn-gallows-road-merrifield-northbound/tysons-route-7-leesburg-pike-northbound/"
 test "$(curl --silent --show-error --output /dev/null --dump-header "$REPORT_PAGE" \
   --write-out '%{http_code}' "$LEGACY_REPORT")" -eq 301
-grep -iFx $'location: https://tollchat.ai/tolls/i95-i495/northbound/woodburn-to-tysons/\r' "$REPORT_PAGE"
+grep -iFx $'location: /tolls/i95-i495/northbound/woodburn-to-tysons/\r' "$REPORT_PAGE"
 curl --fail-with-body --silent --show-error --location "$LEGACY_REPORT" \
   | grep -F '<link rel="canonical" href="https://tollchat.ai/tolls/i95-i495/northbound/woodburn-to-tysons/">' >/dev/null
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \

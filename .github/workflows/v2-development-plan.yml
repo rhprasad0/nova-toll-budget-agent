@@ -154,6 +154,8 @@ jobs:
             >"$EVIDENCE_DIR/development-release-manifest.json"
           git show "${CANDIDATE_SHA}:v2/scripts/shared-package-compatibility.json" \
             >"$EVIDENCE_DIR/shared-package-compatibility.json"
+          git show "${CANDIDATE_SHA}:v2/agent/public-report-routes.js" \
+            >"$EVIDENCE_DIR/public-report-routes.js"
           cp -P -- v2/infra/build/DEPLOYMENT_SHA256SUMS "$EVIDENCE_DIR/"
 
       - name: Checkout trusted manifest verifier after candidate build
@@ -178,6 +180,7 @@ jobs:
             --candidate-sha "$CANDIDATE_SHA" \
             --run-id "$GITHUB_RUN_ID" \
             --repo-root "$GITHUB_WORKSPACE" \
+            --report-routes "$EVIDENCE_DIR/public-report-routes.js" \
             --write-evidence "$EVIDENCE_DIR/development-release-evidence.json" \
             >"$RUNNER_TEMP/development-release-verification.json"
           jq -e '.status == "accepted" and .reason_code == "ok"' \
@@ -336,10 +339,14 @@ jobs:
             --candidate-sha "$CANDIDATE_SHA" \
             --run-id "$GITHUB_RUN_ID" \
             --evidence "$STAGING/development-release-evidence.json" \
+            --report-routes "$STAGING/public-report-routes.js" \
             --shared-evidence "$STAGING/shared-package-evidence.json" \
             >"$RUNNER_TEMP/development-release-verification.json"
           jq -e '.status == "accepted" and .reason_code == "ok"' \
             "$RUNNER_TEMP/development-release-verification.json" >/dev/null
+          # Stage only verified candidate data; Terraform and the checker stay trusted.
+          cp -P -- "$STAGING/public-report-routes.js" \
+            "$GITHUB_WORKSPACE/trusted/v2/agent/public-report-routes.js"
 
       - name: Assume read-only development-plan identity
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0

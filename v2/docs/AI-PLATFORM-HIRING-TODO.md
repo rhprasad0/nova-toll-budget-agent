@@ -10,6 +10,11 @@ Research used Exa to inspect official hiring and engineering sources, alongside
 repository code, tests, runbooks, and GitHub delivery records. This is an evidence
 review, not a certification of current deployed state.
 
+**Status review:** October 3, 2026, against
+[`bdf4f574`](https://github.com/rhprasad0/nova-toll-budget-agent/tree/bdf4f574f05094bbef6daa4617e216c03ef63583),
+current GitHub delivery records, and read-only checks of the public dashboards.
+The hiring-source research above remains dated September 22.
+
 ## Assessment
 
 **The biggest gap is measured operating evidence, not another infrastructure
@@ -27,7 +32,8 @@ these sources identify relevant signals, not an exclusively infrastructure job
 description or a universal hiring checklist. Staff-level postings do not make
 every listed responsibility a prerequisite for this portfolio.
 
-**The uncomfortable part: there are no real users.** The project therefore has
+**The uncomfortable part: independent use is still unproven.** No external pilot
+is recorded in the reviewed repository or issue evidence. The project therefore has
 limited evidence of demands someone else chose, sustained operational pressure,
 or usefulness outside the builder's expectations. Synthetic workloads can prove
 specific behavior honestly. They cannot establish customer-scale reliability,
@@ -49,7 +55,30 @@ weaken that story.
 | Recovery | The closure record links candidate rejection, recovery, and healthy cleanup; [PR #533](https://github.com/rhprasad0/nova-toll-budget-agent/pull/533) explains the retained frontend defect | The earlier rehearsal demonstrated routing/API recovery, not frontend health. Do not discard that proof or claim it covered the browser. |
 | Streaming and sessions | [Runtime](../agent/agentcore_entrypoint.py) and [proxy](../lambdas/chat_proxy/handler.mjs) implement checked streaming, release fencing, and request leases | Streaming exists. Session metadata is stored, but conversation state is in runtime memory; releases intentionally require a new chat. |
 | Data and security | [Loader](../lambdas/loader/handler.py), [pricing SQL](../db/analysis.sql), [security policy](../../SECURITY.md), and [telemetry runbook](../runbooks/telemetry-pii-redaction.md) | Code and tests establish specific contracts; live observations retain their narrower scope. |
-| Cost and evaluation | [Billing dashboard runbook](../runbooks/cost-dashboard.md) and [experiment summaries](../eval/EXPERIMENT_JOURNAL.md) | Per-turn cost is unmeasured. Evaluation timings that include actors and judges are not serving latency. |
+| Cost and evaluation | [Billing dashboard runbook](../runbooks/cost-dashboard.md), [controlled inference benchmark](../eval/EXPERIMENT_JOURNAL.md#2026-10-03--controlled-inference-cost-benchmark), and [evaluation guide](../eval/README.md) | Controlled per-turn inference cost is measured; deployed serving-path attribution remains missing. Evaluation timings that include actors and judges are not serving latency. Exposed development results do not qualify production. |
+
+### October 3 checklist status
+
+**No full item has verified completion.** Partial means useful supporting evidence
+exists, but the item's full completion criteria remain unmet. The nine main
+checkboxes stay unchecked; the cost item separately records its completed
+benchmark milestone.
+
+| Item | Status | Remaining evidence |
+| --- | --- | --- |
+| 1. Latency improvement | Open | Reproducible deployed baseline, attribution, and comparable improvement attempt. |
+| 2. Conversation continuity | Open | Eligible conversations continuing through promotion and rollback; current behavior is an explicit restart. |
+| 3. Independent use | Open | External pilot findings and changes driven by them. |
+| 4. Capacity and failure envelope | Partial | Bounded load results and a complete failure case study; existing routing recovery retains its narrower scope. |
+| 5. Cost per successful turn | Partial | Production benchmark publication, deployed workload attribution, and measured engineering tradeoffs. |
+| 6. Independent operation | Partial | Another engineer's walkthrough and compact case studies; the README now links implementation and verification evidence. |
+| 7. Source freshness | Open | Source-age alarms and frozen-feed/recovery evidence; tracked in #649. |
+| 8. Database restoration | Open | An approved development-backup restoration drill with measured recovery results. |
+| 9. Security evidence | Partial | A bounded packet covering session/origin/credential controls and telemetry failure behavior, with tests distinguished from live observations. |
+
+The next measured workload should combine serving latency and attributable cost.
+A small independent pilot can proceed alongside it. Preserve conversation
+continuity as a separate technical priority.
 
 ## Ranked TODO
 
@@ -71,6 +100,8 @@ lesson is measurement and attribution; it is not a requirement to add WebSockets
 **Current:** checked streaming already exists. [Issue #542](https://github.com/rhprasad0/nova-toll-budget-agent/issues/542)
 covers synthetic latency publication, explicitly excludes optimization, and
 predates checked streaming. Update its measurement assumptions when implementing.
+No reproducible deployed before/after study is recorded. Frozen-evaluation and
+cost-benchmark timings do not complete this item.
 
 **Done when:** a fixed workload measures from client request start to first
 activity event, first checked answer text, and completed answer separately.
@@ -134,9 +165,10 @@ loss are separate capabilities, not requirements for this item.
 **Why:** this addresses a gap infrastructure alone cannot fill: whether other
 people can complete a useful task without the builder guiding them.
 
-**Current:** there are no real users. Start with a small qualitative sample,
-such as three to five people with relevant commute questions; this is a proposed
-exercise, not existing adoption or a statistically representative study.
+**Current:** no external pilot findings are recorded. Start with a small
+qualitative sample, such as three to five people with relevant commute questions;
+this is a proposed exercise, not existing adoption or a statistically
+representative study.
 
 **Done when:** record task completion, confusion, failures, and whether anyone
 chooses to return. Observe without coaching every interaction, capture consented
@@ -153,8 +185,11 @@ prove. Do not manufacture adoption claims or turn this into a growth project.
 tradeoffs described in [Anthropic's AI reliability role](https://job-boards.greenhouse.io/anthropic/jobs/5101173008).
 
 **Current:** the [proxy configuration](../infra/agentcore.tf) limits each slot to
-five concurrent executions and includes timeout and latency alarms. Controls
-exist; a reproducible capacity study remains missing.
+five concurrent executions and includes timeout and latency alarms. The existing
+[recovery record](https://github.com/rhprasad0/nova-toll-budget-agent/issues/522#issuecomment-5750028330)
+provides routing/API recovery evidence. A reproducible capacity study and a
+complete failure case study remain missing; routing recovery does not prove
+browser health or resilience to shared database/model failures.
 
 **Done when:** test below, at, and above configured capacity in development with
 hard request and cost caps. Report admitted/completed/rejected requests, latency,
@@ -173,8 +208,28 @@ Fix demonstrated bottlenecks before adding queues or autoscaling machinery.
 **Why:** an owner must explain what the service costs and what an improvement
 buys. Reliability, latency, and cost belong in the same engineering decision.
 
-**Current:** the billing dashboard exists; per-turn attribution remains open in
-[issue #543](https://github.com/rhprasad0/nova-toll-budget-agent/issues/543).
+**Current:** billing dashboards are published in both environments. Their October 3
+snapshots report successful refreshes. [PR #653](https://github.com/rhprasad0/nova-toll-budget-agent/pull/653)
+adds a controlled inference benchmark; [issue #543](https://github.com/rhprasad0/nova-toll-budget-agent/issues/543)
+remains open for the full cost-dashboard scope.
+
+- [x] Measure and publish a controlled inference benchmark in development,
+  with complete usage accounting and failure charges included.
+- [ ] Verify production publication of the benchmark and finish deployed
+  workload attribution and tradeoff analysis.
+
+The [journal](../eval/EXPERIMENT_JOURNAL.md#2026-10-03--controlled-inference-cost-benchmark)
+records 36 attempted conversations, 47 completed assistant turns, and three
+tool-argument interruptions. Agent inference averaged **$0.001115 per completed
+turn**; total inference across the agent, simulated user, and judges was
+**$0.149452**. Approximately 98% of agent input was cache reads. This sample with
+frozen tool results excludes infrastructure and tool execution and does not
+establish production or cold-cache costs.
+
+The aggregate is available on the [development cost page](https://dev.tollchat.ai/cost-dashboard).
+At this review, the production benchmark asset returned HTTP 403; a reachable
+billing page does not prove benchmark publication. Serving-path cost measurement
+using the latency workload remains outstanding.
 
 **Done when:** reuse the latency workload and account for model calls, cache
 usage, failures, retries, and completed turns. Verify the applicable rate source
@@ -195,20 +250,31 @@ align with [OpenAI's developer productivity role](https://openai.com/careers/sof
 Independence here means someone can follow the system, not that the original
 builder never needs help.
 
-**Current:** substantial delivery proof exists but is scattered, and some status
-text is stale. The [September 22 development run](https://github.com/rhprasad0/nova-toll-budget-agent/actions/runs/35716572248)
-failed during deployment and final evidence reporting. The [September 20 release
-event](https://github.com/rhprasad0/nova-toll-budget-agent/actions/runs/35546064765)
-succeeded, but its [downstream delivery](https://github.com/rhprasad0/nova-toll-budget-agent/actions/runs/35546070609)
-failed before planning. Neither proves the latest main commit is serving. These
-are dated observations; investigate current status before prescribing a fix.
+**Current:** the [README engineering evidence table](../../README.md#engineering-evidence)
+links claims to implementation, tests, and operating limits. Earlier failed
+deliveries are followed by successful
+[October 2 production delivery](https://github.com/rhprasad0/nova-toll-budget-agent/actions/runs/37070568723)
+for `20e341ca` and
+[October 3 development delivery](https://github.com/rhprasad0/nova-toll-budget-agent/actions/runs/37146460233)
+for `2b716cdc`. Those records cover their exact releases, not every later main
+commit. An independent operator walkthrough and compact case studies are still
+missing.
+
+The former production evaluation qualification gate was deliberately retired in
+[PR #643](https://github.com/rhprasad0/nova-toll-budget-agent/pull/643).
+[#308](https://github.com/rhprasad0/nova-toll-budget-agent/issues/308#issuecomment-5969443960)
+and [#362](https://github.com/rhprasad0/nova-toll-budget-agent/issues/362#issuecomment-5969443743)
+are closed as superseded, not as proof of qualification. The new evaluation
+factory in [PR #648](https://github.com/rhprasad0/nova-toll-budget-agent/pull/648)
+supports private authoring and comparisons; it does not itself establish agent
+accuracy or restore a production qualification gate.
 
 **Done when:** another engineer follows verification and release instructions
 within appropriate access boundaries. Record elapsed time, intervention required,
 and confusing steps; simplify one demonstrated problem without removing a safety
-invariant. Reconcile runbooks, actual serving identity, current delivery failures,
-and outstanding qualification in [#308](https://github.com/rhprasad0/nova-toll-budget-agent/issues/308)
-and [#362](https://github.com/rhprasad0/nova-toll-budget-agent/issues/362). Publish
+invariant. Reconcile runbooks, actual serving identity, current delivery status,
+and the documented evaluation limits. Do not count superseded qualification
+issues as completed accuracy evidence. Publish
 a short architecture explanation and two or three case studies linking decisions,
 measurements, failures, and outcomes. Explain personal contributions and AI
 assistance. Preserve the routing-versus-browser limitation of the earlier rollback
@@ -225,6 +291,9 @@ evidence rather than rerunning completed work merely to create another artifact.
 duplicates, and [pricing SQL](../db/analysis.sql) rejects stale observations.
 However, the [freshness alarm](../infra/main.tf) counts successful loader
 executions; an old or no-op replay can still emit `V2_LOAD_OK`.
+[Issue #649](https://github.com/rhprasad0/nova-toll-budget-agent/issues/649)
+now defines the source-age alarm and bounded replay work. It is open; source-age
+monitoring and frozen-feed evidence remain outstanding.
 
 **Done when:** in an isolated development replay, freeze upstream observation
 timestamps while ingestion continues, replay older and duplicate inputs, and
@@ -261,7 +330,11 @@ still behave correctly when dependencies fail.
 
 **Current:** security controls and checks are already substantive. Reuse the
 [security policy](../../SECURITY.md), proxy tests, release checks, and
-[telemetry verification procedure](../runbooks/telemetry-pii-redaction.md).
+[telemetry verification procedure](../runbooks/telemetry-pii-redaction.md). The
+[README](../../README.md#engineering-evidence) consolidates implementation/test
+links and one observed address-redaction example. That example does not establish
+live coverage of all boundaries or telemetry failure paths; the complete bounded
+packet remains outstanding.
 
 **Done when:** link existing proof, then fill only missing evidence using
 synthetic data. Show rejection across session boundaries, enforcement of
@@ -274,9 +347,13 @@ or credentials. Another security subsystem is not the objective.
 
 - Keep latency, cost, and reliability as separate public pages and reuse existing
   snapshot publishing. Public page views must not trigger experiments or inference.
-- Retain the existing agent-quality release gates and finish outstanding
-  qualification. Do not expand this roadmap into an evaluation program or change
-  the application model/prompt to improve infrastructure measurements.
+- Preserve the current provenance, protected review, migration, saved-plan, and
+  canary controls. The former aggregate production qualification gate is retired;
+  those delivery controls and exposed development results do not establish
+  independent agent accuracy. Follow the [current evaluation guide](../eval/README.md)
+  for replacement authoring/comparison work without treating it as qualification.
+  Do not expand this roadmap into an evaluation program or change the application
+  model/prompt to improve infrastructure measurements.
 - Do not add Kubernetes, GPU serving, multi-agent orchestration, multi-region
   infrastructure, or a generic platform just for signaling. Revisit them only
   for a target role or a demonstrated requirement.
