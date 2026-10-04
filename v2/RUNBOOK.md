@@ -10,6 +10,17 @@ applies Terraform. The existing post-merge development application delivery
 also runs automatically from `main`, using exact CI admission, one saved plan,
 fixed development migrations, application apply, and readiness gates.
 
+The PR plan keeps Terraform and its checker on trusted `main`. It stages the
+candidate's `public-report-routes.js` as data only after checking its digest
+against the candidate manifest and binding that manifest to the commit and run.
+The development validator permits the exact legacy report-routing code to be
+replaced by the reviewed relative redirects on the fixed development function;
+it still rejects the old code as a proposed value and all production identities.
+Changes to the trusted workflow or validator take effect only after they reach
+`main`. A PR containing such a repair cannot activate its own privileged checker;
+rerunning the unchanged trusted baseline will still fail and grants no bypass of
+the required check.
+
 The `development-plan` environment remains reviewer-free with its custom
 `refs/pull/*/merge`, `gh-readonly-queue/main/*`, and `main` branch policies.
 The `development` environment remains reviewer-free with its `main` branch

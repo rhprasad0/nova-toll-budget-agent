@@ -163,6 +163,7 @@ class ReleaseManifestTests(unittest.TestCase):
             "write_evidence": self.root / "evidence.json",
             "evidence": None,
             "bundle_root": None,
+            "report_routes": None,
         }
         values.update(changes)
         return argparse.Namespace(**values)
@@ -179,6 +180,44 @@ class ReleaseManifestTests(unittest.TestCase):
     def assert_rejected(self, reason: str, **changes: object) -> None:
         with self.assertRaisesRegex(release_manifest.Invalid, f"^{reason}$"):
             self.verify(**changes)
+
+    def test_candidate_report_routes_are_verified_against_bound_manifest(self) -> None:
+        relative = "v2/agent/public-report-routes.js"
+        source = self.track(relative, b"function handler() { return '/tolls/'; }\n")
+        self.manifest_value["deployment_inputs"] = {
+            "input.txt": digest(self.input),
+            relative: digest(source),
+        }
+        self.write_manifest()
+        self.assertEqual(
+            self.verify(report_routes=source, _exact_inputs={"input.txt", relative})[
+                "status"
+            ],
+            "accepted",
+        )
+        downloaded = self.root / "public-report-routes.js"
+        downloaded.write_bytes(source.read_bytes())
+        arguments: dict[str, object] = {
+            "repo_root": None,
+            "write_evidence": None,
+            "evidence": self.root / "evidence.json",
+            "report_routes": downloaded,
+        }
+        self.assertEqual(self.verify(**arguments)["status"], "accepted")
+        downloaded.write_bytes(b"unreviewed\n")
+        self.assert_rejected("report_routes_digest_mismatch", **arguments)
+        downloaded.unlink()
+        downloaded.symlink_to(source)
+        self.assert_rejected("report_routes_unreadable", **arguments)
+        downloaded.unlink()
+        self.assert_rejected("report_routes_unreadable", **arguments)
+
+        arguments["report_routes"] = self.input
+        self.assert_rejected("report_routes_digest_mismatch", **arguments)
+        self.manifest_value["deployment_inputs"] = {"input.txt": digest(self.input)}
+        self.write_manifest()
+        arguments["report_routes"] = source
+        self.assert_rejected("report_routes_digest_mismatch", **arguments)
 
     def test_source_then_artifact_verification_accepts(self) -> None:
         first = self.verify()

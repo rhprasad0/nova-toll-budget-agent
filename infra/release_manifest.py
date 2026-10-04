@@ -466,6 +466,10 @@ def verify(args: argparse.Namespace) -> dict[str, JSON]:
     manifest = _load(args.manifest, "manifest_unreadable")
     inputs, packages = _validate_manifest(manifest)
     _verify_packages(args.package_dir, args.checksums, packages)
+    if args.report_routes is not None and _digest_file(
+        args.report_routes, "report_routes_unreadable"
+    ) != inputs.get("v2/agent/public-report-routes.js"):
+        _reject("report_routes_digest_mismatch")
     if args.bundle_root is not None:
         verify_bundle_payload(args.bundle_root, inputs, packages)
     expected_evidence = _evidence(
@@ -515,6 +519,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--write-evidence", type=Path)
     parser.add_argument("--evidence", type=Path)
     parser.add_argument("--shared-evidence", type=Path)
+    parser.add_argument("--report-routes", type=Path)
     args = parser.parse_args(argv)
     try:
         result = verify(args)

@@ -4213,6 +4213,91 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         result = validate_plan(plan, lambda_manifest())
         self.assertEqual(result["status"], "accepted", result)
 
+    def test_report_routes_repair_accepts_only_exact_development_transition(
+        self,
+    ) -> None:
+        root = Path(__file__).resolve().parents[1]
+        code = (root / "v2/agent/public-report-routes.js").read_text()
+        legacy = code.replace('"/#toll-reports"', '"https://tollchat.ai/#toll-reports"')
+        legacy = legacy.replace(
+            '"/tolls/i95-i495/"', '"https://tollchat.ai/tolls/i95-i495/"'
+        )
+        legacy = legacy.replace(
+            "Current area reports are at /tolls/i95-i495/.",
+            "Current area reports are at https://tollchat.ai/tolls/i95-i495/.",
+        )
+        address = "aws_cloudfront_function.public_report_routes"
+        after: dict[str, JSON] = {
+            "name": "tollchat-v2-public-report-routes-dev",
+            "arn": "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-report-routes-dev",
+            "runtime": "cloudfront-js-2.0",
+            "publish": True,
+            "comment": "Resolve canonical TollChat report directories",
+            "code": code,
+        }
+        before = dict(after, code=legacy)
+        plan = _plan([_resource_change(address, "update", before, after)])
+        manifest = json.loads(
+            (root / "infra/development-release-manifest.json").read_text()
+        )
+        result = validate_plan(plan, manifest)
+        self.assertEqual(result["status"], "accepted", result)
+
+        publishing = copy.deepcopy(plan)
+        change = publishing["resource_changes"][0]["change"]
+        for field in ("etag", "live_stage_etag", "status"):
+            change["before"][field] = "previous"
+            change["after"][field] = None
+            change["after_unknown"][field] = True
+        result = validate_plan(publishing, manifest)
+        self.assertEqual(result["status"], "accepted", result)
+
+        for side, field, value in (
+            ("before", "code", legacy + "\n"),
+            ("after", "code", code + "\n"),
+            ("after", "code", legacy),
+            (
+                "before",
+                "arn",
+                "arn:aws:cloudfront::920534282028:function/tollchat-v2-public-report-routes",
+            ),
+            (
+                "after",
+                "arn",
+                "arn:aws:cloudfront::920534282028:function/tollchat-v2-public-report-routes",
+            ),
+            ("before", "name", "other-dev"),
+            ("after", "name", "other-dev"),
+            ("after", "runtime", "cloudfront-js-1.0"),
+            ("after", "publish", False),
+            ("after", "comment", "changed"),
+            ("before", "runtime", "cloudfront-js-1.0"),
+            ("before", "role", "arn:aws:iam::920534282028:role/other"),
+        ):
+            with self.subTest(side=side, field=field):
+                invalid = copy.deepcopy(plan)
+                invalid["resource_changes"][0]["change"][side][field] = value
+                self.assertEqual(validate_plan(invalid, manifest)["status"], "rejected")
+        for action in ("no-op", "create", "delete"):
+            with self.subTest(action=action):
+                invalid = _plan([_resource_change(address, action, before, before)])
+                self.assertEqual(validate_plan(invalid, manifest)["status"], "rejected")
+        invalid = copy.deepcopy(plan)
+        invalid["resource_changes"][0]["change"]["after_unknown"]["code"] = True
+        self.assertEqual(validate_plan(invalid, manifest)["status"], "rejected")
+        invalid = copy.deepcopy(plan)
+        invalid["resource_changes"][0]["change"]["after_sensitive"]["code"] = True
+        self.assertEqual(validate_plan(invalid, manifest)["status"], "rejected")
+        invalid = copy.deepcopy(plan)
+        invalid["resource_changes"].append(
+            _resource_change(
+                "aws_cloudfront_function.public_chat_routes", "no-op", before, before
+            )
+        )
+        self.assertEqual(
+            validate_plan(invalid, manifest)["reason_code"], "production_target"
+        )
+
     def test_accepts_dormant_production_configuration_and_development_resources(
         self,
     ) -> None:
