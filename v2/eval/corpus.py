@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import platform
 import re
@@ -15,7 +16,7 @@ from collections.abc import Generator
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from importlib.metadata import distributions
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO, cast
 
 from agent.toll_agent import parse_prompt_points
 from eval import golden
@@ -284,6 +285,21 @@ def console(
     log = destination.parent / ("." + destination.name + ".console.log")
     require_external(log)
     failed = False
+    handlers: list[tuple[logging.StreamHandler[TextIO], TextIO]] = []
+    loggers = [
+        logging.getLogger(),
+        *(
+            value
+            for value in logging.Logger.manager.loggerDict.values()
+            if isinstance(value, logging.Logger)
+        ),
+    ]
+    for logger in loggers:
+        for handler in logger.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                stream_handler = cast("logging.StreamHandler[TextIO]", handler)
+                if stream_handler.stream in (sys.stdout, sys.stderr):
+                    handlers.append((stream_handler, stream_handler.stream))
     descriptor = os.open(
         log, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600
     )
@@ -293,11 +309,16 @@ def console(
         redirect_stderr(stream),
     ):
         os.fchmod(stream.fileno(), 0o600)
+        for handler, _ in handlers:
+            handler.setStream(stream)
         try:
             yield True
         except BaseException:
             traceback.print_exc()
             failed = True
+        finally:
+            for handler, original in handlers:
+                handler.setStream(original)
     if failed:
         raise SystemExit(
             "External corpus command failed; inspect the host-side diagnostic log."

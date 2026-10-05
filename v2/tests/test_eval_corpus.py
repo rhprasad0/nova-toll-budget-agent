@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import sys
 from pathlib import Path
@@ -693,17 +694,25 @@ def test_holdout_aggregate_is_allowlisted_and_keeps_console_private(
         '{"overall":{"successful_trials":25}}'
     )
     original_render = run.render
+    logger = logging.getLogger("holdout-console-regression")
+    handler = logging.StreamHandler(sys.stderr)
+    logger.addHandler(handler)
 
     def private_render(directory: Path) -> dict[str, Any]:
         print("SECRET_PROGRESS")
         print("SECRET_STDERR", file=sys.stderr)
+        logger.warning("SECRET_LOGGING")
         return original_render(directory)
 
     monkeypatch.setattr(run, "render", private_render)
     monkeypatch.setattr(
         "sys.argv", ["aggregate", "aggregate", "--output", str(journal.directory)]
     )
-    run.main()
+    try:
+        run.main()
+    finally:
+        logger.removeHandler(handler)
+        handler.close()
     captured = capsys.readouterr()
     feedback = json.loads(captured.out)
     assert captured.err == ""
@@ -742,6 +751,7 @@ def test_holdout_aggregate_is_allowlisted_and_keeps_console_private(
     assert all(c.id not in captured.out for c in cases)
     log = tmp_path / ".checkpoint.console.log"
     assert "SECRET_PROGRESS" in log.read_text() and "SECRET_STDERR" in log.read_text()
+    assert "SECRET_LOGGING" in log.read_text()
     journal.append(
         json.loads((journal.directory / "events.jsonl").read_text().splitlines()[0])
     )
