@@ -7,8 +7,8 @@ and candidate evaluations through the existing factory commands. You retain
 review, holdout-reuse, and release decisions. The suite starts at 4.0.0 and wraps
 the pinned golden evaluator without changing the public runner or application
 model/prompt. The kit contains teaching examples; the real suite still needs
-authoring. Hill-climbing integration, shadow CI, and deployment remain separate
-work. Experiment history stays in the
+authoring. The [public intake and training runner](../README.md) receive calibrated
+exports; shadow CI and deployment remain separate work. Experiment history stays in the
 [journal](../EXPERIMENT_JOURNAL.md).
 Read the [authoring guide](AUTHORING.md) before planning coverage, scenarios,
 actor exchanges and independently labeled references.
@@ -276,7 +276,15 @@ factory export-suite --suite 4.0.0 --output /private/public-suite.zip
 
 The export allowlist contains training/shadow inputs and their calibration/actor
 evidence plus the shared evaluator/calibration identity. It contains no holdout
-inputs, examples, case names, review findings, or transcripts.
+inputs, examples, case names, review findings, or transcripts. Export format 1
+includes a digest of the public calibration file, the actual reviewer's name and
+review time, and a protected evaluator/runtime/settings fingerprint. A trusted
+handoff can reuse this evidence in the training runner only when compatibility
+checks pass. Public inputs are executable source; granular evidence stays private.
+
+Rebuild the kit with the current pins before freezing/calibrating the first real
+suite. Older smoke suites retain their original kit identity; regenerating an
+export does not transfer old calibration to a changed evaluator.
 
 ## Source handoff and holdout
 

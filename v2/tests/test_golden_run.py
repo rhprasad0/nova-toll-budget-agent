@@ -100,7 +100,14 @@ def test_cli_runs_independent_work_in_parallel(
 
     monkeypatch.setattr(run, "judge", judge)
     monkeypatch.setattr(run, "execute", execute)
-    args = ["golden_run", mode, "--output", str(directory)]
+    args = [
+        "golden_run",
+        mode,
+        "--output",
+        str(directory),
+        "--trials-per-case",
+        str(repetitions),
+    ]
     if workers is not None:
         args += ["--workers", str(workers)]
     if uncapped:
@@ -1812,7 +1819,16 @@ def test_actor_check_uncapped_cli_preserves_prior_spend(
     output = tmp_path / "actor-check"
     monkeypatch.setattr(
         "sys.argv",
-        ["actor-check", "--output", str(output), "--no-budget-limit", "--workers", "1"],
+        [
+            "actor-check",
+            "--output",
+            str(output),
+            "--no-budget-limit",
+            "--workers",
+            "1",
+            "--trials-per-case",
+            str(repetitions),
+        ],
     )
     case = golden_case(1)
     example = next(
@@ -1953,6 +1969,7 @@ def test_recorded_repetitions_control_summary_and_render(
         trials_per_case=repetitions,
         tool_description_policy=golden.TOOL_DESCRIPTION_POLICY,
     )
+    manifest["identity"]["execution"] = {"trials_per_case": repetitions}
     (journal.directory / "manifest.json").write_text(json.dumps(manifest))
     for row in rows:
         journal.append({"event": "attempt_finished", **row.model_dump()})

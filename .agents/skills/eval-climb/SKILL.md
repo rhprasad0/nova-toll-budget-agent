@@ -1,6 +1,6 @@
 ---
 name: eval-climb
-description: Improve TollChat SOP instructions and model-facing tool descriptions through sequential, budget-bounded subagent search on the 100-case development eval set. Route measurement defects to separate repair tasks.
+description: Improve TollChat SOP instructions and model-facing tool descriptions through sequential, budget-bounded subagent search on the active factory training split. Route measurement defects to separate repair tasks.
 ---
 
 # TollChat eval climb
@@ -11,10 +11,13 @@ this skill alone grants no spending, push, PR, merge or deployment permission.
 
 ## Contract and roles
 
-Development uses **100 cases × one repetition** on corpus 3.3.27 / harness 2.3.27.
-The objective is successful trials divided by all **100 slots**. Fully measured
+Search uses the **active factory training split × one repetition** on harness
+2.4.0. The first contract has 50 training cases; derive counts from its manifest.
+Use three repetitions only when Ryan explicitly requests them. Freeze the chosen
+repetition count for the entire campaign. The objective is successful trials
+divided by all expected training slots. Fully measured
 actor inconclusives stay visible and do not count as successes. Pass³ is
-inapplicable. **90/100 is a soft milestone**, not a stop or production qualification.
+inapplicable for one trial; descriptive only for three. **90% is a soft milestone**, not a stop or production qualification.
 Blind production qualification remains separate: do not access holdout cases,
 paths, IDs or feedback during search. TollChat stays on **gpt-6-luna**.
 
@@ -38,7 +41,9 @@ before paid search.
 
 1. Read [README](../../../v2/eval/README.md),
    [runner guide](../../../v2/eval/GOLDEN_RUNNER.md) and the runner CLI. Validate the
-   real development corpus; never create stubs or copy historical cases.
+   active training inputs; never activate smoke data or copy historical cases.
+   The old development corpus is an archival reference, never a search input.
+   Receive shadow inputs but do not use them in search or wire shadow CI.
 2. Reconcile every started call in the existing ledger and journal chain. Set the
    cumulative ceiling once to verified prior spend plus the newly authorized
    allowance. Calibration, actor checks, failed runs, repairs, baselines, candidates
@@ -47,10 +52,12 @@ before paid search.
 3. Keep changes in project-root `.worktrees/`, clean and committed before paid
    runs. Store detailed decisions and evidence in ignored `v2/eval/private/eval-climb/`.
    Record evidence, alternatives, choice, cost and uncertainty when deciding.
-4. Finish measurement changes first, then run **one fresh calibration**, independent
-   review, **one actor check** and **one full application baseline**, with 16 workers.
-   Do not add duplicate preparation runs. Frozen fixture replay needs no deployment
-   or migration parity gate; it does not establish live pricing correctness.
+4. Finish measurement changes first. Reuse the factory-approved calibration and
+   scripted actor checks only when the runner verifies exact evaluator, runtime,
+   settings and input bindings. Otherwise obtain **one fresh training calibration**,
+   its actual review and **one actor check**. Then run **one full training baseline**,
+   with 16 workers. Do not duplicate approved preparation evidence. Frozen fixture
+   replay needs no deployment or migration parity gate; it does not establish live pricing correctness.
 5. Pin application, corpus, actor, evaluator, model settings, approved calibration
    and content hashes. Keep them fixed during application search except admitted
    SOP/input-description prose. A measurement change needs its own repair layer,
@@ -104,7 +111,7 @@ when substantial and a new measurement baseline when semantics change.
    Lower the search phase's cumulative `--budget-usd` by that reserve. Restore only
    the original authorized ceiling for final verification. Use latest actual costs;
    never treat a historical price as a guarantee. Do not start a partial candidate.
-4. Evaluate the complete 100-case candidate with 16 workers, never `--cases`:
+4. Evaluate the complete training candidate with 16 workers, never `--cases`:
 
    ```bash
    uv run python -m eval.golden_run run --output ABS_NEW_RUN_DIR \
@@ -150,7 +157,7 @@ application gain only if the finalist still strictly improves on that baseline
 and has no unresolved material regression. Otherwise retain the starting application
 and publish honest campaign findings. If no candidate improved, skip unnecessary
 confirmation. Report baseline, selected search score and final score separately.
-The 90/100 milestone never substitutes for evidence or changes these rules.
+The 90% milestone never substitutes for evidence or changes these rules.
 
 Record evaluated and published commits and verify relevant content hashes after
 rebases before reusing evidence. Append concise purpose, versions, scores,

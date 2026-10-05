@@ -1,4 +1,4 @@
-"""Offline golden corpus contracts; paid conversation execution belongs to #360."""
+"""Offline training contracts and integrity checks for the archival reference."""
 
 from __future__ import annotations
 
@@ -29,12 +29,13 @@ if TYPE_CHECKING:
 
     from eval.simulated import GroundedCorrectnessEvaluator
 
-ROOT = Path(__file__).with_name("golden")
-V2 = ROOT.parent.parent
+V2 = Path(__file__).resolve().parents[1]
+ROOT = V2 / "eval/active/training"
+ARCHIVE = V2 / "eval/archive/development-3.3.28"
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-CORPUS_VERSION = "3.3.28"
-CASE_COUNT = 100
-COVERAGE = {
+ARCHIVE_VERSION = "3.3.28"
+ARCHIVE_CASE_COUNT = 100
+ARCHIVE_COVERAGE = {
     "current_complete": 20,
     "current_state": 10,
     "current_evidence": 10,
@@ -46,6 +47,9 @@ COVERAGE = {
 }
 SOURCE_FILES = (
     "uv.lock",
+    "eval/intake.py",
+    "agent/toll_agent.py",
+    "agent_tools/get_current_toll_price.py",
     "eval/golden.py",
     "eval/repetition.py",
     "agent_tools/currency.py",
@@ -987,7 +991,7 @@ def tool_source_digest(name: str, source: str) -> str:
     return hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
 
 
-def hashes(root: Path | None = None) -> dict[str, str]:
+def hashes(root: Path | None = None, *, sources: bool = True) -> dict[str, str]:
     root = root if root is not None else ROOT
     files = [root / "cases.jsonl", root / "prompt-points.json", root / "examples.json"]
     files.extend(sorted((root / "fixtures").glob("*.json")))
@@ -995,22 +999,25 @@ def hashes(root: Path | None = None) -> dict[str, str]:
         str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in files
     }
-    result.update(
-        {
-            "v2/" + name: (
-                tool_source_digest(name, (V2 / name).read_text())
-                if name in TOOL_INPUT_MODELS
-                else hashlib.sha256((V2 / name).read_bytes()).hexdigest()
-            )
-            for name in SOURCE_FILES
-        }
-    )
+    if sources:
+        result.update(source_hashes())
     return result
 
 
-def validate_coverage(cases: list[GoldenCase]) -> None:
+def source_hashes() -> dict[str, str]:
+    return {
+        "v2/" + name: (
+            tool_source_digest(name, (V2 / name).read_text())
+            if name in TOOL_INPUT_MODELS
+            else hashlib.sha256((V2 / name).read_bytes()).hexdigest()
+        )
+        for name in SOURCE_FILES
+    }
+
+
+def validate_archive_coverage(cases: list[GoldenCase]) -> None:
     counts = Counter(c.coverage_family for c in cases)
-    if counts != Counter(COVERAGE) or any(c.held_out for c in cases):
+    if counts != Counter(ARCHIVE_COVERAGE) or any(c.held_out for c in cases):
         raise ValueError("expected the 100-case development-only allocation")
     if Counter(c.kind for c in cases) != {"current": 40, "annual": 55, "mixed": 5}:
         raise ValueError("workflow allocation changed")
@@ -1151,24 +1158,20 @@ def validate_payload(
         raise ValueError("each case needs a labeled good example")
 
 
-def validate(root: Path | None = None) -> None:
-    root = root if root is not None else ROOT
+def validate_archive(root: Path | None = None) -> None:
+    root = root if root is not None else ARCHIVE
     cases = load_cases(root)
-    if len(cases) != CASE_COUNT or {c.number for c in cases} != set(
-        range(1, CASE_COUNT + 1)
+    if len(cases) != ARCHIVE_CASE_COUNT or {c.number for c in cases} != set(
+        range(1, ARCHIVE_CASE_COUNT + 1)
     ):
         raise ValueError("expected exactly 100 numbered cases")
-    if len({c.id for c in cases}) != CASE_COUNT:
+    if len({c.id for c in cases}) != ARCHIVE_CASE_COUNT:
         raise ValueError("duplicate case ID")
-    validate_coverage(cases)
-    from agent.toll_agent import parse_prompt_points
-
-    points = parse_prompt_points(json.loads((root / "prompt-points.json").read_text()))
-    validate_payload(cases, root, {p.point_id for p in points})
+    validate_archive_coverage(cases)
     manifest = json.loads((root / "manifest.json").read_text())
     if (
-        manifest["version"] != CORPUS_VERSION
-        or manifest.get("case_count") != CASE_COUNT
+        manifest["version"] != ARCHIVE_VERSION
+        or manifest.get("case_count") != ARCHIVE_CASE_COUNT
         or manifest.get("evaluation_scope") != "development"
         or manifest["actor_model"] != "gpt-6-luna"
         or manifest["judge_model"] != "gpt-6-luna"
@@ -1176,9 +1179,10 @@ def validate(root: Path | None = None) -> None:
     ):
         raise ValueError("unsupported corpus configuration")
     trial_numbers(manifest)
-    actual = hashes(root)
-    if manifest["hashes"] != actual or manifest["corpus_sha256"] != digest(actual):
-        raise ValueError("corpus or grader hash drift")
+    actual = hashes(root, sources=False)
+    expected = {k: v for k, v in manifest["hashes"].items() if not k.startswith("v2/")}
+    if expected != actual or manifest["corpus_sha256"] != digest(manifest["hashes"]):
+        raise ValueError("archival input hash drift")
     review = json.loads((root / "review.json").read_text())
     if review["status"] == "approved":
         if (
@@ -1191,8 +1195,44 @@ def validate(root: Path | None = None) -> None:
         raise ValueError("invalid review status")
 
 
+def manifest(root: Path | None = None) -> dict[str, Any]:
+    root = root if root is not None else ROOT
+    # Explicit test identities remain local to their fixture directory.
+    path = root / "manifest.json"
+    if path.is_file():
+        return json.loads(path.read_text())
+    return json.loads((root.parent / "manifest.json").read_text())["training"]
+
+
+def validate(root: Path | None = None) -> None:
+    from eval import intake
+
+    root = root if root is not None else ROOT
+    load_cases(root)  # Missing inputs fail before any credentials or output.
+    if root.name != "training" or not (root.parent / "manifest.json").is_file():
+        raise ValueError("No active golden corpus; archival references cannot execute")
+    intake.validate_installed(root.parent)
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--allow-uninitialized", action="store_true")
+    args = parser.parse_args()
+    validate_archive()
+    if (
+        args.allow_uninitialized
+        and not ROOT.parent.exists()
+        and not ROOT.parent.is_symlink()
+    ):
+        print(
+            "archival reference verified; awaiting the first real training/shadow export"
+        )
+    else:
+        validate()
+        print(f"training corpus: {len(load_cases())} cases validated offline")
+
+
 if __name__ == "__main__":
-    validate()
-    print(
-        "golden corpus: 100 development cases validated offline; see review.json for approval status"
-    )
+    main()

@@ -454,17 +454,19 @@ class RepetitionContractTest(unittest.TestCase):
 
     def update(self, value: dict[str, Any]) -> None:
         refresh(value)
-        repetitions = value["manifest"]["identity"]["corpus"]["trials_per_case"]
+        identity = value["manifest"]["identity"]
+        repetitions = identity.get("execution", identity["corpus"])["trials_per_case"]
+        count = len(identity["cases"])
         rows = value["attempts"]
         overall = value["overall"]
         overall.update(
-            expected_trials=100 * repetitions,
+            expected_trials=count * repetitions,
             attempted_trials=len(rows),
             inconclusive_trials=len(rows) - overall["scored_trials"],
-            overall_pass_rate=overall["successful_trials"] / (100 * repetitions),
+            overall_pass_rate=overall["successful_trials"] / (count * repetitions),
             pass_cubed=0 if repetitions == 3 else None,
             passing_all_three_cases=0 if repetitions == 3 else None,
-            pass_cubed_case_denominator=100 if repetitions == 3 else None,
+            pass_cubed_case_denominator=count if repetitions == 3 else None,
             cost_usd={},
             usage={},
         )
@@ -480,6 +482,48 @@ class RepetitionContractTest(unittest.TestCase):
                     for key in ("input_tokens", "output_tokens")
                 },
             }
+
+    def training(self, repetitions: int) -> dict[str, Any]:
+        value = self.current(repetitions)
+        identity = value["manifest"]["identity"]
+        identity.update(
+            harness_version="2.4.0", execution={"trials_per_case": repetitions}
+        )
+        identity["corpus"].update(
+            evaluation_scope="training",
+            case_count=50,
+            trials_per_case=3,
+            factory={"suite_sha256": "f" * 64},
+        )
+        identity["cases"] = identity["cases"][:50]
+        ids = {c["id"] for c in identity["cases"]}
+        identity["prompt_hashes"] = {
+            cid: h for cid, h in identity["prompt_hashes"].items() if cid in ids
+        }
+        value["attempts"] = [r for r in value["attempts"] if r["case_id"] in ids]
+        self.update(value)
+        return value
+
+    def test_training_counts_repetitions_and_strict_gain(self) -> None:
+        for repetitions in (1, 3):
+            left = self.training(repetitions)
+            right = copy.deepcopy(left)
+            right["attempts"][0]["verdicts"]["outcome"]["passed"] = True
+            self.update(right)
+            result = compare(left, right)
+            self.assertTrue(result["numeric_eligible"])
+            self.assertEqual(
+                result["candidate"]["overall_pass_rate"], 1 / (50 * repetitions)
+            )
+            self.assertEqual(result["criteria"], {"successful_trials_increased": True})
+            broken = copy.deepcopy(right)
+            broken["attempts"].pop()
+            with self.assertRaisesRegex(ValueError, "missing trials"):
+                compare(left, broken)
+        with self.assertRaises(ValueError):
+            compare(self.training(1), self.training(3))
+        with self.assertRaises(ValueError):
+            compare(self.training(1), self.current(1))
 
     def test_single_and_three_pass_contracts(self) -> None:
         for repetitions in (1, 3):

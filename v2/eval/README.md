@@ -1,55 +1,39 @@
 # TollChat evaluation
 
-**Current contract: 3.3.28 / harness 2.3.28; calibration review pending.** Development climbs run 100 cases
-once and optimize successful trials divided by all 100 slots. Fully measured
-inconclusives stay visible; pass³ is inapplicable. Strict score gains require
-independent review for material regressions. **90/100 is a soft milestone**;
-blind production qualification stays separate.
-Peak pricing requires a peak qualification; off-peak labels are optional.
-The authored references and SOP now match that rule. The harness checks
-tool-contract failures mechanically and requires verified
-assistant line IDs for applicable schedule and vehicle-cost disclosures. Code
-resolves IDs to the original text, preserving Markdown and assistant-only
-provenance. The judge selects all lines needed to convey the requirement;
-unknown IDs make the measurement unusable. Replay failures identify differing
-fields. Missing disclosures and contradictory claims still fail their rubrics.
-Calibration review records material disagreements without requiring perfect
-label agreement. Optional closing offers do not require actor replies after
-the profile goal is complete. Generic annual-day arithmetic does not replace
-a supplied count, and conventional percentile names may describe equal amounts.
-Actual unapproved counts, unresolved required replies and false inequalities still fail. See the experiment journal for accepted limitations.
-Before search, complete the runner guide's preparation and trajectory audit,
-using one calibration, independent review, one actor check and one baseline.
-Frozen replay does not require deployment parity. See the
-[experiment journal](EXPERIMENT_JOURNAL.md) for validation results and limits.
-
-TollChat remains on `gpt-6-luna`. Preparation changes are separate from prompt
-search. Shared `_PricingProfile` and output descriptions remain frozen under
-`literal-input-prose-v1`. This development corpus cannot qualify production.
-
-The [weekly experiment journal](EXPERIMENT_JOURNAL.md) records what was tried,
-results, limitations, costs, and decisions. Publish summaries in the appropriate
-weekly page; keep granular output in ignored `eval/private/` or the existing
-private workflow store.
+**Awaiting the first real factory export.** The 100-case development corpus
+3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
+Its recorded scores and reviews remain historical; it cannot run or seed fresh inputs.
+The [experiment journal](EXPERIMENT_JOURNAL.md) preserves the findings and limitations.
 
 ## Frozen golden evaluation
 
-- [Authoring contract](GOLDEN_EVAL_SPEC.md): 100 realistic development cases,
-  176 labeled references, 107 synthetic fixtures, and five-turn actors.
-- [Runner](GOLDEN_RUNNER.md): authorized calibration, single-pass development application
-  baselines, complete cost accounting, and offline report reproduction.
+The [evaluation factory](factory/README.md) authors 50 training, 25 private holdout,
+and 10 public shadow cases. Intake receives only training and shadow. Harness
+2.4.0 searches the training split with **one trial per case and 16 workers**;
+three trials require Ryan's explicit instruction. Shadow CI is deferred.
+TollChat remains on `gpt-6-luna`, with the existing actor, judges and grading rules.
 
-The former private holdout tooling and production qualification gate are retired.
-The standalone [evaluation factory](factory/README.md) authors versioned training,
-private holdout, and public shadow splits in its own container and private volume.
-Production delivery uses the existing [release checks](../RUNBOOK.md#production-release-checks).
-Development scores do not establish independent agent accuracy.
-
-From `v2/`, validate without model calls:
+From `v2/`, check readiness or receive a trusted factory export offline:
 
 ```bash
+uv run python -m eval.golden --allow-uninitialized
+uv run python -m eval.intake validate /absolute/public-suite.zip
+uv run python -m eval.intake install /absolute/public-suite.zip
 uv run python -m eval.golden
 ```
+
+Synthetic exports support `validate --smoke` only; they cannot activate a set.
+Install refuses overwrites, validates both public splits, and keeps calibration
+rows and actor-check evidence in ignored `eval/private/intake/`. Commit the real
+executable inputs and their small identity manifest before paid execution.
+No fresh inputs are checked in by this preparation change.
+
+The [runner guide](GOLDEN_RUNNER.md) explains calibration reuse, paid execution,
+accounting and comparison. The [authoring contract](GOLDEN_EVAL_SPEC.md) describes
+required inputs. Scores use all expected training slots; inconclusives remain
+visible. Strict gains require independent scope and material-regression review.
+An exposed training score cannot qualify production. Production retains its
+[delivery checks](../RUNBOOK.md#production-release-checks).
 
 ## Scheduled and live checks
 
@@ -93,7 +77,7 @@ Offline regression checks use focused synthetic inputs; historical run archives
 remain recoverable through the Git commit linked in the journal.
 
 The runner and comparison helpers derive execution slots from the recorded
-`trials_per_case` (1 or 3). The active development contract uses one repetition;
+`trials_per_case` (1 or 3). The active training execution defaults to one repetition;
 three repetitions are available for explicitly authorized campaigns and historical
 development contracts.
 Single-pass reports use all expected slots for overall pass rate and record
@@ -101,4 +85,4 @@ Pass³ fields as `null` (inapplicable). Missing slots remain in the denominator;
 inconclusives remain explicit. Comparisons reject missing or duplicate slots,
 unsupported harness contracts, mismatched repetition counts, and inconsistent
 aggregate usage. Historical three-trial reports retain their recorded scoring rules.
-The repetition contract requires fresh reviewed calibration before paid execution.
+Paid execution requires matching approved factory evidence or fresh local calibration.

@@ -307,7 +307,9 @@ def route_pairs(fixture: golden.Fixture) -> set[tuple[str, ...]]:
     return pairs
 
 
-def validate_splits(source: Path) -> dict[str, dict[str, str]]:
+def validate_splits(
+    source: Path, *, splits: tuple[str, ...] = SPLITS
+) -> dict[str, dict[str, str]]:
     groups: dict[str, str] = {}
     evidence: dict[str, str] = {}
     routes: dict[tuple[str, ...], str] = {}
@@ -316,7 +318,7 @@ def validate_splits(source: Path) -> dict[str, dict[str, str]]:
     reference_ids: set[str] = set()
     total_negative = 0
     result: dict[str, dict[str, str]] = {}
-    for split in SPLITS:
+    for split in splits:
         directory = source / split
         result[split] = input_hashes(directory)
         cases = golden.load_cases(directory)
@@ -409,7 +411,7 @@ def validate_splits(source: Path) -> dict[str, dict[str, str]]:
                 raise ValueError(
                     "behavioral pair must have two members in one scenario group"
                 )
-    if total_negative < 20:
+    if splits == SPLITS and total_negative < 20:
         raise ValueError("suite needs at least 20 labeled negative references")
     return result
 
@@ -1558,9 +1560,11 @@ def export_suite(root: Path, suite_version: str, output: Path) -> None:
         for split in ("training", "shadow")
         for c in golden.load_cases(directory / split)
     }
+    review = read(directory / "calibration/review.json")
     evidence = {
         "measurement": identity,
         "review_status": "approved",
+        "review": {k: review[k] for k in ("status", "reviewer", "reviewed_at")},
         "calibration_rows": [
             r for r in calibration["rows"] if r["case_id"] in public_ids
         ],
@@ -1569,8 +1573,13 @@ def export_suite(root: Path, suite_version: str, output: Path) -> None:
         ],
     }
     exported["calibration.json"] = json.dumps(evidence, indent=2).encode()
+    from eval.intake import fingerprint
+
     exported["manifest.json"] = json.dumps(
         {
+            "export_format_version": 1,
+            "calibration_file_sha256": sha(exported["calibration.json"]),
+            "fingerprint": fingerprint(),
             "version": suite_version,
             "measurement": identity,
             "splits": {s: manifest["splits"][s] for s in ("training", "shadow")},

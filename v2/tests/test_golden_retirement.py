@@ -17,13 +17,14 @@ def test_retired_test_data_is_not_an_active_corpus(tmp_path: Path) -> None:
         assert not (TEST_DATA / name).exists()
     with pytest.raises(ValueError, match="No active golden corpus"):
         golden.validate(tmp_path)
-    with pytest.raises(ValueError, match="exactly 100"):
+    with pytest.raises(ValueError, match="No active golden corpus"):
         golden.validate(TEST_DATA)
 
 
 def test_development_contract_binds_review_without_transferring_approval() -> None:
-    review = json.loads((golden.ROOT / "review.json").read_text())
-    manifest = json.loads((golden.ROOT / "manifest.json").read_text())
+    golden.validate_archive()
+    review = json.loads((golden.ARCHIVE / "review.json").read_text())
+    manifest = json.loads((golden.ARCHIVE / "manifest.json").read_text())
     assert review["status"] in {"approved", "pending"}
     assert review["authorization"].startswith("Ryan explicitly authorized")
     assert review["human_trajectory_adjudication"] is False
@@ -38,7 +39,9 @@ def test_development_contract_binds_review_without_transferring_approval() -> No
     assert manifest["tool_description_policy"] == golden.TOOL_DESCRIPTION_POLICY
     assert review["corpus_sha256"] == manifest["corpus_sha256"]
     assert manifest["evaluation_scope"] == "development"
-    assert not (golden.ROOT / "calibration-reference.json").exists()
+    assert not (golden.ARCHIVE / "calibration-reference.json").exists()
+    with pytest.raises(ValueError, match="archival references cannot execute"):
+        golden.validate(golden.ARCHIVE)
 
 
 @pytest.mark.parametrize("mode", ["calibrate", "run", "actor-check"])
@@ -65,7 +68,7 @@ def test_application_run_requires_new_corpus_approval(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = tmp_path / "pending-corpus"
-    shutil.copytree(golden.ROOT, root)
+    shutil.copytree(TEST_DATA, root)
     (root / "review.json").write_text(json.dumps({"status": "pending"}))
     monkeypatch.setattr(golden, "ROOT", root)
     identity = Mock(side_effect=AssertionError("must stop before run identity"))
@@ -80,3 +83,16 @@ def test_application_run_requires_new_corpus_approval(
     identity.assert_not_called()
     credentials.assert_not_called()
     assert not output.exists()
+
+
+def test_readiness_accepts_absence_but_rejects_partial_installation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    active = tmp_path / "active"
+    monkeypatch.setattr(golden, "ROOT", active / "training")
+    monkeypatch.setattr("sys.argv", ["golden", "--allow-uninitialized"])
+    golden.main()
+    assert "awaiting the first real" in capsys.readouterr().out
+    active.mkdir()
+    with pytest.raises(ValueError, match="No active golden corpus"):
+        golden.main()

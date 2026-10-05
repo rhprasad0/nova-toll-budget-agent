@@ -39,3 +39,12 @@ def golden_test_identity(
             }
         )
     )
+
+
+@pytest.fixture
+def archival_reference_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Old reference assertions are offline tests, never an active set."""
+    from eval import golden
+
+    monkeypatch.setattr(golden, "ROOT", golden.ARCHIVE)
+    monkeypatch.setattr(golden, "validate", golden.validate_archive)
