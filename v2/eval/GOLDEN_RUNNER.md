@@ -283,19 +283,22 @@ split; the external reviewed calibration directory remains accepted too.
 
 The `shadow-readiness` job validates the public shadow inputs and approval receipt.
 It reports "awaiting authored public cases and harness approval" when neither
-exists; partial or unreviewed inputs fail. The `shadow-eval` job then runs all ten
-cases once through `golden-evaluation`, selecting the receipt's exact Python
+exists; partial or unreviewed inputs fail. After candidate CI succeeds, the
+`shadow-ci` follow-on workflow runs all ten cases once through `golden-evaluation`,
+using its protected-main definition and the exact candidate commit. It selects the receipt's exact Python
 version and architecture and verifying the evaluator before credentials.
 Each job has a fresh **$2 spending ceiling**. Its score is informational: 9/10 is
 reported successfully, while missing, inconclusive, unknown-usage or otherwise
-incomplete measurements fail the check. Results appear in the job summary.
+incomplete measurements fail the shadow workflow. Results appear in its job
+summary with the candidate commit. The follow-on workflow becomes available after
+this PR merges; PR CI uses no new model credentials.
 
 Before real cases activate the job, provision the development-only role defined
 in `infra/shadow_eval.tf` through administrator-reviewed infrastructure changes.
 It can read only `/nova-toll/openai_api_key` from development SSM and grants no
 database, deployment or holdout storage access. Keep the existing required
-reviewer on `golden-evaluation`; its current main-only branch policy must also
-allow reviewed same-repository PR and merge-queue refs. Forks and tag pushes do
+reviewer and main-only branch policy on `golden-evaluation`. The role's OIDC trust
+admits only the reusable evaluator definition on protected main. Forks and tag pushes do
 not run paid shadow evaluations. Readiness checks run without these credentials.
 Shadow CI evidence is regression feedback outside the training search loop.
 

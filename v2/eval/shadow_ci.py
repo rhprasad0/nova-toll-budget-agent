@@ -58,6 +58,7 @@ def check(directory: Path) -> dict[str, Any]:
     ):
         raise ValueError("shadow CI requires ten complete measured application trials")
     return {
+        "source_commit": identity["commit"],
         "passed": report["overall"]["successful_trials"],
         "expected_trials": expected,
         "pass_rate": report["overall"]["overall_pass_rate"],

@@ -24,13 +24,9 @@ data "aws_iam_policy_document" "shadow_eval_assume" {
       values   = ["rhprasad0/nova-toll-budget-agent"]
     }
     condition {
-      test     = "StringLike"
+      test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:job_workflow_ref"
-      values = [
-        "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@refs/heads/main",
-        "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@refs/pull/*/merge",
-        "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@refs/heads/gh-readonly-queue/main/*",
-      ]
+      values   = ["rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@refs/heads/main"]
     }
   }
 }

@@ -61,8 +61,10 @@ feedback can still influence tuning; this is not fully blind accuracy.
 ## Shadow CI
 
 CI validates readiness without credentials while awaiting real inputs. Once
-reviewed shadow inputs and `eval/harness-approval.json` exist, it runs the actual
-application on all ten cases through the reviewed `golden-evaluation` environment.
+reviewed shadow inputs and `eval/harness-approval.json` exist, the follow-on
+`shadow-ci` workflow evaluates the exact successful CI candidate on all ten cases
+through the reviewed `golden-evaluation` environment. Its definition runs from
+protected `main`; PR CI remains credential-free.
 Forks do not run paid evaluations. The $2 cap starts a new job-local spending
 chain; CI reports the score without a pass-rate gate, and fails incomplete results.
 
@@ -71,9 +73,9 @@ it contains hashes, runtime, planned split counts and approval provenance, with
 no holdout cases or detailed evidence. Hosted CI selects its exact Python version
 and architecture and verifies the evaluator before credentials. Activation also
 requires administrator provisioning of the development-only SSM reader in
-`infra/shadow_eval.tf`, and allowing same-repository PR/merge-queue refs in the
-existing `golden-evaluation` environment while retaining required review. This PR
-does not deploy that role or alter environment settings. See the
+`infra/shadow_eval.tf`. Keep the existing main-only branch policy and required
+review on `golden-evaluation`. This PR does not deploy that role or alter
+environment settings. See the
 [runner guide](GOLDEN_RUNNER.md#shadow-ci) for usage.
 
 ## Scheduled and live checks
