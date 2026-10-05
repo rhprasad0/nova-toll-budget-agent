@@ -20,6 +20,7 @@ production. See the [experiment journal](EXPERIMENT_JOURNAL.md) for prior findin
 | `manifest.json` | Per-split version, scope, counts, input hashes and protected source identity. |
 | `review.json` | Actual input review bound to this exact corpus digest; initially pending. |
 | Combined harness calibration | All three splits' reference measurements and actual approval, stored externally and bound to the evaluator contract. Reused across splits and future corpus versions. |
+| `eval/harness-approval.json` | Public approval receipt exported from the reviewed combined calibration, containing only hashes, runtime, planned counts and approval provenance. Training and hosted shadow CI reuse it. |
 | Actor-check evidence | Scripted actor checks, stored privately and bound to the selected inputs and evaluator. |
 
 Author realistic passenger-car current-pricing and annual-affordability requests.

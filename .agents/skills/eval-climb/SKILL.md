@@ -1,6 +1,6 @@
 ---
 name: eval-climb
-description: Improve TollChat SOP instructions and model-facing tool descriptions through sequential, budget-bounded subagent search on the locally authored training split. Route measurement defects to separate repair tasks.
+description: Improve TollChat SOP instructions and model-facing tool descriptions through sequential, budget-bounded subagent search on training, using aggregate-only external holdout diagnostics. Route measurement defects to separate repair tasks.
 ---
 
 # TollChat eval climb
@@ -19,9 +19,11 @@ divided by all expected training slots. Fully measured
 actor inconclusives stay visible and do not count as successes. Pass³ is
 inapplicable for one trial; descriptive only for three. **90% is a soft milestone**, not a stop or production qualification.
 External holdout is a procedural host-side diagnostic, not production qualification.
-Never read holdout inputs, references, IDs, detailed reports or transcripts. Ryan
-may return aggregate-only checkpoint feedback during iteration; track the visible/hidden
-gap without requesting cases or category breakdowns. TollChat stays on **gpt-6-luna**.
+The parent may invoke the trusted host-side runner within the authorized budget
+and consume its aggregate output. Never directly inspect holdout inputs,
+references, IDs, detailed reports, calibration evidence or transcripts. Children
+receive aggregate feedback only. Track the visible/hidden gap without requesting
+cases or category breakdowns. TollChat stays on **gpt-6-luna**.
 
 | Agent | Model / effort | Responsibility |
 | --- | --- | --- |
@@ -45,7 +47,8 @@ before paid search.
    [runner guide](../../../v2/eval/GOLDEN_RUNNER.md) and the runner CLI. Validate the
    active training inputs; never activate smoke data or copy historical cases.
    The old development corpus is an archival reference, never a search input.
-   Author shadow inputs separately; do not use them in search or wire shadow CI.
+   Shadow is the ten-case CI regression set, outside search. Use its CI result as
+   regression evidence; do not mine shadow trajectories to propose tuning edits.
 2. Reconcile every started call in the existing ledger and journal chain. Set the
    cumulative ceiling once to verified prior spend plus the newly authorized
    allowance. Calibration, actor checks, failed runs, repairs, baselines, candidates
@@ -58,7 +61,8 @@ before paid search.
    calibration** with matching evaluator, runtime and settings, including for new
    corpus versions. The host operator calibrates training, shadow and holdout
    together until Ryan approves the harness; the coding agent must not inspect
-   that external evidence. Only evaluator contract changes require a new combined
+   that external evidence. Use its exported public harness approval receipt for
+   training and CI; a receipt never grants spending permission. Only evaluator contract changes require a new combined
    calibration. Reuse scripted actor checks only with matching input bindings;
    otherwise obtain **one actor check**. Then run **one full training baseline**,
    with 16 workers. Do not duplicate approved preparation evidence. Frozen fixture
@@ -112,7 +116,8 @@ when substantial and a new measurement baseline when semantics change.
    schemas; run `uv run python -m eval.golden` from `v2/` and relevant offline checks.
    Expected wording snapshot mismatches are explicit; unexplained failures stop
    admission. Record the clean candidate commit and unchanged contract hashes.
-3. Estimate full-run cost with headroom and reserve **one full finalist rerun**.
+3. Estimate full-run cost with headroom and reserve **one full finalist rerun**
+   plus any planned holdout checkpoint costs.
    Lower the search phase's cumulative `--budget-usd` by that reserve. Restore only
    the original authorized ceiling for final verification. Use latest actual costs;
    never treat a historical price as a guarantee. Do not start a partial candidate.
@@ -127,6 +132,11 @@ when substantial and a new measurement baseline when semantics change.
    Use the existing development AWS/SSM credential path. Never store secrets locally.
    Chain every run, including rejects and failures, from the immediately preceding
    accounted run. No replacement trials, silent recovery, relabeling or overwrites.
+   Run an authorized holdout diagnostic at the starting baseline and final
+   confirmation; intermediate checkpoints are allowed when their information
+   justifies the cost. Follow the commands and accounting below. Diagnose general
+   weaknesses from the aggregate gap and public training evidence, never hidden
+   cases. A checkpoint's score does not replace the complete training comparison.
 5. Run `python3 SKILL_DIR/scripts/compare_runs.py INCUMBENT_REPORT CANDIDATE_REPORT`.
    Exit 0 means comparable evidence, not promotion. Strict overall score improvement
    is the numeric objective. Violation/inconclusive counts trigger independent
@@ -143,6 +153,40 @@ when substantial and a new measurement baseline when semantics change.
 7. Promote only a strict score gain passing independent scope/regression review.
    Ties retain the incumbent. Test every additional focused change independently;
    a combined patch is a new candidate. Keep calibration disagreements visible.
+
+## Aggregate-only holdout diagnostics
+
+Require operator-supplied external corpus/output paths, the approved harness
+receipt, and an authorized spending ceiling. Never discover holdout paths or
+perform calibration/input review yourself. The parent may run this CLI, which
+keeps all hidden details and failures on the host and prints safe aggregate JSON:
+
+```bash
+uv run python -m eval.golden_run run --corpus ABS_EXTERNAL_HOLDOUT \
+  --output ABS_NEW_EXTERNAL_CHECKPOINT --calibration ABS_APPROVED_RECEIPT \
+  --trials-per-case CAMPAIGN_REPETITIONS --workers 16 \
+  --budget-usd CAMPAIGN_CUMULATIVE_LIMIT --prior-run ABS_LAST_ACCOUNTED_RUN \
+  > ABS_NEW_PUBLIC_AGGREGATE_JSON
+uv run python SKILL_DIR/scripts/diagnose_gap.py \
+  MATCHING_TRAINING_REPORT ABS_NEW_PUBLIC_AGGREGATE_JSON
+```
+
+Use a fresh ignored public feedback file and external run directory each time.
+The comparison checks source commit, artifact, corpus version, evaluator and
+repetitions before calculating the percentage-point gap. Incomplete checkpoints
+are retained and reported as incomplete, never retried to get a better score.
+Do not inspect the host diagnostic log; ask the operator to resolve a private
+measurement failure. Use aggregate cost plus known prior spend for the public
+ledger; the runner verifies the underlying private usage chain. Chain the next
+paid command from this checkpoint, including when the next run is training.
+
+Pass only aggregate feedback and the validated gap to diagnosis/review agents.
+Keep the hidden suite fixed within a series. A rising gap is evidence to investigate
+overfitting or general weaknesses in public trajectories; it cannot identify a
+hidden-case cause. Report both training and holdout changes, their denominators
+and sampling limits. The training objective and independent material-regression
+review still govern selection. Neither hidden diagnostics nor shadow CI qualify
+production. Once calibration is approved, these checkpoints require no recalibration.
 
 There is no compulsory A/B pair or three-round ceiling. After **four complete
 candidates without improvement**, review the evidence offline. Continue only with

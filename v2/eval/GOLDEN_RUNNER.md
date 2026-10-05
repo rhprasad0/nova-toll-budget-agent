@@ -3,7 +3,8 @@
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
 No fresh set is active until it is authored, frozen and reviewed. Training application
 runs default to one trial per case; use `--trials-per-case 3` only on Ryan's explicit
-instruction. Shadow runs are explicit diagnostics outside search; shadow CI is deferred. Actors have up to five delivered
+instruction. Shadow is a ten-case CI diagnostic outside search, with a $2 per-job
+ceiling and informational scores. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
@@ -257,9 +258,53 @@ stops further paid work. Reproduce a report offline with:
 uv run python -m eval.golden_run render --output eval/private/baseline-N
 ```
 
+## Public harness approval receipt
+
+After Ryan approves complete combined calibration, the host operator exports a
+small public receipt for training, holdout runs and hosted shadow CI:
+
+```bash
+uv run python -m eval.golden_run export-calibration \
+  --output /absolute/external/runs/harness-calibration-N \
+  --receipt eval/harness-approval.json
+```
+
+Commit this executable approval input after reviewing it. Export checks actual
+evidence approval and includes only the evaluator contract digest, calibrated
+runtime, planned split counts, source run/evidence identities and approved status.
+It contains no case IDs, labels, conversations, reviewer prose or external paths.
+The runner checks its digest and evaluator binding before execution. It trusts
+the human-reviewed receipt as an approval input; its checksum is not a signature.
+Never manufacture or edit a receipt to claim approval. Export makes no model calls
+and never calibrates again. Use `--calibration eval/harness-approval.json` with any
+split; the external reviewed calibration directory remains accepted too.
+
+## Shadow CI
+
+The `shadow-readiness` job validates the public shadow inputs and approval receipt.
+It reports "awaiting authored public cases and harness approval" when neither
+exists; partial or unreviewed inputs fail. The `shadow-eval` job then runs all ten
+cases once through `golden-evaluation`, selecting the receipt's exact Python
+version and architecture and verifying the evaluator before credentials.
+Each job has a fresh **$2 spending ceiling**. Its score is informational: 9/10 is
+reported successfully, while missing, inconclusive, unknown-usage or otherwise
+incomplete measurements fail the check. Results appear in the job summary.
+
+Before real cases activate the job, provision the development-only role defined
+in `infra/shadow_eval.tf` through administrator-reviewed infrastructure changes.
+It can read only `/nova-toll/openai_api_key` from development SSM and grants no
+database, deployment or holdout storage access. Keep the existing required
+reviewer on `golden-evaluation`; its current main-only branch policy must also
+allow reviewed same-repository PR and merge-queue refs. Forks and tag pushes do
+not run paid shadow evaluations. Readiness checks run without these credentials.
+Shadow CI evidence is regression feedback outside the training search loop.
+
 ## External holdout checkpoints
 
-These commands belong to the host operator, outside the tuning agent's workflow.
+The host operator authors, validates and approves hidden inputs and combined
+calibration. During an authorized eval-climb campaign, the parent may invoke the
+application checkpoint command and consume its aggregate output; it never
+directly reads external files. Children receive only aggregate feedback.
 Keep the corpus, calibration, reviews, actor checks and application output outside
 the repository and coding-container mounts. An example layout is
 `~/Documents/tollchat-eval-holdout/{5.0.0,runs/}`. Separation is procedural: the
@@ -311,6 +356,15 @@ Keep the suite fixed while tracking the gap; corpus or evaluator repairs start a
 new series. Repeated aggregate feedback can still influence tuning, so this is a
 hidden diagnostic, not fully blind accuracy or a production gate.
 
+The eval-climb parent can save safe stdout in an ignored public feedback file and
+run its `scripts/diagnose_gap.py TRAINING_REPORT PUBLIC_FEEDBACK_JSON`. The helper
+re-renders only the public training evidence, checks source/artifact, evaluator,
+corpus version and repetition agreement, and emits the rates and validated gap.
+Incomplete or mismatched measurements cannot yield a comparable gap. Diagnostics
+share the campaign ledger and budget; the next paid command chains from the last
+checkpoint even when it switches back to training. Never inspect external logs
+to diagnose a hidden measurement failure; have the host operator resolve it.
+
 Keep raw artifacts in ignored `eval/private/` or the existing private workflow
 store. Append summaries to the appropriate Monday-start page in `eval/journal/`
 and link new weeks from [the journal index](EXPERIMENT_JOURNAL.md).
@@ -325,7 +379,7 @@ Historical output removed from the working tree is recoverable at Git commit
 or use its recorded source revision for reproduction; do not restore it as an
 active corpus or reuse a historical budget as new spending authorization.
 
-The private holdout environment and qualification gate are retired. Production
+The former private holdout qualification workflow is retired. Production
 uses the [existing delivery checks](../RUNBOOK.md#production-release-checks); development
 baselines do not establish independently measured agent accuracy.
 
@@ -338,4 +392,4 @@ Pass³ fields as `null` (inapplicable). Missing slots remain in the denominator;
 inconclusives remain explicit. Comparisons reject missing or duplicate slots,
 unsupported harness contracts, mismatched repetition counts, and inconsistent
 aggregate usage. Historical three-trial reports retain their recorded scoring rules.
-The repetition contract requires fresh reviewed calibration before paid execution.
+The repetition contract requires matching approved harness calibration before paid execution.

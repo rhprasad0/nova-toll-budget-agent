@@ -1,0 +1,75 @@
+name: v2-shadow-eval
+
+on:
+  workflow_call:
+    inputs:
+      candidate_sha:
+        required: true
+        type: string
+      python_version:
+        required: true
+        type: string
+      runner:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ${{ inputs.runner }}
+    environment: golden-evaluation
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: v2
+    steps:
+      - name: Bind the reviewed candidate and calibrated runtime
+        working-directory: .
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          EVENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT_REPOSITORY: ${{ github.repository }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          PYTHON_VERSION: ${{ inputs.python_version }}
+          RUNNER_LABEL: ${{ inputs.runner }}
+        run: |
+          set -euo pipefail
+          test "$EVENT_REPOSITORY" = rhprasad0/nova-toll-budget-agent
+          test "$HEAD_REPOSITORY" = "$EVENT_REPOSITORY"
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$CANDIDATE_SHA" = "$EVENT_SHA"
+          [[ "$PYTHON_VERSION" =~ ^3\.13\.[0-9]+$ ]]
+          case "$RUNNER_LABEL" in ubuntu-latest|ubuntu-24.04-arm) ;; *) exit 1 ;; esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          python-version: ${{ inputs.python_version }}
+      - run: uv sync --locked
+      - name: Verify harness approval before credentials
+        run: uv run python -m eval.shadow_ci prepare --verify-runtime
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-shadow-eval-dev
+          aws-region: us-east-1
+          allowed-account-ids: '903859731897'
+          role-duration-seconds: 900
+      - name: Evaluate all ten shadow cases once
+        run: >-
+          uv run python -m eval.golden_run run
+          --corpus eval/active/shadow --calibration eval/harness-approval.json
+          --output "$RUNNER_TEMP/shadow-run" --budget-usd 2 --trials-per-case 1
+      - name: Report shadow score and require complete measurements
+        run: |
+          uv run python -m eval.shadow_ci check --output "$RUNNER_TEMP/shadow-run" \
+            >"$RUNNER_TEMP/shadow-score.json"
+          cat "$RUNNER_TEMP/shadow-score.json"
+          jq -r '"Shadow: \(.passed)/\(.expected_trials) passed (\(.pass_rate * 100)%); cost $\(.cost_usd). Score is informational."' \
+            "$RUNNER_TEMP/shadow-score.json" >>"$GITHUB_STEP_SUMMARY"

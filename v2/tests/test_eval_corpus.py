@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import shutil
@@ -14,7 +15,7 @@ from unittest.mock import Mock
 import pytest
 
 from eval import corpus as f
-from eval import golden, golden_actor_check
+from eval import golden, golden_actor_check, shadow_ci
 from eval import golden_run as run
 from tests.golden_support import ROOT as TEST_DATA
 
@@ -715,6 +716,10 @@ def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
     rendered = capsys.readouterr()
     assert json.loads(rendered.out)["mode"] == "calibrate"
     assert "SECRET" not in rendered.out + rendered.err
+    receipt_path = tmp_path / "harness-approval.json"
+    with pytest.raises(ValueError, match="approved all-split"):
+        run.export_calibration_receipt(calibration, receipt_path)
+    assert not receipt_path.exists()
     (calibration / "review.json").write_text(
         json.dumps(
             {
@@ -726,6 +731,35 @@ def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
         )
     )
     shared = report["manifest"]["identity"]
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "runner",
+            "export-calibration",
+            "--output",
+            str(calibration),
+            "--receipt",
+            str(receipt_path),
+        ],
+    )
+    run.main()
+    assert json.loads(capsys.readouterr().out)["mode"] == "export-calibration"
+    receipt = json.loads(receipt_path.read_text())
+    assert receipt["contract_sha256"] == run.calibration_contract(shared)
+    assert "smoke-holdout" not in receipt_path.read_text()
+    assert "SECRET" not in receipt_path.read_text()
+    monkeypatch.setattr(f, "PUBLIC", drafts)
+    monkeypatch.setattr(shadow_ci, "APPROVAL", receipt_path)
+    assert shadow_ci.prepare(verify_runtime=True)["ready"]
+    changed_receipt = {**receipt, "contract_sha256": "f" * 64}
+    changed_receipt["receipt_sha256"] = golden.digest(
+        {k: v for k, v in changed_receipt.items() if k != "receipt_sha256"}
+    )
+    receipt_path.write_text(json.dumps(changed_receipt))
+    with pytest.raises(ValueError, match="does not match"):
+        shadow_ci.prepare(verify_runtime=True)
+    receipt_path.write_text(json.dumps(receipt))
 
     def execute(
         case: golden.GoldenCase, trial: int, journal: run.Journal
@@ -734,9 +768,12 @@ def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
             id=f"{case.id}-{trial}",
             case_id=case.id,
             trial=trial,
-            status="inconclusive",
-            actor_validity=run.ActorAssessment(status="uncertain", evidence="Offline"),
+            status="scored",
+            turns=[
+                golden.Turn(user=case.prompt, response="Unsupported trip", calls=[])
+            ],
         )
+        judge(case, attempt, journal, fixed_reference=True)
         journal.append({"event": "attempt_finished", **attempt.model_dump()})
         return attempt
 
@@ -751,7 +788,7 @@ def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
                 "--corpus",
                 str(drafts / split),
                 "--calibration",
-                str(calibration),
+                str(receipt_path),
                 "--output",
                 str(tmp_path / f"run-{split}"),
             ],
@@ -775,6 +812,41 @@ def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
                 run.require_calibration(shared, changed)
         with pytest.raises(ValueError, match="all-split"):
             run.require_calibration(pinned, pinned)
+    assert shadow_ci.check(tmp_path / "run-shadow")["passed"] == 10
+    shadow_events = tmp_path / "run-shadow/events.jsonl"
+    original_events = shadow_events.read_text()
+    events = [json.loads(line) for line in original_events.splitlines()]
+    events[0]["verdicts"]["outcome"]["passed"] = False
+    shadow_events.write_text("".join(json.dumps(event) + "\n" for event in events))
+    assert shadow_ci.check(tmp_path / "run-shadow")["passed"] == 9
+    events[0]["status"] = "infrastructure"
+    shadow_events.write_text("".join(json.dumps(event) + "\n" for event in events))
+    with pytest.raises(ValueError, match="ten complete measured"):
+        shadow_ci.check(tmp_path / "run-shadow")
+    shadow_events.write_text(original_events)
+    diagnostic_path = (
+        golden.V2.parent / ".agents/skills/eval-climb/scripts/diagnose_gap.py"
+    )
+    spec = importlib.util.spec_from_file_location("diagnose_gap", diagnostic_path)
+    assert spec and spec.loader
+    diagnostic = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(diagnostic)
+    visible = run.render(tmp_path / "run-training")
+    hidden = run.aggregate(tmp_path / "run-holdout")
+    assert diagnostic.diagnose(visible, hidden)["gap_percentage_points"] == 0
+    for key, value in {
+        "source_commit": "f" * 40,
+        "artifact_sha256": "f" * 64,
+        "corpus_version": "5.1.0",
+        "measurement_sha256": "f" * 64,
+        "trials_per_case": 3,
+        "complete": False,
+        "expected_trials": 24,
+    }.items():
+        with pytest.raises(ValueError, match="complete, matching"):
+            diagnostic.diagnose(visible, {**hidden, key: value})
+    with pytest.raises(ValueError, match="inconsistent holdout totals"):
+        diagnostic.diagnose(visible, {**hidden, "pass_rate": 0.5})
     assert original_root == golden.ROOT
     for split in f.SPLITS:
         incomplete = deepcopy(shared)

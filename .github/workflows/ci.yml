@@ -15,6 +15,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  shadow-readiness:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.prepare.outputs.ready }}
+      python: ${{ steps.prepare.outputs.python }}
+      runner: ${{ steps.prepare.outputs.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          python-version: '3.13'
+      - run: uv sync --locked
+        working-directory: v2
+      - name: Validate shadow inputs and public harness approval
+        id: prepare
+        working-directory: v2
+        run: |
+          uv run python -m eval.shadow_ci prepare >"$RUNNER_TEMP/shadow-readiness.json"
+          jq -r '"ready=\(.ready)", "python=\(.python // "")", "runner=\(.runner // "")"' \
+            "$RUNNER_TEMP/shadow-readiness.json" >>"$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/shadow-readiness.json"
+
+  shadow-eval:
+    needs: shadow-readiness
+    if: >-
+      needs.shadow-readiness.outputs.ready == 'true' &&
+      (github.event_name != 'push' || github.ref == 'refs/heads/main') &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    uses: ./.github/workflows/v2-shadow-eval.yml
+    with:
+      candidate_sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      python_version: ${{ needs.shadow-readiness.outputs.python }}
+      runner: ${{ needs.shadow-readiness.outputs.runner }}
+    permissions:
+      contents: read
+      id-token: write
+
   golden-artifact-smoke:
     runs-on: ubuntu-24.04-arm
     defaults:

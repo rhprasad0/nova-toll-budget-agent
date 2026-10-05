@@ -1812,6 +1812,90 @@ def require_calibration(previous: dict[str, Any], pinned: dict[str, Any]) -> Non
         raise ValueError("split calibration does not qualify the shared harness")
 
 
+def calibration_contract(identity: dict[str, Any]) -> str:
+    return golden.digest({key: identity[key] for key in CALIBRATION_KEYS})
+
+
+def validate_calibration_receipt(receipt: dict[str, Any]) -> None:
+    fields = {
+        "format_version",
+        "kind",
+        "harness_version",
+        "runtime",
+        "contract_sha256",
+        "split_counts",
+        "calibration",
+        "receipt_sha256",
+    }
+    if (
+        set(receipt) != fields
+        or receipt["format_version"] != 1
+        or receipt["kind"] != "all-split-harness-approval"
+        or receipt["split_counts"]
+        != {split: corpus.CONTRACT["splits"][split]["count"] for split in corpus.SPLITS}
+        or receipt["calibration"].get("review") != {"status": "approved"}
+        or set(receipt["calibration"]) != {"run_id", "evidence_sha256", "review"}
+        or receipt["receipt_sha256"]
+        != golden.digest(
+            {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+        )
+    ):
+        raise ValueError("invalid harness calibration receipt")
+    runtime = receipt["runtime"]
+    if (
+        set(runtime) != {"python", "platform", "installed_dependencies_sha256"}
+        or len(runtime["python"]) != 3
+        or any(type(part) is not int or part < 0 for part in runtime["python"])
+        or runtime["python"][:2] != [3, 13]
+        or runtime["platform"] not in {"x86_64", "aarch64"}
+        or not golden.re.fullmatch(
+            "[0-9a-f]{64}", runtime["installed_dependencies_sha256"]
+        )
+    ):
+        raise ValueError("invalid calibrated runtime")
+    uuid.UUID(receipt["calibration"]["run_id"])
+    for value in (
+        receipt["contract_sha256"],
+        receipt["calibration"]["evidence_sha256"],
+    ):
+        if not golden.re.fullmatch("[0-9a-f]{64}", value):
+            raise ValueError("invalid calibration receipt digest")
+
+
+def export_calibration_receipt(directory: Path, destination: Path) -> dict[str, Any]:
+    corpus.require_external(directory)
+    report = render(directory)
+    manifest = report["manifest"]
+    if (
+        manifest["mode"] != "calibrate"
+        or manifest["identity"]["corpus"].get("evaluation_scope") != "suite"
+        or not report["complete"]
+        or report["review"]["status"] != "approved"
+    ):
+        raise ValueError("receipt requires complete, approved all-split calibration")
+    receipt = {
+        "format_version": 1,
+        "kind": "all-split-harness-approval",
+        "harness_version": manifest["identity"]["harness_version"],
+        "runtime": manifest["identity"]["runtime"],
+        "contract_sha256": calibration_contract(manifest["identity"]),
+        "split_counts": {
+            split: item["corpus"]["case_count"]
+            for split, item in manifest["identity"]["calibration_splits"].items()
+        },
+        "calibration": {
+            "run_id": manifest["run_id"],
+            "evidence_sha256": report["evidence_sha256"],
+            "review": {"status": "approved"},
+        },
+    }
+    receipt["receipt_sha256"] = golden.digest(receipt)
+    validate_calibration_receipt(receipt)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(receipt, indent=2) + "\n")
+    return {"mode": "export-calibration", "receipt_sha256": receipt["receipt_sha256"]}
+
+
 def calibrate(
     journal: Journal,
     pool: ThreadPoolExecutor,
@@ -2555,22 +2639,6 @@ def aggregate(directory: Path) -> dict[str, Any]:
     run_id = str(uuid.UUID(manifest["run_id"]))
     corpus.version(identity["corpus"]["version"])
     overall = report["overall"]
-    measurements = {
-        key: identity[key]
-        for key in (
-            "harness_version",
-            "evaluator_sources_sha256",
-            "runtime",
-            "actor_prompt_sha256",
-            "actor_check_sha256",
-            "judge_prompt_sha256",
-            "model",
-            "reasoning_effort",
-            "max_output_tokens",
-            "transport",
-            "tool_description_policy",
-        )
-    }
     return {
         "format_version": 1,
         "scope": "holdout",
@@ -2580,7 +2648,7 @@ def aggregate(directory: Path) -> dict[str, Any]:
         "harness_version": identity["harness_version"],
         "corpus_version": identity["corpus"]["version"],
         "corpus_sha256": identity["corpus"]["corpus_sha256"],
-        "measurement_sha256": golden.digest(measurements),
+        "measurement_sha256": calibration_contract(identity),
         "evidence_sha256": report["evidence_sha256"],
         "trials_per_case": len(report_trials(identity)),
         "expected_trials": overall["expected_trials"],
@@ -2596,7 +2664,10 @@ def aggregate(directory: Path) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("calibrate", "run", "render", "aggregate"))
+    parser.add_argument(
+        "mode",
+        choices=("calibrate", "run", "render", "aggregate", "export-calibration"),
+    )
     parser.add_argument("--corpus", type=Path)
     parser.add_argument(
         "--holdout", type=Path, help="Calibrate all three splits together."
@@ -2617,16 +2688,23 @@ def main() -> None:
     )
     parser.add_argument("--prior-run", type=Path)
     parser.add_argument("--calibration", type=Path)
+    parser.add_argument(
+        "--receipt",
+        type=Path,
+        help="Public approval destination for export-calibration.",
+    )
     parser.add_argument("--trials-per-case", type=int, choices=(1, 3), default=1)
     parser.add_argument("--workers", type=int, choices=range(1, 17), default=16)
     args = parser.parse_args()
+    if (args.mode == "export-calibration") != (args.receipt is not None):
+        parser.error("export-calibration requires --receipt")
     if (args.holdout is not None or args.shadow is not None) and (
         args.mode != "calibrate" or args.holdout is None or args.cases
     ):
         parser.error("--holdout/--shadow require full-suite calibrate")
     selected = (
         args.output
-        if args.mode in {"render", "aggregate"}
+        if args.mode in {"render", "aggregate", "export-calibration"}
         else args.corpus or golden.ROOT
     )
     original_root = golden.ROOT
@@ -2637,7 +2715,10 @@ def main() -> None:
             private=True
             if args.holdout is not None
             or (
-                (args.corpus is not None or args.mode in {"render", "aggregate"})
+                (
+                    args.corpus is not None
+                    or args.mode in {"render", "aggregate", "export-calibration"}
+                )
                 and corpus.private_path(selected)
             )
             else None,
@@ -2654,6 +2735,8 @@ def command(
 ) -> dict[str, Any] | None:
     if args.corpus is not None:
         golden.ROOT = args.corpus
+    if args.mode == "export-calibration":
+        return export_calibration_receipt(args.output, args.receipt)
     if args.mode == "aggregate":
         return aggregate(args.output)
     if args.mode == "render":
@@ -2694,27 +2777,37 @@ def command(
         corpus.require_external(args.output)
         if args.cases:
             parser.error("holdout checkpoints require the complete split")
-        if args.calibration is not None:
+        if args.calibration is not None and not args.calibration.is_file():
             corpus.require_external(args.calibration)
     calibration_identity: dict[str, Any] | None = None
     if args.mode == "run":
         if args.calibration is None:
             parser.error("run requires --calibration with human-reviewed evidence")
-        calibration = render(args.calibration)
-        if not calibration["complete"] or calibration["review"]["status"] != "approved":
-            parser.error("calibration is incomplete or awaits human review")
-        previous_identity = calibration["manifest"]["identity"]
-        if calibration["manifest"]["mode"] != "calibrate":
-            parser.error("--calibration requires calibration evidence")
-        try:
-            require_calibration(previous_identity, pinned)
-        except ValueError as error:
-            parser.error(str(error))
-        calibration_identity = {
-            "run_id": calibration["manifest"]["run_id"],
-            "evidence_sha256": calibration["evidence_sha256"],
-            "review": calibration["review"],
-        }
+        if args.calibration.is_file():
+            receipt = json.loads(args.calibration.read_text())
+            validate_calibration_receipt(receipt)
+            if receipt["contract_sha256"] != calibration_contract(pinned):
+                parser.error("evaluator changed; new harness calibration required")
+            calibration_identity = receipt["calibration"]
+        else:
+            calibration = render(args.calibration)
+            if (
+                not calibration["complete"]
+                or calibration["review"]["status"] != "approved"
+            ):
+                parser.error("calibration is incomplete or awaits human review")
+            previous_identity = calibration["manifest"]["identity"]
+            if calibration["manifest"]["mode"] != "calibrate":
+                parser.error("--calibration requires calibration evidence")
+            try:
+                require_calibration(previous_identity, pinned)
+            except ValueError as error:
+                parser.error(str(error))
+            calibration_identity = {
+                "run_id": calibration["manifest"]["run_id"],
+                "evidence_sha256": calibration["evidence_sha256"],
+                "review": calibration["review"],
+            }
     prior, spent = prior_accounting(args.prior_run)
     journal = Journal(args.output, args.budget_usd, spent)
     manifest = {

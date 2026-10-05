@@ -11,7 +11,8 @@ Author **50 training and 10 shadow cases** under `eval/active/`, with **25 holdo
 cases on an external host path**. Use the [authoring guide](AUTHORING.md) and
 [coverage contract](contract.json). Harness
 2.5.0 searches the training split with **one trial per case and 16 workers**;
-three trials require Ryan's explicit instruction. Shadow CI is deferred.
+three trials require Ryan's explicit instruction. Shadow CI evaluates ten cases
+once with a $2 per-job cap; scores are informational, incomplete measurements fail.
 TollChat remains on `gpt-6-luna`, with the existing actor, judges and grading rules.
 
 From `v2/`, check readiness, validate drafts, and freeze local identities:
@@ -47,13 +48,33 @@ An exposed training score cannot qualify production. Production retains its
 Keep holdout inputs and detailed evidence outside the repository, for example
 `/home/ryan/Documents/tollchat-eval-holdout/5.0.0/`. The host operator explicitly
 selects the corpus with `--corpus`; ordinary training commands never discover it.
-Return only aggregate checkpoint feedback to the coding agent. See the
+Within an authorized eval-climb campaign, the parent can invoke the host runner
+and use its aggregate-only feedback and validated training/holdout gap. Children
+never access hidden evidence. See the
 [host-side commands](GOLDEN_RUNNER.md#external-holdout-checkpoints).
 
 **Separation is procedural:** the coding agent has host filesystem access but
 must never inspect holdout files or detailed evidence. Pair visible and hidden
 scores on the same committed candidate to track their gap. Repeated aggregate
 feedback can still influence tuning; this is not fully blind accuracy.
+
+## Shadow CI
+
+CI validates readiness without credentials while awaiting real inputs. Once
+reviewed shadow inputs and `eval/harness-approval.json` exist, it runs the actual
+application on all ten cases through the reviewed `golden-evaluation` environment.
+Forks do not run paid evaluations. The $2 cap starts a new job-local spending
+chain; CI reports the score without a pass-rate gate, and fails incomplete results.
+
+The host exports the public receipt from the one approved combined calibration;
+it contains hashes, runtime, planned split counts and approval provenance, with
+no holdout cases or detailed evidence. Hosted CI selects its exact Python version
+and architecture and verifies the evaluator before credentials. Activation also
+requires administrator provisioning of the development-only SSM reader in
+`infra/shadow_eval.tf`, and allowing same-repository PR/merge-queue refs in the
+existing `golden-evaluation` environment while retaining required review. This PR
+does not deploy that role or alter environment settings. See the
+[runner guide](GOLDEN_RUNNER.md#shadow-ci) for usage.
 
 ## Scheduled and live checks
 
