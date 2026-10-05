@@ -19,7 +19,8 @@ production. See the [experiment journal](EXPERIMENT_JOURNAL.md) for prior findin
 | `prompt-points.json` | Frozen public point catalog built from the committed Oracle data. |
 | `manifest.json` | Per-split version, scope, counts, input hashes and protected source identity. |
 | `review.json` | Actual input review bound to this exact corpus digest; initially pending. |
-| Local calibration and actor-check evidence | Actual reference measurements, review and scripted actor checks, stored privately and bound to the selected split and evaluator. |
+| Combined harness calibration | All three splits' reference measurements and actual approval, stored externally and bound to the evaluator contract. Reused across splits and future corpus versions. |
+| Actor-check evidence | Scripted actor checks, stored privately and bound to the selected inputs and evaluator. |
 
 Author realistic passenger-car current-pricing and annual-affordability requests.
 Include ordinary clarifications, revisions, cancellations, alternative routes,
@@ -68,8 +69,10 @@ baseline information, without invented toll or affordability totals.
 Validate schemas, coverage, timing, endpoints, arithmetic, and information
 boundaries offline before requesting paid work. Run `uv run python -m eval.golden`
 from `v2/`, plus tests relevant to the changed behavior. Changes to cases,
-references, fixtures, or judge semantics need updated versions/hashes and matching
-calibration; old approvals and scores do not transfer.
+references or fixtures need updated versions/hashes, input review and actor checks;
+the approved harness calibration remains reusable. Judge or other evaluator
+contract changes require a new combined calibration across all three splits.
+Scores across changed corpora or evaluator contracts are not comparable gains.
 
 The [runner guide](GOLDEN_RUNNER.md) describes execution and private artifact
 storage. Publish only a concise journal summary of purpose, versions, aggregate

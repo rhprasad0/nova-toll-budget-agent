@@ -6,6 +6,7 @@ import json
 import logging
 import shutil
 import sys
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -633,6 +634,157 @@ def test_holdout_run_rejects_partial_selection_before_paid_work(
     credentials.assert_not_called()
     captured = capsys.readouterr()
     assert "smoke-holdout" not in captured.out + captured.err
+
+
+def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
+    drafts: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    for split in f.SPLITS:
+        f.freeze(drafts / split, split, "5.0.0")
+        review_path = drafts / split / "review.json"
+        review = json.loads(review_path.read_text())
+        review.update(status="approved", reviewer="Test", evidence="Offline only")
+        review_path.write_text(json.dumps(review))
+    original_git = run.git
+
+    def clean_git(*args: str) -> str:
+        return "" if args[0] == "status" else original_git(*args)
+
+    monkeypatch.setattr(run, "git", clean_git)
+    original_root = golden.ROOT
+    calibration = tmp_path / "suite-calibration"
+    seen: list[str] = []
+
+    def judge(
+        case: golden.GoldenCase,
+        attempt: run.Attempt,
+        journal: run.Journal,
+        *,
+        fixed_reference: bool,
+    ) -> None:
+        assert case in golden.load_cases() and fixed_reference
+        seen.append(case.id)
+        attempt.actor_validity = run.ActorAssessment(status="valid", evidence="SECRET")
+        attempt.measurements = [
+            run.Measurement(
+                role="judge",
+                input_tokens=1,
+                output_tokens=1,
+                cached_tokens=0,
+                written_tokens=0,
+                seconds=0.1,
+                cost_usd=0,
+                complete=True,
+            )
+        ]
+        attempt.verdicts = {
+            key: run.Verdict(passed=True, evidence="SECRET")
+            for key in ("outcome", "grounding", "rules")
+        }
+
+    monkeypatch.setattr(run, "judge", judge)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "runner",
+            "calibrate",
+            "--corpus",
+            str(drafts / "training"),
+            "--shadow",
+            str(drafts / "shadow"),
+            "--holdout",
+            str(drafts / "holdout"),
+            "--output",
+            str(calibration),
+        ],
+    )
+    run.main()
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["expected_examples"] == 105
+    assert "SECRET" not in captured.out + captured.err
+    assert len(seen) == 105 and len(set(seen)) == 85
+    assert original_root == golden.ROOT
+    report = run.render(calibration)
+    assert report["complete"] and report["review"]["status"] == "pending"
+    monkeypatch.setattr(sys, "argv", ["runner", "render", "--output", str(calibration)])
+    run.main()
+    rendered = capsys.readouterr()
+    assert json.loads(rendered.out)["mode"] == "calibrate"
+    assert "SECRET" not in rendered.out + rendered.err
+    (calibration / "review.json").write_text(
+        json.dumps(
+            {
+                "status": "approved",
+                "reviewer": "Test",
+                "evidence": "Offline only",
+                "evidence_sha256": report["evidence_sha256"],
+            }
+        )
+    )
+    shared = report["manifest"]["identity"]
+
+    def execute(
+        case: golden.GoldenCase, trial: int, journal: run.Journal
+    ) -> run.Attempt:
+        attempt = run.Attempt(
+            id=f"{case.id}-{trial}",
+            case_id=case.id,
+            trial=trial,
+            status="inconclusive",
+            actor_validity=run.ActorAssessment(status="uncertain", evidence="Offline"),
+        )
+        journal.append({"event": "attempt_finished", **attempt.model_dump()})
+        return attempt
+
+    monkeypatch.setattr(run, "execute", execute)
+    for split in f.SPLITS:
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "runner",
+                "run",
+                "--corpus",
+                str(drafts / split),
+                "--calibration",
+                str(calibration),
+                "--output",
+                str(tmp_path / f"run-{split}"),
+            ],
+        )
+        run.main()
+        result = run.render(tmp_path / f"run-{split}")
+        assert (
+            result["manifest"]["calibration"]["run_id"] == report["manifest"]["run_id"]
+        )
+        pinned = result["manifest"]["identity"]
+        changed_inputs = deepcopy(pinned)
+        changed_inputs["corpus"]["version"] = "5.1.0"
+        changed_inputs["corpus"]["corpus_sha256"] = "0" * 64
+        changed_inputs["calibration_labels"] = {"example_ids": ["new-reference"]}
+        changed_inputs["commit"] = "f" * 40
+        changed_inputs["prompt_hashes"] = {"new-case": "f" * 64}
+        run.require_calibration(shared, changed_inputs)
+        for key in run.CALIBRATION_KEYS:
+            changed = {**pinned, key: "changed"}
+            with pytest.raises(ValueError, match="new harness calibration"):
+                run.require_calibration(shared, changed)
+        with pytest.raises(ValueError, match="all-split"):
+            run.require_calibration(pinned, pinned)
+    assert original_root == golden.ROOT
+    for split in f.SPLITS:
+        incomplete = deepcopy(shared)
+        del incomplete["calibration_splits"][split]
+        with pytest.raises(ValueError, match="all three"):
+            run.validate_identity(incomplete)
+    incomplete = deepcopy(shared)
+    incomplete["calibration_labels"]["example_ids"].pop()
+    with pytest.raises(ValueError, match="calibration labels"):
+        run.validate_identity(incomplete)
 
 
 def test_default_readiness_checks_both_public_splits(

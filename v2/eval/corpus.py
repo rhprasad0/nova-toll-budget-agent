@@ -270,10 +270,9 @@ def console(
         try:
             metadata = json.loads((path / "manifest.json").read_text())
             identity = metadata.get("identity", {})
-            private = (
-                metadata.get("evaluation_scope") == "holdout"
-                or identity.get("corpus", {}).get("evaluation_scope") == "holdout"
-            )
+            private = metadata.get("evaluation_scope") == "holdout" or identity.get(
+                "corpus", {}
+            ).get("evaluation_scope") in {"holdout", "suite"}
         except (OSError, ValueError):
             private = False
     if not private:

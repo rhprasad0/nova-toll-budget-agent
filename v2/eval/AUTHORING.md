@@ -136,6 +136,10 @@ fixtures; trials never fetch live pricing.
 
 Offline authoring checks do not establish calibration or application performance.
 Paid calibration, actor checks, and application runs require a separately
-authorized budget. Human review must reflect actual inspection. Host-only
-holdout calibration includes all selected references; detailed disagreements stay
-external. Return only aggregate checkpoint feedback to the coding agent.
+authorized budget. Human review must reflect actual inspection. The host operator
+calibrates training, shadow and holdout together until Ryan is satisfied with the
+harness. Keep the combined evidence and detailed disagreements external. Once
+approved, reuse that harness calibration across all splits and future corpus
+versions; changed cases still need validation and input review. Evaluator contract
+changes require a new combined calibration. Return only aggregate checkpoint
+feedback to the coding agent.

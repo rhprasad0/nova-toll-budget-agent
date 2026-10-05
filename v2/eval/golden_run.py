@@ -34,6 +34,22 @@ from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
 VERSION = "2.5.0"
+CALIBRATION_KEYS = (
+    "harness_version",
+    "runtime",
+    "evaluator_sources_sha256",
+    "actor_prompt_sha256",
+    "actor_check_sha256",
+    "judge_prompt_sha256",
+    "diagnostic_prompt",
+    "diagnostic_rubrics",
+    "diagnostic_domain_facts",
+    "model",
+    "reasoning_effort",
+    "max_output_tokens",
+    "transport",
+    "tool_description_policy",
+)
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -1727,6 +1743,75 @@ def development_examples() -> list[golden.Example]:
     ]
 
 
+def suite_identity(paths: dict[str, Path]) -> dict[str, Any]:
+    """Pin one calibration to all three splits without copying hidden inputs."""
+    corpus.validate_splits(paths)
+    original_root = golden.ROOT
+    identities: dict[str, dict[str, Any]] = {}
+    try:
+        for split, root in paths.items():
+            golden.ROOT = root
+            identities[split] = identity(golden.load_cases())
+            if identities[split]["corpus"]["evaluation_scope"] != split:
+                raise ValueError("calibration split does not match its manifest")
+    finally:
+        golden.ROOT = original_root
+    pinned = deepcopy(identities["training"])
+    for item in identities.values():
+        if item["corpus"]["version"] != pinned["corpus"]["version"] or any(
+            item[key] != pinned[key] for key in CALIBRATION_KEYS
+        ):
+            raise ValueError(
+                "suite calibration requires matching versions and evaluator"
+            )
+    pinned["calibration_splits"] = {
+        split: {key: item[key] for key in ("corpus", "calibration_labels")}
+        for split, item in identities.items()
+    }
+    hashes = {
+        split: item["corpus"]["corpus_sha256"] for split, item in identities.items()
+    }
+    pinned["corpus"].update(
+        evaluation_scope="suite",
+        case_count=sum(item["corpus"]["case_count"] for item in identities.values()),
+        hashes=hashes,
+        corpus_sha256=golden.digest(hashes),
+    )
+    pinned["cases"] = [case for item in identities.values() for case in item["cases"]]
+    for key in ("prompt_hashes", "actor_configuration"):
+        pinned[key] = {
+            k: v for item in identities.values() for k, v in item[key].items()
+        }
+    pinned["calibration_labels"] = {
+        "example_ids": [
+            label
+            for item in identities.values()
+            for label in item["calibration_labels"]["example_ids"]
+        ],
+        "expected": {
+            k: v
+            for item in identities.values()
+            for k, v in item["calibration_labels"]["expected"].items()
+        },
+    }
+    return pinned
+
+
+def require_calibration(previous: dict[str, Any], pinned: dict[str, Any]) -> None:
+    """An approved suite calibration qualifies the evaluator, not future inputs."""
+    if any(previous.get(key) != pinned.get(key) for key in CALIBRATION_KEYS):
+        raise ValueError("evaluator changed; new harness calibration required")
+    if pinned["corpus"].get("format_version") == 1 and (
+        previous["corpus"].get("evaluation_scope") != "suite"
+        or set(previous.get("calibration_splits", {})) != set(corpus.SPLITS)
+    ):
+        raise ValueError("local runs require an approved all-split harness calibration")
+    if "calibration_splits" not in previous and any(
+        previous.get(key) != pinned.get(key) for key in ("corpus", "calibration_labels")
+    ):
+        raise ValueError("split calibration does not qualify the shared harness")
+
+
 def calibrate(
     journal: Journal,
     pool: ThreadPoolExecutor,
@@ -2069,9 +2154,34 @@ def validate_identity(value: dict[str, Any]) -> None:
     if not golden.re.fullmatch("[0-9a-f]{40}", value["commit"]):
         raise ValueError("invalid candidate commit")
     report_trials(value)
-    corpus = value["corpus"]
-    if golden.digest(corpus["hashes"]) != corpus["corpus_sha256"]:
+    corpus_manifest = value["corpus"]
+    if golden.digest(corpus_manifest["hashes"]) != corpus_manifest["corpus_sha256"]:
         raise ValueError("invalid corpus identity")
+    if corpus_manifest.get("evaluation_scope") == "suite":
+        splits = value.get("calibration_splits", {})
+        if set(splits) != set(corpus.SPLITS):
+            raise ValueError("suite calibration must cover all three splits")
+        expected: dict[str, Any] = {}
+        example_ids: list[str] = []
+        for split, item in splits.items():
+            contract = item["corpus"]
+            if (
+                contract.get("evaluation_scope") != split
+                or contract.get("version") != corpus_manifest["version"]
+                or contract.get("case_count")
+                != corpus.CONTRACT["splits"][split]["count"]
+                or golden.digest(contract["hashes"]) != contract["corpus_sha256"]
+                or corpus_manifest["hashes"].get(split) != contract["corpus_sha256"]
+            ):
+                raise ValueError("invalid calibration split identity")
+            labels = item["calibration_labels"]
+            example_ids.extend(labels["example_ids"])
+            expected.update(labels["expected"])
+        if len(example_ids) != len(set(example_ids)) or value["calibration_labels"] != {
+            "example_ids": example_ids,
+            "expected": expected,
+        }:
+            raise ValueError("invalid suite calibration labels")
 
 
 def human_review(directory: Path, evidence_digest: str) -> dict[str, Any]:
@@ -2091,6 +2201,8 @@ def human_review(directory: Path, evidence_digest: str) -> dict[str, Any]:
 
 def render(directory: Path) -> dict[str, Any]:
     manifest = json.loads((directory / "manifest.json").read_text())
+    if manifest["identity"]["corpus"].get("evaluation_scope") == "suite":
+        corpus.require_external(directory)
     validate_identity(manifest["identity"])
     legacy = tuple(map(int, manifest["identity"]["harness_version"].split("."))) < (
         2,
@@ -2486,6 +2598,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("calibrate", "run", "render", "aggregate"))
     parser.add_argument("--corpus", type=Path)
+    parser.add_argument(
+        "--holdout", type=Path, help="Calibrate all three splits together."
+    )
+    parser.add_argument(
+        "--shadow", type=Path, help="Shadow path for suite calibration."
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--cases", nargs="*", default=[])
     budget = parser.add_mutually_exclusive_group()
@@ -2502,6 +2620,10 @@ def main() -> None:
     parser.add_argument("--trials-per-case", type=int, choices=(1, 3), default=1)
     parser.add_argument("--workers", type=int, choices=range(1, 17), default=16)
     args = parser.parse_args()
+    if (args.holdout is not None or args.shadow is not None) and (
+        args.mode != "calibrate" or args.holdout is None or args.cases
+    ):
+        parser.error("--holdout/--shadow require full-suite calibrate")
     selected = (
         args.output
         if args.mode in {"render", "aggregate"}
@@ -2513,8 +2635,11 @@ def main() -> None:
             selected,
             args.output,
             private=True
-            if (args.corpus is not None or args.mode in {"render", "aggregate"})
-            and corpus.private_path(selected)
+            if args.holdout is not None
+            or (
+                (args.corpus is not None or args.mode in {"render", "aggregate"})
+                and corpus.private_path(selected)
+            )
             else None,
         ):
             result = command(args, parser)
@@ -2533,10 +2658,12 @@ def command(
         return aggregate(args.output)
     if args.mode == "render":
         report = render(args.output)
-        if (
-            report["manifest"]["identity"]["corpus"].get("evaluation_scope")
-            == "holdout"
-        ):
+        if report["manifest"]["identity"]["corpus"].get("evaluation_scope") in {
+            "holdout",
+            "suite",
+        }:
+            if report["manifest"]["mode"] == "calibrate":
+                return calibration_feedback(report)
             return aggregate(args.output)
         return None
     cases = golden.load_cases()
@@ -2551,7 +2678,16 @@ def command(
         if set(args.cases) - {c.id for c in cases}:
             parser.error("unknown case")
         cases = [c for c in cases if c.id in args.cases]
-    pinned = identity(cases)
+    paths = None
+    if args.holdout is not None:
+        corpus.require_external(args.holdout)
+        corpus.require_external(args.output)
+        paths = {
+            "training": golden.ROOT,
+            "shadow": args.shadow or corpus.PUBLIC / "shadow",
+            "holdout": args.holdout,
+        }
+    pinned = suite_identity(paths) if paths is not None else identity(cases)
     pinned["execution"] = {"trials_per_case": args.trials_per_case}
     if pinned["corpus"].get("evaluation_scope") == "holdout":
         corpus.require_external(golden.ROOT)
@@ -2568,26 +2704,12 @@ def command(
         if not calibration["complete"] or calibration["review"]["status"] != "approved":
             parser.error("calibration is incomplete or awaits human review")
         previous_identity = calibration["manifest"]["identity"]
-        for key in (
-            "corpus",
-            "harness_version",
-            "runtime",
-            "evaluator_sources_sha256",
-            "actor_prompt_sha256",
-            "actor_check_sha256",
-            "calibration_labels",
-            "judge_prompt_sha256",
-            "diagnostic_prompt",
-            "diagnostic_rubrics",
-            "diagnostic_domain_facts",
-            "model",
-            "reasoning_effort",
-            "max_output_tokens",
-            "transport",
-            "tool_description_policy",
-        ):
-            if previous_identity.get(key) != pinned.get(key):
-                parser.error("judge or corpus changed; recalibration required")
+        if calibration["manifest"]["mode"] != "calibrate":
+            parser.error("--calibration requires calibration evidence")
+        try:
+            require_calibration(previous_identity, pinned)
+        except ValueError as error:
+            parser.error(str(error))
         calibration_identity = {
             "run_id": calibration["manifest"]["run_id"],
             "evidence_sha256": calibration["evidence_sha256"],
@@ -2608,9 +2730,14 @@ def command(
     }
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     pool = ThreadPoolExecutor(max_workers=args.workers)
+    original_root = golden.ROOT
     try:
         if args.mode == "calibrate":
-            calibrate(journal, pool)
+            # Each split shares the journal and approval. Finish its workers before
+            # changing the existing global replay root for the next split.
+            for root in paths.values() if paths is not None else [golden.ROOT]:
+                golden.ROOT = root
+                calibrate(journal, pool)
         else:
             futures = [
                 pool.submit(execute, case, number, journal)
@@ -2628,19 +2755,26 @@ def command(
             journal.stop_requested = True
         raise
     finally:
-        pool.shutdown(wait=True, cancel_futures=True)
+        try:
+            pool.shutdown(wait=True, cancel_futures=True)
+        finally:
+            golden.ROOT = original_root
         report = render(args.output)
-    if pinned["corpus"].get("evaluation_scope") == "holdout":
+    if pinned["corpus"].get("evaluation_scope") in {"holdout", "suite"}:
         if args.mode == "run":
             return aggregate(args.output)
-        return {
-            "mode": "calibrate",
-            "complete": report["complete"],
-            "expected_examples": report["expected_examples"],
-            "measurement_failures": report["measurement_failures"],
-            "disagreements": sum(bool(row["disagreements"]) for row in report["rows"]),
-        }
+        return calibration_feedback(report)
     return None
+
+
+def calibration_feedback(report: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "mode": "calibrate",
+        "complete": report["complete"],
+        "expected_examples": report["expected_examples"],
+        "measurement_failures": report["measurement_failures"],
+        "disagreements": sum(bool(row["disagreements"]) for row in report["rows"]),
+    }
 
 
 if __name__ == "__main__":

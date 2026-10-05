@@ -27,7 +27,10 @@ uv run python -m eval.golden
 `freeze` writes a per-split manifest and pending `review.json`; it never grants
 approval. A real reviewer identifies the exact corpus digest and evidence.
 Commit real public inputs, manifests and input reviews before paid execution.
-Changed inputs or protected sources need a newer version and matching calibration.
+Changed inputs or protected sources need a newer corpus version and input review.
+Calibrate the harness across all three splits until Ryan approves it, then reuse
+that approval for every split and future corpus versions. Only an evaluator
+contract change requires a new combined harness calibration.
 Keep public detailed evidence in ignored `eval/private/`. The factory container,
 export/intake and handoff workflow are retired; existing private factory data stays
 untouched. Synthetic regressions and archival cases cannot seed a fresh suite.
@@ -102,4 +105,4 @@ Pass³ fields as `null` (inapplicable). Missing slots remain in the denominator;
 inconclusives remain explicit. Comparisons reject missing or duplicate slots,
 unsupported harness contracts, mismatched repetition counts, and inconsistent
 aggregate usage. Historical three-trial reports retain their recorded scoring rules.
-Paid execution requires matching human-reviewed local calibration.
+Paid execution requires matching human-reviewed harness calibration.

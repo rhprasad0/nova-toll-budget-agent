@@ -54,10 +54,13 @@ before paid search.
 3. Keep changes in project-root `.worktrees/`, clean and committed before paid
    runs. Store detailed decisions and evidence in ignored `v2/eval/private/eval-climb/`.
    Record evidence, alternatives, choice, cost and uncertainty when deciding.
-4. Finish measurement changes first. Reuse human-reviewed local calibration and
-   scripted actor checks only with matching evaluator, runtime,
-   settings and input bindings. Otherwise obtain **one fresh training calibration**,
-   its actual review and **one actor check**. Then run **one full training baseline**,
+4. Finish measurement changes first. Reuse Ryan's approved **all-split harness
+   calibration** with matching evaluator, runtime and settings, including for new
+   corpus versions. The host operator calibrates training, shadow and holdout
+   together until Ryan approves the harness; the coding agent must not inspect
+   that external evidence. Only evaluator contract changes require a new combined
+   calibration. Reuse scripted actor checks only with matching input bindings;
+   otherwise obtain **one actor check**. Then run **one full training baseline**,
    with 16 workers. Do not duplicate approved preparation evidence. Frozen fixture
    replay needs no deployment or migration parity gate; it does not establish live pricing correctness.
 5. Pin application, corpus, actor, evaluator, model settings, approved calibration
@@ -146,8 +149,10 @@ candidates without improvement**, review the evidence offline. Continue only wit
 a materially different justified hypothesis or bounded repair; otherwise stop.
 Stop earlier for insufficient budget, no supported hypothesis, unknown usage or
 an unusable measurement contract. Repair work shares the original allowance and
-requires matching calibration/baseline when grading, simulation, cases or execution
-semantics change. Preserve earlier scores as historical observations.
+requires new combined harness calibration and a fresh baseline when grading,
+simulation or execution semantics change. Changed cases require input review,
+actor checks and a fresh baseline while retaining harness approval. Preserve
+earlier scores as historical observations.
 
 ## Final verification and delivery
 

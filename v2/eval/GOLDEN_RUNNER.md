@@ -58,7 +58,7 @@ Each run records full tool schema hashes and the exact source artifact, so wordi
 changes remain attributable. The eval-climb comparison permits differing tool
 hashes only with the supported policy and identical pinned corpus. Old-contract
 reports retain their original hash rules and cannot be compared with this contract.
-Input approval and matching calibration are required before the next climb;
+Input approval and approved harness calibration are required before the next climb;
 never transfer prior approvals or regenerate a candidate's corpus manifest.
 
 ## Directed-catalog campaign comparison
@@ -133,9 +133,15 @@ offline validation and are never supplied to judges. Phrase-specific denial
 exceptions are not part of the active contract. Semantic classification can still
 err; inspect both classifications and final grades during calibration review.
 
-Prepare one local reference calibration with actual review and one scripted actor
-check for the selected split. Reuse existing local evidence only with matching
-protected sources, input hashes, runtime, actors, judges and model settings.
+Have the host operator calibrate all three splits together until Ryan approves
+the harness. Reuse that approval across training, shadow and holdout, including
+new corpus versions and application candidates. Calibration binds the evaluator
+sources, runtime, actor/judge prompts and model settings, not future case hashes
+or application prose. Only changes to that evaluator contract require a new
+combined calibration. Keep all combined evidence external; the runner reads it
+internally without exposing holdout details to application or actor prompts.
+Prepare one scripted actor check for the selected split. Actor checks remain
+bound to the selected inputs and must be refreshed when those inputs change.
 Then run one full training baseline
 (50 cases × 1 trial, 16 workers). Do not duplicate compatible approved preparation. Frozen fixture replay needs no deployment or migration parity
 gate. It cannot establish live pricing or deployment correctness.
@@ -168,8 +174,10 @@ the agreed search and confirmation budget. Record amounts and decisions in the
 private ledger and append-only experiment journal.
 Stop on unknown usage, infrastructure failure, unresolved material grading
 ambiguity or insufficient budget. Do not repeat runs to obtain passing results. Substantial measurement repairs belong in separate PRs. Changes to grading,
-simulation, cases or execution semantics require matching calibration and a fresh
-baseline; historical scores are not comparable application gains.
+simulation or execution semantics require new combined calibration and a fresh
+baseline. Changed cases require input review, matching actor checks and a fresh
+baseline, while retaining the approved harness calibration. Historical scores
+across different cases or evaluator contracts are not comparable application gains.
 
 ## Preparing inputs
 
@@ -196,7 +204,8 @@ to spend or reset a previous ledger.
 
 ```bash
 uv run python -m eval.golden_run calibrate \
-  --output eval/private/calibration-N --budget-usd 25 --workers 16 \
+  --holdout /absolute/external/5.0.0 \
+  --output /absolute/external/runs/harness-calibration-N --budget-usd 25 --workers 16 \
   --prior-run eval/private/previous-run
 ```
 
@@ -206,22 +215,24 @@ and actor-check CLIs. Uncapped manifests store `budget_usd: null`; usage account
 call limits, worker bounds, and stop-on-unknown-usage rules still apply.
 
 Omit `--prior-run` only for a genuinely new authorized spending chain. Calibration
-judges all references in the selected split; it does not generate new application or
+judges all references across training, shadow and holdout; it does not generate new application or
 actor conversations. Inspect disagreements, actor validity, measurement failures,
 and usage before application execution. Review approval is stored in the private
-calibration directory’s `review.json`, bound to the exact evidence digest with
+external calibration directory’s `review.json`, bound to the exact evidence digest with
 `status`, `reviewer`, and `evidence`. It must not claim human inspection that did
 not occur. Existing session authorization determines who may perform the review.
 
 ```bash
 uv run python -m eval.golden_run run \
   --output eval/private/baseline-N --budget-usd 25 --workers 16 \
-  --calibration eval/private/calibration-N \
-  --prior-run eval/private/calibration-N
+  --calibration /absolute/external/runs/harness-calibration-N \
+  --prior-run /absolute/external/runs/harness-calibration-N
 ```
 
-`--calibration` accepts a locally reviewed calibration directory matching the
-selected corpus, evaluator, runtime and settings. `--cases` selects a partial
+`--calibration` accepts the same approved combined calibration directory for all
+splits, matching the evaluator, runtime and settings. Future input versions do
+not invalidate harness approval. Ordinary single-split calibration remains a
+diagnostic and cannot qualify the shared local harness. `--cases` selects a partial
 public application diagnostic, which cannot represent a full baseline; holdout
 checkpoints always use the complete split. Actor-invalid
 or uncertain attempts remain inconclusive. Do not retry failures to improve a
@@ -258,24 +269,30 @@ coding agent must not read those files. These examples grant no paid budget.
 uv run python -m eval.corpus validate --holdout /absolute/external/5.0.0
 uv run python -m eval.corpus freeze --corpus /absolute/external/5.0.0 --split holdout --version 5.0.0
 uv run python -m eval.golden --corpus /absolute/external/5.0.0
-uv run python -m eval.golden_run calibrate --corpus /absolute/external/5.0.0 \
-  --output /absolute/external/runs/calibration-N --budget-usd 25
+uv run python -m eval.golden_run calibrate \
+  --corpus eval/active/training --shadow eval/active/shadow \
+  --holdout /absolute/external/5.0.0 \
+  --output /absolute/external/runs/harness-calibration-N --budget-usd 25
 uv run python -m eval.golden_actor_check --corpus /absolute/external/5.0.0 \
   --output /absolute/external/runs/actor-check-N --budget-usd 25 \
-  --prior-run /absolute/external/runs/calibration-N
+  --prior-run /absolute/external/runs/harness-calibration-N
 uv run python -m eval.golden_run run --corpus /absolute/external/5.0.0 \
   --output /absolute/external/runs/checkpoint-N --budget-usd 25 \
-  --calibration /absolute/external/runs/calibration-N \
+  --calibration /absolute/external/runs/harness-calibration-N \
   --prior-run /absolute/external/runs/actor-check-N
 uv run python -m eval.golden_run aggregate --output /absolute/external/runs/checkpoint-N
 ```
 
 Record actual input approval in the corpus's `review.json` and calibration approval
-in the calibration directory's `review.json` before `run`. Both bind exact digests.
+in the combined calibration directory's `review.json` before `run`. Both bind exact digests.
+Repeat combined calibration while resolving harness defects until Ryan is
+satisfied, then keep that approval as the harness baseline. No per-split or
+per-corpus-version recalibration is required after approval. A changed evaluator
+contract requires a new combined calibration covering all three splits.
 Omit `--prior-run` only at the start of a new authorized spending chain; otherwise
 chain all public and hidden work to the immediately preceding run. Holdout
-references are included in calibration and passing scripted actor checks. Public
-and hidden calibration evidence is not interchangeable.
+references are included in the combined calibration and passing scripted actor
+checks. That same approved calibration qualifies training and shadow runs too.
 
 Holdout console output contains aggregate status only. Diagnostics, including
 tracebacks and case progress, go to a sibling `.RUN_NAME.console.log` on the host.

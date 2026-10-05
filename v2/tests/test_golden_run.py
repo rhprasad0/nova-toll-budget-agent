@@ -66,7 +66,11 @@ def test_cli_runs_independent_work_in_parallel(
             return_value={
                 "complete": True,
                 "review": {"status": "approved"},
-                "manifest": {"identity": pinned, "run_id": "offline"},
+                "manifest": {
+                    "mode": "calibrate",
+                    "identity": pinned,
+                    "run_id": "offline",
+                },
                 "evidence_sha256": "0" * 64,
             }
         ),
@@ -1095,7 +1099,7 @@ def test_cli_rejects_changed_cache_contract(
             return_value={
                 "complete": True,
                 "review": {"status": "approved"},
-                "manifest": {"identity": previous},
+                "manifest": {"mode": "calibrate", "identity": previous},
             }
         ),
     )
