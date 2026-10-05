@@ -1,16 +1,17 @@
 # Authoring a fresh evaluation suite
 
 Read this guide before planning or writing cases. Use the frozen schemas and
-`contract.json`; keep **50 training, 25 holdout, and 10 shadow cases**, with the
+[coverage contract](contract.json); keep **50 training, 25 holdout, and 10 shadow cases**, with the
 existing workflow and coverage-family allocations. Historical examples explain
 the file formats. Exposed packets are retired review material and cannot seed a
-fresh holdout. This guide governs the next fresh run; it does not revise the
-development benchmark, application model/SOP, or archived smoke inputs.
+fresh holdout. This guide governs locally authored suite 5.0.0. Keep the
+application model/SOP and historical archive unchanged.
 
 ## Plan coverage before writing
 
-Keep a private coverage plan alongside the private authoring history, outside
-the validated split directories. Assign scenario groups and concrete situations
+Keep the public coverage plan in ignored `eval/private/`, outside the validated
+split directories. Keep holdout details on the external host path; only the host
+operator validates all three splits together. Assign scenario groups and concrete situations
 to each split and coverage family before generating prose or fixtures. Include
 the following dimensions, their planned counts by split, and any justified gaps:
 
@@ -44,7 +45,7 @@ Endpoint and price changes alone do not establish semantic independence. Keep
 paraphrases, wording variants, contrastive pairs, corrections and evidence
 variations of one underlying scenario together in one scenario group and split.
 
-Reserve route pairs before authoring. `factory validate` rejects a current,
+Reserve route pairs before authoring. `eval.corpus validate` rejects a current,
 outbound or return pair shared across splits, including reversed legs and
 entry/exit or direction variants. It uses explicit I-95 catalog counterparts,
 preserving distinct accesses that happen to share a numeric stem. For I-495 it
@@ -94,7 +95,7 @@ rejection. Passing variants may use different wording or valid conversation
 paths; they need not copy a reference's formatting or optional numbers.
 Reconcile fixture arithmetic and preserve source/observation times and provenance.
 
-Use **`actor.max_turns = 5` for every factory case, including the opening**.
+Use **`actor.max_turns = 5` for every case, including the opening**.
 Derive `minimum_user_turns` from the exchanges needed to deliver missing facts,
 consent, choices or triggered changes, not from the length of one reference.
 Set each step's `min_turn` to the earliest achievable authorized call. A complete
@@ -105,22 +106,36 @@ cannot finish within five turns.
 
 ## Review and freeze
 
-Run `factory validate --inputs /private/work/drafts` and repair structural
-errors. Then review the coverage plan, cross-split novelty and every reference's
+Run `uv run python -m eval.corpus validate` from `v2/` and repair structural
+errors. The host operator adds `--holdout /absolute/external/holdout` for full-suite
+leakage checks and the minimum 20 negative references across all three splits.
+Then review the coverage plan, cross-split novelty and every reference's
 labels, receipts and actor behavior. Keep a complete private case/reference
 assessment matrix with the review rationale and unresolved limitations. Store it
 outside the split input allowlist. Automated validation cannot establish
 semantic novelty or label correctness.
 
-Summarize only aggregate findings and limitations for external review. Full
-assessments, packet-specific evidence and granular run output stay in private
-history or ignored `v2/eval/private/` on the application host. Publish only small,
-independently authored regression fixtures and the permitted factory exports.
-Freeze reviewed inputs before any calibration. Offline authoring checks are
-not calibration results or application-performance evidence. Real suite
-generation is separate from a tooling smoke or authoring audit; paid calibration
-requires explicit budget authorization.
+Summarize aggregate findings and limitations. Keep detailed public assessments
+in ignored `eval/private/`; all detailed holdout output stays external. The coding
+agent never reads that external evidence. Synthetic regressions and exposed
+historical cases teach formats, not fresh holdout content.
 
-For a new real run after exposed review material, follow the
-[fresh-volume setup](README.md#fresh-real-run-after-exposed-review-material).
-Carry only these generic instructions into the clean authoring session.
+Freeze each split with `eval.corpus freeze --corpus PATH --split SPLIT --version
+5.0.0`. Each split owns `cases.jsonl`, `fixtures/*.json`, `examples.json`, and
+`prompt-points.json`, plus its generated `manifest.json` and `review.json`.
+Version and review changes before using them; never regenerate a candidate's
+manifest to bypass protected-source checks. New holdout versions should use new
+external directories, retaining old inputs and evidence. Review public split
+independence before freezing, and have the host operator review the full suite.
+
+For pricing-grounded authoring, inspect the committed Oracle schema/data and use
+[the development PostgreSQL skill](../../.agents/skills/query-dev-postgres/SKILL.md)
+only when bounded current data is needed. Keep credentials in the existing
+AWS/SSM path. Freeze retrieved facts and truthful provenance in reconciled
+fixtures; trials never fetch live pricing.
+
+Offline authoring checks do not establish calibration or application performance.
+Paid calibration, actor checks, and application runs require a separately
+authorized budget. Human review must reflect actual inspection. Host-only
+holdout calibration includes all selected references; detailed disagreements stay
+external. Return only aggregate checkpoint feedback to the coding agent.

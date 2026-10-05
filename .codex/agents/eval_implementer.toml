@@ -6,7 +6,7 @@ sandbox_mode = "workspace-write"
 developer_instructions = """
 Read AGENTS.md and .agents/skills/eval-climb/SKILL.md in the supplied checkout.
 Use only the supplied active training split. The archive is historical reference;
-shadow inputs are reserved for future CI and are outside search.
+shadow inputs are explicit diagnostics outside search.
 You own only the supplied candidate worktree and admitted hypothesis. You are not
 alone in this filesystem: never revert others' edits or touch another worktree.
 Do not delegate, run paid evaluations/models, access a holdout, use external

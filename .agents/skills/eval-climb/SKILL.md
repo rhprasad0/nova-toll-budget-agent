@@ -1,6 +1,6 @@
 ---
 name: eval-climb
-description: Improve TollChat SOP instructions and model-facing tool descriptions through sequential, budget-bounded subagent search on the active factory training split. Route measurement defects to separate repair tasks.
+description: Improve TollChat SOP instructions and model-facing tool descriptions through sequential, budget-bounded subagent search on the locally authored training split. Route measurement defects to separate repair tasks.
 ---
 
 # TollChat eval climb
@@ -11,15 +11,17 @@ this skill alone grants no spending, push, PR, merge or deployment permission.
 
 ## Contract and roles
 
-Search uses the **active factory training split × one repetition** on harness
-2.4.0. The first contract has 50 training cases; derive counts from its manifest.
+Search uses the **active locally authored training split × one repetition** on harness
+2.5.0. The first contract has 50 training cases; derive counts from its manifest.
 Use three repetitions only when Ryan explicitly requests them. Freeze the chosen
 repetition count for the entire campaign. The objective is successful trials
 divided by all expected training slots. Fully measured
 actor inconclusives stay visible and do not count as successes. Pass³ is
 inapplicable for one trial; descriptive only for three. **90% is a soft milestone**, not a stop or production qualification.
-Blind production qualification remains separate: do not access holdout cases,
-paths, IDs or feedback during search. TollChat stays on **gpt-6-luna**.
+External holdout is a procedural host-side diagnostic, not production qualification.
+Never read holdout inputs, references, IDs, detailed reports or transcripts. Ryan
+may return aggregate-only checkpoint feedback during iteration; track the visible/hidden
+gap without requesting cases or category breakdowns. TollChat stays on **gpt-6-luna**.
 
 | Agent | Model / effort | Responsibility |
 | --- | --- | --- |
@@ -43,7 +45,7 @@ before paid search.
    [runner guide](../../../v2/eval/GOLDEN_RUNNER.md) and the runner CLI. Validate the
    active training inputs; never activate smoke data or copy historical cases.
    The old development corpus is an archival reference, never a search input.
-   Receive shadow inputs but do not use them in search or wire shadow CI.
+   Author shadow inputs separately; do not use them in search or wire shadow CI.
 2. Reconcile every started call in the existing ledger and journal chain. Set the
    cumulative ceiling once to verified prior spend plus the newly authorized
    allowance. Calibration, actor checks, failed runs, repairs, baselines, candidates
@@ -52,8 +54,8 @@ before paid search.
 3. Keep changes in project-root `.worktrees/`, clean and committed before paid
    runs. Store detailed decisions and evidence in ignored `v2/eval/private/eval-climb/`.
    Record evidence, alternatives, choice, cost and uncertainty when deciding.
-4. Finish measurement changes first. Reuse the factory-approved calibration and
-   scripted actor checks only when the runner verifies exact evaluator, runtime,
+4. Finish measurement changes first. Reuse human-reviewed local calibration and
+   scripted actor checks only with matching evaluator, runtime,
    settings and input bindings. Otherwise obtain **one fresh training calibration**,
    its actual review and **one actor check**. Then run **one full training baseline**,
    with 16 workers. Do not duplicate approved preparation evidence. Frozen fixture

@@ -29,11 +29,11 @@ from strands_evals.types.simulation import ActorResponse
 from strands_evals.types.trace import Session, TraceLevelInput
 
 from agent import toll_agent
-from eval import golden
+from eval import corpus, golden
 from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.4.0"
+VERSION = "2.5.0"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -1623,6 +1623,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
     points = json.loads((golden.ROOT / "prompt-points.json").read_text())
     return {
         "harness_version": VERSION,
+        "runtime": corpus.runtime(),
         "execution": {"trials_per_case": 1},
         "harness_sha256": golden.hashlib.sha256(
             Path(__file__).read_bytes()
@@ -1714,7 +1715,11 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
 
 
 def development_examples() -> list[golden.Example]:
-    held = {c.id for c in golden.load_cases() if c.held_out}
+    # Local splits calibrate their own references, including external holdout.
+    local = (golden.ROOT / "manifest.json").is_file() and golden.manifest().get(
+        "format_version"
+    ) == 1
+    held = {c.id for c in golden.load_cases() if c.held_out and not local}
     return [
         golden.Example.model_validate(e)
         for e in json.loads((golden.ROOT / "examples.json").read_text())
@@ -2187,7 +2192,7 @@ def render(directory: Path) -> dict[str, Any]:
         lines = [
             "# Golden judge calibration",
             "",
-            "Pending human adjudication. Held-out examples excluded.",
+            "Pending human adjudication. References belong to the selected corpus.",
             "",
             "| Example | Disagreements |"
             if legacy
@@ -2419,9 +2424,68 @@ def prior_accounting(directory: Path | None) -> tuple[dict[str, Any] | None, flo
     return prior, spent
 
 
+def aggregate(directory: Path) -> dict[str, Any]:
+    """The only holdout feedback surface: totals and opaque identities."""
+    corpus.require_external(directory)
+    report = render(directory)
+    manifest = report["manifest"]
+    identity = manifest["identity"]
+    if (
+        manifest["mode"] != "run"
+        or identity["corpus"].get("evaluation_scope") != "holdout"
+    ):
+        raise ValueError("aggregate feedback requires a holdout application run")
+    if len(identity["cases"]) != identity["corpus"]["case_count"] or any(
+        not case["held_out"] for case in identity["cases"]
+    ):
+        raise ValueError("aggregate feedback requires the complete holdout split")
+    # Validate strings before returning them; never copy arbitrary metadata prose.
+    run_id = str(uuid.UUID(manifest["run_id"]))
+    corpus.version(identity["corpus"]["version"])
+    overall = report["overall"]
+    measurements = {
+        key: identity[key]
+        for key in (
+            "harness_version",
+            "evaluator_sources_sha256",
+            "runtime",
+            "actor_prompt_sha256",
+            "actor_check_sha256",
+            "judge_prompt_sha256",
+            "model",
+            "reasoning_effort",
+            "max_output_tokens",
+            "transport",
+            "tool_description_policy",
+        )
+    }
+    return {
+        "format_version": 1,
+        "scope": "holdout",
+        "run_id": run_id,
+        "source_commit": identity["commit"],
+        "artifact_sha256": identity["artifact_sha256"],
+        "harness_version": identity["harness_version"],
+        "corpus_version": identity["corpus"]["version"],
+        "corpus_sha256": identity["corpus"]["corpus_sha256"],
+        "measurement_sha256": golden.digest(measurements),
+        "evidence_sha256": report["evidence_sha256"],
+        "trials_per_case": len(report_trials(identity)),
+        "expected_trials": overall["expected_trials"],
+        "passed": overall["successful_trials"],
+        "failed": overall["scored_trials"] - overall["successful_trials"],
+        "inconclusive": overall["inconclusive_trials"],
+        "missing": overall["expected_trials"] - overall["attempted_trials"],
+        "pass_rate": overall["overall_pass_rate"],
+        "complete": report["full_corpus_complete"],
+        "cost_usd": sum(overall["cost_usd"].values()),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("calibrate", "run", "render"))
+    parser.add_argument("mode", choices=("calibrate", "run", "render", "aggregate"))
+    parser.add_argument("--corpus", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--cases", nargs="*", default=[])
     budget = parser.add_mutually_exclusive_group()
@@ -2438,20 +2502,46 @@ def main() -> None:
     parser.add_argument("--trials-per-case", type=int, choices=(1, 3), default=1)
     parser.add_argument("--workers", type=int, choices=range(1, 17), default=16)
     args = parser.parse_args()
+    selected = (
+        args.output
+        if args.mode in {"render", "aggregate"}
+        else args.corpus or golden.ROOT
+    )
+    original_root = golden.ROOT
+    try:
+        with corpus.console(
+            selected,
+            args.output,
+            private=True
+            if (args.corpus is not None or args.mode in {"render", "aggregate"})
+            and corpus.private_path(selected)
+            else None,
+        ):
+            result = command(args, parser)
+    finally:
+        golden.ROOT = original_root
+    if result is not None:
+        print(json.dumps(result, allow_nan=False))
+
+
+def command(
+    args: argparse.Namespace, parser: argparse.ArgumentParser
+) -> dict[str, Any] | None:
+    if args.corpus is not None:
+        golden.ROOT = args.corpus
+    if args.mode == "aggregate":
+        return aggregate(args.output)
     if args.mode == "render":
-        render(args.output)
-        return
+        report = render(args.output)
+        if (
+            report["manifest"]["identity"]["corpus"].get("evaluation_scope")
+            == "holdout"
+        ):
+            return aggregate(args.output)
+        return None
     cases = golden.load_cases()
     if args.mode == "run":
         review_path = golden.ROOT / "review.json"
-        if (
-            not review_path.is_file()
-            and (golden.ROOT.parent / "manifest.json").is_file()
-        ):
-            from eval.intake import validate_installed
-
-            validate_installed(golden.ROOT.parent)
-            review_path = golden.ROOT.parent / "manifest.json"
         if (
             not review_path.is_file()
             or json.loads(review_path.read_text()).get("status") != "approved"
@@ -2463,22 +2553,25 @@ def main() -> None:
         cases = [c for c in cases if c.id in args.cases]
     pinned = identity(cases)
     pinned["execution"] = {"trials_per_case": args.trials_per_case}
+    if pinned["corpus"].get("evaluation_scope") == "holdout":
+        corpus.require_external(golden.ROOT)
+        corpus.require_external(args.output)
+        if args.cases:
+            parser.error("holdout checkpoints require the complete split")
+        if args.calibration is not None:
+            corpus.require_external(args.calibration)
     calibration_identity: dict[str, Any] | None = None
     if args.mode == "run":
         if args.calibration is None:
             parser.error("run requires --calibration with human-reviewed evidence")
-        if args.calibration.is_file():
-            from eval.intake import approved_calibration
-
-            calibration = approved_calibration(args.calibration, pinned)
-        else:
-            calibration = render(args.calibration)
+        calibration = render(args.calibration)
         if not calibration["complete"] or calibration["review"]["status"] != "approved":
             parser.error("calibration is incomplete or awaits human review")
         previous_identity = calibration["manifest"]["identity"]
         for key in (
             "corpus",
             "harness_version",
+            "runtime",
             "evaluator_sources_sha256",
             "actor_prompt_sha256",
             "actor_check_sha256",
@@ -2536,7 +2629,18 @@ def main() -> None:
         raise
     finally:
         pool.shutdown(wait=True, cancel_futures=True)
-        render(args.output)
+        report = render(args.output)
+    if pinned["corpus"].get("evaluation_scope") == "holdout":
+        if args.mode == "run":
+            return aggregate(args.output)
+        return {
+            "mode": "calibrate",
+            "complete": report["complete"],
+            "expected_examples": report["expected_examples"],
+            "measurement_failures": report["measurement_failures"],
+            "disagreements": sum(bool(row["disagreements"]) for row in report["rows"]),
+        }
+    return None
 
 
 if __name__ == "__main__":

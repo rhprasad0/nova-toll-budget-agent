@@ -77,7 +77,7 @@ jobs:
           echo "$RUNNER_TEMP/repository-check-tools" >> "$GITHUB_PATH"
       - name: Check all authored code
         run: python3 scripts/check_repository.py
-      - name: Validate training intake, archival reference, and release isolation
+      - name: Validate local corpus readiness, archival reference, and release isolation
         run: |
           uv run python -m eval.golden --allow-uninitialized
           uv run python ../.agents/skills/eval-climb/scripts/test_compare_runs.py

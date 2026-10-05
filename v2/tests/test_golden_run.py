@@ -1084,7 +1084,8 @@ def test_cli_rejects_changed_cache_contract(
         "transport",
         "tool_description_policy",
     )
-    pinned = dict.fromkeys(keys, "current")
+    pinned: dict[str, Any] = dict.fromkeys(keys, "current")
+    pinned["corpus"] = {"evaluation_scope": "training"}
     previous = {**pinned, changed: "old"}
     monkeypatch.setattr(run, "identity", Mock(return_value=pinned))
     monkeypatch.setattr(

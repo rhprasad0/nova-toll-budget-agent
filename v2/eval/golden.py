@@ -47,7 +47,8 @@ ARCHIVE_COVERAGE = {
 }
 SOURCE_FILES = (
     "uv.lock",
-    "eval/intake.py",
+    "eval/corpus.py",
+    "eval/contract.json",
     "agent/toll_agent.py",
     "agent_tools/get_current_toll_price.py",
     "eval/golden.py",
@@ -1201,17 +1202,13 @@ def manifest(root: Path | None = None) -> dict[str, Any]:
     path = root / "manifest.json"
     if path.is_file():
         return json.loads(path.read_text())
-    return json.loads((root.parent / "manifest.json").read_text())["training"]
+    raise ValueError("No active golden corpus; freeze a local split manifest")
 
 
 def validate(root: Path | None = None) -> None:
-    from eval import intake
+    from eval import corpus
 
-    root = root if root is not None else ROOT
-    load_cases(root)  # Missing inputs fail before any credentials or output.
-    if root.name != "training" or not (root.parent / "manifest.json").is_file():
-        raise ValueError("No active golden corpus; archival references cannot execute")
-    intake.validate_installed(root.parent)
+    corpus.validate(root if root is not None else ROOT)
 
 
 def main() -> None:
@@ -1219,19 +1216,29 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--allow-uninitialized", action="store_true")
+    parser.add_argument("--corpus", type=Path)
     args = parser.parse_args()
     validate_archive()
+    root = args.corpus if args.corpus is not None else ROOT
     if (
         args.allow_uninitialized
-        and not ROOT.parent.exists()
-        and not ROOT.parent.is_symlink()
+        and not root.parent.exists()
+        and not root.parent.is_symlink()
     ):
         print(
-            "archival reference verified; awaiting the first real training/shadow export"
+            "archival reference verified; awaiting the first real locally authored corpus"
         )
     else:
-        validate()
-        print(f"training corpus: {len(load_cases())} cases validated offline")
+        from eval import corpus
+
+        with corpus.console(
+            root,
+            private=True
+            if args.corpus is not None and corpus.private_path(root)
+            else None,
+        ):
+            validate(root)
+        print("Selected corpus validated offline")
 
 
 if __name__ == "__main__":
