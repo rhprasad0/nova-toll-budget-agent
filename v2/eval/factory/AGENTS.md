@@ -2,8 +2,8 @@
 
 Author private inputs only in `/private/work/drafts/`; preserve revisions in the
 private Git repository. Use the frozen schemas and contract in
-`/opt/factory/v2/eval/factory/`. Start at suite/split version 4.0.0: 100 training,
-50 holdout, 10 shadow. Read `/opt/factory/v2/eval/factory/README.md` for commands
+`/opt/factory/v2/eval/factory/`. Start at suite/split version 4.0.0: 50 training,
+25 holdout, 10 shadow. Read `/opt/factory/v2/eval/factory/README.md` for commands
 and review formats; it stays available after initialization and restore.
 
 ## Agent-driven authoring and execution
@@ -69,14 +69,25 @@ Every read must verify account `903859731897`, the fixed private `nova-toll-db`
 instance, site-1 route, and TLS CA, then use only `nova_toll_development` with
 `pricing_reader_development`. Follow DATABASE.md's bounded, timed, read-only
 transaction procedure. Inspect explicit route/pricing columns, not application
-conversations or stored eval cases/results. Stop on missing login, privileges,
-connectivity, or schema uncertainty; report the boundary without leaking tokens
-or connection metadata. Do not substitute production or change IAM/database roles.
+conversations or stored eval cases/results. Stop on missing login, required
+pricing privileges, connectivity, or schema uncertainty; report the boundary
+without leaking tokens or connection metadata. Do not substitute production or
+change IAM/database roles.
 
 Use observed catalog/pricing data to ground realistic synthetic cases. Reconcile
 fixture arithmetic, preserve relevant observation times/provenance, and label
 generated fixtures truthfully. The schema references are documentation; never
-execute them. Use the bundled point catalog if oracle tables are not readable.
+execute them. Migration 035 adds development-only read access to Oracle's schema
+version, catalog points, connections, and route-pricing-component view. Follow
+DATABASE.md's privilege checks before bounded catalog queries; Oracle/PostGIS
+function execution and writes remain unavailable. The agent must never apply
+migrations or change grants. Until those grants are installed, use
+`examples/prompt-points.json` under the frozen factory path for the catalog.
+An Oracle-only permission denial stops that query, not all
+authoring: do not retry it or change grants. Follow DATABASE.md to verify pricing
+access and continue with the bundled catalog, recording its provenance. Stop if
+the required pricing reads fail. A catalog denial alone does not invalidate an
+existing freeze; preserve frozen files and history, and version any later repairs.
 Freeze all case evidence before calibration. References, actors, and application
 trials use frozen fixtures and never fetch live database data.
 

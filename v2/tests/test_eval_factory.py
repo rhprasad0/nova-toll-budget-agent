@@ -381,7 +381,7 @@ def test_validate_cli_does_not_freeze_or_change_history(
         f.main()
     assert json.loads(capsys.readouterr().out) == {
         "valid": True,
-        "cases": {"training": 100, "holdout": 50, "shadow": 10},
+        "cases": {"training": 50, "holdout": 25, "shadow": 10},
     }
     assert {
         str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()
@@ -417,9 +417,9 @@ def test_allocations_settings_and_one_full_calibration(
 ) -> None:
     root, _ = factory
     directory, manifest = f.suite(root, "4.0.0")
-    assert [manifest["splits"][s]["count"] for s in f.SPLITS] == [100, 50, 10]
+    assert [manifest["splits"][s]["count"] for s in f.SPLITS] == [50, 25, 10]
     calibration = f.checked_report(directory / "calibration/report.json")
-    assert len(calibration["rows"]) == 180 and len(calibration["actor_check"]) == 160
+    assert len(calibration["rows"]) == 105 and len(calibration["actor_check"]) == 85
     assert f.CONTRACT["settings"]["actor_params"] == run.EVAL_MODEL_PARAMS
     assert f.CONTRACT["settings"]["judge_params"] == run.JUDGE_MODEL_PARAMS
     with pytest.raises(FileExistsError):
@@ -509,7 +509,7 @@ def add_route_case(
         c
         for c in cases
         if c["kind"] == kind
-        and (split != "training" or c["number"] > 20)
+        and (split != "training" or c["number"] <= len(cases) - 20)
         and (number is None or c["number"] == number)
     )
     case["max_tool_calls"] = 1
@@ -728,8 +728,8 @@ def test_distinct_routes_and_within_split_reuse_are_valid(
     root, _ = factory
     drafts = root / "drafts"
     route = [("greenway:7:entry:EB", "greenway:28:exit:EB")]
-    add_route_case(drafts, "training", route, number=21)
-    add_route_case(drafts, "training", route, number=22)
+    add_route_case(drafts, "training", route, number=1)
+    add_route_case(drafts, "training", route, number=2)
     add_route_case(drafts, split, distinct)
     assert set(f.validate_splits(drafts)) == set(f.SPLITS)
 
@@ -978,15 +978,15 @@ def test_missing_slots_fixed_denominator_and_invalid_scores(
 ) -> None:
     root, run_id, report = application(factory)
     assert (
-        report["overall"]["expected_trials"] == 150
-        and report["overall"]["expected_cases"] == 50
+        report["overall"]["expected_trials"] == 75
+        and report["overall"]["expected_cases"] == 25
     )
     assert report["overall"]["inconclusive_trials"] == 1
     missing = deepcopy(report)
     missing["attempts"].pop()
     summary = f.summarize(missing["manifest"]["identity"]["cases"], missing["attempts"])
     assert (
-        summary["expected_trials"] == 150
+        summary["expected_trials"] == 75
         and summary["missing_trials"] == 1
         and not summary["complete"]
     )
@@ -1018,15 +1018,15 @@ def test_incumbent_reuse_grouped_uncertainty_and_export_privacy(
 ) -> None:
     root, incumbent, candidate = paired(factory)
     private = f.comparison(root, candidate, incumbent)
-    assert len(private["private_case_differences"]) == 50
+    assert len(private["private_case_differences"]) == 25
     aggregate = private["aggregate"]
-    assert aggregate["scenario_groups"] == 50
-    assert aggregate["baseline"]["slots"] == aggregate["final"]["slots"] == 150
+    assert aggregate["scenario_groups"] == 25
+    assert aggregate["baseline"]["slots"] == aggregate["final"]["slots"] == 75
     assert aggregate["mean_paired_case_delta"] == pytest.approx(
-        aggregate["successful_trial_delta"] / 150
+        aggregate["successful_trial_delta"] / 75
     )
     assert len(aggregate["intervals_percent"]["delta"]) == 2
-    assert sum(aggregate["final"]["case_success_histogram"]) == 50
+    assert sum(aggregate["final"]["case_success_histogram"]) == 25
     exported = f.export_report(
         root, candidate, tmp_path / "aggregate.json", "Test", "Comparison", incumbent
     )

@@ -79,7 +79,7 @@ def inputs(root: Path) -> Path:
                     ],
                 }
                 examples.append(example)
-                if split == "training" and number <= 20:
+                if split == "training" and number > allocation["count"] - 20:
                     bad = json.loads(json.dumps(example))
                     bad.update(
                         label="invented-price",
@@ -223,7 +223,7 @@ def workflow(root: Path) -> dict[str, Any]:
         )
         f.export_suite(work, "4.0.0", root / "public-suite.zip")
         f.backup(work, root / "backup.tar.gz")
-        assert exported["overall"]["expected_trials"] == 150
+        assert exported["overall"]["expected_trials"] == 75
         assert not exported["release_ready_evidence"]
         assert f.ledger(work)[-1]["event"] == "feedback_disclosed"
         return {
@@ -231,7 +231,7 @@ def workflow(root: Path) -> dict[str, Any]:
             "incumbent": incumbent,
             "ledger_sha256": f.ledger(work)[-1]["sha256"],
             "successful_trials": exported["overall"]["successful_trials"],
-            "expected_trials": 150,
+            "expected_trials": exported["overall"]["expected_trials"],
             "synthetic_smoke": True,
         }
 

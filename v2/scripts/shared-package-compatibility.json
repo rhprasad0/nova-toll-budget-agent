@@ -8,7 +8,7 @@
   },
   "schemas": {
     "application-schemas.json": "7db6fcb374162aaa157116b4107dab3160854ffeb5603557771043faf0dce85d",
-    "oracle/schema.sql": "1621ea63f991455952723e7b39544dbf928bdcf976efbab793054f7867d44ac3",
+    "oracle/schema.sql": "48c5471cb4733bf6bb4a7d6d7ac229e2ddca942bb0a1e5de223e9960d5d0f095",
     "schema.sql": "9bed36a8a09b3f49dabf0f640702b2c72ad6955f6fb24db66825898016f6ed72"
   }
 }

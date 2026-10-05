@@ -2,13 +2,14 @@ FROM ghcr.io/astral-sh/uv:0.12.5@sha256:e85be844203885286c60ffad8a858d48afb6c5a5
 FROM python:3.13-slim-bookworm@sha256:5024f48ba9441d4b13a95d3945abc6365538e3a31109833367a1923523c6efed
 COPY --from=uv /uv /usr/local/bin/uv
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git ca-certificates curl bubblewrap postgresql-client jq unzip groff-base proxychains4 \
+      git ca-certificates curl bubblewrap postgresql-client jq unzip groff-base proxychains4 procps \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 1000 --create-home factory \
     && mkdir -p /private/work /private/agent-state/home /private/agent-state/codex /private/agent-state/aws /private/agent-state/tailscale \
     && chmod 700 /private/agent-state /private/agent-state/aws /private/agent-state/tailscale \
     && printf 'strict_chain\ntcp_read_time_out 15000\ntcp_connect_time_out 5000\n[ProxyList]\nsocks5 127.0.0.1 1055\n' > /etc/factory-proxychains.conf \
     && chown -R factory:factory /private
+# Keep the complete Codex package separate: daemon bootstrap validates its tree.
 RUN case "$(dpkg --print-architecture)" in \
       amd64) codex_arch=x86_64; codex_sha=4fcc47ab57f52ff75363951a8761146cd10c8288bd86fed45487dbb204a16b71 ;; \
       arm64) codex_arch=aarch64; codex_sha=7f0fe42ff22ecfa3a47bc4a34f5b22c4218b431a4ec0aba51c7d98299f07900c ;; \
@@ -16,13 +17,15 @@ RUN case "$(dpkg --print-architecture)" in \
     esac \
     && curl -fsSL "https://github.com/openai/codex/releases/download/rust-v0.160.0/codex-package-${codex_arch}-unknown-linux-musl.tar.gz" -o /tmp/codex.tar.gz \
     && printf '%s  /tmp/codex.tar.gz\n' "$codex_sha" | sha256sum -c - \
-    && tar -xzf /tmp/codex.tar.gz -C /usr/local --no-same-owner \
-    && test -x /usr/local/bin/codex-code-mode-host \
-    && codex --version \
-    && codex-code-mode-host --help >/dev/null \
+    && mkdir -p /opt/codex \
+    && tar -xzf /tmp/codex.tar.gz -C /opt/codex --no-same-owner \
+    && test -x /opt/codex/bin/codex-code-mode-host \
+    && /opt/codex/bin/codex --version \
+    && /opt/codex/bin/codex-code-mode-host --help >/dev/null \
     && rm /tmp/codex.tar.gz \
     && printf '#!/bin/sh\nexec /opt/factory/v2/.venv/bin/python -m eval.factory.factory "$@"\n' > /usr/local/bin/factory \
     && chmod 755 /usr/local/bin/factory
+ENV PATH="/opt/codex/bin:/opt/codex/codex-path:$PATH"
 RUN case "$(dpkg --print-architecture)" in \
       amd64) aws_arch=x86_64; aws_sha=ddd7a5aabf363f5b82085ef732c806d4fe73ad0d10e35cffedd5c3560f56a641 ;; \
       arm64) aws_arch=aarch64; aws_sha=11a035805d7cbcbb6f13d1fe1f3422ea198048e2b643ce3c7ea215cf0f21f35a ;; \
@@ -53,7 +56,7 @@ RUN uv sync --frozen --python /usr/local/bin/python3.13 --no-managed-python \
     && mkdir -m 700 /run/tailscale \
     && ln -s /private/agent-state/tailscale/tailscaled.sock /run/tailscale/tailscaled.sock \
     && chown factory:factory /run/tailscale
-ENV PATH="/opt/factory/v2/.venv/bin:/usr/local/codex-path:$PATH" \
+ENV PATH="/opt/factory/v2/.venv/bin:$PATH" \
     PYTHONPATH="/opt/factory/v2" \
     PYTHONDONTWRITEBYTECODE=1 \
     OTEL_SDK_DISABLED=true \

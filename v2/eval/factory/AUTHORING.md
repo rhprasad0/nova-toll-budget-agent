@@ -1,7 +1,7 @@
 # Authoring a fresh evaluation suite
 
 Read this guide before planning or writing cases. Use the frozen schemas and
-`contract.json`; keep **100 training, 50 holdout, and 10 shadow cases**, with the
+`contract.json`; keep **50 training, 25 holdout, and 10 shadow cases**, with the
 existing workflow and coverage-family allocations. Historical examples explain
 the file formats. Exposed packets are retired review material and cannot seed a
 fresh holdout. This guide governs the next fresh run; it does not revise the

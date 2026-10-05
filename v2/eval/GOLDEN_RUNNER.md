@@ -176,7 +176,7 @@ uv run python -m eval.golden
 
 Paid work requires user authorization for a stated budget or explicitly uncapped
 spending, and a clean committed checkout. Use a new ignored output directory for each run. These examples assume
-an authorized $25 cumulative ceiling and 16 workers; they do not grant permission
+an authorized $25 cumulative ceiling and 16 workers (the default); they do not grant permission
 to spend or reset a previous ledger.
 
 ```bash

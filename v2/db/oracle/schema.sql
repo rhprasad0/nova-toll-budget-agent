@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.15.1
+-- oracle schema version: 1.15.2
 
 \set ON_ERROR_STOP on
 
@@ -163,7 +163,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.15.1');
+INSERT INTO oracle.schema_version (version) VALUES ('1.15.2');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,
@@ -2810,6 +2810,18 @@ GRANT EXECUTE ON FUNCTION oracle.get_annual_ballpark_summary(
 ) TO pricing_caller;
 GRANT EXECUTE ON FUNCTION oracle.get_i95_i495_report_inputs()
 TO report_publisher;
+
+-- The evaluation factory's fixed development reader can inspect catalog evidence.
+DO $catalog_reader$
+BEGIN
+    IF current_database() = 'nova_toll_development' THEN
+        GRANT USAGE ON SCHEMA oracle TO pricing_reader_development;
+        GRANT SELECT ON oracle.schema_version, oracle.toll_route_point,
+            oracle.toll_connection, oracle.route_pricing_component
+        TO pricing_reader_development;
+    END IF;
+END
+$catalog_reader$;
 
 ALTER TABLE oracle.schema_version OWNER TO oracle_owner;
 ALTER TABLE oracle.toll_route_point OWNER TO oracle_owner;

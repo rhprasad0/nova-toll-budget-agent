@@ -1,6 +1,6 @@
 # TollChat v2 routing oracle
 
-- **Status:** Adopted for oracle schema `1.15.1`
+- **Status:** Adopted for oracle schema `1.15.2`
 - **Scope:** V2 directed toll-road reachability and least-privilege pricing access
 
 ## Purpose
@@ -78,6 +78,13 @@ privilege. An additive install rejects either pre-existing runtime role when it
 has inherited membership other than `rds_iam` or direct privileges outside its
 exact function surface.
 
+In `nova_toll_development` only, `pricing_reader_development` additionally has
+`USAGE` on `oracle` and `SELECT` on `schema_version`, `toll_route_point`,
+`toll_connection`, and `route_pricing_component` for evaluation authoring.
+Migration 035 adds these grants without writes, schema creation, function
+execution, or default privileges for future objects. Production reader grants
+and the protected production migration cap remain unchanged.
+
 Agent-callable functions are `SECURITY DEFINER`, owned by `oracle_owner`, use
 fixed SQL without dynamic execution, qualify every application and extension
 object, and set `search_path` to `pg_catalog, pg_temp`. Creation, revocation of
@@ -139,7 +146,7 @@ to an unqualified pricing view, or leaving a partially granted function.
 ### Schema version and CI contract
 
 Every v2 application schema has an independent canonical SemVer contract. The
-oracle is at version `1.15.1`, stored as the single row in
+oracle is at version `1.15.2`, stored as the single row in
 `oracle.schema_version` with the same singleton, SemVer-format, and installation
 timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
@@ -735,7 +742,7 @@ DTR connection charge; only crossing either directed handoff adds it.
   reject cross-row semantic violations.
 - A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
   PostGIS 3.5.x and every v2 routing object in `oracle` beside `pricing`.
-- `oracle.schema_version` contains exactly one row at `1.15.1`, its canonical
+- `oracle.schema_version` contains exactly one row at `1.15.2`, its canonical
   bootstrap declaration matches that row, and `application-schemas.json`
   registers both `oracle` and `pricing` exactly once.
 - CI rejects an oracle SQL contract change without a monotonic oracle SemVer

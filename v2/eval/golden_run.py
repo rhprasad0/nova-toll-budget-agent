@@ -2434,7 +2434,7 @@ def main() -> None:
     )
     parser.add_argument("--prior-run", type=Path)
     parser.add_argument("--calibration", type=Path)
-    parser.add_argument("--workers", type=int, choices=range(1, 17), default=4)
+    parser.add_argument("--workers", type=int, choices=range(1, 17), default=16)
     args = parser.parse_args()
     if args.mode == "render":
         render(args.output)
