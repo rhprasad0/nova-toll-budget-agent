@@ -1,17 +1,14 @@
 # Golden corpus authoring
 
-The active corpus is **3.3.28: 100 development cases**, with **176 labeled
-references** and **107 frozen synthetic tool fixtures**. It covers 40 current,
-55 annual, and five mixed workflows. The executable schema and validation rules
-live in [golden.py](golden.py); the inputs live in [golden/](golden/).
+The next executable inputs are the factory's **50 training and 10 public shadow
+cases**. The private 25-case holdout stays in the factory. There is no active set
+until a real calibrated export passes [intake](README.md#frozen-golden-evaluation).
+Use the [factory authoring guide](factory/AUTHORING.md) and frozen contract for
+coverage allocations and versioning. The executable schema is [golden.py](golden.py).
 
-Use the [experiment journal](EXPERIMENT_JOURNAL.md) for prior attempts, measured
-results, and decisions. The retired 200 cases must not be reused as fresh cases.
-This exposed development set is not an independent holdout. The private holdout
-environment and qualification gate are retired. The standalone
-[evaluation factory](factory/README.md) provides the next authoring workflow;
-it does not reuse this exposed corpus as a holdout. Production uses the
-[existing delivery checks](../RUNBOOK.md#production-release-checks).
+Corpus 3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
+Historical inputs, approvals and scores cannot activate fresh training or qualify
+production. See the [experiment journal](EXPERIMENT_JOURNAL.md) for prior findings.
 
 ## Required artifacts
 
@@ -21,8 +18,8 @@ it does not reuse this exposed corpus as a holdout. Production uses the
 | `fixtures/*.json` | Schema-valid tool inputs/results with provenance and independently reconciled financial amounts. |
 | `examples.json` | Complete reference conversations, actual tool evidence, expected deterministic failures, Outcome/Grounding/Rules labels, actor validity, and rationale. Invalid actors have no application labels. |
 | `prompt-points.json` | Frozen public point catalog built from the committed Oracle data. |
-| `manifest.json` | Corpus version and exact hashes for all evaluation inputs and pinned evaluator sources. |
-| `review.json` | Development authorization tied to the exact corpus digest. |
+| `manifest.json` | Installed training identity, factory provenance, public input hashes and protected evaluator sources. |
+| Factory calibration evidence | Actual approved review, reference measurements and scripted actor checks, stored privately and bound to the export. |
 
 Author realistic passenger-car current-pricing and annual-affordability requests.
 Include ordinary clarifications, revisions, cancellations, alternative routes,
@@ -56,9 +53,8 @@ scenarios, accurate sources and coverage, and annual scaling can convey the
 limits without separate forecast or guarantee disclaimers. Daily scenario
 labels and scaling also distinguish them from annual percentiles; answer explicit
 probability questions directly. Promised future prices, guaranteed budgets,
-false annual probabilities and source contradictions still fail. Four synthetic
-positive/negative pairs exercise this boundary, including earlier-turn context
-and observed, modeled and published fixed-rate sources.
+false annual probabilities and source contradictions still fail. References should exercise this boundary with earlier-turn context and
+observed, modeled and published fixed-rate sources.
 
 Financial amounts and labels, route identity, material scope/assumptions,
 source accuracy, and consent remain strict. A correct table does not excuse a

@@ -61,7 +61,7 @@ def test_paired_comparison_excludes_invalid_actor_case(repetitions: int) -> None
 
 @pytest.mark.parametrize("version", ["1.2.10", "2.3.21"])
 def test_recovery_preserves_scored_trials_and_all_costs(version: str) -> None:
-    cases = golden.load_cases()[:2]
+    cases = golden.load_cases(golden.ARCHIVE)[:2]
     cases[1] = cases[1].model_copy(update={"held_out": True})
     attempts = [
         golden_run.Attempt(

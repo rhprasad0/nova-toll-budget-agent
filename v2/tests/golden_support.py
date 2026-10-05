@@ -25,6 +25,7 @@ def report_manifest(
             "commit": "0" * 40,
             "artifact_sha256": digest,
             "harness_version": harness_version,
+            "execution": {"trials_per_case": 3},
             "harness_sha256": digest,
             "corpus": {
                 "case_count": len(cases),

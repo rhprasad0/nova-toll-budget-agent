@@ -16,7 +16,7 @@ TollChat answers a practical question: **"What would this Northern Virginia comm
 
 I built the data pipeline, directed PostgreSQL/PostGIS route model, two deterministic pricing tools, and the Strands agent that uses them. I deployed the application on Amazon Bedrock AgentCore with separate AWS development and production environments, reviewed release workflows, and safety checks around the conversation. Diagnostic traces redact detected personal information before export.
 
-This reference implementation demonstrates how I build and operate an AI application, including the boundaries around the model. Six scheduled scenarios now exercise simulated conversations with deterministic tool-call checks and model-based judges. The golden corpus contains 100 development cases, with repeated baselines and measured prompt experiments recorded in the [experiment journal](v2/eval/EXPERIMENT_JOURNAL.md). Review of the current evaluation contract and fresh calibration remain pending; exposed development results do not qualify production.
+This reference implementation demonstrates how I build and operate an AI application, including the boundaries around the model. Six scheduled scenarios now exercise simulated conversations with deterministic tool-call checks and model-based judges. The former 100-case development corpus is retained as an archival reference, with findings in the [experiment journal](v2/eval/EXPERIMENT_JOURNAL.md). Intake is ready for the first calibrated 50-case training and 10-case shadow export; no fresh set is active yet. Exposed training results do not qualify production.
 
 ![TollChat showing an annual commute estimate beside a map of supported Northern Virginia toll routes](v2/agent/assets/tollchat-annual-commute-example.png)
 
@@ -33,7 +33,7 @@ Each row links a claim to its implementation and a way to inspect or verify it. 
 | Guardrails check inputs, streamed assistant snapshots, and completed answers | [Runtime checks](v2/agent/agentcore_entrypoint.py) and [versioned guardrail policy](v2/infra/agentcore.tf) | [Input/output blocking and safe-failure tests](v2/tests/test_agentcore_entrypoint.py) and [live release gates](v2/scripts/check_development_release.py) | Configured content, prompt-attack, and credential protections reduce abuse risk; they do not guarantee prevention. |
 | Detected PII is redacted from telemetry before export | [Telemetry exporter](v2/agent/telemetry.py) and [additional masking and alarms](v2/infra/trace_redaction.tf) | [Redaction and failure-path tests](v2/tests/test_telemetry_redaction.py), [observed trace example](#observed-trace-redaction), and [verification runbook](v2/runbooks/telemetry-pii-redaction.md) | Detection can miss information. Redaction failures omit affected content; the screenshot demonstrates one address-redaction example. |
 | Runtime access and credentials have explicit boundaries | [Runtime IAM permissions](v2/infra/agentcore.tf), [database roles](v2/db/roles.sql), and [security policy](SECURITY.md) | [IAM contract tests](v2/tests/test_infrastructure_iam.py) and [database validation instructions](v2/README.md#verify-the-build) | IAM-authenticated database access; deployed credentials live in SSM Parameter Store. |
-| Agent behavior has executable evaluation checks | [Scheduled simulation and judges](v2/eval/simulated.py), [evaluation runner](v2/eval/run_evaluation.py), and [evaluation guide](v2/eval/README.md) | [Simulation contract tests](v2/tests/test_simulated_evaluation.py), [dashboard runbook](v2/runbooks/eval-dashboard.md), and [recorded experiments](#evaluation-status) | Six scheduled current-toll scenarios; development dashboard publication first, production activation pending. 100-case development corpus; historical calibration retained; private holdout approach retired. |
+| Agent behavior has executable evaluation checks | [Scheduled simulation and judges](v2/eval/simulated.py), [evaluation runner](v2/eval/run_evaluation.py), and [evaluation guide](v2/eval/README.md) | [Simulation contract tests](v2/tests/test_simulated_evaluation.py), [dashboard runbook](v2/runbooks/eval-dashboard.md), and [recorded experiments](#evaluation-status) | Six scheduled current-toll scenarios; development dashboard publication first, production activation pending. 100-case archival reference; awaiting fresh training/shadow inputs; historical results retained. |
 
 ## Architecture and safety
 
@@ -88,13 +88,15 @@ Promotion changes routing to the validated candidate and retains the previous re
 
 ## Evaluation status
 
-**The golden corpus contains 100 development cases.** Development baselines and
+**The former 100-case golden corpus is an archival reference.** Development baselines and
 bounded prompt experiments are recorded in the experiment journal. These exposed
 development measurements do not qualify production or establish whole-agent
 accuracy.
 
-**The private holdout environment and qualification gate are retired.** A new
-container and evaluation approach will be designed separately. Production delivery
+**Fresh training/shadow intake is ready; no new set is active yet.** The standalone
+factory authors 50 training, 25 private holdout and 10 public shadow cases. Training
+hill-climbing defaults to one trial per case; shadow CI is deferred. The former
+production qualification gate remains retired. Production delivery
 uses the existing artifact provenance, protected human approvals, saved-plan,
 migration, and canary checks described in the [runbook](v2/RUNBOOK.md#production-release-checks).
 These delivery checks do not establish independently measured agent accuracy.

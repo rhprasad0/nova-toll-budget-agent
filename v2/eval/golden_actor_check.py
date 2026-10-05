@@ -126,11 +126,13 @@ def main() -> None:
         const=None,
         help="Explicitly authorized uncapped spending; usage accounting remains required.",
     )
+    parser.add_argument("--trials-per-case", type=int, choices=(1, 3), default=1)
     parser.add_argument("--prior-run", type=Path)
     parser.add_argument("--workers", type=int, choices=range(1, 17), default=16)
     args = parser.parse_args()
     cases = golden.load_cases()
     identity = run.identity(cases)
+    identity["execution"] = {"trials_per_case": args.trials_per_case}
     passing: dict[str, golden.Example] = {}
     for example in run.development_examples():
         if (

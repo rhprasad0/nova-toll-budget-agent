@@ -1,4 +1,4 @@
-"""Compare two frozen 100-case development reports without rerunning or regrading."""
+"""Compare two frozen training or historical development reports without rerunning or regrading."""
 
 import ast
 import hashlib
@@ -101,12 +101,23 @@ def identity(report: dict[str, Any], name: str) -> tuple[dict[str, Any], set[str
         f"{name}: empty contract identity",
     )
     corpus = value["corpus"]
+    scope = corpus.get("evaluation_scope") if is_record(corpus) else None
+    count = corpus.get("case_count") if is_record(corpus) else None
+    training = value["harness_version"] == "2.4.0"
     require(
-        is_record(corpus)
-        and corpus.get("evaluation_scope") == "development"
-        and corpus.get("case_count") == 100,
-        f"{name}: expected 100 development cases",
+        type(count) is int
+        and count > 0
+        and (
+            (scope == "training" and training)
+            or (scope == "development" and not training and count == 100)
+        ),
+        f"{name}: expected training or historical development cases",
     )
+    if training:
+        require(
+            is_record(corpus.get("factory")) and is_record(value.get("execution")),
+            f"{name}: missing factory or execution identity",
+        )
     require(
         is_record(corpus.get("hashes"))
         and corpus.get("corpus_sha256") == digest(corpus["hashes"]),
@@ -133,12 +144,12 @@ def identity(report: dict[str, Any], name: str) -> tuple[dict[str, Any], set[str
     )
     report_trials(value)
     cases = value["cases"]
-    require(is_array(cases) and len(cases) == 100, f"{name}: expected 100 cases")
+    require(is_array(cases) and len(cases) == count, f"{name}: unexpected case count")
     ids = [c.get("id") for c in cases if is_record(c)]
     require(
-        len(ids) == 100
+        len(ids) == count
         and all(isinstance(cid, str) and cid for cid in ids)
-        and len(set(ids)) == 100
+        and len(set(ids)) == count
         and all(
             c.get("held_out") is False
             and isinstance(c.get("contract_version"), int)
@@ -312,7 +323,7 @@ def attempts(
     version = report["manifest"]["identity"]["harness_version"]
     fixed = tuple(map(int, version.split("."))) >= (2, 2, 0)
     denominator = (
-        100
+        len(ids)
         if fixed
         else sum(all(by_slot[cid, n]["scored"] for n in trials) for cid in ids)
     )
@@ -330,9 +341,9 @@ def attempts(
         )
     elif fixed:
         require(
-            overall.get("pass_cubed") == triples / 100
+            overall.get("pass_cubed") == triples / len(ids)
             and overall.get("passing_all_three_cases") == triples
-            and overall.get("pass_cubed_case_denominator") == 100,
+            and overall.get("pass_cubed_case_denominator") == len(ids),
             f"{name}: inconsistent fixed-denominator pass cubed",
         )
     if tuple(map(int, version.split("."))) >= (2, 3, 0):
@@ -593,6 +604,7 @@ def compare(
         "2.3.25",
         "2.3.26",
         "2.3.27",
+        "2.4.0",
     }:
         criteria = {
             "successful_trials_increased": criteria["successful_trials_increased"]

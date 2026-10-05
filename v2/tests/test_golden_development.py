@@ -1,4 +1,4 @@
-"""Offline acceptance of the fresh development set, not model performance."""
+"""Offline regression assertions over the archived development reference."""
 
 import json
 import shutil
@@ -10,6 +10,8 @@ import pytest
 from eval import golden
 from eval import golden_run as run
 from oracle.build_oracle_data import build_connections, build_points
+
+pytestmark = pytest.mark.usefixtures("archival_reference_data")
 
 
 @pytest.mark.parametrize(
@@ -288,7 +290,7 @@ def test_gallows_review_preserves_evidence_and_source_failure() -> None:
         ("count", "exactly 100"),
         ("duplicate", "duplicate case ID"),
         ("held_out", "development-only"),
-        ("actor_leak", "oracle leakage"),
+        ("actor_leak", "hash drift"),
         ("hash", "hash drift"),
         ("version", "unsupported corpus"),
     ],

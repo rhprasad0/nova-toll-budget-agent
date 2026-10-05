@@ -33,7 +33,7 @@ from eval import golden
 from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.3.28"
+VERSION = "2.4.0"
 PRICES = {
     "model": "gpt-6-luna",
     "date": "2026-09-22",
@@ -1613,7 +1613,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
     golden.validate()
     if git("status", "--porcelain", "--untracked-files=normal"):
         raise ValueError("paid runs require a clean committed checkout")
-    manifest = json.loads((golden.ROOT / "manifest.json").read_text())
+    manifest = golden.manifest()
     files = git("ls-files", "--full-name", "-z", "--", ":/").split("\0")
     source_hashes = {
         p: golden.hashlib.sha256((golden.V2.parent / p).read_bytes()).hexdigest()
@@ -1623,6 +1623,7 @@ def identity(cases: list[golden.GoldenCase]) -> dict[str, Any]:
     points = json.loads((golden.ROOT / "prompt-points.json").read_text())
     return {
         "harness_version": VERSION,
+        "execution": {"trials_per_case": 1},
         "harness_sha256": golden.hashlib.sha256(
             Path(__file__).read_bytes()
         ).hexdigest(),
@@ -2434,6 +2435,7 @@ def main() -> None:
     )
     parser.add_argument("--prior-run", type=Path)
     parser.add_argument("--calibration", type=Path)
+    parser.add_argument("--trials-per-case", type=int, choices=(1, 3), default=1)
     parser.add_argument("--workers", type=int, choices=range(1, 17), default=16)
     args = parser.parse_args()
     if args.mode == "render":
@@ -2444,6 +2446,14 @@ def main() -> None:
         review_path = golden.ROOT / "review.json"
         if (
             not review_path.is_file()
+            and (golden.ROOT.parent / "manifest.json").is_file()
+        ):
+            from eval.intake import validate_installed
+
+            validate_installed(golden.ROOT.parent)
+            review_path = golden.ROOT.parent / "manifest.json"
+        if (
+            not review_path.is_file()
             or json.loads(review_path.read_text()).get("status") != "approved"
         ):
             parser.error("corpus review is pending")
@@ -2452,11 +2462,17 @@ def main() -> None:
             parser.error("unknown case")
         cases = [c for c in cases if c.id in args.cases]
     pinned = identity(cases)
+    pinned["execution"] = {"trials_per_case": args.trials_per_case}
     calibration_identity: dict[str, Any] | None = None
     if args.mode == "run":
         if args.calibration is None:
             parser.error("run requires --calibration with human-reviewed evidence")
-        calibration = render(args.calibration)
+        if args.calibration.is_file():
+            from eval.intake import approved_calibration
+
+            calibration = approved_calibration(args.calibration, pinned)
+        else:
+            calibration = render(args.calibration)
         if not calibration["complete"] or calibration["review"]["status"] != "approved":
             parser.error("calibration is incomplete or awaits human review")
         previous_identity = calibration["manifest"]["identity"]

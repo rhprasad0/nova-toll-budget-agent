@@ -1,7 +1,9 @@
-# Running the frozen golden corpus
+# Running the frozen training split
 
-The current development corpus has **100 cases and 176 calibration references**.
-Development application runs and actor checks use one trial per case. Actors have up to five delivered
+The first factory contract has **50 training cases and 10 public shadow cases**.
+No active training set exists until a real export is installed. Training application
+runs default to one trial per case; use `--trials-per-case 3` only on Ryan's explicit
+instruction. Shadow execution and CI integration are deferred. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
@@ -42,7 +44,7 @@ require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-Contract 3.3.28 / harness 2.3.28 uses `literal-input-prose-v1`. The corpus hashes
+The factory training contract / harness 2.4.0 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -56,7 +58,7 @@ Each run records full tool schema hashes and the exact source artifact, so wordi
 changes remain attributable. The eval-climb comparison permits differing tool
 hashes only with the supported policy and identical pinned corpus. Old-contract
 reports retain their original hash rules and cannot be compared with this contract.
-Corpus review and fresh matching calibration are required before the next climb;
+Input approval and matching calibration are required before the next climb;
 never transfer prior approvals or regenerate a candidate's corpus manifest.
 
 ## Directed-catalog campaign comparison
@@ -94,7 +96,8 @@ also supplies final verification. Keep the bundle and raw reports private.
 
 ## Scoring and preparation
 
-Development score is successful trials divided by **all 100 expected slots**.
+Training score is successful trials divided by **all expected training slots**
+(case count × recorded execution repetitions).
 Fully measured actor inconclusives stay visible and count as no success. Pass³
 fields are null (inapplicable) for one repetition. Scheduling, actor checks,
 rendering and comparison use recorded `trials_per_case`; historical three-trial
@@ -104,12 +107,13 @@ Promotion requires a strict overall score gain and independent scope and materia
 regression review. Violation and inconclusive increases trigger review, not an
 automatic numeric veto. Demonstrated material regressions block promotion; a lost
 stochastic pass alone does not prove causation. Ties retain the incumbent.
-**90/100 is a soft milestone.** Sequential search is bounded by the authorized
+**90% is a soft milestone.** Sequential search is bounded by the authorized
 budget; after four complete candidates without improvement, continue only with a
 materially different evidence-backed hypothesis or a bounded measurement repair.
 See the [eval-climb skill](../../.agents/skills/eval-climb/SKILL.md).
 
-Optimize using development cases only. These measurements do not establish
+Optimize using training cases only. Do not use archived or shadow cases in
+search. These measurements do not establish
 independent agent accuracy. The retired private holdout approach grants no new
 development spending authorization.
 
@@ -129,10 +133,13 @@ offline validation and are never supplied to judges. Phrase-specific denial
 exceptions are not part of the active contract. Semantic classification can still
 err; inspect both classifications and final grades during calibration review.
 
-After foundational measurement changes, preparation is one fresh full-reference
-calibration, independent review, one full scripted actor check and one full
-application baseline (100 cases × 1 trial, 16 workers). No duplicate preparation
-runs are required. Frozen fixture replay needs no deployment or migration parity
+Reuse factory-approved reference calibration and scripted actor-check evidence
+when the runner verifies matching protected source hashes, model settings,
+dependency/runtime identity and inputs. Its original review identity is retained;
+training's one-trial execution setting does not alter the factory's three-trial
+contract. If compatibility fails, perform one fresh local reference calibration,
+its actual review and one scripted actor check. Then run one full training baseline
+(50 cases × 1 trial, 16 workers). Do not duplicate compatible approved preparation. Frozen fixture replay needs no deployment or migration parity
 gate. It cannot establish live pricing or deployment correctness.
 
 Use the fixed starting baseline for the final comparison. Reserve one fresh full
@@ -165,6 +172,20 @@ Stop on unknown usage, infrastructure failure, unresolved material grading
 ambiguity or insufficient budget. Do not repeat runs to obtain passing results. Substantial measurement repairs belong in separate PRs. Changes to grading,
 simulation, cases or execution semantics require matching calibration and a fresh
 baseline; historical scores are not comparable application gains.
+
+## Receiving inputs
+
+From `v2/`, use `eval.intake validate EXPORT.zip` followed by
+`eval.intake install EXPORT.zip`. The latter atomically installs both public splits
+under `eval/active/` and prints the private exported-calibration path. Commit the
+executable inputs and identity manifest before running. Installation never
+overwrites an existing set. A changed split needs a new reviewed version and an
+explicit replacement change; the archive is historical reference only.
+
+Use `eval.intake validate EXPORT.zip --smoke` for credential-free factory smoke
+exports. Smoke never activates training. CI uses `eval.golden --allow-uninitialized`
+to verify archive integrity while waiting for real inputs; ordinary validation
+and paid entrypoints require an installed training split.
 
 ## Execution
 
@@ -205,7 +226,11 @@ uv run python -m eval.golden_run run \
   --prior-run eval/private/calibration-N
 ```
 
-The calibration must match the execution contract. `--cases` selects a partial
+`--calibration` accepts either the private factory `calibration.json` printed by
+intake or a locally reviewed calibration directory. Compatible factory evidence
+also includes the scripted actor checks, so do not rerun those checks unnecessarily.
+A mismatched factory fingerprint fails before paid output or credentials; obtain
+local calibration instead. The calibration must match the evaluation contract. `--cases` selects a partial
 application diagnostic, which cannot represent a full baseline. Actor-invalid
 or uncertain attempts remain inconclusive. Do not retry failures to improve a
 score, erase interrupted attempts, or silently relabel an old report.

@@ -70,7 +70,7 @@ def evidence(directory: Path) -> dict[str, Any]:
 
 
 def test_selection_and_scoped_model_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    cases = benchmark.select_cases(golden.load_cases())
+    cases = benchmark.select_cases(golden.load_cases(golden.ARCHIVE))
     assert len(cases) == len({case.id for case in cases}) == 12
     assert sum(case.kind == "current" for case in cases) == 6
     assert any(case.terminal_objective == "unavailable" for case in cases)
