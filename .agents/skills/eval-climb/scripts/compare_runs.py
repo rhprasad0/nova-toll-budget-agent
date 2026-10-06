@@ -103,7 +103,7 @@ def identity(report: dict[str, Any], name: str) -> tuple[dict[str, Any], set[str
     corpus = value["corpus"]
     scope = corpus.get("evaluation_scope") if is_record(corpus) else None
     count = corpus.get("case_count") if is_record(corpus) else None
-    training = value["harness_version"] == "2.4.0"
+    training = value["harness_version"] in {"2.4.0", "2.5.0"}
     require(
         type(count) is int
         and count > 0
@@ -115,9 +115,17 @@ def identity(report: dict[str, Any], name: str) -> tuple[dict[str, Any], set[str
     )
     if training:
         require(
-            is_record(corpus.get("factory")) and is_record(value.get("execution")),
-            f"{name}: missing factory or execution identity",
+            is_record(value.get("execution")), f"{name}: missing execution identity"
         )
+        if value["harness_version"] == "2.4.0":
+            require(
+                is_record(corpus.get("factory")), f"{name}: missing factory identity"
+            )
+        else:
+            require(
+                corpus.get("format_version") == 1 and is_record(value.get("runtime")),
+                f"{name}: missing local corpus or runtime identity",
+            )
     require(
         is_record(corpus.get("hashes"))
         and corpus.get("corpus_sha256") == digest(corpus["hashes"]),
@@ -605,6 +613,7 @@ def compare(
         "2.3.26",
         "2.3.27",
         "2.4.0",
+        "2.5.0",
     }:
         criteria = {
             "successful_trials_increased": criteria["successful_trials_increased"]

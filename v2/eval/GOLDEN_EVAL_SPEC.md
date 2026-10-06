@@ -1,10 +1,9 @@
 # Golden corpus authoring
 
-The next executable inputs are the factory's **50 training and 10 public shadow
-cases**. The private 25-case holdout stays in the factory. There is no active set
-until a real calibrated export passes [intake](README.md#frozen-golden-evaluation).
-Use the [factory authoring guide](factory/AUTHORING.md) and frozen contract for
-coverage allocations and versioning. The executable schema is [golden.py](golden.py).
+Author suite **5.0.0** locally: **50 training and 10 shadow cases** in the repo,
+plus **25 external holdout cases**. There is no active set until real inputs are
+validated, frozen and reviewed. Use the [authoring guide](AUTHORING.md) and
+[coverage contract](contract.json). The executable schema is [golden.py](golden.py).
 
 Corpus 3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
 Historical inputs, approvals and scores cannot activate fresh training or qualify
@@ -18,8 +17,11 @@ production. See the [experiment journal](EXPERIMENT_JOURNAL.md) for prior findin
 | `fixtures/*.json` | Schema-valid tool inputs/results with provenance and independently reconciled financial amounts. |
 | `examples.json` | Complete reference conversations, actual tool evidence, expected deterministic failures, Outcome/Grounding/Rules labels, actor validity, and rationale. Invalid actors have no application labels. |
 | `prompt-points.json` | Frozen public point catalog built from the committed Oracle data. |
-| `manifest.json` | Installed training identity, factory provenance, public input hashes and protected evaluator sources. |
-| Factory calibration evidence | Actual approved review, reference measurements and scripted actor checks, stored privately and bound to the export. |
+| `manifest.json` | Per-split version, scope, counts, input hashes and protected source identity. |
+| `review.json` | Actual input review bound to this exact corpus digest; initially pending. |
+| Combined harness calibration | All three splits' reference measurements and actual approval, stored externally and bound to the evaluator contract. Reused across splits and future corpus versions. |
+| `eval/harness-approval.json` | Public approval receipt exported from the reviewed combined calibration, containing only hashes, runtime, planned counts and approval provenance. Training and hosted shadow CI reuse it. |
+| Actor-check evidence | Scripted actor checks, stored privately and bound to the selected inputs and evaluator. |
 
 Author realistic passenger-car current-pricing and annual-affordability requests.
 Include ordinary clarifications, revisions, cancellations, alternative routes,
@@ -68,8 +70,10 @@ baseline information, without invented toll or affordability totals.
 Validate schemas, coverage, timing, endpoints, arithmetic, and information
 boundaries offline before requesting paid work. Run `uv run python -m eval.golden`
 from `v2/`, plus tests relevant to the changed behavior. Changes to cases,
-references, fixtures, or judge semantics need updated versions/hashes and matching
-calibration; old approvals and scores do not transfer.
+references or fixtures need updated versions/hashes, input review and actor checks;
+the approved harness calibration remains reusable. Judge or other evaluator
+contract changes require a new combined calibration across all three splits.
+Scores across changed corpora or evaluator contracts are not comparable gains.
 
 The [runner guide](GOLDEN_RUNNER.md) describes execution and private artifact
 storage. Publish only a concise journal summary of purpose, versions, aggregate

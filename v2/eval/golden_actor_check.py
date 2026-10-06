@@ -8,11 +8,11 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from strands_evals.types.simulation import ActorResponse
 
-from eval import golden
+from eval import corpus, golden
 from eval import golden_run as run
 from eval.repetition import report_trials
 
@@ -117,6 +117,7 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--corpus", type=Path)
     budget = parser.add_mutually_exclusive_group(required=True)
     budget.add_argument("--budget-usd", type=float)
     budget.add_argument(
@@ -130,9 +131,32 @@ def main() -> None:
     parser.add_argument("--prior-run", type=Path)
     parser.add_argument("--workers", type=int, choices=range(1, 17), default=16)
     args = parser.parse_args()
+    original_root = golden.ROOT
+    try:
+        with corpus.console(
+            args.corpus or golden.ROOT,
+            args.output,
+            private=True
+            if args.corpus is not None and corpus.private_path(args.corpus)
+            else None,
+        ):
+            if args.corpus is not None:
+                golden.ROOT = args.corpus
+            report = command(args)
+    finally:
+        golden.ROOT = original_root
+    if report is not None:
+        print(json.dumps(report, allow_nan=False))
+
+
+def command(args: argparse.Namespace) -> dict[str, Any] | None:
     cases = golden.load_cases()
     identity = run.identity(cases)
     identity["execution"] = {"trials_per_case": args.trials_per_case}
+    private = identity["corpus"].get("evaluation_scope") == "holdout"
+    if private:
+        corpus.require_external(golden.ROOT)
+        corpus.require_external(args.output)
     passing: dict[str, golden.Example] = {}
     for example in run.development_examples():
         if (
@@ -184,6 +208,16 @@ def main() -> None:
         f"Actor checks: {report['valid_trials']}/{report['expected_trials']}",
         flush=True,
     )
+
+    if private:
+        return {
+            "mode": "actor-check",
+            "expected_trials": report["expected_trials"],
+            "valid_trials": report["valid_trials"],
+            "cost_usd": report["cost_usd"],
+            "unknown_usage": report["unknown_usage"],
+        }
+    return None
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
 # Running the frozen training split
 
-The first factory contract has **50 training cases and 10 public shadow cases**.
-No active training set exists until a real export is installed. Training application
+The local contract has **50 training, 10 shadow and 25 external holdout cases**.
+No fresh set is active until it is authored, frozen and reviewed. Training application
 runs default to one trial per case; use `--trials-per-case 3` only on Ryan's explicit
-instruction. Shadow execution and CI integration are deferred. Actors have up to five delivered
+instruction. Shadow is a ten-case CI diagnostic outside search, with a $2 per-job
+ceiling and informational scores. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
@@ -44,7 +45,7 @@ require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-The factory training contract / harness 2.4.0 uses `literal-input-prose-v1`. The corpus hashes
+The local training contract / harness 2.5.0 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -58,7 +59,7 @@ Each run records full tool schema hashes and the exact source artifact, so wordi
 changes remain attributable. The eval-climb comparison permits differing tool
 hashes only with the supported policy and identical pinned corpus. Old-contract
 reports retain their original hash rules and cannot be compared with this contract.
-Input approval and matching calibration are required before the next climb;
+Input approval and approved harness calibration are required before the next climb;
 never transfer prior approvals or regenerate a candidate's corpus manifest.
 
 ## Directed-catalog campaign comparison
@@ -133,12 +134,16 @@ offline validation and are never supplied to judges. Phrase-specific denial
 exceptions are not part of the active contract. Semantic classification can still
 err; inspect both classifications and final grades during calibration review.
 
-Reuse factory-approved reference calibration and scripted actor-check evidence
-when the runner verifies matching protected source hashes, model settings,
-dependency/runtime identity and inputs. Its original review identity is retained;
-training's one-trial execution setting does not alter the factory's three-trial
-contract. If compatibility fails, perform one fresh local reference calibration,
-its actual review and one scripted actor check. Then run one full training baseline
+Have the host operator calibrate all three splits together until Ryan approves
+the harness. Reuse that approval across training, shadow and holdout, including
+new corpus versions and application candidates. Calibration binds the evaluator
+sources, runtime, actor/judge prompts and model settings, not future case hashes
+or application prose. Only changes to that evaluator contract require a new
+combined calibration. Keep all combined evidence external; the runner reads it
+internally without exposing holdout details to application or actor prompts.
+Prepare one scripted actor check for the selected split. Actor checks remain
+bound to the selected inputs and must be refreshed when those inputs change.
+Then run one full training baseline
 (50 cases × 1 trial, 16 workers). Do not duplicate compatible approved preparation. Frozen fixture replay needs no deployment or migration parity
 gate. It cannot establish live pricing or deployment correctness.
 
@@ -170,22 +175,20 @@ the agreed search and confirmation budget. Record amounts and decisions in the
 private ledger and append-only experiment journal.
 Stop on unknown usage, infrastructure failure, unresolved material grading
 ambiguity or insufficient budget. Do not repeat runs to obtain passing results. Substantial measurement repairs belong in separate PRs. Changes to grading,
-simulation, cases or execution semantics require matching calibration and a fresh
-baseline; historical scores are not comparable application gains.
+simulation or execution semantics require new combined calibration and a fresh
+baseline. Changed cases require input review, matching actor checks and a fresh
+baseline, while retaining the approved harness calibration. Historical scores
+across different cases or evaluator contracts are not comparable application gains.
 
-## Receiving inputs
+## Preparing inputs
 
-From `v2/`, use `eval.intake validate EXPORT.zip` followed by
-`eval.intake install EXPORT.zip`. The latter atomically installs both public splits
-under `eval/active/` and prints the private exported-calibration path. Commit the
-executable inputs and identity manifest before running. Installation never
-overwrites an existing set. A changed split needs a new reviewed version and an
-explicit replacement change; the archive is historical reference only.
-
-Use `eval.intake validate EXPORT.zip --smoke` for credential-free factory smoke
-exports. Smoke never activates training. CI uses `eval.golden --allow-uninitialized`
-to verify archive integrity while waiting for real inputs; ordinary validation
-and paid entrypoints require an installed training split.
+Author training and shadow under `eval/active/`. Use `eval.corpus validate` for
+draft checks, then `eval.corpus freeze --corpus PATH --split SPLIT --version
+5.0.0` to write each split's manifest and pending input review. It records protected
+source hashes and never approves inputs. A changed contract needs a newer version
+and actual review. CI uses `eval.golden --allow-uninitialized` while waiting for
+real inputs; partial sets fail validation. Commit public inputs and their identities
+before paid execution. The archive remains historical reference only.
 
 ## Execution
 
@@ -202,7 +205,8 @@ to spend or reset a previous ledger.
 
 ```bash
 uv run python -m eval.golden_run calibrate \
-  --output eval/private/calibration-N --budget-usd 25 --workers 16 \
+  --holdout /absolute/external/5.0.0 \
+  --output /absolute/external/runs/harness-calibration-N --budget-usd 25 --workers 16 \
   --prior-run eval/private/previous-run
 ```
 
@@ -212,26 +216,26 @@ and actor-check CLIs. Uncapped manifests store `budget_usd: null`; usage account
 call limits, worker bounds, and stop-on-unknown-usage rules still apply.
 
 Omit `--prior-run` only for a genuinely new authorized spending chain. Calibration
-judges all fixed development references; it does not generate new application or
+judges all references across training, shadow and holdout; it does not generate new application or
 actor conversations. Inspect disagreements, actor validity, measurement failures,
 and usage before application execution. Review approval is stored in the private
-calibration directory’s `review.json`, bound to the exact evidence digest with
+external calibration directory’s `review.json`, bound to the exact evidence digest with
 `status`, `reviewer`, and `evidence`. It must not claim human inspection that did
 not occur. Existing session authorization determines who may perform the review.
 
 ```bash
 uv run python -m eval.golden_run run \
   --output eval/private/baseline-N --budget-usd 25 --workers 16 \
-  --calibration eval/private/calibration-N \
-  --prior-run eval/private/calibration-N
+  --calibration /absolute/external/runs/harness-calibration-N \
+  --prior-run /absolute/external/runs/harness-calibration-N
 ```
 
-`--calibration` accepts either the private factory `calibration.json` printed by
-intake or a locally reviewed calibration directory. Compatible factory evidence
-also includes the scripted actor checks, so do not rerun those checks unnecessarily.
-A mismatched factory fingerprint fails before paid output or credentials; obtain
-local calibration instead. The calibration must match the evaluation contract. `--cases` selects a partial
-application diagnostic, which cannot represent a full baseline. Actor-invalid
+`--calibration` accepts the same approved combined calibration directory for all
+splits, matching the evaluator, runtime and settings. Future input versions do
+not invalidate harness approval. Ordinary single-split calibration remains a
+diagnostic and cannot qualify the shared local harness. `--cases` selects a partial
+public application diagnostic, which cannot represent a full baseline; holdout
+checkpoints always use the complete split. Actor-invalid
 or uncertain attempts remain inconclusive. Do not retry failures to improve a
 score, erase interrupted attempts, or silently relabel an old report.
 
@@ -254,6 +258,116 @@ stops further paid work. Reproduce a report offline with:
 uv run python -m eval.golden_run render --output eval/private/baseline-N
 ```
 
+## Public harness approval receipt
+
+After Ryan approves complete combined calibration, the host operator exports a
+small public receipt for training, holdout runs and hosted shadow CI:
+
+```bash
+uv run python -m eval.golden_run export-calibration \
+  --output /absolute/external/runs/harness-calibration-N \
+  --receipt eval/harness-approval.json
+```
+
+Commit this executable approval input after reviewing it. Export checks actual
+evidence approval and includes only the evaluator contract digest, calibrated
+runtime, planned split counts, source run/evidence identities and approved status.
+It contains no case IDs, labels, conversations, reviewer prose or external paths.
+The runner checks its digest and evaluator binding before execution. It trusts
+the human-reviewed receipt as an approval input; its checksum is not a signature.
+Never manufacture or edit a receipt to claim approval. Export makes no model calls
+and never calibrates again. Use `--calibration eval/harness-approval.json` with any
+split; the external reviewed calibration directory remains accepted too.
+
+## Shadow CI
+
+The `shadow-readiness` job validates the public shadow inputs and approval receipt.
+It reports "awaiting authored public cases and harness approval" when neither
+exists; partial or unreviewed inputs fail. After candidate CI succeeds, the
+`shadow-ci` follow-on workflow runs all ten cases once through `golden-evaluation`,
+using its protected-main definition and the exact candidate commit. It selects the receipt's exact Python
+version and architecture and verifying the evaluator before credentials.
+Each job has a fresh **$2 spending ceiling**. Its score is informational: 9/10 is
+reported successfully, while missing, inconclusive, unknown-usage or otherwise
+incomplete measurements fail the shadow workflow. Results appear in its job
+summary with the candidate commit. The follow-on workflow becomes available after
+this PR merges; PR CI uses no new model credentials.
+
+Before real cases activate the job, provision the development-only role defined
+in `infra/shadow_eval.tf` through administrator-reviewed infrastructure changes.
+It can read only `/nova-toll/openai_api_key` from development SSM and grants no
+database, deployment or holdout storage access. Keep the existing required
+reviewer and main-only branch policy on `golden-evaluation`. The role's OIDC trust
+admits only the reusable evaluator definition on protected main. Forks and tag pushes do
+not run paid shadow evaluations. Readiness checks run without these credentials.
+Shadow CI evidence is regression feedback outside the training search loop.
+
+## External holdout checkpoints
+
+The host operator authors, validates and approves hidden inputs and combined
+calibration. During an authorized eval-climb campaign, the parent may invoke the
+application checkpoint command and consume its aggregate output; it never
+directly reads external files. Children receive only aggregate feedback.
+Keep the corpus, calibration, reviews, actor checks and application output outside
+the repository and coding-container mounts. An example layout is
+`~/Documents/tollchat-eval-holdout/{5.0.0,runs/}`. Separation is procedural: the
+coding agent must not read those files. These examples grant no paid budget.
+
+```bash
+uv run python -m eval.corpus validate --holdout /absolute/external/5.0.0
+uv run python -m eval.corpus freeze --corpus /absolute/external/5.0.0 --split holdout --version 5.0.0
+uv run python -m eval.golden --corpus /absolute/external/5.0.0
+uv run python -m eval.golden_run calibrate \
+  --corpus eval/active/training --shadow eval/active/shadow \
+  --holdout /absolute/external/5.0.0 \
+  --output /absolute/external/runs/harness-calibration-N --budget-usd 25
+uv run python -m eval.golden_actor_check --corpus /absolute/external/5.0.0 \
+  --output /absolute/external/runs/actor-check-N --budget-usd 25 \
+  --prior-run /absolute/external/runs/harness-calibration-N
+uv run python -m eval.golden_run run --corpus /absolute/external/5.0.0 \
+  --output /absolute/external/runs/checkpoint-N --budget-usd 25 \
+  --calibration /absolute/external/runs/harness-calibration-N \
+  --prior-run /absolute/external/runs/actor-check-N
+uv run python -m eval.golden_run aggregate --output /absolute/external/runs/checkpoint-N
+```
+
+Record actual input approval in the corpus's `review.json` and calibration approval
+in the combined calibration directory's `review.json` before `run`. Both bind exact digests.
+Repeat combined calibration while resolving harness defects until Ryan is
+satisfied, then keep that approval as the harness baseline. No per-split or
+per-corpus-version recalibration is required after approval. A changed evaluator
+contract requires a new combined calibration covering all three splits.
+Omit `--prior-run` only at the start of a new authorized spending chain; otherwise
+chain all public and hidden work to the immediately preceding run. Holdout
+references are included in the combined calibration and passing scripted actor
+checks. That same approved calibration qualifies training and shadow runs too.
+
+Holdout console output contains aggregate status only. Diagnostics, including
+tracebacks and case progress, go to a sibling `.RUN_NAME.console.log` on the host.
+Application JSON includes source/run identities, corpus and measurement digests,
+repetitions, expected slots, pass/fail/inconclusive/missing counts, overall rate,
+completeness and cost. It excludes case IDs, category breakdowns, conversation
+text, routes, reference answers and paths. Export recalculates totals from the
+private journal rather than trusting a copied report.
+
+Return only that JSON to the coding agent. Repeated checkpoints are allowed within
+authorized budgets. Pair each committed candidate's training and hidden scores
+under the same evaluator, settings and repetitions. Record the rates and
+`100 × (training rate − holdout rate)` in percentage points in the experiment
+journal. Mark incomplete measurements instead of claiming a comparable gap.
+Keep the suite fixed while tracking the gap; corpus or evaluator repairs start a
+new series. Repeated aggregate feedback can still influence tuning, so this is a
+hidden diagnostic, not fully blind accuracy or a production gate.
+
+The eval-climb parent can save safe stdout in an ignored public feedback file and
+run its `scripts/diagnose_gap.py TRAINING_REPORT PUBLIC_FEEDBACK_JSON`. The helper
+re-renders only the public training evidence, checks source/artifact, evaluator,
+corpus version and repetition agreement, and emits the rates and validated gap.
+Incomplete or mismatched measurements cannot yield a comparable gap. Diagnostics
+share the campaign ledger and budget; the next paid command chains from the last
+checkpoint even when it switches back to training. Never inspect external logs
+to diagnose a hidden measurement failure; have the host operator resolve it.
+
 Keep raw artifacts in ignored `eval/private/` or the existing private workflow
 store. Append summaries to the appropriate Monday-start page in `eval/journal/`
 and link new weeks from [the journal index](EXPERIMENT_JOURNAL.md).
@@ -268,7 +382,7 @@ Historical output removed from the working tree is recoverable at Git commit
 or use its recorded source revision for reproduction; do not restore it as an
 active corpus or reuse a historical budget as new spending authorization.
 
-The private holdout environment and qualification gate are retired. Production
+The former private holdout qualification workflow is retired. Production
 uses the [existing delivery checks](../RUNBOOK.md#production-release-checks); development
 baselines do not establish independently measured agent accuracy.
 
@@ -281,4 +395,4 @@ Pass³ fields as `null` (inapplicable). Missing slots remain in the denominator;
 inconclusives remain explicit. Comparisons reject missing or duplicate slots,
 unsupported harness contracts, mismatched repetition counts, and inconsistent
 aggregate usage. Historical three-trial reports retain their recorded scoring rules.
-The repetition contract requires fresh reviewed calibration before paid execution.
+The repetition contract requires matching approved harness calibration before paid execution.

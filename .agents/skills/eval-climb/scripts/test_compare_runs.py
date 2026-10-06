@@ -525,6 +525,31 @@ class RepetitionContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             compare(self.training(1), self.current(1))
 
+    def test_local_training_identity_and_scope(self) -> None:
+        for repetitions in (1, 3):
+            left = self.training(repetitions)
+            identity = left["manifest"]["identity"]
+            identity.update(harness_version="2.5.0", runtime={"python": [3, 13, 15]})
+            identity["corpus"].pop("factory")
+            identity["corpus"].update(
+                format_version=1, version="5.0.0", trials_per_case=1
+            )
+            right = copy.deepcopy(left)
+            right["attempts"][0]["verdicts"]["outcome"]["passed"] = True
+            self.update(right)
+            self.assertTrue(compare(left, right)["numeric_eligible"])
+            changed = copy.deepcopy(right)
+            changed["manifest"]["identity"]["runtime"]["python"] = [3, 14, 0]
+            with self.assertRaisesRegex(ValueError, "runtime"):
+                compare(left, changed)
+            for scope in ("holdout", "shadow"):
+                changed = copy.deepcopy(right)
+                changed["manifest"]["identity"]["corpus"]["evaluation_scope"] = scope
+                with self.assertRaisesRegex(ValueError, "expected training"):
+                    compare(left, changed)
+            with self.assertRaises(ValueError):
+                compare(left, self.training(repetitions))
+
     def test_single_and_three_pass_contracts(self) -> None:
         for repetitions in (1, 3):
             left = self.current(repetitions)

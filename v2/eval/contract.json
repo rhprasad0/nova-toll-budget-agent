@@ -1,0 +1,59 @@
+{
+  "version": "5.0.0",
+  "splits": {
+    "training": {
+      "count": 50,
+      "workflow": {
+        "current": 20,
+        "annual": 27,
+        "mixed": 3
+      },
+      "coverage": {
+        "current_complete": 10,
+        "current_state": 5,
+        "current_evidence": 5,
+        "annual_complete": 10,
+        "annual_inputs": 7,
+        "annual_routes": 5,
+        "annual_interpretation": 5,
+        "mixed": 3
+      }
+    },
+    "holdout": {
+      "count": 25,
+      "workflow": {
+        "current": 10,
+        "annual": 14,
+        "mixed": 1
+      },
+      "coverage": {
+        "current_complete": 5,
+        "current_state": 3,
+        "current_evidence": 2,
+        "annual_complete": 5,
+        "annual_inputs": 4,
+        "annual_routes": 3,
+        "annual_interpretation": 2,
+        "mixed": 1
+      }
+    },
+    "shadow": {
+      "count": 10,
+      "workflow": {
+        "current": 4,
+        "annual": 5,
+        "mixed": 1
+      },
+      "coverage": {
+        "current_complete": 2,
+        "current_state": 1,
+        "current_evidence": 1,
+        "annual_complete": 2,
+        "annual_inputs": 1,
+        "annual_routes": 1,
+        "annual_interpretation": 1,
+        "mixed": 1
+      }
+    }
+  }
+}
