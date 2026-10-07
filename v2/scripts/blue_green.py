@@ -635,7 +635,7 @@ def validate_plan(
                 "ordered_cache_behavior"
             ):
                 try:
-                    cost_release.routes(before, after)
+                    cost_release.routes(before, after, plan)
                 except (ValueError, KeyError, TypeError) as error:
                     raise Rejected("cost_release_boundary") from error
                 allow |= {

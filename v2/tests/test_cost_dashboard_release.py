@@ -21,6 +21,40 @@ from scripts import shared_packages
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def future_report_function(environment: str) -> dict[str, Any]:
+    source = (ROOT / "v2/agent/public-report-routes.js").read_text()
+    future = source.replace(
+        " } }} event */",
+        " }, response?: { statusCode: number, headers: Record<string, {value: string}> } }} event */",
+    ).replace(
+        "  var request = event.request;\n",
+        "  var request = event.request;\n  if (event.response) {\n"
+        '    if (request.uri.startsWith("/assets/evals")) {\n'
+        '      event.response.headers["cache-control"] = { value: "no-store" };\n'
+        "    }\n    return event.response;\n  }\n",
+        1,
+    )
+    suffix = "-dev" if environment == "development" else ""
+    return {
+        "address": "aws_cloudfront_function.public_report_routes",
+        "mode": "managed",
+        "provider_name": "registry.terraform.io/hashicorp/aws",
+        "change": {
+            "actions": ["update"],
+            "before": {},
+            "after": {
+                "name": "tollchat-v2-public-report-routes" + suffix,
+                "arn": f"arn:aws:cloudfront::{gate.ACCOUNTS[environment]}:function/tollchat-v2-public-report-routes{suffix}",
+                "runtime": "cloudfront-js-2.0",
+                "publish": True,
+                "comment": "Resolve canonical TollChat report directories",
+                "code": future,
+            },
+            "after_unknown": {},
+        },
+    }
+
+
 def test_asset_pins_and_archive_contract() -> None:
     for name, digest in gate.ASSET_SHA256.items():
         if "/" in name:
@@ -105,6 +139,139 @@ def test_routes_only_add_the_four_billing_behaviors() -> None:
             gate.routes(before, bad)
     with pytest.raises(ValueError):
         gate.routes(after, before)
+
+
+@pytest.mark.parametrize("distribution", ["site", "staging"])
+def test_eval_assets_only_move_with_cache_protection(distribution: str) -> None:
+    function = (
+        "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-report-routes-dev"
+    )
+    model: dict[str, Any] = {
+        "path_pattern": "/eval-dashboard*",
+        "target_origin_id": "site",
+        "function_association": [
+            {"event_type": "viewer-request", "function_arn": function}
+        ],
+        "cache_policy_id": "caching-disabled",
+    }
+    before: dict[str, Any] = {
+        "ordered_cache_behavior": [
+            model,
+            dict(deepcopy(model), path_pattern="/evals.json"),
+            dict(deepcopy(model), path_pattern="/assets/evals*"),
+            *(
+                dict(deepcopy(model), path_pattern=path)
+                for path in sorted(gate.COST_ROUTES)
+            ),
+        ]
+    }
+    after = deepcopy(before)
+    target = after["ordered_cache_behavior"][2]
+    target["target_origin_id"] = "documents"
+    target["function_association"].append(
+        {"event_type": "viewer-response", "function_arn": function}
+    )
+    evidence = {"resource_changes": [future_report_function("development")]}
+    gate.routes(before, after, evidence)
+    for mutation in ("missing", "old", "unknown", "wrong_arn", "duplicate"):
+        bad_evidence = deepcopy(evidence)
+        function_row = bad_evidence["resource_changes"][0]
+        if mutation == "missing":
+            bad_evidence["resource_changes"] = []
+        elif mutation == "old":
+            function_row["change"]["after"]["code"] = (
+                ROOT / "v2/agent/public-report-routes.js"
+            ).read_text()
+        elif mutation == "unknown":
+            function_row["change"]["after_unknown"] = {"code": True}
+        elif mutation == "wrong_arn":
+            function_row["change"]["after"]["arn"] += "-other"
+        else:
+            bad_evidence["resource_changes"].append(function_row)
+        with pytest.raises(ValueError):
+            gate.routes(before, after, bad_evidence)
+    unchanged = deepcopy(evidence)
+    unchanged["resource_changes"][0]["change"]["actions"] = ["no-op"]
+    unchanged["resource_changes"][0]["change"]["before"] = deepcopy(
+        unchanged["resource_changes"][0]["change"]["after"]
+    )
+    gate.routes(before, after, unchanged)
+    # Terraform set ordering must not require a particular association order.
+    target["function_association"].reverse()
+    gate.routes(before, after, evidence)
+    for field, value in (
+        ("target_origin_id", "public-chat"),
+        ("cache_policy_id", "untrusted"),
+        ("function_association", model["function_association"]),
+        (
+            "function_association",
+            [{"event_type": "viewer-response", "function_arn": function}],
+        ),
+        (
+            "function_association",
+            [
+                *model["function_association"],
+                {"event_type": "viewer-response", "function_arn": function + "-other"},
+            ],
+        ),
+    ):
+        bad = deepcopy(after)
+        bad["ordered_cache_behavior"][2][field] = value
+        with pytest.raises(ValueError):
+            gate.routes(before, bad, evidence)
+    for rows in (
+        after["ordered_cache_behavior"][:-1],
+        [*after["ordered_cache_behavior"], after["ordered_cache_behavior"][2]],
+        list(reversed(after["ordered_cache_behavior"])),
+    ):
+        with pytest.raises(ValueError):
+            gate.routes(before, {"ordered_cache_behavior": rows}, evidence)
+    bad = deepcopy(after)
+    bad["ordered_cache_behavior"][1]["target_origin_id"] = "documents"
+    with pytest.raises(ValueError):
+        gate.routes(before, bad, evidence)
+    with pytest.raises(ValueError):
+        gate.routes(after, before, evidence)
+
+    rehearsal = importlib.import_module("test_blue_green")
+    prior = rehearsal.previous()
+    inputs = rehearsal.gate.desired(prior, rehearsal.slot("green", "release2"))
+    selected = "blue" if distribution == "site" else "green"
+    released = prior["slots"][selected]
+    before["origin"] = [
+        {"origin_id": "site"},
+        {"origin_id": "documents", "origin_path": released["asset_prefix"]},
+        {
+            "origin_id": "public-chat",
+            "domain_name": released["proxy_url"].removeprefix("https://").rstrip("/"),
+        },
+    ]
+    after["origin"] = deepcopy(before["origin"])
+    after["origin"][1]["origin_path"] = inputs["release_slots"][selected][
+        "asset_prefix"
+    ]
+    item = rehearsal.change(
+        f"aws_cloudfront_distribution.{distribution}", before, after
+    )
+    prepared = rehearsal.plan(inputs, [item, *evidence["resource_changes"]])
+    rehearsal.gate.validate_plan(prepared, prior, "prepare")
+    for phase in ("promote", "recover"):
+        saved = rehearsal.plan(rehearsal.gate.desired(prior, promote=True), [item])
+        with pytest.raises(rehearsal.gate.Rejected):
+            rehearsal.gate.validate_plan(saved, prior, phase)
+
+
+@pytest.mark.parametrize("environment", ["development", "production"])
+def test_future_report_function_pin_is_exact(environment: str) -> None:
+    item = future_report_function(environment)
+    assert (
+        hashlib.sha256(item["change"]["after"]["code"].encode()).hexdigest()
+        == gate.FUTURE_REPORT_ROUTES_SHA256
+    )
+    gate.validate(item, environment)
+    item["change"]["after"]["code"] += "\n"
+    with pytest.raises(ValueError):
+        gate.validate(item, environment)
 
 
 def test_billing_routes_keep_the_active_chat_release() -> None:
