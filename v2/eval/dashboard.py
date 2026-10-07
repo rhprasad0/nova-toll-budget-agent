@@ -15,6 +15,7 @@ from agent_tools.validate_toll_route import (
 )
 from eval.live_runtime import ModelSettings
 from eval.run_evaluation import load_cases
+from eval.simulated import POLICY_VERSION
 from timed_checks import NEW_YORK, SCHEDULE_WINDOW_PAIRS
 
 if TYPE_CHECKING:
@@ -70,6 +71,7 @@ PUBLIC_FIELDS = frozenset(
         "transponder_mode",
         "status",
         "reason",
+        "code",
         "error",
         "total_usd",
         "components",
@@ -84,6 +86,14 @@ PUBLIC_FIELDS = frozenset(
         "source_status",
         "required_i95_directions",
         "availability",
+        "i95_evidence",
+        "northbound_link_status",
+        "southbound_link_status",
+        "general_purpose_gaps",
+        "role",
+        "boundary_point_id",
+        "i95_direction",
+        "fallback_required",
         "evidence",
         "direction",
         "interval_end_at",
@@ -186,6 +196,10 @@ def project_report(report: object) -> dict[str, Any]:
     metadata = cast(
         dict[str, Any], trajectory["traces"][0]["spans"][0].get("metadata") or {}
     )
+    if "policy_version" in metadata:
+        if metadata["policy_version"] != POLICY_VERSION:
+            raise ValueError("Unknown scheduled evaluation policy")
+        evidence["policy_version"] = POLICY_VERSION
     if "models" in metadata:
         evidence["models"] = {
             role: {

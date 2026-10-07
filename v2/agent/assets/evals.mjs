@@ -1,6 +1,6 @@
 /** @typedef {{window_id: string, scheduled_at: string, scenario_id: string}} Scheduled */
 /** @typedef {{model: string, reasoning_effort: string, max_output_tokens: number}} ModelSettings */
-/** @typedef {{turns?: {user: string, assistant: string, tools: unknown[]}[], checks?: {name: string, passed: boolean, reason: string}[], model?: string, models?: {application: ModelSettings, actor: ModelSettings, judge: ModelSettings}, deployment?: {release_id?: string, runtime_version?: string}}} Evidence */
+/** @typedef {{turns?: {user: string, assistant: string, tools: unknown[]}[], checks?: {name: string, passed: boolean, reason: string}[], model?: string, models?: {application: ModelSettings, actor: ModelSettings, judge: ModelSettings}, deployment?: {release_id?: string, runtime_version?: string}, policy_version?: string}} Evidence */
 /** @typedef {Scheduled & {status: string, evidence?: Evidence}} Run */
 /** @typedef {{schema_version: number, environment: string, generated_at: string, scenarios: {id: string, tag: string, title: string, description: string, route: string}[], runs: Run[], schedule: Scheduled[]}} Snapshot */
 /** @param {string} selector */
@@ -26,7 +26,7 @@ const labels = {
 };
 /** @type {Record<string, string>} */
 const checkLabels = {
-  ToolCallCount: "One pricing lookup per turn",
+  ToolCallCount: "Pricing tool evidence",
   Completeness: "Answered the request",
   Correctness: "Supported by evidence",
 };
@@ -40,9 +40,12 @@ const date = (value) =>
     minute: "2-digit",
     timeZoneName: "short",
   });
-/** @param {string} status */
-const badge = (status) =>
-  `<span class="badge ${status}"><i class="dot" aria-hidden="true"></i>${labels[status]}</span>`;
+/** @param {string} status @param {boolean} [legacy] */
+const badge = (status, legacy = false) =>
+  `<span class="badge ${status}"><i class="dot" aria-hidden="true"></i>${labels[status]}${legacy && ["passed", "failed"].includes(status) ? " · Legacy grading" : ""}</span>`;
+const policyVersion = "scheduled-critical-v1";
+/** @param {Run} r */
+const currentPolicy = (r) => r.evidence?.policy_version === policyVersion;
 const expectedEnvironment = /** @type {HTMLMetaElement} */ ($('meta[name="eval-environment"]')).content;
 /** @param {Scheduled} r */
 const key = (r) => `${r.window_id}/${r.scheduled_at}`;
@@ -72,7 +75,7 @@ function evidence(r) {
   const checks = (e.checks || [])
     .map(
       (c) =>
-        `<div class="check"><div class="check-line"><span>${checkLabels[c.name]}</span><span class="${c.passed ? "green" : "red"}">${c.passed ? "Passed" : "Failed"}</span></div><p>${escapeHtml(c.reason)}</p></div>`,
+        `<div class="check"><div class="check-line"><span>${c.name === "ToolCallCount" && !currentPolicy(r) ? "One pricing lookup per turn (legacy)" : checkLabels[c.name]}</span><span class="${c.passed ? "green" : "red"}">${c.passed ? "Passed" : "Failed"}</span></div><p>${escapeHtml(c.reason)}</p></div>`,
     )
     .join("");
   const settings = e.models
@@ -88,7 +91,7 @@ function evidence(r) {
   const deployment = e.deployment?.release_id
     ? ` Application release: ${escapeHtml(e.deployment.release_id)}; runtime version: ${escapeHtml(e.deployment.runtime_version || "not recorded")}.`
     : "";
-  return `<div class="evidence"><h4>Recorded conversation</h4>${turns || "<p>No completed conversation was recorded.</p>"}<h4>Checks</h4>${checks || "<p>Not scored. An interrupted or late run is not a passing evaluation.</p>"}<p class="tool-evidence">${settings}.${deployment} Internal diagnostics are omitted from public evidence.</p></div>`;
+  return `<div class="evidence"><h4>Recorded conversation</h4>${turns || "<p>No completed conversation was recorded.</p>"}<h4>Checks</h4>${checks || "<p>Not scored. An interrupted or late run is not a passing evaluation.</p>"}<p class="tool-evidence">${settings}.${deployment} Grading policy: ${escapeHtml(e.policy_version || "legacy (not recorded)")}. Internal diagnostics are omitted from public evidence.</p></div>`;
 }
 
 function render() {
@@ -109,8 +112,10 @@ function render() {
       Date.parse(s.scheduled_at) < Date.now() - 25 * 60000 &&
       !occupied.has(instantKey(s)),
   );
-  const passes = runs.filter((r) => r.status === "passed").length;
-  const failures = runs.filter((r) => r.status === "failed").length;
+  const current = runs.filter(currentPolicy);
+  const passes = current.filter((r) => r.status === "passed").length;
+  const failures = current.filter((r) => r.status === "failed").length;
+  const legacy = runs.filter((r) => !currentPolicy(r) && ["passed", "failed"].includes(r.status)).length;
   const errors = runs.filter((r) =>
     ["error", "stale", "overdue"].includes(outcome(r)),
   ).length;
@@ -131,16 +136,16 @@ function render() {
   $("#updated").textContent = `Published ${date(snapshot.generated_at)}`;
   $("#metrics").innerHTML = [
     [
-      "Graded runs passed",
+      "Runs without critical failures",
       `${passes} <small>of ${graded}</small>`,
       graded
         ? `${Math.round((passes / graded) * 100)}% · execution errors excluded`
-        : "No completed, graded runs yet",
+        : "No completed runs under the current policy yet",
     ],
     [
-      "Graded runs failed",
+      "Critical failures",
       failures,
-      "Completed runs that did not meet all checks",
+      "Material errors or unmet user goals",
     ],
     [
       "Errors / incomplete",
@@ -162,7 +167,7 @@ function render() {
     .reverse()
     .map(
       (r) =>
-        `<span class="tick ${outcome(r)}" title="${date(r.scheduled_at)}: ${labels[outcome(r)]}"><span class="sr-only">${date(r.scheduled_at)}: ${labels[outcome(r)]}</span></span>`,
+        `<span class="tick ${outcome(r)}" title="${date(r.scheduled_at)}: ${labels[outcome(r)]}${!currentPolicy(r) ? " · Legacy grading" : ""}"><span class="sr-only">${date(r.scheduled_at)}: ${labels[outcome(r)]}${!currentPolicy(r) ? " · Legacy grading" : ""}</span></span>`,
     )
     .join("");
   $("#scenarios").innerHTML = snapshot.scenarios
@@ -181,7 +186,7 @@ function render() {
         .sort(
           (a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at),
         )[0];
-      return `<article class="scenario"><div class="scenario-body"><div class="card-top"><span class="route-tag">${escapeHtml(s.tag)}</span>${badge(missing ? "overdue" : r ? outcome(r) : "waiting")}</div><h3>${escapeHtml(s.title)}</h3><p class="description">${escapeHtml(s.description)}</p><div class="route"><strong>${escapeHtml(s.route)}</strong>${due ? `Next: ${date(due.scheduled_at)}` : "Waiting for schedule update"}</div><div class="latest"><span>${missing ? "Prior recorded run" : "Latest run"}</span><span>${r ? date(r.scheduled_at) : "None recorded"}</span></div></div>${r ? `<details data-key="scenario-${escapeHtml(s.id)}"><summary>Inspect result<span class="sr-only"> for ${escapeHtml(s.title)}</span></summary>${evidence(r)}</details>` : '<p class="awaiting">No recorded result. This scenario has no score.</p>'}</article>`;
+      return `<article class="scenario"><div class="scenario-body"><div class="card-top"><span class="route-tag">${escapeHtml(s.tag)}</span>${badge(missing ? "overdue" : r ? outcome(r) : "waiting", !!r && !currentPolicy(r))}</div><h3>${escapeHtml(s.title)}</h3><p class="description">${escapeHtml(s.description)}</p><div class="route"><strong>${escapeHtml(s.route)}</strong>${due ? `Next: ${date(due.scheduled_at)}` : "Waiting for schedule update"}</div><div class="latest"><span>${missing ? "Prior recorded run" : "Latest run"}</span><span>${r ? date(r.scheduled_at) : "None recorded"}</span></div></div>${r ? `<details data-key="scenario-${escapeHtml(s.id)}"><summary>Inspect result<span class="sr-only"> for ${escapeHtml(s.title)}</span></summary>${evidence(r)}</details>` : '<p class="awaiting">No recorded result. This scenario has no score.</p>'}</article>`;
     })
     .join("");
   const filter = /** @type {HTMLSelectElement} */ ($("#outcome")).value;
@@ -201,11 +206,11 @@ function render() {
     visible
       .map((r) => {
         const s = snapshot.scenarios.find((s) => s.id === r.scenario_id);
-        return `<details class="run" data-key="${escapeHtml(key(r))}"><summary><time datetime="${escapeHtml(r.scheduled_at)}">${date(r.scheduled_at)}</time><span class="run-title">${escapeHtml(/** @type {Snapshot["scenarios"][number]} */ (s).title)}</span>${badge(outcome(r))}</summary>${evidence(r)}</details>`;
+        return `<details class="run" data-key="${escapeHtml(key(r))}"><summary><time datetime="${escapeHtml(r.scheduled_at)}">${date(r.scheduled_at)}</time><span class="run-title">${escapeHtml(/** @type {Snapshot["scenarios"][number]} */ (s).title)}</span>${badge(outcome(r), !currentPolicy(r))}</summary>${evidence(r)}</details>`;
       })
       .join("") || '<p class="empty">No runs in this view yet.</p>';
   $("#shown").textContent =
-    `${visible.length} shown · ${graded} graded · ${missed.length} expected runs missing`;
+    `${visible.length} shown · ${graded} graded under current policy · ${legacy} legacy graded runs (history only) · ${missed.length} expected runs missing`;
   /** @type {NodeListOf<HTMLDetailsElement>} */ (document.querySelectorAll("details[data-key]")).forEach((el) => {
     el.open = opened.has(el.dataset.key);
   });
@@ -243,6 +248,10 @@ function validate(input) {
   for (const r of data.runs) {
     if (!r.evidence || typeof r.evidence !== "object")
       throw Error("Invalid evidence");
+    if (r.evidence.policy_version !== undefined &&
+      (typeof r.evidence.policy_version !== "string" ||
+       !r.evidence.policy_version.length || r.evidence.policy_version.length > 128))
+      throw Error("Invalid grading policy");
     const checks = r.evidence.checks || [],
       turns = r.evidence.turns || [];
     if (
