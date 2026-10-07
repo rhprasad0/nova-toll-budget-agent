@@ -539,9 +539,13 @@ def test_existing_upload_requires_browser_metadata(
 
 
 @pytest.mark.parametrize("has_scorecard", [False, True])
+@pytest.mark.parametrize(
+    "module", [b"// legacy dashboard", b"// scheduled-critical-v1"]
+)
 def test_scorecard_is_checked_with_its_retained_release(
-    monkeypatch: pytest.MonkeyPatch, has_scorecard: bool
+    monkeypatch: pytest.MonkeyPatch, has_scorecard: bool, module: bytes
 ) -> None:
+    monkeypatch.setattr(delivery, "environment", "development")
     prefix = "/releases/release2"
     index = f'<link href="{prefix}/assets/evals.css">'.encode()
     if has_scorecard:
@@ -551,18 +555,32 @@ def test_scorecard_is_checked_with_its_retained_release(
         prefix + "/index.html": index,
         prefix + "/assets/releases.html": scorecard,
         prefix + "/assets/evals.css": b"body {}",
+        prefix + "/assets/evals.mjs": module,
+        "/evals.html": b'<meta name="eval-environment" content="development"><link href="/assets/evals.css"><script src="/assets/evals.mjs"></script>',
         prefix + "/assets/releases.css": b"svg {}",
     }
     observed: list[str] = []
+    monkeypatch.setitem(
+        gate.cost_release.ASSET_SHA256,
+        "development/evals.html",
+        hashlib.sha256(payloads["/evals.html"]).hexdigest(),
+    )
     wrong_route = False
+    fault = ""
 
-    def request(jar: object, path: str) -> tuple[int, str, bytes]:
+    def request(
+        jar: object, path: str, *, expected_cache_control: str | None = None
+    ) -> tuple[int, str, bytes]:
         observed.append(path)
         source = (
             prefix + "/index.html"
             if path == "/"
             else prefix + "/assets/releases.html"
             if path == "/release-dashboard"
+            else "/evals.html"
+            if path == "/eval-dashboard"
+            else prefix + path
+            if path.startswith("/assets/evals")
             else path
         )
         body = (
@@ -570,7 +588,22 @@ def test_scorecard_is_checked_with_its_retained_release(
             if wrong_route and path == "/release-dashboard"
             else payloads[source]
         )
-        return 200, "text/html" if source.endswith(".html") else "text/css", body
+        if path.startswith("/assets/evals"):
+            assert expected_cache_control == "no-store"
+        if fault == "stale_module" and path == "/assets/evals.mjs":
+            body = b"stale root module"
+        if fault == "wrong_environment" and path == "/evals.html":
+            body = body.replace(b"development", b"production")
+        if fault == "alias" and path == "/eval-dashboard":
+            body = b"wrong document"
+        content_type = (
+            "text/html"
+            if source.endswith(".html")
+            else "text/javascript"
+            if source.endswith(".mjs")
+            else "text/css"
+        )
+        return 200, content_type, body
 
     def head(*args: str) -> dict[str, str]:
         body = payloads["/" + args[args.index("--key") + 1]]
@@ -583,6 +616,17 @@ def test_scorecard_is_checked_with_its_retained_release(
     delivery.assets(slot("green", "release2"), document=True)
     assert ("/release-dashboard" in observed) == has_scorecard
     assert (prefix + "/assets/releases.css" in observed) == has_scorecard
+    assert {
+        "/evals.html",
+        "/eval-dashboard",
+        "/assets/evals.css",
+        "/assets/evals.mjs",
+    } <= set(observed)
+    for failure in ("stale_module", "wrong_environment", "alias"):
+        fault = failure
+        with pytest.raises(gate.Rejected, match=r"asset_content|candidate_document"):
+            delivery.assets(slot("green", "release2"), document=True)
+    fault = ""
     if has_scorecard:
         wrong_route = True
         with pytest.raises(gate.Rejected, match="candidate_release_document"):

@@ -42,16 +42,12 @@ ASSET_SHA256: dict[str, str] = {
     "costs.css": "8578e3aa2939740c6010793662aa75ea99cac633e59853804e8d15e094bb0ce2",
     "costs.mjs": "38964764c0202b1b4a35750359acd9db3ddb13020102ade803dbda383b38d153",
     "evals.css": "a769365269ebde99103a56e6ce64a619f1a728c137aeeeca93ea04023db85688",
-    "public-report-routes.js": "a5bea948dd9c37075262f839acbb3635e149248e8e6effdff2e2ab7af2976cd2",
+    "public-report-routes.js": "ffbcffad663e80878c7d213aaaf533bbe05dcbe438beef1a771b6603d8ae9d44",
     "development/costs.html": "8c785f3cd1e365640ed00343acba2f9ce1c2db5166063ad4a1003f8e474c172b",
-    "development/evals.html": "837320a607c7eb2bac8e507eb4d24400662523b92edb9e6202815cc721c1b1dd",
+    "development/evals.html": "0d291fc57e710721696002feec0285c0e9adcae3c3427a328d32215d516dc6cf",
     "production/costs.html": "ad1f2d5f7e24cb383d1b98baf716173b6c7c7bdcc2bf5241b5e6cfe7b5d3da6b",
-    "production/evals.html": "4fecf038987fd5fc018ec04eecb2e2f4166446effb62fcec5f68ecc76eea3677",
+    "production/evals.html": "9786ac45d0f48086ffcfa79889d9959da63bf1262d278fa47cda0ed234d2ac57",
 }
-# Admit only the reviewed response handler before candidate JS enters trusted CI.
-FUTURE_REPORT_ROUTES_SHA256 = (
-    "ffbcffad663e80878c7d213aaaf533bbe05dcbe438beef1a771b6603d8ae9d44"
-)
 
 
 def require(value: object) -> None:
@@ -179,7 +175,7 @@ def routes(
         require(
             values["arn"] == function
             and hashlib.sha256(values["code"].encode()).hexdigest()
-            == FUTURE_REPORT_ROUTES_SHA256
+            == ASSET_SHA256["public-report-routes.js"]
         )
         validate(functions[0], identities[function])
         expected = [*associations, dict(associations[0], event_type="viewer-response")]
@@ -563,7 +559,7 @@ def validate(
         mutable = {"code"}
         require(
             hashlib.sha256(after["code"].encode()).hexdigest()
-            in {ASSET_SHA256["public-report-routes.js"], FUTURE_REPORT_ROUTES_SHA256}
+            == ASSET_SHA256["public-report-routes.js"]
         )
         computed |= {"etag", "live_stage_etag", "status"}
         empty |= {"key_value_store_associations"}

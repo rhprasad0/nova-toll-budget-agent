@@ -628,6 +628,34 @@ def assets(slot: dict[str, Any], *, document: bool = False) -> None:
         "asset_prefix",
     )
     paths.add((prefix + "/index.html").encode())
+    if document:
+        code, kind, eval_page = checks.request(jar, "/evals.html")
+        gate.require(
+            code == 200
+            and kind == "text/html"
+            and hashlib.sha256(eval_page).hexdigest()
+            == gate.cost_release.ASSET_SHA256[environment + "/evals.html"]
+            and f'<meta name="eval-environment" content="{environment}"'.encode()
+            in eval_page
+            and checks.request(jar, "/eval-dashboard") == (code, kind, eval_page),
+            "candidate_document",
+        )
+        # Shared HTML keeps retained modules usable; aliases follow the selected slot.
+        for name, content_type in (
+            ("evals.css", "text/css"),
+            ("evals.mjs", "text/javascript"),
+        ):
+            public = "/assets/" + name
+            gate.require(f'="{public}"'.encode() in eval_page, "asset_prefix")
+            path = prefix + public
+            expected = checks.request(jar, path)
+            gate.require(
+                expected[0:2] == (200, content_type)
+                and checks.request(jar, public, expected_cache_control="no-store")
+                == expected,
+                "asset_content",
+            )
+            paths.add(path.encode())
     # Older retained releases predate the scorecard and must remain recoverable.
     if b'href="/release-dashboard"' in page:
         release_path = prefix + "/assets/releases.html"

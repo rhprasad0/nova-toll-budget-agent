@@ -4218,7 +4218,20 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
     ) -> None:
         root = Path(__file__).resolve().parents[1]
         code = (root / "v2/agent/public-report-routes.js").read_text()
-        legacy = code.replace('"/#toll-reports"', '"https://tollchat.ai/#toll-reports"')
+        # Reconstruct the fixed legacy bytes, before the response handler existed.
+        legacy = code.replace(
+            ", response?: { statusCode: number, headers: Record<string, {value: string}> }",
+            "",
+        ).replace(
+            "  if (event.response) {\n"
+            '    if (request.uri.startsWith("/assets/evals")) {\n'
+            '      event.response.headers["cache-control"] = { value: "no-store" };\n'
+            "    }\n    return event.response;\n  }\n",
+            "",
+        )
+        legacy = legacy.replace(
+            '"/#toll-reports"', '"https://tollchat.ai/#toll-reports"'
+        )
         legacy = legacy.replace(
             '"/tolls/i95-i495/"', '"https://tollchat.ai/tolls/i95-i495/"'
         )

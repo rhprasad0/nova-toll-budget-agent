@@ -149,7 +149,7 @@
                 <h3>Three checks inspect what happened</h3>
                 <p>
                   Did it answer the request? Are its claims supported? Did it
-                  use one pricing lookup per turn?
+                  fetch pricing evidence when needed?
                 </p>
               </div>
             </div>
@@ -188,16 +188,17 @@
               </p>
               <p>
                 Strands ActorSimulator supplies follow-up messages, with at most
-                three assistant turns. The application, simulator, and judges
-                use GPT-5.6 Luna. Completeness uses Strands
+                three assistant turns. Recorded evidence identifies the models, settings,
+                and grading policy used for each run. Completeness uses Strands
                 GoalSuccessRateEvaluator; correctness uses CorrectnessEvaluator
-                with the conversation and tool evidence. A deterministic check
-                requires exactly one pricing call per user turn. The
-                origin-correction example has two turns and two calls total.
+                with the conversation and tool evidence. The current policy fails only on material errors or an unmet
+                user goal. A deterministic check requires pricing evidence
+                when needed; a simple confirmation does not need another lookup.
               </p>
               <p>
-                The pass rate counts passed runs divided by completed, graded
-                runs. Execution errors are shown separately and are not counted
+                Current-policy scores count runs without critical failures
+                divided by completed, graded runs under that policy. Historical
+                grades are preserved; compare results within the same policy. Execution errors are shown separately and are not counted
                 as passes or graded failures. Missing or unscored results never
                 become a passing score. This page shows the environment named at
                 the top. Results refresh every minute while the page is visible.

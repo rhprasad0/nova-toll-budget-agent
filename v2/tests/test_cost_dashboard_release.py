@@ -21,19 +21,8 @@ from scripts import shared_packages
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def future_report_function(environment: str) -> dict[str, Any]:
+def report_function(environment: str) -> dict[str, Any]:
     source = (ROOT / "v2/agent/public-report-routes.js").read_text()
-    future = source.replace(
-        " } }} event */",
-        " }, response?: { statusCode: number, headers: Record<string, {value: string}> } }} event */",
-    ).replace(
-        "  var request = event.request;\n",
-        "  var request = event.request;\n  if (event.response) {\n"
-        '    if (request.uri.startsWith("/assets/evals")) {\n'
-        '      event.response.headers["cache-control"] = { value: "no-store" };\n'
-        "    }\n    return event.response;\n  }\n",
-        1,
-    )
     suffix = "-dev" if environment == "development" else ""
     return {
         "address": "aws_cloudfront_function.public_report_routes",
@@ -48,7 +37,7 @@ def future_report_function(environment: str) -> dict[str, Any]:
                 "runtime": "cloudfront-js-2.0",
                 "publish": True,
                 "comment": "Resolve canonical TollChat report directories",
-                "code": future,
+                "code": source,
             },
             "after_unknown": {},
         },
@@ -171,7 +160,7 @@ def test_eval_assets_only_move_with_cache_protection(distribution: str) -> None:
     target["function_association"].append(
         {"event_type": "viewer-response", "function_arn": function}
     )
-    evidence = {"resource_changes": [future_report_function("development")]}
+    evidence = {"resource_changes": [report_function("development")]}
     gate.routes(before, after, evidence)
     for mutation in ("missing", "old", "unknown", "wrong_arn", "duplicate"):
         bad_evidence = deepcopy(evidence)
@@ -180,8 +169,8 @@ def test_eval_assets_only_move_with_cache_protection(distribution: str) -> None:
             bad_evidence["resource_changes"] = []
         elif mutation == "old":
             function_row["change"]["after"]["code"] = (
-                ROOT / "v2/agent/public-report-routes.js"
-            ).read_text()
+                "function handler(event) { return event.request; }"
+            )
         elif mutation == "unknown":
             function_row["change"]["after_unknown"] = {"code": True}
         elif mutation == "wrong_arn":
@@ -262,11 +251,11 @@ def test_eval_assets_only_move_with_cache_protection(distribution: str) -> None:
 
 
 @pytest.mark.parametrize("environment", ["development", "production"])
-def test_future_report_function_pin_is_exact(environment: str) -> None:
-    item = future_report_function(environment)
+def test_report_function_pin_is_exact(environment: str) -> None:
+    item = report_function(environment)
     assert (
         hashlib.sha256(item["change"]["after"]["code"].encode()).hexdigest()
-        == gate.FUTURE_REPORT_ROUTES_SHA256
+        == gate.ASSET_SHA256["public-report-routes.js"]
     )
     gate.validate(item, environment)
     item["change"]["after"]["code"] += "\n"
