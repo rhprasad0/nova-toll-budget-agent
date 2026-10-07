@@ -84,7 +84,7 @@ resource "aws_iam_role_policy" "timed_checks_lambda" {
   # A policy-document data source defers its read when those dependencies update.
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid      = "ConnectEvaluationHistory"
         Effect   = "Allow"
@@ -158,7 +158,16 @@ resource "aws_iam_role_policy" "timed_checks_lambda" {
         Action   = ["kms:Decrypt", "kms:GenerateDataKey*"]
         Resource = [data.aws_kms_alias.alerts.target_key_arn]
       },
-    ]
+      ], local.is_production ? [{
+        # Retain the deployed bundled evaluator's access until the live consumer ships.
+        Sid    = "ConnectRdsIam"
+        Effect = "Allow"
+        Action = ["rds-db:connect"]
+        Resource = [
+          "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.agent}",
+          "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.pricing_caller}",
+        ]
+    }] : [])
   })
 }
 
@@ -287,7 +296,10 @@ resource "aws_lambda_function" "timed_checks" {
       EVAL_DB_USER               = local.eval_db_user
       EVAL_SITE_DISTRIBUTION_ID  = aws_cloudfront_distribution.site.id
       AGENTCORE_VPCE_URL         = "https://${var.foundation.agentcore_vpc_endpoint_dns_name}"
-      }, local.timed_check_alerts_enabled ? {
+      }, local.is_production ? {
+      DB_USER         = local.database_roles.agent
+      PRICING_DB_USER = local.database_roles.pricing_caller
+      } : {}, local.timed_check_alerts_enabled ? {
       ALERTS_TOPIC_ARN = var.foundation.alerts_topic_arn
     } : {})
   }

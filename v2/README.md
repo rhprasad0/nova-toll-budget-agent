@@ -71,8 +71,8 @@ core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
 exposes route validation plus bounded prompt-point retrieval to `tollchat_agent`
 and internal pricing operations to `pricing_caller`.
 Migration 035 adds read-only catalog access for `pricing_reader_development`
-in the development database. The protected production boundary remains
-migration 034 and Oracle 1.15.1.
+in the development database. The protected production boundary includes
+migration 035 and Oracle 1.15.2; production advances its version without catalog grants.
 Regenerate and verify its checked-in SQL seed and frontend coverage snapshot with:
 
 ```sh
