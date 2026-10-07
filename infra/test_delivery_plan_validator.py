@@ -612,6 +612,30 @@ def _derived_fixture(
 
 
 class DeliveryPlanValidatorTests(unittest.TestCase):
+    def test_admits_fixed_billing_alert_declarations_before_activation(self) -> None:
+        addresses = [
+            address
+            for address in CONTRACT
+            if address.startswith(
+                (
+                    "aws_cloudwatch_log_metric_filter.costs_",
+                    "aws_cloudwatch_metric_alarm.costs_",
+                )
+            )
+        ]
+        self.assertEqual(len(addresses), 9)
+        manifest = _mutation_manifest(
+            [
+                (address, "create", sorted(CONTRACT[address].fields))
+                for address in addresses
+            ]
+        )
+        self.assertEqual(validate_plan(_plan([]), manifest)["status"], "accepted")
+        manifest["permissions"][0]["resource"] = "*"
+        self.assertEqual(
+            validate_plan(_plan([]), manifest)["reason_code"], "invalid_permission"
+        )
+
     def test_redacted_notices_require_complete_activation_and_support_later_noops(
         self,
     ) -> None:
@@ -3600,6 +3624,19 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         )
         for address, spec in CONTRACT.items():
             if spec.operation_class in {"cost-publication", "cost-routing"}:
+                if (
+                    address.startswith(
+                        (
+                            "aws_cloudwatch_log_metric_filter.costs_",
+                            "aws_cloudwatch_metric_alarm.costs_",
+                        )
+                    )
+                    and f'"{address.split(".", 1)[1].split("[", 1)[0]}"'
+                    not in (
+                        Path(__file__).parent.parent / "v2/infra/costs.tf"
+                    ).read_text()
+                ):
+                    continue  # Admit the fixed alert contract before activation.
                 deferred_asset = next(
                     (
                         asset

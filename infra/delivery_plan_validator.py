@@ -840,7 +840,7 @@ def _build_contract() -> dict[str, Mutation]:
     cost_function = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{cost_name}"
     cost_rule = f"arn:aws:events:{REGION}:{ACCOUNT}:rule/{cost_name}"
     cost_log = f"arn:aws:logs:{REGION}:{ACCOUNT}:log-group:/aws/lambda/{cost_name}"
-    billing = {
+    billing: dict[str, tuple[tuple[str, ...], ...]] = {
         "aws_iam_role.costs": (
             (
                 "name",
@@ -918,6 +918,51 @@ def _build_contract() -> dict[str, Mutation]:
             for asset in ("costs.css", "costs.mjs", "costs-benchmark.json", "evals.css")
         },
     }
+    for publication in ("dashboard", "aws-feed"):
+        for outcome in ("success", "failure"):
+            billing[
+                f'aws_cloudwatch_log_metric_filter.costs_{outcome}["{publication}"]'
+            ] = (
+                (
+                    "name",
+                    "log_group_name",
+                    "pattern",
+                    "metric_transformation",
+                    "apply_on_transformed_logs",
+                ),
+                ("logs:PutMetricFilter", cost_log),
+            )
+    for outcome in ("errors", "failed", "stale"):
+        for publication in (
+            (None,) if outcome == "errors" else ("dashboard", "aws-feed")
+        ):
+            address = f"aws_cloudwatch_metric_alarm.costs_{outcome}"
+            alarm_name = f"{cost_name}-{outcome}"
+            if publication is not None:
+                address += f'["{publication}"]'
+                alarm_name = f"{cost_name}-{publication}-{outcome}"
+            alarm_arn = f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{alarm_name}"
+            billing[address] = (
+                (
+                    "alarm_name",
+                    "alarm_description",
+                    "namespace",
+                    "metric_name",
+                    "dimensions",
+                    "statistic",
+                    "period",
+                    "evaluation_periods",
+                    "datapoints_to_alarm",
+                    "comparison_operator",
+                    "threshold",
+                    "treat_missing_data",
+                    "alarm_actions",
+                    "metric_query",
+                ),
+                ("cloudwatch:PutMetricAlarm", alarm_arn),
+                ("cloudwatch:TagResource", alarm_arn),
+                ("cloudwatch:UntagResource", alarm_arn),
+            )
     for address, (fields, *permissions) in billing.items():
         required = [_permission(action, resource) for action, resource in permissions]
         if address == "aws_lambda_function.costs":
