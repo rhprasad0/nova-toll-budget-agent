@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import re
+from copy import deepcopy
 from typing import Any, cast
 
 try:
@@ -47,6 +48,10 @@ ASSET_SHA256: dict[str, str] = {
     "production/costs.html": "ad1f2d5f7e24cb383d1b98baf716173b6c7c7bdcc2bf5241b5e6cfe7b5d3da6b",
     "production/evals.html": "4fecf038987fd5fc018ec04eecb2e2f4166446effb62fcec5f68ecc76eea3677",
 }
+# Admit only the reviewed response handler before candidate JS enters trusted CI.
+FUTURE_REPORT_ROUTES_SHA256 = (
+    "ffbcffad663e80878c7d213aaaf533bbe05dcbe438beef1a771b6603d8ae9d44"
+)
 
 
 def require(value: object) -> None:
@@ -131,13 +136,63 @@ def policy(environment: str) -> dict[str, Any]:
     return {"Version": "2012-10-17", "Statement": statements}
 
 
-def routes(before: dict[str, Any], after: dict[str, Any]) -> None:
+def routes(
+    before: dict[str, Any],
+    after: dict[str, Any],
+    plan: dict[str, Any] | None = None,
+) -> None:
     old, new = before["ordered_cache_behavior"], after["ordered_cache_behavior"]
+    require(len({row["path_pattern"] for row in old}) == len(old))
     require(len({row["path_pattern"] for row in new}) == len(new))
-    require(
-        [row for row in new if row["path_pattern"] not in COST_ROUTES]
-        == [row for row in old if row["path_pattern"] not in COST_ROUTES]
-    )
+    retained = deepcopy([row for row in old if row["path_pattern"] not in COST_ROUTES])
+    proposed = [row for row in new if row["path_pattern"] not in COST_ROUTES]
+    if retained != proposed:
+        require(len(retained) == len(proposed))
+        matches = [
+            i
+            for i, row in enumerate(retained)
+            if row["path_pattern"] == "/assets/evals*"
+        ]
+        require(len(matches) == 1)
+        index = matches[0]
+        row, target = retained[index], proposed[index]
+        require(row["target_origin_id"] == "site")
+        associations = row["function_association"]
+        require(
+            len(associations) == 1 and associations[0]["event_type"] == "viewer-request"
+        )
+        function = associations[0]["function_arn"]
+        identities = {
+            f"arn:aws:cloudfront::{account}:function/tollchat-v2-public-report-routes"
+            + ("-dev" if environment == "development" else ""): environment
+            for environment, account in ACCOUNTS.items()
+        }
+        require(function in identities and plan is not None)
+        assert plan is not None
+        functions = [
+            item
+            for item in plan.get("resource_changes", [])
+            if item["address"] == "aws_cloudfront_function.public_report_routes"
+        ]
+        require(len(functions) == 1)
+        values = functions[0]["change"]["after"]
+        require(
+            values["arn"] == function
+            and hashlib.sha256(values["code"].encode()).hexdigest()
+            == FUTURE_REPORT_ROUTES_SHA256
+        )
+        validate(functions[0], identities[function])
+        expected = [*associations, dict(associations[0], event_type="viewer-response")]
+        require(
+            len(target["function_association"]) == 2
+            and sorted(
+                target["function_association"], key=lambda item: item["event_type"]
+            )
+            == sorted(expected, key=lambda item: item["event_type"])
+        )
+        row["target_origin_id"] = "documents"
+        row["function_association"] = target["function_association"]
+    require(retained == proposed)
     models = [row for row in old if row["path_pattern"] == "/eval-dashboard*"]
     require(len(models) == 1)
     expected = {path: dict(models[0], path_pattern=path) for path in COST_ROUTES}
@@ -508,7 +563,7 @@ def validate(
         mutable = {"code"}
         require(
             hashlib.sha256(after["code"].encode()).hexdigest()
-            == ASSET_SHA256["public-report-routes.js"]
+            in {ASSET_SHA256["public-report-routes.js"], FUTURE_REPORT_ROUTES_SHA256}
         )
         computed |= {"etag", "live_stage_etag", "status"}
         empty |= {"key_value_store_associations"}

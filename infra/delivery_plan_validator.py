@@ -2877,7 +2877,7 @@ def _parse_plan(
             try:
                 before = cast(dict[str, JSON], before)
                 after = cast(dict[str, JSON], after)
-                cost_release.routes(before, after)
+                cost_release.routes(before, after, plan)
                 if (
                     not isinstance(before.get("arn"), str)
                     or not cast(str, before["arn"]).startswith(
