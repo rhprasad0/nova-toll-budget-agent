@@ -98,6 +98,8 @@ There is no database migration or application-agent change in this release.
    scheduled **08:00 and 12:00 UTC** refreshes; a manual invocation does not prove
    scheduling. Confirm all development billing alarms have actions enabled and
    target the foundation alert topic.
+   Confirm the topic has a confirmed subscription. If its configured email
+   subscription was restored, confirm AWS's email request before relying on alerts.
 3. After development's AWS feed is valid, check production prerequisites
    **before preparing the production release**: account-local foundation
    permissions, the fixed SecureString's metadata and effective cost-role
