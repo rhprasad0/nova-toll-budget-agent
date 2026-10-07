@@ -56,6 +56,7 @@ def test_projection_publishes_evidence_once_and_omits_internal_fields() -> None:
     assert "user@example.com" not in str(result)
     assert "model" not in result and "models" not in result
     trajectory["traces"][0]["spans"][0]["metadata"] = {
+        "policy_version": "scheduled-critical-v1",
         "models": {
             "application": {
                 "model": "deployed-model",
@@ -75,14 +76,50 @@ def test_projection_publishes_evidence_once_and_omits_internal_fields() -> None:
     assert recorded["models"]["application"]["model"] == "deployed-model"
     assert recorded["models"]["actor"]["reasoning_effort"] == "low"
     assert recorded["models"]["judge"]["reasoning_effort"] == "xhigh"
+    assert recorded["policy_version"] == "scheduled-critical-v1"
     assert recorded["deployment"] == {
         "release_id": "application-release",
         "runtime_version": "7",
     }
     assert "private" not in str(recorded)
+    trajectory["traces"][0]["spans"][0]["metadata"]["policy_version"] = "unknown"
+    with pytest.raises(ValueError, match="Unknown scheduled evaluation policy"):
+        dashboard.project_report(report)
+    trajectory["traces"][0]["spans"][0]["metadata"]["policy_version"] = (
+        "scheduled-critical-v1"
+    )
     report.detailed_results[1] = []
     with pytest.raises(ValueError, match="incomplete"):
         dashboard.project_report(report)
+
+
+def test_projection_preserves_availability_and_fallback_evidence() -> None:
+    facts = {
+        "status": "unknown_availability",
+        "reason": {"code": "i95_stale_evidence", "internal_diagnostic": "private"},
+        "i95_evidence": {
+            "availability": "unknown",
+            "northbound_link_status": "CLOSED",
+            "observed_at": "2026-10-07T00:00:00Z",
+            "s3_key": "private",
+        },
+        "general_purpose_gaps": [
+            {
+                "role": "prefix",
+                "boundary_point_id": "i495:192NO",
+                "fallback_required": None,
+                "i95_direction": "NB",
+                "storage_key": "private",
+            }
+        ],
+    }
+    public = cast(dict[str, Any], dashboard.public_facts(facts))
+    assert public["reason"] == {"code": "i95_stale_evidence"}
+    assert public["i95_evidence"]["availability"] == "unknown"
+    assert public["i95_evidence"]["northbound_link_status"] == "CLOSED"
+    assert public["general_purpose_gaps"][0]["fallback_required"] is None
+    assert public["general_purpose_gaps"][0]["boundary_point_id"] == "i495:192NO"
+    assert "private" not in str(public)
 
 
 @pytest.mark.parametrize(

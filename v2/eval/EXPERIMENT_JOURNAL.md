@@ -7,7 +7,7 @@ the weekly accounts keep those distinctions alongside the figures.
 
 | Week | Work | Recorded result |
 | --- | --- | --- |
-| [October 5-11](journal/2026-10-05.md) | Archive the exposed development reference and prepare training/shadow intake | No fresh active set; credential-free preparation only |
+| [October 5-11](journal/2026-10-05.md) | Prepare repository-native corpora and calibrate daily judges | Scheduled calibration across three runs: **204/204 expected judgments**, **$0.0492** estimated cost; no fresh active golden set |
 | [September 28-October 4](journal/2026-09-28.md) | Retire the private holdout approach; repair certificate/dependency builds; measure inference cost | Controlled benchmark: **$1.115488 per 1,000 completed answers** at the sampled average; infrastructure and tool execution excluded |
 | [September 21-27](journal/2026-09-21.md) | Calibrate judges; compare prompts and catalog formats; test repeatability; profile CI | Final development verification: **269/300 successful trials, 78% pass³**; below the **271/300 target** |
 | [September 14-20](journal/2026-09-14.md) | Simulate deployment/recovery outcomes; run the early agent demonstration | Demonstration: **27/72 successful trials**; actor and grader problems remained |
