@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 from botocore.exceptions import ClientError
+
 from lambdas.publisher import costs
 
 NOW = datetime(2026, 9, 18, 10, tzinfo=UTC)
