@@ -22,7 +22,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize("environment", ["development", "production"])
-def test_admitted_billing_freshness_alarm_configuration(environment: str) -> None:
+@pytest.mark.parametrize("unit", [None, ""])
+def test_admitted_billing_freshness_alarm_configuration(
+    environment: str, unit: str | None
+) -> None:
     account = gate.ACCOUNTS[environment]
     name = "tollchat-v2-cost-publisher" + (
         "-dev" if environment == "development" else ""
@@ -58,7 +61,7 @@ def test_admitted_billing_freshness_alarm_configuration(environment: str) -> Non
                                 "metric_name": name + "-dashboard-success",
                                 "period": 3600,
                                 "stat": "Sum",
-                                "unit": None,
+                                "unit": unit,
                             }
                         ],
                     },
@@ -82,6 +85,10 @@ def test_admitted_billing_freshness_alarm_configuration(environment: str) -> Non
         bad["change"]["after"][field] = value
         with pytest.raises(ValueError):
             gate.validate(bad, environment)
+    bad = deepcopy(item)
+    bad["change"]["after"]["metric_query"][1]["metric"][0]["unit"] = "Count"
+    with pytest.raises(ValueError):
+        gate.validate(bad, environment)
 
 
 def report_function(environment: str) -> dict[str, Any]:
