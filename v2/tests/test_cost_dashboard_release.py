@@ -21,6 +21,69 @@ from scripts import shared_packages
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.parametrize("environment", ["development", "production"])
+def test_admitted_billing_freshness_alarm_configuration(environment: str) -> None:
+    account = gate.ACCOUNTS[environment]
+    name = "tollchat-v2-cost-publisher" + (
+        "-dev" if environment == "development" else ""
+    )
+    item: dict[str, Any] = {
+        "address": 'aws_cloudwatch_metric_alarm.costs_stale["dashboard"]',
+        "mode": "managed",
+        "provider_name": "registry.terraform.io/hashicorp/aws",
+        "change": {
+            "actions": ["create"],
+            "before": None,
+            "after": {
+                "alarm_name": name + "-dashboard-stale",
+                "alarm_description": "No successful billing publication in 48 hourly periods.",
+                "evaluation_periods": 48,
+                "datapoints_to_alarm": 48,
+                "threshold": 1,
+                "comparison_operator": "LessThanThreshold",
+                "treat_missing_data": "breaching",
+                "alarm_actions": [f"arn:aws:sns:us-east-1:{account}:nova-toll-alerts"],
+                "metric_query": [
+                    {
+                        "id": "filled",
+                        "expression": "FILL(success, 0)",
+                        "return_data": True,
+                    },
+                    {
+                        "id": "success",
+                        "return_data": False,
+                        "metric": [
+                            {
+                                "namespace": "TollChat/Billing",
+                                "metric_name": name + "-dashboard-success",
+                                "period": 3600,
+                                "stat": "Sum",
+                                "unit": None,
+                            }
+                        ],
+                    },
+                ],
+            },
+            "after_unknown": {},
+        },
+    }
+    original = deepcopy(item)
+    gate.validate(item, environment)
+    assert item == original
+    for field, value in (
+        ("alarm_name", name + "-unreviewed"),
+        ("alarm_actions", ["arn:aws:sns:us-east-1:000000000000:other"]),
+        ("actions_enabled", False),
+        ("evaluation_periods", 24),
+        ("datapoints_to_alarm", 1),
+        ("treat_missing_data", "notBreaching"),
+    ):
+        bad = deepcopy(item)
+        bad["change"]["after"][field] = value
+        with pytest.raises(ValueError):
+            gate.validate(bad, environment)
+
+
 def report_function(environment: str) -> dict[str, Any]:
     source = (ROOT / "v2/agent/public-report-routes.js").read_text()
     suffix = "-dev" if environment == "development" else ""
