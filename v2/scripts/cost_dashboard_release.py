@@ -620,8 +620,9 @@ def validate(
                     require(
                         len(metrics) == 1 and metrics[0].get("dimensions") in (None, {})
                     )
+                    require(metrics[0].get("unit") in (None, ""))
                     require(
-                        [{**metrics[0], "dimensions": None}]
+                        [{**metrics[0], "dimensions": None, "unit": None}]
                         == [
                             {
                                 "namespace": "TollChat/Billing",
