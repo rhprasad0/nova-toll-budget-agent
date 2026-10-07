@@ -51,7 +51,7 @@ run_private_stage migration-identity "$OUT" "$ERR" jq -e --arg candidate "$CANDI
   .candidate == $candidate and ($candidate | test("^[0-9a-f]{40}$")) and
   (.release_id | type == "number") and (.claim_id | type == "number") and
   (.schema_versions | type == "object" and keys == ["oracle", "pricing"] and
-   . == {pricing:"1.4.0", oracle:"1.15.1"})
+   . == {pricing:"1.4.0", oracle:"1.15.2"})
 ' <<<"$ADMISSION"
 run_private_stage rds-ca "$OUT" "$ERR" test -f "$CA_BUNDLE"
 run_private_stage rds-ca "$OUT" "$ERR" test "$(sha256sum "$CA_BUNDLE" | awk '{print $1}')" = "$CA_SHA256"

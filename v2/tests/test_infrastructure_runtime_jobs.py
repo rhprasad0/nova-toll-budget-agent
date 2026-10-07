@@ -110,8 +110,17 @@ def test_timed_lambda_scheduler_and_failure_contract() -> None:
     )
     assert 'Action   = ["rds:DescribeDBInstances"]' in lambda_policy
     assert "/${local.eval_db_user}" in lambda_policy
-    assert "/${local.database_roles.agent}" not in lambda_policy
-    assert "/${local.database_roles.pricing_caller}" not in lambda_policy
+    legacy_policy = lambda_policy.split("], local.is_production ? [{", 1)[1]
+    assert 'Sid    = "ConnectRdsIam"' in legacy_policy
+    assert "/${local.database_roles.agent}" in legacy_policy
+    assert "/${local.database_roles.pricing_caller}" in legacy_policy
+    assert "}] : [])" in legacy_policy
+    assert (
+        "local.is_production ? {\n"
+        "      DB_USER         = local.database_roles.agent\n"
+        "      PRICING_DB_USER = local.database_roles.pricing_caller\n"
+        "      } : {}" in lambda_block
+    )
     for action in (
         "cloudfront:GetDistribution",
         "lambda:GetFunctionUrlConfig",

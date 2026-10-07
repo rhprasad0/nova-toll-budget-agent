@@ -2016,3 +2016,50 @@ COMMIT;
         "v2/db/migrations/034_upgrade_oracle_1_15_0_to_1_15_1.sql",
     ]
     assert runner.run_production()["applied"] == []
+
+    # 035's development-only grants must leave production data and ACLs untouched.
+    production_fingerprint = """
+SELECT md5(jsonb_build_object(
+  'points', (SELECT jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text)
+             FROM oracle.toll_route_point t),
+  'connections', (SELECT jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text)
+                  FROM oracle.toll_connection t),
+  'components', (SELECT jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text)
+                 FROM oracle.route_pricing_component t),
+  'schema_acl', (SELECT nspacl::text FROM pg_namespace WHERE nspname = 'oracle'),
+  'table_acls', (SELECT jsonb_agg(jsonb_build_object(
+                  'name', c.relname, 'owner', c.relowner, 'acl', c.relacl)
+                  ORDER BY c.relname)
+                 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = 'oracle' AND c.relkind IN ('r', 'v', 'm', 'p'))
+)::text);
+"""
+    before = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        "--tuples-only",
+        "--no-align",
+        input_sql=production_fingerprint,
+    )
+    assert before.returncode == 0, before.stderr
+    monkeypatch.setattr(runner, "PRODUCTION_MAX_MIGRATION_NUMBER", 35)
+    catalog = runner.run_production()
+    assert catalog["before"] == {"pricing": "1.4.0", "oracle": "1.15.1"}
+    assert catalog["after"] == {"pricing": "1.4.0", "oracle": "1.15.2"}
+    assert catalog["applied"] == [
+        "v2/db/migrations/035_upgrade_oracle_1_15_1_to_1_15_2.sql",
+    ]
+    assert runner.run_production()["applied"] == []
+    after = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        "--tuples-only",
+        "--no-align",
+        input_sql=production_fingerprint,
+    )
+    assert after.returncode == 0, after.stderr
+    assert after.stdout == before.stdout

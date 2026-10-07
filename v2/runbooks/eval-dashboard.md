@@ -135,8 +135,8 @@ development application.
    until then the page correctly shows no results. Inspect its environment,
    occurrence timestamp, three verdicts, conversation, and tool evidence.
 
-The production migration boundary includes 034, targeting pricing 1.4.0 and
-Oracle 1.15.1. Before publishing a production release, complete the
+The production migration boundary includes 035, targeting pricing 1.4.0 and
+Oracle 1.15.2. Before publishing a production release, complete the
 [release schema preflight](../manual-releases/README.md#2-check-schemas-before-publishing)
 and the fixed writer prerequisite below. Complete the production runtime activation
 below before treating the dashboard as ready. Development data is never copied there.
@@ -218,9 +218,13 @@ review the existing prerequisite from `v2/infra/timed_checks.tf`: the four IAM
 statements `ReadLiveChatRouting`, `ReadPublishedChatProxy`,
 `ReadLiveRuntimeVersion` and `InvokeLiveApplication`; the fixed
 `EVAL_SITE_DISTRIBUTION_ID` and `AGENTCORE_VPCE_URL` variables; and the timed-check
-security-group access to the private AgentCore endpoint. Keep the current package
-and its required variables and permissions working during the prerequisite
-transition. Do not expand delivery permissions or fold unreviewed IAM changes
+security-group access to the private AgentCore endpoint, plus the fixed runtime
+and endpoint resource policies allowing the eval role only through that endpoint.
+Keep the current package, `DB_USER`, `PRICING_DB_USER` and `ConnectRdsIam` working
+during the prerequisite transition. The source retains these legacy production
+capabilities through release so ordinary preparation has no IAM/configuration
+changes; retire them only in a separately reviewed infrastructure cleanup. Do not
+expand delivery permissions or fold unreviewed IAM changes
 into ordinary release delivery. Reconcile approved cached policy state as
 described above before the finite release plan.
 
