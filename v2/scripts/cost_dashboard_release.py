@@ -35,6 +35,17 @@ RESOURCES = {
     'aws_s3_object.cost_assets["evals.css"]',
     "aws_s3_object.evals",
     "aws_cloudfront_function.public_report_routes",
+    "aws_cloudwatch_metric_alarm.costs_errors",
+    *(
+        f'{resource}["{publication}"]'
+        for resource in (
+            "aws_cloudwatch_log_metric_filter.costs_success",
+            "aws_cloudwatch_log_metric_filter.costs_failure",
+            "aws_cloudwatch_metric_alarm.costs_failed",
+            "aws_cloudwatch_metric_alarm.costs_stale",
+        )
+        for publication in ("dashboard", "aws-feed")
+    ),
 }
 # Reviewed public bytes. Update these pins when changing these public assets.
 ASSET_SHA256: dict[str, str] = {
@@ -212,6 +223,11 @@ def validate_drift(item: dict[str, Any], environment: str) -> None:
         'aws_s3_object.cost_assets["costs.mjs"]': {"tags", "metadata"},
         'aws_s3_object.cost_assets["costs-benchmark.json"]': {"tags", "metadata"},
         'aws_s3_object.cost_assets["evals.css"]': {"tags", "metadata"},
+        **{
+            address: {"tags"}
+            for address in RESOURCES
+            if address.startswith("aws_cloudwatch_metric_alarm.costs_")
+        },
     }
     require(address in fields and environment in ACCOUNTS)
     before, after = (dict(change[key]) for key in ("before", "after"))
@@ -472,6 +488,138 @@ def validate(
             "principal_org_id",
             "invoked_via_function_url",
         }
+    elif address.startswith("aws_cloudwatch_log_metric_filter.costs_"):
+        publication = address.split('["')[1].removesuffix('"]')
+        require(publication in ({"dashboard", "aws-feed"} if suffix else {"dashboard"}))
+        outcome = (
+            "success"
+            if address.startswith("aws_cloudwatch_log_metric_filter.costs_success")
+            else "failure"
+        )
+        marker = "SUCCEEDED" if outcome == "success" else "FAILED"
+        transformations = after["metric_transformation"]
+        require(
+            len(transformations) == 1
+            and transformations[0].get("dimensions") in (None, {})
+        )
+        after["metric_transformation"] = [{**transformations[0], "dimensions": None}]
+        expected = {
+            "name": f"{name}-{publication}-{outcome}",
+            "log_group_name": "/aws/lambda/" + name,
+            "pattern": f'"COST_REFRESH_{marker} snapshot={publication}"',
+            "apply_on_transformed_logs": False,
+            "metric_transformation": [
+                {
+                    "namespace": "TollChat/Billing",
+                    "name": f"{name}-{publication}-{outcome}",
+                    "value": "1",
+                    "default_value": "0",
+                    "unit": "Count",
+                    "dimensions": None,
+                }
+            ],
+        }
+        computed |= {"creation_time"}
+        empty |= {
+            "emit_system_field_dimensions",
+            "field_selection_criteria",
+        }
+    elif address.startswith("aws_cloudwatch_metric_alarm.costs_"):
+        alarm = address.split("costs_", 1)[1]
+        outcome = alarm.split("[", 1)[0]
+        publication = (
+            None if outcome == "errors" else alarm.split('["')[1].removesuffix('"]')
+        )
+        require(
+            publication is None
+            or publication in ({"dashboard", "aws-feed"} if suffix else {"dashboard"})
+        )
+        stale = outcome == "stale"
+        expected = {
+            "alarm_name": f"{name}-{outcome}"
+            if publication is None
+            else f"{name}-{publication}-{outcome}",
+            "alarm_description": {
+                "errors": "Billing publisher Lambda failed.",
+                "failed": "Billing collection or snapshot publication failed.",
+                "stale": "No successful billing publication in 48 hourly periods.",
+            }[outcome],
+            "actions_enabled": True,
+            "evaluate_low_sample_count_percentiles": "evaluate",
+            "evaluation_periods": 48 if stale else 1,
+            "datapoints_to_alarm": 48 if stale else 1,
+            "threshold": 1,
+            "comparison_operator": "LessThanThreshold"
+            if stale
+            else "GreaterThanOrEqualToThreshold",
+            "treat_missing_data": "breaching" if stale else "notBreaching",
+            "alarm_actions": [f"arn:aws:sns:us-east-1:{account}:nova-toll-alerts"],
+        }
+        if stale:
+            # metric_query is a set in provider plans; compare without ordering.
+            queries = after.pop("metric_query")
+            require(
+                len(queries) == 2
+                and {query["id"] for query in queries} == {"filled", "success"}
+            )
+            for query in queries:
+                require(
+                    not query.get("account_id")
+                    and not query.get("label")
+                    and not query.get("period")
+                )
+                if query["id"] == "filled":
+                    require(
+                        query["expression"] == "FILL(success, 0)"
+                        and query["return_data"] is True
+                        and not query.get("metric")
+                    )
+                else:
+                    require(
+                        not query.get("expression") and query["return_data"] is False
+                    )
+                    metrics = query["metric"]
+                    require(
+                        len(metrics) == 1 and metrics[0].get("dimensions") in (None, {})
+                    )
+                    require(
+                        [{**metrics[0], "dimensions": None}]
+                        == [
+                            {
+                                "namespace": "TollChat/Billing",
+                                "metric_name": f"{name}-{publication}-success",
+                                "period": 3600,
+                                "stat": "Sum",
+                                "dimensions": None,
+                                "unit": None,
+                            }
+                        ]
+                    )
+            mutable = {"metric_query"}
+            empty |= {"metric_name", "namespace", "period", "statistic", "dimensions"}
+        else:
+            expected.update(
+                namespace="AWS/Lambda" if outcome == "errors" else "TollChat/Billing",
+                metric_name="Errors"
+                if outcome == "errors"
+                else f"{name}-{publication}-failure",
+                period=300,
+                statistic="Sum",
+            )
+            if outcome == "errors":
+                expected["dimensions"] = {"FunctionName": name}
+            else:
+                empty.add("dimensions")
+            empty.add("metric_query")
+        empty |= {
+            "ok_actions",
+            "insufficient_data_actions",
+            "unit",
+            "extended_statistic",
+            "threshold_metric_id",
+            "alarm_rule",
+            "warm_up_configuration",
+        }
     elif address.startswith("aws_s3_object."):
         require(after.get("server_side_encryption") in (None, "aws:kms"))
         require(after.get("storage_class") in (None, "STANDARD"))
@@ -573,12 +721,16 @@ def validate(
         "publish": False,
         "event_bus_name": "default",
         "is_enabled": True,
+        "actions_enabled": True,
+        "evaluate_low_sample_count_percentiles": "evaluate",
     }.items():
         if field in expected and after.get(field) is None:
             after[field] = default
     omitted_defaults = {"acl", "managed_policy_arns", "inline_policy"}
     if address == "aws_lambda_function.costs":
         omitted_defaults |= {"logging_config", "tracing_config", "ephemeral_storage"}
+    if address.startswith("aws_cloudwatch_metric_alarm.costs_"):
+        omitted_defaults.add("evaluate_low_sample_count_percentiles")
     if address.startswith("aws_s3_object."):
         omitted_defaults |= {
             "kms_key_id",
