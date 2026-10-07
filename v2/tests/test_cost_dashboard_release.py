@@ -72,7 +72,7 @@ def test_admitted_billing_freshness_alarm_configuration(environment: str) -> Non
     assert item == original
     for field, value in (
         ("alarm_name", name + "-unreviewed"),
-        ("alarm_actions", []),
+        ("alarm_actions", ["arn:aws:sns:us-east-1:000000000000:other"]),
         ("actions_enabled", False),
         ("evaluation_periods", 24),
         ("datapoints_to_alarm", 1),
