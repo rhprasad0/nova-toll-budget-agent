@@ -24,9 +24,15 @@ function permanentRedirect(location) {
   };
 }
 
-/** @param {{ request: { method: string, uri: string, headers?: Record<string, {value: string}> } }} event */
+/** @param {{ request: { method: string, uri: string, headers?: Record<string, {value: string}> }, response?: { statusCode: number, headers: Record<string, {value: string}> } }} event */
 function handler(event) {
   var request = event.request;
+  if (event.response) {
+    if (request.uri.startsWith("/assets/evals")) {
+      event.response.headers["cache-control"] = { value: "no-store" };
+    }
+    return event.response;
+  }
   if (request.uri === "/tolls" || request.uri === "/tolls/") {
     return permanentRedirect("/#toll-reports");
   }

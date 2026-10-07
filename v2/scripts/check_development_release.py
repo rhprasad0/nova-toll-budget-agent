@@ -496,6 +496,7 @@ def request(
     origin: str | None = None,
     cookie: str | None = None,
     canary: bool = False,
+    expected_cache_control: str | None = None,
 ) -> tuple[int, str, bytes]:
     require(
         path.startswith("/") and not path.startswith("//"),
@@ -545,6 +546,11 @@ def request(
         content = response.read(MAX_BODY + 1)
         require(len(content) <= MAX_BODY, "response_size")
         code, kind = response.status, response.headers.get_content_type()
+        if expected_cache_control is not None:
+            require(
+                response.headers.get("Cache-Control") == expected_cache_control,
+                "asset_content",
+            )
         if (
             not isinstance(code, int)
             or not isinstance(kind, str)

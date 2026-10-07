@@ -444,7 +444,7 @@ resource "aws_cloudfront_distribution" "site" {
     content {
       allowed_methods        = ["GET", "HEAD"]
       cached_methods         = ["GET", "HEAD"]
-      target_origin_id       = "site"
+      target_origin_id       = ordered_cache_behavior.value == "/assets/evals*" ? "documents" : "site"
       path_pattern           = ordered_cache_behavior.value
       viewer_protocol_policy = "redirect-to-https"
       compress               = true
@@ -465,6 +465,13 @@ resource "aws_cloudfront_distribution" "site" {
       function_association {
         event_type   = "viewer-request"
         function_arn = aws_cloudfront_function.public_report_routes.arn
+      }
+      dynamic "function_association" {
+        for_each = ordered_cache_behavior.value == "/assets/evals*" ? [1] : []
+        content {
+          event_type   = "viewer-response"
+          function_arn = aws_cloudfront_function.public_report_routes.arn
+        }
       }
     }
   }
@@ -724,7 +731,7 @@ resource "aws_cloudfront_distribution" "staging" {
     content {
       allowed_methods        = ["GET", "HEAD"]
       cached_methods         = ["GET", "HEAD"]
-      target_origin_id       = "site"
+      target_origin_id       = ordered_cache_behavior.value == "/assets/evals*" ? "documents" : "site"
       path_pattern           = ordered_cache_behavior.value
       viewer_protocol_policy = "redirect-to-https"
       compress               = true
@@ -745,6 +752,13 @@ resource "aws_cloudfront_distribution" "staging" {
       function_association {
         event_type   = "viewer-request"
         function_arn = aws_cloudfront_function.public_report_routes.arn
+      }
+      dynamic "function_association" {
+        for_each = ordered_cache_behavior.value == "/assets/evals*" ? [1] : []
+        content {
+          event_type   = "viewer-response"
+          function_arn = aws_cloudfront_function.public_report_routes.arn
+        }
       }
     }
   }
