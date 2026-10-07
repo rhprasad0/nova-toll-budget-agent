@@ -3660,6 +3660,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         for address, field in {
             "aws_lambda_function.costs": "source_code_hash",
             "aws_iam_role_policy.costs": "policy",
+            "aws_cloudwatch_event_rule.costs": "schedule_expression",
             "aws_s3_object.cost_dashboard": "content",
             'aws_s3_object.cost_assets["costs.css"]': "source_hash",
             'aws_s3_object.cost_assets["costs.mjs"]': "source_hash",

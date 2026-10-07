@@ -140,6 +140,26 @@ def policy(environment: str) -> dict[str, Any]:
             },
         },
     ]
+    if environment == "development":
+        statements.extend(
+            [
+                {
+                    "Sid": "PublishAwsFeed",
+                    "Effect": "Allow",
+                    "Action": ["s3:GetObject", "s3:PutObject"],
+                    "Resource": bucket + "/assets/costs-aws.json",
+                },
+                {
+                    "Sid": "FindAwsFeed",
+                    "Effect": "Allow",
+                    "Action": ["s3:ListBucket"],
+                    "Resource": bucket,
+                    "Condition": {
+                        "StringEquals": {"s3:prefix": "assets/costs-aws.json"}
+                    },
+                },
+            ]
+        )
     return {"Version": "2012-10-17", "Statement": statements}
 
 
@@ -235,16 +255,32 @@ def validate_drift(item: dict[str, Any], environment: str) -> None:
         empty: object = [] if field == "layers" else {}
         require(before[field] in (None, empty) and after[field] in (None, empty))
         before[field] = after[field] = None
+    if address == "aws_cloudwatch_event_rule.costs":
+        hour = "8" if environment == "development" else "9"
+        recovery = "12" if environment == "development" else "13"
+        daily = f"cron(0 {hour} * * ? *)"
+        twice_daily = f"cron(0 {hour},{recovery} * * ? *)"
+        require(before["schedule_expression"] == after["schedule_expression"])
+        require(after["schedule_expression"] in (daily, twice_daily))
+        before["schedule_expression"] = after["schedule_expression"] = twice_daily
     if address == "aws_iam_role.costs":
         name = "tollchat-v2-cost-publisher" + (
             "-dev" if environment == "development" else ""
         )
         current = policy(environment)
-        legacy = {
+        pre_feed = {
             **current,
             "Statement": [
                 row
                 for row in current["Statement"]
+                if row["Sid"] not in {"PublishAwsFeed", "FindAwsFeed"}
+            ],
+        }
+        legacy = {
+            **pre_feed,
+            "Statement": [
+                row
+                for row in pre_feed["Statement"]
                 if row["Sid"] not in {"ReadBillingKey", "DecryptBillingKey"}
             ],
         }
@@ -258,12 +294,14 @@ def validate_drift(item: dict[str, Any], environment: str) -> None:
             require(values[0]["name"] == name)
             require(
                 observed == current
-                or (environment == "development" and observed == legacy)
+                or (environment == "development" and observed in (legacy, pre_feed))
             )
         require(after["inline_policy"])
         if before["inline_policy"]:
             require(environment == "development")
-            require(json.loads(before["inline_policy"][0]["policy"]) == legacy)
+            require(
+                json.loads(before["inline_policy"][0]["policy"]) in (legacy, pre_feed)
+            )
             require(json.loads(after["inline_policy"][0]["policy"]) == current)
         require(after["arn"] == f"arn:aws:iam::{ACCOUNTS[environment]}:role/{name}")
         before["inline_policy"] = after["inline_policy"] = []
@@ -440,9 +478,9 @@ def validate(
         expected = {
             "name": name,
             "event_bus_name": "default",
-            "schedule_expression": "cron(0 8 * * ? *)"
+            "schedule_expression": "cron(0 8,12 * * ? *)"
             if suffix
-            else "cron(0 9 * * ? *)",
+            else "cron(0 9,13 * * ? *)",
             "state": "ENABLED",
             "is_enabled": True,
         }

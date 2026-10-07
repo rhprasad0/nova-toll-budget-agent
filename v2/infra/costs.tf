@@ -1,11 +1,12 @@
 # Billing reads and publication are isolated from the database/model publishers.
 locals {
-  cost_name       = "tollchat-v2-cost-publisher${local.suffix}"
-  cost_role_arn   = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.cost_name}"
-  cost_lambda_arn = "arn:aws:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${local.cost_name}"
-  cost_rule_arn   = "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${local.cost_name}"
-  cost_log_arn    = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.cost_name}"
-  cost_key_arn    = "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/nova-toll/openai_billing_api_key"
+  cost_name         = "tollchat-v2-cost-publisher${local.suffix}"
+  cost_role_arn     = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.cost_name}"
+  cost_lambda_arn   = "arn:aws:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${local.cost_name}"
+  cost_rule_arn     = "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${local.cost_name}"
+  cost_log_arn      = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.cost_name}"
+  cost_key_arn      = "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/nova-toll/openai_billing_api_key"
+  cost_publications = local.is_production ? toset(["dashboard"]) : toset(["dashboard", "aws-feed"])
 }
 
 resource "aws_cloudwatch_log_group" "costs" {
@@ -27,7 +28,7 @@ resource "aws_iam_role_policy" "costs" {
   role = aws_iam_role.costs.name
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid    = "ReadAccountBilling", Effect = "Allow"
         Action = ["ce:GetCostAndUsage"], Resource = "*"
@@ -65,7 +66,17 @@ resource "aws_iam_role_policy" "costs" {
           "kms:EncryptionContext:PARAMETER_ARN" = local.cost_key_arn
         } }
       }
-    ]
+      ], [for statement in [
+        {
+          Sid    = "PublishAwsFeed", Effect = "Allow"
+          Action = ["s3:GetObject", "s3:PutObject"], Resource = "${aws_s3_bucket.site.arn}/assets/costs-aws.json"
+        },
+        {
+          Sid       = "FindAwsFeed", Effect = "Allow"
+          Action    = ["s3:ListBucket"], Resource = aws_s3_bucket.site.arn
+          Condition = { StringEquals = { "s3:prefix" = "assets/costs-aws.json" } }
+        }
+    ] : statement if !local.is_production])
   })
 }
 
@@ -99,8 +110,102 @@ resource "aws_lambda_function" "costs" {
 resource "aws_cloudwatch_event_rule" "costs" {
   region              = data.aws_region.current.region
   name                = local.cost_name
-  schedule_expression = local.is_production ? "cron(0 9 * * ? *)" : "cron(0 8 * * ? *)"
+  schedule_expression = local.is_production ? "cron(0 9,13 * * ? *)" : "cron(0 8,12 * * ? *)"
   state               = "ENABLED"
+}
+
+resource "aws_cloudwatch_log_metric_filter" "costs_success" {
+  apply_on_transformed_logs = false
+  region                    = data.aws_region.current.region
+  for_each                  = local.cost_publications
+  name                      = "${local.cost_name}-${each.key}-success"
+  log_group_name            = aws_cloudwatch_log_group.costs.name
+  pattern                   = "\"COST_REFRESH_SUCCEEDED snapshot=${each.key}\""
+  metric_transformation {
+    namespace     = "TollChat/Billing"
+    name          = "${local.cost_name}-${each.key}-success"
+    value         = "1"
+    default_value = 0
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "costs_failure" {
+  apply_on_transformed_logs = false
+  region                    = data.aws_region.current.region
+  for_each                  = local.cost_publications
+  name                      = "${local.cost_name}-${each.key}-failure"
+  log_group_name            = aws_cloudwatch_log_group.costs.name
+  pattern                   = "\"COST_REFRESH_FAILED snapshot=${each.key}\""
+  metric_transformation {
+    namespace     = "TollChat/Billing"
+    name          = "${local.cost_name}-${each.key}-failure"
+    value         = "1"
+    default_value = 0
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "costs_failed" {
+  region              = data.aws_region.current.region
+  for_each            = local.cost_publications
+  alarm_name          = "${local.cost_name}-${each.key}-failed"
+  alarm_description   = "Billing collection or snapshot publication failed."
+  namespace           = "TollChat/Billing"
+  metric_name         = aws_cloudwatch_log_metric_filter.costs_failure[each.key].metric_transformation[0].name
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  datapoints_to_alarm = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [var.foundation.alerts_topic_arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "costs_stale" {
+  region              = data.aws_region.current.region
+  for_each            = local.cost_publications
+  alarm_name          = "${local.cost_name}-${each.key}-stale"
+  alarm_description   = "No successful billing publication in 48 hourly periods."
+  evaluation_periods  = 48
+  datapoints_to_alarm = 48
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [var.foundation.alerts_topic_arn]
+  metric_query {
+    id          = "filled"
+    expression  = "FILL(success, 0)"
+    return_data = true
+  }
+  metric_query {
+    id          = "success"
+    return_data = false
+    metric {
+      namespace   = "TollChat/Billing"
+      metric_name = aws_cloudwatch_log_metric_filter.costs_success[each.key].metric_transformation[0].name
+      period      = 3600
+      stat        = "Sum"
+    }
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "costs_errors" {
+  region              = data.aws_region.current.region
+  alarm_name          = "${local.cost_name}-errors"
+  alarm_description   = "Billing publisher Lambda failed."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = local.cost_name }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  datapoints_to_alarm = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [var.foundation.alerts_topic_arn]
 }
 
 resource "aws_cloudwatch_event_target" "costs" {
