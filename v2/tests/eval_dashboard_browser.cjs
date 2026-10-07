@@ -127,6 +127,17 @@ const { chromium } = require("playwright");
     assert.match(await page.locator("#metrics").innerText(), /1 of 1/);
     assert.match(await page.locator("#shown").innerText(), /1 legacy graded runs/);
     assert.match(await page.locator("#history").innerText(), /Failed · Legacy grading/);
+    const ungraded = ["running", "error"].map((status, i) => ({
+      ...snapshot.runs[0], status, scheduled_at: `2026-09-15T21:${23-i}:00Z`,
+      evidence: {...snapshot.runs[0].evidence, policy_version: undefined, checks: [], turns: []},
+    }));
+    data = {...snapshot, runs: [...snapshot.runs, legacyFailed, ...ungraded]};
+    await page.reload();
+    await page.locator(".scenario").first().waitFor();
+    assert.match(await page.locator("#metrics").innerText(), /1 of 1/);
+    assert.match(await page.locator("#shown").innerText(), /1 legacy graded runs/);
+    for (const state of ["running", "error"])
+      assert.doesNotMatch((await page.locator(`#ticks .${state}`).getAttribute("title")) || "Legacy grading", /Legacy grading/);
     const criticalFailed = {...legacyFailed, scheduled_at: "2026-09-15T16:00:00Z",
       evidence: {...legacyFailed.evidence, policy_version: "scheduled-critical-v1"},
     };

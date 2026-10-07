@@ -46,6 +46,8 @@ const badge = (status, legacy = false) =>
 const policyVersion = "scheduled-critical-v1";
 /** @param {Run} r */
 const currentPolicy = (r) => r.evidence?.policy_version === policyVersion;
+/** @param {Run} r */
+const legacyGrade = (r) => !currentPolicy(r) && ["passed", "failed"].includes(r.status);
 const expectedEnvironment = /** @type {HTMLMetaElement} */ ($('meta[name="eval-environment"]')).content;
 /** @param {Scheduled} r */
 const key = (r) => `${r.window_id}/${r.scheduled_at}`;
@@ -115,7 +117,7 @@ function render() {
   const current = runs.filter(currentPolicy);
   const passes = current.filter((r) => r.status === "passed").length;
   const failures = current.filter((r) => r.status === "failed").length;
-  const legacy = runs.filter((r) => !currentPolicy(r) && ["passed", "failed"].includes(r.status)).length;
+  const legacy = runs.filter(legacyGrade).length;
   const errors = runs.filter((r) =>
     ["error", "stale", "overdue"].includes(outcome(r)),
   ).length;
@@ -167,7 +169,7 @@ function render() {
     .reverse()
     .map(
       (r) =>
-        `<span class="tick ${outcome(r)}" title="${date(r.scheduled_at)}: ${labels[outcome(r)]}${!currentPolicy(r) ? " · Legacy grading" : ""}"><span class="sr-only">${date(r.scheduled_at)}: ${labels[outcome(r)]}${!currentPolicy(r) ? " · Legacy grading" : ""}</span></span>`,
+        `<span class="tick ${outcome(r)}" title="${date(r.scheduled_at)}: ${labels[outcome(r)]}${legacyGrade(r) ? " · Legacy grading" : ""}"><span class="sr-only">${date(r.scheduled_at)}: ${labels[outcome(r)]}${legacyGrade(r) ? " · Legacy grading" : ""}</span></span>`,
     )
     .join("");
   $("#scenarios").innerHTML = snapshot.scenarios
