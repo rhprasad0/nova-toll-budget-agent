@@ -3,17 +3,18 @@
 import io
 import json
 import logging
+import urllib.error
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from botocore.exceptions import ClientError
-
 from lambdas.publisher import costs
 
 NOW = datetime(2026, 9, 18, 10, tzinfo=UTC)
@@ -92,6 +93,346 @@ def fixture(environment: str = "production", now: datetime = NOW) -> dict[str, A
         daily=[{"date": day, "usd": "0.4"} for day in costs.dates(period)],
     )
     return costs.build_snapshot(environment, now, sources)
+
+
+def aws_feed(now: datetime = NOW) -> dict[str, Any]:
+    sources = fixture("development", now)["sources"]
+    sources["openai"] = costs.blank_source(
+        "openai", sources["openai"]["requested"], True
+    )
+    return costs.build_snapshot("development", now, sources, aws_only=True)
+
+
+def http_error(
+    status: int = 503, retry_after: str | None = None
+) -> urllib.error.HTTPError:
+    headers = Message()
+    if retry_after is not None:
+        headers["Retry-After"] = retry_after
+    return urllib.error.HTTPError(
+        costs.OPENAI_URL, status, "private-secret", headers, None
+    )
+
+
+def mock_reader(
+    monkeypatch: pytest.MonkeyPatch, outcomes: list[object], raw: bytes = b"{}"
+) -> tuple[Mock, Mock]:
+    response = MagicMock(status=200, url=costs.OPENAI_URL)
+    response.read.return_value = raw
+    response.__enter__.return_value = response
+    opener = Mock(open=Mock(side_effect=[*outcomes, response]))
+    sleep = Mock()
+    monkeypatch.setattr(costs.urllib.request, "build_opener", Mock(return_value=opener))
+    monkeypatch.setattr(costs.time, "sleep", sleep)
+    return opener.open, sleep
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        http_error(),
+        urllib.error.HTTPError(
+            costs.OPENAI_URL,
+            503,
+            "private-secret",
+            None,  # pyright: ignore[reportArgumentType] - urllib accepts absent headers
+            None,
+        ),
+        urllib.error.URLError("private-secret"),
+        TimeoutError("private-secret"),
+        ConnectionResetError("private-secret"),
+    ],
+)
+def test_https_transient_failure_then_success(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failure: Exception,
+) -> None:
+    request, sleep = mock_reader(monkeypatch, [failure, failure])
+    budget = Mock()
+    assert costs.get_json(costs.OPENAI_URL, "private-secret", budget) == {}
+    assert request.call_count == 3
+    assert [call.args for call in sleep.call_args_list] == [(2,), (5,)]
+    assert [call.args for call in budget.call_args_list] == [
+        (20,),
+        (22,),
+        (20,),
+        (25,),
+        (20,),
+    ]
+    assert all(call.kwargs["timeout"] == 20 for call in request.call_args_list)
+    assert "source=openai attempt=1" in caplog.text
+    assert "source=openai attempt=2" in caplog.text
+    assert "private-secret" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
+
+
+@pytest.mark.parametrize("status", [408, 429, 500, 502, 503, 504])
+def test_https_retry_exhaustion(monkeypatch: pytest.MonkeyPatch, status: int) -> None:
+    error = http_error(status)
+    request, sleep = mock_reader(monkeypatch, [error] * 3)
+    with pytest.raises(urllib.error.HTTPError):
+        costs.get_json(costs.OPENAI_URL, "test-key")
+    assert request.call_count == 3 and sleep.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        http_error(400),
+        http_error(401),
+        http_error(403),
+        http_error(404),
+        http_error(302),
+        ValueError("billing_redirect"),
+    ],
+)
+def test_https_permanent_errors_are_not_retried(
+    monkeypatch: pytest.MonkeyPatch, failure: Exception
+) -> None:
+    request, sleep = mock_reader(monkeypatch, [failure])
+    with pytest.raises(type(failure)):
+        costs.get_json(costs.OPENAI_URL, "test-key")
+    assert request.call_count == 1
+    sleep.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "value,expected", [("7", 7), ("999", 30), ("0", 0), ("-1", 2), ("garbage", 2)]
+)
+def test_https_retry_after(
+    monkeypatch: pytest.MonkeyPatch, value: str, expected: float
+) -> None:
+    _, sleep = mock_reader(monkeypatch, [http_error(429, value)])
+    assert costs.get_json(costs.OPENAI_URL, "test-key") == {}
+    sleep.assert_called_once_with(expected)
+
+
+def test_retry_after_http_date() -> None:
+    from email.utils import format_datetime
+
+    later = datetime.now(UTC) + timedelta(seconds=12)
+    delay = costs.retry_delay(http_error(503, format_datetime(later, usegmt=True)), 2)
+    assert 10 <= delay <= 12
+    assert (
+        costs.retry_delay(
+            http_error(503, format_datetime(later + timedelta(minutes=1), usegmt=True)),
+            2,
+        )
+        == 30
+    )
+    assert (
+        costs.retry_delay(
+            http_error(503, format_datetime(later - timedelta(minutes=1), usegmt=True)),
+            2,
+        )
+        == 0
+    )
+
+
+def test_https_malformed_response_is_not_retried(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    request, sleep = mock_reader(monkeypatch, [], b'{"duplicate":1,"duplicate":2}')
+    with pytest.raises(ValueError):
+        costs.get_json(costs.OPENAI_URL, "test-key")
+    assert request.call_count == 1
+    sleep.assert_not_called()
+    assert "error=ValueError status=200" in caplog.text
+
+
+def test_https_body_timeout_is_retried(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    response = MagicMock(status=200, url=costs.OPENAI_URL)
+    response.__enter__.return_value = response
+    response.read.side_effect = [TimeoutError("private-secret"), b"{}"]
+    request, sleep = mock_reader(monkeypatch, [response, response])
+    assert costs.get_json(costs.OPENAI_URL, "private-secret") == {}
+    assert request.call_count == 2
+    sleep.assert_called_once_with(2)
+    assert "error=TimeoutError status=200" in caplog.text
+    assert "private-secret" not in caplog.text
+
+
+@pytest.mark.parametrize("remaining,requests", [(79000, 0), (81000, 1), (82000, 1)])
+def test_https_publication_budget(
+    monkeypatch: pytest.MonkeyPatch, remaining: int, requests: int
+) -> None:
+    request, sleep = mock_reader(monkeypatch, [http_error()])
+    checks = iter([remaining, remaining, 79000])
+
+    def budget(seconds: float) -> None:
+        costs.require(next(checks) >= 60000 + seconds * 1000)
+
+    with pytest.raises(ValueError):
+        costs.get_json(costs.OPENAI_URL, "test-key", budget)
+    assert request.call_count == requests
+    assert sleep.call_count == (1 if remaining == 82000 else 0)
+
+
+def test_aws_feed_failure_retains_original_publication() -> None:
+    previous = aws_feed()
+    now = NOW + timedelta(days=1)
+    period = costs.requested(costs.periods(now.date()))
+    failed = costs.build_snapshot(
+        "development",
+        now,
+        {
+            "aws_development": costs.blank_source("aws_development", period),
+            "openai": costs.blank_source("openai", period, True),
+        },
+        previous,
+        aws_only=True,
+    )
+    assert failed["scope"] == "aws-development"
+    assert failed["attempt"]["status"] == "failed"
+    assert failed["published_at"] == previous["published_at"]
+    assert failed["sources"] == previous["sources"]
+    with pytest.raises(ValueError):
+        costs.development_source(failed, period, now)
+
+
+def test_production_rejects_failed_mismatched_and_old_retrieval_feeds() -> None:
+    feed = aws_feed()
+    cases = [fixture("development"), aws_feed(NOW - timedelta(days=1))]
+    failed = json.loads(json.dumps(feed))
+    failed["attempt"]["status"] = "failed"
+    failed["attempt"]["sources"]["aws_development"] = "unavailable"
+    cases.append(failed)
+    old = json.loads(json.dumps(feed))
+    later = NOW + timedelta(hours=49)
+    old["published_at"] = costs.utc_text(later)
+    old["attempt"]["at"] = costs.utc_text(later)
+    with pytest.raises(ValueError):
+        costs.development_source(old, old["requested"], later)
+    for value in cases:
+        with pytest.raises(ValueError):
+            costs.development_source(value, feed["requested"], NOW)
+
+
+@pytest.mark.parametrize(
+    "failure_key,openai_failure",
+    [
+        (None, True),
+        (costs.AWS_FEED_KEY, True),
+        ("costs.json", True),
+        (costs.AWS_FEED_KEY, False),
+    ],
+)
+def test_development_openai_outage_does_not_freeze_production(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failure_key: str | None,
+    openai_failure: bool,
+) -> None:
+    now = datetime.now(UTC).replace(microsecond=0)
+    production = fixture("production", now)
+    development = fixture("development", now)
+    snapshots: dict[str, dict[str, Any]] = {
+        "costs.json": fixture("development", now - timedelta(days=1))
+    }
+    previous = snapshots["costs.json"]
+    s3 = Mock()
+
+    def listed(*, Prefix: str, **_: object) -> dict[str, Any]:
+        return {"Contents": [{"Key": Prefix}]} if Prefix in snapshots else {}
+
+    def read(*, Key: str, **_: object) -> dict[str, Any]:
+        return {"Body": io.BytesIO(json.dumps(snapshots[Key]).encode())}
+
+    def write(*, Key: str, Body: bytes, **_: object) -> None:
+        if Key == failure_key:
+            raise RuntimeError("private-secret publication-error")
+        snapshots[Key] = json.loads(Body)
+
+    s3.list_objects_v2.side_effect = listed
+    s3.get_object.side_effect = read
+    s3.put_object.side_effect = write
+
+    def client(name: str, **_: object) -> Mock:
+        return {
+            "s3": s3,
+            "ce": Mock(),
+            "ssm": Mock(
+                get_parameter=Mock(
+                    return_value={"Parameter": {"Value": "private-secret"}}
+                )
+            ),
+        }[name]
+
+    def openai(*_: object) -> dict[str, Any]:
+        # The independent AWS write must already have been attempted.
+        assert s3.put_object.call_args.kwargs["Key"] == costs.AWS_FEED_KEY
+        if openai_failure:
+            raise urllib.error.HTTPError(
+                costs.OPENAI_URL, 503, "private-secret", Message(), None
+            )
+        return development["sources"]["openai"]
+
+    monkeypatch.setattr(costs.boto3, "client", client)
+    monkeypatch.setattr(
+        costs, "collect_aws", Mock(return_value=source("development", now))
+    )
+    collector = Mock(side_effect=openai)
+    monkeypatch.setattr(costs, "collect_openai", collector)
+    monkeypatch.setenv("DEPLOYMENT_ENVIRONMENT", "development")
+    monkeypatch.setenv("COST_BUCKET", "tollchat-site-903859731897-dev")
+    context = SimpleNamespace(
+        invoked_function_arn="arn:aws:lambda:us-east-1:903859731897:function:test",
+        get_remaining_time_in_millis=lambda: 300000,
+    )
+    assert costs.handler({}, context) == {"status": "failed"}
+    assert [call.kwargs["Key"] for call in s3.put_object.call_args_list] == [
+        costs.AWS_FEED_KEY,
+        "costs.json",
+    ]
+    if openai_failure:
+        assert snapshots["costs.json"]["published_at"] == previous["published_at"]
+        assert snapshots["costs.json"]["month_to_date"] == previous["month_to_date"]
+        assert "COST_REFRESH_SUCCEEDED snapshot=dashboard" not in caplog.text
+    else:
+        assert snapshots["costs.json"]["attempt"]["status"] == "succeeded"
+        assert snapshots["costs.json"]["month_to_date"] == development["month_to_date"]
+        assert "COST_REFRESH_SUCCEEDED snapshot=dashboard" in caplog.text
+    assert "private-secret" not in caplog.text
+    if failure_key == costs.AWS_FEED_KEY:
+        assert "COST_REFRESH_SUCCEEDED snapshot=aws-feed" not in caplog.text
+        collector.assert_called_once()
+        assert snapshots["costs.json"]["attempt"]["status"] == (
+            "failed" if openai_failure else "succeeded"
+        )
+        return
+    feed = snapshots[costs.AWS_FEED_KEY]
+    assert (
+        feed["scope"] == "aws-development" and feed["attempt"]["status"] == "succeeded"
+    )
+    assert feed["sources"]["openai"]["status"] == "not_configured"
+    assert feed["requested"] == costs.requested(costs.periods(now.date()))
+    assert "COST_REFRESH_SUCCEEDED snapshot=aws-feed" in caplog.text
+    # Run the real production handler using this freshly published feed.
+    snapshots.pop("costs.json")
+    failure_key = None
+    monkeypatch.setenv("DEPLOYMENT_ENVIRONMENT", "production")
+    monkeypatch.setenv("COST_BUCKET", "tollchat-site-920534282028")
+    context.invoked_function_arn = "arn:aws:lambda:us-east-1:920534282028:function:test"
+    monkeypatch.setattr(costs, "get_json", Mock(return_value=feed))
+    monkeypatch.setattr(
+        costs, "collect_openai", Mock(return_value=production["sources"]["openai"])
+    )
+    monkeypatch.setattr(
+        costs, "collect_aws", Mock(return_value=production["sources"]["aws_production"])
+    )
+    assert costs.handler({}, context) == {"status": "succeeded"}
+    assert snapshots["costs.json"] == costs.validate_snapshot(
+        snapshots["costs.json"], "production", datetime.now(UTC)
+    )
+    assert snapshots["costs.json"]["month_to_date"] == production["month_to_date"]
+    assert (
+        snapshots["costs.json"]["sources"]["aws_development"]
+        == feed["sources"]["aws_development"]
+    )
 
 
 @pytest.mark.parametrize("minute", [0, 9, 30, 60])
@@ -354,14 +695,14 @@ def _strict_callback_2(s: dict[str, Any]) -> object:
 def test_reject_invalid_development_aggregates(
     mutate: Callable[[dict[str, Any]], object],
 ) -> None:
-    value = fixture("development")
+    value = aws_feed()
     mutate(value)
     with pytest.raises((ValueError, KeyError, TypeError)):
         costs.development_source(value, costs.requested(costs.periods(NOW.date())), NOW)
 
 
 def test_development_freshness_and_last_valid_retention() -> None:
-    dev = fixture("development")
+    dev = aws_feed()
     assert (
         costs.development_source(dev, dev["requested"], NOW)["scope"]
         == "development-account"
@@ -444,8 +785,10 @@ def test_handler_preserves_data_and_sanitizes_provider_failure(
     assert result["daily"] == previous["daily"]
     assert "secret" not in json.dumps(result)
     assert [record.getMessage() for record in caplog.records] == [
-        "COST_SOURCE_FAILED source=aws_development error=RuntimeError",
-        "COST_SOURCE_FAILED source=openai error=RuntimeError",
+        "COST_SOURCE_FAILED source=aws_development attempt=terminal error=RuntimeError status=None",
+        "COST_REFRESH_FAILED snapshot=aws-feed stage=collection error=UnavailableSource",
+        "COST_SOURCE_FAILED source=openai attempt=terminal error=RuntimeError status=None",
+        "COST_REFRESH_FAILED snapshot=dashboard stage=collection error=UnavailableSource",
     ]
     assert all(
         record.levelno == logging.WARNING and record.exc_info is None
@@ -458,9 +801,10 @@ def test_handler_preserves_data_and_sanitizes_provider_failure(
         {"Error": {"Code": "AccessDenied"}}, "GetObject"
     )
     s3.put_object.reset_mock()
-    with pytest.raises(RuntimeError, match="cost_snapshot_read_failed"):
-        costs.handler({}, context)
-    s3.put_object.assert_not_called()
+    assert costs.handler({}, context) == {"status": "failed"}
+    assert all(
+        call.kwargs["Key"] != "costs.json" for call in s3.put_object.call_args_list
+    )
     s3.list_objects_v2.return_value = {}
     s3.get_object.reset_mock()
     period = costs.requested(costs.periods(datetime.now(UTC).date()))
@@ -500,7 +844,7 @@ def test_legacy_development_and_production_do_not_double_count_openai() -> None:
         ).read_text()
     )
     dev = fixture("development")
-    for snapshot in (legacy, dev):
+    for snapshot in (legacy, aws_feed()):
         production = fixture()
         production["sources"]["aws_development"] = costs.development_source(
             snapshot, production["requested"], NOW

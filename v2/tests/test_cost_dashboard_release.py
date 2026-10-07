@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 from zipfile import ZipFile
 
 import pytest
-
 from scripts import cost_dashboard_release as gate
 from scripts import shared_packages
 
@@ -393,6 +392,7 @@ def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str) -
     account = gate.ACCOUNTS[environment]
     suffix = "-dev" if environment == "development" else ""
     source = (ROOT / "v2/infra/costs.tf").read_text()
+    source += "\n" + (ROOT / "infra/costs-delivery.tf").read_text()
     replacements = {
         "data.aws_caller_identity.current.account_id": json.dumps(account),
         "data.aws_region.current.region": '"us-east-1"',
@@ -404,6 +404,18 @@ def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str) -
             f"arn:aws:kms:us-east-1:{account}:key/{gate.SITE_KEYS[environment]}"
         ),
         "${path.module}/../agent/": str(ROOT / "v2/agent") + "/",
+        "var.foundation.alerts_topic_arn": json.dumps(
+            f"arn:aws:sns:us-east-1:{account}:nova-toll-alerts"
+        ),
+        **{
+            f"aws_iam_role.{role}[0].id": json.dumps(role)
+            for role in (
+                "development_delivery",
+                "development_plan",
+                "production_deploy",
+                "production_planner",
+            )
+        },
     }
     for old, new in replacements.items():
         source = source.replace(old, new)
@@ -454,6 +466,45 @@ locals {{
     plan: dict[str, Any] = next(
         item["test_plan"] for item in events if item["type"] == "test_plan"
     )
+    foundation = [row for row in plan["resource_changes"] if "_cost_" in row["address"]]
+    assert len(foundation) == 2
+    publications = ("dashboard", "aws-feed") if suffix else ("dashboard",)
+    name = "tollchat-v2-cost-publisher" + suffix
+    alarm_arns = {
+        f"arn:aws:cloudwatch:us-east-1:{account}:alarm:{name}-errors",
+        *(
+            f"arn:aws:cloudwatch:us-east-1:{account}:alarm:{name}-{publication}-{outcome}"
+            for publication in publications
+            for outcome in ("failed", "stale")
+        ),
+    }
+    log = f"arn:aws:logs:us-east-1:{account}:log-group:/aws/lambda/{name}"
+    for item in foundation:
+        statements = json.loads(item["change"]["after"]["policy"])["Statement"]
+        permissions = {
+            action: statement["Resource"]
+            for statement in statements
+            for action in statement["Action"]
+        }
+        assert set(permissions["cloudwatch:DescribeAlarms"]) == alarm_arns
+        assert set(permissions["cloudwatch:ListTagsForResource"]) == alarm_arns
+        assert set(permissions["logs:DescribeMetricFilters"]) == {log, log + ":*"}
+        assert not any(
+            action.startswith(("ssm:", "kms:", "ce:", "s3:")) for action in permissions
+        )
+        if "delivery" in item["address"]:
+            assert set(permissions["cloudwatch:PutMetricAlarm"]) == alarm_arns
+            assert set(permissions["cloudwatch:TagResource"]) == alarm_arns
+            assert set(permissions["cloudwatch:UntagResource"]) == alarm_arns
+            assert set(permissions["logs:PutMetricFilter"]) == {log, log + ":*"}
+        else:
+            assert not any(
+                action.startswith(("cloudwatch:Put", "logs:Put"))
+                for action in permissions
+            )
+    plan["resource_changes"] = [
+        row for row in plan["resource_changes"] if row not in foundation
+    ]
     # terraform test omits configuration in its verbose JSON. Supply the actual
     # expression inventory from this same tested source for omitted ACL proofs.
     resources: list[dict[str, Any]] = []
@@ -487,12 +538,43 @@ locals {{
             ("source_hash", base64.b64encode(b"a" * 32).decode()),
             ("kms_key_id", "foreign-key"),
             ("schedule_expression", "rate(1 minute)"),
+            ("alarm_actions", ["arn:aws:sns:us-east-1:000000000000:other"]),
+            ("actions_enabled", False),
+            ("evaluation_periods", 1),
+            ("datapoints_to_alarm", 1),
+            ("treat_missing_data", "ignore"),
+            ("threshold", 0),
+            ("pattern", '"COST_SOURCE_FAILED"'),
+            ("apply_on_transformed_logs", True),
         ):
-            if key in item["change"]["after"]:
+            if key in item["change"]["after"] and item["change"]["after"][key] != value:
                 bad = deepcopy(item)
                 bad["change"]["after"][key] = value
                 with pytest.raises(ValueError):
                     gate.validate(bad, environment, plan, package_evidence)
+        if item["address"].startswith("aws_cloudwatch_metric_alarm.costs_stale"):
+            for field, value in (
+                ("expression", "FILL(success, 1)"),
+                ("period", 86400),
+                ("stat", "Average"),
+            ):
+                bad = deepcopy(item)
+                for query in bad["change"]["after"]["metric_query"]:
+                    if field == "expression" and query["id"] == "filled":
+                        query[field] = value
+                    elif field != "expression" and query["id"] == "success":
+                        query["metric"][0][field] = value
+                with pytest.raises(ValueError):
+                    gate.validate(bad, environment, plan, package_evidence)
+            readback = deepcopy(item)
+            for query in readback["change"]["after"]["metric_query"]:
+                if query["id"] == "success":
+                    query["metric"][0]["dimensions"] = {}
+            gate.validate(readback, environment, plan, package_evidence)
+        if item["address"].startswith("aws_cloudwatch_log_metric_filter.costs_"):
+            readback = deepcopy(item)
+            readback["change"]["after"]["metric_transformation"][0]["dimensions"] = {}
+            gate.validate(readback, environment, plan, package_evidence)
         bad = deepcopy(item)
         bad["change"]["actions"] = ["delete"]
         with pytest.raises(ValueError):
@@ -542,7 +624,7 @@ locals {{
             "configuration": plan["configuration"],
         }
         records = legacy._parse_plan(plan, package_evidence)
-        assert len(records) == 12
+        assert len(records) == 21
         manifest = json.loads(
             (ROOT / "infra/development-release-manifest.json").read_text()
         )
@@ -749,8 +831,9 @@ def test_provider_report_routes_keep_known_defaults(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("environment", ["development", "production"])
 @pytest.mark.parametrize("phase", ["prepare", "promote", "recover"])
+@pytest.mark.parametrize("legacy_schedule", [False, True])
 def test_first_billing_refresh_preserves_release_authority(
-    environment: str, phase: str
+    environment: str, phase: str, legacy_schedule: bool
 ) -> None:
     if TYPE_CHECKING:
         import test_blue_green as rehearsal
@@ -764,9 +847,9 @@ def test_first_billing_refresh_preserves_release_authority(
             "name": name,
             "event_bus_name": "default",
             "state": "ENABLED",
-            "schedule_expression": "cron(0 8 * * ? *)"
+            "schedule_expression": "cron(0 8,12 * * ? *)"
             if suffix
-            else "cron(0 9 * * ? *)",
+            else "cron(0 9,13 * * ? *)",
             "is_enabled": True,
             "tags": None,
         },
@@ -871,6 +954,10 @@ def test_first_billing_refresh_preserves_release_authority(
             )
         before[address] = asset_values
     drifts: list[dict[str, Any]] = []
+    if legacy_schedule:
+        before["aws_cloudwatch_event_rule.costs"]["schedule_expression"] = (
+            "cron(0 8 * * ? *)" if suffix else "cron(0 9 * * ? *)"
+        )
     for address, resource in before.items():
         after = deepcopy(resource)
         for field in ("tags", "metadata"):
@@ -922,6 +1009,7 @@ def test_first_billing_refresh_preserves_release_authority(
             with pytest.raises(rehearsal.gate.Rejected, match="incomplete_or_drift"):
                 rehearsal.gate.validate_plan(document, state, phase)
         for field, value in (
+            ("schedule_expression", "rate(1 minute)"),
             ("tags", {"extra": "tag"}),
             ("metadata", {"extra": "metadata"}),
             ("layers", [{"arn": "unreviewed"}]),
@@ -942,12 +1030,37 @@ def test_first_billing_refresh_preserves_release_authority(
         legacy_policy["Statement"] = [
             row
             for row in legacy_policy["Statement"]
-            if row["Sid"] not in {"ReadBillingKey", "DecryptBillingKey"}
+            if row["Sid"]
+            not in {
+                "ReadBillingKey",
+                "DecryptBillingKey",
+                "PublishAwsFeed",
+                "FindAwsFeed",
+            }
         ]
         legacy = [{"name": name, "policy": json.dumps(legacy_policy)}]
         for old, new in (
             ([], legacy),
             (legacy, role["change"]["after"]["inline_policy"]),
+            (
+                [
+                    {
+                        "name": name,
+                        "policy": json.dumps(
+                            {
+                                **gate.policy(environment),
+                                "Statement": [
+                                    row
+                                    for row in gate.policy(environment)["Statement"]
+                                    if row["Sid"]
+                                    not in {"PublishAwsFeed", "FindAwsFeed"}
+                                ],
+                            }
+                        ),
+                    }
+                ],
+                role["change"]["after"]["inline_policy"],
+            ),
         ):
             transition = deepcopy(role)
             transition["change"]["before"]["inline_policy"] = old
@@ -991,3 +1104,24 @@ def test_first_billing_refresh_preserves_release_authority(
         document["resource_drift"] = [bad]
         with pytest.raises(rehearsal.gate.Rejected, match="incomplete_or_drift"):
             rehearsal.gate.validate_plan(document, state, phase)
+    if legacy_schedule:
+        schedule = next(
+            drift
+            for drift in drifts
+            if drift["address"] == "aws_cloudwatch_event_rule.costs"
+        )
+        after = dict(
+            schedule["change"]["after"],
+            schedule_expression="cron(0 8,12 * * ? *)"
+            if suffix
+            else "cron(0 9,13 * * ? *)",
+        )
+        document["resource_drift"] = drifts
+        document["resource_changes"].append(
+            rehearsal.change(schedule["address"], schedule["change"]["after"], after)
+        )
+        if phase == "prepare":
+            rehearsal.gate.validate_plan(document, state, phase)
+        else:
+            with pytest.raises(rehearsal.gate.Rejected):
+                rehearsal.gate.validate_plan(document, state, phase)

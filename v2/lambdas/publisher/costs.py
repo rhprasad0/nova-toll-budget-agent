@@ -7,22 +7,26 @@ import json
 import logging
 import os
 import re
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
 from collections.abc import Callable, Iterable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, getcontext
+from email.utils import parsedate_to_datetime
 from typing import Any, cast
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 getcontext().prec = 80
-DEVELOPMENT_URL = "https://dev.tollchat.ai/costs.json"
+AWS_FEED_KEY = "assets/costs-aws.json"
+DEVELOPMENT_URL = "https://dev.tollchat.ai/" + AWS_FEED_KEY
 OPENAI_URL = "https://api.openai.com/v1/organization/costs"
 BILLING_KEY = "/nova-toll/openai_billing_api_key"
 ACCOUNTS = {"development": "903859731897", "production": "920534282028"}
@@ -300,7 +304,25 @@ def decode(raw: bytes) -> dict[str, Any]:
     return cast(dict[str, Any], result)
 
 
-def get_json(url: str, key: str | None = None) -> dict[str, Any]:
+def retry_delay(error: Exception, default: float) -> float:
+    if isinstance(error, urllib.error.HTTPError):
+        value = error.headers.get("Retry-After", "") if error.headers else ""
+        try:
+            if re.fullmatch(r"\d+", value):
+                return min(int(value), 30)
+            retry_at = parsedate_to_datetime(value)
+            if retry_at.tzinfo is not None:
+                return min(max((retry_at - datetime.now(UTC)).total_seconds(), 0), 30)
+        except (ValueError, TypeError, OverflowError):
+            pass
+    return default
+
+
+def get_json(
+    url: str,
+    key: str | None = None,
+    budget: Callable[[float], None] = lambda seconds: None,
+) -> dict[str, Any]:
     parsed = urllib.parse.urlsplit(url)
     base = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
     require(base in {DEVELOPMENT_URL, OPENAI_URL} and not parsed.fragment)
@@ -308,18 +330,49 @@ def get_json(url: str, key: str | None = None) -> dict[str, Any]:
     request = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {key}"} if key else {}
     )
-    with urllib.request.build_opener(NoRedirect()).open(
-        request, timeout=20
-    ) as response:
-        require(response.status == 200 and response.url == url)
-        return decode(response.read(MAX_BODY + 1))
+    source = "openai" if base == OPENAI_URL else "aws_development"
+    for attempt in range(1, 4):
+        budget(20)
+        status: int | None = None
+        try:
+            with urllib.request.build_opener(NoRedirect()).open(
+                request, timeout=20
+            ) as response:
+                status = response.status
+                require(status == 200 and response.url == url)
+                return decode(response.read(MAX_BODY + 1))
+        except Exception as error:
+            if isinstance(error, urllib.error.HTTPError):
+                status = error.code
+            logger.warning(
+                "COST_REQUEST_FAILED source=%s attempt=%d error=%s status=%s",
+                source,
+                attempt,
+                type(error).__name__,
+                status,
+            )
+            if (
+                not isinstance(
+                    error, (urllib.error.URLError, ConnectionError, TimeoutError)
+                )
+                or attempt == 3
+                or (
+                    isinstance(error, urllib.error.HTTPError)
+                    and status not in {408, 429, 500, 502, 503, 504}
+                )
+            ):
+                raise
+            delay = retry_delay(error, (2, 5)[attempt - 1])
+            budget(delay + 20)
+            time.sleep(delay)
+    raise RuntimeError("billing_request_failed")
 
 
 def collect_openai(
     key: str,
     period: dict[str, str],
     retrieved: str,
-    budget: Callable[[], None] = lambda: None,
+    budget: Callable[[float], None] = lambda seconds=0: None,
 ) -> dict[str, Any]:
     query: dict[str, Any] = {
         "start_time": int(timestamp(period["start"] + "T00:00:00Z").timestamp()),
@@ -331,8 +384,9 @@ def collect_openai(
     tokens: set[str] = set()
     expected = set(dates(period))
     while True:
-        budget()
-        response = get_json(OPENAI_URL + "?" + urllib.parse.urlencode(query), key)
+        response = get_json(
+            OPENAI_URL + "?" + urllib.parse.urlencode(query), key, budget
+        )
         require(isinstance(response["data"], list))
         for bucket in response["data"]:
             start, end = bucket["start_time"], bucket["end_time"]
@@ -528,7 +582,9 @@ def development_source(
 ) -> dict[str, Any]:
     snapshot = validate_snapshot(value, "development", now)
     require(
-        snapshot["requested"] == period and snapshot["attempt"]["status"] == "succeeded"
+        snapshot["scope"] == "aws-development"
+        and snapshot["requested"] == period
+        and snapshot["attempt"]["status"] == "succeeded"
     )
     source = snapshot["sources"]["aws_development"]
     require(source["status"] == "available")
@@ -544,7 +600,9 @@ def build_snapshot(
     previous: dict[str, Any] | None = None,
     *,
     published_at: datetime | None = None,
+    aws_only: bool = False,
 ) -> dict[str, Any]:
+    require(not aws_only or environment == "development")
     published_at = published_at or now
     statuses = {name: source["status"] for name, source in sources.items()}
     attempt = {
@@ -554,7 +612,8 @@ def build_snapshot(
     }
     if previous is not None and attempt["status"] == "failed":
         result = copy.deepcopy(validate_snapshot(previous, environment, published_at))
-        if result["scope"] == "aws-development":
+        require(not aws_only or result["scope"] == "aws-development")
+        if result["scope"] == "aws-development" and not aws_only:
             # Migrate retained AWS-only data without claiming a fresh publication.
             result["scope"] = "aws-development+openai-organization"
             result["sources"]["openai"] = blank_source("openai", result["requested"])
@@ -567,6 +626,8 @@ def build_snapshot(
             "environment": environment,
             "scope": "aws-production+aws-development+openai-organization"
             if environment == "production"
+            else "aws-development"
+            if aws_only
             else "aws-development+openai-organization",
             "currency": "USD",
             "periods": windows,
@@ -577,6 +638,69 @@ def build_snapshot(
             **summarize(sources, windows),
         }
     return validate_snapshot(result, environment, published_at)
+
+
+def publish_snapshot(
+    s3: Any,  # noqa: ANN401 - boto3 service client
+    bucket: str,
+    key: str,
+    environment: str,
+    now: datetime,
+    sources: dict[str, Any],
+    *,
+    aws_only: bool = False,
+) -> str:
+    snapshot = "aws-feed" if aws_only else "dashboard"
+    previous = None
+    try:
+        # A prefix-scoped ListBucket grant does not guarantee GetObject returns
+        # 404 for missing keys. Check existence explicitly before reading.
+        objects = s3.list_objects_v2(Bucket=bucket, Prefix=key, MaxKeys=1)
+        if any(row["Key"] == key for row in objects.get("Contents", [])):
+            stored = s3.get_object(Bucket=bucket, Key=key)["Body"]
+            try:
+                try:
+                    previous = validate_snapshot(
+                        decode(stored.read(MAX_BODY + 1)),
+                        environment,
+                        datetime.now(UTC),
+                    )
+                    require(not aws_only or previous["scope"] == "aws-development")
+                except (ValueError, KeyError, TypeError):
+                    # Invalid prior public data cannot become a last-valid snapshot.
+                    previous = None
+            finally:
+                stored.close()
+        result = build_snapshot(
+            environment,
+            now,
+            sources,
+            previous,
+            published_at=datetime.now(UTC).replace(microsecond=0),
+            aws_only=aws_only,
+        )
+        s3.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=json.dumps(result, separators=(",", ":")).encode(),
+            ContentType="application/json; charset=utf-8",
+            CacheControl="no-cache",
+        )
+    except Exception as error:
+        logger.warning(
+            "COST_REFRESH_FAILED snapshot=%s stage=publication error=%s",
+            snapshot,
+            type(error).__name__,
+        )
+        return "failed"
+    if result["attempt"]["status"] == "succeeded":
+        logger.info("COST_REFRESH_SUCCEEDED snapshot=%s", snapshot)
+    else:
+        logger.warning(
+            "COST_REFRESH_FAILED snapshot=%s stage=collection error=UnavailableSource",
+            snapshot,
+        )
+    return result["attempt"]["status"]
 
 
 def handler(_event: dict[str, Any], context: object) -> dict[str, str]:
@@ -593,32 +717,17 @@ def handler(_event: dict[str, Any], context: object) -> dict[str, str]:
         connect_timeout=3, read_timeout=10, retries={"total_max_attempts": 2}
     )
     s3 = cast(Any, boto3).client("s3", config=config)
-    previous = None
-    try:
-        # A prefix-scoped ListBucket grant does not guarantee GetObject returns
-        # 404 for missing keys. Check existence explicitly before reading.
-        objects = s3.list_objects_v2(Bucket=bucket, Prefix="costs.json", MaxKeys=1)
-        if any(row["Key"] == "costs.json" for row in objects.get("Contents", [])):
-            stored = s3.get_object(Bucket=bucket, Key="costs.json")["Body"]
-            try:
-                previous = validate_snapshot(
-                    decode(stored.read(MAX_BODY + 1)), environment, datetime.now(UTC)
-                )
-            finally:
-                stored.close()
-    except ClientError:
-        raise RuntimeError("cost_snapshot_read_failed") from None
-    except (ValueError, KeyError, TypeError):
-        # Invalid prior public data cannot become a last-valid snapshot.
-        previous = None
     now = datetime.now(UTC).replace(microsecond=0)
     period = requested(periods(now.date()))
     sources = {name: blank_source(name, period) for name in source_ids(environment)}
 
-    def budget() -> None:
+    def budget(seconds: float = 0) -> None:
         # Reserve time to publish a sanitized failed attempt after provider I/O.
-        require(runtime_context.get_remaining_time_in_millis() >= 60000)
+        require(
+            runtime_context.get_remaining_time_in_millis() >= 60000 + seconds * 1000
+        )
 
+    feed_status = "succeeded"
     for name in sources:
         try:
             budget()
@@ -634,7 +743,7 @@ def handler(_event: dict[str, Any], context: object) -> dict[str, str]:
                 )
             elif name == "aws_development":
                 sources[name] = development_source(
-                    get_json(DEVELOPMENT_URL), period, now
+                    get_json(DEVELOPMENT_URL, budget=budget), period, datetime.now(UTC)
                 )
             else:
                 secret = (
@@ -652,21 +761,30 @@ def handler(_event: dict[str, Any], context: object) -> dict[str, str]:
         except Exception as error:
             # Provider exceptions can contain credentials, URLs, IDs, or raw bodies.
             logger.warning(
-                "COST_SOURCE_FAILED source=%s error=%s", name, type(error).__name__
+                "COST_SOURCE_FAILED source=%s attempt=terminal error=%s status=%s",
+                name,
+                type(error).__name__,
+                error.code if isinstance(error, urllib.error.HTTPError) else None,
             )
             sources[name] = blank_source(name, period)
-    result = build_snapshot(
-        environment,
-        now,
-        sources,
-        previous,
-        published_at=datetime.now(UTC).replace(microsecond=0),
+        if environment == "development" and name == "aws_development":
+            feed_status = publish_snapshot(
+                s3,
+                bucket,
+                AWS_FEED_KEY,
+                environment,
+                now,
+                {
+                    "aws_development": sources[name],
+                    "openai": blank_source("openai", period, True),
+                },
+                aws_only=True,
+            )
+    dashboard_status = publish_snapshot(
+        s3, bucket, "costs.json", environment, now, sources
     )
-    s3.put_object(
-        Bucket=bucket,
-        Key="costs.json",
-        Body=json.dumps(result, separators=(",", ":")).encode(),
-        ContentType="application/json; charset=utf-8",
-        CacheControl="no-cache",
-    )
-    return {"status": result["attempt"]["status"]}
+    return {
+        "status": "failed"
+        if "failed" in (feed_status, dashboard_status)
+        else "succeeded"
+    }
