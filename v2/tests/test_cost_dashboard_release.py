@@ -127,6 +127,12 @@ def test_asset_pins_and_archive_contract() -> None:
     assert not (ROOT / "v2/prototypes").exists()
     archive = ROOT / "v2/infra/build/publisher.zip"
     if archive.exists():
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        for record in (
+            ROOT / "infra/development-release-manifest.json",
+            ROOT / "v2/scripts/shared-package-compatibility.json",
+        ):
+            assert json.loads(record.read_text())["packages"]["publisher.zip"] == digest
         with ZipFile(archive) as bundle:
             assert (
                 bundle.read("costs.py")
