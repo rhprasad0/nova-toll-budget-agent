@@ -309,7 +309,8 @@ def retry_delay(error: Exception, default: float) -> float:
         value = error.headers.get("Retry-After", "") if error.headers else ""
         try:
             if re.fullmatch(r"\d+", value):
-                return min(int(value), 30)
+                seconds = value.lstrip("0") or "0"
+                return 30 if len(seconds) > 2 else min(int(seconds), 30)
             retry_at = parsedate_to_datetime(value)
             if retry_at.tzinfo is not None:
                 return min(max((retry_at - datetime.now(UTC)).total_seconds(), 0), 30)

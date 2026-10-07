@@ -199,7 +199,16 @@ def test_https_permanent_errors_are_not_retried(
 
 
 @pytest.mark.parametrize(
-    "value,expected", [("7", 7), ("999", 30), ("0", 0), ("-1", 2), ("garbage", 2)]
+    "value,expected",
+    [
+        ("7", 7),
+        ("999", 30),
+        ("9" * 5000, 30),
+        ("0" * 5000 + "7", 7),
+        ("0", 0),
+        ("-1", 2),
+        ("garbage", 2),
+    ],
 )
 def test_https_retry_after(
     monkeypatch: pytest.MonkeyPatch, value: str, expected: float

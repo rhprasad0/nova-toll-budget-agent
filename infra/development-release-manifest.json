@@ -163,7 +163,7 @@
     "v2/lambdas/loader/handler.py": "2c490f11eb538d8e6e39c689d503b18f47b5e4ddeec62a1458e88ff6e976aac5",
     "v2/lambdas/loader/parse_csv.py": "313d5d0843f9e884e7649dc66da3ebc5cdb015e2484899f4152d5ab9fb7b19ac",
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
-    "v2/lambdas/publisher/costs.py": "d463012093f03cb94afd7c394836b313879f5d6ae287f2954940b60f67ca12ed",
+    "v2/lambdas/publisher/costs.py": "40f0732c1a929f346898c4b8118805d64a5037aa27d536578687b30520651afc",
     "v2/lambdas/publisher/handler.py": "7ff9042626aedd46513868023496a71fab324f593a2f4c09f986dec15027e5fd",
     "v2/lambdas/timed_checks/handler.py": "b7f952df617bddccc03d4e34245a40b49fdb66f4af74e4f1ed884540221ae3ea",
     "v2/pyproject.toml": "c2428ed9608ab151665f6e1578a24ba15800c6e51f88f25701f51a2097feb009",
