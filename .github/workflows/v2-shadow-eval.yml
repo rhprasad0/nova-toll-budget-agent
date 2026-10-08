@@ -19,7 +19,7 @@ permissions:
 jobs:
   evaluate:
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
       id-token: write
@@ -59,6 +59,7 @@ jobs:
           python-version: ${{ inputs.python_version }}
       - run: uv sync --locked
       - name: Verify harness approval before credentials
+        id: approval
         run: uv run python -m eval.shadow_ci prepare --verify-runtime
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         with:
@@ -89,4 +90,23 @@ jobs:
             echo 'Shadow evaluation did not produce a usable report. See the job logs; no score is available. The pass^3 gate failed.' >>"$GITHUB_STEP_SUMMARY"
             echo '::error::Shadow evaluation did not produce a usable report.'
             exit 1
+          fi
+      - name: Compare Decisions scores (informational)
+        if: ${{ !cancelled() && steps.approval.outcome == 'success' }}
+        continue-on-error: true
+        timeout-minutes: 4
+        working-directory: .
+        run: |
+          if timeout --kill-after=5s 180s uv run --directory v2 python -m eval.decisions_ci \
+            --output "$RUNNER_TEMP/shadow-run" --budget-usd 2 >"$RUNNER_TEMP/decisions-score.json"; then
+            cat "$RUNNER_TEMP/decisions-score.json"
+            {
+              echo '### Decisions comparison (informational; native gate unchanged)'
+              echo 'Predicate threshold: 0.5. Grades are uncalibrated. Native judge latency sums judge calls per trial; Decisions latency is one request for three criteria.'
+              echo '```json'
+              cat "$RUNNER_TEMP/decisions-score.json"
+              echo '```'
+            } >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Decisions comparison unavailable or timed out. This does not affect the native pass^3 gate.' >>"$GITHUB_STEP_SUMMARY"
           fi

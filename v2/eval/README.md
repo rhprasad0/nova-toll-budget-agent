@@ -72,6 +72,13 @@ This is the measured share of passing triples, not the cube of the pooled trial
 pass rate. Below-threshold scores, incomplete measurements and execution errors
 fail CI; the summary and logs retain the score, completeness and accounted cost.
 
+After native evaluation, an **informational Decisions comparison** scores the
+same traces with Outcome, Grounding and Rules predicates. Four requests run
+concurrently, with a 0.5 probability threshold. It reports agreement, disagreement
+direction, pass³, grading latency and cost. It uses only the remainder of the
+same $2 cap; incomplete or unavailable comparisons never affect the native gate.
+Raw evidence stays in runner temporary storage. These grades are uncalibrated.
+
 The host exports the public receipt from the one approved combined calibration;
 it contains hashes, runtime, planned split counts and approval provenance, with
 no holdout cases or detailed evidence. Hosted CI selects its exact Python version

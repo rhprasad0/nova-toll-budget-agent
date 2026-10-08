@@ -304,13 +304,44 @@ The job summary identifies the candidate, pass³, successful trial count,
 measured and inconclusive counts, completeness and accounted cost. Readiness
 and evaluation are required PR checks.
 
+An informational comparison then sends the same eligible traces to OpenAI's
+Decisions API (`gpt-6-luna`), asking independent Outcome, Grounding and Rules
+predicates in one request per trial. It reuses the grading policy and public case
+evidence, without native judge verdicts or private simulator profiles. Native
+actor validity remains a shared eligibility check; monetary claims are assessed
+independently. Four requests run concurrently, with no automatic retries and a
+three-minute process deadline. A predicate passes at probability ≥0.5; this
+initial threshold is uncalibrated and never controls merging.
+Agreement measures consistency with native grades, not grader correctness.
+
+The summary compares grades, measured pass³, per-criterion agreement and
+disagreement direction, grading costs and per-trial latency. Native judge latency
+is the sum of judge calls for that trial; Decisions latency covers one request
+for all three predicates. Native spending takes priority under the **same $2
+total cap**. Requests reserve conservative input costs before dispatch, including
+in-flight requests. Unknown usage retains the reserved maximum and stops further
+requests. Missing measurements suppress the comparison's headline pass rate and
+pass³. Detailed results stay beside the native run in temporary `decisions.json`;
+only aggregate diagnostics enter CI logs and summaries. API errors, refusals,
+budget exhaustion and timeouts leave the native gate result intact.
+
+For a local comparison of an existing shadow run (one paid attempt per trace):
+
+```bash
+uv run python -m eval.decisions_ci --output eval/private/shadow-run --budget-usd 2
+```
+
+The budget includes the existing native run's accounted cost. The command refuses
+to overwrite an existing `decisions.json`, preventing an accidental paid rerun.
+
 Provision the development-only role defined in `infra/shadow_eval.tf` to activate
 paid evaluation.
 It can read only `/nova-toll/openai_api_key` from development SSM and grants no
 database, deployment or holdout storage access. The role's OIDC trust admits
 only the credential owner's same-repository PR runs using the pinned evaluator
 definition. When changing that workflow, update its commit pin in both CI and
-the role's trust policy.
+the role's trust policy. Retain the previous approved pin while the lower PR in
+a stack or active main workflow still uses it.
 Forks, main and tag pushes do not run paid shadow evaluations. Readiness checks
 run without these credentials.
 Shadow CI evidence is regression feedback outside the training search loop.
