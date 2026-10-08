@@ -9,10 +9,28 @@ The parent owns admission, paid runs, spending and selection. Named agents diagn
 implement and independently review. Honor the user's existing authorization;
 this skill alone grants no spending, push, PR, merge or deployment permission.
 
+## Inputs and discovery
+
+The only path the user must supply is the **external holdout corpus path**.
+Discover other setup from the checkout, session context and available metadata:
+the active training split, approved public harness receipt, accounting ledgers
+and prior-run references, runtime/source bindings, and existing AWS/SSM settings.
+Choose fresh ignored local artifact/feedback paths and a new external checkpoint
+directory beside the supplied corpus; do not require the user to name them.
+Reuse existing authorization and approvals, asking only for genuinely missing
+authorization or information that cannot be discovered.
+
+Discovery may use public records and trusted aggregate feedback, including
+references to external accounting checkpoints. The native runner verifies the
+private accounting chain. This does not permit direct inspection of holdout
+cases, detailed reports, transcripts or calibration evidence, or bypassing the
+holdout guard. Never search for or infer a different holdout corpus.
+
 ## Contract and roles
 
-Search uses the **active locally authored training split × one repetition** on harness
-2.5.0. The first contract has 50 training cases; derive counts from its manifest.
+Search uses the **active locally authored training split × one repetition**.
+Discover the approved harness version from its public receipt and case counts
+from the active manifest.
 Use three repetitions only when Ryan explicitly requests them. Freeze the chosen
 repetition count for the entire campaign. The objective is successful trials
 divided by all expected training slots. Fully measured
@@ -185,10 +203,12 @@ when substantial and a new measurement baseline when semantics change.
 
 ## Aggregate-only holdout diagnostics
 
-Require operator-supplied external corpus/output paths, the approved harness
-receipt, and an authorized spending ceiling. Never discover holdout paths or
-perform calibration/input review yourself. The parent may run this CLI, which
-keeps all hidden details and failures on the host and prints safe aggregate JSON:
+Use the user-supplied external holdout corpus path. Discover the approved public
+harness receipt and prior accounting references, reuse the authorized spending
+ceiling, and choose a fresh external output directory as described above.
+Do not perform hidden calibration/input review yourself. The parent may run this
+CLI, which keeps all hidden details and failures on the host and prints safe
+aggregate JSON:
 
 ```bash
 uv run python -m eval.golden_run run --corpus ABS_EXTERNAL_HOLDOUT \
