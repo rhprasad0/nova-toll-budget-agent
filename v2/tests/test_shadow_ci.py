@@ -1,6 +1,7 @@
 """Shadow CI validates inputs before credentials and reports results without gating."""
 
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -34,8 +35,9 @@ def test_shadow_workflow_uses_approved_runtime_before_fixed_read_only_role() -> 
     assert "head.repo.full_name == github.repository" in job["if"]
     assert "github.event_name == 'pull_request'" in job["if"]
     assert "outputs.ready == 'true'" in job["if"]
-    assert job["uses"] == (
-        "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@main"
+    assert re.fullmatch(
+        r"rhprasad0/nova-toll-budget-agent/\.github/workflows/v2-shadow-eval\.yml@[0-9a-f]{40}",
+        job["uses"],
     )
     assert ci["jobs"]["shadow-readiness"]["continue-on-error"] is True
     workflow = yaml.safe_load(
@@ -100,7 +102,7 @@ def test_shadow_workflow_uses_approved_runtime_before_fixed_read_only_role() -> 
     policy = (root / "infra/shadow_eval.tf").read_text()
     assert 'Action   = ["ssm:GetParameter"]' in policy
     assert "parameter/nova-toll/openai_api_key" in policy
-    assert "v2-shadow-eval.yml@refs/heads/main" in policy
+    assert job["uses"] in policy
     assert '1306930324:pull_request"' in policy
     assert "golden-evaluation" not in policy
     assert "refs/pull" not in policy and "gh-readonly-queue" not in policy
