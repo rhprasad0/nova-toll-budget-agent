@@ -18,7 +18,9 @@ AWS_PROFILE=nova-toll-dev terraform -chdir=infra init -backend=false -input=fals
 AWS_PROFILE=nova-toll-dev terraform -chdir=infra validate
 ```
 
-Pull-request checks remain credential-free. Load any runtime-only credentials
+Pull-request infrastructure checks remain credential-free. The informational
+[shadow evaluation](eval/README.md#shadow-ci) reads only the development model
+credential through its pinned workflow. Load any runtime-only credentials
 from SSM into the process environment; never place them in Terraform variables,
 plans, state evidence, or documentation.
 

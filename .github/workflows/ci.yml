@@ -17,6 +17,7 @@ concurrency:
 jobs:
   shadow-readiness:
     runs-on: ubuntu-latest
+    continue-on-error: true
     outputs:
       ready: ${{ steps.prepare.outputs.ready }}
       python: ${{ steps.prepare.outputs.python }}
@@ -39,6 +40,24 @@ jobs:
           jq -r '"ready=\(.ready)", "python=\(.python // "")", "runner=\(.runner // "")"' \
             "$RUNNER_TEMP/shadow-readiness.json" >>"$GITHUB_OUTPUT"
           cat "$RUNNER_TEMP/shadow-readiness.json"
+      - name: Report unavailable shadow inputs
+        if: failure()
+        run: echo 'Shadow evaluation could not start because its inputs or calibration receipt are invalid. See the readiness logs. This diagnostic is informational.' >>"$GITHUB_STEP_SUMMARY"
+
+  shadow-evaluation:
+    needs: shadow-readiness
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      needs.shadow-readiness.outputs.ready == 'true'
+    uses: rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@main
+    with:
+      candidate_sha: ${{ github.event.pull_request.head.sha }}
+      python_version: ${{ needs.shadow-readiness.outputs.python }}
+      runner: ${{ needs.shadow-readiness.outputs.runner }}
+    permissions:
+      contents: read
+      id-token: write
 
   golden-artifact-smoke:
     runs-on: ubuntu-24.04-arm

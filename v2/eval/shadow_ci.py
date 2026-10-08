@@ -1,4 +1,4 @@
-"""Prepare the shadow CI job and require a complete ten-case application result."""
+"""Prepare shadow CI and report measured or incomplete ten-case application results."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def prepare(*, verify_runtime: bool = False) -> dict[str, Any]:
     }
 
 
-def check(directory: Path) -> dict[str, Any]:
+def report(directory: Path) -> dict[str, Any]:
     report = run.render(directory)
     identity = report["manifest"]["identity"]
     expected = corpus.CONTRACT["splits"]["shadow"]["count"]
@@ -53,33 +53,35 @@ def check(directory: Path) -> dict[str, Any]:
         or identity["corpus"].get("evaluation_scope") != "shadow"
         or len(identity["cases"]) != expected
         or len(run.report_trials(identity)) != 1
-        or not report["full_corpus_complete"]
-        or report["overall"]["scored_trials"] != expected
     ):
-        raise ValueError("shadow CI requires ten complete measured application trials")
+        raise ValueError("shadow CI requires a ten-case, one-trial shadow run")
     return {
         "source_commit": identity["commit"],
         "passed": report["overall"]["successful_trials"],
         "expected_trials": expected,
         "pass_rate": report["overall"]["overall_pass_rate"],
-        "complete": True,
+        "scored_trials": report["overall"]["scored_trials"],
+        "inconclusive_trials": report["overall"]["inconclusive_trials"],
+        "complete": report["full_corpus_complete"]
+        and report["overall"]["scored_trials"] == expected,
+        "failure_counts": report["overall"]["failure_counts"],
         "cost_usd": sum(report["overall"]["cost_usd"].values()),
     }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("prepare", "check"))
+    parser.add_argument("mode", choices=("prepare", "report"))
     parser.add_argument("--output", type=Path)
     parser.add_argument("--verify-runtime", action="store_true")
     args = parser.parse_args()
-    if args.mode == "check" and args.output is None:
-        parser.error("check requires --output")
+    if args.mode == "report" and args.output is None:
+        parser.error("report requires --output")
     print(
         json.dumps(
             prepare(verify_runtime=args.verify_runtime)
             if args.mode == "prepare"
-            else check(args.output)
+            else report(args.output)
         )
     )
 
