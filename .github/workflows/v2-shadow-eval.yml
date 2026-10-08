@@ -34,6 +34,7 @@ jobs:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           EVENT_SHA: ${{ github.event.pull_request.head.sha }}
           EVENT_NAME: ${{ github.event_name }}
+          ACTOR_ID: ${{ github.actor_id }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           EVENT_REPOSITORY: ${{ github.repository }}
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
@@ -42,6 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$EVENT_NAME" = pull_request
+          test "$ACTOR_ID" = 91573985
           test "$WORKFLOW_REF" = "$EVENT_REPOSITORY/.github/workflows/ci.yml@$GITHUB_REF"
           test "$EVENT_REPOSITORY" = rhprasad0/nova-toll-budget-agent
           test "$HEAD_REPOSITORY" = "$EVENT_REPOSITORY"
