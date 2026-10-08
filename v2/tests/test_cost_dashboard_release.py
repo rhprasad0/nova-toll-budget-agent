@@ -154,6 +154,39 @@ def test_asset_pins_and_archive_contract() -> None:
             )
 
 
+def test_reviewed_billing_diagnostics_development_transition() -> None:
+    reviewed = json.loads(
+        (ROOT / "v2/scripts/shared-package-compatibility.json").read_text()
+    )
+    baseline = "4a62cfa1fc35737da91cc104d68756ebd7dcb113"
+    assert reviewed["development_baseline"] == baseline
+    expected = shared_packages.evidence(
+        "development", gate.ACCOUNTS["development"], "a" * 40, reviewed["packages"]
+    )
+    schemas = {
+        name: hashlib.sha256((ROOT / "v2/db" / name).read_bytes()).hexdigest()
+        for name in shared_packages.SCHEMAS
+    }
+    assert (
+        shared_packages.validate_compatibility(
+            reviewed, expected, baseline, schemas, changing=True
+        )["status"]
+        == "reviewed"
+    )
+    for stale in ("74820fcdefc898d41c0c1b72a2528cae01fc8776", "b" * 40):
+        with pytest.raises(ValueError, match="shared_compatibility"):
+            shared_packages.validate_compatibility(
+                reviewed, expected, stale, schemas, changing=True
+            )
+    production = shared_packages.evidence(
+        "production", gate.ACCOUNTS["production"], "a" * 40, reviewed["packages"]
+    )
+    with pytest.raises(ValueError, match="shared_compatibility"):
+        shared_packages.validate_compatibility(
+            reviewed, production, baseline, schemas, changing=True
+        )
+
+
 @pytest.mark.parametrize("environment", ["development", "production"])
 def test_billing_policy_limits(environment: str) -> None:
     statements = {row["Sid"]: row for row in gate.policy(environment)["Statement"]}
