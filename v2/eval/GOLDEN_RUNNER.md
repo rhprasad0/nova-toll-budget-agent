@@ -291,7 +291,9 @@ Regular PR CI runs `shadow-readiness` to validate the public shadow inputs and
 approval receipt. It reports "awaiting authored public cases and harness approval"
 when neither exists; partial or unreviewed inputs produce a diagnostic. When
 ready, `shadow-evaluation` automatically runs all ten cases once on the exact PR
-candidate. Its reusable workflow is pinned to an immutable commit and selects
+candidate for updates initiated by `rhprasad0`. This account already owns the
+development credential; other contributors receive only offline readiness
+checks. Its reusable workflow is pinned to an immutable commit and selects
 the receipt's exact Python version and architecture, verifying the evaluator
 before credentials. There is no deployment or environment approval.
 Each job has a fresh **$2 spending ceiling**. Scores, missing measurements,
@@ -304,8 +306,9 @@ Provision the development-only role defined in `infra/shadow_eval.tf` to activat
 paid evaluation.
 It can read only `/nova-toll/openai_api_key` from development SSM and grants no
 database, deployment or holdout storage access. The role's OIDC trust admits
-same-repository PRs using only the pinned evaluator definition. When changing
-that workflow, update its commit pin in both CI and the role's trust policy.
+only the credential owner's same-repository PR runs using the pinned evaluator
+definition. When changing that workflow, update its commit pin in both CI and
+the role's trust policy.
 Forks, main and tag pushes do not run paid shadow evaluations. Readiness checks
 run without these credentials.
 Shadow CI evidence is regression feedback outside the training search loop.

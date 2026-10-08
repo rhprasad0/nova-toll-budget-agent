@@ -25,8 +25,13 @@ data "aws_iam_policy_document" "shadow_eval_assume" {
     }
     condition {
       test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:actor_id"
+      values   = ["91573985"] # rhprasad0 already owns the development credential.
+    }
+    condition {
+      test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:job_workflow_ref"
-      values   = ["rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@144332de99104ec50bccf6614a1b11c119d7d5f7"]
+      values   = ["rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@646c5bb78555f6e3cc1fe836b3e847b30549641a"]
     }
   }
 }

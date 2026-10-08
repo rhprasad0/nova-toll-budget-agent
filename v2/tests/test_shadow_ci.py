@@ -34,6 +34,7 @@ def test_shadow_workflow_uses_approved_runtime_before_fixed_read_only_role() -> 
     assert job["needs"] == "shadow-readiness"
     assert "head.repo.full_name == github.repository" in job["if"]
     assert "github.event_name == 'pull_request'" in job["if"]
+    assert "github.actor_id == '91573985'" in job["if"]
     assert "outputs.ready == 'true'" in job["if"]
     assert re.fullmatch(
         r"rhprasad0/nova-toll-budget-agent/\.github/workflows/v2-shadow-eval\.yml@[0-9a-f]{40}",
@@ -73,6 +74,7 @@ def test_shadow_workflow_uses_approved_runtime_before_fixed_read_only_role() -> 
         "CANDIDATE_SHA": "a" * 40,
         "EVENT_SHA": "a" * 40,
         "EVENT_NAME": "pull_request",
+        "ACTOR_ID": "91573985",
         "WORKFLOW_REF": "rhprasad0/nova-toll-budget-agent/.github/workflows/ci.yml@refs/pull/1/merge",
         "GITHUB_REF": "refs/pull/1/merge",
         "EVENT_REPOSITORY": "rhprasad0/nova-toll-budget-agent",
@@ -87,6 +89,7 @@ def test_shadow_workflow_uses_approved_runtime_before_fixed_read_only_role() -> 
             for key, value in {
                 "CANDIDATE_SHA": "b" * 40,
                 "EVENT_NAME": "workflow_run",
+                "ACTOR_ID": "123456",
                 "WORKFLOW_REF": "rhprasad0/nova-toll-budget-agent/.github/workflows/other.yml@refs/pull/1/merge",
                 "HEAD_REPOSITORY": "someone/fork",
                 "PYTHON_VERSION": "3.12.1",
@@ -111,6 +114,8 @@ def test_shadow_workflow_uses_approved_runtime_before_fixed_read_only_role() -> 
     assert 'Action   = ["ssm:GetParameter"]' in policy
     assert "parameter/nova-toll/openai_api_key" in policy
     assert job["uses"] in policy
+    assert 'variable = "token.actions.githubusercontent.com:actor_id"' in policy
+    assert 'values   = ["91573985"]' in policy
     assert '1306930324:pull_request"' in policy
     assert "golden-evaluation" not in policy
     assert "refs/pull" not in policy and "gh-readonly-queue" not in policy

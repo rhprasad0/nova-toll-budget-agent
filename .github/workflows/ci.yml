@@ -48,9 +48,10 @@ jobs:
     needs: shadow-readiness
     if: >-
       github.event_name == 'pull_request' &&
+      github.actor_id == '91573985' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       needs.shadow-readiness.outputs.ready == 'true'
-    uses: rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@144332de99104ec50bccf6614a1b11c119d7d5f7
+    uses: rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@646c5bb78555f6e3cc1fe836b3e847b30549641a
     with:
       candidate_sha: ${{ github.event.pull_request.head.sha }}
       python_version: ${{ needs.shadow-readiness.outputs.python }}

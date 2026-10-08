@@ -1406,9 +1406,19 @@ def test_pull_request_workflows_have_no_production_access() -> None:
             for job in cast(dict[str, object], jobs).values():
                 if isinstance(job, dict):
                     job = cast(dict[str, object], job)
+                    shadow = re.fullmatch(
+                        r"rhprasad0/nova-toll-budget-agent/\.github/workflows/v2-shadow-eval\.yml@[0-9a-f]{40}",
+                        str(job.get("uses", "")),
+                    )
+                    if shadow:
+                        assert "github.actor_id == '91573985'" in str(job["if"])
+                        assert "head.repo.full_name == github.repository" in str(
+                            job["if"]
+                        )
                     assert_safe_permissions(
                         job.get("permissions"),
-                        allow_id_token=job.get("uses") == trusted_planner,
+                        allow_id_token=job.get("uses") == trusted_planner
+                        or shadow is not None,
                     )
         assert not re.search(r"\bsecrets\b", github_token.sub("", workflow))
         for forbidden in (
@@ -2265,7 +2275,11 @@ def _assert_required_event_callers(source: str) -> None:
     )
     assert 'test "$CALL_RESULT" = success' in gate_source
     assert 'test "$PLAN_RESULT" = success' in gate_source
-    assert "continue-on-error" not in source
+    for name, job in ci_jobs.items():
+        if name != "shadow-readiness":
+            assert "continue-on-error" not in job
+        for step in cast(list[dict[str, object]], job.get("steps", [])):
+            assert "continue-on-error" not in step
 
     _assert_terraform_trigger(TERRAFORM_WORKFLOW)
 
@@ -2322,6 +2336,14 @@ def test_required_event_callers_are_unfiltered_and_fail_closed() -> None:
             "development-plan:\n    if: success()",
         ),
         ('test "$PLAN_RESULT" = success', 'test "$PLAN_RESULT" = skipped'),
+        (
+            "v2-loader:\n    runs-on: ubuntu-latest",
+            "v2-loader:\n    continue-on-error: true\n    runs-on: ubuntu-latest",
+        ),
+        (
+            "- name: Require successful trusted development plan",
+            "- name: Require successful trusted development plan\n        continue-on-error: true",
+        ),
     ):
         must_reject(
             _assert_required_event_callers,

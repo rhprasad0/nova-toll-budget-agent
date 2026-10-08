@@ -63,8 +63,10 @@ feedback can still influence tuning; this is not fully blind accuracy.
 Regular PR CI validates the reviewed shadow inputs and
 `eval/harness-approval.json`, then evaluates the exact candidate commit on all ten
 cases once. The evaluator workflow is pinned to an immutable commit. It runs
-automatically on same-repository PR updates, with no deployment or environment
-approval. Forks do not run paid evaluations. The $2 cap starts a new job-local
+automatically on same-repository PR updates initiated by `rhprasad0`, who already
+owns the development model credential. Other contributors and forks get offline
+readiness checks without that credential. There is no deployment or environment
+approval. The $2 cap starts a new job-local
 spending chain. Scores, incomplete measurements and execution errors appear in
 the job summary and logs without blocking CI.
 
@@ -73,8 +75,8 @@ it contains hashes, runtime, planned split counts and approval provenance, with
 no holdout cases or detailed evidence. Hosted CI selects its exact Python version
 and architecture and verifies the evaluator before credentials. Activation also
 requires provisioning the development-only SSM reader in `infra/shadow_eval.tf`.
-Its trust policy admits only same-repository PRs using the pinned evaluator;
-updating that workflow requires updating both pins. See the
+Its trust policy admits only the owner's same-repository PR runs using the pinned
+evaluator; updating that workflow requires updating both pins. See the
 [runner guide](GOLDEN_RUNNER.md#shadow-ci) for usage.
 
 ## Scheduled and live checks
