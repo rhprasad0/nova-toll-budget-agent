@@ -163,7 +163,7 @@
     "v2/lambdas/loader/handler.py": "2c490f11eb538d8e6e39c689d503b18f47b5e4ddeec62a1458e88ff6e976aac5",
     "v2/lambdas/loader/parse_csv.py": "313d5d0843f9e884e7649dc66da3ebc5cdb015e2484899f4152d5ab9fb7b19ac",
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
-    "v2/lambdas/publisher/costs.py": "40f0732c1a929f346898c4b8118805d64a5037aa27d536578687b30520651afc",
+    "v2/lambdas/publisher/costs.py": "61b82090f88090b0f5742dee2674c8ebc3ce2c38712f9e7dce0b8f2765783abf",
     "v2/lambdas/publisher/handler.py": "7ff9042626aedd46513868023496a71fab324f593a2f4c09f986dec15027e5fd",
     "v2/lambdas/timed_checks/handler.py": "b7f952df617bddccc03d4e34245a40b49fdb66f4af74e4f1ed884540221ae3ea",
     "v2/pyproject.toml": "c2428ed9608ab151665f6e1578a24ba15800c6e51f88f25701f51a2097feb009",
@@ -190,7 +190,7 @@
     "v2/scripts/run_private_stage.sh": "7557685f176439a393a8b9cfbe3460bf70875dc2fa1a0b16ff5b4ec4dec7f38e",
     "v2/scripts/run_production_migrations.py": "2077cbd16ba4832de6c75f1f113c2f23bb16f1d57a0dcb1615701b2631bb2e5c",
     "v2/scripts/run_production_migrations_workflow.sh": "731d27486b9c2426222eccf9e96119dafc62b8bc828d217b682101d6f8fc109b",
-    "v2/scripts/shared-package-compatibility.json": "7829ff81cf4615ceda57ddce8acf0894e946298c2b003d6c68890e4eb19cd821",
+    "v2/scripts/shared-package-compatibility.json": "b071b99442d8d4f5ba6241d7a600c978d266d320f377a542f7a5c6e2c27a8968",
     "v2/scripts/shared_packages.py": "4c8be7bcf4ed0ba82579f3171e87ac3c2f97c7f2a0a2c87dbad623e052851c39",
     "v2/scripts/timed-checks-requirements.in": "8218bd738a1337e889d04756b2f7c53f1693503b97c519dcc8a10a423b2837e5",
     "v2/scripts/timed-checks-requirements.txt": "1ef94fcd8c97c31ec48575bd01d835d18cc60751529f1ede16b17e5a82cd6bd4",
@@ -202,7 +202,7 @@
     "agentcore.zip": "961a4549a4c672dcd1fe6bf4a76695a38b73e4340f79826e085d291bc19e71a8",
     "chat-proxy.zip": "4a5f4a42a220217dd88318a2d2d44973d825ede4b78da7ef313c06beb93a9754",
     "loader.zip": "17f3ac0e9cd20109fc6f287c144ab4cb2181b1eb3fe6da7cb24a849be0fea985",
-    "publisher.zip": "f961fbce39ab5fad72f05ef4cb41a982aa0eb6418af62c507c72b15a1b7fa3e1",
+    "publisher.zip": "9f24d1bd1d3f44ac170fb5e63b26c4961f6d48a400aed8b5f47632f594823c78",
     "timed-checks.zip": "d3bc19b6e6c496e073798b6af79d48c355e0ac677f25f88602ab066a8b710074"
   },
   "mutations": [

@@ -13,6 +13,7 @@ import urllib.parse
 import urllib.request
 from collections import defaultdict
 from collections.abc import Callable, Iterable
+from contextlib import suppress
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, getcontext
 from email.utils import parsedate_to_datetime
@@ -69,6 +70,28 @@ SERVICES = frozenset(
     }
 )
 MAX_BODY = 2 * 1024 * 1024
+MAX_ERROR_BODY = 16 * 1024
+OPENAI_ERROR_CODES = frozenset(
+    {
+        "rate_limit_exceeded",
+        "slow_down",
+        "insufficient_quota",
+        "credit_balance_exhausted",
+        "organization_spend_limit_exceeded",
+        "project_spend_limit_exceeded",
+        "organization_usage_limit_exceeded",
+        "invalid_api_key",
+    }
+)
+OPENAI_ERROR_TYPES = frozenset(
+    {
+        "rate_limit_error",
+        "insufficient_quota",
+        "invalid_request_error",
+        "requests",
+        "tokens",
+    }
+)
 AMOUNT = re.compile(r"-?(?:0|[1-9]\d{0,17})(?:\.\d{1,30})?\Z")
 
 
@@ -319,6 +342,67 @@ def retry_delay(error: Exception, default: float) -> float:
     return default
 
 
+def openai_error_diagnostics(
+    error: urllib.error.HTTPError, budget: Callable[[float], None]
+) -> dict[str, str]:
+    result = {"provider_code": "unknown", "provider_type": "unknown"}
+    patterns = {
+        "x-request-id": r"req_[0-9a-f]{32}",
+        "x-ratelimit-limit-requests": r"[0-9]{1,12}",
+        "x-ratelimit-remaining-requests": r"[0-9]{1,12}",
+        "x-ratelimit-reset-requests": r"(?:[0-9]{1,8}(?:\.[0-9]{1,3})?(?:ms|s|m|h|d)){1,5}",
+        "retry-after": r"(?:[0-9]{1,12}|[A-Za-z]{3}, [0-9]{2} [A-Za-z]{3} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT)",
+    }
+    for name, pattern in patterns.items():
+        value = error.headers.get(name) if error.headers else None
+        result[name] = (
+            value
+            if isinstance(value, str)
+            and len(value) <= 128
+            and re.fullmatch(pattern, value)
+            else "unavailable"
+        )
+    result["body_kind"] = "empty"
+    try:
+        try:
+            budget(20)
+        except Exception:
+            result["body_kind"] = "skipped_budget"
+            return result
+        try:
+            raw = error.read(MAX_ERROR_BODY + 1)
+        except Exception:
+            result["body_kind"] = "unreadable"
+            return result
+        if len(raw) > MAX_ERROR_BODY:
+            result["body_kind"] = "oversized"
+        elif raw.strip():
+            result["body_kind"] = "malformed"
+            if (
+                error.headers and error.headers.get_content_type() == "text/html"
+            ) or raw.lstrip().lower().startswith((b"<!doctype html", b"<html")):
+                result["body_kind"] = "html"
+            else:
+                payload = decode(raw).get("error")
+                if isinstance(payload, dict):
+                    result["body_kind"] = "json_error"
+                    for field, allowed in (
+                        ("code", OPENAI_ERROR_CODES),
+                        ("type", OPENAI_ERROR_TYPES),
+                    ):
+                        value = cast(dict[str, Any], payload).get(field)
+                        if isinstance(value, str) and value in allowed:
+                            result["provider_" + field] = value
+    except (ValueError, UnicodeError):
+        pass
+    except Exception:
+        result["body_kind"] = "unreadable"
+    finally:
+        with suppress(Exception):
+            error.close()
+    return result
+
+
 def get_json(
     url: str,
     key: str | None = None,
@@ -333,7 +417,11 @@ def get_json(
     )
     source = "openai" if base == OPENAI_URL else "aws_development"
     for attempt in range(1, 4):
-        budget(20)
+        try:
+            budget(20)
+        except Exception:
+            logger.warning("COST_REQUEST_STOPPED source=%s reason=budget", source)
+            raise
         status: int | None = None
         try:
             with urllib.request.build_opener(NoRedirect()).open(
@@ -343,28 +431,44 @@ def get_json(
                 require(status == 200 and response.url == url)
                 return decode(response.read(MAX_BODY + 1))
         except Exception as error:
+            diagnostics: dict[str, str] = {}
             if isinstance(error, urllib.error.HTTPError):
                 status = error.code
+                if source == "openai":
+                    diagnostics = openai_error_diagnostics(error, budget)
             logger.warning(
-                "COST_REQUEST_FAILED source=%s attempt=%d error=%s status=%s",
+                "COST_REQUEST_FAILED source=%s attempt=%d error=%s status=%s diagnostics=%s",
                 source,
                 attempt,
                 type(error).__name__,
                 status,
+                json.dumps(diagnostics, separators=(",", ":")),
             )
-            if (
-                not isinstance(
-                    error, (urllib.error.URLError, ConnectionError, TimeoutError)
+            retryable = isinstance(
+                error, (urllib.error.URLError, ConnectionError, TimeoutError)
+            ) and not (
+                isinstance(error, urllib.error.HTTPError)
+                and status not in {408, 429, 500, 502, 503, 504}
+            )
+            if not retryable or attempt == 3:
+                logger.warning(
+                    "COST_REQUEST_STOPPED source=%s reason=%s",
+                    source,
+                    "exhausted" if retryable else "permanent",
                 )
-                or attempt == 3
-                or (
-                    isinstance(error, urllib.error.HTTPError)
-                    and status not in {408, 429, 500, 502, 503, 504}
-                )
-            ):
                 raise
             delay = retry_delay(error, (2, 5)[attempt - 1])
-            budget(delay + 20)
+            try:
+                budget(delay + 20)
+            except Exception:
+                logger.warning("COST_REQUEST_STOPPED source=%s reason=budget", source)
+                raise
+            logger.info(
+                "COST_REQUEST_RETRY source=%s attempt=%d delay_seconds=%s",
+                source,
+                attempt,
+                delay,
+            )
             time.sleep(delay)
     raise RuntimeError("billing_request_failed")
 

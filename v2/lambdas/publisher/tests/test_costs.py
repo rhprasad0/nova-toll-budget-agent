@@ -105,13 +105,23 @@ def aws_feed(now: datetime = NOW) -> dict[str, Any]:
 
 
 def http_error(
-    status: int = 503, retry_after: str | None = None
+    status: int = 503,
+    retry_after: str | None = None,
+    *,
+    body: bytes | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> urllib.error.HTTPError:
     headers = Message()
     if retry_after is not None:
         headers["Retry-After"] = retry_after
+    for name, value in (extra_headers or {}).items():
+        headers[name] = value
     return urllib.error.HTTPError(
-        costs.OPENAI_URL, status, "private-secret", headers, None
+        costs.OPENAI_URL,
+        status,
+        "private-secret",
+        headers,
+        io.BytesIO(body) if body is not None else None,
     )
 
 
@@ -154,13 +164,17 @@ def test_https_transient_failure_then_success(
     assert costs.get_json(costs.OPENAI_URL, "private-secret", budget) == {}
     assert request.call_count == 3
     assert [call.args for call in sleep.call_args_list] == [(2,), (5,)]
-    assert [call.args for call in budget.call_args_list] == [
+    expected_budget = [
         (20,),
         (22,),
         (20,),
         (25,),
         (20,),
     ]
+    if isinstance(failure, urllib.error.HTTPError):
+        expected_budget.insert(1, (20,))
+        expected_budget.insert(4, (20,))
+    assert [call.args for call in budget.call_args_list] == expected_budget
     assert all(call.kwargs["timeout"] == 20 for call in request.call_args_list)
     assert "source=openai attempt=1" in caplog.text
     assert "source=openai attempt=2" in caplog.text
@@ -266,12 +280,204 @@ def test_https_body_timeout_is_retried(
     assert "private-secret" not in caplog.text
 
 
+def test_https_429_diagnostics_and_actual_retry_delay(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    error = http_error(
+        429,
+        "61",
+        body=json.dumps(
+            {
+                "error": {
+                    "code": "rate_limit_exceeded",
+                    "type": "requests",
+                    "message": "private-secret org-private project-private",
+                }
+            }
+        ).encode(),
+        extra_headers={
+            "x-request-id": "req_" + "a" * 32,
+            "x-ratelimit-limit-requests": "60",
+            "x-ratelimit-remaining-requests": "0",
+            "x-ratelimit-reset-requests": "1m1.5s",
+            "Authorization": "Bearer private-secret",
+            "openai-organization": "org-private",
+        },
+    )
+    _, sleep = mock_reader(monkeypatch, [error])
+    assert costs.get_json(costs.OPENAI_URL, "private-secret") == {}
+    sleep.assert_called_once_with(30)
+    failure = next(
+        r.getMessage() for r in caplog.records if "COST_REQUEST_FAILED" in r.message
+    )
+    diagnostics = json.loads(failure.split("diagnostics=", 1)[1])
+    assert diagnostics == {
+        "provider_code": "rate_limit_exceeded",
+        "provider_type": "requests",
+        "x-request-id": "req_" + "a" * 32,
+        "x-ratelimit-limit-requests": "60",
+        "x-ratelimit-remaining-requests": "0",
+        "x-ratelimit-reset-requests": "1m1.5s",
+        "retry-after": "61",
+        "body_kind": "json_error",
+    }
+    assert "COST_REQUEST_RETRY source=openai attempt=1 delay_seconds=30" in caplog.text
+    assert not any(
+        value in caplog.text
+        for value in ["private-secret", "org-private", "project-private"]
+    )
+
+
+@pytest.mark.parametrize(
+    "code,error_type",
+    [
+        ("slow_down", "rate_limit_error"),
+        ("insufficient_quota", "insufficient_quota"),
+        ("credit_balance_exhausted", "insufficient_quota"),
+        ("organization_spend_limit_exceeded", "insufficient_quota"),
+        ("project_spend_limit_exceeded", "insufficient_quota"),
+        ("organization_usage_limit_exceeded", "insufficient_quota"),
+    ],
+)
+def test_openai_error_classification(code: str, error_type: str) -> None:
+    error = http_error(
+        429, body=json.dumps({"error": {"code": code, "type": error_type}}).encode()
+    )
+    diagnostic = costs.openai_error_diagnostics(error, lambda seconds: None)
+    assert diagnostic["provider_code"] == code
+    assert diagnostic["provider_type"] == error_type
+    assert diagnostic["body_kind"] == "json_error"
+
+
+@pytest.mark.parametrize(
+    "body,kind",
+    [
+        (b"<html>private-secret</html>", "html"),
+        (b" <!DOCTYPE html><html>private-secret</html>", "html"),
+        (b"not json private-secret", "malformed"),
+        (b'{"error":{"code":"rate_limit_exceeded"},"error":{}}', "malformed"),
+        (b'{"error":[]}', "malformed"),
+        (b"\xff", "malformed"),
+        (b"x" * (costs.MAX_ERROR_BODY + 1), "oversized"),
+        (b"", "empty"),
+    ],
+)
+def test_openai_unusual_error_bodies(body: bytes, kind: str) -> None:
+    error = http_error(429, body=body)
+    diagnostic = costs.openai_error_diagnostics(error, lambda seconds: None)
+    assert diagnostic["body_kind"] == kind
+    assert diagnostic["provider_code"] == "unknown"
+    assert "private-secret" not in json.dumps(diagnostic)
+
+
+def test_openai_untrusted_diagnostic_fields(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    error = http_error(
+        401,
+        "private-secret\nCOST_REFRESH_SUCCEEDED",
+        body=b'{"error":{"code":"private-secret","type":{"private-secret":true},"message":"private-secret"}}',
+        extra_headers={
+            "x-request-id": "req_private-secret",
+            "x-ratelimit-limit-requests": "9" * 129,
+            "x-ratelimit-remaining-requests": "private-secret",
+            "x-ratelimit-reset-requests": "1s\nprivate-secret",
+        },
+    )
+    request, sleep = mock_reader(monkeypatch, [error])
+    with pytest.raises(urllib.error.HTTPError) as failure:
+        costs.get_json(costs.OPENAI_URL, "private-secret")
+    assert failure.value is error
+    assert request.call_count == 1
+    sleep.assert_not_called()
+    assert "private-secret" not in caplog.text
+    assert "COST_REFRESH_SUCCEEDED" not in caplog.text
+    assert "reason=permanent" in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
+
+
+def test_openai_diagnostic_read_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    error = http_error(429, body=b"x" * (costs.MAX_ERROR_BODY + 100))
+    read = Mock(wraps=error.read)
+    monkeypatch.setattr(error, "read", read)
+    assert (
+        costs.openai_error_diagnostics(error, lambda seconds: None)["body_kind"]
+        == "oversized"
+    )
+    read.assert_called_once_with(costs.MAX_ERROR_BODY + 1)
+
+
+@pytest.mark.parametrize("read_error", [TimeoutError, ValueError])
+def test_openai_diagnostic_read_failure_preserves_original_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    read_error: type[Exception],
+) -> None:
+    error = http_error(429, body=b"not read")
+    monkeypatch.setattr(error, "read", Mock(side_effect=read_error("private-secret")))
+    request, sleep = mock_reader(monkeypatch, [error] * 3)
+    with pytest.raises(urllib.error.HTTPError) as failure:
+        costs.get_json(costs.OPENAI_URL, "test-key")
+    assert failure.value is error
+    assert request.call_count == 3 and sleep.call_count == 2
+    assert '"body_kind":"unreadable"' in caplog.text
+    assert "reason=exhausted" in caplog.text
+    assert "private-secret" not in caplog.text
+
+
+def test_openai_html_content_type_and_close_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = http_error(
+        429,
+        body=b"<head>private-secret</head>",
+        extra_headers={"Content-Type": "text/html; charset=utf-8"},
+    )
+    monkeypatch.setattr(
+        error, "close", Mock(side_effect=RuntimeError("private-secret"))
+    )
+    diagnostic = costs.openai_error_diagnostics(error, lambda seconds: None)
+    assert diagnostic["body_kind"] == "html"
+    assert "private-secret" not in json.dumps(diagnostic)
+
+
+def test_https_permanent_error_on_last_attempt(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    error = http_error(401)
+    request, sleep = mock_reader(monkeypatch, [http_error(), http_error(), error])
+    with pytest.raises(urllib.error.HTTPError) as failure:
+        costs.get_json(costs.OPENAI_URL, "test-key")
+    assert failure.value is error
+    assert request.call_count == 3 and sleep.call_count == 2
+    assert "reason=permanent" in caplog.text
+    assert "reason=exhausted" not in caplog.text
+
+
+def test_openai_diagnostic_respects_publication_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = http_error(429, body=b"not read")
+    read = Mock(wraps=error.read)
+    monkeypatch.setattr(error, "read", read)
+    budget = Mock(side_effect=ValueError("private-secret"))
+    assert (
+        costs.openai_error_diagnostics(error, budget)["body_kind"] == "skipped_budget"
+    )
+    budget.assert_called_once_with(20)
+    read.assert_not_called()
+    assert error.closed
+
+
 @pytest.mark.parametrize("remaining,requests", [(79000, 0), (81000, 1), (82000, 1)])
 def test_https_publication_budget(
-    monkeypatch: pytest.MonkeyPatch, remaining: int, requests: int
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    remaining: int,
+    requests: int,
 ) -> None:
     request, sleep = mock_reader(monkeypatch, [http_error()])
-    checks = iter([remaining, remaining, 79000])
+    checks = iter([remaining, remaining, remaining, 79000])
 
     def budget(seconds: float) -> None:
         costs.require(next(checks) >= 60000 + seconds * 1000)
@@ -280,6 +486,8 @@ def test_https_publication_budget(
         costs.get_json(costs.OPENAI_URL, "test-key", budget)
     assert request.call_count == requests
     assert sleep.call_count == (1 if remaining == 82000 else 0)
+    assert "reason=budget" in caplog.text
+    assert ("COST_REQUEST_RETRY" in caplog.text) == (remaining == 82000)
 
 
 def test_aws_feed_failure_retains_original_publication() -> None:

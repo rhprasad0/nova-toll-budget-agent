@@ -66,8 +66,20 @@ does not count. Freshness alarms evaluate `FILL(success, 0)` over 48 hourly
 periods and require all 48 to lack success, treating missing data as breaching.
 This handles sparse daily publications ([AWS metric math](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/using-metric-math.html)).
 All billing alarms use the account's foundation alert topic, including development.
-Request logs contain only source, attempt, exception type, and HTTP status;
-terminal publication logs contain the snapshot, stage, and exception type.
+Request failure logs include source, attempt, exception type, and HTTP status.
+OpenAI failures also include allowlisted error codes/types, validated request IDs,
+request-limit/remaining/reset headers, `Retry-After`, and a response-body category.
+Error-body inspection is limited to 16 KiB and skips reads that would consume the
+publication reserve. Unknown or unsafe fields use fixed markers; raw bodies,
+provider messages, credentials, and organization/project identifiers are never
+logged. These diagnostics remain in private CloudWatch logs, outside public snapshots.
+Retry logs record the selected delay after the time-budget check; stop logs
+distinguish permanent failures, exhausted attempts, and insufficient time.
+Compare the server's `Retry-After` with the selected delay when diagnosing 429s;
+the existing 30-second delay cap remains in effect. Use the error code to separate
+throttling from quota/spend failures and retain the request ID for provider support.
+A successful manual refresh does not explain an earlier scheduled failure.
+Terminal publication logs contain the snapshot, stage, and exception type.
 
 ## Authorized rollout
 

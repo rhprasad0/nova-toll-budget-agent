@@ -1,9 +1,9 @@
 {
   "baseline": "e439f23d241c14fea30e7d87e85615298dbfdd1c",
-  "development_baseline": "74820fcdefc898d41c0c1b72a2528cae01fc8776",
+  "development_baseline": "4a62cfa1fc35737da91cc104d68756ebd7dcb113",
   "packages": {
     "loader.zip": "17f3ac0e9cd20109fc6f287c144ab4cb2181b1eb3fe6da7cb24a849be0fea985",
-    "publisher.zip": "f961fbce39ab5fad72f05ef4cb41a982aa0eb6418af62c507c72b15a1b7fa3e1",
+    "publisher.zip": "9f24d1bd1d3f44ac170fb5e63b26c4961f6d48a400aed8b5f47632f594823c78",
     "timed-checks.zip": "d3bc19b6e6c496e073798b6af79d48c355e0ac677f25f88602ab066a8b710074"
   },
   "schemas": {
