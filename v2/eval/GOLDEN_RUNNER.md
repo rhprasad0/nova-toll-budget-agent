@@ -313,6 +313,8 @@ independently. Four requests run concurrently, with no automatic retries and a
 three-minute process deadline. A predicate passes at probability ≥0.5; this
 initial threshold is uncalibrated and never controls merging.
 Agreement measures consistency with native grades, not grader correctness.
+Criterion agreement compares effective grades on both sides, including the native
+mapping of deterministic checks to Outcome, Grounding and Rules.
 
 The summary compares grades, measured pass³, per-criterion agreement and
 disagreement direction, grading costs and per-trial latency. Native judge latency
@@ -324,6 +326,10 @@ requests. Missing measurements suppress the comparison's headline pass rate and
 pass³. Detailed results stay beside the native run in temporary `decisions.json`;
 only aggregate diagnostics enter CI logs and summaries. API errors, refusals,
 budget exhaustion and timeouts leave the native gate result intact.
+The pinned workflow checks the scorer's approved SHA-256 before credentials and
+again before execution. A changed or missing scorer disables only the comparison;
+updating it requires refreshing that digest and the workflow pin. The owner-only
+restriction remains the credential trust boundary.
 
 For a local comparison of an existing shadow run (one paid attempt per trace):
 

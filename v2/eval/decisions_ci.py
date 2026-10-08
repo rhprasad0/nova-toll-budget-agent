@@ -192,6 +192,17 @@ def score(
                     grades[answer.name] = answer.probability >= THRESHOLD
             if item["mechanical_rules_failed"] and "rules" in grades:
                 grades["rules"] = False
+            assessment = run.Attempt(
+                id=item["id"],
+                case_id=item["case_id"],
+                trial=item["trial"],
+                checks=item["checks"],
+                verdicts={
+                    key: run.Verdict(passed=value, evidence="Decisions predicate")
+                    for key, value in grades.items()
+                },
+            )
+            grades.update({key: not run.violation(assessment, key) for key in grades})
         except APIError as error:
             result["error"] = type(error).__name__
         except ValueError:
@@ -226,6 +237,27 @@ def summarize(
     native: dict[str, Any], data: dict[str, Any], results: list[dict[str, Any]]
 ) -> dict[str, Any]:
     paired = {a["id"]: a for a in data["attempts"]}
+    scored_ids = {item["id"] for item in results}
+    effective_native: dict[str, dict[str, bool]] = {}
+    for row in data["attempts"]:
+        if row["id"] not in scored_ids:
+            continue
+        assessment = run.Attempt(
+            id=row["id"],
+            case_id=row["case_id"],
+            trial=row["trial"],
+            checks=row.get("checks", []),
+            verdicts={
+                key: run.Verdict(
+                    passed=row["verdicts"][key]["passed"],
+                    evidence="Native recorded grade",
+                )
+                for key in CRITERIA
+            },
+        )
+        effective_native[row["id"]] = {
+            key: not run.violation(assessment, key) for key in CRITERIA
+        }
     complete = [item for item in results if item.get("complete")]
     successful = [item for item in complete if item["overall_success"]]
     case_ids = {case["id"] for case in data["manifest"]["identity"]["cases"]}
@@ -242,7 +274,7 @@ def summarize(
                 item["overall_success"] if key == "overall" else item["passed"][key],
                 paired[item["id"]]["overall_success"]
                 if key == "overall"
-                else paired[item["id"]]["verdicts"][key]["passed"],
+                else effective_native[item["id"]][key],
             )
             for item in results
             if (item.get("complete") if key == "overall" else key in item["passed"])
@@ -325,6 +357,7 @@ def compare(directory: Path, budget_usd: float) -> dict[str, Any]:
                 and attempt.actor_validity.status == "valid"
                 and attempt.measurements
                 and all(m.complete for m in attempt.measurements)
+                and set(attempt.verdicts) == set(CRITERIA)
             ):
                 packets.append(packet(cases[attempt.case_id], attempt))
     finally:

@@ -1,5 +1,6 @@
 """Paired Decisions scoring stays private, bounded, and outside the native gate."""
 
+import hashlib
 import json
 import os
 import subprocess
@@ -256,6 +257,8 @@ def summary_inputs() -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any
         "attempts": [
             {
                 "id": item["id"],
+                "case_id": item["case_id"],
+                "trial": item["trial"],
                 "overall_success": True,
                 "verdicts": {key: {"passed": True} for key in decisions_ci.CRITERIA},
                 "measurements": [{"role": "judge", "seconds": 2.0}] * 3,
@@ -299,6 +302,36 @@ def test_paired_summary_counts_actual_triples_and_disagreement_direction() -> No
     assert summary["pass_cubed"] is None and summary["pass_rate"] is None
     assert summary["agreement"]["outcome"]["paired"] == 29
     assert summary["agreement"]["grounding"]["paired"] == 30
+    data["attempts"][0]["verdicts"] = {}
+    native["complete"] = False
+    summary = decisions_ci.summarize(native, data, results[1:])
+    assert summary["excluded_native_trials"] == 1
+    assert summary["agreement"]["grounding"]["paired"] == 29
+
+
+@pytest.mark.parametrize("check", ["tool_evidence", "missing_call", "tool_arguments"])
+def test_effective_criterion_grades_apply_the_same_native_check_mapping(
+    check: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_client(
+        monkeypatch, httpx.MockTransport(lambda _: httpx.Response(200, json=response()))
+    )
+    item = packets()[0]
+    item["checks"] = [check]
+    result = decisions_ci.score([item], native_cost=0.1, budget_usd=2)[0]
+    expected = {
+        key: key != "grounding" if check == "tool_evidence" else key == "grounding"
+        for key in decisions_ci.CRITERIA
+    }
+    assert result["passed"] == expected
+    native, data, _ = summary_inputs()
+    data["attempts"] = data["attempts"][:1]
+    data["attempts"][0]["checks"] = [check]
+    data["attempts"][0]["overall_success"] = False
+    summary = decisions_ci.summarize(native, data, [result])
+    for key in (*decisions_ci.CRITERIA, "overall"):
+        assert summary["agreement"][key]["agree"] == 1
+        assert summary["agreement"][key]["decisions_fail_native_pass"] == 0
 
 
 def test_workflow_comparison_errors_cannot_fail_native_gate(tmp_path: Path) -> None:
@@ -316,11 +349,15 @@ def test_workflow_comparison_errors_cannot_fail_native_gate(tmp_path: Path) -> N
         "!cancelled()" in step["if"]
         and "steps.approval.outcome == 'success'" in step["if"]
     )
+    assert "steps.decisions-source.outputs.ready == 'true'" in step["if"]
     assert job["timeout-minutes"] >= 19
     assert "180s" in step["run"] and "--budget-usd 2" in step["run"]
     uv = tmp_path / "uv"
     uv.write_text("#!/bin/sh\nexit 1\n")
     uv.chmod(0o700)
+    source = tmp_path / "v2/eval/decisions_ci.py"
+    source.parent.mkdir(parents=True)
+    source.write_bytes((golden.V2 / "eval/decisions_ci.py").read_bytes())
     summary = tmp_path / "summary.md"
     result = subprocess.run(
         ["bash", "-euo", "pipefail", "-c", step["run"]],
@@ -329,11 +366,66 @@ def test_workflow_comparison_errors_cannot_fail_native_gate(tmp_path: Path) -> N
             "PATH": f"{tmp_path}:{os.environ['PATH']}",
             "RUNNER_TEMP": str(tmp_path),
             "GITHUB_STEP_SUMMARY": str(summary),
+            **step["env"],
         },
+        cwd=tmp_path,
         capture_output=True,
     )
     assert result.returncode == 0
     assert "does not affect the native" in summary.read_text()
+
+
+@pytest.mark.parametrize("tampered", [False, True])
+def test_scorer_digest_is_checked_before_credentials_and_at_execution(
+    tampered: bool, tmp_path: Path
+) -> None:
+    workflow = yaml.safe_load(
+        (golden.V2.parent / ".github/workflows/v2-shadow-eval.yml").read_text()
+    )
+    steps = workflow["jobs"]["evaluate"]["steps"]
+    verify = next(s for s in steps if s.get("id") == "decisions-source")
+    compare = next(
+        s for s in steps if s.get("name") == "Compare Decisions scores (informational)"
+    )
+    credentials = next(
+        i
+        for i, s in enumerate(steps)
+        if "configure-aws-credentials" in s.get("uses", "")
+    )
+    assert steps.index(verify) < credentials
+    original = (golden.V2 / "eval/decisions_ci.py").read_bytes()
+    assert (
+        verify["env"]
+        == compare["env"]
+        == {"DECISIONS_SHA256": hashlib.sha256(original).hexdigest()}
+    )
+    source = tmp_path / "v2/eval/decisions_ci.py"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(original + (b"\n# unapproved edit\n" if tampered else b""))
+    output, summary = tmp_path / "output", tmp_path / "summary"
+    env = {
+        **os.environ,
+        **verify["env"],
+        "GITHUB_OUTPUT": str(output),
+        "GITHUB_STEP_SUMMARY": str(summary),
+    }
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", verify["run"]],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+    )
+    assert result.returncode == 0
+    assert output.read_text().strip() == ("ready=false" if tampered else "ready=true")
+    if tampered:
+        result = subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", compare["run"]],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+        )
+        assert result.returncode == 0
+        assert "source changed" in summary.read_text()
 
 
 def test_comparison_rejects_overwrite_and_bad_budget_before_loading_credentials(
@@ -388,6 +480,7 @@ def test_compare_excludes_invalid_actors_and_preserves_native_evidence(
         data["attempts"][index] = {**attempt.model_dump(), "overall_success": True}
     data["attempts"][0]["actor_validity"]["status"] = "invalid"
     data["attempts"][1]["measurements"][0]["complete"] = False
+    data["attempts"][2]["verdicts"] = {}
     native["complete"] = False
     report = tmp_path / "report.json"
     report.write_text(json.dumps(data))
@@ -397,7 +490,7 @@ def test_compare_excludes_invalid_actors_and_preserves_native_evidence(
     scoring = Mock(return_value=[])
     monkeypatch.setattr(decisions_ci, "score", scoring)
     summary = decisions_ci.compare(tmp_path, 2)
-    assert len(scoring.call_args.args[0]) == 28
+    assert len(scoring.call_args.args[0]) == 27
     assert scoring.call_args.kwargs == {"native_cost": 0.1, "budget_usd": 2}
     assert original_root == golden.ROOT and report.read_bytes() == before
     assert summary["complete"] is False and summary["pass_cubed"] is None

@@ -58,6 +58,18 @@ jobs:
         with:
           python-version: ${{ inputs.python_version }}
       - run: uv sync --locked
+      - name: Verify Decisions source before credentials
+        id: decisions-source
+        working-directory: .
+        env:
+          DECISIONS_SHA256: 329f75ee24a82be6f94c1c01e6c7c2ac614e652302220ebef6bc263e450d8184
+        run: |
+          if printf '%s  %s\n' "$DECISIONS_SHA256" v2/eval/decisions_ci.py | sha256sum --check --status; then
+            echo 'ready=true' >>"$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >>"$GITHUB_OUTPUT"
+            echo 'Decisions comparison unavailable: scorer differs from the approved workflow digest. This does not affect the native gate.' >>"$GITHUB_STEP_SUMMARY"
+          fi
       - name: Verify harness approval before credentials
         id: approval
         run: uv run python -m eval.shadow_ci prepare --verify-runtime
@@ -92,11 +104,17 @@ jobs:
             exit 1
           fi
       - name: Compare Decisions scores (informational)
-        if: ${{ !cancelled() && steps.approval.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.approval.outcome == 'success' && steps.decisions-source.outputs.ready == 'true' }}
         continue-on-error: true
         timeout-minutes: 4
         working-directory: .
+        env:
+          DECISIONS_SHA256: 329f75ee24a82be6f94c1c01e6c7c2ac614e652302220ebef6bc263e450d8184
         run: |
+          if ! printf '%s  %s\n' "$DECISIONS_SHA256" v2/eval/decisions_ci.py | sha256sum --check --status; then
+            echo 'Decisions source changed after verification; comparison unavailable. This does not affect the native gate.' >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           if timeout --kill-after=5s 180s uv run --directory v2 python -m eval.decisions_ci \
             --output "$RUNNER_TEMP/shadow-run" --budget-usd 2 >"$RUNNER_TEMP/decisions-score.json"; then
             cat "$RUNNER_TEMP/decisions-score.json"
