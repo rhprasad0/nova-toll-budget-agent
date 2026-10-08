@@ -14,7 +14,7 @@ cases on an external host path**. Use the [authoring guide](AUTHORING.md) and
 [coverage contract](contract.json). Harness
 2.5.17 searches the training split with **one trial per case and 16 workers**;
 three trials require Ryan's explicit instruction. Shadow CI evaluates ten cases
-once with a $2 per-job cap; scores are informational, incomplete measurements fail.
+three times with a $2 per-job cap and requires **pass³ ≥70%** with complete measurements.
 TollChat's application model, prompt, SOP and tools remain unchanged on `gpt-6-luna`.
 
 From a clean committed `v2/` checkout, validate the approved inputs and readiness:
@@ -60,22 +60,25 @@ feedback can still influence tuning; this is not fully blind accuracy.
 
 ## Shadow CI
 
-CI validates the reviewed shadow inputs and `eval/harness-approval.json` without
-credentials. The follow-on
-`shadow-ci` workflow evaluates the exact successful CI candidate on all ten cases
-through the reviewed `golden-evaluation` environment. Its definition runs from
-protected `main`; PR CI remains credential-free.
-Forks do not run paid evaluations. The $2 cap starts a new job-local spending
-chain; CI reports the score without a pass-rate gate, and fails incomplete results.
+Regular PR CI validates the reviewed shadow inputs and
+`eval/harness-approval.json`, then evaluates the exact candidate commit on all ten
+cases three times. The evaluator workflow is pinned to an immutable commit. It runs
+automatically on same-repository PR updates initiated by `rhprasad0`, who already
+owns the development model credential. Other contributors and forks get offline
+readiness checks without that credential. There is no deployment or environment
+approval. The $2 cap starts a new job-local spending chain. At least seven of the
+ten cases must pass all three trials: **pass³ ≥70%**, including exactly 70%.
+This is the measured share of passing triples, not the cube of the pooled trial
+pass rate. Below-threshold scores, incomplete measurements and execution errors
+fail CI; the summary and logs retain the score, completeness and accounted cost.
 
 The host exports the public receipt from the one approved combined calibration;
 it contains hashes, runtime, planned split counts and approval provenance, with
 no holdout cases or detailed evidence. Hosted CI selects its exact Python version
 and architecture and verifies the evaluator before credentials. Activation also
-requires administrator provisioning of the development-only SSM reader in
-`infra/shadow_eval.tf`. Keep the existing main-only branch policy and required
-review on `golden-evaluation`. This PR does not deploy that role or alter
-environment settings. See the
+requires provisioning the development-only SSM reader in `infra/shadow_eval.tf`.
+Its trust policy admits only the owner's same-repository PR runs using the pinned
+evaluator; updating that workflow requires updating both pins. See the
 [runner guide](GOLDEN_RUNNER.md#shadow-ci) for usage.
 
 ## Scheduled and live checks

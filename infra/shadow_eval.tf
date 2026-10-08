@@ -1,4 +1,4 @@
-# A reviewed shadow CI candidate may read only the development model credential.
+# PR CI may read only the development model credential through the pinned evaluator.
 # Raw combined calibration and holdout evidence never enter hosted CI.
 data "aws_iam_policy_document" "shadow_eval_assume" {
   count = var.environment == "development" ? 1 : 0
@@ -16,7 +16,7 @@ data "aws_iam_policy_document" "shadow_eval_assume" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:golden-evaluation"]
+      values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:pull_request"]
     }
     condition {
       test     = "StringEquals"
@@ -25,8 +25,13 @@ data "aws_iam_policy_document" "shadow_eval_assume" {
     }
     condition {
       test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:actor_id"
+      values   = ["91573985"] # rhprasad0 already owns the development credential.
+    }
+    condition {
+      test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:job_workflow_ref"
-      values   = ["rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@refs/heads/main"]
+      values   = ["rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@86bfd03d926e3ce673fb00bad5bfa8aa644b67f1"]
     }
   }
 }

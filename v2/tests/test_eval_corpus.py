@@ -791,6 +791,8 @@ def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
                 str(receipt_path),
                 "--output",
                 str(tmp_path / f"run-{split}"),
+                "--trials-per-case",
+                "3" if split == "shadow" else "1",
             ],
         )
         run.main()
@@ -812,17 +814,24 @@ def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
                 run.require_calibration(shared, changed)
         with pytest.raises(ValueError, match="all-split"):
             run.require_calibration(pinned, pinned)
-    assert shadow_ci.check(tmp_path / "run-shadow")["passed"] == 10
+    assert shadow_ci.report(tmp_path / "run-shadow")["passed"] == 30
     shadow_events = tmp_path / "run-shadow/events.jsonl"
     original_events = shadow_events.read_text()
     events = [json.loads(line) for line in original_events.splitlines()]
     events[0]["verdicts"]["outcome"]["passed"] = False
     shadow_events.write_text("".join(json.dumps(event) + "\n" for event in events))
-    assert shadow_ci.check(tmp_path / "run-shadow")["passed"] == 9
+    failed_trial = shadow_ci.report(tmp_path / "run-shadow")
+    assert failed_trial["passed"] == 29
+    assert failed_trial["passing_all_three_cases"] == 9
+    assert failed_trial["pass_cubed"] == 0.9
     events[0]["status"] = "infrastructure"
     shadow_events.write_text("".join(json.dumps(event) + "\n" for event in events))
-    with pytest.raises(ValueError, match="ten complete measured"):
-        shadow_ci.check(tmp_path / "run-shadow")
+    incomplete = shadow_ci.report(tmp_path / "run-shadow")
+    assert incomplete["complete"] is False
+    assert incomplete["scored_trials"] == 29
+    assert incomplete["inconclusive_trials"] == 1
+    assert incomplete["pass_rate"] == 29 / 30
+    assert incomplete["pass_cubed"] == 0.9
     shadow_events.write_text(original_events)
     diagnostic_path = (
         golden.V2.parent / ".agents/skills/eval-climb/scripts/diagnose_gap.py"

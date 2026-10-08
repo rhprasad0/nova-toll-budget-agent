@@ -19,7 +19,6 @@ permissions:
 jobs:
   evaluate:
     runs-on: ${{ inputs.runner }}
-    environment: golden-evaluation
     timeout-minutes: 15
     permissions:
       contents: read
@@ -28,23 +27,23 @@ jobs:
       run:
         working-directory: v2
     steps:
-      - name: Bind the reviewed candidate and calibrated runtime
+      - name: Bind the PR candidate and calibrated runtime
         working-directory: .
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-          EVENT_SHA: ${{ github.event.workflow_run.head_sha }}
+          EVENT_SHA: ${{ github.event.pull_request.head.sha }}
           EVENT_NAME: ${{ github.event_name }}
-          EVENT_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-          EVENT_PATH: ${{ github.event.workflow_run.path }}
+          ACTOR_ID: ${{ github.actor_id }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
           EVENT_REPOSITORY: ${{ github.repository }}
-          HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           PYTHON_VERSION: ${{ inputs.python_version }}
           RUNNER_LABEL: ${{ inputs.runner }}
         run: |
           set -euo pipefail
-          test "$EVENT_NAME" = workflow_run
-          test "$EVENT_CONCLUSION" = success
-          test "$EVENT_PATH" = .github/workflows/ci.yml
+          test "$EVENT_NAME" = pull_request
+          test "$ACTOR_ID" = 91573985
+          test "$WORKFLOW_REF" = "$EVENT_REPOSITORY/.github/workflows/ci.yml@$GITHUB_REF"
           test "$EVENT_REPOSITORY" = rhprasad0/nova-toll-budget-agent
           test "$HEAD_REPOSITORY" = "$EVENT_REPOSITORY"
           [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
@@ -67,15 +66,27 @@ jobs:
           aws-region: us-east-1
           allowed-account-ids: '903859731897'
           role-duration-seconds: 900
-      - name: Evaluate all ten shadow cases once
+      - name: Evaluate all ten shadow cases three times
         run: >-
           uv run python -m eval.golden_run run
           --corpus eval/active/shadow --calibration eval/harness-approval.json
-          --output "$RUNNER_TEMP/shadow-run" --budget-usd 2 --trials-per-case 1
-      - name: Report shadow score and require complete measurements
+          --output "$RUNNER_TEMP/shadow-run" --budget-usd 2 --trials-per-case 3
+      - name: Report shadow results
+        if: always()
+        working-directory: .
         run: |
-          uv run python -m eval.shadow_ci check --output "$RUNNER_TEMP/shadow-run" \
-            >"$RUNNER_TEMP/shadow-score.json"
-          cat "$RUNNER_TEMP/shadow-score.json"
-          jq -r '"Candidate \(.source_commit): shadow \(.passed)/\(.expected_trials) passed (\(.pass_rate * 100)%); cost $\(.cost_usd). Score is informational."' \
-            "$RUNNER_TEMP/shadow-score.json" >>"$GITHUB_STEP_SUMMARY"
+          if [[ -f "$RUNNER_TEMP/shadow-run/manifest.json" ]] &&
+            uv run --directory v2 python -m eval.shadow_ci report --output "$RUNNER_TEMP/shadow-run" \
+              >"$RUNNER_TEMP/shadow-score.json"; then
+            cat "$RUNNER_TEMP/shadow-score.json"
+            jq -r '"Candidate \(.source_commit): shadow pass^3 \(.passing_all_three_cases)/\(.case_count) (\(.pass_cubed * 100)%); required >=70%; \(.passed)/\(.expected_trials) trials passed, \(.scored_trials) scored, \(.inconclusive_trials) inconclusive; complete=\(.complete); accounted cost $\(.cost_usd)."' \
+              "$RUNNER_TEMP/shadow-score.json" >>"$GITHUB_STEP_SUMMARY"
+            if ! jq -e '.complete == true and .pass_cubed >= 0.7' "$RUNNER_TEMP/shadow-score.json" >/dev/null; then
+              echo '::error::Shadow evaluation requires pass^3 >=70% and all 30 measurements complete.'
+              exit 1
+            fi
+          else
+            echo 'Shadow evaluation did not produce a usable report. See the job logs; no score is available. The pass^3 gate failed.' >>"$GITHUB_STEP_SUMMARY"
+            echo '::error::Shadow evaluation did not produce a usable report.'
+            exit 1
+          fi
