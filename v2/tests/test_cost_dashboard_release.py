@@ -609,11 +609,12 @@ locals {{
                     ]
                 )
             else:
-                for field, empty in (
-                    ("tags", {}),
-                    ("ok_actions", []),
-                    ("insufficient_data_actions", []),
-                ):
+                defaults: dict[str, object] = {
+                    "tags": {},
+                    "ok_actions": [],
+                    "insufficient_data_actions": [],
+                }
+                for field, empty in defaults.items():
                     before[field], after[field] = None, empty
                     mutations.append(
                         (
