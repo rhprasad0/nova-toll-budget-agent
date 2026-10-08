@@ -19,7 +19,6 @@ permissions:
 jobs:
   evaluate:
     runs-on: ${{ inputs.runner }}
-    continue-on-error: true
     timeout-minutes: 15
     permissions:
       contents: read
@@ -67,11 +66,11 @@ jobs:
           aws-region: us-east-1
           allowed-account-ids: '903859731897'
           role-duration-seconds: 900
-      - name: Evaluate all ten shadow cases once
+      - name: Evaluate all ten shadow cases three times
         run: >-
           uv run python -m eval.golden_run run
           --corpus eval/active/shadow --calibration eval/harness-approval.json
-          --output "$RUNNER_TEMP/shadow-run" --budget-usd 2 --trials-per-case 1
+          --output "$RUNNER_TEMP/shadow-run" --budget-usd 2 --trials-per-case 3
       - name: Report shadow results
         if: always()
         working-directory: .
@@ -80,12 +79,14 @@ jobs:
             uv run --directory v2 python -m eval.shadow_ci report --output "$RUNNER_TEMP/shadow-run" \
               >"$RUNNER_TEMP/shadow-score.json"; then
             cat "$RUNNER_TEMP/shadow-score.json"
-            jq -r '"Candidate \(.source_commit): shadow \(.passed)/\(.expected_trials) passed (\(.pass_rate * 100)%); \(.scored_trials) scored, \(.inconclusive_trials) inconclusive; complete=\(.complete); accounted cost $\(.cost_usd). Informational only."' \
+            jq -r '"Candidate \(.source_commit): shadow pass^3 \(.passing_all_three_cases)/\(.case_count) (\(.pass_cubed * 100)%); required >=70%; \(.passed)/\(.expected_trials) trials passed, \(.scored_trials) scored, \(.inconclusive_trials) inconclusive; complete=\(.complete); accounted cost $\(.cost_usd)."' \
               "$RUNNER_TEMP/shadow-score.json" >>"$GITHUB_STEP_SUMMARY"
-            if [[ "$(jq -r .complete "$RUNNER_TEMP/shadow-score.json")" != true ]]; then
-              echo '::warning::Shadow evaluation has incomplete measurements; see the summary and logs.'
+            if ! jq -e '.complete == true and .pass_cubed >= 0.7' "$RUNNER_TEMP/shadow-score.json" >/dev/null; then
+              echo '::error::Shadow evaluation requires pass^3 >=70% and all 30 measurements complete.'
+              exit 1
             fi
           else
-            echo 'Shadow evaluation did not produce a usable report. See the job logs; no score is available. This diagnostic is informational.' >>"$GITHUB_STEP_SUMMARY"
-            echo '::warning::Shadow evaluation did not produce a usable report.'
+            echo 'Shadow evaluation did not produce a usable report. See the job logs; no score is available. The pass^3 gate failed.' >>"$GITHUB_STEP_SUMMARY"
+            echo '::error::Shadow evaluation did not produce a usable report.'
+            exit 1
           fi
