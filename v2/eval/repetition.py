@@ -25,16 +25,71 @@ def report_trials(identity: dict[str, Any]) -> range:
         "2.2.0",
         "2.4.0",
         "2.5.0",
+        "2.5.1",
+        "2.5.2",
+        "2.5.3",
+        "2.5.4",
+        "2.5.5",
+        "2.5.6",
+        "2.5.7",
+        "2.5.8",
+        "2.5.9",
+        "2.5.10",
+        "2.5.11",
+        "2.5.12",
+        "2.5.13",
+        "2.5.14",
+        "2.5.15",
+        "2.5.16",
         *(f"2.3.{n}" for n in range(29)),
     }
     if version not in supported:
         raise ValueError(f"unsupported harness contract: {version}")
-    if version in {"2.4.0", "2.5.0"} and not isinstance(
-        identity.get("execution"), dict
-    ):
+    if version in {
+        "2.4.0",
+        "2.5.0",
+        "2.5.1",
+        "2.5.2",
+        "2.5.3",
+        "2.5.4",
+        "2.5.5",
+        "2.5.6",
+        "2.5.7",
+        "2.5.8",
+        "2.5.9",
+        "2.5.10",
+        "2.5.11",
+        "2.5.12",
+        "2.5.13",
+        "2.5.14",
+        "2.5.15",
+        "2.5.16",
+    } and not isinstance(identity.get("execution"), dict):
         raise ValueError("missing training execution contract")
     trials = trial_numbers(
-        identity["execution"] if version in {"2.4.0", "2.5.0"} else identity["corpus"]
+        identity["execution"]
+        if version
+        in {
+            "2.4.0",
+            "2.5.0",
+            "2.5.1",
+            "2.5.2",
+            "2.5.3",
+            "2.5.4",
+            "2.5.5",
+            "2.5.6",
+            "2.5.7",
+            "2.5.8",
+            "2.5.9",
+            "2.5.10",
+            "2.5.11",
+            "2.5.12",
+            "2.5.13",
+            "2.5.14",
+            "2.5.15",
+            "2.5.16",
+        }
+        else identity["corpus"]
     )
     if tuple(map(int, version.split("."))) < (2, 3, 21) and len(trials) != 3:
         raise ValueError("historical harness contracts require three trials")

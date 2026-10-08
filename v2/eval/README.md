@@ -1,31 +1,31 @@
 # TollChat evaluation
 
-**Preparing locally authored suite 5.0.0.** No fresh cases are active yet. The 100-case development corpus
+**Approved locally authored suite 5.1.13:** 50 training and 10 shadow cases are
+active, with 25 holdout cases stored externally. Harness 2.5.16 has an approved
+aggregate calibration receipt. The 100-case development corpus
 3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
 Its recorded scores and reviews remain historical; it cannot run or seed fresh inputs.
 The [experiment journal](EXPERIMENT_JOURNAL.md) preserves the findings and limitations.
 
 ## Frozen golden evaluation
 
-Author **50 training and 10 shadow cases** under `eval/active/`, with **25 holdout
+The **50 training and 10 shadow cases** live under `eval/active/`, with **25 holdout
 cases on an external host path**. Use the [authoring guide](AUTHORING.md) and
 [coverage contract](contract.json). Harness
-2.5.0 searches the training split with **one trial per case and 16 workers**;
+2.5.16 searches the training split with **one trial per case and 16 workers**;
 three trials require Ryan's explicit instruction. Shadow CI evaluates ten cases
 once with a $2 per-job cap; scores are informational, incomplete measurements fail.
-TollChat remains on `gpt-6-luna`, with the existing actor, judges and grading rules.
+TollChat's application model, prompt, SOP and tools remain unchanged on `gpt-6-luna`.
 
-From `v2/`, check readiness, validate drafts, and freeze local identities:
+From a clean committed `v2/` checkout, validate the approved inputs and readiness:
 
 ```bash
-uv run python -m eval.golden --allow-uninitialized
 uv run python -m eval.corpus validate
-uv run python -m eval.corpus freeze --corpus eval/active/training --split training --version 5.0.0
-uv run python -m eval.corpus freeze --corpus eval/active/shadow --split shadow --version 5.0.0
 uv run python -m eval.golden
+uv run python -m eval.shadow_ci prepare --verify-runtime
 ```
 
-`freeze` writes a per-split manifest and pending `review.json`; it never grants
+For new inputs, `eval.corpus freeze` writes a per-split manifest and pending `review.json`; it never grants
 approval. A real reviewer identifies the exact corpus digest and evidence.
 Commit real public inputs, manifests and input reviews before paid execution.
 Changed inputs or protected sources need a newer corpus version and input review.
@@ -60,8 +60,8 @@ feedback can still influence tuning; this is not fully blind accuracy.
 
 ## Shadow CI
 
-CI validates readiness without credentials while awaiting real inputs. Once
-reviewed shadow inputs and `eval/harness-approval.json` exist, the follow-on
+CI validates the reviewed shadow inputs and `eval/harness-approval.json` without
+credentials. The follow-on
 `shadow-ci` workflow evaluates the exact successful CI candidate on all ten cases
 through the reviewed `golden-evaluation` environment. Its definition runs from
 protected `main`; PR CI remains credential-free.

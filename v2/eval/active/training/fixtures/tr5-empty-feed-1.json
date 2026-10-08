@@ -1,0 +1,33 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "i66:4:entry:EB",
+    "destination_point_id": "i66:11:exit:EB",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "i66:4:entry:EB",
+    "destination_point_id": "i66:11:exit:EB",
+    "error": "pricing_unavailable",
+    "reason": "incomplete_route_price",
+    "unavailable_components": [
+      {
+        "route_step_id": "step-1",
+        "reason": "missing_observation",
+        "component_evaluated_at": "2026-10-07T07:59:00-04:00",
+        "interval_end_at": null,
+        "observed_at": null
+      }
+    ]
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "Committed Oracle catalog and published domain schedules at base 7670ff82; one-time local authoring on 2026-10-07",
+    "note": "Fictional driver and synthetic dynamic observations/history, not recorded traffic. Fixed charges calculated from frozen domain schedules. No historical case was used as a scenario seed."
+  }
+}

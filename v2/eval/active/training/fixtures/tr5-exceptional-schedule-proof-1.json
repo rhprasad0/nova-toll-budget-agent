@@ -1,0 +1,61 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "i95:203NO",
+    "destination_point_id": "i495:187ND",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "status": "currently_unavailable",
+    "reason": {
+      "code": "i95_opposite_direction_open",
+      "details": {
+        "required_i95_directions": [
+          "NB"
+        ],
+        "availability": "southbound"
+      }
+    },
+    "point_ids": [
+      "i95:203NO",
+      "i495:187ND"
+    ],
+    "connection_ids": [
+      "source:i95_shared:Northbound:203NO:187ND"
+    ],
+    "connection_types": [
+      "general_purpose_gap"
+    ],
+    "general_purpose_gaps": [
+      {
+        "connection_id": "source:i95_shared:Northbound:203NO:187ND",
+        "boundary_point_id": "i495:192NO",
+        "role": "prefix",
+        "i95_direction": "NB",
+        "fallback_required": true
+      }
+    ],
+    "i95_evidence": {
+      "availability": "southbound",
+      "northbound_corridor_name": "95 Express Northbound",
+      "northbound_link_status": "closed",
+      "northbound_interval_end_at": "2026-10-07T07:50:00-04:00",
+      "northbound_calculated_at": "2026-10-07T07:51:00-04:00",
+      "southbound_corridor_name": "95 Express Southbound",
+      "southbound_link_status": "open",
+      "southbound_interval_end_at": "2026-10-07T07:50:00-04:00",
+      "southbound_calculated_at": "2026-10-07T07:51:00-04:00"
+    },
+    "facility_legs": []
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "Committed Oracle catalog and published domain schedules at base 7670ff82; one-time local authoring on 2026-10-07",
+    "note": "Fictional driver and synthetic dynamic observations/history, not recorded traffic. Fixed charges calculated from frozen domain schedules. No historical case was used as a scenario seed."
+  }
+}

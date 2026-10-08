@@ -1,0 +1,71 @@
+{
+  "tool": "get_annual_toll_ballpark",
+  "input": {
+    "outbound": {
+      "origin_point_id": "greenway:5:exit:EB",
+      "destination_point_id": "greenway:6:exit:EB",
+      "departure_time": "07:35:00"
+    },
+    "weekdays": [
+      "tuesday",
+      "thursday"
+    ],
+    "planned_annual_commute_days": 106,
+    "gross_annual_income_usd": "127000.00",
+    "return": {
+      "origin_point_id": "greenway:6:entry:WB",
+      "destination_point_id": "greenway:5:exit:WB",
+      "departure_time": "17:15:00"
+    }
+  },
+  "result": {
+    "error": "ballpark_unavailable",
+    "reason": "route_unavailable",
+    "outbound": {
+      "origin_point_id": "greenway:5:exit:EB",
+      "destination_point_id": "greenway:6:exit:EB",
+      "status": "invalid_origin",
+      "reason": {
+        "code": "origin_not_entry",
+        "details": {
+          "point_id": "greenway:5:exit:EB",
+          "point_type": "exit",
+          "allowed_point_types": [
+            "entry",
+            "airport"
+          ],
+          "alternatives": [
+            {
+              "point_id": "greenway:5:entry:EB",
+              "network_id": "greenway",
+              "source_node_id": "5",
+              "point_type": "entry",
+              "direction": "EB",
+              "label": "Exit 5 - SR 901 (Claiborne Pkwy)",
+              "aliases": [],
+              "location": {
+                "type": "Point",
+                "coordinates": [
+                  -77.5083964,
+                  39.0302984
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "return": {
+      "origin_point_id": "greenway:6:entry:WB",
+      "destination_point_id": "greenway:5:exit:WB",
+      "status": "valid",
+      "reason": null
+    }
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "Committed Oracle catalog and published domain schedules at base 7670ff82; one-time local authoring on 2026-10-07",
+    "note": "Fictional driver and synthetic dynamic observations/history, not recorded traffic. Fixed charges calculated from frozen domain schedules. No historical case was used as a scenario seed."
+  }
+}

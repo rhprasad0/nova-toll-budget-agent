@@ -1,0 +1,95 @@
+{
+  "tool": "get_annual_toll_ballpark",
+  "input": {
+    "outbound": {
+      "origin_point_id": "i95:203NO",
+      "destination_point_id": "i95:202ND",
+      "departure_time": "07:35:00"
+    },
+    "weekdays": [
+      "monday",
+      "wednesday",
+      "friday"
+    ],
+    "planned_annual_commute_days": 54,
+    "gross_annual_income_usd": "84375.00",
+    "return": {
+      "origin_point_id": "i95:202SO",
+      "destination_point_id": "i95:203SD",
+      "departure_time": "17:15:00"
+    }
+  },
+  "result": {
+    "method": "recent_complete_same_date_round_trips",
+    "evaluated_at": "2026-10-07T07:59:00-04:00",
+    "timezone": "America/New_York",
+    "target_window": {
+      "start_date": "2026-07-15",
+      "end_date": "2026-10-06",
+      "date_count": 84
+    },
+    "weekdays": [
+      "monday",
+      "wednesday",
+      "friday"
+    ],
+    "planned_annual_commute_days": 54,
+    "coverage": {
+      "eligible_date_count": 36,
+      "complete_pair_count": 0,
+      "coverage_percent": "0.0",
+      "by_weekday": [
+        {
+          "weekday": "monday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 0,
+          "coverage_percent": "0.0"
+        },
+        {
+          "weekday": "wednesday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 0,
+          "coverage_percent": "0.0"
+        },
+        {
+          "weekday": "friday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 0,
+          "coverage_percent": "0.0"
+        }
+      ]
+    },
+    "uses_modeled": false,
+    "uses_current_fixed_rates": false,
+    "facilities": [],
+    "assumptions": {
+      "estimated_tax_fraction": "1/3",
+      "vehicle_cost_per_mile_usd": "0.685",
+      "distance_method": "straight_line_priced_facility_legs",
+      "scope": "tolled_portions_only"
+    },
+    "income": {
+      "gross_annual_usd": "84375.00",
+      "estimated_tax_usd": "28125.00",
+      "estimated_after_tax_usd": "56250.00"
+    },
+    "tolled_distance": {
+      "daily_round_trip_miles": "15.73",
+      "annual_miles": "849.47"
+    },
+    "vehicle_cost": {
+      "daily_usd": "10.78",
+      "annual_usd": "581.89"
+    },
+    "error": "ballpark_unavailable",
+    "reason": "no_complete_paired_days",
+    "available_date_range": null
+  },
+  "is_error": false,
+  "synthetic_daily_distance_miles": "15.731",
+  "provenance": {
+    "kind": "synthetic",
+    "source": "Committed Oracle catalog and published domain schedules at base 7670ff82; one-time local authoring on 2026-10-07",
+    "note": "Fictional driver and synthetic dynamic observations/history, not recorded traffic. Fixed charges calculated from frozen domain schedules. No historical case was used as a scenario seed."
+  }
+}

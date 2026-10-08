@@ -1,7 +1,7 @@
 # Running the frozen training split
 
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
-No fresh set is active until it is authored, frozen and reviewed. Training application
+Corpus 5.1.13 is frozen and reviewed under harness 2.5.16. Training application
 runs default to one trial per case; use `--trials-per-case 3` only on Ryan's explicit
 instruction. Shadow is a ten-case CI diagnostic outside search, with a $2 per-job
 ceiling and informational scores. Actors have up to five delivered
@@ -19,6 +19,11 @@ generation remains low/2,048 and actor generation medium/2,048 on the same model
 Judge instructions require checking source and other factual claims before
 amounts, and evaluating missing qualifications by the meaning conveyed across
 the conversation.
+Potential actor passes receive a separate confirmation using only the private
+driver profile, delivered dialogue and simulator controls. Both assessments must
+accept the actor; a correct application answer cannot repair wrong driver facts.
+The profile, including its opening request, supplies the actor's facts; the
+confirmation checks consistency rather than inventing outside route geography.
 Useful answers pass despite optional detail or minor omissions that preserve
 material meaning. Missing final-answer disclosures affect Outcome; Rules checks
 prohibited actions, affirmative misrepresentations, and required workflow steps.
@@ -39,13 +44,14 @@ Code resolves selected IDs without retyping or normalizing Markdown. User and
 tool text are excluded. Unknown IDs make the measurement unusable. The model
 judges whether the selected lines together convey the requirement, including
 headings when needed, and checks remaining requirements and contradictions.
-Raw judgments and original cited text remain in private evidence. This uses the
-existing three calls per calibration reference. Calibration review need not
+Raw judgments and original cited text remain in private evidence. Outcome,
+Grounding and Rules assessments also confirm potential actor passes separately.
+Calibration review need not
 require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-The local training contract / harness 2.5.0 uses `literal-input-prose-v1`. The corpus hashes
+The local training contract / harness 2.5.16 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -301,6 +307,52 @@ reviewer and main-only branch policy on `golden-evaluation`. The role's OIDC tru
 admits only the reusable evaluator definition on protected main. Forks and tag pushes do
 not run paid shadow evaluations. Readiness checks run without these credentials.
 Shadow CI evidence is regression feedback outside the training search loop.
+
+## Uncommitted corpus preparation
+
+If an all-split preparation calibration loses provider usage, its external
+`usage-ceiling.json` may bind the retained calls to their full recorded
+reservations. Only explicit preparation may continue from that receipt. This
+accounts for the maximum cost without inventing token counts: the original run
+stays incomplete and cannot qualify as a confirmation round. Ordinary runs still
+require complete prior usage.
+
+Combined all-split `calibrate` and scripted `eval.golden_actor_check` accept
+`--allow-uncommitted-preparation` when preparation is explicitly authorized.
+Detailed output must be external. Each run records preparation status, base
+commit and actual tracked/untracked source hashes, and saves a private source
+snapshot before model calls. This flag is unavailable for application runs;
+shadow CI still requires a clean committed checkout. Validate and provisionally
+freeze all inputs before paid preparation, and version all splits together after
+any protected-source or input repair. Chain every paid run with `--prior-run`
+and the same cumulative authorized budget; retain unsuccessful runs.
+
+When Ryan explicitly waives commits for a local full application diagnostic, use
+`python -m eval.uncommitted_run run --allow-uncommitted-application` with the normal
+run arguments. This host launcher retains the frozen evaluator and all input,
+calibration, privacy and budget gates, while using its existing actual-source
+hashing and external snapshot support. It records the explicit waiver and launcher
+hash in the run identity. Output must be external. Native application execution
+and shadow CI keep their clean-checkout requirement; no holdout input enters Git.
+
+Complete diagnostic repairs before the three unchanged judge-replay rounds and
+three actor trials per case. Human review covers split-level decision and
+individual-dimension disagreements, material-error false passes, every invalid
+actor exchange and usage completeness. Do not relabel examples to gain agreement.
+After Ryan approves the concrete evidence, record input and harness approvals
+and export the existing aggregate receipt. Freeze inputs, instructions, model
+settings and runtime for the comparison series; a later material measurement
+defect stops affected comparisons.
+
+For a newly authorized calibration series, `eval.golden_actor_check` also accepts
+`--live-application --allow-uncommitted-preparation`. It measures actors against
+the unchanged application with frozen fixture tools, retains every exchange and
+usage charge, and clears application verdicts from actor-check reports. Output
+must be external. Record the assistant mode and run three trials per case on
+each split; scripted-answer checks alone do not qualify live actor behavior.
+Changed inputs or evaluator instructions require coordinated new identities and
+new reference calibration. Input and harness approval remain separate from these
+preparation diagnostics.
 
 ## External holdout checkpoints
 

@@ -1,0 +1,35 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "i95:206NO",
+    "destination_point_id": "i495:187ND",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "status": "invalid_origin",
+    "reason": {
+      "code": "i95_northbound_requires_i495_restart",
+      "details": {
+        "point_id": "i95:206NO",
+        "point_type": "entry",
+        "suggested_restart_point_id": "i495:192NO",
+        "suggested_destination_point_id": "i495:187ND"
+      }
+    },
+    "point_ids": [],
+    "connection_ids": [],
+    "connection_types": [],
+    "general_purpose_gaps": [],
+    "i95_evidence": null
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "Committed Oracle catalog and published domain schedules at base 7670ff82; one-time local authoring on 2026-10-07",
+    "note": "Fictional driver and synthetic dynamic observations/history, not recorded traffic. Fixed charges calculated from frozen domain schedules. No historical case was used as a scenario seed."
+  }
+}

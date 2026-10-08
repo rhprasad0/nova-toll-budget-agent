@@ -1,0 +1,6 @@
+{
+  "status": "approved",
+  "corpus_sha256": "b730d9d7b5a0292c88588560ed4ba9f81acf88f618e519170fa2a33f6b665e36",
+  "reviewer": "Ryan",
+  "evidence": "Ryan explicitly approved this verified corpus 5.1.13 / harness 2.5.16 candidate after receiving the three-round and all-split actor results, retained residuals and cumulative cost. Approval message: Approved. Candidate SHA256: 3a6d187f95b19e8cff528d09dc3d34ea10ce20705c97981ae517016cf533ad39."
+}
