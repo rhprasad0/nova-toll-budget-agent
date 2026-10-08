@@ -1,7 +1,7 @@
 name = "eval_reviewer"
 description = "Independently review TollChat eval-climb candidate scope, comparable evidence, and new regressions."
-model = "gpt-6-astra"
-model_reasoning_effort = "high"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"
 developer_instructions = """
 Read AGENTS.md and .agents/skills/eval-climb/SKILL.md in the supplied checkout.
