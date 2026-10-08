@@ -589,6 +589,118 @@ locals {{
             readback = deepcopy(item)
             readback["change"]["after"]["metric_transformation"][0]["dimensions"] = {}
             gate.validate(readback, environment, plan, package_evidence)
+        if item["address"].startswith(
+            (
+                "aws_cloudwatch_log_metric_filter.costs_",
+                "aws_cloudwatch_metric_alarm.costs_",
+            )
+        ):
+            drift = deepcopy(item)
+            before = deepcopy(item["change"]["after"])
+            after = deepcopy(before)
+            mutations: list[tuple[tuple[str | int, ...], object]] = []
+            if "metric_transformation" in before:
+                before["metric_transformation"][0]["dimensions"] = None
+                after["metric_transformation"][0]["dimensions"] = {}
+                mutations.extend(
+                    [
+                        (("metric_transformation", 0, "dimensions"), {"extra": "tag"}),
+                        (("metric_transformation", 0, "name"), "unreviewed"),
+                    ]
+                )
+            else:
+                defaults: dict[str, object] = {
+                    "tags": {},
+                    "ok_actions": [],
+                    "insufficient_data_actions": [],
+                }
+                for field, empty in defaults.items():
+                    before[field], after[field] = None, empty
+                    mutations.append(
+                        (
+                            (field,),
+                            {"extra": "tag"} if field == "tags" else ["unreviewed"],
+                        )
+                    )
+                before["evaluate_low_sample_count_percentiles"] = ""
+                after["evaluate_low_sample_count_percentiles"] = ""
+                mutations.extend(
+                    [
+                        (("actions_enabled",), False),
+                        (("evaluate_low_sample_count_percentiles",), "ignore"),
+                        (("threshold",), 0),
+                        (("alarm_actions",), ["unreviewed"]),
+                    ]
+                )
+                if not item["address"].endswith("costs_errors"):
+                    before["dimensions"], after["dimensions"] = None, {}
+                    mutations.append((("dimensions",), {"extra": "tag"}))
+                if item["address"].startswith(
+                    "aws_cloudwatch_metric_alarm.costs_stale"
+                ):
+                    for index, query in enumerate(before["metric_query"]):
+                        query["period"] = None
+                        after["metric_query"][index]["period"] = 0
+                        mutations.append((("metric_query", index, "period"), 300))
+                        if query["id"] == "success":
+                            query["metric"][0]["dimensions"] = None
+                            query["metric"][0]["unit"] = None
+                            after["metric_query"][index]["metric"][0].update(
+                                dimensions={}, unit=""
+                            )
+                            mutations.extend(
+                                [
+                                    (
+                                        ("metric_query", index, "metric", 0, "period"),
+                                        60,
+                                    ),
+                                    (
+                                        ("metric_query", index, "metric", 0, "unit"),
+                                        "Count",
+                                    ),
+                                    (
+                                        (
+                                            "metric_query",
+                                            index,
+                                            "metric",
+                                            0,
+                                            "dimensions",
+                                        ),
+                                        {"extra": "tag"},
+                                    ),
+                                ]
+                            )
+                        else:
+                            mutations.append(
+                                (
+                                    ("metric_query", index, "expression"),
+                                    "FILL(success, 1)",
+                                )
+                            )
+            drift["change"] = dict(
+                actions=["update"],
+                before=before,
+                after=after,
+                after_unknown={},
+                after_sensitive={},
+            )
+            original_drift = deepcopy(drift)
+            gate.validate_drift(drift, environment)
+            assert drift == original_drift
+            if "metric_query" in after:
+                reordered = deepcopy(drift)
+                reordered["change"]["after"]["metric_query"].reverse()
+                gate.validate_drift(reordered, environment)
+            for path, value in mutations:
+                bad = deepcopy(drift)
+                # Equal wrong settings must fail too; equality alone is insufficient.
+                for side in ("before", "after"):
+                    target = bad["change"][side]
+                    for part in path[:-1]:
+                        target = target[part]
+                    target[path[-1]] = value
+                with pytest.raises(ValueError):
+                    gate.validate_drift(bad, environment)
         bad = deepcopy(item)
         bad["change"]["actions"] = ["delete"]
         with pytest.raises(ValueError):

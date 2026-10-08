@@ -244,17 +244,47 @@ def validate_drift(item: dict[str, Any], environment: str) -> None:
         'aws_s3_object.cost_assets["costs-benchmark.json"]': {"tags", "metadata"},
         'aws_s3_object.cost_assets["evals.css"]': {"tags", "metadata"},
         **{
-            address: {"tags"}
+            address: {"tags", "ok_actions", "insufficient_data_actions"}
+            | (set() if address.endswith("costs_errors") else {"dimensions"})
             for address in RESOURCES
             if address.startswith("aws_cloudwatch_metric_alarm.costs_")
         },
+        **{
+            address: set()
+            for address in RESOURCES
+            if address.startswith("aws_cloudwatch_log_metric_filter.costs_")
+        },
     }
     require(address in fields and environment in ACCOUNTS)
-    before, after = (dict(change[key]) for key in ("before", "after"))
+    before, after = (deepcopy(change[key]) for key in ("before", "after"))
     for field in fields[address]:
-        empty: object = [] if field == "layers" else {}
+        empty: object = (
+            [] if field in {"layers", "ok_actions", "insufficient_data_actions"} else {}
+        )
         require(before[field] in (None, empty) and after[field] in (None, empty))
         before[field] = after[field] = None
+    for values in (before, after):
+        if address.startswith("aws_cloudwatch_log_metric_filter.costs_"):
+            transformations = values["metric_transformation"]
+            require(len(transformations) == 1)
+            require(transformations[0].get("dimensions") in (None, {}))
+            transformations[0]["dimensions"] = None
+        if address.startswith("aws_cloudwatch_metric_alarm.costs_stale"):
+            queries = values["metric_query"]
+            require(
+                len(queries) == 2
+                and {query["id"] for query in queries} == {"filled", "success"}
+            )
+            for query in queries:
+                require(query.get("period") in (None, 0))
+                query["period"] = None
+                if query["id"] == "success":
+                    metrics = query["metric"]
+                    require(len(metrics) == 1)
+                    require(metrics[0].get("dimensions") in (None, {}))
+                    require(metrics[0].get("unit") in (None, ""))
+                    metrics[0]["dimensions"] = metrics[0]["unit"] = None
+            values["metric_query"] = sorted(queries, key=lambda query: query["id"])
     if address == "aws_cloudwatch_event_rule.costs":
         hour = "8" if environment == "development" else "9"
         recovery = "12" if environment == "development" else "13"
@@ -763,7 +793,13 @@ def validate(
         "actions_enabled": True,
         "evaluate_low_sample_count_percentiles": "evaluate",
     }.items():
-        if field in expected and after.get(field) is None:
+        if field in expected and (
+            after.get(field) is None
+            or (
+                field == "evaluate_low_sample_count_percentiles"
+                and after.get(field) == ""
+            )
+        ):
             after[field] = default
     omitted_defaults = {"acl", "managed_policy_arns", "inline_policy"}
     if address == "aws_lambda_function.costs":
