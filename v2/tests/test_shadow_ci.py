@@ -39,6 +39,14 @@ def test_shadow_workflow_uses_approved_runtime_before_fixed_read_only_role() -> 
         r"rhprasad0/nova-toll-budget-agent/\.github/workflows/v2-shadow-eval\.yml@[0-9a-f]{40}",
         job["uses"],
     )
+    revision = job["uses"].rsplit("@", 1)[1]
+    assert (
+        subprocess.check_output(
+            ["git", "show", f"{revision}:.github/workflows/v2-shadow-eval.yml"],
+            cwd=root,
+        )
+        == (root / ".github/workflows/v2-shadow-eval.yml").read_bytes()
+    )
     assert ci["jobs"]["shadow-readiness"]["continue-on-error"] is True
     workflow = yaml.safe_load(
         (root / ".github/workflows/v2-shadow-eval.yml").read_text()
