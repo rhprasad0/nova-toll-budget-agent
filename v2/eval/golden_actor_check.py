@@ -250,6 +250,15 @@ def live_check(
     case = next(c for c in golden.load_cases() if c.id == example.case_id)
     row = run.execute(case, trial, journal)
     row.verdicts.clear()  # Preparation reports actor validity, not application scores.
+    if row.status == "scored" and not row.actor_replies:
+        row.status = "inconclusive"
+        row.error = "actor_not_sampled"
+        row.actor_validity = run.ActorAssessment(
+            status="uncertain",
+            evidence="The application stopped before any actor reply.",
+        )
+        row.failure_phase = "actor"
+        row.failure_class = run.failure_class(row)
     journal.append({"event": "actor_check", **row.model_dump()})
     print(f"{row.id}: {row.error or row.actor_validity}", flush=True)
     return row

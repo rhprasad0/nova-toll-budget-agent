@@ -1031,6 +1031,15 @@ def test_request_hashes_exact_json_bytes_and_skips_bodyless_hash(
     production_request = captured.pop()
     assert production_request.full_url == "https://tollchat.ai/api/config"
     assert production_request.get_header("Origin") == "https://tollchat.ai"
+    Response.headers["Cache-Control"] = "no-store"
+    assert check.request(
+        jar, "/assets/evals.mjs", expected_cache_control="no-store"
+    ) == (200, "text/plain", b"ok")
+    Response.headers.replace_header(
+        "Cache-Control", "public, max-age=31536000, immutable"
+    )
+    with pytest.raises(check.CheckFailure, match="asset_content"):
+        check.request(jar, "/assets/evals.mjs", expected_cache_control="no-store")
 
 
 def test_request_path_failure_has_fixed_reason(

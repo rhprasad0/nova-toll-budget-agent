@@ -31,6 +31,7 @@ const { chromium } = require("playwright");
           scheduled_at: "2026-09-15T18:17:00Z",
           status: "passed",
           evidence: {
+            policy_version: /** @type {string | undefined} */ ("scheduled-critical-v1"),
             checks: ["ToolCallCount", "Completeness", "Correctness"].map(
               (name) => ({
                 name,
@@ -113,6 +114,41 @@ const { chromium } = require("playwright");
     assert.match(modelLabels, /Simulated user: gpt-6-luna \(low reasoning\)/);
     assert.match(modelLabels, /Judges: gpt-6-luna \(xhigh reasoning\)/);
     assert.doesNotMatch(modelLabels, /gpt-5.6-luna/);
+    assert.match(modelLabels, /scheduled-critical-v1/);
+    const legacyFailed = {
+      ...snapshot.runs[0], scheduled_at: "2026-09-15T17:00:00Z", status: "failed",
+      evidence: {...snapshot.runs[0].evidence, policy_version: undefined,
+        checks: snapshot.runs[0].evidence.checks.map((check) => ({...check, passed: false})),
+      },
+    };
+    data = {...snapshot, runs: [...snapshot.runs, legacyFailed]};
+    await page.reload();
+    await page.locator(".scenario").first().waitFor();
+    assert.match(await page.locator("#metrics").innerText(), /1 of 1/);
+    assert.match(await page.locator("#shown").innerText(), /1 legacy graded runs/);
+    assert.match(await page.locator("#history").innerText(), /Failed · Legacy grading/);
+    const ungraded = ["running", "error"].map((status, i) => ({
+      ...snapshot.runs[0], status, scheduled_at: `2026-09-15T21:${23-i}:00Z`,
+      evidence: {...snapshot.runs[0].evidence, policy_version: undefined, checks: [], turns: []},
+    }));
+    data = {...snapshot, runs: [...snapshot.runs, legacyFailed, ...ungraded]};
+    await page.reload();
+    await page.locator(".scenario").first().waitFor();
+    assert.match(await page.locator("#metrics").innerText(), /1 of 1/);
+    assert.match(await page.locator("#shown").innerText(), /1 legacy graded runs/);
+    for (const state of ["running", "error"])
+      assert.doesNotMatch((await page.locator(`#ticks .${state}`).getAttribute("title")) || "Legacy grading", /Legacy grading/);
+    const criticalFailed = {...legacyFailed, scheduled_at: "2026-09-15T16:00:00Z",
+      evidence: {...legacyFailed.evidence, policy_version: "scheduled-critical-v1"},
+    };
+    data = {...snapshot, runs: [...snapshot.runs, legacyFailed, criticalFailed]};
+    await page.reload();
+    await page.locator(".scenario").first().waitFor();
+    assert.match(await page.locator("#metrics").innerText(), /1 of 2/);
+    assert.match(await page.locator("#metrics").innerText(), /Critical failures\s+1/);
+    data = snapshot;
+    await page.reload();
+    await page.locator(".scenario").first().waitFor();
     await page.selectOption("#outcome", "error");
     assert.equal(await page.locator(".run").count(), 1);
     status = 503;
@@ -139,9 +175,14 @@ const { chromium } = require("playwright");
     await page.locator(".scenario").first().waitFor();
     assert.match(
       await page.locator("#metrics").innerText(),
-      /No completed, graded runs/,
+      /No completed runs under the current policy/,
     );
     assert.doesNotMatch(await page.locator("#metrics").innerText(), /NaN|100%/);
+    data = {...snapshot, runs: [legacyFailed]};
+    await page.reload();
+    await page.locator(".scenario").first().waitFor();
+    assert.match(await page.locator("#metrics").innerText(), /No completed runs under the current policy/);
+    assert.match(await page.locator("#history").innerText(), /Failed · Legacy grading/);
     for (const width of [320, 390, 820, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       assert.ok(

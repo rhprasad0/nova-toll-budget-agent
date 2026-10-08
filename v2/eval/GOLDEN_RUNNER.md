@@ -1,7 +1,7 @@
 # Running the frozen training split
 
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
-Corpus 5.1.13 is frozen and reviewed under harness 2.5.16. Training application
+Corpus 5.1.14 is frozen and reviewed under harness 2.5.17. Training application
 runs default to one trial per case; use `--trials-per-case 3` only on Ryan's explicit
 instruction. Shadow is a ten-case CI diagnostic outside search, with a $2 per-job
 ceiling and informational scores. Actors have up to five delivered
@@ -51,7 +51,7 @@ require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-The local training contract / harness 2.5.16 uses `literal-input-prose-v1`. The corpus hashes
+The local training contract / harness 2.5.17 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including

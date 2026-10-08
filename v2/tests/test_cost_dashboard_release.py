@@ -21,6 +21,99 @@ from scripts import shared_packages
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.parametrize("environment", ["development", "production"])
+@pytest.mark.parametrize("unit", [None, ""])
+def test_admitted_billing_freshness_alarm_configuration(
+    environment: str, unit: str | None
+) -> None:
+    account = gate.ACCOUNTS[environment]
+    name = "tollchat-v2-cost-publisher" + (
+        "-dev" if environment == "development" else ""
+    )
+    item: dict[str, Any] = {
+        "address": 'aws_cloudwatch_metric_alarm.costs_stale["dashboard"]',
+        "mode": "managed",
+        "provider_name": "registry.terraform.io/hashicorp/aws",
+        "change": {
+            "actions": ["create"],
+            "before": None,
+            "after": {
+                "alarm_name": name + "-dashboard-stale",
+                "alarm_description": "No successful billing publication in 48 hourly periods.",
+                "evaluation_periods": 48,
+                "datapoints_to_alarm": 48,
+                "threshold": 1,
+                "comparison_operator": "LessThanThreshold",
+                "treat_missing_data": "breaching",
+                "alarm_actions": [f"arn:aws:sns:us-east-1:{account}:nova-toll-alerts"],
+                "metric_query": [
+                    {
+                        "id": "filled",
+                        "expression": "FILL(success, 0)",
+                        "return_data": True,
+                    },
+                    {
+                        "id": "success",
+                        "return_data": False,
+                        "metric": [
+                            {
+                                "namespace": "TollChat/Billing",
+                                "metric_name": name + "-dashboard-success",
+                                "period": 3600,
+                                "stat": "Sum",
+                                "unit": unit,
+                            }
+                        ],
+                    },
+                ],
+            },
+            "after_unknown": {},
+        },
+    }
+    original = deepcopy(item)
+    gate.validate(item, environment)
+    assert item == original
+    for field, value in (
+        ("alarm_name", name + "-unreviewed"),
+        ("alarm_actions", ["arn:aws:sns:us-east-1:000000000000:other"]),
+        ("actions_enabled", False),
+        ("evaluation_periods", 24),
+        ("datapoints_to_alarm", 1),
+        ("treat_missing_data", "notBreaching"),
+    ):
+        bad = deepcopy(item)
+        bad["change"]["after"][field] = value
+        with pytest.raises(ValueError):
+            gate.validate(bad, environment)
+    bad = deepcopy(item)
+    bad["change"]["after"]["metric_query"][1]["metric"][0]["unit"] = "Count"
+    with pytest.raises(ValueError):
+        gate.validate(bad, environment)
+
+
+def report_function(environment: str) -> dict[str, Any]:
+    source = (ROOT / "v2/agent/public-report-routes.js").read_text()
+    suffix = "-dev" if environment == "development" else ""
+    return {
+        "address": "aws_cloudfront_function.public_report_routes",
+        "mode": "managed",
+        "provider_name": "registry.terraform.io/hashicorp/aws",
+        "change": {
+            "actions": ["update"],
+            "before": {},
+            "after": {
+                "name": "tollchat-v2-public-report-routes" + suffix,
+                "arn": f"arn:aws:cloudfront::{gate.ACCOUNTS[environment]}:function/tollchat-v2-public-report-routes{suffix}",
+                "runtime": "cloudfront-js-2.0",
+                "publish": True,
+                "comment": "Resolve canonical TollChat report directories",
+                "code": source,
+            },
+            "after_unknown": {},
+        },
+    }
+
+
 def test_asset_pins_and_archive_contract() -> None:
     for name, digest in gate.ASSET_SHA256.items():
         if "/" in name:
@@ -41,6 +134,12 @@ def test_asset_pins_and_archive_contract() -> None:
     assert not (ROOT / "v2/prototypes").exists()
     archive = ROOT / "v2/infra/build/publisher.zip"
     if archive.exists():
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        for record in (
+            ROOT / "infra/development-release-manifest.json",
+            ROOT / "v2/scripts/shared-package-compatibility.json",
+        ):
+            assert json.loads(record.read_text())["packages"]["publisher.zip"] == digest
         with ZipFile(archive) as bundle:
             assert (
                 bundle.read("costs.py")
@@ -105,6 +204,139 @@ def test_routes_only_add_the_four_billing_behaviors() -> None:
             gate.routes(before, bad)
     with pytest.raises(ValueError):
         gate.routes(after, before)
+
+
+@pytest.mark.parametrize("distribution", ["site", "staging"])
+def test_eval_assets_only_move_with_cache_protection(distribution: str) -> None:
+    function = (
+        "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-report-routes-dev"
+    )
+    model: dict[str, Any] = {
+        "path_pattern": "/eval-dashboard*",
+        "target_origin_id": "site",
+        "function_association": [
+            {"event_type": "viewer-request", "function_arn": function}
+        ],
+        "cache_policy_id": "caching-disabled",
+    }
+    before: dict[str, Any] = {
+        "ordered_cache_behavior": [
+            model,
+            dict(deepcopy(model), path_pattern="/evals.json"),
+            dict(deepcopy(model), path_pattern="/assets/evals*"),
+            *(
+                dict(deepcopy(model), path_pattern=path)
+                for path in sorted(gate.COST_ROUTES)
+            ),
+        ]
+    }
+    after = deepcopy(before)
+    target = after["ordered_cache_behavior"][2]
+    target["target_origin_id"] = "documents"
+    target["function_association"].append(
+        {"event_type": "viewer-response", "function_arn": function}
+    )
+    evidence = {"resource_changes": [report_function("development")]}
+    gate.routes(before, after, evidence)
+    for mutation in ("missing", "old", "unknown", "wrong_arn", "duplicate"):
+        bad_evidence = deepcopy(evidence)
+        function_row = bad_evidence["resource_changes"][0]
+        if mutation == "missing":
+            bad_evidence["resource_changes"] = []
+        elif mutation == "old":
+            function_row["change"]["after"]["code"] = (
+                "function handler(event) { return event.request; }"
+            )
+        elif mutation == "unknown":
+            function_row["change"]["after_unknown"] = {"code": True}
+        elif mutation == "wrong_arn":
+            function_row["change"]["after"]["arn"] += "-other"
+        else:
+            bad_evidence["resource_changes"].append(function_row)
+        with pytest.raises(ValueError):
+            gate.routes(before, after, bad_evidence)
+    unchanged = deepcopy(evidence)
+    unchanged["resource_changes"][0]["change"]["actions"] = ["no-op"]
+    unchanged["resource_changes"][0]["change"]["before"] = deepcopy(
+        unchanged["resource_changes"][0]["change"]["after"]
+    )
+    gate.routes(before, after, unchanged)
+    # Terraform set ordering must not require a particular association order.
+    target["function_association"].reverse()
+    gate.routes(before, after, evidence)
+    for field, value in (
+        ("target_origin_id", "public-chat"),
+        ("cache_policy_id", "untrusted"),
+        ("function_association", model["function_association"]),
+        (
+            "function_association",
+            [{"event_type": "viewer-response", "function_arn": function}],
+        ),
+        (
+            "function_association",
+            [
+                *model["function_association"],
+                {"event_type": "viewer-response", "function_arn": function + "-other"},
+            ],
+        ),
+    ):
+        bad = deepcopy(after)
+        bad["ordered_cache_behavior"][2][field] = value
+        with pytest.raises(ValueError):
+            gate.routes(before, bad, evidence)
+    for rows in (
+        after["ordered_cache_behavior"][:-1],
+        [*after["ordered_cache_behavior"], after["ordered_cache_behavior"][2]],
+        list(reversed(after["ordered_cache_behavior"])),
+    ):
+        with pytest.raises(ValueError):
+            gate.routes(before, {"ordered_cache_behavior": rows}, evidence)
+    bad = deepcopy(after)
+    bad["ordered_cache_behavior"][1]["target_origin_id"] = "documents"
+    with pytest.raises(ValueError):
+        gate.routes(before, bad, evidence)
+    with pytest.raises(ValueError):
+        gate.routes(after, before, evidence)
+
+    rehearsal = importlib.import_module("test_blue_green")
+    prior = rehearsal.previous()
+    inputs = rehearsal.gate.desired(prior, rehearsal.slot("green", "release2"))
+    selected = "blue" if distribution == "site" else "green"
+    released = prior["slots"][selected]
+    before["origin"] = [
+        {"origin_id": "site"},
+        {"origin_id": "documents", "origin_path": released["asset_prefix"]},
+        {
+            "origin_id": "public-chat",
+            "domain_name": released["proxy_url"].removeprefix("https://").rstrip("/"),
+        },
+    ]
+    after["origin"] = deepcopy(before["origin"])
+    after["origin"][1]["origin_path"] = inputs["release_slots"][selected][
+        "asset_prefix"
+    ]
+    item = rehearsal.change(
+        f"aws_cloudfront_distribution.{distribution}", before, after
+    )
+    prepared = rehearsal.plan(inputs, [item, *evidence["resource_changes"]])
+    rehearsal.gate.validate_plan(prepared, prior, "prepare")
+    for phase in ("promote", "recover"):
+        saved = rehearsal.plan(rehearsal.gate.desired(prior, promote=True), [item])
+        with pytest.raises(rehearsal.gate.Rejected):
+            rehearsal.gate.validate_plan(saved, prior, phase)
+
+
+@pytest.mark.parametrize("environment", ["development", "production"])
+def test_report_function_pin_is_exact(environment: str) -> None:
+    item = report_function(environment)
+    assert (
+        hashlib.sha256(item["change"]["after"]["code"].encode()).hexdigest()
+        == gate.ASSET_SHA256["public-report-routes.js"]
+    )
+    gate.validate(item, environment)
+    item["change"]["after"]["code"] += "\n"
+    with pytest.raises(ValueError):
+        gate.validate(item, environment)
 
 
 def test_billing_routes_keep_the_active_chat_release() -> None:
@@ -174,6 +406,7 @@ def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str) -
     account = gate.ACCOUNTS[environment]
     suffix = "-dev" if environment == "development" else ""
     source = (ROOT / "v2/infra/costs.tf").read_text()
+    source += "\n" + (ROOT / "infra/costs-delivery.tf").read_text()
     replacements = {
         "data.aws_caller_identity.current.account_id": json.dumps(account),
         "data.aws_region.current.region": '"us-east-1"',
@@ -185,6 +418,18 @@ def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str) -
             f"arn:aws:kms:us-east-1:{account}:key/{gate.SITE_KEYS[environment]}"
         ),
         "${path.module}/../agent/": str(ROOT / "v2/agent") + "/",
+        "var.foundation.alerts_topic_arn": json.dumps(
+            f"arn:aws:sns:us-east-1:{account}:nova-toll-alerts"
+        ),
+        **{
+            f"aws_iam_role.{role}[0].id": json.dumps(role)
+            for role in (
+                "development_delivery",
+                "development_plan",
+                "production_deploy",
+                "production_planner",
+            )
+        },
     }
     for old, new in replacements.items():
         source = source.replace(old, new)
@@ -235,6 +480,45 @@ locals {{
     plan: dict[str, Any] = next(
         item["test_plan"] for item in events if item["type"] == "test_plan"
     )
+    foundation = [row for row in plan["resource_changes"] if "_cost_" in row["address"]]
+    assert len(foundation) == 2
+    publications = ("dashboard", "aws-feed") if suffix else ("dashboard",)
+    name = "tollchat-v2-cost-publisher" + suffix
+    alarm_arns = {
+        f"arn:aws:cloudwatch:us-east-1:{account}:alarm:{name}-errors",
+        *(
+            f"arn:aws:cloudwatch:us-east-1:{account}:alarm:{name}-{publication}-{outcome}"
+            for publication in publications
+            for outcome in ("failed", "stale")
+        ),
+    }
+    log = f"arn:aws:logs:us-east-1:{account}:log-group:/aws/lambda/{name}"
+    for item in foundation:
+        statements = json.loads(item["change"]["after"]["policy"])["Statement"]
+        permissions = {
+            action: statement["Resource"]
+            for statement in statements
+            for action in statement["Action"]
+        }
+        assert set(permissions["cloudwatch:DescribeAlarms"]) == alarm_arns
+        assert set(permissions["cloudwatch:ListTagsForResource"]) == alarm_arns
+        assert set(permissions["logs:DescribeMetricFilters"]) == {log, log + ":*"}
+        assert not any(
+            action.startswith(("ssm:", "kms:", "ce:", "s3:")) for action in permissions
+        )
+        if "delivery" in item["address"]:
+            assert set(permissions["cloudwatch:PutMetricAlarm"]) == alarm_arns
+            assert set(permissions["cloudwatch:TagResource"]) == alarm_arns
+            assert set(permissions["cloudwatch:UntagResource"]) == alarm_arns
+            assert set(permissions["logs:PutMetricFilter"]) == {log, log + ":*"}
+        else:
+            assert not any(
+                action.startswith(("cloudwatch:Put", "logs:Put"))
+                for action in permissions
+            )
+    plan["resource_changes"] = [
+        row for row in plan["resource_changes"] if row not in foundation
+    ]
     # terraform test omits configuration in its verbose JSON. Supply the actual
     # expression inventory from this same tested source for omitted ACL proofs.
     resources: list[dict[str, Any]] = []
@@ -268,12 +552,155 @@ locals {{
             ("source_hash", base64.b64encode(b"a" * 32).decode()),
             ("kms_key_id", "foreign-key"),
             ("schedule_expression", "rate(1 minute)"),
+            ("alarm_actions", ["arn:aws:sns:us-east-1:000000000000:other"]),
+            ("actions_enabled", False),
+            ("evaluation_periods", 1),
+            ("datapoints_to_alarm", 1),
+            ("treat_missing_data", "ignore"),
+            ("threshold", 0),
+            ("pattern", '"COST_SOURCE_FAILED"'),
+            ("apply_on_transformed_logs", True),
         ):
-            if key in item["change"]["after"]:
+            if key in item["change"]["after"] and item["change"]["after"][key] != value:
                 bad = deepcopy(item)
                 bad["change"]["after"][key] = value
                 with pytest.raises(ValueError):
                     gate.validate(bad, environment, plan, package_evidence)
+        if item["address"].startswith("aws_cloudwatch_metric_alarm.costs_stale"):
+            for field, value in (
+                ("expression", "FILL(success, 1)"),
+                ("period", 86400),
+                ("stat", "Average"),
+            ):
+                bad = deepcopy(item)
+                for query in bad["change"]["after"]["metric_query"]:
+                    if field == "expression" and query["id"] == "filled":
+                        query[field] = value
+                    elif field != "expression" and query["id"] == "success":
+                        query["metric"][0][field] = value
+                with pytest.raises(ValueError):
+                    gate.validate(bad, environment, plan, package_evidence)
+            readback = deepcopy(item)
+            for query in readback["change"]["after"]["metric_query"]:
+                if query["id"] == "success":
+                    query["metric"][0]["dimensions"] = {}
+            gate.validate(readback, environment, plan, package_evidence)
+        if item["address"].startswith("aws_cloudwatch_log_metric_filter.costs_"):
+            readback = deepcopy(item)
+            readback["change"]["after"]["metric_transformation"][0]["dimensions"] = {}
+            gate.validate(readback, environment, plan, package_evidence)
+        if item["address"].startswith(
+            (
+                "aws_cloudwatch_log_metric_filter.costs_",
+                "aws_cloudwatch_metric_alarm.costs_",
+            )
+        ):
+            drift = deepcopy(item)
+            before = deepcopy(item["change"]["after"])
+            after = deepcopy(before)
+            mutations: list[tuple[tuple[str | int, ...], object]] = []
+            if "metric_transformation" in before:
+                before["metric_transformation"][0]["dimensions"] = None
+                after["metric_transformation"][0]["dimensions"] = {}
+                mutations.extend(
+                    [
+                        (("metric_transformation", 0, "dimensions"), {"extra": "tag"}),
+                        (("metric_transformation", 0, "name"), "unreviewed"),
+                    ]
+                )
+            else:
+                defaults: dict[str, object] = {
+                    "tags": {},
+                    "ok_actions": [],
+                    "insufficient_data_actions": [],
+                }
+                for field, empty in defaults.items():
+                    before[field], after[field] = None, empty
+                    mutations.append(
+                        (
+                            (field,),
+                            {"extra": "tag"} if field == "tags" else ["unreviewed"],
+                        )
+                    )
+                before["evaluate_low_sample_count_percentiles"] = ""
+                after["evaluate_low_sample_count_percentiles"] = ""
+                mutations.extend(
+                    [
+                        (("actions_enabled",), False),
+                        (("evaluate_low_sample_count_percentiles",), "ignore"),
+                        (("threshold",), 0),
+                        (("alarm_actions",), ["unreviewed"]),
+                    ]
+                )
+                if not item["address"].endswith("costs_errors"):
+                    before["dimensions"], after["dimensions"] = None, {}
+                    mutations.append((("dimensions",), {"extra": "tag"}))
+                if item["address"].startswith(
+                    "aws_cloudwatch_metric_alarm.costs_stale"
+                ):
+                    for index, query in enumerate(before["metric_query"]):
+                        query["period"] = None
+                        after["metric_query"][index]["period"] = 0
+                        mutations.append((("metric_query", index, "period"), 300))
+                        if query["id"] == "success":
+                            query["metric"][0]["dimensions"] = None
+                            query["metric"][0]["unit"] = None
+                            after["metric_query"][index]["metric"][0].update(
+                                dimensions={}, unit=""
+                            )
+                            mutations.extend(
+                                [
+                                    (
+                                        ("metric_query", index, "metric", 0, "period"),
+                                        60,
+                                    ),
+                                    (
+                                        ("metric_query", index, "metric", 0, "unit"),
+                                        "Count",
+                                    ),
+                                    (
+                                        (
+                                            "metric_query",
+                                            index,
+                                            "metric",
+                                            0,
+                                            "dimensions",
+                                        ),
+                                        {"extra": "tag"},
+                                    ),
+                                ]
+                            )
+                        else:
+                            mutations.append(
+                                (
+                                    ("metric_query", index, "expression"),
+                                    "FILL(success, 1)",
+                                )
+                            )
+            drift["change"] = dict(
+                actions=["update"],
+                before=before,
+                after=after,
+                after_unknown={},
+                after_sensitive={},
+            )
+            original_drift = deepcopy(drift)
+            gate.validate_drift(drift, environment)
+            assert drift == original_drift
+            if "metric_query" in after:
+                reordered = deepcopy(drift)
+                reordered["change"]["after"]["metric_query"].reverse()
+                gate.validate_drift(reordered, environment)
+            for path, value in mutations:
+                bad = deepcopy(drift)
+                # Equal wrong settings must fail too; equality alone is insufficient.
+                for side in ("before", "after"):
+                    target = bad["change"][side]
+                    for part in path[:-1]:
+                        target = target[part]
+                    target[path[-1]] = value
+                with pytest.raises(ValueError):
+                    gate.validate_drift(bad, environment)
         bad = deepcopy(item)
         bad["change"]["actions"] = ["delete"]
         with pytest.raises(ValueError):
@@ -323,7 +750,7 @@ locals {{
             "configuration": plan["configuration"],
         }
         records = legacy._parse_plan(plan, package_evidence)
-        assert len(records) == 12
+        assert len(records) == 21
         manifest = json.loads(
             (ROOT / "infra/development-release-manifest.json").read_text()
         )
@@ -530,8 +957,9 @@ def test_provider_report_routes_keep_known_defaults(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("environment", ["development", "production"])
 @pytest.mark.parametrize("phase", ["prepare", "promote", "recover"])
+@pytest.mark.parametrize("legacy_schedule", [False, True])
 def test_first_billing_refresh_preserves_release_authority(
-    environment: str, phase: str
+    environment: str, phase: str, legacy_schedule: bool
 ) -> None:
     if TYPE_CHECKING:
         import test_blue_green as rehearsal
@@ -545,9 +973,9 @@ def test_first_billing_refresh_preserves_release_authority(
             "name": name,
             "event_bus_name": "default",
             "state": "ENABLED",
-            "schedule_expression": "cron(0 8 * * ? *)"
+            "schedule_expression": "cron(0 8,12 * * ? *)"
             if suffix
-            else "cron(0 9 * * ? *)",
+            else "cron(0 9,13 * * ? *)",
             "is_enabled": True,
             "tags": None,
         },
@@ -652,6 +1080,10 @@ def test_first_billing_refresh_preserves_release_authority(
             )
         before[address] = asset_values
     drifts: list[dict[str, Any]] = []
+    if legacy_schedule:
+        before["aws_cloudwatch_event_rule.costs"]["schedule_expression"] = (
+            "cron(0 8 * * ? *)" if suffix else "cron(0 9 * * ? *)"
+        )
     for address, resource in before.items():
         after = deepcopy(resource)
         for field in ("tags", "metadata"):
@@ -703,6 +1135,7 @@ def test_first_billing_refresh_preserves_release_authority(
             with pytest.raises(rehearsal.gate.Rejected, match="incomplete_or_drift"):
                 rehearsal.gate.validate_plan(document, state, phase)
         for field, value in (
+            ("schedule_expression", "rate(1 minute)"),
             ("tags", {"extra": "tag"}),
             ("metadata", {"extra": "metadata"}),
             ("layers", [{"arn": "unreviewed"}]),
@@ -723,12 +1156,37 @@ def test_first_billing_refresh_preserves_release_authority(
         legacy_policy["Statement"] = [
             row
             for row in legacy_policy["Statement"]
-            if row["Sid"] not in {"ReadBillingKey", "DecryptBillingKey"}
+            if row["Sid"]
+            not in {
+                "ReadBillingKey",
+                "DecryptBillingKey",
+                "PublishAwsFeed",
+                "FindAwsFeed",
+            }
         ]
         legacy = [{"name": name, "policy": json.dumps(legacy_policy)}]
         for old, new in (
             ([], legacy),
             (legacy, role["change"]["after"]["inline_policy"]),
+            (
+                [
+                    {
+                        "name": name,
+                        "policy": json.dumps(
+                            {
+                                **gate.policy(environment),
+                                "Statement": [
+                                    row
+                                    for row in gate.policy(environment)["Statement"]
+                                    if row["Sid"]
+                                    not in {"PublishAwsFeed", "FindAwsFeed"}
+                                ],
+                            }
+                        ),
+                    }
+                ],
+                role["change"]["after"]["inline_policy"],
+            ),
         ):
             transition = deepcopy(role)
             transition["change"]["before"]["inline_policy"] = old
@@ -772,3 +1230,24 @@ def test_first_billing_refresh_preserves_release_authority(
         document["resource_drift"] = [bad]
         with pytest.raises(rehearsal.gate.Rejected, match="incomplete_or_drift"):
             rehearsal.gate.validate_plan(document, state, phase)
+    if legacy_schedule:
+        schedule = next(
+            drift
+            for drift in drifts
+            if drift["address"] == "aws_cloudwatch_event_rule.costs"
+        )
+        after = dict(
+            schedule["change"]["after"],
+            schedule_expression="cron(0 8,12 * * ? *)"
+            if suffix
+            else "cron(0 9,13 * * ? *)",
+        )
+        document["resource_drift"] = drifts
+        document["resource_changes"].append(
+            rehearsal.change(schedule["address"], schedule["change"]["after"], after)
+        )
+        if phase == "prepare":
+            rehearsal.gate.validate_plan(document, state, phase)
+        else:
+            with pytest.raises(rehearsal.gate.Rejected):
+                rehearsal.gate.validate_plan(document, state, phase)

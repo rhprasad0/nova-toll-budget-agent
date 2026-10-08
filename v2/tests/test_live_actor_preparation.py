@@ -51,6 +51,9 @@ def test_live_actor_checks_reuse_execution_and_preserve_actor_evidence(
         status="scored" if validity == "valid" else "inconclusive",
         checks=["tool_arguments"],
         actor_validity=run.ActorAssessment(status=validity, evidence="Driver evidence"),
+        actor_replies=[
+            {"stop": True, "message": None, "stop_reason": "goal_completed"}
+        ],
         verdicts={"outcome": run.Verdict(passed=False, evidence="Application failed")},
     )
     execute = Mock(return_value=row)
@@ -67,6 +70,49 @@ def test_live_actor_checks_reuse_execution_and_preserve_actor_evidence(
         (journal.directory / "events.jsonl").read_text().splitlines()[-1]
     )
     assert event["event"] == "actor_check" and event["verdicts"] == {}
+
+
+@pytest.mark.parametrize("application_stop", ["max_tokens", "TaskFailure"])
+@pytest.mark.parametrize("status", ["scored", "infrastructure"])
+def test_live_actor_checks_require_a_sampled_actor(
+    application_stop: str,
+    status: Literal["scored", "infrastructure"],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    case = golden.load_cases(corpus.PUBLIC / "training")[0]
+    example = golden.Example.model_validate(
+        json.loads((corpus.PUBLIC / "training" / "examples.json").read_text())[0]
+    )
+    row = run.Attempt(
+        id=f"{case.id}-1",
+        case_id=case.id,
+        trial=1,
+        status=status,
+        application_stop=application_stop,
+        actor_validity=run.ActorAssessment(status="valid", evidence="Approved opening"),
+        error="missing_usage" if status == "infrastructure" else None,
+    )
+    monkeypatch.setattr(run, "execute", Mock(return_value=row))
+    monkeypatch.setattr(golden, "load_cases", lambda: [case])
+    journal = run.Journal(tmp_path / "live", 1)
+    result = golden_actor_check.live_check(example, 1, journal)
+    assert result.application_stop == application_stop
+    if status == "scored":
+        assert result.status == "inconclusive"
+        assert result.actor_validity is not None
+        assert result.actor_validity.status == "uncertain"
+        assert result.error == "actor_not_sampled"
+        assert result.failure_phase == "actor"
+        assert result.failure_class == "actor_validity"
+    else:
+        assert result.status == "infrastructure"
+        assert result.error == "missing_usage"
+    event = json.loads(
+        (journal.directory / "events.jsonl").read_text().splitlines()[-1]
+    )
+    assert event["status"] == result.status
+    assert event["error"] == result.error
 
 
 def test_supplied_schedule_and_days_allow_second_turn_replay() -> None:

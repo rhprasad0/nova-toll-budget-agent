@@ -20,9 +20,9 @@
     "infra/backend.development.hcl": "a3ae667db1382bdffc851cffcc29f3d127df34d3ce31179e75758b2eda5526cf",
     "infra/blue-green.tf": "b764e82a7ca6d22ed3149eb64b59723066596993dc759fd89f09eb6e0ee5d4f7",
     "infra/budget.tf": "01980ebb992a5256e5cdb3ae4b3da19a197e5011b83551d94b638d0dfc1d3ec7",
-    "infra/costs-delivery.tf": "4dfe2f91e68536bcd9257207c0a2b73f89e7cc533af182eb407542abd18e2ae7",
+    "infra/costs-delivery.tf": "a282207d78257f3371f080e34afd74b22a733ed5279c7ca38962803fed7c780c",
     "infra/data.tf": "e8e443e33a9d908f405eec54fa6bee2075fa8c228e293d734d1b0a5fc0428bc1",
-    "infra/delivery_plan_validator.py": "b4a84c187dc78a0ed56a8aa6a70283bb63db90d6328f27550854fab4f933cd4d",
+    "infra/delivery_plan_validator.py": "04ecc40efd6fe7aefd70b49993e2007794dfddcf514b920be78085dbe135ee7c",
     "infra/development-tracing.tf": "489b1cb626e528a6fb0dc68d8d2dbf8e3beb24d40a7b3d7fa92631f00e920c97",
     "infra/golden_eval.tf": "881e8a8871aa70d7d9168453bd5151529e3597c29015f9cadfae4dfacdea1aeb",
     "infra/iam.tf": "969e7b53b4c457f58f840d665737d72df3d3fafdb7adf6c2d41b862d9eb373e0",
@@ -58,7 +58,7 @@
     "v2/agent/assets/costs.mjs": "38964764c0202b1b4a35750359acd9db3ddb13020102ade803dbda383b38d153",
     "v2/agent/assets/coverage-locations.json": "d53fda712210689eecb7e723a00dc6800d24beb82ea05bc9bd1247456025f4c6",
     "v2/agent/assets/evals.css": "a769365269ebde99103a56e6ce64a619f1a728c137aeeeca93ea04023db85688",
-    "v2/agent/assets/evals.mjs": "a702f9a953fd06ff5a6198a5435921ac777e35d9c0a86a59f2a584d5c9aa0db7",
+    "v2/agent/assets/evals.mjs": "d27890fabc2c8a901beaea6497726ade5ae2604ed926b8c08480c7c6d3d7a803",
     "v2/agent/assets/favicon.png": "dc47e12a0652a019c819ac6ff92fab231974af7fa0d5efff6652415645a149ad",
     "v2/agent/assets/maplibre-gl-6.0.0/LICENSE.txt": "ee5fc05a0677eaf69601d2c7db0d9ecd6cc27c3abc1d0733bc9ed34707cf8ef2",
     "v2/agent/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs": "ba5bae6a93301ad92b8466fce6b80f8299c5825c41ae76496293bde34db96713",
@@ -74,11 +74,11 @@
     "v2/agent/assets/tollchat-logo.png": "da0167c64714b0e37c234d18695aecf6f81226627ca21e105e1fcc43c397e1a6",
     "v2/agent/costs.html": "6d7deb55e3473d64ebdcf2ca36134f7887c924eb256041299c77ac1be944cc0a",
     "v2/agent/dev_chat.html": "fc098e2ade503285c06982c23acfa25e463cfe7f96494d97daebb0eb20e0c30b",
-    "v2/agent/evals.html": "de52752d330b5298e17ed5a2c57bf92b22e358f799c3a18be79e7ae7130f7fca",
+    "v2/agent/evals.html": "0cdae384a0833fe9ea486ac13ef1f42b2f17678c26ac5e38415980805f536ec2",
     "v2/agent/faq.html": "8561e7393285af1d9dbc122027c62831a45c1b4a43b1ecfac320e74f5e9852f1",
     "v2/agent/privacy.txt": "00b192c03648aaec4913aafc8e3ad30bff05d73497de7466a78fbcef1969e0f5",
     "v2/agent/public-api-gate.js": "1c93d8b91885a207b674a8abc7f9ec6bcd5747b6d6b373082d27fe681fd3e082",
-    "v2/agent/public-report-routes.js": "a5bea948dd9c37075262f839acbb3635e149248e8e6effdff2e2ab7af2976cd2",
+    "v2/agent/public-report-routes.js": "ffbcffad663e80878c7d213aaaf533bbe05dcbe438beef1a771b6603d8ae9d44",
     "v2/agent/public_chat.mjs": "16f5a9b8237b398d2701f37a38255543b47c965a545da346fa0650d1b01770cd",
     "v2/agent/robots.txt": "006953aa1ea1e823fdbde642b82832eca750db1ef7d22edffee8d8a7deabf879",
     "v2/agent/telemetry.py": "57c5eb6e4fea3a8d62f79cd242ad0eed99724dd9c30c59ff981270943ee1b79f",
@@ -134,14 +134,14 @@
     "v2/db/oracle/schema.sql": "48c5471cb4733bf6bb4a7d6d7ac229e2ddca942bb0a1e5de223e9960d5d0f095",
     "v2/db/roles.sql": "ac2bd729a38763870e904747622b9d76a6e9bf7ba2762870607a75004e5469f1",
     "v2/db/schema.sql": "9bed36a8a09b3f49dabf0f640702b2c72ad6955f6fb24db66825898016f6ed72",
-    "v2/eval/dashboard.py": "f50d0d6a1e445800fa8819f615da83e91cf3eb76ac94448701882d19ca93188c",
+    "v2/eval/dashboard.py": "9075408027c860f66edca89747793953a974a6ac6f292a788eeff4220e2d788f",
     "v2/eval/run_evaluation.py": "b4a9abb3ccd913d747b4227466d3138af0b5b681c89438f5c50406f2473da18b",
     "v2/eval/test-cases.jsonl": "88339a635880daea8c29171f0003386e0d7f6efb8c787ec806eeb92fed6bdf5c",
     "v2/infra/.terraform.lock.hcl": "fd42f83e883fe5b260118f566eeb4f4a918f6c68dd791bcf7a3e5677f3830fad",
     "v2/infra/agent_measurement.tf": "4044474e5f57758fbd70b25cb53dc9a17ad00189761811d5ca2968e0e1576502",
     "v2/infra/agentcore.tf": "1b5d8ed19b6fa827521174a7e3a21d444b4425773a98e927a0ff5f2ae9d93bfa",
     "v2/infra/backend.development.hcl": "e9140a8f8120f479e04d22def7149d32e63fd34d5e82d04db9bda51e4ccbf313",
-    "v2/infra/costs.tf": "a7408bb57e587a1f6ce145988fe02a8e149d21616159550abfab6f3ee3e13958",
+    "v2/infra/costs.tf": "22ddcaa16d6be605d17c70fbdbe54d54e1d7778aff7d1c72b2b1580dc50c2d52",
     "v2/infra/data.tf": "6288fa2b14e10e503499a59a8cca7a763d4f23ea9d27f167d922ae41cd24569b",
     "v2/infra/development.tfvars": "73f91fa50c80c95491b83d664d7a7b1f9661198026b94977e10c63b36f475fff",
     "v2/infra/environment.tf": "ef2d5db8e58b72bf603b0c65fff677ffd0d7c956dc4241ac922d3e66db76d7dc",
@@ -150,9 +150,9 @@
     "v2/infra/providers.tf": "b5fc8bb0f92ed4990625aebbe95811d683f36d48a9f18ad3520238d79b95e4aa",
     "v2/infra/release-bootstrap.tf": "65fbaa8f39b2a6d365ff41e58ac8505e8d463a0b41b81021d9c79822e9c17f55",
     "v2/infra/releases.tf": "81588ec85c0c1e0018040660537930a5cd9d48b78ac4ba64d9b51caceb932ff4",
-    "v2/infra/site.tf": "83acf95d08d2c7f4305522f721c6aee597526bd7f20fa060ba882ad58d404388",
+    "v2/infra/site.tf": "93788d02dbc609b742b1e313bf58432fcda40375aff0011b2754b7da7b1b79ba",
     "v2/infra/telemetry-log-policy.tf": "641ab81e8c947e3c04196e856addee12bdd06a06c1e9a9f14cdb8b5f8830c03a",
-    "v2/infra/timed_checks.tf": "2fa789987395b544eafd217f55cd1144ec28bb58dc33bd8801030d187ed5b863",
+    "v2/infra/timed_checks.tf": "63d14d1c2f51e6983ce55956feb7430db6004c8b10ca3e5719c6830adf3aca40",
     "v2/infra/trace_redaction.tf": "70bd43bf038c175f47ff2ff9a125c911d0452b12ced42081fdd93808dbf60569",
     "v2/infra/variables.tf": "e7b65b5213bd44772e1b08787cfed54749115897612dd67f3f714c3c88ed20df",
     "v2/infra/versions.tf": "e08079981fe5f42c0af5906a3710c635d03e346e2724811d02cb8528bb5ad32d",
@@ -163,34 +163,34 @@
     "v2/lambdas/loader/handler.py": "2c490f11eb538d8e6e39c689d503b18f47b5e4ddeec62a1458e88ff6e976aac5",
     "v2/lambdas/loader/parse_csv.py": "313d5d0843f9e884e7649dc66da3ebc5cdb015e2484899f4152d5ab9fb7b19ac",
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
-    "v2/lambdas/publisher/costs.py": "14fdc89ea6ef455c831fe1d52c2db9d760184521a0f283b7716e3e2cfaf5e34b",
+    "v2/lambdas/publisher/costs.py": "40f0732c1a929f346898c4b8118805d64a5037aa27d536578687b30520651afc",
     "v2/lambdas/publisher/handler.py": "7ff9042626aedd46513868023496a71fab324f593a2f4c09f986dec15027e5fd",
     "v2/lambdas/timed_checks/handler.py": "b7f952df617bddccc03d4e34245a40b49fdb66f4af74e4f1ed884540221ae3ea",
     "v2/pyproject.toml": "c2428ed9608ab151665f6e1578a24ba15800c6e51f88f25701f51a2097feb009",
     "v2/scripts/adopt_production_baseline.py": "2421c2fc8ef1a98635db6fc989e1a05e4cb43a652f30fa2506753b4e4275099b",
-    "v2/scripts/blue_green.py": "f66c452bf48c09753942580474ac26aba68cd6d8e8ca820fb80b47c6888cfbce",
+    "v2/scripts/blue_green.py": "660c18f6a985d715bc830456b5e3bcb1ace1f38ac15f3df125307b5a14649dbb",
     "v2/scripts/build_agentcore_zips.sh": "f05f2a40a4579600fa13e2a731a052325a2985eacf866e6fa920924c4d91eacc",
     "v2/scripts/build_loader_zip.sh": "0f480d3e5295561a16149d0d117ae733b933be51c4555da05051f697cee54e34",
     "v2/scripts/build_publisher_zip.sh": "679ea3d1a2f03020ad03eefd39ffa56af1afb73ee0b8cb950bb062fb287c2fc1",
     "v2/scripts/build_release_bundle.sh": "40bf8759eddb5b75a5b0e44b3fbd568f2252f1e5fa034163da8111c444a5c6e8",
     "v2/scripts/build_timed_checks_zip.sh": "7021f16b0983904543d71b8683e89704fe80a0845a028bec45078852d3a2359e",
     "v2/scripts/check_development_admission.py": "248d87d228bb3411070acbb67f1fa89b003ee13885196487c5bb967002dc7ed6",
-    "v2/scripts/check_development_release.py": "c9d1b3920dff337fe3d38e69bf8e2bbbf1fc463dcbadfc21ffb2bc9f27a631dc",
+    "v2/scripts/check_development_release.py": "9c5017a99abce7c58e0e5d2e7f4db306d4e9adb31a182cfb4c3a5ff7f675f78a",
     "v2/scripts/check_production_release.py": "1cefe222603d6bcf0d73630b0bf5daaed03bac6bcecf009bbd916bfd6aca84ef",
     "v2/scripts/classify_deployment_error.py": "8211c8395b88dc59107b1079308093a047a9ce240bb2d93073bd2dbde9ff3865",
-    "v2/scripts/cost_dashboard_release.py": "ce22a0997b50ac07d5237793616103d155c24be4ce5852aaca3888be31507eb0",
+    "v2/scripts/cost_dashboard_release.py": "aba9db2afc560aeea29bfd0732e0fe866db21afcda722ba0bbcd48c6e92c3d5e",
     "v2/scripts/development_deployment_status.py": "41bbcb7f419483dc8d8a5b2cbb20f42e5f816d5fc2092b48c639aae4eaecc91b",
     "v2/scripts/loader-requirements.in": "38c314f1e9470587a6b566f2c8ed28cdf2ed3df2d87d349c3cbfc9f5a707230e",
     "v2/scripts/loader-requirements.txt": "7e35ab33589fae931d8bac07a7e32f868c02c4f37b629eb4208075a98fd918b4",
     "v2/scripts/publisher-requirements.in": "443323b60ce646abe57f80efe6a842af9467d089d73459b84830450825fabdcc",
     "v2/scripts/publisher-requirements.txt": "cb3079cc8c5512aa65994c7dd3c2e31a5f98386e53a7d059622badf96be11019",
-    "v2/scripts/release_blue_green.py": "65e5f81433a5fa21227d9de1ff24e855b54af83208dcba1e349da3252521cd70",
-    "v2/scripts/run_development_migrations.py": "5d1c6052d493fd37f21d435fe976fde5bffe7cae746d68b0b4762f87845abc49",
+    "v2/scripts/release_blue_green.py": "01c58b52c14c0ebd3bf49f3ddfbe204d2731d3ab0adb9cb3cdf80b37217db131",
+    "v2/scripts/run_development_migrations.py": "3347f175b449f11853a6ea2d67e31fd63bd1e14819c57c58d3ee310ee5921606",
     "v2/scripts/run_development_migrations_workflow.sh": "ed94f267bf2d87ee0fbc2bb9787b139d2ed23c8379f69e6e743976940116b3ff",
     "v2/scripts/run_private_stage.sh": "7557685f176439a393a8b9cfbe3460bf70875dc2fa1a0b16ff5b4ec4dec7f38e",
     "v2/scripts/run_production_migrations.py": "2077cbd16ba4832de6c75f1f113c2f23bb16f1d57a0dcb1615701b2631bb2e5c",
-    "v2/scripts/run_production_migrations_workflow.sh": "92e3f456d193a78974f0f9796fdbfa80e18641a8293faa886fbef0cb2efcac8b",
-    "v2/scripts/shared-package-compatibility.json": "a28d7ae23be46ab8286b432158f2cf363d472dd4c000bd770ba51eea2902373e",
+    "v2/scripts/run_production_migrations_workflow.sh": "731d27486b9c2426222eccf9e96119dafc62b8bc828d217b682101d6f8fc109b",
+    "v2/scripts/shared-package-compatibility.json": "7829ff81cf4615ceda57ddce8acf0894e946298c2b003d6c68890e4eb19cd821",
     "v2/scripts/shared_packages.py": "4c8be7bcf4ed0ba82579f3171e87ac3c2f97c7f2a0a2c87dbad623e052851c39",
     "v2/scripts/timed-checks-requirements.in": "8218bd738a1337e889d04756b2f7c53f1693503b97c519dcc8a10a423b2837e5",
     "v2/scripts/timed-checks-requirements.txt": "1ef94fcd8c97c31ec48575bd01d835d18cc60751529f1ede16b17e5a82cd6bd4",
@@ -202,8 +202,8 @@
     "agentcore.zip": "961a4549a4c672dcd1fe6bf4a76695a38b73e4340f79826e085d291bc19e71a8",
     "chat-proxy.zip": "4a5f4a42a220217dd88318a2d2d44973d825ede4b78da7ef313c06beb93a9754",
     "loader.zip": "17f3ac0e9cd20109fc6f287c144ab4cb2181b1eb3fe6da7cb24a849be0fea985",
-    "publisher.zip": "1bafed1d8db005a4308e15224247d764097b763fe4d26340552bb21b3e45aefa",
-    "timed-checks.zip": "a10288f3eaed87c7b00e73f9019aaed030d15d9af2ed0d173b8ade077f4aa760"
+    "publisher.zip": "f961fbce39ab5fad72f05ef4cb41a982aa0eb6418af62c507c72b15a1b7fa3e1",
+    "timed-checks.zip": "d3bc19b6e6c496e073798b6af79d48c355e0ac677f25f88602ab066a8b710074"
   },
   "mutations": [
     {
@@ -611,13 +611,10 @@
     },
     {
       "address": "aws_cloudwatch_event_rule.costs",
-      "action": "create",
+      "action": "update",
       "operation_class": "cost-publication",
       "changed_fields": [
-        "event_bus_name",
-        "name",
-        "schedule_expression",
-        "state"
+        "schedule_expression"
       ]
     },
     {
@@ -710,6 +707,159 @@
       "operation_class": "cost-routing",
       "changed_fields": [
         "ordered_cache_behavior"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_log_metric_filter.costs_success[\"dashboard\"]",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "apply_on_transformed_logs",
+        "log_group_name",
+        "metric_transformation",
+        "name",
+        "pattern"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_log_metric_filter.costs_failure[\"dashboard\"]",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "apply_on_transformed_logs",
+        "log_group_name",
+        "metric_transformation",
+        "name",
+        "pattern"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_log_metric_filter.costs_success[\"aws-feed\"]",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "apply_on_transformed_logs",
+        "log_group_name",
+        "metric_transformation",
+        "name",
+        "pattern"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_log_metric_filter.costs_failure[\"aws-feed\"]",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "apply_on_transformed_logs",
+        "log_group_name",
+        "metric_transformation",
+        "name",
+        "pattern"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_errors",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "alarm_actions",
+        "alarm_description",
+        "alarm_name",
+        "comparison_operator",
+        "datapoints_to_alarm",
+        "dimensions",
+        "evaluation_periods",
+        "metric_name",
+        "metric_query",
+        "namespace",
+        "period",
+        "statistic",
+        "threshold",
+        "treat_missing_data"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_failed[\"dashboard\"]",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "alarm_actions",
+        "alarm_description",
+        "alarm_name",
+        "comparison_operator",
+        "datapoints_to_alarm",
+        "dimensions",
+        "evaluation_periods",
+        "metric_name",
+        "metric_query",
+        "namespace",
+        "period",
+        "statistic",
+        "threshold",
+        "treat_missing_data"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_failed[\"aws-feed\"]",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "alarm_actions",
+        "alarm_description",
+        "alarm_name",
+        "comparison_operator",
+        "datapoints_to_alarm",
+        "dimensions",
+        "evaluation_periods",
+        "metric_name",
+        "metric_query",
+        "namespace",
+        "period",
+        "statistic",
+        "threshold",
+        "treat_missing_data"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_stale[\"dashboard\"]",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "alarm_actions",
+        "alarm_description",
+        "alarm_name",
+        "comparison_operator",
+        "datapoints_to_alarm",
+        "dimensions",
+        "evaluation_periods",
+        "metric_name",
+        "metric_query",
+        "namespace",
+        "period",
+        "statistic",
+        "threshold",
+        "treat_missing_data"
+      ]
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_stale[\"aws-feed\"]",
+      "action": "create",
+      "operation_class": "cost-publication",
+      "changed_fields": [
+        "alarm_actions",
+        "alarm_description",
+        "alarm_name",
+        "comparison_operator",
+        "datapoints_to_alarm",
+        "dimensions",
+        "evaluation_periods",
+        "metric_name",
+        "metric_query",
+        "namespace",
+        "period",
+        "statistic",
+        "threshold",
+        "treat_missing_data"
       ]
     }
   ],
@@ -1214,6 +1364,120 @@
       "address": "aws_cloudfront_distribution.staging",
       "action": "cloudfront:UpdateDistribution",
       "resource": "arn:aws:cloudfront::903859731897:distribution/*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_log_metric_filter.costs_success[\"dashboard\"]",
+      "action": "logs:PutMetricFilter",
+      "resource": "arn:aws:logs:us-east-1:903859731897:log-group:/aws/lambda/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_log_metric_filter.costs_failure[\"dashboard\"]",
+      "action": "logs:PutMetricFilter",
+      "resource": "arn:aws:logs:us-east-1:903859731897:log-group:/aws/lambda/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_log_metric_filter.costs_success[\"aws-feed\"]",
+      "action": "logs:PutMetricFilter",
+      "resource": "arn:aws:logs:us-east-1:903859731897:log-group:/aws/lambda/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_log_metric_filter.costs_failure[\"aws-feed\"]",
+      "action": "logs:PutMetricFilter",
+      "resource": "arn:aws:logs:us-east-1:903859731897:log-group:/aws/lambda/tollchat-v2-cost-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_errors",
+      "action": "cloudwatch:PutMetricAlarm",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-errors",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_errors",
+      "action": "cloudwatch:TagResource",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-errors",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_errors",
+      "action": "cloudwatch:UntagResource",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-errors",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_failed[\"dashboard\"]",
+      "action": "cloudwatch:PutMetricAlarm",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-dashboard-failed",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_failed[\"dashboard\"]",
+      "action": "cloudwatch:TagResource",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-dashboard-failed",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_failed[\"dashboard\"]",
+      "action": "cloudwatch:UntagResource",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-dashboard-failed",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_failed[\"aws-feed\"]",
+      "action": "cloudwatch:PutMetricAlarm",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-aws-feed-failed",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_failed[\"aws-feed\"]",
+      "action": "cloudwatch:TagResource",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-aws-feed-failed",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_failed[\"aws-feed\"]",
+      "action": "cloudwatch:UntagResource",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-aws-feed-failed",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_stale[\"dashboard\"]",
+      "action": "cloudwatch:PutMetricAlarm",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-dashboard-stale",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_stale[\"dashboard\"]",
+      "action": "cloudwatch:TagResource",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-dashboard-stale",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_stale[\"dashboard\"]",
+      "action": "cloudwatch:UntagResource",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-dashboard-stale",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_stale[\"aws-feed\"]",
+      "action": "cloudwatch:PutMetricAlarm",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-aws-feed-stale",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_stale[\"aws-feed\"]",
+      "action": "cloudwatch:TagResource",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-aws-feed-stale",
+      "conditions": {}
+    },
+    {
+      "address": "aws_cloudwatch_metric_alarm.costs_stale[\"aws-feed\"]",
+      "action": "cloudwatch:UntagResource",
+      "resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-cost-publisher-dev-aws-feed-stale",
       "conditions": {}
     }
   ]

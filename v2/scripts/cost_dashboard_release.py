@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import re
+from copy import deepcopy
 from typing import Any, cast
 
 try:
@@ -34,6 +35,17 @@ RESOURCES = {
     'aws_s3_object.cost_assets["evals.css"]',
     "aws_s3_object.evals",
     "aws_cloudfront_function.public_report_routes",
+    "aws_cloudwatch_metric_alarm.costs_errors",
+    *(
+        f'{resource}["{publication}"]'
+        for resource in (
+            "aws_cloudwatch_log_metric_filter.costs_success",
+            "aws_cloudwatch_log_metric_filter.costs_failure",
+            "aws_cloudwatch_metric_alarm.costs_failed",
+            "aws_cloudwatch_metric_alarm.costs_stale",
+        )
+        for publication in ("dashboard", "aws-feed")
+    ),
 }
 # Reviewed public bytes. Update these pins when changing these public assets.
 ASSET_SHA256: dict[str, str] = {
@@ -41,11 +53,11 @@ ASSET_SHA256: dict[str, str] = {
     "costs.css": "8578e3aa2939740c6010793662aa75ea99cac633e59853804e8d15e094bb0ce2",
     "costs.mjs": "38964764c0202b1b4a35750359acd9db3ddb13020102ade803dbda383b38d153",
     "evals.css": "a769365269ebde99103a56e6ce64a619f1a728c137aeeeca93ea04023db85688",
-    "public-report-routes.js": "a5bea948dd9c37075262f839acbb3635e149248e8e6effdff2e2ab7af2976cd2",
+    "public-report-routes.js": "ffbcffad663e80878c7d213aaaf533bbe05dcbe438beef1a771b6603d8ae9d44",
     "development/costs.html": "8c785f3cd1e365640ed00343acba2f9ce1c2db5166063ad4a1003f8e474c172b",
-    "development/evals.html": "837320a607c7eb2bac8e507eb4d24400662523b92edb9e6202815cc721c1b1dd",
+    "development/evals.html": "0d291fc57e710721696002feec0285c0e9adcae3c3427a328d32215d516dc6cf",
     "production/costs.html": "ad1f2d5f7e24cb383d1b98baf716173b6c7c7bdcc2bf5241b5e6cfe7b5d3da6b",
-    "production/evals.html": "4fecf038987fd5fc018ec04eecb2e2f4166446effb62fcec5f68ecc76eea3677",
+    "production/evals.html": "9786ac45d0f48086ffcfa79889d9959da63bf1262d278fa47cda0ed234d2ac57",
 }
 
 
@@ -128,16 +140,86 @@ def policy(environment: str) -> dict[str, Any]:
             },
         },
     ]
+    if environment == "development":
+        statements.extend(
+            [
+                {
+                    "Sid": "PublishAwsFeed",
+                    "Effect": "Allow",
+                    "Action": ["s3:GetObject", "s3:PutObject"],
+                    "Resource": bucket + "/assets/costs-aws.json",
+                },
+                {
+                    "Sid": "FindAwsFeed",
+                    "Effect": "Allow",
+                    "Action": ["s3:ListBucket"],
+                    "Resource": bucket,
+                    "Condition": {
+                        "StringEquals": {"s3:prefix": "assets/costs-aws.json"}
+                    },
+                },
+            ]
+        )
     return {"Version": "2012-10-17", "Statement": statements}
 
 
-def routes(before: dict[str, Any], after: dict[str, Any]) -> None:
+def routes(
+    before: dict[str, Any],
+    after: dict[str, Any],
+    plan: dict[str, Any] | None = None,
+) -> None:
     old, new = before["ordered_cache_behavior"], after["ordered_cache_behavior"]
+    require(len({row["path_pattern"] for row in old}) == len(old))
     require(len({row["path_pattern"] for row in new}) == len(new))
-    require(
-        [row for row in new if row["path_pattern"] not in COST_ROUTES]
-        == [row for row in old if row["path_pattern"] not in COST_ROUTES]
-    )
+    retained = deepcopy([row for row in old if row["path_pattern"] not in COST_ROUTES])
+    proposed = [row for row in new if row["path_pattern"] not in COST_ROUTES]
+    if retained != proposed:
+        require(len(retained) == len(proposed))
+        matches = [
+            i
+            for i, row in enumerate(retained)
+            if row["path_pattern"] == "/assets/evals*"
+        ]
+        require(len(matches) == 1)
+        index = matches[0]
+        row, target = retained[index], proposed[index]
+        require(row["target_origin_id"] == "site")
+        associations = row["function_association"]
+        require(
+            len(associations) == 1 and associations[0]["event_type"] == "viewer-request"
+        )
+        function = associations[0]["function_arn"]
+        identities = {
+            f"arn:aws:cloudfront::{account}:function/tollchat-v2-public-report-routes"
+            + ("-dev" if environment == "development" else ""): environment
+            for environment, account in ACCOUNTS.items()
+        }
+        require(function in identities and plan is not None)
+        assert plan is not None
+        functions = [
+            item
+            for item in plan.get("resource_changes", [])
+            if item["address"] == "aws_cloudfront_function.public_report_routes"
+        ]
+        require(len(functions) == 1)
+        values = functions[0]["change"]["after"]
+        require(
+            values["arn"] == function
+            and hashlib.sha256(values["code"].encode()).hexdigest()
+            == ASSET_SHA256["public-report-routes.js"]
+        )
+        validate(functions[0], identities[function])
+        expected = [*associations, dict(associations[0], event_type="viewer-response")]
+        require(
+            len(target["function_association"]) == 2
+            and sorted(
+                target["function_association"], key=lambda item: item["event_type"]
+            )
+            == sorted(expected, key=lambda item: item["event_type"])
+        )
+        row["target_origin_id"] = "documents"
+        row["function_association"] = target["function_association"]
+    require(retained == proposed)
     models = [row for row in old if row["path_pattern"] == "/eval-dashboard*"]
     require(len(models) == 1)
     expected = {path: dict(models[0], path_pattern=path) for path in COST_ROUTES}
@@ -161,23 +243,74 @@ def validate_drift(item: dict[str, Any], environment: str) -> None:
         'aws_s3_object.cost_assets["costs.mjs"]': {"tags", "metadata"},
         'aws_s3_object.cost_assets["costs-benchmark.json"]': {"tags", "metadata"},
         'aws_s3_object.cost_assets["evals.css"]': {"tags", "metadata"},
+        **{
+            address: {"tags", "ok_actions", "insufficient_data_actions"}
+            | (set() if address.endswith("costs_errors") else {"dimensions"})
+            for address in RESOURCES
+            if address.startswith("aws_cloudwatch_metric_alarm.costs_")
+        },
+        **{
+            address: set()
+            for address in RESOURCES
+            if address.startswith("aws_cloudwatch_log_metric_filter.costs_")
+        },
     }
     require(address in fields and environment in ACCOUNTS)
-    before, after = (dict(change[key]) for key in ("before", "after"))
+    before, after = (deepcopy(change[key]) for key in ("before", "after"))
     for field in fields[address]:
-        empty: object = [] if field == "layers" else {}
+        empty: object = (
+            [] if field in {"layers", "ok_actions", "insufficient_data_actions"} else {}
+        )
         require(before[field] in (None, empty) and after[field] in (None, empty))
         before[field] = after[field] = None
+    for values in (before, after):
+        if address.startswith("aws_cloudwatch_log_metric_filter.costs_"):
+            transformations = values["metric_transformation"]
+            require(len(transformations) == 1)
+            require(transformations[0].get("dimensions") in (None, {}))
+            transformations[0]["dimensions"] = None
+        if address.startswith("aws_cloudwatch_metric_alarm.costs_stale"):
+            queries = values["metric_query"]
+            require(
+                len(queries) == 2
+                and {query["id"] for query in queries} == {"filled", "success"}
+            )
+            for query in queries:
+                require(query.get("period") in (None, 0))
+                query["period"] = None
+                if query["id"] == "success":
+                    metrics = query["metric"]
+                    require(len(metrics) == 1)
+                    require(metrics[0].get("dimensions") in (None, {}))
+                    require(metrics[0].get("unit") in (None, ""))
+                    metrics[0]["dimensions"] = metrics[0]["unit"] = None
+            values["metric_query"] = sorted(queries, key=lambda query: query["id"])
+    if address == "aws_cloudwatch_event_rule.costs":
+        hour = "8" if environment == "development" else "9"
+        recovery = "12" if environment == "development" else "13"
+        daily = f"cron(0 {hour} * * ? *)"
+        twice_daily = f"cron(0 {hour},{recovery} * * ? *)"
+        require(before["schedule_expression"] == after["schedule_expression"])
+        require(after["schedule_expression"] in (daily, twice_daily))
+        before["schedule_expression"] = after["schedule_expression"] = twice_daily
     if address == "aws_iam_role.costs":
         name = "tollchat-v2-cost-publisher" + (
             "-dev" if environment == "development" else ""
         )
         current = policy(environment)
-        legacy = {
+        pre_feed = {
             **current,
             "Statement": [
                 row
                 for row in current["Statement"]
+                if row["Sid"] not in {"PublishAwsFeed", "FindAwsFeed"}
+            ],
+        }
+        legacy = {
+            **pre_feed,
+            "Statement": [
+                row
+                for row in pre_feed["Statement"]
                 if row["Sid"] not in {"ReadBillingKey", "DecryptBillingKey"}
             ],
         }
@@ -191,12 +324,14 @@ def validate_drift(item: dict[str, Any], environment: str) -> None:
             require(values[0]["name"] == name)
             require(
                 observed == current
-                or (environment == "development" and observed == legacy)
+                or (environment == "development" and observed in (legacy, pre_feed))
             )
         require(after["inline_policy"])
         if before["inline_policy"]:
             require(environment == "development")
-            require(json.loads(before["inline_policy"][0]["policy"]) == legacy)
+            require(
+                json.loads(before["inline_policy"][0]["policy"]) in (legacy, pre_feed)
+            )
             require(json.loads(after["inline_policy"][0]["policy"]) == current)
         require(after["arn"] == f"arn:aws:iam::{ACCOUNTS[environment]}:role/{name}")
         before["inline_policy"] = after["inline_policy"] = []
@@ -373,9 +508,9 @@ def validate(
         expected = {
             "name": name,
             "event_bus_name": "default",
-            "schedule_expression": "cron(0 8 * * ? *)"
+            "schedule_expression": "cron(0 8,12 * * ? *)"
             if suffix
-            else "cron(0 9 * * ? *)",
+            else "cron(0 9,13 * * ? *)",
             "state": "ENABLED",
             "is_enabled": True,
         }
@@ -420,6 +555,139 @@ def validate(
             "function_url_auth_type",
             "principal_org_id",
             "invoked_via_function_url",
+        }
+    elif address.startswith("aws_cloudwatch_log_metric_filter.costs_"):
+        publication = address.split('["')[1].removesuffix('"]')
+        require(publication in ({"dashboard", "aws-feed"} if suffix else {"dashboard"}))
+        outcome = (
+            "success"
+            if address.startswith("aws_cloudwatch_log_metric_filter.costs_success")
+            else "failure"
+        )
+        marker = "SUCCEEDED" if outcome == "success" else "FAILED"
+        transformations = after["metric_transformation"]
+        require(
+            len(transformations) == 1
+            and transformations[0].get("dimensions") in (None, {})
+        )
+        after["metric_transformation"] = [{**transformations[0], "dimensions": None}]
+        expected = {
+            "name": f"{name}-{publication}-{outcome}",
+            "log_group_name": "/aws/lambda/" + name,
+            "pattern": f'"COST_REFRESH_{marker} snapshot={publication}"',
+            "apply_on_transformed_logs": False,
+            "metric_transformation": [
+                {
+                    "namespace": "TollChat/Billing",
+                    "name": f"{name}-{publication}-{outcome}",
+                    "value": "1",
+                    "default_value": "0",
+                    "unit": "Count",
+                    "dimensions": None,
+                }
+            ],
+        }
+        computed |= {"creation_time"}
+        empty |= {
+            "emit_system_field_dimensions",
+            "field_selection_criteria",
+        }
+    elif address.startswith("aws_cloudwatch_metric_alarm.costs_"):
+        alarm = address.split("costs_", 1)[1]
+        outcome = alarm.split("[", 1)[0]
+        publication = (
+            None if outcome == "errors" else alarm.split('["')[1].removesuffix('"]')
+        )
+        require(
+            publication is None
+            or publication in ({"dashboard", "aws-feed"} if suffix else {"dashboard"})
+        )
+        stale = outcome == "stale"
+        expected = {
+            "alarm_name": f"{name}-{outcome}"
+            if publication is None
+            else f"{name}-{publication}-{outcome}",
+            "alarm_description": {
+                "errors": "Billing publisher Lambda failed.",
+                "failed": "Billing collection or snapshot publication failed.",
+                "stale": "No successful billing publication in 48 hourly periods.",
+            }[outcome],
+            "actions_enabled": True,
+            "evaluate_low_sample_count_percentiles": "evaluate",
+            "evaluation_periods": 48 if stale else 1,
+            "datapoints_to_alarm": 48 if stale else 1,
+            "threshold": 1,
+            "comparison_operator": "LessThanThreshold"
+            if stale
+            else "GreaterThanOrEqualToThreshold",
+            "treat_missing_data": "breaching" if stale else "notBreaching",
+            "alarm_actions": [f"arn:aws:sns:us-east-1:{account}:nova-toll-alerts"],
+        }
+        if stale:
+            # metric_query is a set in provider plans; compare without ordering.
+            queries = after.pop("metric_query")
+            require(
+                len(queries) == 2
+                and {query["id"] for query in queries} == {"filled", "success"}
+            )
+            for query in queries:
+                require(
+                    not query.get("account_id")
+                    and not query.get("label")
+                    and not query.get("period")
+                )
+                if query["id"] == "filled":
+                    require(
+                        query["expression"] == "FILL(success, 0)"
+                        and query["return_data"] is True
+                        and not query.get("metric")
+                    )
+                else:
+                    require(
+                        not query.get("expression") and query["return_data"] is False
+                    )
+                    metrics = query["metric"]
+                    require(
+                        len(metrics) == 1 and metrics[0].get("dimensions") in (None, {})
+                    )
+                    require(metrics[0].get("unit") in (None, ""))
+                    require(
+                        [{**metrics[0], "dimensions": None, "unit": None}]
+                        == [
+                            {
+                                "namespace": "TollChat/Billing",
+                                "metric_name": f"{name}-{publication}-success",
+                                "period": 3600,
+                                "stat": "Sum",
+                                "dimensions": None,
+                                "unit": None,
+                            }
+                        ]
+                    )
+            mutable = {"metric_query"}
+            empty |= {"metric_name", "namespace", "period", "statistic", "dimensions"}
+        else:
+            expected.update(
+                namespace="AWS/Lambda" if outcome == "errors" else "TollChat/Billing",
+                metric_name="Errors"
+                if outcome == "errors"
+                else f"{name}-{publication}-failure",
+                period=300,
+                statistic="Sum",
+            )
+            if outcome == "errors":
+                expected["dimensions"] = {"FunctionName": name}
+            else:
+                empty.add("dimensions")
+            empty.add("metric_query")
+        empty |= {
+            "ok_actions",
+            "insufficient_data_actions",
+            "unit",
+            "extended_statistic",
+            "threshold_metric_id",
+            "alarm_rule",
+            "warm_up_configuration",
         }
     elif address.startswith("aws_s3_object."):
         require(after.get("server_side_encryption") in (None, "aws:kms"))
@@ -522,12 +790,22 @@ def validate(
         "publish": False,
         "event_bus_name": "default",
         "is_enabled": True,
+        "actions_enabled": True,
+        "evaluate_low_sample_count_percentiles": "evaluate",
     }.items():
-        if field in expected and after.get(field) is None:
+        if field in expected and (
+            after.get(field) is None
+            or (
+                field == "evaluate_low_sample_count_percentiles"
+                and after.get(field) == ""
+            )
+        ):
             after[field] = default
     omitted_defaults = {"acl", "managed_policy_arns", "inline_policy"}
     if address == "aws_lambda_function.costs":
         omitted_defaults |= {"logging_config", "tracing_config", "ephemeral_storage"}
+    if address.startswith("aws_cloudwatch_metric_alarm.costs_"):
+        omitted_defaults.add("evaluate_low_sample_count_percentiles")
     if address.startswith("aws_s3_object."):
         omitted_defaults |= {
             "kms_key_id",

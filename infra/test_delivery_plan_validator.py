@@ -612,6 +612,30 @@ def _derived_fixture(
 
 
 class DeliveryPlanValidatorTests(unittest.TestCase):
+    def test_admits_fixed_billing_alert_declarations_before_activation(self) -> None:
+        addresses = [
+            address
+            for address in CONTRACT
+            if address.startswith(
+                (
+                    "aws_cloudwatch_log_metric_filter.costs_",
+                    "aws_cloudwatch_metric_alarm.costs_",
+                )
+            )
+        ]
+        self.assertEqual(len(addresses), 9)
+        manifest = _mutation_manifest(
+            [
+                (address, "create", sorted(CONTRACT[address].fields))
+                for address in addresses
+            ]
+        )
+        self.assertEqual(validate_plan(_plan([]), manifest)["status"], "accepted")
+        manifest["permissions"][0]["resource"] = "*"
+        self.assertEqual(
+            validate_plan(_plan([]), manifest)["reason_code"], "invalid_permission"
+        )
+
     def test_redacted_notices_require_complete_activation_and_support_later_noops(
         self,
     ) -> None:
@@ -3600,6 +3624,19 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         )
         for address, spec in CONTRACT.items():
             if spec.operation_class in {"cost-publication", "cost-routing"}:
+                if (
+                    address.startswith(
+                        (
+                            "aws_cloudwatch_log_metric_filter.costs_",
+                            "aws_cloudwatch_metric_alarm.costs_",
+                        )
+                    )
+                    and f'"{address.split(".", 1)[1].split("[", 1)[0]}"'
+                    not in (
+                        Path(__file__).parent.parent / "v2/infra/costs.tf"
+                    ).read_text()
+                ):
+                    continue  # Admit the fixed alert contract before activation.
                 deferred_asset = next(
                     (
                         asset
@@ -3623,6 +3660,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         for address, field in {
             "aws_lambda_function.costs": "source_code_hash",
             "aws_iam_role_policy.costs": "policy",
+            "aws_cloudwatch_event_rule.costs": "schedule_expression",
             "aws_s3_object.cost_dashboard": "content",
             'aws_s3_object.cost_assets["costs.css"]': "source_hash",
             'aws_s3_object.cost_assets["costs.mjs"]': "source_hash",
@@ -4218,7 +4256,20 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
     ) -> None:
         root = Path(__file__).resolve().parents[1]
         code = (root / "v2/agent/public-report-routes.js").read_text()
-        legacy = code.replace('"/#toll-reports"', '"https://tollchat.ai/#toll-reports"')
+        # Reconstruct the fixed legacy bytes, before the response handler existed.
+        legacy = code.replace(
+            ", response?: { statusCode: number, headers: Record<string, {value: string}> }",
+            "",
+        ).replace(
+            "  if (event.response) {\n"
+            '    if (request.uri.startsWith("/assets/evals")) {\n'
+            '      event.response.headers["cache-control"] = { value: "no-store" };\n'
+            "    }\n    return event.response;\n  }\n",
+            "",
+        )
+        legacy = legacy.replace(
+            '"/#toll-reports"', '"https://tollchat.ai/#toll-reports"'
+        )
         legacy = legacy.replace(
             '"/tolls/i95-i495/"', '"https://tollchat.ai/tolls/i95-i495/"'
         )

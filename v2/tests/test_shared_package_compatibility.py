@@ -61,7 +61,7 @@ def test_mixed_loader_publisher_timed_and_cost_contracts(
                 previous = previous.replace(
                     marker, marker.replace(b"1.15.1", b"1.15.2")
                 )
-        if name == "oracle/schema.sql":
+        if name == "oracle/schema.sql" and previous != current:
             catalog_grant = b"""-- The evaluation factory's fixed development reader can inspect catalog evidence.
 DO $catalog_reader$
 BEGIN

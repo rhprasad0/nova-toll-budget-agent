@@ -12,7 +12,9 @@ The snapshot contains seven days of runs, the latest result for each of the six
 scenarios, and scheduled occurrences calculated in America/New_York. Failed
 grades, execution errors, late arrivals, and missing completions are distinct.
 A result is overdue after the existing ten-minute delivery allowance plus the
-fifteen-minute Lambda timeout. Only completed graded runs enter the pass rate.
+fifteen-minute Lambda timeout. Only completed runs under the current grading
+policy enter the headline pass rate. Legacy grades remain labeled in history;
+they are not rewritten or mixed into the current-policy denominator.
 Duplicate deliveries do not invoke models again. A refresh failure retains the
 last received snapshot with a warning; an absent or wrong-environment snapshot
 shows no scores. There is no sample fallback or historical backfill.
@@ -22,6 +24,43 @@ arguments/results, and each judge's explanation. Storage keys and internal error
 diagnostics are omitted; common credential and infrastructure identifiers are
 redacted from text. The source is this controlled synthetic suite, never real
 user chat sessions. Postgres retains history; the public window is seven days.
+
+## Material-error grading
+
+`scheduled-critical-v1` assesses the entire ordered conversation. A failure means
+a material error or unmet goal: wrong route, price, applicable time or provenance;
+invented facts; misleading availability; an unauthorized action; or failure to
+answer. Correct unavailable answers can pass. Formatting, optional details,
+equivalent wording and missing recaps are non-blocking. Noncritical notes appear
+in the existing check explanations. A confirmation can reuse previous evidence;
+changed inputs or a new estimate require a fresh matching lookup. The three
+recorded check names remain ToolCallCount, Completeness and Correctness; the first
+now checks pricing evidence rather than demanding a call on every turn.
+
+Evidence records `policy_version` beside separate model and application-release
+identities. Missing policy metadata indicates legacy grading. Availability,
+reason codes and fallback eligibility are published through the existing bounded
+allowlist so unavailable answers can be understood without internal diagnostics.
+
+Before releasing changes to this policy, run the offline simulator, calibration,
+dashboard and live-runtime tests, plus `node tests/eval_dashboard_browser.cjs`.
+For explicitly authorized paid calibration, from `v2/`:
+
+```bash
+env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll-dev \
+  uv run python -m eval.scheduled_calibration \
+  --output eval/private/scheduled-calibration-YYYYMMDD-r1 --budget-usd 5
+```
+
+This judges the checked-in synthetic examples twice with both judges. It invokes
+neither the application nor a simulated user. Require a complete run and no
+disagreements. The existing spending ledger reserves each call and stops further
+calls on unknown usage. For another iteration, pass `--prior` with the previous
+private run directory and retain the same cumulative ceiling. Keep raw evidence
+private; record only the aggregate result and limitations in the weekly journal.
+This scheduled calibration does not approve the golden training/shadow/holdout
+harness. Its shared-source identity includes `eval/simulated.py`, so any previous
+combined receipt must be checked against the new source before those paid runs.
 
 ## Application and evaluation models
 
@@ -96,8 +135,8 @@ development application.
    until then the page correctly shows no results. Inspect its environment,
    occurrence timestamp, three verdicts, conversation, and tool evidence.
 
-The production migration boundary includes 034, targeting pricing 1.4.0 and
-Oracle 1.15.1. Before publishing a production release, complete the
+The production migration boundary includes 035, targeting pricing 1.4.0 and
+Oracle 1.15.2. Before publishing a production release, complete the
 [release schema preflight](../manual-releases/README.md#2-check-schemas-before-publishing)
 and the fixed writer prerequisite below. Complete the production runtime activation
 below before treating the dashboard as ready. Development data is never copied there.
@@ -169,6 +208,36 @@ pricing 1.4.0 with `pricing.evaluation_runs` and the fixed `eval_writer` grants;
 the Lambda configuration and IAM below; and publication from a real scheduled run.
 Use bounded read-only database checks through the existing TLS-verified production
 connection. Do not rerun role bootstrap or migration 033 to activate the runtime.
+
+### Live-application evaluator prerequisite
+
+The production inspection on October 7 found the older bundled-agent evaluator;
+development already had the live consumer. Judge calibration alone cannot
+activate the live consumer. Before its protected production release, prepare and
+review the existing prerequisite from `v2/infra/timed_checks.tf`: the four IAM
+statements `ReadLiveChatRouting`, `ReadPublishedChatProxy`,
+`ReadLiveRuntimeVersion` and `InvokeLiveApplication`; the fixed
+`EVAL_SITE_DISTRIBUTION_ID` and `AGENTCORE_VPCE_URL` variables; and the timed-check
+security-group access to the private AgentCore endpoint, plus the fixed runtime
+and endpoint resource policies allowing the eval role only through that endpoint.
+Keep the current package, `DB_USER`, `PRICING_DB_USER` and `ConnectRdsIam` working
+during the prerequisite transition. The source retains these legacy production
+capabilities through release so ordinary preparation has no IAM/configuration
+changes; retire them only in a separately reviewed infrastructure cleanup. Do not
+expand delivery permissions or fold unreviewed IAM changes
+into ordinary release delivery. Reconcile approved cached policy state as
+described above before the finite release plan.
+
+Release the compatible private evidence protocol before activating its consumer.
+Use the existing protected production preparation/cutover sequence and verify the
+next real scheduled occurrence: policy `scheduled-critical-v1`, actor low/judges
+xhigh, separate application settings, and the serving release matching
+`/api/config`. Missing evidence or deployment changes remain execution errors.
+Observe the next seven days for incomplete runs and misclassifications; preserve
+historical grades. These prerequisites require their existing human-reviewed
+saved plan and protected release approvals; calibration performs none of them.
+
+### Snapshot publication prerequisite
 
 1. Prepare a private saved production Terraform plan from the reviewed source,
    with the **currently deployed packages** and the production backend/account

@@ -34,7 +34,7 @@ from eval import corpus, golden
 from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.5.16"
+VERSION = "2.5.17"
 CALIBRATION_KEYS = (
     "harness_version",
     "runtime",
