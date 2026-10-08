@@ -34,7 +34,7 @@ data "aws_iam_policy_document" "shadow_eval_assume" {
       # The lower stacked PR and main still use the previous approved workflow.
       values = [
         "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@86bfd03d926e3ce673fb00bad5bfa8aa644b67f1",
-        "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@efd23983ef492e892b6158a449f3e77a36636947",
+        "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-shadow-eval.yml@a173b0afccf9c5ae87a71903214d9ec2dd4109cd",
       ]
     }
   }
