@@ -444,20 +444,17 @@ def get_json(
                 status,
                 json.dumps(diagnostics, separators=(",", ":")),
             )
-            if (
-                not isinstance(
-                    error, (urllib.error.URLError, ConnectionError, TimeoutError)
-                )
-                or attempt == 3
-                or (
-                    isinstance(error, urllib.error.HTTPError)
-                    and status not in {408, 429, 500, 502, 503, 504}
-                )
-            ):
+            retryable = isinstance(
+                error, (urllib.error.URLError, ConnectionError, TimeoutError)
+            ) and not (
+                isinstance(error, urllib.error.HTTPError)
+                and status not in {408, 429, 500, 502, 503, 504}
+            )
+            if not retryable or attempt == 3:
                 logger.warning(
                     "COST_REQUEST_STOPPED source=%s reason=%s",
                     source,
-                    "exhausted" if attempt == 3 else "permanent",
+                    "exhausted" if retryable else "permanent",
                 )
                 raise
             delay = retry_delay(error, (2, 5)[attempt - 1])

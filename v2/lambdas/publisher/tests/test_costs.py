@@ -441,6 +441,19 @@ def test_openai_html_content_type_and_close_failure(
     assert "private-secret" not in json.dumps(diagnostic)
 
 
+def test_https_permanent_error_on_last_attempt(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    error = http_error(401)
+    request, sleep = mock_reader(monkeypatch, [http_error(), http_error(), error])
+    with pytest.raises(urllib.error.HTTPError) as failure:
+        costs.get_json(costs.OPENAI_URL, "test-key")
+    assert failure.value is error
+    assert request.call_count == 3 and sleep.call_count == 2
+    assert "reason=permanent" in caplog.text
+    assert "reason=exhausted" not in caplog.text
+
+
 def test_openai_diagnostic_respects_publication_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
