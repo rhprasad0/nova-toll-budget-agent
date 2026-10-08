@@ -1,4 +1,4 @@
-"""Prepare shadow CI and report measured or incomplete ten-case application results."""
+"""Prepare shadow CI and report pass cubed from ten cases with three trials each."""
 
 from __future__ import annotations
 
@@ -47,23 +47,27 @@ def prepare(*, verify_runtime: bool = False) -> dict[str, Any]:
 def report(directory: Path) -> dict[str, Any]:
     report = run.render(directory)
     identity = report["manifest"]["identity"]
-    expected = corpus.CONTRACT["splits"]["shadow"]["count"]
+    expected_cases = corpus.CONTRACT["splits"]["shadow"]["count"]
+    expected_trials = expected_cases * 3
     if (
         report["manifest"]["mode"] != "run"
         or identity["corpus"].get("evaluation_scope") != "shadow"
-        or len(identity["cases"]) != expected
-        or len(run.report_trials(identity)) != 1
+        or len(identity["cases"]) != expected_cases
+        or len(run.report_trials(identity)) != 3
     ):
-        raise ValueError("shadow CI requires a ten-case, one-trial shadow run")
+        raise ValueError("shadow CI requires a ten-case, three-trial shadow run")
     return {
         "source_commit": identity["commit"],
         "passed": report["overall"]["successful_trials"],
-        "expected_trials": expected,
+        "expected_trials": expected_trials,
         "pass_rate": report["overall"]["overall_pass_rate"],
+        "case_count": expected_cases,
+        "passing_all_three_cases": report["overall"]["passing_all_three_cases"],
+        "pass_cubed": report["overall"]["pass_cubed"],
         "scored_trials": report["overall"]["scored_trials"],
         "inconclusive_trials": report["overall"]["inconclusive_trials"],
         "complete": report["full_corpus_complete"]
-        and report["overall"]["scored_trials"] == expected,
+        and report["overall"]["scored_trials"] == expected_trials,
         "failure_counts": report["overall"]["failure_counts"],
         "cost_usd": sum(report["overall"]["cost_usd"].values()),
     }

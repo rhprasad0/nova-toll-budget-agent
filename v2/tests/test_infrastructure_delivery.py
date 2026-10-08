@@ -2275,9 +2275,8 @@ def _assert_required_event_callers(source: str) -> None:
     )
     assert 'test "$CALL_RESULT" = success' in gate_source
     assert 'test "$PLAN_RESULT" = success' in gate_source
-    for name, job in ci_jobs.items():
-        if name != "shadow-readiness":
-            assert "continue-on-error" not in job
+    for job in ci_jobs.values():
+        assert "continue-on-error" not in job
         for step in cast(list[dict[str, object]], job.get("steps", [])):
             assert "continue-on-error" not in step
 

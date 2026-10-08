@@ -1,5 +1,6 @@
-"""Shadow CI validates inputs before credentials and reports results without gating."""
+"""Shadow CI validates inputs before credentials and requires pass cubed >=70%."""
 
+import json
 import os
 import re
 import subprocess
@@ -48,13 +49,15 @@ def test_shadow_workflow_uses_approved_runtime_before_fixed_read_only_role() -> 
         )
         == (root / ".github/workflows/v2-shadow-eval.yml").read_bytes()
     )
-    assert ci["jobs"]["shadow-readiness"]["continue-on-error"] is True
+    assert "continue-on-error" not in ci["jobs"]["shadow-readiness"]
+    readiness = ci["jobs"]["shadow-readiness"]["steps"]
+    assert any("jq -e '.ready == true'" in s.get("run", "") for s in readiness)
     workflow = yaml.safe_load(
         (root / ".github/workflows/v2-shadow-eval.yml").read_text()
     )
     evaluation = workflow["jobs"]["evaluate"]
     assert "environment" not in evaluation
-    assert evaluation["continue-on-error"] is True
+    assert "continue-on-error" not in evaluation
     steps = evaluation["steps"]
     verify = next(
         i for i, step in enumerate(steps) if "--verify-runtime" in step.get("run", "")
@@ -106,9 +109,9 @@ def test_shadow_workflow_uses_approved_runtime_before_fixed_read_only_role() -> 
     command = next(
         step["run"]
         for step in steps
-        if step.get("name") == "Evaluate all ten shadow cases once"
+        if step.get("name") == "Evaluate all ten shadow cases three times"
     )
-    assert "--budget-usd 2" in command and "--trials-per-case 1" in command
+    assert "--budget-usd 2" in command and "--trials-per-case 3" in command
     assert "--cases" not in command
     policy = (root / "infra/shadow_eval.tf").read_text()
     assert 'Action   = ["ssm:GetParameter"]' in policy
@@ -121,7 +124,7 @@ def test_shadow_workflow_uses_approved_runtime_before_fixed_read_only_role() -> 
     assert "refs/pull" not in policy and "gh-readonly-queue" not in policy
 
 
-@pytest.mark.parametrize("scored_trials", [10, 8])
+@pytest.mark.parametrize("scored_trials", [30, 28])
 def test_shadow_report_preserves_incomplete_measurements(
     scored_trials: int, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -132,30 +135,38 @@ def test_shadow_report_preserves_incomplete_measurements(
                 "commit": "a" * 40,
                 "corpus": {"evaluation_scope": "shadow", "trials_per_case": 1},
                 "harness_version": "2.5.17",
-                "execution": {"trials_per_case": 1},
+                "execution": {"trials_per_case": 3},
                 "cases": [{}] * 10,
             },
         },
-        "full_corpus_complete": scored_trials == 10,
+        "full_corpus_complete": scored_trials == 30,
         "overall": {
-            "successful_trials": 6,
-            "overall_pass_rate": 0.6,
+            "successful_trials": 26,
+            "overall_pass_rate": 26 / 30,
+            "passing_all_three_cases": 6,
+            "pass_cubed": 0.6,
             "scored_trials": scored_trials,
-            "inconclusive_trials": 10 - scored_trials,
-            "failure_counts": {"actor_validity": 10 - scored_trials},
+            "inconclusive_trials": 30 - scored_trials,
+            "failure_counts": {"actor_validity": 30 - scored_trials},
             "cost_usd": {"agent": 0.1, "actor": 0.05, "judge": 0.05},
         },
     }
     monkeypatch.setattr(shadow_ci.run, "render", Mock(return_value=data))
     result = shadow_ci.report(tmp_path)
-    assert result["passed"] == 6 and result["expected_trials"] == 10
-    assert result["pass_rate"] == 0.6
-    assert result["complete"] is (scored_trials == 10)
+    assert result["passed"] == 26 and result["expected_trials"] == 30
+    assert result["pass_rate"] == 26 / 30
+    assert result["pass_cubed"] == 0.6
+    assert result["passing_all_three_cases"] == 6 and result["case_count"] == 10
+    assert result["complete"] is (scored_trials == 30)
     assert result["scored_trials"] == scored_trials
-    assert result["inconclusive_trials"] == 10 - scored_trials
-    assert result["failure_counts"] == {"actor_validity": 10 - scored_trials}
+    assert result["inconclusive_trials"] == 30 - scored_trials
+    assert result["failure_counts"] == {"actor_validity": 30 - scored_trials}
     data["manifest"]["identity"]["corpus"]["evaluation_scope"] = "training"
-    with pytest.raises(ValueError, match="ten-case, one-trial shadow run"):
+    with pytest.raises(ValueError, match="ten-case, three-trial shadow run"):
+        shadow_ci.report(tmp_path)
+    data["manifest"]["identity"]["corpus"]["evaluation_scope"] = "shadow"
+    data["manifest"]["identity"]["execution"]["trials_per_case"] = 1
+    with pytest.raises(ValueError, match="ten-case, three-trial shadow run"):
         shadow_ci.report(tmp_path)
 
 
@@ -181,6 +192,63 @@ def test_shadow_summary_reports_failure_before_checkout(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0
+    assert result.returncode == 1
     assert "no score is available" in summary.read_text()
-    assert "::warning::" in result.stdout
+    assert "::error::" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("pass_cubed", "complete", "accepted"),
+    [(0.6, True, False), (0.7, True, True), (0.8, True, True), (0.9, False, False)],
+)
+def test_shadow_gate_requires_seven_complete_passing_triples(
+    pass_cubed: float, complete: bool, accepted: bool, tmp_path: Path
+) -> None:
+    workflow = yaml.safe_load(
+        (golden.V2.parent / ".github/workflows/v2-shadow-eval.yml").read_text()
+    )
+    step = next(
+        s
+        for s in workflow["jobs"]["evaluate"]["steps"]
+        if s.get("name") == "Report shadow results"
+    )
+    output = tmp_path / "shadow-run"
+    output.mkdir()
+    (output / "manifest.json").write_text("{}")
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "source_commit": "a" * 40,
+                "passed": 20 + round(pass_cubed * 10),
+                "expected_trials": 30,
+                "passing_all_three_cases": round(pass_cubed * 10),
+                "case_count": 10,
+                "pass_cubed": pass_cubed,
+                "scored_trials": 30 if complete else 29,
+                "inconclusive_trials": 0 if complete else 1,
+                "complete": complete,
+                "cost_usd": 0.2,
+            }
+        )
+    )
+    uv = tmp_path / "uv"
+    uv.write_text('#!/bin/sh\ncat "$SHADOW_TEST_REPORT"\n')
+    uv.chmod(0o700)
+    summary = tmp_path / "summary.md"
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", step["run"]],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "SHADOW_TEST_REPORT": str(report),
+            "RUNNER_TEMP": str(tmp_path),
+            "GITHUB_STEP_SUMMARY": str(summary),
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert (result.returncode == 0) is accepted
+    assert "required >=70%" in summary.read_text()
+    assert ("::error::" in result.stdout) is (not accepted)

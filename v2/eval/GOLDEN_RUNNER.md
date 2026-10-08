@@ -3,8 +3,8 @@
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
 Corpus 5.1.14 is frozen and reviewed under harness 2.5.17. Training application
 runs default to one trial per case; use `--trials-per-case 3` only on Ryan's explicit
-instruction. Shadow is a ten-case CI diagnostic outside search, with a $2 per-job
-ceiling and informational scores. Actors have up to five delivered
+instruction. Shadow CI runs three trials per case outside search, with a $2 per-job
+ceiling and a **pass³ ≥70%** gate. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
@@ -288,19 +288,21 @@ split; the external reviewed calibration directory remains accepted too.
 ## Shadow CI
 
 Regular PR CI runs `shadow-readiness` to validate the public shadow inputs and
-approval receipt. It reports "awaiting authored public cases and harness approval"
-when neither exists; partial or unreviewed inputs produce a diagnostic. When
-ready, `shadow-evaluation` automatically runs all ten cases once on the exact PR
+approval receipt. Unavailable, partial or unreviewed inputs fail readiness. When
+ready, `shadow-evaluation` automatically runs all ten cases three times on the exact PR
 candidate for updates initiated by `rhprasad0`. This account already owns the
 development credential; other contributors receive only offline readiness
 checks. Its reusable workflow is pinned to an immutable commit and selects
 the receipt's exact Python version and architecture, verifying the evaluator
 before credentials. There is no deployment or environment approval.
-Each job has a fresh **$2 spending ceiling**. Scores, missing measurements,
-inconclusives, unknown usage and execution errors are informational. The job
-summary identifies the candidate, score, measured and inconclusive counts,
-completeness and accounted cost. An unavailable report produces a warning
-instead of a score; neither outcome blocks CI.
+Each job has a fresh **$2 spending ceiling** and requires **pass³ ≥70%**:
+at least seven of ten cases must pass all three trials. Exactly 70% passes.
+Use the runner's measured passing triples, not the cube of the overall trial
+pass rate. All 30 measurements must be complete; missing measurements,
+inconclusives, unknown usage, execution errors and unavailable reports fail CI.
+The job summary identifies the candidate, pass³, successful trial count,
+measured and inconclusive counts, completeness and accounted cost. Readiness
+and evaluation are required PR checks.
 
 Provision the development-only role defined in `infra/shadow_eval.tf` to activate
 paid evaluation.
