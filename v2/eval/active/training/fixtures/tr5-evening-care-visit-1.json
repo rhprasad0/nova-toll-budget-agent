@@ -1,0 +1,49 @@
+{
+  "tool": "get_current_toll_price",
+  "input": {
+    "origin_point_id": "i95:2233SO",
+    "destination_point_id": "i95:202SD",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "i95:2233SO",
+    "destination_point_id": "i95:202SD",
+    "method": "latest_complete_current_facility_prices",
+    "evaluated_at": "2026-10-07T17:59:00-04:00",
+    "maximum_observation_age_minutes": 30,
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    },
+    "source_kind": "observed",
+    "components": [
+      {
+        "route_step_id": "step-1",
+        "price_usd": "2.60",
+        "source_kind": "observed",
+        "pricing_method": "source_observation",
+        "facility": "i95_i495",
+        "component_evaluated_at": "2026-10-07T17:59:00-04:00",
+        "bin_minutes": 10,
+        "bin_start": "2026-10-07T17:40:00-04:00",
+        "bin_end": "2026-10-07T17:50:00-04:00",
+        "interval_end_at": "2026-10-07T17:50:00-04:00",
+        "observed_at": "2026-10-07T17:49:00-04:00",
+        "od_pair_id": 1204,
+        "source_status": "open"
+      }
+    ],
+    "total_usd": "2.60"
+  },
+  "is_error": false,
+  "provenance": {
+    "kind": "synthetic",
+    "source": "Committed Oracle catalog and published domain schedules at base 7670ff82; one-time local authoring on 2026-10-07",
+    "note": "Fictional driver and synthetic dynamic observations/history, not recorded traffic. Fixed charges calculated from frozen domain schedules. No historical case was used as a scenario seed."
+  }
+}

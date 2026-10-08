@@ -443,18 +443,19 @@ def test_real_sdk_transport_has_no_retries_and_bounded_timeout(
     requests: list[httpx.Request] = []
     clients: list[openai.AsyncOpenAI] = []
     original = openai.AsyncOpenAI
+    expected_timeout = 180 if role == "judge" else 60
 
     def respond(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         return httpx.Response(500, json={"error": {"message": "offline failure"}})
 
     def client(**kwargs: Any) -> openai.AsyncOpenAI:  # noqa: ANN401
-        assert kwargs["max_retries"] == 0 and kwargs["timeout"] == 60
+        assert kwargs["max_retries"] == 0 and kwargs["timeout"] == expected_timeout
         kwargs["http_client"] = httpx.AsyncClient(
             transport=httpx.MockTransport(respond)
         )
         result = original(**kwargs)
-        assert result.max_retries == 0 and result.timeout == 60
+        assert result.max_retries == 0 and result.timeout == expected_timeout
         clients.append(result)
         return result
 
@@ -1896,18 +1897,27 @@ def test_actor_judge_delivered_turns_do_not_depend_on_control_log(
         else [],
     )
     evaluator = Mock(
-        return_value=SimpleNamespace(
-            structured_output=run.OutcomeAssessment(
-                outcome=run.RequirementAssessment(
-                    evidence="Offline", unmet_requirements=[]
-                ),
-                actor_validity=run.ActorAssessment(evidence="Offline", status="valid"),
-            )
-        )
+        side_effect=[
+            SimpleNamespace(
+                structured_output=run.OutcomeAssessment(
+                    outcome=run.RequirementAssessment(
+                        evidence="Offline", unmet_requirements=[]
+                    ),
+                    actor_validity=run.ActorAssessment(
+                        evidence="Offline", status="valid"
+                    ),
+                )
+            ),
+            SimpleNamespace(
+                structured_output=run.ActorAssessment(
+                    status="valid", evidence="Confirmed"
+                )
+            ),
+        ]
     )
     monkeypatch.setattr(run, "Agent", Mock(return_value=evaluator))
     run.assess_outcome(case, row, Mock(spec=Model), "contract", "conversation")
-    prompt = evaluator.call_args.args[0]
+    prompt = evaluator.call_args_list[0].args[0]
     delivered = prompt.split("DELIVERED USER TURNS", 1)[1].split(
         "SIMULATOR CONTROL LOG", 1
     )[0]

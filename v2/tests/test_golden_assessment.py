@@ -55,6 +55,34 @@ def test_rules_reuse_replay_for_rejected_arguments_and_discovery() -> None:
         run.mechanical_rules(case, attempt)
 
 
+def test_guard_request_order_includes_rejected_call_after_success() -> None:
+    case = golden_case(1)
+    example = next(
+        e
+        for e in run.development_examples()
+        if e.case_id == case.id and e.label == "good"
+    )
+    attempt = run.Attempt(
+        id="guard-order", case_id=case.id, trial=1, turns=deepcopy(example.turns)
+    )
+    assert len(case.steps) == 1
+    call = attempt.turns[0].calls[0]
+    attempt.rejected_tools = [
+        golden.RejectedCall(
+            turn=1, name=call.name, input=call.input, result={}, reason="tool_budget"
+        )
+    ]
+    request = {"turn": 1, "name": call.name, "input": call.input}
+    attempt.attempted_tools = [request]  # Guard cancellation precedes tool execution.
+    attempt.requested_tools = [request, request]
+    failures = run.mechanical_rules(case, attempt)
+    assert len(failures) == 1
+    assert json.loads(failures[0].evidence)["error"] == "unexpected_call"
+    attempt.requested_tools = []
+    with pytest.raises(ValueError, match="ambiguous_tool_order"):
+        run.mechanical_rules(case, attempt)
+
+
 def test_mechanical_findings_isolate_wrong_id_and_ignore_weekday_order() -> None:
     case = golden_case(22)
     example = next(
@@ -111,23 +139,30 @@ def test_outcome_places_original_answers_beside_disclosure_requirements(
         turns=[golden.Turn(user="USER ONLY", response=answer, calls=[])],
     )
     evaluator = Mock(
-        return_value=SimpleNamespace(
-            structured_output=run.OutcomeAssessment(
-                disclosures=[],
-                outcome=run.RequirementAssessment(
-                    evidence="Satisfied", unmet_requirements=[]
-                ),
-                actor_validity=run.ActorAssessment(
-                    status="valid", evidence="Consistent"
-                ),
-            )
-        )
+        side_effect=[
+            SimpleNamespace(
+                structured_output=run.OutcomeAssessment(
+                    disclosures=[],
+                    outcome=run.RequirementAssessment(
+                        evidence="Satisfied", unmet_requirements=[]
+                    ),
+                    actor_validity=run.ActorAssessment(
+                        status="valid", evidence="Consistent"
+                    ),
+                )
+            ),
+            SimpleNamespace(
+                structured_output=run.ActorAssessment(
+                    status="valid", evidence="Confirmed"
+                )
+            ),
+        ]
     )
     monkeypatch.setattr(run, "Agent", Mock(return_value=evaluator))
     run.assess_outcome(
         case, attempt, Mock(spec=Model), "contract", "FULL TOOL EVIDENCE"
     )
-    prompt = evaluator.call_args.args[0]
+    prompt = evaluator.call_args_list[0].args[0]
     block = prompt.split("ASSISTANT ANSWER LINES", 1)[1].split(
         "DISCLOSURE ASSESSMENT", 1
     )[0]
@@ -141,6 +176,64 @@ def test_outcome_places_original_answers_beside_disclosure_requirements(
         < prompt.index("ASSISTANT ANSWER LINES")
         < prompt.index("FULL TOOL EVIDENCE")
     )
+
+
+@pytest.mark.parametrize("fixed_reference", [False, True])
+def test_actor_confirmation_rejects_wrong_driver_facts_independently(
+    monkeypatch: pytest.MonkeyPatch, fixed_reference: bool
+) -> None:
+    case = golden_case(1)
+    attempt = run.Attempt(
+        id="wrong-origin",
+        case_id=case.id,
+        trial=1,
+        turns=[golden.Turn(user="Wrong origin", response="Correct price", calls=[])],
+        actor_validity=run.ActorAssessment(status="valid", evidence="Combined pass"),
+        verdicts={"outcome": run.Verdict(passed=True, evidence="Application answer")},
+    )
+    evaluator = Mock(
+        return_value=SimpleNamespace(
+            structured_output=run.ActorAssessment(
+                status="invalid",
+                evidence="Destination approach substituted for supplied origin",
+            )
+        )
+    )
+    factory = Mock(return_value=evaluator)
+    monkeypatch.setattr(run, "Agent", factory)
+    run.confirm_actor_validity(
+        case, attempt, Mock(spec=Model), fixed_reference=fixed_reference
+    )
+    assert (
+        attempt.actor_validity is not None
+        and attempt.actor_validity.status == "invalid"
+    )
+    assert attempt.verdicts["outcome"].passed
+    evidence = json.loads(attempt.actor_validity.evidence)
+    assert evidence["combined"]["status"] == "valid"
+    assert evidence["confirmation"]["status"] == "invalid"
+    data = json.loads(evaluator.call_args.args[0])
+    assert data["private_driver_profile"] == golden.actor_profile(case).model_dump(
+        mode="json"
+    )
+    assert data["delivered_turns"] == [
+        {"turn": 1, "user": "Wrong origin", "assistant": "Correct price"}
+    ]
+    assert "calls" not in evaluator.call_args.args[0]
+    assert "including its initial request" in factory.call_args.kwargs["system_prompt"]
+    assert (
+        "do not invent outside geography" in factory.call_args.kwargs["system_prompt"]
+    )
+    assert (
+        "Only corrections or changes explicitly supplied in the profile"
+        in factory.call_args.kwargs["system_prompt"]
+    )
+    assert "cannot be reassigned entirely" in factory.call_args.kwargs["system_prompt"]
+    assert (
+        run.FIXED_REFERENCE_PROMPT in factory.call_args.kwargs["system_prompt"]
+    ) is fixed_reference
+    run.confirm_actor_validity(case, attempt, Mock(spec=Model))
+    assert evaluator.call_count == 1  # A rejected actor cannot be rehabilitated.
 
 
 @pytest.mark.parametrize("period,expected", [("peak", 2), ("off_peak", 1)])

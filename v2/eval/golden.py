@@ -74,12 +74,32 @@ TOOL_INPUT_MODELS = {
 }
 ACTOR_PROMPT = """Speak as the driver described below, in first person.
 {actor_profile}
+Choose your next action before drafting: first deliver any triggered, unfulfilled
+profile action; otherwise answer a necessary question from your facts; otherwise
+return message=null after closure. A specific profile action overrides generic
+reply rules, including giving only one endpoint or cancelling instead of answering.
+Interpret profile triggers by meaning: destination, exit, and where you leave
+refer to the same requested endpoint; origin, starting point, and where you enter
+refer to the other endpoint. When that request triggers cancellation,
+cancel instead of supplying the endpoint, even when your facts contain it.
+Deliver a triggered cancellation or correction in your very next reply, before
+answering the old request. Returning null has not delivered that action.
+After a profile-directed origin-only reply, a later question for the destination
+still triggers its cancellation rule, even when both endpoints are asked again.
+A required follow-up question is something YOU ask, not something you explain to
+the assistant. Ask it naturally even when the assistant already addressed it;
+you may ask for confirmation, but do not replace it with your own answer.
+Ask the assistant to calculate, quote, or screen for you. Do not offer to perform
+those calculations for the assistant or ask whether it wants you to screen an offer.
+Keep complete endpoint place names. Parenthetical approach qualifiers are not
+replacement endpoints. Words such as West in a place name do not establish a
+travel direction; never add a direction absent from your supplied facts.
 Use your initial request and supplied profile facts together. Profile omissions
 do not retract facts from your initial request. Only explicit correction or
 selection instructions change those facts. Answer questions briefly and naturally. Follow
 the supplied time roles: a departure time is not an arrival deadline, and a known
 departure time must be supplied when asked rather than described as unknown. Follow
-any stated correction or selection instructions before stopping. When one assistant
+any stated correction or selection instructions before stopping. An explicitly triggered cancellation or change of intent takes precedence over supplying missing facts for the old request; deliver the changed request instead of continuing the withdrawn workflow. When one assistant
 turn triggers multiple profile-required actions, deliver all of them together in
 your next message. Do not defer part of that response to another reply or perform
 actions whose trigger has not occurred. Do not invent
@@ -101,7 +121,8 @@ If that necessary question is repeated or still unanswered, supply the existing
 fact again, even if you already stated it. Never invent endpoint IDs;
 answer with the place names and corridor facts supplied in your profile.
 If the profile supplies the requested fact, deliver it; give both endpoints when
-both are requested. Never stop merely because the assistant asked a clear question.
+both are requested unless a specific profile action requires otherwise.
+Never stop merely because the assistant asked a clear question.
 Explicit profile choices override preserving the original route: if instructed
 to select a named alternative when offered, choose it rather than rejecting all
 alternatives. Do not invent a preference to retain the original starting point.
@@ -178,6 +199,11 @@ numeric fields than the reference. This overrides exhaustive final-answer
 number lists in the case, reference, or SOP. Preserve the requested annual
 affordability summary, scenario meaning, material assumptions and limitations,
 and accuracy of every amount and label that is given.
+For no_complete_paired_days, the available baseline is the returned gross and
+after-tax income, daily and annual tolled distance, and daily and annual vehicle
+costs. These baseline fields are required; the optional percentile breakdown
+above concerns available toll scenarios, not this unavailable-history answer.
+Stating a per-mile cost assumption does not supply the distance baseline.
 Assess annual uncertainty from the complete delivered conversation. Clearly
 estimated daily scenarios, accurate source and coverage descriptions, and scaling
 by planned annual days can together convey uncertainty without separate "not a
@@ -619,7 +645,7 @@ def make_actor(case: GoldenCase, model: Model) -> ActorSimulator:
         messages=actor.conversation_history,
         callback_handler=None,
         retry_strategy=None,
-        structured_output_prompt="Format YOUR next driver action, not an evaluation of your preceding response. Deliver necessary clarification, choice, confirmation, or a profile-required correction, cancellation, proof question, or workflow switch in message: writing it has NOT delivered it yet. After completion, return message=null only when no necessary question or triggered, unfulfilled profile follow-up remains. Using or repeating an already delivered choice does not trigger it again; still answer repeated necessary questions or separate later profile actions. Never return an empty or whitespace-only string, thanks, or a summary as a stopping message.",
+        structured_output_prompt="Format YOUR next driver action, not an evaluation of your preceding response. Deliver necessary clarification, choice, confirmation, or a profile-required correction, cancellation, proof question, or workflow switch in message: writing it has NOT delivered it yet. A triggered cancellation or correction must be delivered in this next reply; message=null does not deliver it. After completion, return message=null only when no necessary question or triggered, unfulfilled profile follow-up remains. Using or repeating an already delivered choice does not trigger it again; still answer repeated necessary questions or separate later profile actions. Never return an empty or whitespace-only string, thanks, or a summary as a stopping message.",
     )
     return actor
 

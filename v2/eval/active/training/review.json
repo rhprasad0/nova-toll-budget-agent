@@ -1,0 +1,6 @@
+{
+  "status": "approved",
+  "corpus_sha256": "074bfe2ca0d711086c7e172adc3e2cef104ae4cf71eb6115e8035b031a9a8739",
+  "reviewer": "Codex",
+  "evidence": "Reviewed for PR #677 integration at Ryan\u2019s request. Every case, reference, label, catalog and fixture is byte-identical to Ryan-approved 5.1.13. Only protected source identities and the version changed: current main scheduled evaluator, harness 2.5.17 and the tested rejection of live actor trials without an actor reply. Fresh combined harness calibration is required; the prior receipt does not qualify this contract."
+}

@@ -130,7 +130,11 @@ def main() -> None:
     parser.add_argument("--trials-per-case", type=int, choices=(1, 3), default=1)
     parser.add_argument("--prior-run", type=Path)
     parser.add_argument("--workers", type=int, choices=range(1, 17), default=16)
+    parser.add_argument("--allow-uncommitted-preparation", action="store_true")
+    parser.add_argument("--live-application", action="store_true")
     args = parser.parse_args()
+    if args.live_application and not args.allow_uncommitted_preparation:
+        parser.error("live actor calibration requires --allow-uncommitted-preparation")
     original_root = golden.ROOT
     try:
         with corpus.console(
@@ -151,8 +155,17 @@ def main() -> None:
 
 def command(args: argparse.Namespace) -> dict[str, Any] | None:
     cases = golden.load_cases()
-    identity = run.identity(cases)
+    if args.allow_uncommitted_preparation:
+        corpus.require_external(args.output)
+    identity = (
+        run.identity(cases, allow_uncommitted_preparation=True)
+        if args.allow_uncommitted_preparation
+        else run.identity(cases)
+    )
     identity["execution"] = {"trials_per_case": args.trials_per_case}
+    identity["actor_check_assistant"] = (
+        "live_application" if args.live_application else "scripted_reference"
+    )
     private = identity["corpus"].get("evaluation_scope") == "holdout"
     if private:
         corpus.require_external(golden.ROOT)
@@ -169,8 +182,11 @@ def command(args: argparse.Namespace) -> dict[str, Any] | None:
         raise ValueError("actor checks require one passing example per case")
     examples = list(passing.values())
     trials = report_trials(identity)
-    prior, spent = run.prior_accounting(args.prior_run)
+    prior, spent = run.prior_accounting(
+        args.prior_run, allow_preparation_ceiling=args.allow_uncommitted_preparation
+    )
     journal = run.Journal(args.output, args.budget_usd, spent)
+    run.snapshot_preparation(identity, args.output)
     manifest = {
         "mode": "actor-check",
         "run_id": str(uuid.uuid4()),
@@ -183,8 +199,9 @@ def command(args: argparse.Namespace) -> dict[str, Any] | None:
     }
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        check_actor = live_check if args.live_application else check
         futures = [
-            pool.submit(check, example, trial, journal)
+            pool.submit(check_actor, example, trial, journal)
             for example in examples
             for trial in trials
         ]
@@ -194,7 +211,13 @@ def command(args: argparse.Namespace) -> dict[str, Any] | None:
         for line in (args.output / "events.jsonl").read_text().splitlines()
     ]
     report = {
-        "warning": "Scripted development answers; actor checks only, not application quality or release qualification. Human actor review remains required.",
+        "warning": (
+            "Live frozen-application exchanges; actor calibration only, no application scores."
+            if args.live_application
+            else "Scripted development answers; actor checks only, not application quality or release qualification."
+        )
+        + " Human actor review remains required.",
+        "assistant_mode": identity["actor_check_assistant"],
         "trials_per_case": len(trials),
         "expected_trials": len(cases) * len(trials),
         "valid_trials": sum(r.status == "scored" for r in rows),
@@ -218,6 +241,27 @@ def command(args: argparse.Namespace) -> dict[str, Any] | None:
             "unknown_usage": report["unknown_usage"],
         }
     return None
+
+
+def live_check(
+    example: golden.Example, trial: int, journal: run.Journal
+) -> run.Attempt:
+    """Measure driver validity against the unchanged application during preparation."""
+    case = next(c for c in golden.load_cases() if c.id == example.case_id)
+    row = run.execute(case, trial, journal)
+    row.verdicts.clear()  # Preparation reports actor validity, not application scores.
+    if row.status == "scored" and not row.actor_replies:
+        row.status = "inconclusive"
+        row.error = "actor_not_sampled"
+        row.actor_validity = run.ActorAssessment(
+            status="uncertain",
+            evidence="The application stopped before any actor reply.",
+        )
+        row.failure_phase = "actor"
+        row.failure_class = run.failure_class(row)
+    journal.append({"event": "actor_check", **row.model_dump()})
+    print(f"{row.id}: {row.error or row.actor_validity}", flush=True)
+    return row
 
 
 if __name__ == "__main__":
