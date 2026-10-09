@@ -278,6 +278,24 @@ def test_runner_injection_and_invalid_flags(
     assert guard.blocked(payload(v2, command=command))
 
 
+@pytest.mark.parametrize("background", [False, True])
+def test_trusted_command_with_claude_bash_fields(
+    layout: tuple[Path, Path], background: bool
+) -> None:
+    v2, hidden = layout
+    event = payload(
+        v2,
+        command=f"{PREFIX} aggregate --output {hidden}/checkpoint",
+        description="Aggregate checkpoint",
+        timeout=600000,
+        run_in_background=background,
+    )
+    assert not guard.blocked(event)
+    for extra in ({"run_in_background": "true"}, {"dangerouslyDisableSandbox": True}):
+        event["tool_input"] = {**event["tool_input"], **extra}
+        assert guard.blocked(event)
+
+
 def test_runner_requires_checkout_and_no_overrides(layout: tuple[Path, Path]) -> None:
     v2, hidden = layout
     command = f"{PREFIX} aggregate --output {hidden}/checkpoint"
