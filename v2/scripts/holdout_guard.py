@@ -1,4 +1,4 @@
-"""Codex PreToolUse guard; trusted golden_run commands own all private I/O."""
+"""Claude Code PreToolUse guard; trusted golden_run commands own all private I/O."""
 
 from __future__ import annotations
 
@@ -274,10 +274,12 @@ def blocked(payload: object) -> bool:
             "max_output_tokens",
             "login",
             "tty",
+            "run_in_background",
         }
         return not (
             set(arguments) <= safe_keys
             and not arguments.get("tty", False)
+            and isinstance(arguments.get("run_in_background", False), bool)
             and trusted_runner(command, tokens, cwd)
         )
     return protected(str(cwd), cwd) or any(

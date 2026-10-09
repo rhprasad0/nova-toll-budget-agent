@@ -129,7 +129,7 @@ external directories, retaining old inputs and evidence. Review public split
 independence before freezing, and have the host operator review the full suite.
 
 For pricing-grounded authoring, inspect the committed Oracle schema/data and use
-[the development PostgreSQL skill](../../.agents/skills/query-dev-postgres/SKILL.md)
+[the development PostgreSQL skill](../../.claude/skills/query-dev-postgres/SKILL.md)
 only when bounded current data is needed. Keep credentials in the existing
 AWS/SSM path. Freeze retrieved facts and truthful provenance in reconciled
 fixtures; trials never fetch live pricing.
@@ -144,6 +144,6 @@ versions; changed cases still need validation and input review. Evaluator contra
 changes require a new combined calibration. Return only aggregate checkpoint
 feedback to the coding agent.
 Export the public harness approval receipt after review so training and shadow CI
-can reuse it without reading hidden calibration evidence. The eval-climb parent
+can reuse it without reading hidden calibration evidence. The coding agent
 may invoke an authorized host-side application checkpoint and consume only its
 aggregate output. Shadow is CI regression coverage outside the training search.

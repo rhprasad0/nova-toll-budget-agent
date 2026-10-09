@@ -8,7 +8,6 @@ import os
 import shlex
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -138,6 +137,11 @@ def test_protected_working_directory(layout: tuple[Path, Path], directory: str) 
         ("view_image", {"path": "alias/image.png"}),
         ("Read", {"file_path": "~/private-suite/cases.jsonl"}),
         ("Edit", {"file_path": "alias/cases.jsonl"}),
+        ("Write", {"file_path": "alias/new", "content": "synthetic"}),
+        ("Glob", {"pattern": "**/*.jsonl", "path": "alias"}),
+        ("Grep", {"pattern": "case_id", "path": "../../private-suite"}),
+        ("NotebookEdit", {"notebook_path": "alias/notes.ipynb", "new_source": ""}),
+        ("Agent", {"description": "Inspect", "prompt": "Read alias/cases.jsonl"}),
         (
             "apply_patch",
             {
@@ -197,7 +201,7 @@ def test_trusted_commands(layout: tuple[Path, Path], mode: str, child: bool) -> 
     for suffix in ("", " > public.json", " >> 'public summary.json'"):
         event = payload(v2.parent, command=command + suffix, workdir=str(v2))
         if child:
-            event.update(agent_id="synthetic-child", agent_type="eval_reviewer")
+            event.update(agent_id="synthetic-child", agent_type="synthetic-reviewer")
         assert not guard.blocked(event)
 
 
@@ -272,6 +276,24 @@ def test_runner_injection_and_invalid_flags(
         aggregate=aggregate, run=run, prefix=PREFIX, v2=v2, hidden=hidden
     )
     assert guard.blocked(payload(v2, command=command))
+
+
+@pytest.mark.parametrize("background", [False, True])
+def test_trusted_command_with_claude_bash_fields(
+    layout: tuple[Path, Path], background: bool
+) -> None:
+    v2, hidden = layout
+    event = payload(
+        v2,
+        command=f"{PREFIX} aggregate --output {hidden}/checkpoint",
+        description="Aggregate checkpoint",
+        timeout=600000,
+        run_in_background=background,
+    )
+    assert not guard.blocked(event)
+    for extra in ({"run_in_background": "true"}, {"dangerouslyDisableSandbox": True}):
+        event["tool_input"] = {**event["tool_input"], **extra}
+        assert guard.blocked(event)
 
 
 def test_runner_requires_checkout_and_no_overrides(layout: tuple[Path, Path]) -> None:
@@ -364,13 +386,15 @@ def test_ordinary_operations(
 
 
 def test_registration_from_root_subdirectory_and_worktree(tmp_path: Path) -> None:
-    config = tomllib.loads((SOURCE / ".codex/config.toml").read_text())
+    config = json.loads((SOURCE / ".claude/settings.json").read_text())
     groups = config["hooks"]["PreToolUse"]
     assert len(groups) == 1 and groups[0]["matcher"] == "*"
     handlers = groups[0]["hooks"]
     assert len(handlers) == 1
     handler = handlers[0]
-    assert handler["type"] == "command" and handler["async"] is False
+    assert handler["type"] == "command" and not handler.get("async", False)
+    # Claude Code lets a crashed or timed-out hook proceed unless told to block.
+    assert handler["onFailure"] == "block"
     root = tmp_path / "repo"
     script = root / "v2/scripts/holdout_guard.py"
     script.parent.mkdir(parents=True)
@@ -413,6 +437,8 @@ def test_registration_from_root_subdirectory_and_worktree(tmp_path: Path) -> Non
         env=environment,
     )
     for directory in (root, root / "v2", worktree, worktree / "v2"):
+        checkout = directory.parent if directory.name == "v2" else directory
+        project = {**environment, "CLAUDE_PROJECT_DIR": str(checkout)}
         event = payload(directory, command="git status --short")
         result = subprocess.run(
             ["/bin/sh", "-c", handler["command"]],
@@ -421,7 +447,7 @@ def test_registration_from_root_subdirectory_and_worktree(tmp_path: Path) -> Non
             text=True,
             capture_output=True,
             check=True,
-            env=environment,
+            env=project,
         )
         assert result.stdout == result.stderr == ""
         event = payload(
@@ -434,16 +460,14 @@ def test_registration_from_root_subdirectory_and_worktree(tmp_path: Path) -> Non
             text=True,
             capture_output=True,
             check=True,
-            env=environment,
+            env=project,
         )
         assert json.loads(result.stdout) == guard.DENIAL
         assert result.stderr == ""
         # Exercise the real command and module location without reading a holdout.
-        local_v2 = directory if directory.name == "v2" else directory / "v2"
         event = payload(
-            directory,
+            checkout / "v2",
             command=f"{PREFIX} aggregate --output {shlex.quote(str(hidden / 'synthetic'))}",
-            workdir=str(local_v2),
         )
         result = subprocess.run(
             ["/bin/sh", "-c", handler["command"]],
@@ -452,15 +476,16 @@ def test_registration_from_root_subdirectory_and_worktree(tmp_path: Path) -> Non
             text=True,
             capture_output=True,
             check=True,
-            env=environment,
+            env=project,
         )
         assert result.stdout == result.stderr == ""
-
-
-def test_role_definitions_and_skill_match() -> None:
-    skill = (SOURCE / ".agents/skills/eval-climb/SKILL.md").read_text()
-    for role in ("eval_implementer", "eval_reviewer"):
-        config = tomllib.loads((SOURCE / f".codex/agents/{role}.toml").read_text())
-        assert config["model"] == "gpt-6.1-sol"
-        assert config["model_reasoning_effort"] == "xhigh"
-        assert f"| `{role}` | `gpt-6.1-sol` / xhigh |" in skill
+    # Without a project directory the script path is missing, so the hook fails.
+    result = subprocess.run(
+        ["/bin/sh", "-c", handler["command"]],
+        cwd=root,
+        input=json.dumps(payload(root, command="git status --short")),
+        text=True,
+        capture_output=True,
+        env={k: v for k, v in environment.items() if k != "CLAUDE_PROJECT_DIR"},
+    )
+    assert result.returncode != 0

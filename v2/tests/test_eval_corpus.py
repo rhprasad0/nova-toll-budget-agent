@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import logging
 import shutil
@@ -833,29 +832,6 @@ def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
     assert incomplete["pass_rate"] == 29 / 30
     assert incomplete["pass_cubed"] == 0.9
     shadow_events.write_text(original_events)
-    diagnostic_path = (
-        golden.V2.parent / ".agents/skills/eval-climb/scripts/diagnose_gap.py"
-    )
-    spec = importlib.util.spec_from_file_location("diagnose_gap", diagnostic_path)
-    assert spec and spec.loader
-    diagnostic = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(diagnostic)
-    visible = run.render(tmp_path / "run-training")
-    hidden = run.aggregate(tmp_path / "run-holdout")
-    assert diagnostic.diagnose(visible, hidden)["gap_percentage_points"] == 0
-    for key, value in {
-        "source_commit": "f" * 40,
-        "artifact_sha256": "f" * 64,
-        "corpus_version": "5.1.0",
-        "measurement_sha256": "f" * 64,
-        "trials_per_case": 3,
-        "complete": False,
-        "expected_trials": 24,
-    }.items():
-        with pytest.raises(ValueError, match="complete, matching"):
-            diagnostic.diagnose(visible, {**hidden, key: value})
-    with pytest.raises(ValueError, match="inconsistent holdout totals"):
-        diagnostic.diagnose(visible, {**hidden, "pass_rate": 0.5})
     assert original_root == golden.ROOT
     for split in f.SPLITS:
         incomplete = deepcopy(shared)

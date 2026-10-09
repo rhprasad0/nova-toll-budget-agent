@@ -48,13 +48,16 @@ An exposed training score cannot qualify production. Production retains its
 Keep holdout inputs and detailed evidence outside the repository, for example
 `/home/ryan/Documents/tollchat-eval-holdout/5.0.0/`. The host operator explicitly
 selects the corpus with `--corpus`; ordinary training commands never discover it.
-Within an authorized eval-climb campaign, the parent can invoke the host runner
-and use its aggregate-only feedback and validated training/holdout gap. Children
-never access hidden evidence. See the
+With authorization, the coding agent can invoke the host runner and use only its
+aggregate feedback. See the
 [host-side commands](GOLDEN_RUNNER.md#external-holdout-checkpoints).
 
 **Separation is procedural:** the coding agent has host filesystem access but
-must never inspect holdout files or detailed evidence. Pair visible and hidden
+must never inspect holdout files or detailed evidence. The `PreToolUse` hook in
+[`.claude/settings.json`](../../.claude/settings.json) runs
+[`holdout_guard.py`](../scripts/holdout_guard.py), which blocks detected agent
+tool access to that tree except literal `eval.golden_run run|aggregate` commands
+run from this checkout's `v2/`. It guards supported tool calls, not the OS. Pair visible and hidden
 scores on the same committed candidate to track their gap. Repeated aggregate
 feedback can still influence tuning; this is not fully blind accuracy.
 

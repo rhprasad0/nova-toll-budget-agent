@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 \"$CLAUDE_PROJECT_DIR/v2/scripts/holdout_guard.py\"",
+            "timeout": 10,
+            "onFailure": "block",
+            "statusMessage": "Checking holdout access"
+          }
+        ]
+      }
+    ]
+  }
+}
