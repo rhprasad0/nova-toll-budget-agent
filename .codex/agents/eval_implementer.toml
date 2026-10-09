@@ -1,6 +1,6 @@
 name = "eval_implementer"
 description = "Implement one admitted TollChat SOP or tool-description hypothesis in an owned candidate worktree."
-model = "gpt-6-sol"
+model = "gpt-6.1-sol"
 model_reasoning_effort = "xhigh"
 sandbox_mode = "workspace-write"
 developer_instructions = """

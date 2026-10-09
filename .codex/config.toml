@@ -1,3 +1,13 @@
 [mcp_servers.context7]
 command = "npx"
 args = ["-y", "@upstash/context7-mcp@4.0.4"]
+
+[[hooks.PreToolUse]]
+matcher = "*"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = '/usr/bin/python3 "$(git rev-parse --show-toplevel)/v2/scripts/holdout_guard.py"'
+async = false
+timeout = 10
+statusMessage = "Checking holdout access"
