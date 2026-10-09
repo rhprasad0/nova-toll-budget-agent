@@ -110,7 +110,7 @@ resource "aws_lambda_function" "costs" {
 resource "aws_cloudwatch_event_rule" "costs" {
   region              = data.aws_region.current.region
   name                = local.cost_name
-  schedule_expression = local.is_production ? "cron(0 9,13 * * ? *)" : "cron(0 8,12 * * ? *)"
+  schedule_expression = local.is_production ? "cron(0 9,13 * * ? *)" : "cron(17 8,12 * * ? *)"
   state               = "ENABLED"
 }
 

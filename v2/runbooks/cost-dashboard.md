@@ -4,7 +4,7 @@
 publisher shares the report publisher's archive, but has its own Lambda and
 execution role. It has no database or model permissions.
 
-Development runs at **08:00 and 12:00 UTC** and combines its own AWS account's billing with
+Development runs at **08:17 and 12:17 UTC** and combines its own AWS account's billing with
 OpenAI organization-wide costs. OpenAI includes all environments, not just development.
 Immediately after collecting AWS, development publishes
 `https://dev.tollchat.ai/assets/costs-aws.json` before requesting OpenAI. This
@@ -20,6 +20,11 @@ receives parameter read and scoped decryption permission; delivery and planning
 roles cannot read the key. Production consumes only development's AWS feed and
 collects OpenAI directly once. Do not enable
 Cost Explorer as part of this release.
+
+The development minute offset is an experiment to avoid top-of-hour billing
+traffic; it does not establish the cause of earlier OpenAI rate limits. After
+delivery, check the next four scheduled runs for successful dashboard and AWS
+feed publications and review any OpenAI failures or retries.
 
 The requested interval is the union of month-to-date and the last 30 completed
 UTC days, ending before today. AWS uses account-filtered `UnblendedCost`; OpenAI
@@ -107,7 +112,7 @@ There is no database migration or application-agent change in this release.
    Cost Explorer request and OpenAI against the unfiltered organization Costs API
    for the same dates. Reconcile exact daily and month-to-date decimals and check
    browser labels, totals, and chart/table agreement. Separately confirm the next
-   scheduled **08:00 and 12:00 UTC** refreshes; a manual invocation does not prove
+   scheduled **08:17 and 12:17 UTC** refreshes; a manual invocation does not prove
    scheduling. Confirm all development billing alarms have actions enabled and
    target the foundation alert topic.
    Confirm the topic has a confirmed subscription. If its configured email

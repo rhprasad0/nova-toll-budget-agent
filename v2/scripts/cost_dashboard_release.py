@@ -290,9 +290,12 @@ def validate_drift(item: dict[str, Any], environment: str) -> None:
         recovery = "12" if environment == "development" else "13"
         daily = f"cron(0 {hour} * * ? *)"
         twice_daily = f"cron(0 {hour},{recovery} * * ? *)"
+        current = (
+            "cron(17 8,12 * * ? *)" if environment == "development" else twice_daily
+        )
         require(before["schedule_expression"] == after["schedule_expression"])
-        require(after["schedule_expression"] in (daily, twice_daily))
-        before["schedule_expression"] = after["schedule_expression"] = twice_daily
+        require(after["schedule_expression"] in (daily, twice_daily, current))
+        before["schedule_expression"] = after["schedule_expression"] = current
     if address == "aws_iam_role.costs":
         name = "tollchat-v2-cost-publisher" + (
             "-dev" if environment == "development" else ""
@@ -508,7 +511,7 @@ def validate(
         expected = {
             "name": name,
             "event_bus_name": "default",
-            "schedule_expression": "cron(0 8,12 * * ? *)"
+            "schedule_expression": "cron(17 8,12 * * ? *)"
             if suffix
             else "cron(0 9,13 * * ? *)",
             "state": "ENABLED",
