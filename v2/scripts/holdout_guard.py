@@ -1,4 +1,4 @@
-"""Codex PreToolUse guard; trusted golden_run commands own all private I/O."""
+"""Claude Code PreToolUse guard; trusted golden_run commands own all private I/O."""
 
 from __future__ import annotations
 

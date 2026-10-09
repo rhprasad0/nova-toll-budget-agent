@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 \"$(git rev-parse --show-toplevel)/v2/scripts/holdout_guard.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking holdout access"
+          }
+        ]
+      }
+    ]
+  }
+}

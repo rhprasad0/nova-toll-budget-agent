@@ -62,44 +62,10 @@ The shared `_PricingProfile` model is excluded because its descriptions also
 appear in the output schema.
 
 Each run records full tool schema hashes and the exact source artifact, so wording
-changes remain attributable. The eval-climb comparison permits differing tool
-hashes only with the supported policy and identical pinned corpus. Old-contract
-reports retain their original hash rules and cannot be compared with this contract.
-Input approval and approved harness calibration are required before the next climb;
+changes remain attributable. Old-contract reports retain their original hash
+rules and cannot be compared with this contract.
+Input approval and approved harness calibration are required before the next run;
 never transfer prior approvals or regenerate a candidate's corpus manifest.
-
-## Directed-catalog campaign comparison
-
-The separately authorized three-trial campaign may use
-`compare_runs.py BASELINE_REPORT CANDIDATE_REPORT --campaign-policy directed-catalog-v1`.
-This opt-in policy is limited to harness 2.3.27, three repetitions and renderer
-versions 1.0.0 and 1.0.2. It pins both Dulles route source graphs and application
-code outside the supplemental catalog helper, its render expression and the
-renderer version literal to the campaign's starting commit.
-The usual identity checks still pin tools, corpus, actors, judges and model
-settings. Default and historical comparisons retain their original behavior.
-
-Independent review must verify that supplemental entry-to-exit relationships
-match all 189 canonical same-facility pairs, preserve every catalog record and
-field, and introduce no pricing, availability, consent or cross-facility claims.
-This evaluates the rendered application prompt. A pricing-runtime resolver
-requires a separate measurement repair because frozen replay replaces that code.
-The campaign's isolated manifest uses three repetitions; the ordinary development
-default stays at one. Results belong in the experiment journal.
-
-Retain evaluated source commits with the private reports in a self-contained
-`evaluated-sources.bundle`; temporary worktrees alone do not preserve them.
-The campaign archive contains this bundle and its SHA-256 receipt. In a fresh
-checkout, verify the receipt and import those commits before comparing reports:
-
-```bash
-git bundle verify /absolute/private-campaign/evaluated-sources.bundle
-git fetch /absolute/private-campaign/evaluated-sources.bundle \
-  'refs/tags/eval/three-trial-20260927/*:refs/tags/eval/three-trial-20260927/*'
-```
-
-These refs cover the fixed baseline and every candidate; the selected candidate
-also supplies final verification. Keep the bundle and raw reports private.
 
 ## Scoring and preparation
 
@@ -109,15 +75,6 @@ Fully measured actor inconclusives stay visible and count as no success. Pass³
 fields are null (inapplicable) for one repetition. Scheduling, actor checks,
 rendering and comparison use recorded `trials_per_case`; historical three-trial
 reports keep their recorded scoring rules. Unsupported or mixed contracts fail.
-
-Promotion requires a strict overall score gain and independent scope and material
-regression review. Violation and inconclusive increases trigger review, not an
-automatic numeric veto. Demonstrated material regressions block promotion; a lost
-stochastic pass alone does not prove causation. Ties retain the incumbent.
-**90% is a soft milestone.** Sequential search is bounded by the authorized
-budget; after four complete candidates without improvement, continue only with a
-materially different evidence-backed hypothesis or a bounded measurement repair.
-See the [eval-climb skill](../../.agents/skills/eval-climb/SKILL.md).
 
 Optimize using training cases only. Do not use archived or shadow cases in
 search. These measurements do not establish
@@ -364,9 +321,9 @@ preparation diagnostics.
 ## External holdout checkpoints
 
 The host operator authors, validates and approves hidden inputs and combined
-calibration. During an authorized eval-climb campaign, the parent may invoke the
-application checkpoint command and consume its aggregate output; it never
-directly reads external files. Children receive only aggregate feedback.
+calibration. With authorization, the coding agent may invoke the application
+checkpoint command and consume its aggregate output; it never directly reads
+external files.
 Keep the corpus, calibration, reviews, actor checks and application output outside
 the repository and coding-container mounts. An example layout is
 `~/Documents/tollchat-eval-holdout/{5.0.0,runs/}`. Separation is procedural: the
@@ -418,14 +375,8 @@ Keep the suite fixed while tracking the gap; corpus or evaluator repairs start a
 new series. Repeated aggregate feedback can still influence tuning, so this is a
 hidden diagnostic, not fully blind accuracy or a production gate.
 
-The eval-climb parent can save safe stdout in an ignored public feedback file and
-run its `scripts/diagnose_gap.py TRAINING_REPORT PUBLIC_FEEDBACK_JSON`. The helper
-re-renders only the public training evidence, checks source/artifact, evaluator,
-corpus version and repetition agreement, and emits the rates and validated gap.
-Incomplete or mismatched measurements cannot yield a comparable gap. Diagnostics
-share the campaign ledger and budget; the next paid command chains from the last
-checkpoint even when it switches back to training. Never inspect external logs
-to diagnose a hidden measurement failure; have the host operator resolve it.
+Never inspect external logs to diagnose a hidden measurement failure; have the
+host operator resolve it.
 
 Keep raw artifacts in ignored `eval/private/` or the existing private workflow
 store. Append summaries to the appropriate Monday-start page in `eval/journal/`

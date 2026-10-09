@@ -8,7 +8,6 @@ import os
 import shlex
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -197,7 +196,7 @@ def test_trusted_commands(layout: tuple[Path, Path], mode: str, child: bool) -> 
     for suffix in ("", " > public.json", " >> 'public summary.json'"):
         event = payload(v2.parent, command=command + suffix, workdir=str(v2))
         if child:
-            event.update(agent_id="synthetic-child", agent_type="eval_reviewer")
+            event.update(agent_id="synthetic-child", agent_type="synthetic-reviewer")
         assert not guard.blocked(event)
 
 
@@ -364,13 +363,13 @@ def test_ordinary_operations(
 
 
 def test_registration_from_root_subdirectory_and_worktree(tmp_path: Path) -> None:
-    config = tomllib.loads((SOURCE / ".codex/config.toml").read_text())
+    config = json.loads((SOURCE / ".claude/settings.json").read_text())
     groups = config["hooks"]["PreToolUse"]
     assert len(groups) == 1 and groups[0]["matcher"] == "*"
     handlers = groups[0]["hooks"]
     assert len(handlers) == 1
     handler = handlers[0]
-    assert handler["type"] == "command" and handler["async"] is False
+    assert handler["type"] == "command" and not handler.get("async", False)
     root = tmp_path / "repo"
     script = root / "v2/scripts/holdout_guard.py"
     script.parent.mkdir(parents=True)
@@ -455,12 +454,3 @@ def test_registration_from_root_subdirectory_and_worktree(tmp_path: Path) -> Non
             env=environment,
         )
         assert result.stdout == result.stderr == ""
-
-
-def test_role_definitions_and_skill_match() -> None:
-    skill = (SOURCE / ".agents/skills/eval-climb/SKILL.md").read_text()
-    for role in ("eval_implementer", "eval_reviewer"):
-        config = tomllib.loads((SOURCE / f".codex/agents/{role}.toml").read_text())
-        assert config["model"] == "gpt-6.1-sol"
-        assert config["model_reasoning_effort"] == "xhigh"
-        assert f"| `{role}` | `gpt-6.1-sol` / xhigh |" in skill
