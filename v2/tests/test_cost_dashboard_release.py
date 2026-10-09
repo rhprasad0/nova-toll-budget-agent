@@ -585,6 +585,8 @@ locals {{
             ("source_hash", base64.b64encode(b"a" * 32).decode()),
             ("kms_key_id", "foreign-key"),
             ("schedule_expression", "rate(1 minute)"),
+            ("schedule_expression", "cron(18 8,12 * * ? *)"),
+            ("schedule_expression", "cron(0 8,12 * * ? *)"),
             ("alarm_actions", ["arn:aws:sns:us-east-1:000000000000:other"]),
             ("actions_enabled", False),
             ("evaluation_periods", 1),
@@ -988,11 +990,19 @@ def test_provider_report_routes_keep_known_defaults(tmp_path: Path) -> None:
             gate.routes(retained, after)
 
 
-@pytest.mark.parametrize("environment", ["development", "production"])
+@pytest.mark.parametrize(
+    ("environment", "observed_schedule"),
+    [
+        ("development", "current"),
+        ("development", "daily"),
+        ("development", "on_hour"),
+        ("production", "current"),
+        ("production", "daily"),
+    ],
+)
 @pytest.mark.parametrize("phase", ["prepare", "promote", "recover"])
-@pytest.mark.parametrize("legacy_schedule", [False, True])
 def test_first_billing_refresh_preserves_release_authority(
-    environment: str, phase: str, legacy_schedule: bool
+    environment: str, phase: str, observed_schedule: str
 ) -> None:
     if TYPE_CHECKING:
         import test_blue_green as rehearsal
@@ -1006,7 +1016,7 @@ def test_first_billing_refresh_preserves_release_authority(
             "name": name,
             "event_bus_name": "default",
             "state": "ENABLED",
-            "schedule_expression": "cron(0 8,12 * * ? *)"
+            "schedule_expression": "cron(17 8,12 * * ? *)"
             if suffix
             else "cron(0 9,13 * * ? *)",
             "is_enabled": True,
@@ -1113,9 +1123,13 @@ def test_first_billing_refresh_preserves_release_authority(
             )
         before[address] = asset_values
     drifts: list[dict[str, Any]] = []
-    if legacy_schedule:
+    if observed_schedule == "daily":
         before["aws_cloudwatch_event_rule.costs"]["schedule_expression"] = (
             "cron(0 8 * * ? *)" if suffix else "cron(0 9 * * ? *)"
+        )
+    elif observed_schedule == "on_hour":
+        before["aws_cloudwatch_event_rule.costs"]["schedule_expression"] = (
+            "cron(0 8,12 * * ? *)"
         )
     for address, resource in before.items():
         after = deepcopy(resource)
@@ -1169,6 +1183,7 @@ def test_first_billing_refresh_preserves_release_authority(
                 rehearsal.gate.validate_plan(document, state, phase)
         for field, value in (
             ("schedule_expression", "rate(1 minute)"),
+            ("schedule_expression", "cron(18 8,12 * * ? *)"),
             ("tags", {"extra": "tag"}),
             ("metadata", {"extra": "metadata"}),
             ("layers", [{"arn": "unreviewed"}]),
@@ -1183,6 +1198,12 @@ def test_first_billing_refresh_preserves_release_authority(
                     rehearsal.gate.Rejected, match="incomplete_or_drift"
                 ):
                     rehearsal.gate.validate_plan(document, state, phase)
+                if field == "schedule_expression":
+                    bad["change"]["before"][field] = value
+                    with pytest.raises(
+                        rehearsal.gate.Rejected, match="incomplete_or_drift"
+                    ):
+                        rehearsal.gate.validate_plan(document, state, phase)
     role = next(drift for drift in drifts if drift["address"] == "aws_iam_role.costs")
     if environment == "development":
         legacy_policy = gate.policy(environment)
@@ -1263,7 +1284,7 @@ def test_first_billing_refresh_preserves_release_authority(
         document["resource_drift"] = [bad]
         with pytest.raises(rehearsal.gate.Rejected, match="incomplete_or_drift"):
             rehearsal.gate.validate_plan(document, state, phase)
-    if legacy_schedule:
+    if observed_schedule != "current":
         schedule = next(
             drift
             for drift in drifts
@@ -1271,7 +1292,7 @@ def test_first_billing_refresh_preserves_release_authority(
         )
         after = dict(
             schedule["change"]["after"],
-            schedule_expression="cron(0 8,12 * * ? *)"
+            schedule_expression="cron(17 8,12 * * ? *)"
             if suffix
             else "cron(0 9,13 * * ? *)",
         )
