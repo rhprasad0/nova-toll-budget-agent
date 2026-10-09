@@ -65,9 +65,11 @@ The synchronous `PreToolUse` hook in [`.codex/config.toml`](../../../.codex/conf
 uses [`holdout_guard.py`](../../../v2/scripts/holdout_guard.py) to block detected
 tool access to the entire `/home/ryan/Documents/tollchat-eval-holdout` tree.
 It checks shell commands, working directories and file-tool paths, including
-relative, home-expanded and symlink paths. Malformed requests are denied with
-generic messages. Parent and child tool calls use the same guard; role instructions
-still prohibit children from invoking holdout diagnostics.
+relative, home-expanded, symlink and attached short-option paths. Bash ANSI-C
+quoting is denied entirely because the shell parser cannot decode its escapes.
+Malformed requests are denied with generic messages. Parent and child tool calls
+use the same guard; role instructions still prohibit children from invoking
+holdout diagnostics.
 
 The only exception is a literal `uv run python -m eval.golden_run run|aggregate`
 command with validated mode-appropriate flags, executed with the tool's working

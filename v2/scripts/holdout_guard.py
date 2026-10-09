@@ -63,6 +63,14 @@ def mentions_private(text: str, cwd: Path) -> bool:
         if not candidate:
             continue
         candidate = candidate.removeprefix("file://")
+        # Short options may attach paths after one letter or an option cluster.
+        option = re.match(r"-[A-Za-z]+", candidate)
+        if option and any(
+            mentions_private(candidate[index:], cwd)
+            for index in range(2, option.end() + 1)
+            if candidate[index:]
+        ):
+            return True
         if protected(candidate, cwd, ancestors=True):
             return True
         if re.search(r"[*?\[]", candidate):
@@ -242,6 +250,9 @@ def blocked(payload: object) -> bool:
         command = arguments.get("command", arguments.get("cmd"))
         if not isinstance(command, str):
             raise ValueError("invalid command")
+        # shlex cannot decode Bash ANSI-C escapes; deny this syntax entirely.
+        if "$'" in command.replace("\\\n", ""):
+            return True
         tokens = shell_tokens(command)
         other_private = any(
             mentions_private(value, cwd)

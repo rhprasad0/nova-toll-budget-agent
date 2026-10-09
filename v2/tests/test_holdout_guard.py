@@ -60,6 +60,10 @@ def payload(
         "cat $SYNTHETIC_HIDDEN/cases.jsonl",
         "cat alias/cases.jsonl",
         "cat --file=alias/cases.jsonl",
+        "tar -cf /tmp/public.tar -C{hidden} .",
+        "tar -cf /tmp/public.tar -C../../private-suite .",
+        "tar -cf /tmp/public.tar -Calias .",
+        "tar -xC{hidden} -f /tmp/public.tar",
         "python -c \"open('{hidden}/cases.jsonl').read()\"",
         "bash -c 'cat {hidden}/cases.jsonl'",
         "cd .. && cat ../private-suite/cases.jsonl",
@@ -78,6 +82,33 @@ def test_direct_shell_access(layout: tuple[Path, Path], command: str) -> None:
     assert guard.blocked(
         payload(v2, command=command.format(hidden=hidden, parent=hidden.parent))
     )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat $'{hidden}/cases.jsonl'",
+        "cat $'\\x2f{relative}/cases.jsonl'",
+        "cat $'\\057{relative}/cases.jsonl'",
+        "cat $'\\u002f{relative}/cases.jsonl'",
+        "cat $'alias/cases.jsonl'",
+        "cat $\\\n'alias/cases.jsonl'",
+        "bash -c \"cat $'alias/cases.jsonl'\"",
+        "printf '%s' $'ordinary\\ntext'",
+    ],
+)
+def test_ansi_c_quoting_is_denied(
+    layout: tuple[Path, Path], command: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    v2, hidden = layout
+    command = command.format(hidden=hidden, relative=str(hidden).lstrip("/"))
+    event = payload(v2, command=command)
+    assert guard.blocked(event)
+    output = io.StringIO()
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(sys, "stdout", output)
+    guard.main()
+    assert json.loads(output.getvalue()) == guard.DENIAL
 
 
 @pytest.mark.parametrize("directory", ["session", "workdir", "cwd"])
@@ -301,6 +332,7 @@ def test_parser_errors_are_generic(
     ("tool", "arguments"),
     [
         ("Bash", {"command": "git status --short"}),
+        ("Bash", {"command": "tar -cf /tmp/public.tar -Cpublic ."}),
         ("Bash", {"cmd": "rg --files . && cat pyproject.toml"}),
         ("Bash", {"command": "uv run pytest tests/test_holdout_guard.py"}),
         (
