@@ -21,10 +21,10 @@ roles cannot read the key. Production consumes only development's AWS feed and
 collects OpenAI directly once. Do not enable
 Cost Explorer as part of this release.
 
-The development minute offset is an experiment to avoid top-of-hour billing
-traffic; it does not establish the cause of earlier OpenAI rate limits. After
-delivery, check the next four scheduled runs for successful dashboard and AWS
-feed publications and review any OpenAI failures or retries.
+After delivering the development schedule offset, check the next four scheduled
+runs for successful dashboard and AWS-feed publications and review any OpenAI
+failures or retries. See the [experiment journal](../eval/journal/2026-10-05.md)
+for the hypothesis and measured results.
 
 The requested interval is the union of month-to-date and the last 30 completed
 UTC days, ending before today. AWS uses account-filtered `UnblendedCost`; OpenAI
