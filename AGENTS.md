@@ -68,7 +68,9 @@ subagent, defined in `.claude/agents/pre_release_reviewer.md`. Example: "Use
 pre_release_reviewer to review candidate <SHA> against deployed production <SHA>,
 and recommend checks that would catch production failures before rollout." Supply
 release/plan evidence when available. The agent reviews and recommends; it does
-not deploy or act as an automatic CI gate. Run Claude Code in the checkout
+not deploy or act as an automatic CI gate. It uses Opus with `high` effort and
+only Read, Grep, Glob and Bash; its prompt keeps Bash read-only, so do not run it
+in a bypass-permissions session. Start a new Claude Code session in the checkout
 containing the agent.
 
 The repository's `PreToolUse` hook in `.claude/settings.json` runs

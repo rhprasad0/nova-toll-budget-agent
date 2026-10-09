@@ -64,7 +64,7 @@ appear in the output schema.
 Each run records full tool schema hashes and the exact source artifact, so wording
 changes remain attributable. Old-contract reports retain their original hash
 rules and cannot be compared with this contract.
-Input approval and approved harness calibration are required before the next run;
+Input approval and approved harness calibration are required before the next tuning campaign;
 never transfer prior approvals or regenerate a candidate's corpus manifest.
 
 ## Scoring and preparation
@@ -110,14 +110,10 @@ Then run one full training baseline
 (50 cases × 1 trial, 16 workers). Do not duplicate compatible approved preparation. Frozen fixture replay needs no deployment or migration parity
 gate. It cannot establish live pricing or deployment correctness.
 
-Use the fixed starting baseline for the final comparison. Reserve one fresh full
-finalist rerun with cost headroom. Report the starting score, selected search score
-and final score separately; do not rerun a fully measured low result until it
-passes. No retained improvement means no unnecessary confirmation run.
 Unseeded trial numbers identify slots, not identical random draws. Inspect passing
 and failing counterparts and the candidate diff to assess causal regressions.
 
-Audit fresh application trajectories before search and at final confirmation.
+Audit fresh application trajectories before tuning and when comparing candidates.
 Use a fixed selection rule: in each coverage family, review the first successful
 and first scored failing trial in `(case_id, trial)` order, when present. Also
 review all actor-invalid/uncertain trials and all new Grounding/Rules violations

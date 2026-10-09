@@ -137,6 +137,11 @@ def test_protected_working_directory(layout: tuple[Path, Path], directory: str) 
         ("view_image", {"path": "alias/image.png"}),
         ("Read", {"file_path": "~/private-suite/cases.jsonl"}),
         ("Edit", {"file_path": "alias/cases.jsonl"}),
+        ("Write", {"file_path": "alias/new", "content": "synthetic"}),
+        ("Glob", {"pattern": "**/*.jsonl", "path": "alias"}),
+        ("Grep", {"pattern": "case_id", "path": "../../private-suite"}),
+        ("NotebookEdit", {"notebook_path": "alias/notes.ipynb", "new_source": ""}),
+        ("Agent", {"description": "Inspect", "prompt": "Read alias/cases.jsonl"}),
         (
             "apply_patch",
             {
@@ -370,6 +375,8 @@ def test_registration_from_root_subdirectory_and_worktree(tmp_path: Path) -> Non
     assert len(handlers) == 1
     handler = handlers[0]
     assert handler["type"] == "command" and not handler.get("async", False)
+    # Claude Code lets a crashed or timed-out hook proceed unless told to block.
+    assert handler["onFailure"] == "block"
     root = tmp_path / "repo"
     script = root / "v2/scripts/holdout_guard.py"
     script.parent.mkdir(parents=True)
@@ -412,6 +419,8 @@ def test_registration_from_root_subdirectory_and_worktree(tmp_path: Path) -> Non
         env=environment,
     )
     for directory in (root, root / "v2", worktree, worktree / "v2"):
+        checkout = directory.parent if directory.name == "v2" else directory
+        project = {**environment, "CLAUDE_PROJECT_DIR": str(checkout)}
         event = payload(directory, command="git status --short")
         result = subprocess.run(
             ["/bin/sh", "-c", handler["command"]],
@@ -420,7 +429,7 @@ def test_registration_from_root_subdirectory_and_worktree(tmp_path: Path) -> Non
             text=True,
             capture_output=True,
             check=True,
-            env=environment,
+            env=project,
         )
         assert result.stdout == result.stderr == ""
         event = payload(
@@ -433,16 +442,14 @@ def test_registration_from_root_subdirectory_and_worktree(tmp_path: Path) -> Non
             text=True,
             capture_output=True,
             check=True,
-            env=environment,
+            env=project,
         )
         assert json.loads(result.stdout) == guard.DENIAL
         assert result.stderr == ""
         # Exercise the real command and module location without reading a holdout.
-        local_v2 = directory if directory.name == "v2" else directory / "v2"
         event = payload(
-            directory,
+            checkout / "v2",
             command=f"{PREFIX} aggregate --output {shlex.quote(str(hidden / 'synthetic'))}",
-            workdir=str(local_v2),
         )
         result = subprocess.run(
             ["/bin/sh", "-c", handler["command"]],
@@ -451,6 +458,16 @@ def test_registration_from_root_subdirectory_and_worktree(tmp_path: Path) -> Non
             text=True,
             capture_output=True,
             check=True,
-            env=environment,
+            env=project,
         )
         assert result.stdout == result.stderr == ""
+    # Without a project directory the script path is missing, so the hook fails.
+    result = subprocess.run(
+        ["/bin/sh", "-c", handler["command"]],
+        cwd=root,
+        input=json.dumps(payload(root, command="git status --short")),
+        text=True,
+        capture_output=True,
+        env={k: v for k, v in environment.items() if k != "CLAUDE_PROJECT_DIR"},
+    )
+    assert result.returncode != 0
