@@ -32,6 +32,7 @@ extraPaths = [".", "..", "scripts", "../infra"]
 venvPath = "."
 venv = ".venv"
 executionEnvironments = [
+  {root = "../.agents/skills/eval-climb/scripts"},
   {root = "lambdas/fetcher", extraPaths = ["lambdas/fetcher", ".", ".."]},
   {root = "lambdas/loader", extraPaths = ["lambdas/loader", ".", ".."]},
   {root = ".", extraPaths = [".", "..", "scripts", "../infra"]},
