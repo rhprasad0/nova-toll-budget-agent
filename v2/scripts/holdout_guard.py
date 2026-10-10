@@ -29,13 +29,13 @@ DENIAL = {
 def resolve(value: str, cwd: Path) -> Path:
     if not value or "\x00" in value:
         raise ValueError("invalid path")
-    path = Path(os.path.expandvars(value)).expanduser()
+    path = Path(os.path.expanduser(os.path.expandvars(value)))
     return (path if path.is_absolute() else cwd / path).resolve()
 
 
 def protected(value: str, cwd: Path, *, ancestors: bool = False) -> bool:
     # Check the lexical path too: a symlink inside the tree is still private.
-    expanded = Path(os.path.expandvars(value)).expanduser()
+    expanded = Path(os.path.expanduser(os.path.expandvars(value)))
     lexical = Path(
         os.path.abspath(expanded if expanded.is_absolute() else cwd / expanded)
     )
@@ -62,6 +62,8 @@ def mentions_private(text: str, cwd: Path) -> bool:
     for candidate in (text, *re.split(r"[\s\"'`=,;(){}<>|]+", text)):
         if not candidate:
             continue
+        # Only a whole argument may name an ancestor; split code and prose may not.
+        ancestors = candidate == text and not re.search(r"\s", text)
         candidate = candidate.removeprefix("file://")
         # Short options may attach paths after one letter or an option cluster.
         option = re.match(r"-[A-Za-z]+", candidate)
@@ -71,14 +73,14 @@ def mentions_private(text: str, cwd: Path) -> bool:
             if candidate[index:]
         ):
             return True
-        if protected(candidate, cwd, ancestors=True):
+        if protected(candidate, cwd, ancestors=ancestors):
             return True
         if re.search(r"[*?\[]", candidate):
             prefix = re.split(r"[*?\[]", candidate, maxsplit=1)[0]
             if prefix and not prefix.endswith("/"):
                 prefix = str(Path(prefix).parent)
             # A wildcard may traverse the private tree through an ancestor.
-            if protected(prefix or ".", cwd, ancestors=True):
+            if protected(prefix or ".", cwd, ancestors=ancestors):
                 return True
     return False
 
@@ -94,6 +96,39 @@ def shell_tokens(command: str) -> list[str]:
     if not tokens:
         raise ValueError("empty command")
     return tokens
+
+
+def ansi_c_quoted(command: str) -> bool:
+    """Whether Bash may decode an ANSI-C string, whose escapes shlex cannot read."""
+    # Heredoc bodies are not shell syntax, so quote tracking cannot follow them.
+    if "<<" in command:
+        return "$'" in command
+    quote = ""
+    word_start = True
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if quote == "'":
+            if char == "'":
+                quote = ""
+        elif char == "\\":
+            index += 1
+        elif command.startswith("$'", index):
+            # Double quotes stay live under bash -c or eval; only single quotes are inert.
+            return True
+        elif quote:
+            if char == quote:
+                quote = ""
+        elif char in "'\"":
+            quote = char
+        elif char == "#" and word_start:
+            index = command.find("\n", index)
+            if index < 0:
+                break
+            continue
+        word_start = not quote and char in " \t\r\n;&|()<>"
+        index += 1
+    return bool(quote)
 
 
 def shell_private(tokens: list[str], cwd: Path) -> bool:
@@ -250,10 +285,12 @@ def blocked(payload: object) -> bool:
         command = arguments.get("command", arguments.get("cmd"))
         if not isinstance(command, str):
             raise ValueError("invalid command")
-        # shlex cannot decode Bash ANSI-C escapes; deny this syntax entirely.
-        if "$'" in command.replace("\\\n", ""):
+        if ansi_c_quoted(command.replace("\\\n", "")):
             return True
         tokens = shell_tokens(command)
+        # Quote concatenation can still hand an inner shell an ANSI-C string.
+        if any("$'" in token for token in tokens):
+            return True
         other_private = any(
             mentions_private(value, cwd)
             for key, value in arguments.items()
