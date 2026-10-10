@@ -1,6 +1,6 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "b989aafa6df95096fa33bbb30900c95058be9338eab210e0e7a69f40f56631c2",
-  "reviewer": "",
-  "evidence": ""
+  "reviewer": "Claude",
+  "evidence": "Approved by Claude at Ryan's request on 2026-10-10. Inputs are byte-identical to approved 5.2.0 (shadow 5.1.14); only the version and protected source identities changed for harness 2.5.18 (aggregate pass\u00b3 fields)."
 }
