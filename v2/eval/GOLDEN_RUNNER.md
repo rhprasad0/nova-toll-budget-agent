@@ -329,7 +329,10 @@ Holdout console output contains aggregate status only. Diagnostics, including
 tracebacks and case progress, go to a sibling `.RUN_NAME.console.log` on the host.
 Application JSON includes source/run identities, corpus and measurement digests,
 repetitions, expected slots, pass/fail/inconclusive/missing counts, overall rate,
-completeness and cost. It excludes case IDs, category breakdowns, conversation
+completeness and cost. For three repetitions it also includes `pass_cubed`,
+`passing_all_three_cases` and `pass_cubed_case_denominator`: the measured fraction
+of cases passing all three trials, not the cube of the overall rate. These fields
+are null for one repetition. It excludes case IDs, category breakdowns, conversation
 text, routes, reference answers and paths. Export recalculates totals from the
 private journal rather than trusting a copied report.
 

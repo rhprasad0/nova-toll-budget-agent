@@ -34,7 +34,7 @@ from eval import corpus, golden
 from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.5.17"
+VERSION = "2.5.18"
 CALIBRATION_KEYS = (
     "harness_version",
     "runtime",
@@ -2881,6 +2881,9 @@ def aggregate(directory: Path) -> dict[str, Any]:
         "inconclusive": overall["inconclusive_trials"],
         "missing": overall["expected_trials"] - overall["attempted_trials"],
         "pass_rate": overall["overall_pass_rate"],
+        "pass_cubed": overall["pass_cubed"],
+        "passing_all_three_cases": overall["passing_all_three_cases"],
+        "pass_cubed_case_denominator": overall["pass_cubed_case_denominator"],
         "complete": report["full_corpus_complete"],
         "cost_usd": sum(overall["cost_usd"].values()),
     }
