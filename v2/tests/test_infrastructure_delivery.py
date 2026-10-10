@@ -1406,19 +1406,9 @@ def test_pull_request_workflows_have_no_production_access() -> None:
             for job in cast(dict[str, object], jobs).values():
                 if isinstance(job, dict):
                     job = cast(dict[str, object], job)
-                    shadow = re.fullmatch(
-                        r"rhprasad0/nova-toll-budget-agent/\.github/workflows/v2-shadow-eval\.yml@[0-9a-f]{40}",
-                        str(job.get("uses", "")),
-                    )
-                    if shadow:
-                        assert "github.actor_id == '91573985'" in str(job["if"])
-                        assert "head.repo.full_name == github.repository" in str(
-                            job["if"]
-                        )
                     assert_safe_permissions(
                         job.get("permissions"),
-                        allow_id_token=job.get("uses") == trusted_planner
-                        or shadow is not None,
+                        allow_id_token=job.get("uses") == trusted_planner,
                     )
         assert not re.search(r"\bsecrets\b", github_token.sub("", workflow))
         for forbidden in (

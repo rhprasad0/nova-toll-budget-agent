@@ -143,7 +143,7 @@ approved, reuse that harness calibration across all splits and future corpus
 versions; changed cases still need validation and input review. Evaluator contract
 changes require a new combined calibration. Return only aggregate checkpoint
 feedback to the coding agent.
-Export the public harness approval receipt after review so training and shadow CI
+Export the public harness approval receipt after review so training and shadow runs
 can reuse it without reading hidden calibration evidence. The coding agent
 may invoke an authorized host-side application checkpoint and consume only its
-aggregate output. Shadow is CI regression coverage outside the training search.
+aggregate output. Shadow is manual regression coverage outside the training search.
