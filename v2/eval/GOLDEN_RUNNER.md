@@ -1,11 +1,12 @@
 # Running the frozen training split
 
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
-Corpus 5.1.14 is frozen and reviewed under harness 2.5.17. Training application
-runs default to one trial per case; use `--trials-per-case 3` only on Ryan's explicit
-instruction. Shadow runs are manual and outside search. Actors have up to five delivered
-user turns. The application, actor, judge settings, input hashes, and source commit
-are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
+Training and holdout corpus 5.2.0 and shadow 5.1.14 run under harness 2.5.17.
+Training application runs default to one trial per case; use `--trials-per-case 3`
+only on Ryan's explicit instruction. Shadow runs are manual and outside search.
+Actors have up to five delivered user turns. The application, actor, judge
+settings, input hashes, and source commit are recorded in each run. See
+[authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
 
 Actors reply to necessary questions and outstanding triggered follow-ups. Once a
@@ -252,8 +253,9 @@ Detailed output must be external. Each run records preparation status, base
 commit and actual tracked/untracked source hashes, and saves a private source
 snapshot before model calls. This flag is unavailable for application runs,
 which still require a clean committed checkout. Validate and provisionally
-freeze all inputs before paid preparation, and version all splits together after
-any protected-source or input repair. Chain every paid run with `--prior-run`
+freeze all inputs before paid preparation. Version all splits together after a
+protected-source repair or before a combined calibration; an input repair outside
+calibration versions only the changed splits. Chain every paid run with `--prior-run`
 and the same cumulative authorized budget; retain unsuccessful runs.
 
 When Ryan explicitly waives commits for a local full application diagnostic, use
@@ -339,8 +341,10 @@ journal. Mark incomplete measurements instead of claiming a comparable gap.
 Keep the suite fixed while tracking the gap; corpus or evaluator repairs start a
 new series. Repeated aggregate feedback can still influence tuning, so this is a
 hidden diagnostic, not fully blind accuracy or a production gate.
-The 5.1.14 holdout was read case by case on October 10, 2026; do not use it for
-candidate checkpoints ([journal](journal/2026-10-05.md)).
+The 5.1.14 holdout and its 5.2.0 repair were read case by case on October 10,
+2026 ([journal](journal/2026-10-05.md)). Do not use 5.1.14 for candidate
+checkpoints. Checkpoints on 5.2.0 give descriptive aggregate feedback, not blind
+evidence, until a fresh holdout replaces it.
 
 Never inspect external logs to diagnose a hidden measurement failure; have the
 host operator resolve it.

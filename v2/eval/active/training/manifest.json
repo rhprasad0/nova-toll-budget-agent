@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "version": "5.1.14",
+  "version": "5.2.0",
   "evaluation_scope": "training",
   "case_count": 50,
   "trials_per_case": 1,
@@ -58,8 +58,8 @@
     "fixtures/tr5-westbound-equipment-1.json": "2a1751e682596e80f586b6b741f5973529abd07f3ce045214bf5b18ae2927c07",
     "fixtures/tr5-wrong-ramp-choice-1.json": "893f0cb6e30e1327b58fee3ef6bfd92a7cf69868cd4687e01581c8acdbe0679d",
     "fixtures/tr5-wrong-ramp-choice-2.json": "35f4663967c26f6f7869eda4a2ac238c33a15b80c367ca32f7355aa0c10ed68c",
-    "cases.jsonl": "62e1d7ffbff26a629f25feca529908af38ecf21284af1b64291fb043e5adfa17",
-    "examples.json": "b5ed23002a39ba6d669917ee5da9c778d0eadcfe886d50ba5e91df7b195586ea",
+    "cases.jsonl": "7878f9cf4ada3e7436e1ac330b0bfc5c8bea865d2e1cacf9588e3a03d46a2262",
+    "examples.json": "8e12d6e80dca4113e932242983da2b74379a0e1f286c33b49e25a73beda41292",
     "prompt-points.json": "fe158b3b6c5c4e7a3fd3606c56633eac77683d365e2e93c82f3b065b8eb1879d",
     "v2/uv.lock": "b7a2c24b78a17e1d6b19e12ef213c1341c02f283c992627941a791df2fb6b52b",
     "v2/eval/corpus.py": "b5ffdfc5cdd87a52fe1408205032edcfd707e065978fc7a8e94bc90be12284b9",
@@ -79,5 +79,5 @@
     "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
-  "corpus_sha256": "074bfe2ca0d711086c7e172adc3e2cef104ae4cf71eb6115e8035b031a9a8739"
+  "corpus_sha256": "e6f4d80394c25e934e082ac00115fea08c32306649f1f1d4d752d7a202a3347d"
 }

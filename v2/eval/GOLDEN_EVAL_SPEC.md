@@ -9,9 +9,10 @@ Corpus 3.3.28 is retained unchanged as an [archival reference](archive/developme
 Historical inputs, approvals and scores cannot activate fresh training or qualify
 production. See the [experiment journal](EXPERIMENT_JOURNAL.md) for prior findings.
 
-The 5.1.14 holdout is no longer blind ([October 10 journal](journal/2026-10-05.md));
-do not use it as blind evidence for later decisions. The next suite needs fresh
-holdout cases in a new external directory, authored under the guide's
+The holdout, read for an October 10 diagnosis and repaired as 5.2.0, is no
+longer blind ([October 10 journal](journal/2026-10-05.md)); do not use it as
+blind evidence for later decisions. Blind evidence needs fresh holdout cases in a
+new external directory, authored outside tuning sessions under the guide's
 endpoint-resolution, route-reuse and `min_turn` rules.
 
 ## Required artifacts

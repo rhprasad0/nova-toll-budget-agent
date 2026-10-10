@@ -133,7 +133,8 @@ Summarize aggregate findings and limitations. Keep detailed public assessments
 in ignored `eval/private/`; all detailed holdout output stays external. The coding
 agent never reads that external evidence and never disables or evades the holdout
 guard; case-level holdout diagnosis belongs to the host operator. The 5.1.14
-holdout was exposed on October 10, 2026 and is retired as blind evidence.
+holdout and its 5.2.0 repair were exposed on October 10, 2026 and are retired as
+blind evidence.
 Synthetic regressions and exposed
 historical cases teach formats, not fresh holdout content.
 
