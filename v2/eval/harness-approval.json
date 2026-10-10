@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "kind": "all-split-harness-approval",
-  "harness_version": "2.5.17",
+  "harness_version": "2.5.18",
   "runtime": {
     "python": [
       3,
@@ -11,18 +11,18 @@
     "platform": "x86_64",
     "installed_dependencies_sha256": "af69a6cf8d144a030b53bed39d087ac45c228bf4e99d47cd49a1805a34464516"
   },
-  "contract_sha256": "3616df8c019922408fc2a60c04affaee1aa88f2e37426a10283b5f28af17df7a",
+  "contract_sha256": "0784889a6130ab382cb80c91c89fb3fb9dd36d594c7224cb40efff4b6cb6bd36",
   "split_counts": {
     "training": 50,
     "shadow": 10,
     "holdout": 25
   },
   "calibration": {
-    "run_id": "e83a9586-bf5f-435c-a017-25c1448366a4",
-    "evidence_sha256": "6795659a1067130cbd2ccdc74fdf76a2640302da2badacc6b164aa138b0bc60e",
+    "run_id": "d2e198bd-e2ca-4212-9d72-8b35cfb1418e",
+    "evidence_sha256": "2c6cff14019e8bcb92e5e9c3f84b5a80e704427d0de9a27ecf3ea197a0c77468",
     "review": {
       "status": "approved"
     }
   },
-  "receipt_sha256": "131b9e976fcb35d66e1ff5421615ae148285a7b04b55f52a65c7f134b495f6ff"
+  "receipt_sha256": "7cc4bbbd5a454479c5c460420ea17eff991d78b687995b5c9fa882ebda980ee9"
 }

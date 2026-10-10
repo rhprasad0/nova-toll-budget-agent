@@ -872,12 +872,15 @@ def test_default_readiness_checks_both_public_splits(
         f.validate(drafts / "training")
 
 
+@pytest.mark.parametrize("repetitions", [1, 3])
 def test_holdout_aggregate_is_allowlisted_and_keeps_console_private(
     hidden_identity: dict[str, Any],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    repetitions: int,
 ) -> None:
+    hidden_identity["execution"] = {"trials_per_case": repetitions}
     journal = run.Journal(tmp_path / "checkpoint", 1)
     manifest = {
         "run_id": "00000000-0000-4000-8000-000000000001",
@@ -886,37 +889,45 @@ def test_holdout_aggregate_is_allowlisted_and_keeps_console_private(
     }
     (journal.directory / "manifest.json").write_text(json.dumps(manifest))
     cases = golden.load_cases()
+    # Case 0 passes every trial; cases 1 and 2 lose only their last trial.
     for n, case in enumerate(cases[:3]):
-        row = run.Attempt(
-            id=f"{case.id}-1",
-            case_id=case.id,
-            trial=1,
-            status="inconclusive" if n == 2 else "scored",
-            actor_validity=run.ActorAssessment(
-                status="uncertain" if n == 2 else "valid", evidence="SECRET_ACTOR_FACTS"
-            ),
-            measurements=[
-                run.Measurement(
-                    role="judge",
-                    input_tokens=1,
-                    output_tokens=1,
-                    cached_tokens=0,
-                    written_tokens=0,
-                    seconds=0.1,
-                    cost_usd=0.01,
-                    complete=True,
-                )
-            ],
-            verdicts={
-                k: run.Verdict(passed=n != 1, evidence="SECRET_REFERENCE")
-                for k in ("outcome", "grounding", "rules")
-            },
-            turns=[golden.Turn(user=case.prompt, response="SECRET_ANSWER", calls=[])],
-        )
-        journal.append({"event": "attempt_finished", **row.model_dump()})
+        for trial in range(1, repetitions + 1):
+            last = n and trial == repetitions
+            row = run.Attempt(
+                id=f"{case.id}-{trial}",
+                case_id=case.id,
+                trial=trial,
+                status="inconclusive" if last and n == 2 else "scored",
+                actor_validity=run.ActorAssessment(
+                    status="uncertain" if last and n == 2 else "valid",
+                    evidence="SECRET_ACTOR_FACTS",
+                ),
+                measurements=[
+                    run.Measurement(
+                        role="judge",
+                        input_tokens=1,
+                        output_tokens=1,
+                        cached_tokens=0,
+                        written_tokens=0,
+                        seconds=0.1,
+                        cost_usd=0.01,
+                        complete=True,
+                    )
+                ],
+                verdicts={
+                    k: run.Verdict(
+                        passed=not (last and n == 1), evidence="SECRET_REFERENCE"
+                    )
+                    for k in ("outcome", "grounding", "rules")
+                },
+                turns=[
+                    golden.Turn(user=case.prompt, response="SECRET_ANSWER", calls=[])
+                ],
+            )
+            journal.append({"event": "attempt_finished", **row.model_dump()})
     # A copied or stale report cannot supply inflated aggregate scores.
     (journal.directory / "report.json").write_text(
-        '{"overall":{"successful_trials":25}}'
+        '{"overall":{"successful_trials":75,"passing_all_three_cases":25,"pass_cubed":1}}'
     )
     original_render = run.render
     logger = logging.getLogger("holdout-console-regression")
@@ -941,16 +952,22 @@ def test_holdout_aggregate_is_allowlisted_and_keeps_console_private(
     captured = capsys.readouterr()
     feedback = json.loads(captured.out)
     assert captured.err == ""
-    assert feedback["expected_trials"] == 25
+    assert feedback["expected_trials"] == 25 * repetitions
     assert (
         feedback["passed"],
         feedback["failed"],
         feedback["inconclusive"],
         feedback["missing"],
-    ) == (1, 1, 1, 22)
-    assert feedback["pass_rate"] == 1 / 25
+    ) == (3 * repetitions - 2, 1, 1, 22 * repetitions)
+    assert feedback["pass_rate"] == (3 * repetitions - 2) / (25 * repetitions)
+    three = repetitions == 3
+    assert (
+        feedback["pass_cubed"],
+        feedback["passing_all_three_cases"],
+        feedback["pass_cubed_case_denominator"],
+    ) == ((1 / 25, 1, 25) if three else (None, None, None))
     assert not feedback["complete"]
-    assert feedback["cost_usd"] == pytest.approx(0.03)
+    assert feedback["cost_usd"] == pytest.approx(0.03 * repetitions)
     assert set(feedback) == {
         "format_version",
         "scope",
@@ -969,6 +986,9 @@ def test_holdout_aggregate_is_allowlisted_and_keeps_console_private(
         "inconclusive",
         "missing",
         "pass_rate",
+        "pass_cubed",
+        "passing_all_three_cases",
+        "pass_cubed_case_denominator",
         "complete",
         "cost_usd",
     }

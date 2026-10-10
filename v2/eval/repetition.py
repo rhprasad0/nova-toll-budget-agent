@@ -42,6 +42,7 @@ def report_trials(identity: dict[str, Any]) -> range:
         "2.5.15",
         "2.5.16",
         "2.5.17",
+        "2.5.18",
         *(f"2.3.{n}" for n in range(29)),
     }
     if version not in supported:
@@ -66,6 +67,7 @@ def report_trials(identity: dict[str, Any]) -> range:
         "2.5.15",
         "2.5.16",
         "2.5.17",
+        "2.5.18",
     } and not isinstance(identity.get("execution"), dict):
         raise ValueError("missing training execution contract")
     trials = trial_numbers(
@@ -91,6 +93,7 @@ def report_trials(identity: dict[str, Any]) -> range:
             "2.5.15",
             "2.5.16",
             "2.5.17",
+            "2.5.18",
         }
         else identity["corpus"]
     )

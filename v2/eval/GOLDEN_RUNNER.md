@@ -1,7 +1,7 @@
 # Running the frozen training split
 
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
-Training and holdout corpus 5.2.0 and shadow 5.1.14 run under harness 2.5.17.
+Training, shadow and holdout corpus 5.2.1 run under harness 2.5.18.
 Training application runs default to one trial per case; use `--trials-per-case 3`
 only on Ryan's explicit instruction. Shadow runs are manual and outside search.
 Actors have up to five delivered user turns. The application, actor, judge
@@ -51,7 +51,7 @@ require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-The local training contract / harness 2.5.17 uses `literal-input-prose-v1`. The corpus hashes
+The local training contract / harness 2.5.18 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -329,7 +329,10 @@ Holdout console output contains aggregate status only. Diagnostics, including
 tracebacks and case progress, go to a sibling `.RUN_NAME.console.log` on the host.
 Application JSON includes source/run identities, corpus and measurement digests,
 repetitions, expected slots, pass/fail/inconclusive/missing counts, overall rate,
-completeness and cost. It excludes case IDs, category breakdowns, conversation
+completeness and cost. For three repetitions it also includes `pass_cubed`,
+`passing_all_three_cases` and `pass_cubed_case_denominator`: the measured fraction
+of cases passing all three trials, not the cube of the overall rate. These fields
+are null for one repetition. It excludes case IDs, category breakdowns, conversation
 text, routes, reference answers and paths. Export recalculates totals from the
 private journal rather than trusting a copied report.
 
@@ -343,7 +346,7 @@ new series. Repeated aggregate feedback can still influence tuning, so this is a
 hidden diagnostic, not fully blind accuracy or a production gate.
 The 5.1.14 holdout and its 5.2.0 repair were read case by case on October 10,
 2026 ([journal](journal/2026-10-05.md)). Do not use 5.1.14 for candidate
-checkpoints. Checkpoints on 5.2.0 give descriptive aggregate feedback, not blind
+checkpoints. Checkpoints on 5.2.x (now 5.2.1) give descriptive aggregate feedback, not blind
 evidence, until a fresh holdout replaces it.
 
 Never inspect external logs to diagnose a hidden measurement failure; have the
