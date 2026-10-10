@@ -94,6 +94,13 @@ def test_direct_shell_access(layout: tuple[Path, Path], command: str) -> None:
         "cat $\\\n'alias/cases.jsonl'",
         "bash -c \"cat $'alias/cases.jsonl'\"",
         "printf '%s' $'ordinary\\ntext'",
+        "echo 'quoted' $'ordinary'",
+        "echo \"$'ordinary'\"",
+        "echo \"$(echo $'ordinary')\"",
+        "true # it'\necho $'ordinary' # '",
+        "cat <<'EOF'\nordinary$'\nEOF",
+        "bash -c 'echo $'\"'\"'ordinary'\"'\"",
+        "bash -c \"echo \\$'ordinary'\"",
     ],
 )
 def test_ansi_c_quoting_is_denied(
@@ -155,6 +162,9 @@ def test_protected_working_directory(layout: tuple[Path, Path], directory: str) 
             },
         ),
         ("mcp__filesystem__read_file", {"request": {"files": ["alias/cases.jsonl"]}}),
+        # Whole values that name an ancestor can traverse the private tree.
+        ("Grep", {"pattern": "case_id", "path": "..\x2f.."}),
+        ("Glob", {"pattern": "..\x2f..\x2f*\x2fcases.jsonl"}),
     ],
 )
 def test_file_tools(
@@ -365,6 +375,19 @@ def test_parser_errors_are_generic(
         ),
         ("Bash", {"command": "cd .. && git diff\npwd"}),
         ("Bash", {"command": "python - <<'PY'\nprint('synthetic')\nPY"}),
+        # Slashes split from code, regexes and prose are not path arguments.
+        ("Bash", {"command": "sed 's\x2f=.*\x2f=x\x2f' notes.txt"}),
+        ("Bash", {"command": "python -c 'print(7 \x2f\x2f 2)'"}),
+        ("Bash", {"command": "python -c 'print(f\"{a}\x2f{b}\")'"}),
+        ("Bash", {"command": "grep -E 'fixture$' notes.txt 'other$'"}),
+        ("Bash", {"command": "echo \x7enosuchuser-synthetic"}),
+        # Accepted gap: an ancestor inside a nested program is not a whole argument.
+        ("Bash", {"command": "bash -c 'find ..\x2f..'"}),
+        ("Write", {"file_path": "public.css", "content": "\x2f* note *\x2f\nb {}"}),
+        (
+            "AskUserQuestion",
+            {"questions": [{"question": "List \x7e or \x24HOME, then \x2f?"}]},
+        ),
         ("Read", {"file_path": "pyproject.toml"}),
         (
             "apply_patch",
