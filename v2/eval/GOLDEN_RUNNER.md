@@ -4,9 +4,9 @@ The local contract has **50 training, 10 shadow and 25 external holdout cases**.
 Training and holdout corpus 5.2.0 and shadow 5.1.14 run under harness 2.5.17.
 Training application runs default to one trial per case; use `--trials-per-case 3`
 only on Ryan's explicit instruction. Shadow runs are manual and outside search.
-Actors have up to five delivered
-user turns. The application, actor, judge settings, input hashes, and source commit
-are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
+Actors have up to five delivered user turns. The application, actor, judge
+settings, input hashes, and source commit are recorded in each run. See
+[authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
 
 Actors reply to necessary questions and outstanding triggered follow-ups. Once a
@@ -253,8 +253,9 @@ Detailed output must be external. Each run records preparation status, base
 commit and actual tracked/untracked source hashes, and saves a private source
 snapshot before model calls. This flag is unavailable for application runs,
 which still require a clean committed checkout. Validate and provisionally
-freeze all inputs before paid preparation, and version all splits together after
-any protected-source or input repair. Chain every paid run with `--prior-run`
+freeze all inputs before paid preparation. Version all splits together after a
+protected-source repair or before a combined calibration; an input repair outside
+calibration versions only the changed splits. Chain every paid run with `--prior-run`
 and the same cumulative authorized budget; retain unsuccessful runs.
 
 When Ryan explicitly waives commits for a local full application diagnostic, use
