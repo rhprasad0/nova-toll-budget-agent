@@ -1,13 +1,13 @@
 # TollChat evaluation
 
-**Approved locally authored suite 5.1.14:** 50 training and 10 shadow cases are
-active, with 25 holdout cases stored externally. Harness 2.5.17 has an approved
-aggregate calibration receipt. The 100-case development corpus
+**Locally authored suite:** 50 training (5.2.0) and 10 shadow (5.1.14) cases are
+active, with 25 holdout cases (5.2.0) stored externally. Harness 2.5.17 has an
+approved aggregate calibration receipt. The 100-case development corpus
 3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
 Its recorded scores and reviews remain historical; it cannot run or seed fresh inputs.
 The [experiment journal](EXPERIMENT_JOURNAL.md) preserves the findings and limitations.
-The 5.1.14 holdout was read for an October 10, 2026 diagnosis and is no longer
-blind; see the [journal](journal/2026-10-05.md).
+The holdout was read for an October 10, 2026 diagnosis and repaired in place as
+5.2.0; it is no longer blind. See the [journal](journal/2026-10-05.md).
 
 ## Frozen golden evaluation
 
