@@ -14,7 +14,7 @@ from unittest.mock import Mock
 import pytest
 
 from eval import corpus as f
-from eval import golden, golden_actor_check, shadow_ci
+from eval import golden, golden_actor_check
 from eval import golden_run as run
 from tests.golden_support import ROOT as TEST_DATA
 
@@ -749,15 +749,30 @@ def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
     assert "smoke-holdout" not in receipt_path.read_text()
     assert "SECRET" not in receipt_path.read_text()
     monkeypatch.setattr(f, "PUBLIC", drafts)
-    monkeypatch.setattr(shadow_ci, "APPROVAL", receipt_path)
-    assert shadow_ci.prepare(verify_runtime=True)["ready"]
     changed_receipt = {**receipt, "contract_sha256": "f" * 64}
     changed_receipt["receipt_sha256"] = golden.digest(
         {k: v for k, v in changed_receipt.items() if k != "receipt_sha256"}
     )
     receipt_path.write_text(json.dumps(changed_receipt))
-    with pytest.raises(ValueError, match="does not match"):
-        shadow_ci.prepare(verify_runtime=True)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "runner",
+            "run",
+            "--corpus",
+            str(drafts / "shadow"),
+            "--calibration",
+            str(receipt_path),
+            "--output",
+            str(tmp_path / "run-tampered"),
+        ],
+    )
+    with pytest.raises(SystemExit, match="host-side diagnostic log"):
+        run.main()
+    assert "new harness calibration required" in (
+        tmp_path / ".run-tampered.console.log"
+    ).read_text()
     receipt_path.write_text(json.dumps(receipt))
 
     def execute(
@@ -813,23 +828,22 @@ def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
                 run.require_calibration(shared, changed)
         with pytest.raises(ValueError, match="all-split"):
             run.require_calibration(pinned, pinned)
-    assert shadow_ci.report(tmp_path / "run-shadow")["passed"] == 30
+    assert run.render(tmp_path / "run-shadow")["overall"]["successful_trials"] == 30
     shadow_events = tmp_path / "run-shadow/events.jsonl"
     original_events = shadow_events.read_text()
     events = [json.loads(line) for line in original_events.splitlines()]
     events[0]["verdicts"]["outcome"]["passed"] = False
     shadow_events.write_text("".join(json.dumps(event) + "\n" for event in events))
-    failed_trial = shadow_ci.report(tmp_path / "run-shadow")
-    assert failed_trial["passed"] == 29
+    failed_trial = run.render(tmp_path / "run-shadow")["overall"]
+    assert failed_trial["successful_trials"] == 29
     assert failed_trial["passing_all_three_cases"] == 9
     assert failed_trial["pass_cubed"] == 0.9
     events[0]["status"] = "infrastructure"
     shadow_events.write_text("".join(json.dumps(event) + "\n" for event in events))
-    incomplete = shadow_ci.report(tmp_path / "run-shadow")
-    assert incomplete["complete"] is False
+    incomplete = run.render(tmp_path / "run-shadow")["overall"]
     assert incomplete["scored_trials"] == 29
     assert incomplete["inconclusive_trials"] == 1
-    assert incomplete["pass_rate"] == 29 / 30
+    assert incomplete["overall_pass_rate"] == 29 / 30
     assert incomplete["pass_cubed"] == 0.9
     shadow_events.write_text(original_events)
     assert original_root == golden.ROOT

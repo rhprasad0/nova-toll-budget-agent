@@ -95,7 +95,7 @@ accuracy.
 
 **Fresh training/shadow intake is ready; no new set is active yet.** The standalone
 factory authors 50 training, 25 private holdout and 10 public shadow cases. Training
-hill-climbing defaults to one trial per case; shadow CI is deferred. The former
+hill-climbing defaults to one trial per case; shadow runs are manual, not a CI gate. The former
 production qualification gate remains retired. Production delivery
 uses the existing artifact provenance, protected human approvals, saved-plan,
 migration, and canary checks described in the [runbook](v2/RUNBOOK.md#production-release-checks).

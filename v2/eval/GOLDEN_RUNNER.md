@@ -3,8 +3,7 @@
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
 Corpus 5.1.14 is frozen and reviewed under harness 2.5.17. Training application
 runs default to one trial per case; use `--trials-per-case 3` only on Ryan's explicit
-instruction. Shadow CI runs three trials per case outside search, with a $2 per-job
-ceiling and a **pass³ ≥70%** gate. Actors have up to five delivered
+instruction. Shadow runs are manual and outside search. Actors have up to five delivered
 user turns. The application, actor, judge settings, input hashes, and source commit
 are recorded in each run. See [authoring](GOLDEN_EVAL_SPEC.md) for the contract and
 [the experiment journal](EXPERIMENT_JOURNAL.md) for results and prior decisions.
@@ -220,7 +219,7 @@ uv run python -m eval.golden_run render --output eval/private/baseline-N
 ## Public harness approval receipt
 
 After Ryan approves complete combined calibration, the host operator exports a
-small public receipt for training, holdout runs and hosted shadow CI:
+small public receipt for training, shadow and holdout runs:
 
 ```bash
 uv run python -m eval.golden_run export-calibration \
@@ -238,36 +237,6 @@ Never manufacture or edit a receipt to claim approval. Export makes no model cal
 and never calibrates again. Use `--calibration eval/harness-approval.json` with any
 split; the external reviewed calibration directory remains accepted too.
 
-## Shadow CI
-
-Regular PR CI runs `shadow-readiness` to validate the public shadow inputs and
-approval receipt. Unavailable, partial or unreviewed inputs fail readiness. When
-ready, `shadow-evaluation` automatically runs all ten cases three times on the exact PR
-candidate for updates initiated by `rhprasad0`. This account already owns the
-development credential; other contributors receive only offline readiness
-checks. Its reusable workflow is pinned to an immutable commit and selects
-the receipt's exact Python version and architecture, verifying the evaluator
-before credentials. There is no deployment or environment approval.
-Each job has a fresh **$2 spending ceiling** and requires **pass³ ≥70%**:
-at least seven of ten cases must pass all three trials. Exactly 70% passes.
-Use the runner's measured passing triples, not the cube of the overall trial
-pass rate. All 30 measurements must be complete; missing measurements,
-inconclusives, unknown usage, execution errors and unavailable reports fail CI.
-The job summary identifies the candidate, pass³, successful trial count,
-measured and inconclusive counts, completeness and accounted cost. Readiness
-and evaluation are required PR checks.
-
-Provision the development-only role defined in `infra/shadow_eval.tf` to activate
-paid evaluation.
-It can read only `/nova-toll/openai_api_key` from development SSM and grants no
-database, deployment or holdout storage access. The role's OIDC trust admits
-only the credential owner's same-repository PR runs using the pinned evaluator
-definition. When changing that workflow, update its commit pin in both CI and
-the role's trust policy.
-Forks, main and tag pushes do not run paid shadow evaluations. Readiness checks
-run without these credentials.
-Shadow CI evidence is regression feedback outside the training search loop.
-
 ## Uncommitted corpus preparation
 
 If an all-split preparation calibration loses provider usage, its external
@@ -281,8 +250,8 @@ Combined all-split `calibrate` and scripted `eval.golden_actor_check` accept
 `--allow-uncommitted-preparation` when preparation is explicitly authorized.
 Detailed output must be external. Each run records preparation status, base
 commit and actual tracked/untracked source hashes, and saves a private source
-snapshot before model calls. This flag is unavailable for application runs;
-shadow CI still requires a clean committed checkout. Validate and provisionally
+snapshot before model calls. This flag is unavailable for application runs,
+which still require a clean committed checkout. Validate and provisionally
 freeze all inputs before paid preparation, and version all splits together after
 any protected-source or input repair. Chain every paid run with `--prior-run`
 and the same cumulative authorized budget; retain unsuccessful runs.
@@ -293,7 +262,7 @@ run arguments. This host launcher retains the frozen evaluator and all input,
 calibration, privacy and budget gates, while using its existing actual-source
 hashing and external snapshot support. It records the explicit waiver and launcher
 hash in the run identity. Output must be external. Native application execution
-and shadow CI keep their clean-checkout requirement; no holdout input enters Git.
+keeps its clean-checkout requirement; no holdout input enters Git.
 
 Complete diagnostic repairs before the three unchanged judge-replay rounds and
 three actor trials per case. Human review covers split-level decision and

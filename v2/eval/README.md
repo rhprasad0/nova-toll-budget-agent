@@ -13,8 +13,8 @@ The **50 training and 10 shadow cases** live under `eval/active/`, with **25 hol
 cases on an external host path**. Use the [authoring guide](AUTHORING.md) and
 [coverage contract](contract.json). Harness
 2.5.17 searches the training split with **one trial per case and 16 workers**;
-three trials require Ryan's explicit instruction. Shadow CI evaluates ten cases
-three times with a $2 per-job cap and requires **pass³ ≥70%** with complete measurements.
+three trials require Ryan's explicit instruction. Shadow runs are local and
+manual; PR CI does not run them.
 TollChat's application model, prompt, SOP and tools remain unchanged on `gpt-6-luna`.
 
 From a clean committed `v2/` checkout, validate the approved inputs and readiness:
@@ -22,7 +22,6 @@ From a clean committed `v2/` checkout, validate the approved inputs and readines
 ```bash
 uv run python -m eval.corpus validate
 uv run python -m eval.golden
-uv run python -m eval.shadow_ci prepare --verify-runtime
 ```
 
 For new inputs, `eval.corpus freeze` writes a per-split manifest and pending `review.json`; it never grants
@@ -60,29 +59,6 @@ tool access to that tree except literal `eval.golden_run run|aggregate` commands
 run from this checkout's `v2/`. It guards supported tool calls, not the OS. Pair visible and hidden
 scores on the same committed candidate to track their gap. Repeated aggregate
 feedback can still influence tuning; this is not fully blind accuracy.
-
-## Shadow CI
-
-Regular PR CI validates the reviewed shadow inputs and
-`eval/harness-approval.json`, then evaluates the exact candidate commit on all ten
-cases three times. The evaluator workflow is pinned to an immutable commit. It runs
-automatically on same-repository PR updates initiated by `rhprasad0`, who already
-owns the development model credential. Other contributors and forks get offline
-readiness checks without that credential. There is no deployment or environment
-approval. The $2 cap starts a new job-local spending chain. At least seven of the
-ten cases must pass all three trials: **pass³ ≥70%**, including exactly 70%.
-This is the measured share of passing triples, not the cube of the pooled trial
-pass rate. Below-threshold scores, incomplete measurements and execution errors
-fail CI; the summary and logs retain the score, completeness and accounted cost.
-
-The host exports the public receipt from the one approved combined calibration;
-it contains hashes, runtime, planned split counts and approval provenance, with
-no holdout cases or detailed evidence. Hosted CI selects its exact Python version
-and architecture and verifies the evaluator before credentials. Activation also
-requires provisioning the development-only SSM reader in `infra/shadow_eval.tf`.
-Its trust policy admits only the owner's same-repository PR runs using the pinned
-evaluator; updating that workflow requires updating both pins. See the
-[runner guide](GOLDEN_RUNNER.md#shadow-ci) for usage.
 
 ## Scheduled and live checks
 
