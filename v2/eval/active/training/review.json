@@ -1,6 +1,6 @@
 {
-  "status": "pending",
+  "status": "approved",
   "corpus_sha256": "e6f4d80394c25e934e082ac00115fea08c32306649f1f1d4d752d7a202a3347d",
-  "reviewer": "",
-  "evidence": ""
+  "reviewer": "Ryan",
+  "evidence": "Ryan approved on 2026-10-10 after reviewing the change summary for the October 10 effort-transfer findings and the October 8 deferred repairs, including the ruling that a separate Saturday/Sunday rate breakdown is not a required follow-up. Training changes: two reworded openings (no announced follow-up request; 'southbound' toward a plain I-495 exit with a misleading northbound sibling) and three tightened actor profiles. Fixtures unchanged. Scripted actor check at 791d9e32, 3 trials per case: 150/150 valid, $0.2025, complete usage. The approved harness calibration remains reusable."
 }
