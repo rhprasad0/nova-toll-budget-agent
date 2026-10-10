@@ -1,7 +1,7 @@
 # TollChat evaluation
 
-**Locally authored suite:** 50 training (5.2.0) and 10 shadow (5.1.14) cases are
-active, with 25 holdout cases (5.2.0) stored externally. Harness 2.5.17 has an
+**Locally authored suite:** 50 training and 10 shadow cases (5.2.1) are
+active, with 25 holdout cases (5.2.1) stored externally. Harness 2.5.18 has an
 approved aggregate calibration receipt. The 100-case development corpus
 3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
 Its recorded scores and reviews remain historical; it cannot run or seed fresh inputs.
@@ -15,7 +15,7 @@ in a new external directory; it is no longer blind. See the
 The **50 training and 10 shadow cases** live under `eval/active/`, with **25 holdout
 cases on an external host path**. Use the [authoring guide](AUTHORING.md) and
 [coverage contract](contract.json). Harness
-2.5.17 searches the training split with **one trial per case and 16 workers**;
+2.5.18 searches the training split with **one trial per case and 16 workers**;
 three trials require Ryan's explicit instruction. Shadow runs are local and
 manual; PR CI does not run them.
 TollChat's application model, prompt, SOP and tools remain unchanged on `gpt-6-luna`.
