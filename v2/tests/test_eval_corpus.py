@@ -770,9 +770,10 @@ def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
     )
     with pytest.raises(SystemExit, match="host-side diagnostic log"):
         run.main()
-    assert "new harness calibration required" in (
-        tmp_path / ".run-tampered.console.log"
-    ).read_text()
+    assert (
+        "new harness calibration required"
+        in (tmp_path / ".run-tampered.console.log").read_text()
+    )
     receipt_path.write_text(json.dumps(receipt))
 
     def execute(
