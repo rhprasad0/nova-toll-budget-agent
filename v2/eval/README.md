@@ -6,6 +6,8 @@ aggregate calibration receipt. The 100-case development corpus
 3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
 Its recorded scores and reviews remain historical; it cannot run or seed fresh inputs.
 The [experiment journal](EXPERIMENT_JOURNAL.md) preserves the findings and limitations.
+The 5.1.14 holdout was read for an October 10, 2026 diagnosis and is no longer
+blind; see the [journal](journal/2026-10-05.md).
 
 ## Frozen golden evaluation
 

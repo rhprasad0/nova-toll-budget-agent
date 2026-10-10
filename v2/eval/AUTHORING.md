@@ -18,6 +18,7 @@ the following dimensions, their planned counts by split, and any justified gaps:
 | Dimension | Plan for |
 | --- | --- |
 | Networks and directions | I-95/I-395, I-495, I-66, Dulles Toll Road and Greenway; supported travel directions and cross-facility trips |
+| Endpoint resolution | Plainly named endpoints; direction implied by the trip or the other endpoint; one name on several roads (Route 267); places with several same-named points that differ by direction or approach (I-495 at Jones Branch Drive/Route 123 has five) |
 | Price evidence | Observed, published fixed/schedule-derived, modeled and mixed sources; freshness, partial coverage and unavailable evidence |
 | Commute schedules | Weekdays and weekends, peak/off-peak times, explicit departure versus arrival roles and annual-day counts |
 | I-95 availability | Directional availability, exceptional schedules, unavailable legs, eligible alternatives and user-approved restart/fallback decisions |
@@ -30,6 +31,9 @@ splits. Do not make one split entirely one facility or direction, or make
 pricing type predict split membership. The ten-case shadow can sample these
 dimensions rather than contain every combination; record its limitations.
 Use supported routes and truthful evidence, not invented coverage to fill a row.
+Spread endpoint-resolution difficulty across splits in proportion too; an
+application change can fix one kind and not another
+([October 10 journal](journal/2026-10-05.md)).
 
 ## Write natural, independent scenarios
 
@@ -52,7 +56,10 @@ preserving distinct accesses that happen to share a numeric stem. For I-495 it
 strips access suffixes, including the alternate `9ND` approach, and treats
 180/181 and 183/184 as shared boundaries. Other networks retain their facility
 and access number across entry/exit and direction variants.
-Network identity remains significant; reuse within one split is allowed.
+Network identity remains significant. Reuse within one split is allowed but
+should be rare and recorded in the coverage plan: cases sharing a pair,
+including one leg of an annual trip, tend to fail together, so they measure one
+situation, not several.
 Prices, observation times, schedules, case names and group names cannot make a
 shared pair independent. This is a conservative route check, not proof of
 semantic novelty: review similar situations even when their routes differ.
@@ -98,11 +105,18 @@ Reconcile fixture arithmetic and preserve source/observation times and provenanc
 Use **`actor.max_turns = 5` for every case, including the opening**.
 Derive `minimum_user_turns` from the exchanges needed to deliver missing facts,
 consent, choices or triggered changes, not from the length of one reference.
-Set each step's `min_turn` to the earliest achievable authorized call. A complete
-opening may need only one turn; a clarification followed by confirmation and a
-workflow switch needs room for those exchanges. Do not require redundant replies
-or use a shorter budget to force a preferred path. Simplify any scenario that
-cannot finish within five turns.
+Set each step's `min_turn` to the earliest achievable authorized call. Count
+every SOP-compliant path, not only the reference: an assistant may ask for all
+missing inputs at once, including annual inputs right after a current quote
+when the user already asked for both, and call as soon as the user supplies
+them. An opening that already gives a confirmation or announces a later request
+authorizes acting on it in turn 1, so keep a confirmation or follow-up request
+the case should collect later out of the opening, including any scenario
+summary copied into it.
+A complete opening may need only one turn; a clarification followed by
+confirmation and a workflow switch needs room for those exchanges. Do not require
+redundant replies or use a shorter budget to force a preferred path. Simplify
+any scenario that cannot finish within five turns.
 
 ## Review and freeze
 
@@ -117,7 +131,10 @@ semantic novelty or label correctness.
 
 Summarize aggregate findings and limitations. Keep detailed public assessments
 in ignored `eval/private/`; all detailed holdout output stays external. The coding
-agent never reads that external evidence. Synthetic regressions and exposed
+agent never reads that external evidence and never disables or evades the holdout
+guard; case-level holdout diagnosis belongs to the host operator. The 5.1.14
+holdout was exposed on October 10, 2026 and is retired as blind evidence.
+Synthetic regressions and exposed
 historical cases teach formats, not fresh holdout content.
 
 Freeze each split with `eval.corpus freeze --corpus PATH --split SPLIT --version
