@@ -841,6 +841,7 @@ def test_one_reviewed_harness_calibration_serves_all_splits_and_new_inputs(
     events[0]["status"] = "infrastructure"
     shadow_events.write_text("".join(json.dumps(event) + "\n" for event in events))
     incomplete = run.render(tmp_path / "run-shadow")["overall"]
+    assert incomplete["complete"] is False
     assert incomplete["scored_trials"] == 29
     assert incomplete["inconclusive_trials"] == 1
     assert incomplete["overall_pass_rate"] == 29 / 30
