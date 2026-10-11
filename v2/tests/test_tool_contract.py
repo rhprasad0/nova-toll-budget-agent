@@ -104,7 +104,7 @@ def test_resolver_contract_matches_models_and_manifest() -> None:
     from agent_tools import resolve_trip
 
     assert resolve_trip.TOOL_SPEC["inputSchema"] == {
-        "json": resolve_trip._ResolveRequest.model_json_schema(mode="validation")
+        "json": resolve_trip._ResolveRequest.model_json_schema(mode="validation")  # pyright: ignore[reportPrivateUsage]
     }
     assert resolve_trip.TOOL_CONTRACT == {"toolSpec": resolve_trip.TOOL_SPEC}
     manifest = _manifest()["resolve_trip"]

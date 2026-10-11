@@ -42,6 +42,7 @@ BLOCKED_MESSAGE = "I can only help with Northern Virginia toll road estimates."
 _FAILURE_MODE = "runtime_exception_v2"
 CANARY_MARKER = "greenway-canary-v1"
 EVALUATION_MARKER = "scheduled-evaluation-v1"
+RESOLVER_TOOL = "resolve_trip"
 CANARY_PROMPT = "What is the current toll from the Leesburg Bypass entrance to Route 28 for a two-axle vehicle with E-ZPass?"
 _CREDENTIAL = re.compile(
     r"(?i)(?:authorization\s*[:=]|password\s*[:=]|api[_-]?key\s*[:=]|"
@@ -85,6 +86,7 @@ def _canary_event(messages: Sequence[object]) -> dict[str, object]:
     """Return the bounded, record-once evidence for the fixed synthetic probe."""
     calls: list[Mapping[str, object]] = []
     results: dict[str, Mapping[str, object]] = {}
+    resolver_ids: set[object] = set()
     duplicate_result = False
     for message in messages:
         if not isinstance(message, Mapping):
@@ -97,10 +99,17 @@ def _canary_event(messages: Sequence[object]) -> dict[str, object]:
                 continue
             data = cast(Mapping[str, object], block)
             if isinstance(data.get("toolUse"), Mapping):
-                calls.append(cast(Mapping[str, object], data["toolUse"]))
+                use = cast(Mapping[str, object], data["toolUse"])
+                # Resolver lookups are not pricing evidence; the probe counts pricing calls.
+                if use.get("name") == RESOLVER_TOOL:
+                    resolver_ids.add(use.get("toolUseId"))
+                else:
+                    calls.append(use)
             if isinstance(data.get("toolResult"), Mapping):
                 result = cast(Mapping[str, object], data["toolResult"])
                 tool_id = result.get("toolUseId")
+                if tool_id in resolver_ids:
+                    continue
                 if not isinstance(tool_id, str) or not tool_id or tool_id in results:
                     duplicate_result = True
                 else:
@@ -184,6 +193,7 @@ def _evaluation_event(
     """Correlate this turn's completed tools for the private eval caller only."""
     calls: dict[str, dict[str, Any]] = {}
     results: dict[str, dict[str, Any]] = {}
+    resolver_ids: set[str] = set()  # deterministic lookups, not pricing evidence
     for message in messages:
         if not isinstance(message, dict):
             continue
@@ -191,12 +201,17 @@ def _evaluation_event(
             if "toolUse" in block:
                 call = block["toolUse"]
                 tool_id = call["toolUseId"]
+                if call.get("name") == RESOLVER_TOOL:
+                    resolver_ids.add(tool_id)
+                    continue
                 if tool_id in calls:
                     raise ValueError("Duplicate evaluation tool call")
                 calls[tool_id] = call
             if "toolResult" in block:
                 result = block["toolResult"]
                 tool_id = result["toolUseId"]
+                if tool_id in resolver_ids:
+                    continue
                 if tool_id in results:
                     raise ValueError("Duplicate evaluation tool result")
                 results[tool_id] = result

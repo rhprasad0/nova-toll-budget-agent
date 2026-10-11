@@ -52,7 +52,8 @@ require perfect label agreement; document and assess each disagreement.
 ## Description-edit contract
 
 The local training contract / harness 2.6.0 uses `literal-input-prose-v1`. The corpus hashes
-parsed source for the two pricing tool modules, masking only existing literal
+parsed source for the two pricing tool modules (the resolver module is hashed
+byte for byte, so any edit to it needs a refreeze), masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
 schema constraints, validators, runtime logic, and output descriptions, stays

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -127,7 +128,7 @@ def test_ambiguity_not_found_wrong_role_and_no_route_are_reported() -> None:
     ):
         ambiguous = resolve_trip.resolve(CATALOG, origin, destination)
         assert ambiguous["status"] == "ambiguous", ambiguous
-    assert 1 < len(ambiguous["candidates"]) <= resolve_trip._MAX_CANDIDATES
+    assert 1 < len(ambiguous["candidates"]) <= resolve_trip._MAX_CANDIDATES  # pyright: ignore[reportPrivateUsage]
     assert resolve_trip.resolve(CATALOG, "Baltimore", "Westpark Drive") == {
         "status": "not_found",
         "places": ["Baltimore"],
@@ -153,10 +154,11 @@ def test_every_training_fixture_leg_resolves_from_its_labels() -> None:
     for case in golden.load_cases(TRAINING):
         for step in case.steps:
             fixture = golden.load_fixture(step.fixture, TRAINING)
-            legs = (
+            legs = cast(
+                list[dict[str, str]],
                 [fixture.input["outbound"], fixture.input["return"]]
                 if "outbound" in fixture.input
-                else [fixture.input]
+                else [fixture.input],
             )
             for leg in legs:
                 origin, destination = (
@@ -175,6 +177,78 @@ def test_every_training_fixture_leg_resolves_from_its_labels() -> None:
                 ), (case.id, result)
 
 
+@pytest.mark.parametrize(
+    ("origin", "destination", "facility", "status", "pair"),
+    [
+        # Direction words name a variant, never another place; the graph decides.
+        (
+            "Gallows Road northbound",
+            "Interstate 66",
+            None,
+            "resolved",
+            ("i495:189NO", "i495:187ND"),
+        ),
+        (
+            "I-495 South",
+            "Fairfax Drive",
+            "i66",
+            "resolved",
+            ("i66:5:entry:EB", "i66:12:exit:EB"),
+        ),
+        (
+            "I-66 W",
+            "Route 7 - Leesburg Pike",
+            "i66",
+            "resolved",
+            ("i66:1:entry:EB", "i66:4:exit:EB"),
+        ),
+        # A road alias on one facility does not hide the same road on another.
+        ("Route 7", "Washington D.C. I-66", None, "ambiguous", None),
+        (
+            "Route 7",
+            "Washington D.C. I-66",
+            "i66",
+            "resolved",
+            ("i66:4:entry:EB", "i66:16:exit:EB"),
+        ),
+        # Approach-suffixed text names the place; the swapped return still resolves.
+        (
+            "Seminary Road (from I-95/I-395 northbound or I-495 northbound)",
+            "US-1",
+            None,
+            "resolved",
+            ("i95:226SO", "i95:210SD"),
+        ),
+    ],
+)
+def test_natural_phrasings(
+    origin: str,
+    destination: str,
+    facility: resolve_trip.Facility | None,
+    status: str,
+    pair: tuple[str, str] | None,
+) -> None:
+    result = resolve_trip.resolve(CATALOG, origin, destination, facility)
+    assert result["status"] == status, result
+    if pair:
+        assert (result["origin_point_id"], result["destination_point_id"]) == pair
+
+
+def test_not_found_echo_is_bounded_and_wrong_role_describes_points() -> None:
+    long_place = "x" * 500
+    result = resolve_trip.resolve(CATALOG, long_place, "Route 28")
+    assert result["status"] == "not_found" and len(result["places"][0]) <= 80
+    wrong_role = resolve_trip.resolve(
+        CATALOG, "Exit 2B - Compass Creek Pkwy", "Exit 6 - SR 772 (Ryan Rd)"
+    )
+    assert wrong_role["origin_matches"][0] == {
+        "point_id": "greenway:2B:exit:WB",
+        "label": "Exit 2B - Compass Creek Pkwy",
+        "point_type": "exit",
+        "direction": "WB",
+    }
+
+
 def test_tool_returns_recorder_shaped_results() -> None:
     tool = resolve_trip.make_resolve_trip_tool(CATALOG)
     assert tool.tool_spec["name"] == "resolve_trip"
@@ -184,7 +258,8 @@ def test_tool_returns_recorder_shaped_results() -> None:
         def __init__(self, data: dict[str, Any]) -> None:
             self.tool_use = {"toolUseId": "t1", "name": "resolve_trip", "input": data}
 
-    good = tool._tool_func(  # pyright: ignore[reportAttributeAccessIssue]
+    invoke = cast(Callable[..., dict[str, Any]], cast(Any, tool)._tool_func)
+    good = invoke(
         tool_context=Context(
             {
                 "origin": "Exit 10 - SR 657",
@@ -194,7 +269,7 @@ def test_tool_returns_recorder_shaped_results() -> None:
     )
     assert good["status"] == "success"
     assert good["content"][0]["json"]["destination_point_id"] == "dtr:11:exit:EB"
-    bad = tool._tool_func(  # pyright: ignore[reportAttributeAccessIssue]
+    bad = invoke(
         tool_context=Context({"origin": "", "destination": "x", "facility": "i99"})
     )
     assert bad["status"] == "error"

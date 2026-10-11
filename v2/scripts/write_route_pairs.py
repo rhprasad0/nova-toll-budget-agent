@@ -58,7 +58,7 @@ def reachable_pairs() -> list[tuple[str, str]]:
 
 def render() -> str:
     body = "".join(
-        f"        ({origin!r}, {destination!r}),\n"
+        f'        ("{origin}", "{destination}"),\n'
         for origin, destination in reachable_pairs()
     )
     return HEADER + body + FOOTER

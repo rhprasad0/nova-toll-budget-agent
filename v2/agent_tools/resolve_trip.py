@@ -54,6 +54,11 @@ class _Point(BaseModel):
 _POINTS_ADAPTER: TypeAdapter[list[_Point]] = TypeAdapter(list[_Point])
 _APPROACH = re.compile(r"\s*\(from [^)]*\)\s*$", re.IGNORECASE)
 _NON_WORD = re.compile(r"[^a-z0-9]+")
+_TRAILING_DIRECTION = re.compile(
+    r"[\s,-]*\b(?:north|south|east|west)(?:bound)?\b\.?$|[\s,-]+\b(?:nb|sb|eb|wb|n|s|e|w)\b\.?$",
+    re.IGNORECASE,
+)
+_MAX_ECHO = 80
 _ORIGIN_ROLES = {"entry", "airport"}
 _DESTINATION_ROLES = {"exit", "airport"}
 _MAX_CANDIDATES = 12
@@ -82,8 +87,21 @@ def _loose(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
+_DIRECTION_WORDS = {
+    "north": "n",
+    "south": "s",
+    "east": "e",
+    "west": "w",
+    "northbound": "nb",
+    "southbound": "sb",
+    "eastbound": "eb",
+    "westbound": "wb",
+}
+
+
 def _normalize(text: str) -> str:
-    return _NON_WORD.sub(" ", text.casefold()).strip()
+    words = _NON_WORD.sub(" ", text.casefold()).split()
+    return " ".join(_DIRECTION_WORDS.get(word, word) for word in words)
 
 
 class _Catalog:
@@ -102,7 +120,6 @@ class _Catalog:
         }
         self.names = {
             point.point_id: {
-                _normalize(point.label),
                 _normalize(_APPROACH.sub("", point.label)),
                 *(_normalize(alias) for alias in point.aliases),
             }
@@ -110,21 +127,29 @@ class _Catalog:
         }
 
     def _search(self, points: list[_Point], text: str) -> list[_Point]:
-        """Exact label, then exact alias, then all words; approach suffixes name a place."""
+        """Exact label first; otherwise an exact alias or every word of the text.
+
+        Approach suffixes and trailing direction words name a place or a variant,
+        never a different place, so they are dropped and the graph picks the variant.
+        """
         text = _APPROACH.sub("", text)
         loose, query = _loose(text), _normalize(text)
         tokens = set(query.split())
         if not tokens:
             return []
-        for keep in (
-            lambda p: loose in self.labels[p.point_id],
-            lambda p: query in self.names[p.point_id],
-            lambda p: any(tokens <= set(n.split()) for n in self.names[p.point_id]),
-        ):
-            found = [point for point in points if keep(point)]
-            if found:
-                return found
-        return []
+        by_label = [p for p in points if loose in self.labels[p.point_id]]
+        if by_label:
+            return by_label
+        found = [
+            p
+            for p in points
+            if query in self.names[p.point_id]
+            or any(tokens <= set(n.split()) for n in self.names[p.point_id])
+        ]
+        if found:
+            return found
+        trimmed = _TRAILING_DIRECTION.sub("", text)
+        return self._search(points, trimmed) if trimmed != text else []
 
     def matches(self, text: str, facility: Facility | None) -> list[_Point]:
         # A named road is searched first; a place absent from it crosses facilities.
@@ -137,8 +162,13 @@ class _Catalog:
         return self._search(self.points, text)
 
 
-def _describe(point: _Point) -> dict[str, str]:
-    return {"point_id": point.point_id, "label": point.label}
+def _describe(point: _Point) -> dict[str, str | None]:
+    return {
+        "point_id": point.point_id,
+        "label": point.label,
+        "point_type": point.point_type,
+        "direction": point.direction,
+    }
 
 
 def resolve(
@@ -170,7 +200,7 @@ def _leg(
         if not matches
     ]
     if missing:
-        return {"status": "not_found", "places": missing}
+        return {"status": "not_found", "places": [m[:_MAX_ECHO] for m in missing]}
     origins = [p for p in origin_matches if p.point_type in _ORIGIN_ROLES]
     destinations = [
         p for p in destination_matches if p.point_type in _DESTINATION_ROLES
