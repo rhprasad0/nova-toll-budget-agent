@@ -182,9 +182,7 @@ def command(args: argparse.Namespace) -> dict[str, Any] | None:
         raise ValueError("actor checks require one passing example per case")
     examples = list(passing.values())
     trials = report_trials(identity)
-    prior, spent = run.prior_accounting(
-        args.prior_run, allow_preparation_ceiling=args.allow_uncommitted_preparation
-    )
+    prior, spent = run.prior_accounting(args.prior_run)
     journal = run.Journal(args.output, args.budget_usd, spent)
     run.snapshot_preparation(identity, args.output)
     manifest = {

@@ -77,55 +77,6 @@ def test_preparation_snapshot_stays_external() -> None:
         run.snapshot_preparation({"preparation": {"source_hashes": {}}}, golden.V2)
 
 
-def test_lost_usage_ceiling_is_bound_and_preparation_only(tmp_path: Path) -> None:
-    manifest = {
-        "mode": "calibrate",
-        "run_id": "synthetic",
-        "prior_spend_usd": 10,
-        "identity": {
-            "artifact_kind": "uncommitted_preparation",
-            "corpus": {"evaluation_scope": "suite"},
-        },
-    }
-    events = [
-        {
-            "event": "model_started",
-            "attempt": "a",
-            "role": "judge",
-            "reserved_usd": 0.03,
-        },
-        {
-            "event": "model_finished",
-            "attempt": "a",
-            "role": "judge",
-            "complete": False,
-            "cost_usd": 0.03,
-        },
-    ]
-    (tmp_path / "manifest.json").write_text(json.dumps(manifest))
-    (tmp_path / "events.jsonl").write_text("\n".join(map(json.dumps, events)))
-    receipt = run.preparation_usage_ceiling(manifest, events)
-    path = tmp_path / "usage-ceiling.json"
-    path.write_text(json.dumps(receipt))
-    with pytest.raises(ValueError, match="unknown usage"):
-        run.prior_accounting(tmp_path)
-    assert run.prior_accounting(tmp_path, allow_preparation_ceiling=True)[1] == 10.03
-    assert events[-1]["complete"] is False
-    receipt["charges"][0]["ceiling_usd"] = 0.02
-    path.write_text(json.dumps(receipt))
-    with pytest.raises(ValueError, match="unknown usage"):
-        run.prior_accounting(tmp_path, allow_preparation_ceiling=True)
-    events[-1]["cost_usd"] = 0.02
-    with pytest.raises(ValueError, match="full reservation"):
-        run.preparation_usage_ceiling(manifest, events)
-    events[-1]["cost_usd"] = 0.03
-    with pytest.raises(ValueError, match="closed lost-usage"):
-        run.preparation_usage_ceiling(manifest, events[:1])
-    manifest["mode"] = "run"
-    with pytest.raises(ValueError, match="all-split preparation"):
-        run.preparation_usage_ceiling(manifest, events)
-
-
 def test_valid_disclosure_citation_keeps_same_line_financial_error() -> None:
     answer = (
         "Vehicle cost assumes $0.685 per straight-line tolled mile. "

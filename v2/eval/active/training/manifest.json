@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "version": "5.2.1",
+  "version": "5.2.2",
   "evaluation_scope": "training",
   "case_count": 50,
   "trials_per_case": 1,
@@ -64,20 +64,20 @@
     "v2/uv.lock": "b7a2c24b78a17e1d6b19e12ef213c1341c02f283c992627941a791df2fb6b52b",
     "v2/eval/corpus.py": "b5ffdfc5cdd87a52fe1408205032edcfd707e065978fc7a8e94bc90be12284b9",
     "v2/eval/contract.json": "2e36bdfed363f0480bf8f7741de76fa392aa20578ceb10449196b4bc3efa94c3",
-    "v2/agent/toll_agent.py": "69516b7f6a2dca16e943dfbfb0e66ff3a11b7c7192ac36fde31633998cc2d45d",
+    "v2/agent/toll_agent.py": "6099b508e382cbd642b48f3f3b2c065cb578421f0f713e9dc4325fff11c62c64",
     "v2/agent_tools/get_current_toll_price.py": "03560678deb79a8665b47de80793e744a6072419f09e4ec95401019ab23befcc",
     "v2/eval/golden.py": "4aaacb3c2d237c36432bee556ef24d39dd4ea1053cf923664d4761982feac89d",
-    "v2/eval/repetition.py": "9e93c6602d6c49ff1a6321b29de1a5afe24cd5a975f065db715f1f410093d4f9",
+    "v2/eval/repetition.py": "198bc5a5274decc172a0eaa24796b8f8c9b6a3b17ef4459d440802da02622f6c",
     "v2/agent_tools/currency.py": "09a6325499e46ef0eca57ac3dd2cebedd460cf6937ceb48860c58eb1ea238710",
     "v2/eval/simulated.py": "846d1c477cdba987a12cff3360c1eafdff7afa5d709062530404e4d8f7a9e6c4",
     "v2/eval/run_evaluation.py": "b4a9abb3ccd913d747b4227466d3138af0b5b681c89438f5c50406f2473da18b",
-    "v2/eval/golden_run.py": "e9caab26ffe24ba99eeb4fbf6755f8d7950fc0acf9e4d6ea3a3f61f603afdd0e",
-    "v2/eval/golden_actor_check.py": "d26b9b1d8aa0dc029cf1fc1cea3b37e81178a40574d26047d3c455f7cd41ae70",
+    "v2/eval/golden_run.py": "333e1d6be8637e48f657203c0ea103c7b81d6dc49794c500b4c153def0699b30",
+    "v2/eval/golden_actor_check.py": "6551254f9a1e421d1d830f450f55085165f5a3f2bb09137d6f3b016b05ed658e",
     "v2/eval/artifact_agent.py": "7e3b9d7d058a655fe848a3875aecea33ce1aa94f4aa45056e85ce4f0200b0f6b",
     "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
     "v2/agent_tools/current_price_domain.py": "028d36addc4cf35926113f09fc8f7fa203ce15a2fa04882e8979fb41f4d02e12",
     "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
-  "corpus_sha256": "b989aafa6df95096fa33bbb30900c95058be9338eab210e0e7a69f40f56631c2"
+  "corpus_sha256": "64da7f4801ca1492e32a9f0e4d580d4e7d7a1cc1f371c5f4ed701f785b0f138b"
 }

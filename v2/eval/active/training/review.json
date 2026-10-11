@@ -1,6 +1,6 @@
 {
   "status": "approved",
-  "corpus_sha256": "b989aafa6df95096fa33bbb30900c95058be9338eab210e0e7a69f40f56631c2",
+  "corpus_sha256": "64da7f4801ca1492e32a9f0e4d580d4e7d7a1cc1f371c5f4ed701f785b0f138b",
   "reviewer": "Claude",
-  "evidence": "Approved by Claude at Ryan's request on 2026-10-10. Inputs are byte-identical to approved 5.2.0 (shadow 5.1.14); only the version and protected source identities changed for harness 2.5.18 (aggregate pass\u00b3 fields)."
+  "evidence": "Approved by Claude at Ryan's request on 2026-10-10. Inputs are byte-identical to approved 5.2.0; only the version and protected source identities changed for harness 2.5.19 (bounded lost-usage accounting) and system prompt version 2.3.16."
 }

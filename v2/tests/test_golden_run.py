@@ -200,8 +200,9 @@ def test_parallel_calls_reserve_shared_budget_before_provider_calls(
     assert sum(e["event"] == "model_started" for e in events) == 2
     assert sum(e["event"] == "model_finished" for e in events) == 2
     assert invoke(4, invalid_usage=True)
-    assert journal.unknown_usage and journal.reserved == pytest.approx(0)
-    assert not invoke(5)
+    assert journal.unknown_usage == 1 and journal.reserved == pytest.approx(0)
+    # One lost-usage call is charged its reservation; later calls still run.
+    assert invoke(5)
 
 
 def measurement() -> run.Measurement:
@@ -413,13 +414,15 @@ def test_missing_usage_stops_future_calls_without_storing_exception(
         async for _ in cast(Any, model).stream([]):
             pass
 
-    with pytest.raises(RuntimeError):
-        asyncio.run(consume())
+    for _ in range(run.LOST_USAGE_STOP):
+        with pytest.raises(RuntimeError):
+            asyncio.run(consume())
     with pytest.raises(run.StopRun):
         asyncio.run(consume())
-    assert journal.unknown_usage
-    assert not row.measurements[0].complete
-    assert "secret-token" not in (journal.directory / "events.jsonl").read_text()
+    assert journal.unknown_usage == run.LOST_USAGE_STOP
+    assert not any(m.complete for m in row.measurements)
+    text = (journal.directory / "events.jsonl").read_text()
+    assert "secret-token" not in text and '"error_type": "RuntimeError"' in text
 
 
 @pytest.mark.parametrize("role", ["agent", "actor", "judge"])
@@ -471,8 +474,6 @@ def test_real_sdk_transport_has_no_retries_and_bounded_timeout(
             pass
 
     with pytest.raises(openai.InternalServerError):
-        asyncio.run(consume())
-    with pytest.raises(run.StopRun):
         asyncio.run(consume())
     assert len(clients) == len(requests) == len(row.measurements) == 1
     assert journal.unknown_usage and not row.measurements[0].complete
@@ -1705,22 +1706,47 @@ def test_fixed_pass_cubed_preserves_historical_denominator() -> None:
         run.summary([*rows, rows[0]], cases)
 
 
-def test_prior_accounting_rejects_unknown_usage(tmp_path: Path) -> None:
+def test_prior_accounting_accepts_only_bounded_lost_usage(tmp_path: Path) -> None:
     (tmp_path / "manifest.json").write_text(
-        json.dumps({"run_id": "previous", "prior_spend_usd": 11.0})
+        json.dumps({"run_id": "previous", "prior_spend_usd": 10.0})
     )
-    events: list[dict[str, Any]] = [
-        {"event": "model_started"},
-        {"event": "model_finished", "complete": True, "cost_usd": 0.25},
-    ]
+    started = {
+        "event": "model_started",
+        "attempt": "a",
+        "role": "judge",
+        "reserved_usd": 0.03,
+    }
+    finished = {
+        "event": "model_finished",
+        "attempt": "a",
+        "role": "judge",
+        "complete": True,
+        "cost_usd": 0.01,
+    }
     path = tmp_path / "events.jsonl"
-    path.write_text("\n".join(map(json.dumps, events)))
-    assert run.prior_accounting(tmp_path)[1] == 11.25
-    events[-1]["complete"] = False
-    path.write_text("\n".join(map(json.dumps, events)))
+
+    def write(*events: dict[str, Any]) -> None:
+        path.write_text("\n".join(map(json.dumps, events)))
+
+    write(started, finished)
+    assert run.prior_accounting(tmp_path)[1] == pytest.approx(10.01)
+    # A lost-usage call charged its full reservation is bounded, so the chain continues.
+    lost = {**finished, "complete": False, "cost_usd": 0.03}
+    write(started, lost)
+    assert run.prior_accounting(tmp_path)[1] == pytest.approx(10.03)
+    assert run.lost_usage_charges([started, lost]) == [
+        {"event_index": 1, "attempt": "a", "role": "judge", "ceiling_usd": 0.03}
+    ]
+    undercharged = {**lost, "cost_usd": 0.02}
+    write(started, undercharged)
     with pytest.raises(ValueError, match="unknown usage"):
         run.prior_accounting(tmp_path)
-    path.write_text(json.dumps(events[0]))
+    with pytest.raises(ValueError, match="full reservation"):
+        run.lost_usage_charges([started, undercharged])
+    write(started)
+    with pytest.raises(ValueError, match="unknown usage"):
+        run.prior_accounting(tmp_path)
+    write({"event": "model_started"}, {"event": "model_finished", "complete": True})
     with pytest.raises(ValueError, match="unknown usage"):
         run.prior_accounting(tmp_path)
 
@@ -1746,18 +1772,29 @@ def test_explicit_cumulative_ceiling_above_25_preserves_reservations(
     assert journal.reserved == 0
 
 
-def test_uncapped_accounting_still_stops_on_unknown_usage(tmp_path: Path) -> None:
+def test_uncapped_accounting_stops_after_repeated_lost_usage(tmp_path: Path) -> None:
     journal = run.Journal(tmp_path / "uncapped", None, prior_spend=30)
     row = run.Attempt(id="uncapped", case_id="synthetic", trial=1)
     reserve = journal.reserve(row, "judge", 1000)
     assert reserve == pytest.approx((1000 * 0.25 + 8192 * 0.75) / 1_000_000)
     journal.finish(row, "judge", reserve, {"inputTokens": 100, "outputTokens": 20}, 1)
     assert journal.spent == 30 + run.cost({"inputTokens": 100, "outputTokens": 20})
-    reserve = journal.reserve(row, "judge", 1000)
-    journal.finish(row, "judge", reserve, None, 1)
-    assert journal.unknown_usage
+    spent = journal.spent
+    for lost in range(1, run.LOST_USAGE_STOP + 1):
+        reserve = journal.reserve(row, "judge", 1000)
+        journal.finish(row, "judge", reserve, None, 2.5, "TimeoutError")
+        assert journal.unknown_usage == lost
+    assert journal.spent == pytest.approx(spent + run.LOST_USAGE_STOP * reserve)
     with pytest.raises(run.StopRun, match="unknown_usage"):
         journal.reserve(row, "judge", 1000)
+    lost_events = [
+        json.loads(line)
+        for line in (journal.directory / "events.jsonl").read_text().splitlines()
+        if '"complete": false' in line
+    ]
+    assert all(
+        e["seconds"] == 2.5 and e["error_type"] == "TimeoutError" for e in lost_events
+    )
 
 
 @pytest.mark.parametrize("actor_check", [False, True])

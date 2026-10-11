@@ -34,7 +34,9 @@ from eval import corpus, golden
 from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.5.18"
+VERSION = "2.5.19"
+# Lost-usage calls tolerated per run; each is charged its full reservation (an upper bound).
+LOST_USAGE_STOP = 3
 CALIBRATION_KEYS = (
     "harness_version",
     "runtime",
@@ -607,7 +609,7 @@ class Journal:
         self.limit = limit
         self.spent = prior_spend
         self.reserved = 0.0
-        self.unknown_usage = False
+        self.unknown_usage = 0  # lost-usage calls so far
         self.stop_requested = False
         self.lock = RLock()
         (directory / "events.jsonl").touch()
@@ -650,13 +652,19 @@ class Journal:
             count += 1
             started = time.monotonic()
             usage: dict[str, int] | None = None
+            error: str | None = None
             try:
                 async for event in original(*args, **kwargs):
                     if "metadata" in event and "usage" in event["metadata"]:
                         usage = event["metadata"]["usage"]
                     yield event
+            except BaseException as failure:
+                error = type(failure).__name__  # type only: messages can hold secrets
+                raise
             finally:
-                self.finish(attempt, role, reserve, usage, time.monotonic() - started)
+                self.finish(
+                    attempt, role, reserve, usage, time.monotonic() - started, error
+                )
 
         native.stream = measured
         return model
@@ -676,7 +684,7 @@ class Journal:
         with self.lock:
             if (
                 self.stop_requested
-                or self.unknown_usage
+                or self.unknown_usage >= LOST_USAGE_STOP
                 or (
                     self.limit is not None
                     and self.spent + self.reserved + reserve > self.limit
@@ -701,6 +709,7 @@ class Journal:
         reserve: float,
         usage: dict[str, int] | None,
         seconds: float,
+        error: str | None = None,
     ) -> None:
         complete = (
             isinstance(usage, dict)
@@ -716,9 +725,11 @@ class Journal:
         except (ValueError, TypeError):
             complete = False
         if not complete:
-            usage, charged, seconds = None, reserve, 0
+            usage, charged = None, reserve
+            if not (type(seconds) in {int, float} and math.isfinite(seconds)):
+                seconds = 0
         with self.lock:
-            self.unknown_usage |= not complete
+            self.unknown_usage += not complete
             self.reserved -= reserve
             self.spent += charged
         usage = usage or {}
@@ -738,6 +749,7 @@ class Journal:
                 "event": "model_finished",
                 "attempt": attempt.id,
                 **item.model_dump(),
+                **({"error_type": error} if error else {}),
             }
         )
 
@@ -1839,7 +1851,7 @@ def identity(
             "evaluator_tool_choice": "required",
             "timeout_seconds": 60,
             "judge_timeout_seconds": 180,
-            "unknown_usage": "stop further paid calls",
+            "unknown_usage": "charge the full reservation, leave that trial unscored, stop after 3 such calls",
             "evaluator_model_config": deepcopy(JUDGE_MODEL_PARAMS),
             "actor_model_config": deepcopy(EVAL_MODEL_PARAMS),
             "cache_adapter_sha256": golden.digest(
@@ -2763,16 +2775,8 @@ def render(directory: Path) -> dict[str, Any]:
     return report
 
 
-def preparation_usage_ceiling(
-    manifest: dict[str, Any], events: list[dict[str, Any]]
-) -> dict[str, Any]:
-    """Bind lost-usage preparation calls to their already charged maximums."""
-    if (
-        manifest.get("mode") != "calibrate"
-        or manifest["identity"].get("artifact_kind") != "uncommitted_preparation"
-        or manifest["identity"]["corpus"].get("evaluation_scope") != "suite"
-    ):
-        raise ValueError("usage ceilings require all-split preparation calibration")
+def lost_usage_charges(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return lost-usage calls, each proven closed and charged its full reservation."""
     pending: dict[tuple[str, str], float] = {}
     charges: list[dict[str, Any]] = []
     for index, event in enumerate(events):
@@ -2799,21 +2803,15 @@ def preparation_usage_ceiling(
                         "ceiling_usd": reserve,
                     }
                 )
-    if pending or not charges:
-        raise ValueError("usage ceiling requires closed lost-usage calls")
-    return {
-        "kind": "preparation-usage-ceiling-v1",
-        "run_id": manifest["run_id"],
-        "evidence_sha256": golden.digest({"manifest": manifest, "events": events}),
-        "charges": charges,
-        "policy": "Retain unmeasured calls and charge their full reserved maximum; token usage remains unavailable.",
-    }
+    if pending:
+        raise ValueError("lost usage requires closed model calls")
+    return charges
 
 
 def prior_accounting(
-    directory: Path | None, *, allow_preparation_ceiling: bool = False
+    directory: Path | None,
 ) -> tuple[dict[str, Any] | None, float]:
-    """Continue a known-usage journal chain for every paid runner."""
+    """Continue a bounded-usage journal chain for every paid runner."""
     prior = json.loads((directory / "manifest.json").read_text()) if directory else None
     spent = 0.0
     if directory and prior:
@@ -2821,21 +2819,12 @@ def prior_accounting(
             json.loads(line)
             for line in (directory / "events.jsonl").read_text().splitlines()
         ]
-        if any(
-            not e["complete"] for e in prior_events if e["event"] == "model_finished"
-        ) or sum(e["event"] == "model_started" for e in prior_events) != sum(
-            e["event"] == "model_finished" for e in prior_events
-        ):
-            receipt = directory / "usage-ceiling.json"
-            if (
-                not allow_preparation_ceiling
-                or not receipt.is_file()
-                or json.loads(receipt.read_text())
-                != preparation_usage_ceiling(prior, prior_events)
-            ):
-                raise ValueError(
-                    "prior run has unknown usage; reconcile before more paid calls"
-                )
+        try:
+            lost_usage_charges(prior_events)
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(
+                "prior run has unknown usage; reconcile before more paid calls"
+            ) from error
         spent = prior["prior_spend_usd"] + sum(
             e["cost_usd"] for e in prior_events if e["event"] == "model_finished"
         )
@@ -3050,9 +3039,7 @@ def command(
                 "evidence_sha256": calibration["evidence_sha256"],
                 "review": calibration["review"],
             }
-    prior, spent = prior_accounting(
-        args.prior_run, allow_preparation_ceiling=args.allow_uncommitted_preparation
-    )
+    prior, spent = prior_accounting(args.prior_run)
     journal = Journal(args.output, args.budget_usd, spent)
     snapshot_preparation(pinned, args.output)
     manifest = {
