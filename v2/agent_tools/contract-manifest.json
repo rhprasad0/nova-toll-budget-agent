@@ -21,5 +21,12 @@
       "1.5.0": "a2d029b0f74306da7c75a368bb63ccf4cbad8d4ee4023d95b20ba73cd2ea6440",
       "1.5.1": "558bded9d48560129b1391161b347de407552e92c3466718ac19f2e0b74d4190"
     }
+  },
+  "resolve_trip": {
+    "current": "1.1.0",
+    "releases": {
+      "1.0.0": "c83355a230ba805c9fba0de8da2464b98717558d45524f9b5d97d3debf863b08",
+      "1.1.0": "301619e021141a54d770bcba1262f94ddc15b741b3371d977fbaa5bc27ed4d84"
+    }
   }
 }

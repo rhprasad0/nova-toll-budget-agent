@@ -1,7 +1,7 @@
 # Running the frozen training split
 
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
-Training, shadow and holdout corpus 5.2.2 run under harness 2.5.19.
+Training, shadow and holdout corpus 5.2.12 run under harness 2.6.0.
 Training application runs default to one trial per case; use `--trials-per-case 3`
 only on Ryan's explicit instruction. Shadow runs are manual and outside search.
 Actors have up to five delivered user turns. The application, actor, judge
@@ -51,8 +51,9 @@ require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-The local training contract / harness 2.5.19 uses `literal-input-prose-v1`. The corpus hashes
-parsed source for the two pricing tool modules, masking only existing literal
+The local training contract / harness 2.6.0 uses `literal-input-prose-v1`. The corpus hashes
+parsed source for the two pricing tool modules (the resolver module is hashed
+byte for byte, so any edit to it needs a refreeze), masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
 schema constraints, validators, runtime logic, and output descriptions, stays
@@ -109,6 +110,12 @@ bound to the selected inputs and must be refreshed when those inputs change.
 Then run one full training baseline
 (50 cases × 1 trial, 16 workers). Do not duplicate compatible approved preparation. Frozen fixture replay needs no deployment or migration parity
 gate. It cannot establish live pricing or deployment correctness.
+
+Since harness 2.6.0 the application's `resolve_trip` tool runs live during replay,
+bound to the corpus's frozen `prompt-points.json`. Its lookups are recorded in each
+turn's `calls` so judges see which places were resolved, but they are not pricing
+requests: `max_tool_calls`, the `tool_calls` count, mechanical rules and fixture
+matching cover the two pricing tools only.
 
 Unseeded trial numbers identify slots, not identical random draws. Inspect passing
 and failing counterparts and the candidate diff to assess causal regressions.

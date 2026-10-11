@@ -1,6 +1,6 @@
 {
   "status": "approved",
-  "corpus_sha256": "5497f993a8704179f38bc2023e7224ec4113c7b59e6df92eee86fb8094abb2e9",
+  "corpus_sha256": "d727c3160eef324c2e335bdffba05ab437c2b79bdc08fe776352c69754e43b0b",
   "reviewer": "Claude",
-  "evidence": "Approved by Claude at Ryan's request on 2026-10-10. Inputs are byte-identical to approved 5.2.0; only the version and protected source identities changed for harness 2.5.19 (bounded lost-usage accounting) and system prompt version 2.3.16."
+  "evidence": "Approved by Claude at Ryan's request on 2026-10-11. Inputs are byte-identical to approved 5.2.6; only the version and protected source identities changed: resolve_trip tries the exact catalog label on the whole catalog before looser matches on a named road (confirmation-run regression fix). 5.2.7 through 5.2.11 were superseded before shipping."
 }

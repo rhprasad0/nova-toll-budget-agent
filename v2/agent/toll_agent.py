@@ -30,6 +30,7 @@ from strands.types.content import Messages
 from strands.types.streaming import StreamEvent
 from strands.types.tools import ToolChoice, ToolSpec
 
+from agent_tools import resolve_trip
 from agent_tools import validate_toll_route as route_validation
 from agent_tools.get_annual_toll_ballpark import get_annual_toll_ballpark
 from agent_tools.get_current_toll_price import get_current_toll_price
@@ -38,7 +39,7 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _PROMPT_POINTS_SQL = "SELECT oracle.get_toll_route_prompt_points() AS points"
-SYSTEM_PROMPT_VERSION = "2.3.16"
+SYSTEM_PROMPT_VERSION = "2.4.4"
 SYSTEM_PROMPT_RENDERER_VERSION = "1.0.2"
 _EASTERN = ZoneInfo("America/New_York")
 _DUPLICATE_TOOL_STATE_KEY = "tollchat_v2_duplicate_tool_calls"
@@ -51,6 +52,7 @@ _DUPLICATE_TOOL_MESSAGE = (
 _TOOL_LABELS = {
     "get_current_toll_price": "Checking current toll price",
     "get_annual_toll_ballpark": "Calculating annual toll-commute affordability",
+    "resolve_trip": "Matching the named places to covered ramps",
 }
 
 
@@ -327,6 +329,15 @@ def _agent_tools() -> list[Any]:
     return tools
 
 
+def agent_tools(points: list[dict[str, object]] | list[_PromptPoint]) -> list[Any]:
+    """Tools for an agent whose prompt renders ``points``.
+
+    The resolver is bound to that same catalog. Replay harnesses swap the pricing
+    tools by name and keep the resolver live.
+    """
+    return [*_agent_tools(), resolve_trip.make_resolve_trip_tool(points)]
+
+
 def _render_prompt_points(points: list[_PromptPoint]) -> str:
     """Supplement endpoint records with same-facility directed topology only."""
     # Source-node order from oracle/sources; exact pair equivalence is tested.
@@ -361,23 +372,27 @@ def _render_prompt_points(points: list[_PromptPoint]) -> str:
     return json.dumps(records, indent=2)
 
 
+def _prompt_points(
+    prompt_points: list[dict[str, object]] | list[_PromptPoint] | None,
+) -> list[_PromptPoint]:
+    if prompt_points is None:
+        return load_prompt_points()
+    return parse_prompt_points(
+        [
+            point.model_dump(mode="python")
+            if isinstance(point, _PromptPoint)
+            else point
+            for point in prompt_points
+        ]
+    )
+
+
 def _render_system_prompt_values(
     prompt_points: list[dict[str, object]] | list[_PromptPoint] | None = None,
     *,
     current_date: date,
 ) -> dict[str, str]:
-    points = (
-        load_prompt_points()
-        if prompt_points is None
-        else parse_prompt_points(
-            [
-                point.model_dump(mode="python")
-                if isinstance(point, _PromptPoint)
-                else point
-                for point in prompt_points
-            ]
-        )
-    )
+    points = _prompt_points(prompt_points)
     return {
         "PROMPT_POINTS_JSON": _render_prompt_points(points),
         "CURRENT_DATE": current_date.strftime("%-m/%-d/%Y"),
@@ -410,7 +425,8 @@ def build_agent(
     tools: list[Any] | None = None,
     hooks: list[object] | None = None,
 ) -> Agent:
-    system_prompt = build_system_prompt(prompt_points, current_date=current_date)
+    points = _prompt_points(prompt_points)
+    system_prompt = build_system_prompt(points, current_date=current_date)
     trace_attributes = {
         "tollchat.system_prompt_version": SYSTEM_PROMPT_VERSION,
         "tollchat.system_prompt_renderer_version": SYSTEM_PROMPT_RENDERER_VERSION,
@@ -418,7 +434,7 @@ def build_agent(
     }
     return Agent(
         model=_build_model() if model is None else cast(Any, model),
-        tools=_agent_tools() if tools is None else tools,
+        tools=agent_tools(points) if tools is None else tools,
         system_prompt=system_prompt,
         callback_handler=None,
         trace_attributes=trace_attributes,

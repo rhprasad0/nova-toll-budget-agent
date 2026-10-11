@@ -21,7 +21,12 @@ from typing import Any, Literal, cast
 
 from pydantic import Field, JsonValue
 from strands import Agent, tool  # pyright: ignore[reportUnknownVariableType]
-from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
+from strands.hooks import (
+    AfterToolCallEvent,
+    BeforeToolCallEvent,
+    HookProvider,
+    HookRegistry,
+)
 from strands.models import Model
 from strands.types.exceptions import MaxTokensReachedException
 from strands.types.tools import ToolContext, ToolSpec
@@ -34,7 +39,7 @@ from eval import corpus, golden
 from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.5.19"
+VERSION = "2.6.0"
 # Lost-usage calls tolerated per run; each is charged its full reservation (an upper bound).
 LOST_USAGE_STOP = 3
 CALIBRATION_KEYS = (
@@ -501,8 +506,28 @@ class RequestGuard(HookProvider):
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:  # noqa: ANN401
         registry.add_callback(BeforeToolCallEvent, self.before)
+        registry.add_callback(AfterToolCallEvent, self.after)
+
+    def after(self, event: AfterToolCallEvent) -> None:
+        """Record live resolver lookups as evidence; they are not pricing requests."""
+        if event.tool_use["name"] != golden.RESOLVER_TOOL:
+            return
+        ok = event.result.get("status") == "success"
+        content = cast(list[dict[str, Any]], event.result.get("content") or [{}])
+        self.attempt.turns[-1].calls.append(
+            golden.Call(
+                name=golden.RESOLVER_TOOL,
+                input=deepcopy(event.tool_use["input"]),
+                result=deepcopy(content[0]["json"])
+                if ok
+                else {"error": str(content[0].get("text", ""))},
+                is_error=not ok,
+            )
+        )
 
     def before(self, event: BeforeToolCallEvent) -> None:
+        if event.tool_use["name"] == golden.RESOLVER_TOOL:
+            return
         self.count += 1
         self.attempt.requested_tools.append(
             {
@@ -817,6 +842,20 @@ def replay_tools(
     return tools
 
 
+def agent_tools(points: list[dict[str, Any]], replay: list[Any]) -> list[Any]:
+    """The application's tools with the pricing tools swapped for frozen replay."""
+    frozen = {tool.tool_spec["name"]: tool for tool in replay}
+    return [
+        frozen.get(tool.tool_spec["name"], tool)
+        for tool in toll_agent.agent_tools(points)
+    ]
+
+
+def model_call_limit(case: golden.GoldenCase) -> int:
+    """One resolver lookup per user turn on top of the pricing budget."""
+    return 2 * case.actor.max_turns + case.max_tool_calls + 2
+
+
 def trajectory(case: golden.GoldenCase, turns: list[golden.Turn]) -> Session:
     traces: list[dict[str, Any]] = []
     for index, turn in enumerate(turns):
@@ -884,6 +923,7 @@ def judge_prompt(key: str) -> str:
         else DIAGNOSTIC_PROMPT + "\n" + RUBRICS[key]
     )
     prompt += "\nRejected calls are attempts, not successful pricing results. Their recorded error supports saying a tool rejected or could not complete a request; it does not support a price or prove the real road is unavailable."
+    prompt += "\nresolve_trip calls are deterministic lookups in this same catalog that the application may make before pricing. They are not pricing requests: they never appear in the permitted tool sequence and do not count toward the tool-request limit. Their returned labels and point IDs are evidence of which catalog places the application resolved from the user's words."
     prompt += "\nA confirmation proposal (52 weeks times the user's weekdays) is not consent and cannot be used in a call until accepted. Do not propose a salary midpoint or choose an endpoint of an income range: ask the user for their own single gross annual income."
     if key == "outcome":
         prompt += "\nJudge the declared terminal objective across all delivered requests. A clarification passes only when terminal clarification is the case objective; otherwise an unfinished task fails. An honest explanation of an agent-caused rejection does not complete the intended task. Expected tool unavailability can satisfy the requested answer through the applicable unavailable-result explanation, including within a multi-request answer objective; do not require nonexistent figures or treat a later separate request as a substitute. A contract-permitted discovery or validation result is not an agent-caused failure merely because the requested route is unavailable. If the delivered user declines the offered alternatives, assess whether the assistant accurately explains the limitation and respects that choice; do not require an unauthorized replacement estimate or use private-profile expectations to impose a different user choice. Still assess all other applicable obligations. Cancellation requires respecting the user's latest withdrawal. Do not infer success from honesty alone."
@@ -1130,7 +1170,9 @@ def mechanical_rules(
     failures: list[UnmetRequirement] = []
     for turn, response in enumerate(attempt.turns, 1):
         messages.append(response.user)
-        calls = [(call.name, call.input) for call in response.calls]
+        calls = [
+            (call.name, call.input) for call in golden.pricing_calls(response.calls)
+        ]
         rejected = [
             (call.name, call.input)
             for call in attempt.rejected_tools
@@ -1459,7 +1501,7 @@ def judge(
         if key != "grounding":
             reference += (
                 f"\nConversation limits: {case.actor.max_turns} delivered user turns, "
-                f"{case.max_tool_calls} tool requests; required follow-ups need at least "
+                f"{case.max_tool_calls} pricing tool requests; required follow-ups need at least "
                 f"{case.minimum_user_turns} user turns."
             )
             reference += (
@@ -1611,13 +1653,14 @@ def execute(
     try:
         attempt.failure_phase = "harness"
         messages: list[str] = []
+        points = json.loads((golden.ROOT / "prompt-points.json").read_text())
         with journal.lock:
             model = (
                 journal.model(
                     toll_agent._build_model(),
                     "agent",
                     attempt,
-                    case.actor.max_turns + case.max_tool_calls + 2,
+                    model_call_limit(case),
                     attempt.checks,
                 )
                 if agent_factory is None
@@ -1631,10 +1674,10 @@ def execute(
             if agent_factory
             else toll_agent.build_agent(
                 model=model,
-                tools=replay_tools(case, attempt, messages, journal),
-                prompt_points=json.loads(
-                    (golden.ROOT / "prompt-points.json").read_text()
+                tools=agent_tools(
+                    points, replay_tools(case, attempt, messages, journal)
                 ),
+                prompt_points=points,
                 current_date=case.frozen_time.date(),
                 hooks=[RequestGuard(case, attempt, journal)],
             )

@@ -58,7 +58,9 @@ def check(example: golden.Example, trial: int, journal: run.Journal) -> run.Atte
             )
             for call in turn.calls:
                 row.turns[-1].calls.append(
-                    replay.call(call.name, call.input, [t.user for t in row.turns])
+                    call
+                    if call.name == golden.RESOLVER_TOOL
+                    else replay.call(call.name, call.input, [t.user for t in row.turns])
                 )
             response = cast(ActorResponse, actor.act(turn.response).structured_output)
             row.actor_replies.append(

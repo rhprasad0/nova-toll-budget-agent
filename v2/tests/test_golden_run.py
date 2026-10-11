@@ -681,6 +681,8 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
     assert "Do not require an official operator" in seen[0]
     assert "Optional tool calls are not required" in seen[0]
     assert "Permitted tool sequence" not in seen[1]
+    assert all("resolve_trip calls are deterministic lookups" in r for r in seen)
+    assert "pricing tool requests" in seen[0] and "pricing tool requests" in seen[2]
     for reference in (seen[0], seen[2]):
         assert (
             "original-route call is permitted before any alternative selection"
@@ -926,7 +928,7 @@ def test_packaged_model_budget_is_scored_but_protocol_failure_is_not(
     from eval.artifact_agent import ArtifactAgent
 
     case = golden_case(1)
-    call_limit = case.actor.max_turns + case.max_tool_calls + 2
+    call_limit = run.model_call_limit(case)
     usage = {"inputTokens": 100, "outputTokens": 20}
     events: list[dict[str, Any]] = []
     for _ in range(call_limit):
@@ -2065,3 +2067,91 @@ def test_recorded_repetitions_control_summary_and_render(
             cases[1:],
             trials_per_case=repetitions,
         )
+
+
+def test_live_resolver_lookups_are_recorded_but_not_budgeted(
+    monkeypatch: pytest.MonkeyPatch, golden_test_data: None
+) -> None:
+    from strands.models.openai_responses import OpenAIResponsesModel
+
+    from agent_tools import resolve_trip
+
+    monkeypatch.setattr(
+        run.toll_agent, "load_prompt_points", lambda: pytest.fail("live prompt points")
+    )
+    case = golden_case(1)
+    fixture = golden.load_fixture(case.steps[0].fixture)
+    points = json.loads((golden.ROOT / "prompt-points.json").read_text())
+    labels = {point["point_id"]: point["label"] for point in points}
+    scripted_calls: list[tuple[str, dict[str, Any]]] = [
+        (
+            "resolve_trip",
+            {
+                "origin": labels[str(fixture.input["origin_point_id"])],
+                "destination": labels[str(fixture.input["destination_point_id"])],
+                "facility": "greenway",
+            },
+        ),
+        (fixture.tool, dict(fixture.input)),
+    ]
+    row = run.Attempt(id="resolver", case_id=case.id, trial=1)
+    messages: list[str] = []
+    model = OpenAIResponsesModel(model_id="offline", client_args={"api_key": "offline"})
+    seen = 0
+
+    async def scripted(
+        history: list[Any], *args: object, **kwargs: object
+    ) -> AsyncIterator[dict[str, Any]]:
+        nonlocal seen
+        seen += 1
+        yield {"messageStart": {"role": "assistant"}}
+        if seen <= len(scripted_calls):
+            name, arguments = scripted_calls[seen - 1]
+            yield {
+                "contentBlockStart": {
+                    "start": {"toolUse": {"toolUseId": str(seen), "name": name}}
+                }
+            }
+            yield {
+                "contentBlockDelta": {
+                    "delta": {"toolUse": {"input": json.dumps(arguments)}}
+                }
+            }
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "tool_use"}}
+        else:
+            yield {"contentBlockDelta": {"delta": {"text": "$5.80 fixed toll."}}}
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "end_turn"}}
+        yield {
+            "metadata": {
+                "usage": {"inputTokens": 100, "outputTokens": 20, "totalTokens": 120},
+                "metrics": {"latencyMs": 1},
+            }
+        }
+
+    cast(Any, model).stream = scripted
+    agent = run.toll_agent.build_agent(
+        model=model,
+        tools=[
+            *run.replay_tools(case, row, messages),
+            resolve_trip.make_resolve_trip_tool(points),
+        ],
+        current_date=case.frozen_time.date(),
+        prompt_points=points,
+        hooks=[run.RequestGuard(case, row)],
+    )
+    messages.append(case.prompt)
+    row.turns.append(golden.Turn(user=case.prompt, response="pending", calls=[]))
+    row.turns[-1].response = str(agent(case.prompt))
+    assert [call.name for call in row.turns[0].calls] == ["resolve_trip", fixture.tool]
+    resolved = row.turns[0].calls[0].result
+    assert resolved["status"] == "resolved"
+    assert resolved["origin_point_id"] == fixture.input["origin_point_id"]
+    assert resolved["destination_point_id"] == fixture.input["destination_point_id"]
+    assert len(row.requested_tools) == 1 and not row.checks and not row.rejected_tools
+    assert golden.grade_assertions(case, row.turns) == []
+    assert run.mechanical_rules(case, row) == []
+    assert (
+        run.model_call_limit(case) == 2 * case.actor.max_turns + case.max_tool_calls + 2
+    )

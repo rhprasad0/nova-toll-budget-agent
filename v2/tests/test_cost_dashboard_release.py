@@ -158,7 +158,7 @@ def test_reviewed_billing_diagnostics_development_transition() -> None:
     reviewed = json.loads(
         (ROOT / "v2/scripts/shared-package-compatibility.json").read_text()
     )
-    baseline = "8ebb91189dac5b50cdd1c5d2c80b189305833286"
+    baseline = "af7462dd08c36a3c57ca9223f38eb62ef4a88ed0"
     assert reviewed["development_baseline"] == baseline
     expected = shared_packages.evidence(
         "development", gate.ACCOUNTS["development"], "a" * 40, reviewed["packages"]

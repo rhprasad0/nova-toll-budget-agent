@@ -730,3 +730,75 @@ def test_private_evaluation_still_obeys_guardrails() -> None:
         {"prompt": "Blocked", "evaluation_marker": EVALUATION_MARKER},
     )
     assert events == [{"type": "answer", "text": BLOCKED_MESSAGE, "blocked": True}]
+
+
+def _pricing_messages() -> list[dict[str, Any]]:
+    return [
+        {
+            "content": [
+                {
+                    "toolUse": {
+                        "toolUseId": "tool-1",
+                        "name": "get_current_toll_price",
+                        "input": {
+                            "origin_point_id": "greenway:1:entry:EB",
+                            "destination_point_id": "greenway:28:exit:EB",
+                            "pricing_profile": {
+                                "vehicle_class": "two_axle_passenger",
+                                "payment_method": "e_zpass",
+                                "transponder_mode": "toll",
+                            },
+                        },
+                    }
+                }
+            ]
+        },
+        {
+            "content": [
+                {
+                    "toolResult": {
+                        "toolUseId": "tool-1",
+                        "status": "success",
+                        "content": [{"json": {"total_usd": "4.25"}}],
+                    }
+                }
+            ]
+        },
+    ]
+
+
+def test_canary_and_evaluation_ignore_resolver_lookups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TOLLCHAT_RELEASE_ID", "test-release")
+    resolver_use = {
+        "toolUse": {
+            "toolUseId": "resolve-1",
+            "name": "resolve_trip",
+            "input": {"origin": "Leesburg Bypass", "destination": "Route 28"},
+        }
+    }
+    resolver_error = {
+        "toolResult": {
+            "toolUseId": "resolve-1",
+            "status": "error",
+            "content": [{"text": "This exact tool call already ran."}],
+        }
+    }
+    messages: list[object] = [
+        {"content": [resolver_use]},
+        {"content": [resolver_error]},
+        *_pricing_messages(),
+    ]
+    canary = _canary_event(messages)
+    assert canary["call_count"] == 1 and canary["success"] is True
+    evaluation = _evaluation_event(
+        messages,
+        {
+            "model_id": "m",
+            "params": {"reasoning": {"effort": "low"}, "max_output_tokens": 1},
+        },
+        "session",
+    )
+    calls = cast(list[dict[str, Any]], evaluation["calls"])
+    assert [call["name"] for call in calls] == ["get_current_toll_price"]
