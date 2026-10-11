@@ -1,6 +1,6 @@
 {
   "status": "approved",
-  "corpus_sha256": "fcee407dca7976b294728167e35cb0de081bca467795497edcfd071bd66ca01a",
+  "corpus_sha256": "2a4c73775ebee4f56f1be016db407734d285cf8b653e2568452cf75b555f94ed",
   "reviewer": "Claude",
   "evidence": "Approved by Claude at Ryan's request on 2026-10-10. Inputs are byte-identical to approved 5.1.14; only the version and protected source identities changed for harness 2.5.19 (bounded lost-usage accounting) and system prompt version 2.3.16."
 }

@@ -132,7 +132,8 @@ Chain preparation from the last accounted run using the user-authorized cumulati
 ceiling. Admit each complete run only when its estimate with headroom fits, reserving
 the agreed search and confirmation budget. Record amounts and decisions in the
 private ledger and append-only experiment journal.
-Stop on unaccounted usage, infrastructure failure, unresolved material grading
+Stop on unaccounted usage, infrastructure failures other than bounded lost
+usage, unresolved material grading
 ambiguity or insufficient budget. Do not repeat runs to obtain passing results. Substantial measurement repairs belong in separate PRs. Changes to grading,
 simulation or execution semantics require new combined calibration and a fresh
 baseline. Changed cases require input review, matching actor checks and a fresh

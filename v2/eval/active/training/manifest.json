@@ -71,13 +71,13 @@
     "v2/agent_tools/currency.py": "09a6325499e46ef0eca57ac3dd2cebedd460cf6937ceb48860c58eb1ea238710",
     "v2/eval/simulated.py": "846d1c477cdba987a12cff3360c1eafdff7afa5d709062530404e4d8f7a9e6c4",
     "v2/eval/run_evaluation.py": "b4a9abb3ccd913d747b4227466d3138af0b5b681c89438f5c50406f2473da18b",
-    "v2/eval/golden_run.py": "333e1d6be8637e48f657203c0ea103c7b81d6dc49794c500b4c153def0699b30",
-    "v2/eval/golden_actor_check.py": "6551254f9a1e421d1d830f450f55085165f5a3f2bb09137d6f3b016b05ed658e",
+    "v2/eval/golden_run.py": "552e196fafdbd8fd94fae15aaeec3fc840d5aa9a230018aea143ea82137f0334",
+    "v2/eval/golden_actor_check.py": "8ad4de1748fa40bbc1955bf9bced47c761c7521c758d88d66bfd305ce04d1882",
     "v2/eval/artifact_agent.py": "7e3b9d7d058a655fe848a3875aecea33ce1aa94f4aa45056e85ce4f0200b0f6b",
     "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
     "v2/agent_tools/current_price_domain.py": "028d36addc4cf35926113f09fc8f7fa203ce15a2fa04882e8979fb41f4d02e12",
     "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
-  "corpus_sha256": "64da7f4801ca1492e32a9f0e4d580d4e7d7a1cc1f371c5f4ed701f785b0f138b"
+  "corpus_sha256": "5497f993a8704179f38bc2023e7224ec4113c7b59e6df92eee86fb8094abb2e9"
 }

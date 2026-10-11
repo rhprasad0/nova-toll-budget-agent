@@ -978,6 +978,9 @@ def test_packaged_model_budget_is_scored_but_protocol_failure_is_not(
         assert result.error == "artifact_unsettled_call"
         assert journal.unknown_usage and not result.measurements[-1].complete
         assert "model_call_budget" not in result.checks
+        # A bounded lost-usage call leaves only this trial unscored.
+        assert not journal.stop_requested
+        journal.finish(result, "agent", journal.reserve(result, "agent", 100), None, 1)
     else:
         assert result.status == "scored" and result.failure_class == "budget"
         assert result.error is None and "model_call_budget" in result.checks
@@ -1704,6 +1707,17 @@ def test_fixed_pass_cubed_preserves_historical_denominator() -> None:
     assert run.summary(rows[:-1], cases)["overall_pass_rate"] == 5 / 6
     with pytest.raises(ValueError, match="duplicate"):
         run.summary([*rows, rows[0]], cases)
+
+
+def test_only_bounded_lost_usage_keeps_an_infrastructure_run_going() -> None:
+    row = run.Attempt(id="x", case_id="x", trial=1, status="infrastructure")
+    assert run.stops_run(row)  # failed before any model call
+    row.measurements.append(measurement())
+    assert run.stops_run(row)  # e.g. a missing judge verdict with full usage
+    row.measurements.append(measurement().model_copy(update={"complete": False}))
+    assert not run.stops_run(row)
+    row.status = "scored"
+    assert not run.stops_run(row.model_copy(update={"measurements": []}))
 
 
 def test_prior_accounting_accepts_only_bounded_lost_usage(tmp_path: Path) -> None:

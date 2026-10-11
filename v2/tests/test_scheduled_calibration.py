@@ -62,9 +62,9 @@ def test_model_accounts_usage_and_stops_before_another_paid_call(
 
     asyncio.run(consume())
     assert calls == [{"tool_choice": {"auto": {}}}]  # Preserve scheduled transport.
-    assert journal.unknown_usage is not known_usage
-    if known_usage:
-        journal.limit = journal.spent
+    # Scheduled calibration stops between rows on any lost usage (its own guard).
+    assert bool(journal.unknown_usage) is not known_usage
+    journal.limit = journal.spent
     with pytest.raises(StopRun, match="spend_budget_or_unknown_usage"):
         asyncio.run(consume())
     assert len(calls) == 1

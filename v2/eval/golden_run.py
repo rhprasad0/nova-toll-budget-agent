@@ -749,7 +749,7 @@ class Journal:
                 "event": "model_finished",
                 "attempt": attempt.id,
                 **item.model_dump(),
-                **({"error_type": error} if error else {}),
+                **({"error_type": error} if error and not complete else {}),
             }
         )
 
@@ -1572,6 +1572,14 @@ def failure_class(attempt: Attempt) -> str | None:
     return None
 
 
+def stops_run(attempt: Attempt) -> bool:
+    """Infrastructure failures stop the run unless a lost-usage call caused them."""
+    # Lost-usage calls are charged their reservation; the journal stops after LOST_USAGE_STOP.
+    return attempt.status == "infrastructure" and all(
+        m.complete for m in attempt.measurements
+    )
+
+
 def finish_assessment(case: golden.GoldenCase, attempt: Attempt) -> None:
     """Keep invalid measurements outside application scores, preserving evidence."""
     if not attempt.measurements or any(not m.complete for m in attempt.measurements):
@@ -1737,7 +1745,7 @@ def execute(
             agent.close()
     attempt.seconds = time.monotonic() - started
     attempt.failure_class = failure_class(attempt)
-    if attempt.status == "infrastructure":
+    if stops_run(attempt):
         with journal.lock:
             journal.stop_requested = True
     journal.append({"event": "attempt_finished", **attempt.model_dump()})
@@ -1851,7 +1859,7 @@ def identity(
             "evaluator_tool_choice": "required",
             "timeout_seconds": 60,
             "judge_timeout_seconds": 180,
-            "unknown_usage": "charge the full reservation, leave that trial unscored, stop after 3 such calls",
+            "unknown_usage": f"charge the full reservation, leave that trial unscored, stop after {LOST_USAGE_STOP} such calls",
             "evaluator_model_config": deepcopy(JUDGE_MODEL_PARAMS),
             "actor_model_config": deepcopy(EVAL_MODEL_PARAMS),
             "cache_adapter_sha256": golden.digest(
@@ -2099,8 +2107,9 @@ def calibrate(
         except Exception as error:
             attempt.status = "infrastructure"
             attempt.error = error_code(error)
-            with journal.lock:
-                journal.stop_requested = True
+            if stops_run(attempt):
+                with journal.lock:
+                    journal.stop_requested = True
         if (
             attempt.actor_validity is not None
             and attempt.actor_validity.status == "valid"
