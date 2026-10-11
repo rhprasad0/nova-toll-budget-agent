@@ -195,9 +195,12 @@ def test_usage_and_budget_stop_before_further_paid_calls(tmp_path: Path) -> None
     native.stream = missing_usage
     journal = run.Journal(tmp_path / "unknown", 2)
     row = run.Attempt(id="one", case_id="one", trial=1)
-    model = journal.model(native, "agent", row, 3)
+    model = journal.model(native, "agent", row, run.LOST_USAGE_STOP + 1)
     asyncio.run(consume(model))
+    # The benchmark loop stops between conversations on any lost usage.
     assert journal.unknown_usage and not row.measurements[0].complete
+    for _ in range(run.LOST_USAGE_STOP - 1):
+        asyncio.run(consume(model))
     with pytest.raises(run.StopRun):
         asyncio.run(consume(model))
     budget = run.Journal(tmp_path / "budget", 0.000001)

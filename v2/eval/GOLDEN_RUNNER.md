@@ -1,7 +1,7 @@
 # Running the frozen training split
 
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
-Training, shadow and holdout corpus 5.2.1 run under harness 2.5.18.
+Training, shadow and holdout corpus 5.2.2 run under harness 2.5.19.
 Training application runs default to one trial per case; use `--trials-per-case 3`
 only on Ryan's explicit instruction. Shadow runs are manual and outside search.
 Actors have up to five delivered user turns. The application, actor, judge
@@ -51,7 +51,7 @@ require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-The local training contract / harness 2.5.18 uses `literal-input-prose-v1`. The corpus hashes
+The local training contract / harness 2.5.19 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -132,7 +132,8 @@ Chain preparation from the last accounted run using the user-authorized cumulati
 ceiling. Admit each complete run only when its estimate with headroom fits, reserving
 the agreed search and confirmation budget. Record amounts and decisions in the
 private ledger and append-only experiment journal.
-Stop on unknown usage, infrastructure failure, unresolved material grading
+Stop on unaccounted usage, infrastructure failures other than bounded lost
+usage, unresolved material grading
 ambiguity or insufficient budget. Do not repeat runs to obtain passing results. Substantial measurement repairs belong in separate PRs. Changes to grading,
 simulation or execution semantics require new combined calibration and a fresh
 baseline. Changed cases require input review, matching actor checks and a fresh
@@ -210,8 +211,11 @@ uv run python -m eval.golden_actor_check \
 ## Evidence and reporting
 
 Each private run retains `manifest.json`, append-only `events.jsonl`, `report.json`,
-and `report.md`. All started calls and usage contribute to cost; unknown usage
-stops further paid work. Reproduce a report offline with:
+and `report.md`. All started calls contribute to cost. A call that returns no
+usage is charged its full reservation (an upper bound on its cost), records its
+error type and duration, and leaves its trial unscored; the run stops after
+three such calls. Later runs may chain from it, but not from a run with an
+unclosed call. Reproduce a report offline with:
 
 ```bash
 uv run python -m eval.golden_run render --output eval/private/baseline-N
@@ -239,13 +243,6 @@ and never calibrates again. Use `--calibration eval/harness-approval.json` with 
 split; the external reviewed calibration directory remains accepted too.
 
 ## Uncommitted corpus preparation
-
-If an all-split preparation calibration loses provider usage, its external
-`usage-ceiling.json` may bind the retained calls to their full recorded
-reservations. Only explicit preparation may continue from that receipt. This
-accounts for the maximum cost without inventing token counts: the original run
-stays incomplete and cannot qualify as a confirmation round. Ordinary runs still
-require complete prior usage.
 
 Combined all-split `calibrate` and scripted `eval.golden_actor_check` accept
 `--allow-uncommitted-preparation` when preparation is explicitly authorized.
@@ -346,7 +343,7 @@ new series. Repeated aggregate feedback can still influence tuning, so this is a
 hidden diagnostic, not fully blind accuracy or a production gate.
 The 5.1.14 holdout and its 5.2.0 repair were read case by case on October 10,
 2026 ([journal](journal/2026-10-05.md)). Do not use 5.1.14 for candidate
-checkpoints. Checkpoints on 5.2.x (now 5.2.1) give descriptive aggregate feedback, not blind
+checkpoints. Checkpoints on 5.2.x (now 5.2.2) give descriptive aggregate feedback, not blind
 evidence, until a fresh holdout replaces it.
 
 Never inspect external logs to diagnose a hidden measurement failure; have the

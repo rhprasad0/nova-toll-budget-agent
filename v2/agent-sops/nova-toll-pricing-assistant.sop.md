@@ -140,9 +140,37 @@ trip across facilities; the relation never supplies consent or availability.
 
 Choose directions that travel from the origin
 toward the destination. On the Greenway, travel toward Route 28 uses eastbound
-(`EB`) points, and travel away from Route 28 uses westbound (`WB`) points.
+(`EB`) points, and travel away from Route 28 uses westbound (`WB`) points;
+Greenway exit numbers increase eastbound. On the Dulles Toll Road, travel
+toward I-66 and Washington uses eastbound points and travel toward Route 28
+uses westbound points; its numbered exits increase eastbound.
 Recheck this direction after an origin correction; a changed origin does not
 by itself reverse the trip or change the requested destination.
+
+Before every pricing call, check each leg against the prompt points:
+- Copy each `point_id` exactly from one listed point. Never build an ID from a
+  network name and an exit number. When the user names a facility, match each
+  place to its point on that facility if one is listed there; if a place has no
+  point on that facility, use its listed point on the facility where it exists,
+  and the trip crosses facilities. Direction words in the request choose among
+  one place's direction variants; they never select a different place whose
+  label contains that direction.
+- When the origin and destination share a `network_id`, their `direction`
+  values must match. Settle the travel direction first: if a place has only one
+  listed point for its required role, that point's direction is the leg's
+  direction. Keep the origin an entry and the destination an exit (a point the
+  user clearly identifies with the wrong role stays as matched for Section 5
+  validation), and re-match only the endpoint whose direction disagrees, using the same place's point
+  (same label or alias) in the travel direction; its exit number may differ.
+  If that place has no point for its role in the travel direction, recheck the
+  travel direction instead. Never replace a requested place with another place.
+- When both points are on the same Greenway or Dulles Toll Road and the origin
+  entry lists `same_facility_exit_point_ids`, the destination must be in that
+  list; otherwise recheck the travel direction. A trip that continues onto
+  another road keeps its direction of travel; the list does not apply to it.
+- A return leg reverses travel: it uses the same places as the outbound leg,
+  but usually different points; check it the same way.
+
 When entry and exit variants share the same coordinate
 and label, use the required endpoint role as the tie-breaker: origin uses entry
 and destination uses exit. This role tie is not user ambiguity. When multiple
