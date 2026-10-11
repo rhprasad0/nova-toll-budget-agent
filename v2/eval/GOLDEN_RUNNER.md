@@ -1,7 +1,7 @@
 # Running the frozen training split
 
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
-Training, shadow and holdout corpus 5.2.4 run under harness 2.6.0.
+Training, shadow and holdout corpus 5.2.12 run under harness 2.6.0.
 Training application runs default to one trial per case; use `--trials-per-case 3`
 only on Ryan's explicit instruction. Shadow runs are manual and outside search.
 Actors have up to five delivered user turns. The application, actor, judge

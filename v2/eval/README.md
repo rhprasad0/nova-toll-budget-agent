@@ -1,7 +1,7 @@
 # TollChat evaluation
 
-**Locally authored suite:** 50 training and 10 shadow cases (5.2.4) are
-active, with 25 holdout cases (5.2.4) stored externally. Harness 2.6.0 has an
+**Locally authored suite:** 50 training and 10 shadow cases (5.2.12) are
+active, with 25 holdout cases (5.2.12) stored externally. Harness 2.6.0 has an
 approved aggregate calibration receipt. The 100-case development corpus
 3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
 Its recorded scores and reviews remain historical; it cannot run or seed fresh inputs.
