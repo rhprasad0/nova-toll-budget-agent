@@ -37,7 +37,7 @@ Each row links a claim to its implementation and a way to inspect or verify it. 
 
 ## Architecture and safety
 
-The agent resolves intent and helps users choose supported entrances and exits. It can call exactly two tools. The tools validate directed routes, apply schedules and freshness rules, and return pricing components and totals. The model cannot submit its own route plan or pricing components.
+The agent resolves intent and helps users choose supported entrances and exits. It can call exactly three tools: a deterministic resolver that maps the places a user names to catalog entry and exit points over the route graph, and two pricing tools. The pricing tools validate directed routes, apply schedules and freshness rules, and return pricing components and totals. The model cannot submit its own route plan or pricing components.
 
 ```mermaid
 flowchart LR
