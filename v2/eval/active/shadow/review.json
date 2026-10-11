@@ -1,6 +1,6 @@
 {
   "status": "approved",
-  "corpus_sha256": "a72f5ba426ea593a10492ce9909ef2356f2981f9f546e7bccf3ad90bda80eb22",
+  "corpus_sha256": "6e485f083520538047fe0ed51ca0b3dbec4db5db565212e4b53683f434763efd",
   "reviewer": "Claude",
-  "evidence": "Approved by Claude at Ryan's request on 2026-10-11. Inputs are byte-identical to approved 5.2.6; only the version and protected source identities changed: after adversarial review, resolve_trip matches aliases and whole words in one tier, drops trailing direction words, describes wrong-role points and bounds the not-found echo; toll_agent.py renders system prompt 2.4.4. 5.2.7 through 5.2.10 were superseded before shipping."
+  "evidence": "Approved by Claude at Ryan's request on 2026-10-11. Inputs are byte-identical to approved 5.2.6; only the version and protected source identities changed: resolve_trip tries the exact catalog label on the whole catalog before looser matches on a named road (confirmation-run regression fix). 5.2.7 through 5.2.11 were superseded before shipping."
 }

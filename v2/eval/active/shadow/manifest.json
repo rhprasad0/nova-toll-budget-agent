@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "version": "5.2.11",
+  "version": "5.2.12",
   "evaluation_scope": "shadow",
   "case_count": 10,
   "trials_per_case": 1,
@@ -38,8 +38,8 @@
     "v2/agent_tools/current_price_domain.py": "028d36addc4cf35926113f09fc8f7fa203ce15a2fa04882e8979fb41f4d02e12",
     "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e",
-    "v2/agent_tools/resolve_trip.py": "86885c7031b152a185c8d5c8de5d3dc7ba00f18ebfbae459624791b1981d1e9f",
+    "v2/agent_tools/resolve_trip.py": "fc8130c5fd123e445bc49766ea30b60a55eeb134face9dfa76c0b64bc385ef77",
     "v2/agent_tools/route_pairs.py": "4e480c120eec17eac1ccc088c6ed6096b2b0ecab7f2f6846c22d227976522907"
   },
-  "corpus_sha256": "a72f5ba426ea593a10492ce9909ef2356f2981f9f546e7bccf3ad90bda80eb22"
+  "corpus_sha256": "6e485f083520538047fe0ed51ca0b3dbec4db5db565212e4b53683f434763efd"
 }

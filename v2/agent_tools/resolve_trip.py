@@ -126,40 +126,42 @@ class _Catalog:
             for point in self.points
         }
 
-    def _search(self, points: list[_Point], text: str) -> list[_Point]:
-        """Exact label first; otherwise an exact alias or every word of the text.
+    def _exact(self, points: list[_Point], text: str) -> list[_Point]:
+        loose = _loose(text)
+        return [p for p in points if loose in self.labels[p.point_id]]
 
-        Approach suffixes and trailing direction words name a place or a variant,
-        never a different place, so they are dropped and the graph picks the variant.
-        """
-        text = _APPROACH.sub("", text)
-        loose, query = _loose(text), _normalize(text)
+    def _words(self, points: list[_Point], text: str) -> list[_Point]:
+        """An exact alias, or every word of the text inside a label or alias."""
+        query = _normalize(text)
         tokens = set(query.split())
         if not tokens:
             return []
-        by_label = [p for p in points if loose in self.labels[p.point_id]]
-        if by_label:
-            return by_label
-        found = [
+        return [
             p
             for p in points
             if query in self.names[p.point_id]
             or any(tokens <= set(n.split()) for n in self.names[p.point_id])
         ]
-        if found:
-            return found
-        trimmed = _TRAILING_DIRECTION.sub("", text)
-        return self._search(points, trimmed) if trimmed != text else []
 
     def matches(self, text: str, facility: Facility | None) -> list[_Point]:
-        # A named road is searched first; a place absent from it crosses facilities.
+        """Exact catalog label first, then aliases and whole words.
+
+        A named road is searched before the whole catalog at each tier, so a
+        place absent from it crosses facilities. Approach suffixes and trailing
+        direction words name a place or a variant, never a different place: they
+        are dropped and the graph picks the variant.
+        """
+        text = _APPROACH.sub("", text)
+        scopes = [self.points]
         if facility:
-            found = self._search(
-                [point for point in self.points if point.network_id == facility], text
-            )
-            if found:
-                return found
-        return self._search(self.points, text)
+            scopes.insert(0, [p for p in self.points if p.network_id == facility])
+        for tier in (self._exact, self._words):
+            for points in scopes:
+                found = tier(points, text)
+                if found:
+                    return found
+        trimmed = _TRAILING_DIRECTION.sub("", text)
+        return self.matches(trimmed, facility) if trimmed != text else []
 
 
 def _describe(point: _Point) -> dict[str, str | None]:
