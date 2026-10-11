@@ -108,7 +108,7 @@ def test_resolver_contract_matches_models_and_manifest() -> None:
     }
     assert resolve_trip.TOOL_CONTRACT == {"toolSpec": resolve_trip.TOOL_SPEC}
     manifest = _manifest()["resolve_trip"]
-    assert manifest["current"] == "1.0.0"
+    assert manifest["current"] == "1.1.0"
     assert (
         _digest(resolve_trip.TOOL_CONTRACT) == manifest["releases"][manifest["current"]]
     )

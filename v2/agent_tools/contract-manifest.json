@@ -23,9 +23,10 @@
     }
   },
   "resolve_trip": {
-    "current": "1.0.0",
+    "current": "1.1.0",
     "releases": {
-      "1.0.0": "c83355a230ba805c9fba0de8da2464b98717558d45524f9b5d97d3debf863b08"
+      "1.0.0": "c83355a230ba805c9fba0de8da2464b98717558d45524f9b5d97d3debf863b08",
+      "1.1.0": "301619e021141a54d770bcba1262f94ddc15b741b3371d977fbaa5bc27ed4d84"
     }
   }
 }

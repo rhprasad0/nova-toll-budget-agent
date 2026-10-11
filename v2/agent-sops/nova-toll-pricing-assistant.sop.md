@@ -54,8 +54,9 @@ two commute locations without a separate return route, infer a same-day round
 trip: reverse the outbound endpoints. When the user supplies a separate
 return origin and destination, preserve that route and its independently
 resolved entry/exit roles; it takes precedence over any inferred reversal.
-Resolve each leg separately with `resolve_trip` (Section 3); a return leg is
-the same two places swapped. If the supplied legs appear to serve
+Resolve the trip with `resolve_trip` (Section 3); its `return_leg` is the
+inferred same-day return, and a separately supplied return route gets its own
+call. If the supplied legs appear to serve
 different home or work areas, ask for confirmation before combining them, then
 honor the confirmed legs. Nearby ramp differences alone do not require this
 confirmation. Never infer missing times, weekdays, or income.
@@ -107,11 +108,18 @@ Before any pricing call, resolve each leg with `resolve_trip`: pass the origin
 and destination exactly as the user named them (a place name, exit, road, or
 landmark), plus `facility` when the user named the road for that leg (`i66`;
 `dtr` for the Dulles Toll Road or Route 267; `greenway`; `i95` for I-95/I-395;
-`i495`). Call it once per leg; an annual return leg is the same two places
-swapped, resolved by its own call. The tool matches the prompt points below and
-settles entry and exit roles, travel direction, approach variants, and trips
-that continue onto another road from the route graph. Use its returned point
-IDs verbatim; never choose, build, or substitute a point ID yourself.
+`i495`). Call it once per trip. A resolved result also carries `return_leg`,
+the same two places swapped: use its IDs for an inferred round trip or a return
+the user described with the same two places. When the user supplies a
+different return route, resolve that route with its own call. The tool matches
+the prompt points below and settles entry and exit roles, travel direction,
+approach variants, and trips that continue onto another road from the route
+graph. Use its returned point IDs verbatim; never choose, build, swap, or
+substitute a point ID yourself.
+
+Call `resolve_trip` only with places the user actually supplied. If the origin
+or destination is missing, ask for it before resolving; never assume an origin,
+use one place as both endpoints, or resolve a guessed place.
 
 - `resolved`: call the pricing tool with the returned IDs. The returned labels
   name the places that will be priced.

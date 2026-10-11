@@ -238,7 +238,7 @@ def test_system_prompt_matches_its_versioned_contract() -> None:
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
 
-    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.4.0" == prompt_contract["current"]
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.4.1" == prompt_contract["current"]
     assert (
         toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
         == "1.0.2"
@@ -264,8 +264,8 @@ def test_system_prompt_matches_its_versioned_contract() -> None:
 def test_system_prompt_manifest_accepts_one_monotonic_release() -> None:
     previous = _contract_manifest()
     current = copy.deepcopy(previous)
-    current["system_prompt"]["current"] = "2.4.1"
-    current["system_prompt"]["releases"]["2.4.1"] = "a" * 64
+    current["system_prompt"]["current"] = "2.9.1"
+    current["system_prompt"]["releases"]["2.9.1"] = "a" * 64
 
     version_check.validate_manifest_update(previous, current)
     version_check.validate_manifest_update({}, previous)
@@ -333,8 +333,8 @@ def test_system_prompt_manifest_rejects_rewrites_and_removals() -> None:
 def test_system_prompt_manifest_accepts_multiple_forward_releases() -> None:
     previous = _contract_manifest()
     advanced = copy.deepcopy(previous)
-    advanced["system_prompt"]["current"] = "2.5.0"
-    advanced["system_prompt"]["releases"].update({"2.4.1": "b" * 64, "2.5.0": "c" * 64})
+    advanced["system_prompt"]["current"] = "2.9.1"
+    advanced["system_prompt"]["releases"].update({"2.9.0": "b" * 64, "2.9.1": "c" * 64})
     version_check.validate_manifest_update(previous, advanced)
 
 

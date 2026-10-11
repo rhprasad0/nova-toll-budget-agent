@@ -67,9 +67,11 @@ TOOL_SPEC: dict[str, Any] = {
         "named it, plus the road the user named for the leg if any. The resolver "
         "matches catalog labels and aliases and settles entry/exit roles, travel "
         "direction, approach variants and cross-facility trips from the route "
-        "graph. Call it once per leg; a return leg is the same places swapped. "
-        "Use the returned IDs verbatim. It returns ambiguous candidates instead "
-        "of guessing, and reports wrong-role matches for route validation."
+        "graph. Call it once per trip with places the user actually supplied: a "
+        "resolved result also carries return_leg, the same two places swapped, "
+        "for a round trip. Use the returned IDs verbatim. It returns ambiguous "
+        "candidates instead of guessing, and reports wrong-role matches for "
+        "route validation."
     ),
     "inputSchema": {"json": _INPUT_SCHEMA},
 }
@@ -144,9 +146,18 @@ def resolve(
     destination: str,
     facility: Facility | None = None,
 ) -> dict[str, Any]:
-    """Resolve one leg; see TOOL_SPEC for the contract."""
+    """Resolve a trip; a resolved leg also carries its swapped return leg."""
     if not isinstance(catalog, _Catalog):
         catalog = _Catalog(catalog)
+    result = _leg(catalog, origin, destination, facility)
+    if result["status"] == "resolved":
+        result["return_leg"] = _leg(catalog, destination, origin, facility)
+    return result
+
+
+def _leg(
+    catalog: _Catalog, origin: str, destination: str, facility: Facility | None
+) -> dict[str, Any]:
     origin_matches = catalog.matches(origin, facility)
     destination_matches = catalog.matches(destination, facility)
     missing = [

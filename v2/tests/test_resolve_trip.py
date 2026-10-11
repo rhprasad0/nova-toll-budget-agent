@@ -86,6 +86,36 @@ def test_resolves_one_point_pair(
     assert result["status"] == "resolved", result
     assert (result["origin_point_id"], result["destination_point_id"]) == expected
     assert result["origin_label"] and result["destination_label"]
+    back = result["return_leg"]
+    if back["status"] == "resolved":
+        assert back["origin_label"] == result["destination_label"]
+        assert "return_leg" not in back
+
+
+def test_return_leg_is_the_swapped_trip() -> None:
+    result = resolve_trip.resolve(
+        CATALOG,
+        "US-1",
+        "Seminary Road (from I-95/I-395 northbound or I-495 northbound)",
+    )
+    assert (result["origin_point_id"], result["destination_point_id"]) == (
+        "i95:210NO",
+        "i95:222ND",
+    )
+    back = result["return_leg"]
+    assert (back["status"], back["origin_point_id"], back["destination_point_id"]) == (
+        "resolved",
+        "i95:226SO",
+        "i95:210SD",
+    )
+    one_way = resolve_trip.resolve(CATALOG, "Sycamore St", "Fairfax Drive", "i66")
+    assert one_way["return_leg"]["status"] == "resolved"
+    assert (
+        resolve_trip.resolve(CATALOG, "Route 7 - Leesburg Pike", "Sycamore St", "i66")[
+            "status"
+        ]
+        == "no_route"
+    )
 
 
 def test_ambiguity_not_found_wrong_role_and_no_route_are_reported() -> None:
