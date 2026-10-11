@@ -100,6 +100,20 @@ def test_ballpark_runtime_contract_matches_models_and_manifest() -> None:
     assert _digest(expected) == manifest["releases"][manifest["current"]]
 
 
+def test_resolver_contract_matches_models_and_manifest() -> None:
+    from agent_tools import resolve_trip
+
+    assert resolve_trip.TOOL_SPEC["inputSchema"] == {
+        "json": resolve_trip._ResolveRequest.model_json_schema(mode="validation")
+    }
+    assert resolve_trip.TOOL_CONTRACT == {"toolSpec": resolve_trip.TOOL_SPEC}
+    manifest = _manifest()["resolve_trip"]
+    assert manifest["current"] == "1.0.0"
+    assert (
+        _digest(resolve_trip.TOOL_CONTRACT) == manifest["releases"][manifest["current"]]
+    )
+
+
 def test_manifest_accepts_new_contract_with_preserved_one_dot_zero_release() -> None:
     current = _manifest()
     previous = copy.deepcopy(current)

@@ -30,6 +30,7 @@ from strands.types.content import Messages
 from strands.types.streaming import StreamEvent
 from strands.types.tools import ToolChoice, ToolSpec
 
+from agent_tools import resolve_trip
 from agent_tools import validate_toll_route as route_validation
 from agent_tools.get_annual_toll_ballpark import get_annual_toll_ballpark
 from agent_tools.get_current_toll_price import get_current_toll_price
@@ -38,7 +39,7 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _PROMPT_POINTS_SQL = "SELECT oracle.get_toll_route_prompt_points() AS points"
-SYSTEM_PROMPT_VERSION = "2.3.16"
+SYSTEM_PROMPT_VERSION = "2.4.0"
 SYSTEM_PROMPT_RENDERER_VERSION = "1.0.2"
 _EASTERN = ZoneInfo("America/New_York")
 _DUPLICATE_TOOL_STATE_KEY = "tollchat_v2_duplicate_tool_calls"
@@ -51,6 +52,7 @@ _DUPLICATE_TOOL_MESSAGE = (
 _TOOL_LABELS = {
     "get_current_toll_price": "Checking current toll price",
     "get_annual_toll_ballpark": "Calculating annual toll-commute affordability",
+    "resolve_trip": "Matching the named places to covered ramps",
 }
 
 
@@ -330,10 +332,10 @@ def _agent_tools() -> list[Any]:
 def agent_tools(points: list[dict[str, object]] | list[_PromptPoint]) -> list[Any]:
     """Tools for an agent whose prompt renders ``points``.
 
-    Replay harnesses swap the pricing tools by name and keep the rest live.
+    The resolver is bound to that same catalog. Replay harnesses swap the pricing
+    tools by name and keep the resolver live.
     """
-    del points  # The pricing tools do not depend on the catalog.
-    return _agent_tools()
+    return [*_agent_tools(), resolve_trip.make_resolve_trip_tool(points)]
 
 
 def _render_prompt_points(points: list[_PromptPoint]) -> str:

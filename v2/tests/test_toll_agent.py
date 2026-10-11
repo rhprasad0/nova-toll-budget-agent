@@ -238,7 +238,7 @@ def test_system_prompt_matches_its_versioned_contract() -> None:
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
 
-    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.3.16" == prompt_contract["current"]
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.4.0" == prompt_contract["current"]
     assert (
         toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
         == "1.0.2"
@@ -264,8 +264,8 @@ def test_system_prompt_matches_its_versioned_contract() -> None:
 def test_system_prompt_manifest_accepts_one_monotonic_release() -> None:
     previous = _contract_manifest()
     current = copy.deepcopy(previous)
-    current["system_prompt"]["current"] = "2.4.0"
-    current["system_prompt"]["releases"]["2.4.0"] = "a" * 64
+    current["system_prompt"]["current"] = "2.4.1"
+    current["system_prompt"]["releases"]["2.4.1"] = "a" * 64
 
     version_check.validate_manifest_update(previous, current)
     version_check.validate_manifest_update({}, previous)
@@ -334,7 +334,7 @@ def test_system_prompt_manifest_accepts_multiple_forward_releases() -> None:
     previous = _contract_manifest()
     advanced = copy.deepcopy(previous)
     advanced["system_prompt"]["current"] = "2.5.0"
-    advanced["system_prompt"]["releases"].update({"2.4.0": "b" * 64, "2.5.0": "c" * 64})
+    advanced["system_prompt"]["releases"].update({"2.4.1": "b" * 64, "2.5.0": "c" * 64})
     version_check.validate_manifest_update(previous, advanced)
 
 
@@ -393,7 +393,7 @@ def test_duplicate_tool_guard_suppresses_only_successful_exact_repeats() -> None
     assert changed.cancel_tool is False
 
 
-def test_agent_registers_exactly_the_two_existing_tools(
+def test_agent_registers_exactly_the_three_tools(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     model = OpenAIResponsesModel(model_id="test", client_args={"api_key": "test"})
@@ -407,6 +407,7 @@ def test_agent_registers_exactly_the_two_existing_tools(
     assert [spec["name"] for spec in agent.tool_registry.get_all_tool_specs()] == [
         "get_current_toll_price",
         "get_annual_toll_ballpark",
+        "resolve_trip",
     ]
     assert original_specs[0] == current_tool.TOOL_SPEC
     assert original_specs[1] == ballpark_tool.TOOL_SPEC

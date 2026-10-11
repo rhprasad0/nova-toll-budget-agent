@@ -1,6 +1,6 @@
 {
   "status": "approved",
-  "corpus_sha256": "44c3ac2a14772d96c231319c615e20328533c35bf5fb2766b9326b4d7e042e81",
+  "corpus_sha256": "c7bf66b5f70d1961a9d3bc674a770acadd99f3f0c4495d668f484f83d76f2bfd",
   "reviewer": "Claude",
-  "evidence": "Approved by Claude at Ryan's request on 2026-10-11. Inputs are byte-identical to approved 5.2.2; only the version and protected source identities changed for harness 2.6.0 (live resolve_trip lookups recorded outside the pricing budget) and the new agent_tools resolve_trip and route_pairs sources."
+  "evidence": "Approved by Claude at Ryan's request on 2026-10-11. Inputs are byte-identical to approved 5.2.3; only the version and protected source identities changed: agent/toll_agent.py registers resolve_trip and renders system prompt 2.4.0."
 }
