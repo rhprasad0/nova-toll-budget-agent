@@ -327,6 +327,15 @@ def _agent_tools() -> list[Any]:
     return tools
 
 
+def agent_tools(points: list[dict[str, object]] | list[_PromptPoint]) -> list[Any]:
+    """Tools for an agent whose prompt renders ``points``.
+
+    Replay harnesses swap the pricing tools by name and keep the rest live.
+    """
+    del points  # The pricing tools do not depend on the catalog.
+    return _agent_tools()
+
+
 def _render_prompt_points(points: list[_PromptPoint]) -> str:
     """Supplement endpoint records with same-facility directed topology only."""
     # Source-node order from oracle/sources; exact pair equivalence is tested.
@@ -361,23 +370,27 @@ def _render_prompt_points(points: list[_PromptPoint]) -> str:
     return json.dumps(records, indent=2)
 
 
+def _prompt_points(
+    prompt_points: list[dict[str, object]] | list[_PromptPoint] | None,
+) -> list[_PromptPoint]:
+    if prompt_points is None:
+        return load_prompt_points()
+    return parse_prompt_points(
+        [
+            point.model_dump(mode="python")
+            if isinstance(point, _PromptPoint)
+            else point
+            for point in prompt_points
+        ]
+    )
+
+
 def _render_system_prompt_values(
     prompt_points: list[dict[str, object]] | list[_PromptPoint] | None = None,
     *,
     current_date: date,
 ) -> dict[str, str]:
-    points = (
-        load_prompt_points()
-        if prompt_points is None
-        else parse_prompt_points(
-            [
-                point.model_dump(mode="python")
-                if isinstance(point, _PromptPoint)
-                else point
-                for point in prompt_points
-            ]
-        )
-    )
+    points = _prompt_points(prompt_points)
     return {
         "PROMPT_POINTS_JSON": _render_prompt_points(points),
         "CURRENT_DATE": current_date.strftime("%-m/%-d/%Y"),
@@ -410,7 +423,8 @@ def build_agent(
     tools: list[Any] | None = None,
     hooks: list[object] | None = None,
 ) -> Agent:
-    system_prompt = build_system_prompt(prompt_points, current_date=current_date)
+    points = _prompt_points(prompt_points)
+    system_prompt = build_system_prompt(points, current_date=current_date)
     trace_attributes = {
         "tollchat.system_prompt_version": SYSTEM_PROMPT_VERSION,
         "tollchat.system_prompt_renderer_version": SYSTEM_PROMPT_RENDERER_VERSION,
@@ -418,7 +432,7 @@ def build_agent(
     }
     return Agent(
         model=_build_model() if model is None else cast(Any, model),
-        tools=_agent_tools() if tools is None else tools,
+        tools=agent_tools(points) if tools is None else tools,
         system_prompt=system_prompt,
         callback_handler=None,
         trace_attributes=trace_attributes,

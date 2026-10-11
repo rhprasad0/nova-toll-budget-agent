@@ -1,6 +1,6 @@
 {
   "status": "approved",
-  "corpus_sha256": "5497f993a8704179f38bc2023e7224ec4113c7b59e6df92eee86fb8094abb2e9",
+  "corpus_sha256": "44c3ac2a14772d96c231319c615e20328533c35bf5fb2766b9326b4d7e042e81",
   "reviewer": "Claude",
-  "evidence": "Approved by Claude at Ryan's request on 2026-10-10. Inputs are byte-identical to approved 5.2.0; only the version and protected source identities changed for harness 2.5.19 (bounded lost-usage accounting) and system prompt version 2.3.16."
+  "evidence": "Approved by Claude at Ryan's request on 2026-10-11. Inputs are byte-identical to approved 5.2.2; only the version and protected source identities changed for harness 2.6.0 (live resolve_trip lookups recorded outside the pricing budget) and the new agent_tools resolve_trip and route_pairs sources."
 }

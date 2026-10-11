@@ -185,7 +185,7 @@ class ArtifactAgent:
             if kind == "model_start":
                 if self.reserved is not None:
                     raise run.StopRun("artifact_unsettled_call")
-                if self.calls >= case.actor.max_turns + case.max_tool_calls + 2:
+                if self.calls >= run.model_call_limit(case):
                     raise run.TaskFailure("model_call_budget")
                 self.reserved = journal.reserve(attempt, "agent", event["input_bound"])
                 self.calls += 1
@@ -197,6 +197,16 @@ class ArtifactAgent:
                     attempt, "agent", self.reserved, event["usage"], event["seconds"]
                 )
                 self.reserved = None
+                self.send({"event": "continue"})
+            elif kind == "resolved":
+                attempt.turns[-1].calls.append(
+                    golden.Call(
+                        name=golden.RESOLVER_TOOL,
+                        input=event["input"],
+                        result=event["result"],
+                        is_error=event["is_error"],
+                    )
+                )
                 self.send({"event": "continue"})
             elif kind in {"requested", "tool"}:
                 item = {

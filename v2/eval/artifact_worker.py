@@ -45,7 +45,12 @@ def main() -> None:
     sys.path.insert(0, str(bundle))
     initial = exchange({"event": "ready"})
     from strands import tool  # pyright: ignore[reportUnknownVariableType]
-    from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
+    from strands.hooks import (
+        AfterToolCallEvent,
+        BeforeToolCallEvent,
+        HookProvider,
+        HookRegistry,
+    )
     from strands.types.tools import ToolContext, ToolSpec
 
     from agent import toll_agent
@@ -118,8 +123,27 @@ def main() -> None:
     class Requests(HookProvider):
         def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:  # noqa: ANN401
             registry.add_callback(BeforeToolCallEvent, self.before)
+            registry.add_callback(AfterToolCallEvent, self.after)
+
+        def after(self, event: AfterToolCallEvent) -> None:
+            if event.tool_use["name"] != "resolve_trip":
+                return
+            ok = event.result.get("status") == "success"
+            content = cast(list[dict[str, Any]], event.result.get("content") or [{}])
+            exchange(
+                {
+                    "event": "resolved",
+                    "input": event.tool_use["input"],
+                    "result": content[0]["json"]
+                    if ok
+                    else {"error": str(content[0].get("text", ""))},
+                    "is_error": not ok,
+                }
+            )
 
         def before(self, event: BeforeToolCallEvent) -> None:
+            if event.tool_use["name"] == "resolve_trip":
+                return
             result = exchange(
                 {
                     "event": "requested",
@@ -149,9 +173,13 @@ def main() -> None:
 
         frozen.tool_spec = cast(ToolSpec, spec)
         tools.append(frozen)
+    frozen_by_name = {frozen.tool_spec["name"]: frozen for frozen in tools}
     agent = toll_agent.build_agent(
         model=model,
-        tools=tools,
+        tools=[
+            frozen_by_name.get(live.tool_spec["name"], live)
+            for live in toll_agent.agent_tools(initial["points"])
+        ],
         prompt_points=initial["points"],
         current_date=date.fromisoformat(request["date"]),
         hooks=[Requests()],

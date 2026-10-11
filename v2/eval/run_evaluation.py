@@ -504,7 +504,8 @@ def _calls(response: object) -> list[dict[str, Any]]:
         result = cast(dict[str, Any], results.get(tool_id) or {})
         call["tool_result"] = _tool_payload(result)
         call["is_error"] = result.get("status") == "error"
-    return calls
+    # Live resolver lookups are not pricing calls; the case checks count pricing only.
+    return [call for call in calls if call["name"] != "resolve_trip"]
 
 
 def evaluate_westpark_turn(

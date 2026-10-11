@@ -110,6 +110,12 @@ Then run one full training baseline
 (50 cases × 1 trial, 16 workers). Do not duplicate compatible approved preparation. Frozen fixture replay needs no deployment or migration parity
 gate. It cannot establish live pricing or deployment correctness.
 
+Since harness 2.6.0 the application's `resolve_trip` tool runs live during replay,
+bound to the corpus's frozen `prompt-points.json`. Its lookups are recorded in each
+turn's `calls` so judges see which places were resolved, but they are not pricing
+requests: `max_tool_calls`, the `tool_calls` count, mechanical rules and fixture
+matching cover the two pricing tools only.
+
 Unseeded trial numbers identify slots, not identical random draws. Inspect passing
 and failing counterparts and the candidate diff to assess causal regressions.
 

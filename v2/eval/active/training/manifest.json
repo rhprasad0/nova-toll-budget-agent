@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "version": "5.2.2",
+  "version": "5.2.3",
   "evaluation_scope": "training",
   "case_count": 50,
   "trials_per_case": 1,
@@ -64,20 +64,22 @@
     "v2/uv.lock": "b7a2c24b78a17e1d6b19e12ef213c1341c02f283c992627941a791df2fb6b52b",
     "v2/eval/corpus.py": "b5ffdfc5cdd87a52fe1408205032edcfd707e065978fc7a8e94bc90be12284b9",
     "v2/eval/contract.json": "2e36bdfed363f0480bf8f7741de76fa392aa20578ceb10449196b4bc3efa94c3",
-    "v2/agent/toll_agent.py": "6099b508e382cbd642b48f3f3b2c065cb578421f0f713e9dc4325fff11c62c64",
+    "v2/agent/toll_agent.py": "1b84d40b60d03e9a77d4f11522b22af926440a7bda73e173de786469de7628fe",
     "v2/agent_tools/get_current_toll_price.py": "03560678deb79a8665b47de80793e744a6072419f09e4ec95401019ab23befcc",
-    "v2/eval/golden.py": "4aaacb3c2d237c36432bee556ef24d39dd4ea1053cf923664d4761982feac89d",
-    "v2/eval/repetition.py": "198bc5a5274decc172a0eaa24796b8f8c9b6a3b17ef4459d440802da02622f6c",
+    "v2/eval/golden.py": "579dc91f703413f4b81108b15b5a3d5f68aa006db2a34e9854629731677cef93",
+    "v2/eval/repetition.py": "c58965eb3913c2ef2ae2a115037696433f643e24dd005d49938fa5e2b816b7ca",
     "v2/agent_tools/currency.py": "09a6325499e46ef0eca57ac3dd2cebedd460cf6937ceb48860c58eb1ea238710",
     "v2/eval/simulated.py": "846d1c477cdba987a12cff3360c1eafdff7afa5d709062530404e4d8f7a9e6c4",
-    "v2/eval/run_evaluation.py": "b4a9abb3ccd913d747b4227466d3138af0b5b681c89438f5c50406f2473da18b",
-    "v2/eval/golden_run.py": "552e196fafdbd8fd94fae15aaeec3fc840d5aa9a230018aea143ea82137f0334",
-    "v2/eval/golden_actor_check.py": "8ad4de1748fa40bbc1955bf9bced47c761c7521c758d88d66bfd305ce04d1882",
-    "v2/eval/artifact_agent.py": "7e3b9d7d058a655fe848a3875aecea33ce1aa94f4aa45056e85ce4f0200b0f6b",
-    "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
+    "v2/eval/run_evaluation.py": "e0ca63801788e7ef4f508d83dbf6b0439d541025f0f851f412c89c920c798c11",
+    "v2/eval/golden_run.py": "a6f9cb8b413acb9c826fe171c2adb6dcb6326acd4818744ceaf2a3f7b75351d5",
+    "v2/eval/golden_actor_check.py": "9cf09d47330b456faccc7c5cf3a343721453abe08cd7ce34ea34ef065672c085",
+    "v2/eval/artifact_agent.py": "92984c912ba2258fb8141b2121eebe85e645f737e5a45d15f7fde75e9d53d2c0",
+    "v2/eval/artifact_worker.py": "59afb19585a704ac9e90902e43939f47b4acf4c548954eef5e350f512f6a281c",
     "v2/agent_tools/current_price_domain.py": "028d36addc4cf35926113f09fc8f7fa203ce15a2fa04882e8979fb41f4d02e12",
     "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
-    "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
+    "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e",
+    "v2/agent_tools/resolve_trip.py": "5f41b75cacab04ac8c3cc7ae169bbc6ea945d7599b0dc3dc48b4a548c14d553e",
+    "v2/agent_tools/route_pairs.py": "a0eb9dc17be2035af01a4c33da2808eebba48e6e27445b974336eac3fa238309"
   },
-  "corpus_sha256": "5497f993a8704179f38bc2023e7224ec4113c7b59e6df92eee86fb8094abb2e9"
+  "corpus_sha256": "44c3ac2a14772d96c231319c615e20328533c35bf5fb2766b9326b4d7e042e81"
 }

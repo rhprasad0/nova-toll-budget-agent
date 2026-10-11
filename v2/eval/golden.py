@@ -33,6 +33,7 @@ V2 = Path(__file__).resolve().parents[1]
 ROOT = V2 / "eval/active/training"
 ARCHIVE = V2 / "eval/archive/development-3.3.28"
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
+RESOLVER_TOOL = "resolve_trip"
 ARCHIVE_VERSION = "3.3.28"
 ARCHIVE_CASE_COUNT = 100
 ARCHIVE_COVERAGE = {
@@ -63,6 +64,8 @@ SOURCE_FILES = (
     "agent_tools/current_price_domain.py",
     "agent_tools/get_annual_toll_ballpark.py",
     "agent_tools/validate_toll_route.py",
+    "agent_tools/resolve_trip.py",
+    "agent_tools/route_pairs.py",
 )
 TOOL_DESCRIPTION_POLICY = "literal-input-prose-v1"
 TOOL_INPUT_MODELS = {
@@ -390,10 +393,15 @@ class Fixture(Record):
 
 
 class Call(Record):
-    name: ToolName
+    name: ToolName | Literal["resolve_trip"]
     input: dict[str, JsonValue]
     result: dict[str, JsonValue]
     is_error: bool = False
+
+
+def pricing_calls(calls: list[Call]) -> list[Call]:
+    """Drop live resolver lookups; only pricing calls are replayed and budgeted."""
+    return [call for call in calls if call.name != RESOLVER_TOOL]
 
 
 class Turn(Record):
@@ -869,10 +877,11 @@ def grade_assertions(
     rounded = set(rounded_money or [])
     for turn_number, turn in enumerate(turns, 1):
         messages.append(turn.user)
-        if turn.calls:
+        calls = pricing_calls(turn.calls)
+        if calls:
             retained_money = set()
         allowed_money = money("\n".join(messages)) | retained_money
-        for call in turn.calls:
+        for call in calls:
             try:
                 expected = replay.call(call.name, call.input, messages)
                 if call != expected:
@@ -885,7 +894,7 @@ def grade_assertions(
         monetary_claims = turn.response
         # Only explicit proposals can introduce the midpoint before consent.
         amounts = money("\n".join(messages))
-        if case.contract_version == 1 and not turn.calls and len(amounts) == 2:
+        if case.contract_version == 1 and not calls and len(amounts) == 2:
             midpoint = sum(amounts) / 2
             for question in re.findall(
                 r"\b(?:Should I|Would you like me to|May I)\b[^?\n]{1,250}\?",
@@ -900,7 +909,7 @@ def grade_assertions(
                     )
         # ponytail: bounded income-choice syntax; extend only with labeled
         # examples, leaving other proposals to fail closed.
-        if case.contract_version == 1 and not turn.calls and len(amounts) == 2:
+        if case.contract_version == 1 and not calls and len(amounts) == 2:
             plain = monetary_claims.replace("**", "")
             currency = r"\$[0-9][0-9,]*(?:\.[0-9]+)?[kK]?"
             income = r"(?:one\s+)?(?:gross\s+)?(?:annual\s+)?income(?:\s+(?:figure|estimate|amount))?"
@@ -973,7 +982,7 @@ def grade_assertions(
         raise ValueError("invalid_money_classifications")
     if money_catalog is not None:
         money_catalog.extend(catalog)
-    if sum(len(t.calls) for t in turns) > case.max_tool_calls:
+    if sum(len(pricing_calls(t.calls)) for t in turns) > case.max_tool_calls:
         failures.append("tool_budget")
     if any(not step.optional for step in case.steps[replay.index :]):
         failures.append("missing_call")
