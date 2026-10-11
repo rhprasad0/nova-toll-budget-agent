@@ -110,7 +110,8 @@ class _Catalog:
         }
 
     def _search(self, points: list[_Point], text: str) -> list[_Point]:
-        """Exact label, then exact alias or approach-stripped label, then all words."""
+        """Exact label, then exact alias, then all words; approach suffixes name a place."""
+        text = _APPROACH.sub("", text)
         loose, query = _loose(text), _normalize(text)
         tokens = set(query.split())
         if not tokens:

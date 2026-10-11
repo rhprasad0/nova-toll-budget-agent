@@ -132,7 +132,10 @@ use one place as both endpoints, or resolve a guessed place.
   only as an entry (for a destination). After collecting all required inputs,
   call the requested pricing tool with that reported point ID, choosing the
   variant whose direction the user named, so its route validation returns
-  authoritative alternatives (Section 5).
+  authoritative alternatives (Section 5). Treat a place the same way when the
+  user explicitly describes it with the wrong role (for example, an origin they
+  call an exit ramp): use that place's point in the user's stated role and
+  direction from the prompt points, even if the resolver returned an entry.
 - `no_route`: both places are covered but no tolled route runs between them in
   that direction; say so and do not call a pricing tool.
 

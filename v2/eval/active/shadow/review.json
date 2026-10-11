@@ -1,6 +1,6 @@
 {
   "status": "approved",
-  "corpus_sha256": "4e0dd10e615869f04a6a40a703cb1989d8498878c13e63c878f496c8420381ab",
+  "corpus_sha256": "1ae99d8179d0e33beb2090bb054109e406de215f6a1479c7fe277c431b05325e",
   "reviewer": "Claude",
-  "evidence": "Approved by Claude at Ryan's request on 2026-10-11. Inputs are byte-identical to approved 5.2.4; only the version and protected source identities changed: resolve_trip 1.1.0 returns the swapped return leg and toll_agent.py renders system prompt 2.4.1."
+  "evidence": "Approved by Claude at Ryan's request on 2026-10-11. Inputs are byte-identical to approved 5.2.5; only the version and protected source identities changed: resolve_trip matches places independently of approach suffixes and toll_agent.py renders system prompt 2.4.2."
 }

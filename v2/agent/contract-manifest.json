@@ -1,6 +1,6 @@
 {
   "system_prompt": {
-    "current": "2.4.1",
+    "current": "2.4.2",
     "releases": {
       "1.0.0": "45c5b073823ebbc4892a0535f301b9528be390ff7d6c8c4b5510f790cffd3438",
       "2.0.0": "151c16ab7cc3c09a3528f2176fbf88f205f8a390bff3780eb5a6a9174b81454c",
@@ -18,7 +18,8 @@
       "2.3.15": "81655abe04a59479b04fa24ab8a5b443cf37efd8170828fb94986b7484ef013a",
       "2.3.16": "c138da6d1ee94c76509503d65f1c316c8e86a32f218b0cbc5ad32653a497791e",
       "2.4.0": "65a2cdcd8630c92b455a9aee2979cda791662fd94c21adcd4d6c0d8c42337c3c",
-      "2.4.1": "0212f5dc15f33d0fff4b66488b44b1d80cf10f1d21cbaedd29fadc0f0e8b0956"
+      "2.4.1": "0212f5dc15f33d0fff4b66488b44b1d80cf10f1d21cbaedd29fadc0f0e8b0956",
+      "2.4.2": "577ae6d8fb283b7c7217bccf9a31a1cc43e7c1ce11989dedc98eb9cf1c27e60f"
     }
   },
   "system_prompt_renderer": {

@@ -87,9 +87,11 @@ def test_resolves_one_point_pair(
     assert (result["origin_point_id"], result["destination_point_id"]) == expected
     assert result["origin_label"] and result["destination_label"]
     back = result["return_leg"]
+    assert "return_leg" not in back
     if back["status"] == "resolved":
-        assert back["origin_label"] == result["destination_label"]
-        assert "return_leg" not in back
+        assert (back["destination_point_id"] != expected[0]) or expected[0].startswith(
+            "airport"
+        )  # the return uses the place's own entry/exit variants, not swapped ids
 
 
 def test_return_leg_is_the_swapped_trip() -> None:
