@@ -1005,7 +1005,7 @@ def smoke(values: dict[str, Any]) -> None:
         code == 200
         and kind == "application/json"
         and config.get("chatEnabled") is True
-        and config.get("maxTurns") == 5
+        and config.get("maxTurns") == 20
         and type(config.get("maxMessageChars")) is int
         and config["maxMessageChars"] > 0,
         "malformed_response",

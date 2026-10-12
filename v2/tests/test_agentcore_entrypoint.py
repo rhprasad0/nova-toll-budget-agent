@@ -446,7 +446,7 @@ def test_runtime_validates_streams_and_applies_both_guardrails() -> None:
     ]
     assert agent.prompts == ["Price my trip"]
     assert agent.limits == [
-        {"turns": 6, "output_tokens": 8_192, "total_tokens": 50_000}
+        {"turns": 6, "output_tokens": 8_192, "total_tokens": 200_000}
     ]
     assert guardrail.calls == [
         ("INPUT", "Price my trip", ["guard_content"]),
@@ -458,9 +458,9 @@ def test_runtime_rejects_invalid_input_and_enforces_turn_limit() -> None:
     runtime = TollChatRuntime(FakeAgent, FakeGuardrail())
     for payload in ({}, {"prompt": " "}, {"prompt": "x" * 8001}):
         assert collect(runtime, payload)[-1]["code"] == "invalid_request"
-    for turn in range(5):
+    for turn in range(20):
         assert collect(runtime, {"prompt": f"turn {turn}"})[-1]["type"] == "answer"
-    assert collect(runtime, {"prompt": "turn six"})[-1] == {
+    assert collect(runtime, {"prompt": "turn twenty-one"})[-1] == {
         "type": "error",
         "code": "turn_limit",
         "message": "Start a new chat to continue.",

@@ -154,7 +154,7 @@ Retain sanitized browser and release evidence; a deliberate restart is a safe
 exception, not proof of uninterrupted continuity.
 
 **Boundary:** preserve the existing one-hour absolute limit, 15-minute idle
-expiry, and five-turn cap. Long-lived saved history and recovery after runtime
+expiry, and 20-turn cap. Long-lived saved history and recovery after runtime
 loss are separate capabilities, not requirements for this item.
 
 ### 3. Get independent use and record what it changes

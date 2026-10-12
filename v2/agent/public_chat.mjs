@@ -18,6 +18,25 @@ const STARTER_PROMPTS = Object.freeze([
     + "year, on a $130,000 gross annual salary?",
 ]);
 
+/** @typedef {{started: number, html: string}} SavedTranscript */
+const SAVED_TRANSCRIPT = "tollchat-transcript";
+// The proxy's session cookie lasts an hour; an older copy would front a fresh server session.
+const SAVED_MAX_AGE_MS = 60 * 60 * 1000;
+/** @returns {SavedTranscript | null} */
+const savedTranscript = () => {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(SAVED_TRANSCRIPT) ?? "null");
+    return saved && Date.now() - saved.started < SAVED_MAX_AGE_MS ? saved : null;
+  } catch { return null; }
+};
+/** @param {SavedTranscript | null} saved */
+const saveTranscript = (saved) => {
+  try {
+    if (saved) sessionStorage.setItem(SAVED_TRANSCRIPT, JSON.stringify(saved));
+    else sessionStorage.removeItem(SAVED_TRANSCRIPT);
+  } catch { /* Without storage, a refresh starts a new chat as before. */ }
+};
+
 /** @param {string} path @param {object} body */
 export const post = async (path, body) => {
   const payload = JSON.stringify(body);
@@ -172,6 +191,8 @@ const start = () => {
     for (const button of starterButtons) button.disabled = busy;
     form.setAttribute("aria-busy", String(busy));
   };
+  // Set before the first request, so it is never later than the session cookie's creation.
+  let started = 0;
 
   const mapWatchdog = setTimeout(() => {
     /** @type {HTMLElement} */ (document.querySelector("#map-loading")).hidden = true;
@@ -211,18 +232,29 @@ const start = () => {
         });
         return;
       }
-      const response = await post("/api/reset", {}).catch(() => null);
-      let expired;
-      if (!response?.ok) {
-        const error = response ? await responseError(response) : SAFE_ERROR;
-        if (error.code !== "session_expired") {
-          applyEvent(newTurn(transcript), SAFE_ERROR);
-          return;
+      const saved = savedTranscript();
+      if (saved) {
+        // A refresh keeps the server session; the expired path still handles a stale one.
+        // Safe as HTML: only this page saves it, from escaped user text and sanitized Markdown.
+        transcript.innerHTML = saved.html;
+        started = saved.started;
+        starterWrap.hidden = true;
+        transcript.lastElementChild?.scrollIntoView({ block: "end", behavior: "instant" });
+      } else {
+        saveTranscript(null);
+        const response = await post("/api/reset", {}).catch(() => null);
+        let expired;
+        if (!response?.ok) {
+          const error = response ? await responseError(response) : SAFE_ERROR;
+          if (error.code !== "session_expired") {
+            applyEvent(newTurn(transcript), SAFE_ERROR);
+            return;
+          }
+          expired = error;
         }
-        expired = error;
+        transcript.replaceChildren();
+        if (expired) applyEvent(newTurn(transcript), { type: "error", code: /** @type {string} */ (expired.code), message: expired.message });
       }
-      transcript.replaceChildren();
-      if (expired) applyEvent(newTurn(transcript), { type: "error", code: /** @type {string} */ (expired.code), message: expired.message });
       setBusy(false);
       await new Promise(() => {});
     });
@@ -245,11 +277,18 @@ const start = () => {
     starterWrap.hidden = true;
     const view = newTurn(transcript);
     input.value = "";
+    started ||= Date.now();
     runRequest(async (onEvent) => {
       const response = await post("/api/chat", { message });
       if (!response.ok || !response.body) throw await responseError(response);
       await consumeNdjson(response.body, onEvent);
+      // shortcut: saves only completed turns, so a refresh mid-response drops that question
+      // from view while the proxy finishes it (a quick resend gets session_busy); save the
+      // pending question first if study participants hit this.
+      saveTranscript({ started, html: transcript.innerHTML });
     }, (item) => applyEvent(view, item), setBusy, (error) => {
+      started = 0;
+      saveTranscript(null);
       transcript.replaceChildren();
       applyEvent(newTurn(transcript), {
         type: "error", code: /** @type {string} */ (error.code), message: error.message,
@@ -259,6 +298,9 @@ const start = () => {
 
   reset.addEventListener("click", async () => {
     setBusy(true);
+    // Even if the reset fails, a refresh should not restore the abandoned chat.
+    started = 0;
+    saveTranscript(null);
     try {
       const response = await post("/api/reset", {});
       let expired;

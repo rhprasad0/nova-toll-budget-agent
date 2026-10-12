@@ -781,7 +781,7 @@ def test_public_smoke_and_two_session_lifecycle(
                 json.dumps(
                     {
                         "chatEnabled": wrong != "config",
-                        "maxTurns": 5,
+                        "maxTurns": 20,
                         "maxMessageChars": 4000,
                     }
                 ).encode(),
@@ -908,7 +908,7 @@ def test_main_preserves_original_smoke_diagnostic_after_cleanup(
             return (
                 200,
                 "application/json",
-                b'{"chatEnabled": true, "maxTurns": 5, "maxMessageChars": 4000}',
+                b'{"chatEnabled": true, "maxTurns": 20, "maxMessageChars": 4000}',
             )
         if path == "/api/reset":
             reset_calls.append(id(jar))

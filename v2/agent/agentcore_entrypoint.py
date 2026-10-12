@@ -28,11 +28,14 @@ from agent.toll_agent import (
 )
 
 MAX_MESSAGE_CHARS = 8_000
-MAX_TURNS = 5
+MAX_TURNS = 20
 _INVOCATION_LIMITS: Limits = {
     "turns": 6,
     "output_tokens": 8_192,
-    "total_tokens": 50_000,
+    # Counts the 37k-token system prompt and the history (Strands keeps the last
+    # 40 messages) on every model call; sized so late turns in a 20-turn chat can
+    # still finish a tool round trip.
+    "total_tokens": 200_000,
 }
 DISCLAIMER = (
     "Estimates only. Verify current rates with the toll operator before travel."
