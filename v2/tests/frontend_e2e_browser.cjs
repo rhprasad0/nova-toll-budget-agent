@@ -16,9 +16,10 @@ const { chromium } = require('playwright');
   /** @type {string[]} */
   const messages = [];
   let failChat = false;
+  let resets = 0;
   const server = createServer(async (request, response) => {
     const pathname = new URL(request.url || '/', 'http://localhost').pathname;
-    if (pathname === '/api/reset') { response.setHeader('content-type', 'application/json'); response.end('{}'); return; }
+    if (pathname === '/api/reset') { resets += 1; response.setHeader('content-type', 'application/json'); response.end('{}'); return; }
     if (pathname === '/api/chat') {
       let body = ''; for await (const chunk of request) body += chunk;
       messages.push(JSON.parse(body).message);
@@ -98,9 +99,23 @@ const { chromium } = require('playwright');
       assert.ok(stream); stream.end(); await ready(page);
       assert.equal(await page.locator('.answer strong').innerText(), 'Historical estimate:');
       assert.equal(await page.locator('.activities [data-status="completed"]').count(), 1);
+      const resetsBeforeReload = resets;
+      await page.reload(); await ready(page);
+      assert.equal(await page.locator('.answer strong').innerText(), 'Historical estimate:', 'Refresh restores the finished chat');
+      assert.equal(await page.locator('.activities [data-status="completed"]').count(), 1);
+      assert.equal(await page.locator('#starter-wrap').isVisible(), false);
+      assert.equal(resets, resetsBeforeReload, 'Refresh keeps the server session');
       await page.locator('#reset').click(); await ready(page);
       assert.equal(await page.locator('#transcript').innerText(), '');
       assert.equal(await page.locator('#starter-wrap').isVisible(), true);
+      await page.reload(); await ready(page);
+      assert.equal(await page.locator('#transcript').innerText(), '');
+      assert.equal(resets, resetsBeforeReload + 2, 'New chat and a fresh load both reset');
+      await page.evaluate(() => sessionStorage.setItem('tollchat-transcript', JSON.stringify({ started: Date.now() - 60 * 60 * 1000, html: '<p class="user-turn">Old question</p>' })));
+      await page.reload(); await ready(page);
+      assert.equal(await page.locator('#transcript').innerText(), '', 'A copy older than the session cookie is not restored');
+      assert.equal(resets, resetsBeforeReload + 3);
+      assert.equal(await page.evaluate(() => sessionStorage.getItem('tollchat-transcript')), null);
     });
     await flow('shared-theme-and-navigation', { width: 1440, height: 900 }, async page => {
       const palette = () => page.locator('html').evaluate(node => {

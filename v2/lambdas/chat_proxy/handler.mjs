@@ -304,7 +304,7 @@ export async function route(event, dependencies) {
   const method = event.httpMethod ?? event.requestContext?.http?.method;
   const path = event.path ?? event.rawPath;
   if (method === "GET" && path === "/api/config") {
-    return json(200, { chatEnabled: true, maxMessageChars: MAX_MESSAGE_CHARS, maxTurns: 5, release_id: releaseId });
+    return json(200, { chatEnabled: true, maxMessageChars: MAX_MESSAGE_CHARS, maxTurns: 20, release_id: releaseId });
   }
   if (method !== "POST" || !["/api/chat", "/api/reset"].includes(/** @type {string} */ (path))) {
     return json(404, { error: { code: "not_found" } });

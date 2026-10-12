@@ -510,7 +510,7 @@ test("config is available without a frontend", async () => {
     { httpMethod: "GET", path: "/api/config", requestContext: { domainName: domain }, headers: {} },
     dependencies({ async send() { throw new Error("unexpected runtime call"); } }),
   );
-  assert.deepEqual(JSON.parse(/** @type {string} */ (response.body)), { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5, release_id: "release-blue" });
+  assert.deepEqual(JSON.parse(/** @type {string} */ (response.body)), { chatEnabled: true, maxMessageChars: 8000, maxTurns: 20, release_id: "release-blue" });
 });
 
 test("foreign and legacy sessions expire before chat or reset, including leased sessions", async () => {
