@@ -20,7 +20,7 @@ locals {
   domains                           = local.is_production ? ["tollchat.ai", "www.tollchat.ai"] : ["dev.tollchat.ai"]
   log_retention_days                = local.is_production ? 30 : 7
   alarm_actions                     = local.is_production ? [var.foundation.alerts_topic_arn] : []
-  rate_limit                        = 20
+  rate_limit                        = local.is_production ? 20 : 10
   development_custom_domain_enabled = local.is_development && var.enable_development_custom_domain
   custom_domain_enabled             = local.is_production || local.development_custom_domain_enabled
   public_site_url                   = local.is_production || local.development_custom_domain_enabled ? "https://${local.domains[0]}" : (var.public_preview_hostname == "" ? "" : "https://${var.public_preview_hostname}")
