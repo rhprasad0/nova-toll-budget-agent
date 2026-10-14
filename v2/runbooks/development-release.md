@@ -1229,7 +1229,14 @@ the 1 GiB Athena cutoff; filter by time or add partitions then.
    `aws_s3_bucket_lifecycle_configuration.agent_measurement`. Require exactly
    one in-place update that removes `expire-agentcore-traces`, with the other
    two rules and every dependency-expanded address unchanged. Apply that exact
-   file.
+   file. Then sync state: the bucket's computed `lifecycle_rule` still records
+   the previous rules, which release gates reject as `incomplete_or_drift`.
+   Save a `-refresh-only` plan targeting the bucket and its lifecycle
+   configuration, require exactly one drift entry
+   (`aws_s3_bucket.agent_measurement`, `lifecycle_rule` only) and no resource
+   changes, and apply that exact file. A second refresh-only plan with the same
+   targets must show no drift. The PR's `trusted-development-plan` check passes
+   either way, so it is not evidence that the sync ran.
 3. Development: apply from the reviewed PR head **before merge**. The trusted PR
    plan then sees main's old rule as the trace-enable transition that
    `infra/delivery_plan_validator.py` accepts, and post-merge delivery sees a
