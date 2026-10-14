@@ -99,8 +99,8 @@ masking if the check fails.
    Check metrics for omissions and any downstream PII findings.
 
 Development CloudWatch retention stays seven days; production stays one day.
-Both trace archives expire after seven days, with asynchronous S3 lifecycle
-deletion. Existing development traces are not rewritten or purged. New chat
+Both trace archives are kept indefinitely; `agentcore-traces/` has no S3
+lifecycle expiration. Existing traces are not rewritten or purged. New chat
 does not delete retained diagnostic records.
 
 If startup or live verification fails, hold the release and fix the exporter or

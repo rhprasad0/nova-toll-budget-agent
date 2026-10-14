@@ -71,17 +71,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "agent_measurement" {
     abort_incomplete_multipart_upload { days_after_initiation = 1 }
   }
 
-  dynamic "rule" {
-    for_each = ["agentcore-traces"]
-    content {
-      id     = "expire-agentcore-traces"
-      status = "Enabled"
-      filter { prefix = "agentcore-traces/" }
-      expiration { days = 7 }
-      abort_incomplete_multipart_upload { days_after_initiation = 1 }
-    }
-  }
-
+  # No agentcore-traces/ rule: trace archives are kept indefinitely (privacy.txt).
 }
 
 data "aws_iam_policy_document" "agent_measurement_bucket" {

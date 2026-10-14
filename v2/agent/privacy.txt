@@ -1,5 +1,5 @@
 TollChat privacy notice
-Effective September 14, 2026
+Effective October 14, 2026
 
 Who operates TollChat
 
@@ -19,9 +19,7 @@ We make an effort to protect your personal information by automatically redactin
 
 TollChat uses Amazon Bedrock Guardrails to detect and mask personal information in telemetry copies before export. This processing does not change the active conversation or the answer you receive. Diagnostic traces can contain redacted prompts, responses, tool inputs and results, attributes, and error details. Detection is probabilistic, so some personal information may remain. If redaction fails, affected content is omitted rather than exported raw.
 
-CloudWatch Logs data protection provides additional masking of detected information. This additional masking restricts viewing; unmasked originals remain recoverable by authorized AWS administrators. CloudWatch retention is one day in production and seven days in development. Both environments archive traces privately in encrypted S3 for Athena analysis, with seven-day expiration. Expiration and deletion are asynchronous. Starting a new chat does not delete these diagnostic records.
-
-Development traces collected before this rollout were stored without PII redaction. They remain subject to their existing seven-day retention and are not retroactively redacted or immediately purged.
+CloudWatch Logs data protection provides additional masking of detected information. This additional masking restricts viewing; unmasked originals remain recoverable by authorized AWS administrators. CloudWatch retention is one day in production and seven days in development. Both environments archive traces privately in encrypted S3 for Athena analysis. Archived traces are kept indefinitely and used to diagnose, evaluate, and improve TollChat. CloudWatch expiration and deletion are asynchronous. Starting a new chat does not delete these diagnostic records.
 
 Historical usage data
 
@@ -46,8 +44,8 @@ New route-analytics collection and aggregate publication have stopped. TollChat
 retains the historical measurement bucket, registry bytes, report-generation
 objects, rollup objects, and related catalog state on AWS while the separate
 retirement decision remains pending. Existing raw route logs and Athena-result
-objects expire after seven days. Diagnostic trace archives also expire after
-seven days; this release does not purge retained data.
+objects expire after seven days. Diagnostic trace archives are kept indefinitely,
+as described above; this release does not purge retained data.
 
 This retained historical state is not a current usage service and is not used to
 identify visitors or for targeted advertising. Public report access and

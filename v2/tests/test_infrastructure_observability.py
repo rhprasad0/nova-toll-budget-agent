@@ -71,14 +71,14 @@ def test_agentcore_trace_archive_has_shared_privacy_notice_and_retention() -> No
         MEASUREMENT_INFRA,
         'resource "aws_s3_bucket_lifecycle_configuration" "agent_measurement"',
     )
-    assert lifecycle.count("agentcore-traces/") == 1
-    assert 'for_each = ["agentcore-traces"]' in lifecycle
+    assert 'prefix = "agentcore-traces/"' not in lifecycle
     assert "expiration { days = 7 }" in lifecycle
     for filename in ("dev_chat.html", "faq.html", "privacy.txt"):
         assert "v2/agent/" + filename in FIXED_PATHS
         notice = (V2_ROOT / "agent" / filename).read_text()
         assert "make an effort to protect" in notice
         assert "can miss" in notice
+        assert "kept indefinitely" in notice
 
     proxy = agentcore.split(
         'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1

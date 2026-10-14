@@ -181,7 +181,10 @@ No wildcard cleanup, unreviewed prefix expansion, `terraform state rm`,
 `force_destroy`, automatic writer restoration, or blanket key/table/bucket
 deletion is allowed. Preserve the seven-day lifecycle absent a separate
 retention approval; if data is to be preserved elsewhere, archive it before
-that seven-day expiry rather than treating the lifecycle as indefinite.
+that seven-day expiry rather than treating the lifecycle as indefinite. The
+`agentcore-traces/` archive in the same bucket has no expiration by approved
+retention decision (October 2026; see `privacy.txt`); retirement must preserve
+or relocate it, never delete it.
 
 ## Fixed ordering
 
