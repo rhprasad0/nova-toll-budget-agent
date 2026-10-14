@@ -71,7 +71,8 @@ def test_agentcore_trace_archive_has_shared_privacy_notice_and_retention() -> No
         MEASUREMENT_INFRA,
         'resource "aws_s3_bucket_lifecycle_configuration" "agent_measurement"',
     )
-    assert 'prefix = "agentcore-traces/"' not in lifecycle
+    prefixes = re.findall(r'prefix = "([^"]*)"', lifecycle)
+    assert prefixes == ["AWSLogs/", "athena-results/"]
     assert "expiration { days = 7 }" in lifecycle
     for filename in ("dev_chat.html", "faq.html", "privacy.txt"):
         assert "v2/agent/" + filename in FIXED_PATHS
