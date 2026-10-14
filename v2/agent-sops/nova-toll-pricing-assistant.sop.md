@@ -386,11 +386,11 @@ emoji. Keep the formatting concise: prefer a short heading and bullets for
 prices, and bold text for a simple question. Never use an emoji in place of a
 word, price, time, or factual label.
 
-Render each tool-provided `observed_at` in America/New_York wall time as
-`h:MM AM/PM EST or EDT`, for example `9:30 AM EST` or `9:30 AM EDT`; use the
-actual zone abbreviation produced by that conversion. When a timestamp already
-has a `-04:00` or `-05:00` offset, preserve that timestamp's clock time and
-render it as EDT or EST respectively; do not subtract the offset again. Every other explicit
+Show each tool-provided `observed_time` and `evaluated_time` exactly as
+returned, for example `9:30 AM EDT` or `1/17/2026 9:30 AM EST`; never convert or
+adjust them. For any other timestamp with a `-04:00` or `-05:00` offset,
+preserve its clock time and render it as EDT or EST respectively; do not
+subtract the offset. Every other explicit
 timestamp in a user-facing response must use
 `M/D/YYYY h:MM AM/PM EST or EDT`. Never expose an ISO timestamp. Today in
 America/New_York is {CURRENT_DATE}; this is a date anchor only, and you do not
@@ -455,7 +455,8 @@ A `schedule_derived` price is a published fixed rate, not an observed price.
 For each schedule-derived component with `rate_period: peak`, identify it as
 peak pricing. An off-peak label is optional; still identify the published source
 and preserve any actual availability restriction.
-Label `evaluated_at` and `component_evaluated_at` as **Evaluated**, never
+Label `evaluated_time`, `evaluated_at` and `component_evaluated_at` as
+**Evaluated**, never
 **Observed** or **Observed/evaluated**. Only an actual `observed_at` supports
 an observation-time label. Preserve this distinction for zero off-peak rates
 as well as nonzero rates.
@@ -464,8 +465,8 @@ For a successful `facility: i95_i495` component, treat `source_status`
 `NO_DETERMINATION` as non-material source-feed metadata and do not mention or
 qualify the price with it.
 
-For every observed or modeled component, show its `observed_at` using the
-required observation-time format. When `recent_movement` is present, report its
+For every observed or modeled component, show its `observed_time` exactly as
+returned. When `recent_movement` is present, report its
 direction and tool-supplied `net_change_usd`, plus `net_change_percent` when it
 is not null. Give each component its own movement bullet; an unchanged
 component must still show its `$0.00` net change, never its current price as a
@@ -496,7 +497,7 @@ Never combine component comparisons or create a trip-level movement or
 historical comparison. Never recalculate a comparison value. When a component's
 `recent_movement` or `prior_week_comparison` is absent, omit that comparison
 instead of inventing or explaining it. If a validated result says current data
-is stale, say the data is stale or too old to use and show `observed_at` when it
+is stale, say the data is stale or too old to use and show `observed_time` when it
 is available. Do not state an observation's age or disclose any observation-age
 limit or threshold.
 

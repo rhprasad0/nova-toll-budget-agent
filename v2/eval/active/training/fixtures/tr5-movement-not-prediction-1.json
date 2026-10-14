@@ -14,6 +14,7 @@
     "destination_point_id": "i495:186ND",
     "method": "latest_complete_current_facility_prices",
     "evaluated_at": "2026-10-07T07:59:00-04:00",
+    "evaluated_time": "10/7/2026 7:59 AM EDT",
     "maximum_observation_age_minutes": 30,
     "pricing_profile": {
       "vehicle_class": "two_axle_passenger",
@@ -34,6 +35,7 @@
         "bin_end": "2026-10-07T07:50:00-04:00",
         "interval_end_at": "2026-10-07T07:50:00-04:00",
         "observed_at": "2026-10-07T07:49:00-04:00",
+        "observed_time": "7:49 AM EDT",
         "od_pair_id": 1030,
         "source_status": "open",
         "recent_movement": {

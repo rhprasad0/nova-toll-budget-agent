@@ -158,7 +158,7 @@ def test_reviewed_billing_diagnostics_development_transition() -> None:
     reviewed = json.loads(
         (ROOT / "v2/scripts/shared-package-compatibility.json").read_text()
     )
-    baseline = "8ebb91189dac5b50cdd1c5d2c80b189305833286"
+    baseline = "41b9b823e660e9fee66b3fb112eada053edc8776"
     assert reviewed["development_baseline"] == baseline
     expected = shared_packages.evidence(
         "development", gate.ACCOUNTS["development"], "a" * 40, reviewed["packages"]
@@ -173,7 +173,7 @@ def test_reviewed_billing_diagnostics_development_transition() -> None:
         )["status"]
         == "reviewed"
     )
-    for stale in ("4a62cfa1fc35737da91cc104d68756ebd7dcb113", "b" * 40):
+    for stale in ("206d4f7dfb6284a018620b671e216febd0182b2a", "b" * 40):
         with pytest.raises(ValueError, match="shared_compatibility"):
             shared_packages.validate_compatibility(
                 reviewed, expected, stale, schemas, changing=True

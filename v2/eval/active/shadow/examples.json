@@ -31,6 +31,7 @@
               "destination_point_id": "dtr:10:exit:WB",
               "method": "latest_complete_current_facility_prices",
               "evaluated_at": "2026-10-07T17:59:00-04:00",
+              "evaluated_time": "10/7/2026 5:59 PM EDT",
               "maximum_observation_age_minutes": 30,
               "pricing_profile": {
                 "vehicle_class": "two_axle_passenger",
@@ -108,6 +109,7 @@
               "destination_point_id": "i66:13:exit:EB",
               "method": "latest_complete_current_facility_prices",
               "evaluated_at": "2026-10-07T07:59:00-04:00",
+              "evaluated_time": "10/7/2026 7:59 AM EDT",
               "maximum_observation_age_minutes": 30,
               "pricing_profile": {
                 "vehicle_class": "two_axle_passenger",
@@ -127,7 +129,8 @@
                   "bin_start": "2026-10-07T07:48:00-04:00",
                   "bin_end": "2026-10-07T07:54:00-04:00",
                   "interval_end_at": "2026-10-07T07:54:00-04:00",
-                  "observed_at": "2026-10-07T07:53:00-04:00"
+                  "observed_at": "2026-10-07T07:53:00-04:00",
+                  "observed_time": "7:53 AM EDT"
                 }
               ],
               "total_usd": "2.60"
@@ -199,6 +202,7 @@
               "destination_point_id": "i495:181ND",
               "method": "latest_complete_current_facility_prices",
               "evaluated_at": "2026-10-07T07:59:00-04:00",
+              "evaluated_time": "10/7/2026 7:59 AM EDT",
               "maximum_observation_age_minutes": 30,
               "pricing_profile": {
                 "vehicle_class": "two_axle_passenger",
@@ -219,6 +223,7 @@
                   "bin_end": "2026-10-07T07:50:00-04:00",
                   "interval_end_at": "2026-10-07T07:50:00-04:00",
                   "observed_at": "2026-10-07T07:49:00-04:00",
+                  "observed_time": "7:49 AM EDT",
                   "od_pair_id": 1037,
                   "source_status": "open"
                 }
@@ -1026,6 +1031,7 @@
               "destination_point_id": "i66:4:exit:EB",
               "method": "latest_complete_current_facility_prices",
               "evaluated_at": "2026-10-07T07:59:00-04:00",
+              "evaluated_time": "10/7/2026 7:59 AM EDT",
               "maximum_observation_age_minutes": 30,
               "pricing_profile": {
                 "vehicle_class": "two_axle_passenger",
@@ -1045,7 +1051,8 @@
                   "bin_start": "2026-10-07T07:48:00-04:00",
                   "bin_end": "2026-10-07T07:54:00-04:00",
                   "interval_end_at": "2026-10-07T07:54:00-04:00",
-                  "observed_at": "2026-10-07T07:53:00-04:00"
+                  "observed_at": "2026-10-07T07:53:00-04:00",
+                  "observed_time": "7:53 AM EDT"
                 }
               ],
               "total_usd": "2.60"
@@ -1227,6 +1234,7 @@
               "destination_point_id": "dtr:10:exit:WB",
               "method": "latest_complete_current_facility_prices",
               "evaluated_at": "2026-10-07T17:59:00-04:00",
+              "evaluated_time": "10/7/2026 5:59 PM EDT",
               "maximum_observation_age_minutes": 30,
               "pricing_profile": {
                 "vehicle_class": "two_axle_passenger",
@@ -1304,6 +1312,7 @@
               "destination_point_id": "i66:13:exit:EB",
               "method": "latest_complete_current_facility_prices",
               "evaluated_at": "2026-10-07T07:59:00-04:00",
+              "evaluated_time": "10/7/2026 7:59 AM EDT",
               "maximum_observation_age_minutes": 30,
               "pricing_profile": {
                 "vehicle_class": "two_axle_passenger",
@@ -1323,7 +1332,8 @@
                   "bin_start": "2026-10-07T07:48:00-04:00",
                   "bin_end": "2026-10-07T07:54:00-04:00",
                   "interval_end_at": "2026-10-07T07:54:00-04:00",
-                  "observed_at": "2026-10-07T07:53:00-04:00"
+                  "observed_at": "2026-10-07T07:53:00-04:00",
+                  "observed_time": "7:53 AM EDT"
                 }
               ],
               "total_usd": "2.60"
@@ -1362,6 +1372,7 @@
               "destination_point_id": "dtr:10:exit:WB",
               "method": "latest_complete_current_facility_prices",
               "evaluated_at": "2026-10-07T17:59:00-04:00",
+              "evaluated_time": "10/7/2026 5:59 PM EDT",
               "maximum_observation_age_minutes": 30,
               "pricing_profile": {
                 "vehicle_class": "two_axle_passenger",
@@ -1624,6 +1635,7 @@
               "destination_point_id": "dtr:10:exit:WB",
               "method": "latest_complete_current_facility_prices",
               "evaluated_at": "2026-10-07T17:59:00-04:00",
+              "evaluated_time": "10/7/2026 5:59 PM EDT",
               "maximum_observation_age_minutes": 30,
               "pricing_profile": {
                 "vehicle_class": "two_axle_passenger",

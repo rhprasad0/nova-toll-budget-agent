@@ -65,7 +65,7 @@ def test_runtime_spec_and_generated_contract_match_models() -> None:
 
 def test_generated_contract_matches_versioned_digest() -> None:
     manifest = _manifest()["get_current_toll_price"]
-    assert manifest["current"] == "1.5.1"
+    assert manifest["current"] == "1.6.0"
     assert (
         _digest(pricing_tool.TOOL_CONTRACT) == manifest["releases"][manifest["current"]]
     )
@@ -110,8 +110,8 @@ def test_manifest_accepts_new_contract_with_preserved_one_dot_zero_release() -> 
 def test_manifest_accepts_additive_version_advance() -> None:
     previous = _manifest()
     current = copy.deepcopy(previous)
-    current["get_current_toll_price"]["current"] = "1.6.0"
-    current["get_current_toll_price"]["releases"]["1.6.0"] = "a" * 64
+    current["get_current_toll_price"]["current"] = "1.7.0"
+    current["get_current_toll_price"]["releases"]["1.7.0"] = "a" * 64
     version_check.validate_manifest_update(previous, current)
 
 
@@ -139,9 +139,9 @@ def test_manifest_accepts_accumulated_forward_releases(
 def test_manifest_rejects_backfill_even_when_current_advances() -> None:
     previous = _manifest()
     current = copy.deepcopy(previous)
-    current["get_current_toll_price"]["current"] = "1.6.0"
+    current["get_current_toll_price"]["current"] = "1.7.0"
     current["get_current_toll_price"]["releases"].update(
-        {"1.4.1": "b" * 64, "1.6.0": "c" * 64}
+        {"1.4.1": "b" * 64, "1.7.0": "c" * 64}
     )
     with pytest.raises(ValueError, match="must advance beyond"):
         version_check.validate_manifest_update(previous, current)

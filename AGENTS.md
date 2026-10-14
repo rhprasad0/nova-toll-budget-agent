@@ -73,10 +73,6 @@ only Read, Grep, Glob and Bash; its prompt keeps Bash read-only, so do not run i
 in a bypass-permissions session. Start a new Claude Code session in the checkout
 containing the agent.
 
-The repository's `PreToolUse` hook in `.claude/settings.json` runs
-`v2/scripts/holdout_guard.py` to block agent access to the external eval holdout.
-Never disable or evade it; report blocked access to the operator.
-
 The Root model and reasoning effort remain selected by the host/user; do not pin
 them in repository config.
 

@@ -277,6 +277,38 @@ def test_i66_pricer_omits_incomplete_history() -> None:
     assert component.prior_week_comparison is None
 
 
+@pytest.mark.parametrize(
+    ("instant", "shown"),
+    [
+        ("2026-10-13T21:12:27+00:00", "5:12 PM EDT"),
+        ("2026-11-02T22:12:27+00:00", "5:12 PM EST"),
+    ],
+)
+def test_display_times_follow_new_york_daylight_saving(
+    instant: str, shown: str
+) -> None:
+    assert pricing_tool._eastern_clock(datetime.fromisoformat(instant)) == shown
+
+
+def test_components_carry_display_times_that_match_their_timestamps() -> None:
+    component = pricing_tool._build_i66_component(i66_leg(), i66_rows())
+    stale = pricing_tool._build_i66_component(
+        i66_leg(), i66_rows(unavailable_reason="stale_observation")
+    )
+
+    assert isinstance(component, pricing_tool._I66ObservedComponent)
+    assert component.observed_time == "8:22 AM EDT"
+    assert isinstance(stale, pricing_tool._UnavailableComponent)
+    assert (stale.evaluated_time, stale.observed_time) == (
+        "8/13/2026 8:32 AM EDT",
+        "8:01 AM EDT",
+    )
+    with pytest.raises(ValueError, match="display time"):
+        pricing_tool._I66ObservedComponent.model_validate(
+            {**dict(component), "observed_time": "4:22 AM EDT"}
+        )
+
+
 def test_prior_week_expectation_excludes_nonexistent_spring_forward_bin() -> None:
     assert (
         pricing_tool._count_valid_prior_week_bins(

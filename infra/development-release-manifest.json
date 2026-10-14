@@ -43,7 +43,7 @@
     "infra/triggers.tf": "2a696983ca5d0503bfb542e6ccf3365d90e05d32276c04ee075c4ac2df06f607",
     "infra/variables.tf": "6972b85878fea014e2375ba05815bd9902cc722695d50c913d639e344559c881",
     "infra/versions.tf": "f36522386a6e5e733d6d0ed5b61cccb33ba5e08737233da00698682beae671a5",
-    "v2/agent-sops/nova-toll-pricing-assistant.sop.md": "dfd525bda4f9c0b9a5a7e39d9f475c24c98f35f717ae1fb9b3433b0505d4930b",
+    "v2/agent-sops/nova-toll-pricing-assistant.sop.md": "f0d0bc0cc574909dc822e8707ae4c72657ec2fbabaf18e788bc7bb0b4160e5ed",
     "v2/agent/__init__.py": "9a7c5def20c27bee02ace31193aa0ab9b8548e1502db2f894fcf67d3b86a5e88",
     "v2/agent/agentcore_entrypoint.py": "1629ba8bcdf0756dd8faef8c78bf5a8bf18f73ff1388c803dc7bc06b9c9963d3",
     "v2/agent/assets/LICENSE.txt": "792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473",
@@ -82,10 +82,10 @@
     "v2/agent/robots.txt": "006953aa1ea1e823fdbde642b82832eca750db1ef7d22edffee8d8a7deabf879",
     "v2/agent/telemetry.py": "57c5eb6e4fea3a8d62f79cd242ad0eed99724dd9c30c59ff981270943ee1b79f",
     "v2/agent/terms.txt": "8fe686b47200732c6d823a43ae214d9113849f53f2dd9f84e65a82c62f4f46af",
-    "v2/agent/toll_agent.py": "6099b508e382cbd642b48f3f3b2c065cb578421f0f713e9dc4325fff11c62c64",
-    "v2/agent_tools/contract-manifest.json": "0bfed17d75d3329f3ad3fd9ca70aa226697bb16ed151cfebc663344c3546125e",
+    "v2/agent/toll_agent.py": "885ea00c2c3eb22972c17e911018ee0dc040346f7e8680a625a1def06e533b85",
+    "v2/agent_tools/contract-manifest.json": "b606b2d33c6f89887b561e7d0d6855d0ae964ac7185a52055645bcdafb8f194f",
     "v2/agent_tools/currency.py": "09a6325499e46ef0eca57ac3dd2cebedd460cf6937ceb48860c58eb1ea238710",
-    "v2/agent_tools/current_price_domain.py": "673fbe6fc57b835347f4074c446a1da154cd03633c4e91185181e8521a8282d9",
+    "v2/agent_tools/current_price_domain.py": "c65202bb984299f793617416b5d3f6a5611a39512013cb4f0545c45e41c53cc7",
     "v2/agent_tools/get_annual_toll_ballpark.py": "510ced8f159a913d5f49c9f55211be3615aa5c419d3418e6a9571d087544a493",
     "v2/agent_tools/get_current_toll_price.py": "03560678deb79a8665b47de80793e744a6072419f09e4ec95401019ab23befcc",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e",
@@ -189,7 +189,7 @@
     "v2/scripts/run_private_stage.sh": "7557685f176439a393a8b9cfbe3460bf70875dc2fa1a0b16ff5b4ec4dec7f38e",
     "v2/scripts/run_production_migrations.py": "2077cbd16ba4832de6c75f1f113c2f23bb16f1d57a0dcb1615701b2631bb2e5c",
     "v2/scripts/run_production_migrations_workflow.sh": "731d27486b9c2426222eccf9e96119dafc62b8bc828d217b682101d6f8fc109b",
-    "v2/scripts/shared-package-compatibility.json": "e6ea102471370ef900957630c84e3e4572cd356831220a1e353ae778e4a5cfee",
+    "v2/scripts/shared-package-compatibility.json": "3d7904172043c7c009746fcbc5bd5888f922a1ed7fb9143f921f09397ece48c4",
     "v2/scripts/shared_packages.py": "4c8be7bcf4ed0ba82579f3171e87ac3c2f97c7f2a0a2c87dbad623e052851c39",
     "v2/scripts/timed-checks-requirements.in": "8218bd738a1337e889d04756b2f7c53f1693503b97c519dcc8a10a423b2837e5",
     "v2/scripts/timed-checks-requirements.txt": "1ef94fcd8c97c31ec48575bd01d835d18cc60751529f1ede16b17e5a82cd6bd4",
@@ -198,11 +198,11 @@
     "v2/uv.lock": "b7a2c24b78a17e1d6b19e12ef213c1341c02f283c992627941a791df2fb6b52b"
   },
   "packages": {
-    "agentcore.zip": "aba13d359eb58eb53f89a926f25c7a47dedea1467ba961f27647ac7f74ea4487",
+    "agentcore.zip": "2909c81babf20f3b061ec95a57ab04f77c37ae2d74e24e85dd56fcd752ade806",
     "chat-proxy.zip": "66150b47286b9ee0d8a8d1257c00aa589f26be41ce81c6cd10a1da2b9bd65332",
     "loader.zip": "17f3ac0e9cd20109fc6f287c144ab4cb2181b1eb3fe6da7cb24a849be0fea985",
-    "publisher.zip": "9f24d1bd1d3f44ac170fb5e63b26c4961f6d48a400aed8b5f47632f594823c78",
-    "timed-checks.zip": "5aa2e52c7157440a700c8e8e296f6960a9c931ed02b9b6f81a0ab70980a44c54"
+    "publisher.zip": "8862b1803b39956af495fb46cad632c23466f9dc2a5e355433ac7106bb6ab49a",
+    "timed-checks.zip": "69dd06adc587098b582faa881a9a2736249c787e9280358b14c8c23d4649dd98"
   },
   "mutations": [
     {

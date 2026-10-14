@@ -1,7 +1,7 @@
 # TollChat evaluation
 
-**Locally authored suite:** 50 training and 10 shadow cases (5.2.2) are
-active, with 25 holdout cases (5.2.2) stored externally. Harness 2.5.19 has an
+**Locally authored suite:** 50 training and 10 shadow cases (5.2.13) are
+active, with 25 holdout cases (5.2.13) stored externally. Harness 2.5.19 has an
 approved aggregate calibration receipt. The 100-case development corpus
 3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
 Its recorded scores and reviews remain historical; it cannot run or seed fresh inputs.
@@ -55,11 +55,8 @@ aggregate feedback. See the
 [host-side commands](GOLDEN_RUNNER.md#external-holdout-checkpoints).
 
 **Separation is procedural:** the coding agent has host filesystem access but
-must never inspect holdout files or detailed evidence. The `PreToolUse` hook in
-[`.claude/settings.json`](../../.claude/settings.json) runs
-[`holdout_guard.py`](../scripts/holdout_guard.py), which blocks detected agent
-tool access to that tree except literal `eval.golden_run run|aggregate` commands
-run from this checkout's `v2/`. It guards supported tool calls, not the OS. Pair visible and hidden
+must never inspect holdout files or detailed evidence. No hook enforces this.
+Pair visible and hidden
 scores on the same committed candidate to track their gap. Repeated aggregate
 feedback can still influence tuning; this is not fully blind accuracy.
 

@@ -7,6 +7,7 @@ the weekly accounts keep those distinctions alongside the figures.
 
 | Week | Work | Recorded result |
 | --- | --- | --- |
+| [October 12-18](journal/2026-10-12.md) | Have the current-price tool supply Eastern display times; remove the holdout guard hook | Evening daily check: **2 of 3** observed-time answers were **4 hours early** before the fix; corpus 5.2.13 actor checks **84/85** valid, **$0.13**; post-fix results pending |
 | [October 5-11](journal/2026-10-05.md) | Freeze all three suites and calibrate daily judges; climb training pass³ with SOP prose | Golden: **100% judge decisions, ≥95% actor validity**, earlier application **63/85 passes**, ceiling **$22.924064**; scheduled: **204/204 judgments**, **$0.0492** estimated; SOP climb: training pass³ **70.4% → 80.7%**, **$17.07** |
 | [September 28-October 4](journal/2026-09-28.md) | Retire the private holdout approach; repair certificate/dependency builds; measure inference cost | Controlled benchmark: **$1.115488 per 1,000 completed answers** at the sampled average; infrastructure and tool execution excluded |
 | [September 21-27](journal/2026-09-21.md) | Calibrate judges; compare prompts and catalog formats; test repeatability; profile CI | Final development verification: **269/300 successful trials, 78% pass³**; below the **271/300 target** |
