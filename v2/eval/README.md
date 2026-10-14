@@ -55,11 +55,8 @@ aggregate feedback. See the
 [host-side commands](GOLDEN_RUNNER.md#external-holdout-checkpoints).
 
 **Separation is procedural:** the coding agent has host filesystem access but
-must never inspect holdout files or detailed evidence. The `PreToolUse` hook in
-[`.claude/settings.json`](../../.claude/settings.json) runs
-[`holdout_guard.py`](../scripts/holdout_guard.py), which blocks detected agent
-tool access to that tree except literal `eval.golden_run run|aggregate` commands
-run from this checkout's `v2/`. It guards supported tool calls, not the OS. Pair visible and hidden
+must never inspect holdout files or detailed evidence. No hook enforces this.
+Pair visible and hidden
 scores on the same committed candidate to track their gap. Repeated aggregate
 feedback can still influence tuning; this is not fully blind accuracy.
 
