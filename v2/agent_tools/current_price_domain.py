@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncGenerator, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from itertools import groupby, pairwise
@@ -103,6 +103,22 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
 
 
+# The model misreads ISO offsets as arithmetic, so the tool supplies display times.
+def _eastern_clock(value: datetime) -> str:
+    return value.astimezone(_EASTERN).strftime("%-I:%M %p %Z")
+
+
+def _eastern_datetime(value: datetime) -> str:
+    return f"{value.astimezone(_EASTERN):%-m/%-d/%Y} {_eastern_clock(value)}"
+
+
+def _check_display(
+    shown: str | None, value: datetime | None, render: Callable[[datetime], str]
+) -> None:
+    if shown is not None and (value is None or shown != render(value)):
+        raise ValueError("display time does not match its timestamp")
+
+
 class _ToolContext(Protocol):
     @property
     def tool_use(self) -> Mapping[str, Any]: ...
@@ -145,9 +161,19 @@ class _UnavailableComponent(_Model):
         "exceptional_i95_schedule",
     ]
     component_evaluated_at: datetime
+    evaluated_time: str | None = None
     interval_end_at: datetime | None
     observed_at: datetime | None
+    observed_time: str | None = None
     source_status: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_display_times(self) -> Self:
+        _check_display(
+            self.evaluated_time, self.component_evaluated_at, _eastern_datetime
+        )
+        _check_display(self.observed_time, self.observed_at, _eastern_clock)
+        return self
 
 
 class _IncompleteRoutePriceResponse(_Model):
@@ -288,8 +314,14 @@ class _I66ObservedComponent(_Model):
     bin_end: datetime
     interval_end_at: datetime
     observed_at: datetime
+    observed_time: str | None = None
     recent_movement: _RecentMovement | None = None
     prior_week_comparison: _PriorWeekComparison | None = None
+
+    @model_validator(mode="after")
+    def _validate_display_time(self) -> Self:
+        _check_display(self.observed_time, self.observed_at, _eastern_clock)
+        return self
 
 
 class _I66PublishedSchedule(_Model):
@@ -329,6 +361,7 @@ class _I95Component(_Model):
     bin_end: datetime
     interval_end_at: datetime
     observed_at: datetime
+    observed_time: str | None = None
     od_pair_id: Annotated[int, Field(gt=0)]
     proxy_od_pair_id: Annotated[int, Field(gt=0)] | None = None
     source_status: Annotated[str, Field(min_length=1)]
@@ -351,6 +384,7 @@ class _I95Component(_Model):
             )
         ):
             raise ValueError("I-95/I-495 pricing provenance is inconsistent")
+        _check_display(self.observed_time, self.observed_at, _eastern_clock)
         return self
 
 
@@ -550,11 +584,17 @@ class _CurrentPriceResponse(_Model):
     destination_point_id: str
     method: Literal["latest_complete_current_facility_prices"]
     evaluated_at: datetime
+    evaluated_time: str | None = None
     maximum_observation_age_minutes: Literal[30]
     pricing_profile: _PricingProfile
     source_kind: Literal["observed", "modeled", "schedule_derived", "mixed", "none"]
     components: list[_PriceComponent]
     total_usd: Decimal
+
+    @model_validator(mode="after")
+    def _validate_display_time(self) -> Self:
+        _check_display(self.evaluated_time, self.evaluated_at, _eastern_datetime)
+        return self
 
 
 type _PricingOutput = (
@@ -857,6 +897,7 @@ def _build_i66_component(
                 current.availability_reason,
             ),
             component_evaluated_at=evaluated_at,
+            evaluated_time=_eastern_datetime(evaluated_at),
             interval_end_at=(
                 current.interval_end_at.astimezone(_EASTERN)
                 if current.interval_end_at
@@ -866,6 +907,9 @@ def _build_i66_component(
                 current.observed_at.astimezone(_EASTERN)
                 if current.observed_at
                 else None
+            ),
+            observed_time=(
+                _eastern_clock(current.observed_at) if current.observed_at else None
             ),
         )
 
@@ -890,6 +934,7 @@ def _build_i66_component(
         bin_end=current_bin_end.astimezone(_EASTERN),
         interval_end_at=current_interval_end.astimezone(_EASTERN),
         observed_at=current_observed_at.astimezone(_EASTERN),
+        observed_time=_eastern_clock(current_observed_at),
         recent_movement=recent_movement,
         prior_week_comparison=prior_week_comparison,
     )
@@ -937,6 +982,7 @@ def _build_i95_i495_component(
                 current.availability_reason,
             ),
             component_evaluated_at=evaluated_at,
+            evaluated_time=_eastern_datetime(evaluated_at),
             interval_end_at=(
                 current.interval_end_at.astimezone(_EASTERN)
                 if current.interval_end_at
@@ -946,6 +992,9 @@ def _build_i95_i495_component(
                 current.observed_at.astimezone(_EASTERN)
                 if current.observed_at
                 else None
+            ),
+            observed_time=(
+                _eastern_clock(current.observed_at) if current.observed_at else None
             ),
             source_status=current.source_status,
         )
@@ -970,6 +1019,7 @@ def _build_i95_i495_component(
         bin_end=cast(datetime, current.bin_end_at).astimezone(_EASTERN),
         interval_end_at=cast(datetime, current.interval_end_at).astimezone(_EASTERN),
         observed_at=cast(datetime, current.observed_at).astimezone(_EASTERN),
+        observed_time=_eastern_clock(cast(datetime, current.observed_at)),
         od_pair_id=cast(int, current.od_pair_id),
         proxy_od_pair_id=current.proxy_od_pair_id,
         source_status=cast(str, current.source_status),
@@ -1211,11 +1261,13 @@ def build_current_price_result(
         if len(source_kinds) == 1
         else "mixed"
     )
+    response_evaluated_at = database_evaluated_at or evaluated_at
     response = _CurrentPriceResponse(
         origin_point_id=request.origin_point_id,
         destination_point_id=request.destination_point_id,
         method=_METHOD,
-        evaluated_at=database_evaluated_at or evaluated_at,
+        evaluated_at=response_evaluated_at,
+        evaluated_time=_eastern_datetime(response_evaluated_at),
         maximum_observation_age_minutes=30,
         pricing_profile=request.pricing_profile,
         source_kind=source_kind,
@@ -1423,5 +1475,6 @@ __all__ = (
     "_build_i66_component",
     "_build_i95_i495_component",
     "_count_valid_prior_week_bins",
+    "_eastern_clock",
     "_fetch_i95_i495_comparisons",
 )

@@ -719,6 +719,7 @@ def test_greenway_only_route_streams_progress_and_returns_total(
         "destination_point_id": "greenway:28:exit:EB",
         "method": "latest_complete_current_facility_prices",
         "evaluated_at": "2026-08-17T06:30:00-04:00",
+        "evaluated_time": "8/17/2026 6:30 AM EDT",
         "maximum_observation_age_minutes": 30,
         "pricing_profile": _input()["pricing_profile"],
         "source_kind": "schedule_derived",

@@ -19,8 +19,10 @@
         "route_step_id": "step-1",
         "reason": "missing_observation",
         "component_evaluated_at": "2026-10-07T07:59:00-04:00",
+        "evaluated_time": "10/7/2026 7:59 AM EDT",
         "interval_end_at": null,
-        "observed_at": null
+        "observed_at": null,
+        "observed_time": null
       }
     ]
   },
