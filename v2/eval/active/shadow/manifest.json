@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "version": "5.2.3",
+  "version": "5.2.13",
   "evaluation_scope": "shadow",
   "case_count": 10,
   "trials_per_case": 1,
