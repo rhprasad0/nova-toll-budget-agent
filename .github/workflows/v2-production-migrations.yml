@@ -309,7 +309,7 @@ jobs:
           fetch_ca() {
             mkdir -p infra/build/ca || return
             curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o infra/build/ca/rds-ca-bundle.pem || return
-            echo "fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c  infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status || return
+            echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status || return
             chmod 600 infra/build/ca/rds-ca-bundle.pem || return
           }
           run_private_stage rds-ca "$RUNNER_TEMP/production-ca.out" "$RUNNER_TEMP/production-ca.err" fetch_ca

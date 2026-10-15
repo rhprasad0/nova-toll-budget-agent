@@ -68,7 +68,7 @@ def test_manual_oracle_migration_030_contract_is_offline_guarded_and_syntax_chec
         'get-secret-value --secret-id "$SECRET_ARN"',
         'type == "object"',
         "CA_URL=https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem",
-        "CA_SHA256=fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c",
+        "CA_SHA256=90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
         "sha256sum --check --status",
         "PGSSLMODE=verify-full",
         'PGSSLROOTCERT="$CA_FILE"',
@@ -1894,7 +1894,7 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
         in DEVELOPMENT_MIGRATIONS_WORKFLOW
     )
     assert (
-        "fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c"
+        "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
         in DEVELOPMENT_MIGRATIONS_WORKFLOW
     )
     assert "jq -cn" in DEVELOPMENT_MIGRATION_HELPER
