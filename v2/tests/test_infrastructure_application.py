@@ -700,7 +700,7 @@ def test_ca_helper_rejects_download_and_checksum_failures(
     assert checksum_log.exists() is (curl_status == 0)
     if curl_status == 0:
         assert checksum_log.read_text() == (
-            "fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c"
+            "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
             f"  {destination}\n"
         )
     assert ("RDS CA bundle digest mismatch" in result.stderr) is (curl_status == 0)

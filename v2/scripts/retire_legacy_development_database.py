@@ -54,7 +54,7 @@ AWS_CREDENTIAL_ENV = {
 SECRET_ARN_PATTERN = re.compile(
     r"^arn:aws:secretsmanager:us-east-1:920534282028:secret:[^\s]+$"
 )
-APPROVED_CA_SHA256 = "fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c"
+APPROVED_CA_SHA256 = "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
 
 
 def _sql_list(values: tuple[str, ...]) -> str:

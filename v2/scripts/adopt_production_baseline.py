@@ -35,7 +35,7 @@ RDS_ENDPOINT_PATTERN = re.compile(
 SECRET_ARN_PATTERN = re.compile(
     rf"arn:aws:secretsmanager:{re.escape(REGION)}:{ACCOUNT_ID}:secret:\S+\Z"
 )
-APPROVED_CA_SHA256 = "fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c"
+APPROVED_CA_SHA256 = "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
 AWS_SERVICE_ENDPOINTS = MappingProxyType(
     {
         "sts": "https://sts.us-east-1.amazonaws.com",

@@ -1539,7 +1539,7 @@ def test_retirement_runbook_and_sources_keep_the_lower_pr_boundary() -> None:
     assert "PRODUCTION_PROFILE" in database
     assert "APPROVED_CA_SHA256" in database
     assert (
-        "fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c" in database
+        "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b" in database
     )
     for required in (
         "stat -Lc",
