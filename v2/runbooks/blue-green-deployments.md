@@ -68,9 +68,11 @@ approval authorizes those immediate shared-component effects and compatible
 migrations; the later production cutover approval authorizes application routing.
 Before preparation apply, the trusted gate requires the reviewed package hashes,
 unchanged schema contracts and serving baseline in
-`v2/scripts/shared-package-compatibility.json`. This record covers the development
-transition from `20e341ca0bb40b92509a69ce3d60e2c0044bb2fe` and retains the production
-baseline `537a4aa480bc95de704a4af5998e376c05689887`. Preparation checks compatibility
+`v2/scripts/shared-package-compatibility.json`. Its `baseline` and
+`development_baseline` name the release each environment must be serving before a
+preparation that changes shared components; from any other serving release that
+preparation fails with `shared_compatibility`. CI also re-runs the `baseline`
+release's database contracts. Preparation checks compatibility
 before migrations and repeats the check before applying the saved plan.
 An already-completed preparation retains these verified packages without needing
 to repeat that transition from the original baseline. Extending it requires

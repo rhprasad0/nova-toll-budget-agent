@@ -4,8 +4,8 @@
 .release-history { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
 .release-history a { font-weight: 650; }
 .release-hero { padding: 42px 0 34px; display: grid; grid-template-columns: 1fr 330px; gap: 40px; align-items: end; }
-.release-hero h1 { font-size: clamp(38px, 5vw, 66px); letter-spacing: -.055em; margin: 14px 0 20px; }
-.release-hero h1 span { color: var(--accent); }
+.release-hero :is(h1, h2) { font-size: clamp(38px, 5vw, 66px); letter-spacing: -.055em; margin: 14px 0 20px; }
+.release-hero :is(h1, h2) span { color: var(--accent); }
 .release-hero .intro { max-width: 640px; color: var(--muted); font-size: 17px; line-height: 1.6; }
 .release-id { border-left: 2px solid var(--line); padding-left: 22px; color: var(--muted); font-size: 12px; }
 .release-id strong { display: block; color: var(--ink); font-size: 16px; margin-bottom: 8px; }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="TollChat release evidence: measured gains, repeatability, uncertainty, cost, and remaining weaknesses.">
+  <meta name="description" content="TollChat release evidence. v1.2.0 vs the production agent it replaces, same 25 holdout cases, five runs each: 78.4% vs 72.0% of cases passed all three attempts, a gain within run-to-run variation.">
   <title>TollChat · Release scorecard</title>
   <link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png">
   <link rel="stylesheet" href="/assets/evals.css">
@@ -11,20 +11,99 @@
 </head>
 <body class="release-page">
   <a class="skip" href="#main">Skip to release evidence</a>
-  <div class="demo"><strong>Development evidence</strong> · Holdout not evaluated · Frozen replay, not live pricing</div>
+  <div class="demo"><strong>Release evidence</strong> · Frozen tool replay, not live pricing</div>
   <div class="wrap">
     <header class="nav">
       <a class="brand" href="/" aria-label="TollChat home"><span class="mark" aria-hidden="true">T</span><span class="brand-name">tollchat<span style="color:var(--blue)">.</span></span><span class="nav-caption">An applied AI project</span></a>
       <nav class="nav-links" aria-label="Project pages"><a href="/">Chat</a><a href="/cost-dashboard">Cost</a><a href="/eval-dashboard">Evaluation results</a><a href="/release-dashboard" aria-current="page">Release</a></nav>
     </header>
     <main id="main">
-      <nav class="release-history" aria-label="Release history"><span>RELEASE HISTORY · 1 candidate</span><a href="#prompt-2-3-15">Prompt 2.3.15 / renderer 1.0.2 ↓</a></nav>
-      <!-- Append future dated release sections; preserve this candidate's measured contracts and evidence. -->
+      <nav class="release-history" aria-label="Release history"><span>RELEASE HISTORY · 2 candidates</span><a href="#prompt-2-3-17">v1.2.0 · Prompt 2.3.17 / tool 1.6.0 ↓</a><a href="#prompt-2-3-15">Prompt 2.3.15 / renderer 1.0.2 ↓</a></nav>
+      <!-- Add newer dated release sections above older ones; preserve each candidate's measured contracts and evidence. -->
+      <article id="prompt-2-3-17" aria-labelledby="release-2-title">
+        <header class="release-hero">
+          <div>
+            <p class="eyebrow">Release scorecard · v1.2.0 · October 15, 2026</p>
+            <h1 id="release-2-title">Tested against<br><span>the agent it replaces.</span></h1>
+            <p class="intro">On the same 25 holdout cases, the v1.2.0 candidate passed all three attempts on 78.4% of cases on average over five runs, against 72.0% for the production agent it replaces (v1.1.2). The 6.4-point gain is about the size of run-to-run variation, so it is an observed improvement, not a proven one.</p>
+          </div>
+          <aside class="release-id" aria-label="v1.2.0 candidate identity">
+            <strong>Pre-call route check + Eastern display times</strong>
+            <p>Prompt 2.3.17 · Current-price tool 1.6.0<br>Application model: gpt-6-luna · low reasoning</p>
+            <p><span class="badge">Release candidate</span> <span class="badge pending">Holdout not blind</span></p>
+            <p>25 holdout cases × 3 attempts × 5 runs per agent<br>Both agents measured October 15, 2026</p>
+          </aside>
+        </header>
+
+        <section class="score-grid" aria-label="v1.2.0 comparison at a glance">
+          <div class="score-card"><p class="score-label">Holdout cases passing all 3 · mean of 5 runs</p><p class="score-value">78.4%</p><small class="change">+6.4 pp vs production agent</small><small>72.0% for v1.1.2 · same 25 cases</small></div>
+          <div class="score-card"><p class="score-label">Holdout attempts passed · 5 runs</p><p class="score-value">86.4%</p><small class="change">+2.1 pp, within run-to-run spread</small><small>324/375 candidate · 316/375 v1.1.2</small></div>
+          <div class="score-card"><p class="score-label">Training cases passing all 3 · 1 run</p><p class="score-value">82%</p><small class="change">+4 pp vs production agent</small><small>78% for v1.1.2 · 50 exposed cases</small></div>
+          <div class="score-card"><p class="score-label">Holdout run-to-run range · pass³</p><p class="score-value">72–88<span style="font-size:18px">%</span></p><small>v1.1.2: 64–76%</small><small>The two ranges overlap</small></div>
+        </section>
+
+        <section class="release-section" aria-labelledby="compare-title">
+          <div class="section-top"><div><h2 id="compare-title">Old agent and new agent, same cases.</h2><p>Every comparison row was measured on October 15 with one approved evaluator, alternating old and new runs.</p></div><span class="sample-note">Pass³ = cases passing all three attempts</span></div>
+          <p class="mobile-table-note">Scroll the table sideways to compare both agents.</p>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Production agent and v1.2.0 candidate comparison">
+            <table id="holdout-comparison"><caption>Same 25 holdout cases and evaluator; five holdout runs and one training run per agent.</caption>
+              <thead><tr><th scope="col">Measure</th><th scope="col">v1.1.2 production agent<br>prompt 2.3.15 · tool 1.5.1</th><th scope="col">v1.2.0 candidate<br>prompt 2.3.17 · tool 1.6.0</th><th scope="col">Comparable?</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">Holdout pass³ by run</th><td>72 · 76 · 76 · 64 · 72</td><td>72 · 72 · 88 · 72 · 88</td><td>Yes: same 25 cases, evaluator and settings</td></tr>
+                <tr><th scope="row">Holdout pass³ · mean of 5 runs</th><td>72.0%</td><td>78.4%</td><td>Yes · +6.4 pp, within run-to-run spread</td></tr>
+                <tr><th scope="row">Holdout attempts passed</th><td>316/375 · 84.3%</td><td>324/375 · 86.4%</td><td>Yes · +2.1 pp, within run-to-run spread</td></tr>
+                <tr><th scope="row">Inconclusive holdout attempts</th><td>4/375</td><td>1/375</td><td>Yes · counted as not passed</td></tr>
+                <tr><th scope="row">Training pass³ · 1 run</th><td>78% · 39/50</td><td>82% · 41/50</td><td>Yes · exposed cases, used while tuning</td></tr>
+                <tr><th scope="row">Training minus holdout pass³</th><td>+6.0 pp</td><td>+3.6 pp</td><td>Descriptive · one training run each</td></tr>
+                <tr><th scope="row">Evaluation cost per holdout run</th><td>$0.35</td><td>$0.35</td><td>Yes · includes simulated user and judge</td></tr>
+                <tr><th scope="row">September 27 scorecard: 89.7% attempts, 78% pass³</th><td>Measured for prompt 2.3.15</td><td>Not measured</td><td>Not comparable · retired 100-case development set, older harness</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="release-section" aria-labelledby="change-title">
+          <div class="section-top"><div><h2 id="change-title">What changed, and what the numbers cannot say.</h2><p>Two agent changes shipped together; the measurement covers their combined effect.</p></div></div>
+          <div class="two-column">
+            <div class="detail-card">
+              <h3>Changes to the agent</h3>
+              <p><strong>Pre-call route check (prompt 2.3.16).</strong> Before pricing, the agent checks that each entry and exit belong to the same road and direction, keeping the places the user asked for. In the October 10 training runs it cut rejected pricing calls from 16 to 8 per run.</p>
+              <p style="margin-top:10px"><strong>Eastern display times (prompt 2.3.17, tool 1.6.0).</strong> The pricing tool now supplies ready-to-show New York times such as “5:12 PM EDT”, and the agent copies them. Before the fix, two of three production observed-time answers were four hours early.</p>
+              <p class="footnote">20-turn chats, chat persistence across a refresh, and billing alerts also ship in v1.2.0. They sit outside the agent’s prompt and tools, and these runs do not measure them.</p>
+            </div>
+            <div class="detail-card">
+              <h3>Limits of this evidence</h3>
+              <p><strong>The holdout is not blind.</strong> Its cases were read on October 10 to diagnose failures and then repaired, and earlier aggregate holdout scores informed the prompt 2.3.16 choice. Treat these results as descriptive, not as unseen-production accuracy.</p>
+              <p style="margin-top:10px"><strong>Frozen tool replay, five runs.</strong> Tools replay recorded data rather than live prices. In these runs, single runs of identical code moved by up to 16 points, so five runs per agent cannot confirm a gain of a few points.</p>
+              <p class="footnote">The production agent ran holdout and training 5.2.2 because it cannot read tool 1.6.0’s new time fields. Version 5.2.13 adds only those derived strings: cases, routes and prices are identical.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="release-section" aria-labelledby="evidence-2-title">
+          <div class="section-top"><div><h2 id="evidence-2-title">The evidence behind v1.2.0.</h2><p>Measured contracts for both agents, pinned to these runs.</p></div><span class="badge">Holdout aggregates · Frozen replay</span></div>
+          <dl class="contracts">
+            <div><dt>Published prompt contract</dt><dd>2.3.17 · baseline 2.3.15</dd></div><div><dt>Current-price tool contract</dt><dd>1.6.0 · baseline 1.5.1</dd></div>
+            <div><dt>Annual-estimate tool contract</dt><dd>3.0.1 · unchanged</dd></div><div><dt>Prompt renderer</dt><dd>1.0.2 · unchanged</dd></div>
+            <div><dt>Holdout / training corpus</dt><dd>5.2.13 · baseline 5.2.2</dd></div><div><dt>Evaluation harness</dt><dd>2.5.19 · both agents</dd></div>
+            <div><dt>Cases</dt><dd>25 holdout · 50 training</dd></div><div><dt>Application configuration</dt><dd>gpt-6-luna · low · 2,048 tokens</dd></div>
+          </dl>
+          <details id="holdout-methodology"><summary>How these numbers were measured</summary>
+            <p><strong>Success:</strong> an attempt succeeds only when every required Outcome, Grounding, Rules, and mechanical check passes on a valid scored attempt. Pass³ is the share of cases that succeed on all three attempts, counted directly rather than cubed from the attempt rate. An inconclusive attempt, where the simulated user was invalid, counts as not passed.</p>
+            <p><strong>Design:</strong> old and new runs alternated on one day, five of each with the old agent first in each pair, under the same approved evaluator calibration. Each holdout run covers all 25 cases three times. One training run per agent covers the 50 training cases three times.</p>
+            <p><strong>Uncertainty:</strong> the page reports every run and its range. Only aggregate scores leave the holdout store, so this entry publishes no case-level bootstrap interval.</p>
+            <p><strong>The production agent:</strong> v1.1.2’s prompt and tools ran on the harness commit that introduced 2.5.19. Its prompt, agent and tool code match v1.1.2 byte for byte, except a version label that reads 2.3.16. Earlier holdout runs of the same agent, on October 10 under harness 2.5.18, scored 76%, 60% and 48%.</p>
+            <p><strong>Provenance:</strong> the candidate was measured at commit <a href="https://github.com/rhprasad0/nova-toll-budget-agent/commit/532f9fed6618d20315a85a4c3c939dec3db27937">532f9fed</a>. Between the measured commit and v1.2.0, only the RDS trust-bundle pin and this scorecard changed; no prompt, tool or agent code. The measurement cost $4.77 across all model roles.</p>
+          </details>
+          <div class="source-links"><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/eval/journal/2026-10-12.md#october-15-compare-the-v120-candidate-with-the-production-agent-on-holdout">Experiment journal ↗</a><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/eval/GOLDEN_RUNNER.md#external-holdout-checkpoints">Holdout procedure ↗</a><a href="#prompt-2-3-15">Previous scorecard ↓</a></div>
+        </section>
+      </article>
+
       <article id="prompt-2-3-15" aria-labelledby="release-title">
         <header class="release-hero">
           <div>
             <p class="eyebrow">Release scorecard · September 27, 2026</p>
-            <h1 id="release-title">A measured<br><span>step forward.</span></h1>
+            <h2 id="release-title">A measured<br><span>step forward.</span></h2>
             <p class="intro">More successful attempts. More cases that work three times in a row. A retained candidate with observed gains. We cannot yet separate the improvement confidently from noise.</p>
           </div>
           <aside class="release-id" aria-label="Candidate identity">
@@ -32,6 +111,7 @@
             <p>Prompt 2.3.15 · Renderer 1.0.2<br>Application model: gpt-6-luna</p>
             <p><span class="badge">Retained candidate</span> <span class="badge pending">Target missed</span></p>
             <p>100 development cases × 3 attempts<br>Separate final verification · 300/300 scored</p>
+            <p>October 15, 2026 update: this candidate became the production agent in v1.1.1 and stayed through v1.1.2. Its holdout score was measured later, beside its successor, in the <a href="#prompt-2-3-17">v1.2.0 comparison</a>.</p>
           </aside>
         </header>
 
@@ -163,7 +243,7 @@
         </section>
       </article>
     </main>
-    <footer><span>TollChat · An applied AI reference implementation</span><span>Static release evidence · measured September 27, 2026 · <a href="/">Back to chat</a></span></footer>
+    <footer><span>TollChat · An applied AI reference implementation</span><span>Static release evidence · measured September 27 and October 15, 2026 · <a href="/">Back to chat</a></span></footer>
   </div>
 </body>
 </html>
