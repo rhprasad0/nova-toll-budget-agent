@@ -9,7 +9,7 @@ OpenAI organization-wide costs. OpenAI includes all environments, not just devel
 Immediately after collecting AWS, development publishes
 `https://dev.tollchat.ai/assets/costs-aws.json` before requesting OpenAI. This
 independent version 1 feed uses scope `aws-development` and marks OpenAI
-`not_configured`. Production runs at **09:00 and 13:00 UTC** and combines its own
+`not_configured`. Production runs at **09:17 and 13:17 UTC** and combines its own
 AWS account, the validated AWS feed, and OpenAI organization costs.
 Each account's cost publisher reads its account-local SSM SecureString
 `/nova-toll/openai_billing_api_key` in `us-east-1`; it needs an OpenAI organization
@@ -21,10 +21,9 @@ roles cannot read the key. Production consumes only development's AWS feed and
 collects OpenAI directly once. Do not enable
 Cost Explorer as part of this release.
 
-After delivering the development schedule offset, check the next four scheduled
-runs for successful dashboard and AWS-feed publications and review any OpenAI
-failures or retries. See the [experiment journal](../eval/journal/2026-10-05.md)
-for the hypothesis and measured results.
+Keep both schedules off the hour: OpenAI's costs endpoint has returned HTTP 429
+to on-the-hour refreshes. See the [experiment journal](../eval/journal/2026-10-12.md)
+for the evidence.
 
 The requested interval is the union of month-to-date and the last 30 completed
 UTC days, ending before today. AWS uses account-filtered `UnblendedCost`; OpenAI
@@ -132,7 +131,7 @@ There is no database migration or application-agent change in this release.
    feed, and OpenAI against the unfiltered organization costs endpoint for
    the snapshot's exact UTC dates. Sum decimal strings, including credits;
    compare unrounded daily and month-to-date totals. Confirm the scheduled
-   **09:00 and 13:00 UTC** publications and production alarm actions separately.
+   **09:17 and 13:17 UTC** publications and production alarm actions separately.
 4. Verify both deployment labels, Cost navigation, public route refreshes, and
    the publication/attempt timestamps. A failed source must leave the combined
    total unavailable on a first run, or preserve the last valid publication on
