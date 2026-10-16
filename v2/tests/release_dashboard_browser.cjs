@@ -49,12 +49,12 @@ const { chromium } = require("playwright");
     await page.setViewportSize({ width: 1440, height: 1000 });
     assert.equal(await page.locator('nav a[aria-current="page"]').innerText(), "Release");
     assert.equal(await page.locator("script").count(), 0);
-    assert.match(await page.locator(".score-grid").innerText(), /269\/300/);
-    assert.match(await page.locator(".verdict").innerText(), /includes zero/);
+    assert.match(await page.locator("#prompt-2-3-15 .score-grid").innerText(), /269\/300/);
+    assert.match(await page.locator("#prompt-2-3-15 .verdict").innerText(), /includes zero/);
     assert.equal(await page.locator("#family-results tbody tr").count(), 8);
-    assert.match(await page.locator(".regression").innerText(), /23\/30.*76\.7%/s);
+    assert.match(await page.locator("#prompt-2-3-15 .regression").innerText(), /23\/30.*76\.7%/s);
     assert.equal(await page.getByRole("img", { name: /Observed gain of 4.0/ }).count(), 1);
-    assert.equal(await page.getByRole("meter").count(), 8);
+    assert.equal(await page.locator("#prompt-2-3-15").getByRole("meter").count(), 8);
     await page.locator("#methodology summary").focus();
     await page.keyboard.press("Enter");
     assert.equal(await page.locator("#methodology[open]").count(), 1);
@@ -62,13 +62,18 @@ const { chromium } = require("playwright");
     await page.keyboard.press("Enter");
     await page.goto(origin + "/release-dashboard/");
     assert.equal((await page.getByRole("link", { name: "Prompt 2.3.15 / renderer 1.0.2 ↓", exact: true }).getAttribute("href")), "#prompt-2-3-15");
+    assert.equal((await page.getByRole("link", { name: "v1.2.0 · Prompt 2.3.17 / tool 1.6.0 ↓", exact: true }).getAttribute("href")), "#prompt-2-3-17");
+    assert.equal(await page.getByRole("heading", { level: 1 }).count(), 1);
+    assert.match(await page.locator("#prompt-2-3-17 .score-grid").innerText(), /78\.4%.*324\/375/s);
+    assert.equal(await page.locator("#holdout-comparison tbody tr").count(), 8);
+    assert.match(await page.locator("#holdout-comparison").innerText(), /Not comparable/);
     await mkdir(output, { recursive: true });
     await page.screenshot({ path: path.join(output, "desktop.png"), fullPage: true });
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 844 });
       const size = await page.locator("body").boundingBox();
       assert.ok(size && size.width <= width, `body overflows at ${width}px`);
-      for (const selector of [".score-grid", ".verdict-panel", ".contracts", ".nav-links"]) {
+      for (const selector of ["#prompt-2-3-17 .score-grid", "#prompt-2-3-17 .contracts", "#prompt-2-3-17 .table-wrap", "#prompt-2-3-15 .score-grid", "#prompt-2-3-15 .verdict-panel", "#prompt-2-3-15 .contracts", ".nav-links"]) {
         const box = await page.locator(selector).boundingBox();
         assert.ok(box && box.x >= 0 && box.x + box.width <= width, `${selector} overflows at ${width}px`);
       }

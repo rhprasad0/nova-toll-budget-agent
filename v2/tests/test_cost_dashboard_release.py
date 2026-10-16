@@ -158,7 +158,7 @@ def test_reviewed_billing_diagnostics_development_transition() -> None:
     reviewed = json.loads(
         (ROOT / "v2/scripts/shared-package-compatibility.json").read_text()
     )
-    baseline = "532f9fed6618d20315a85a4c3c939dec3db27937"
+    baseline = "dfbca7e198e85716d08c14d529da2eadafe7fffe"
     assert reviewed["development_baseline"] == baseline
     expected = shared_packages.evidence(
         "development", gate.ACCOUNTS["development"], "a" * 40, reviewed["packages"]
@@ -173,7 +173,7 @@ def test_reviewed_billing_diagnostics_development_transition() -> None:
         )["status"]
         == "reviewed"
     )
-    for stale in ("206d4f7dfb6284a018620b671e216febd0182b2a", "b" * 40):
+    for stale in ("532f9fed6618d20315a85a4c3c939dec3db27937", "b" * 40):
         with pytest.raises(ValueError, match="shared_compatibility"):
             shared_packages.validate_compatibility(
                 reviewed, expected, stale, schemas, changing=True
@@ -181,9 +181,14 @@ def test_reviewed_billing_diagnostics_development_transition() -> None:
     production = shared_packages.evidence(
         "production", gate.ACCOUNTS["production"], "a" * 40, reviewed["packages"]
     )
+    # v1.1.2, the production release v1.2.0 replaced.
     with pytest.raises(ValueError, match="shared_compatibility"):
         shared_packages.validate_compatibility(
-            reviewed, production, baseline, schemas, changing=True
+            reviewed,
+            production,
+            "e439f23d241c14fea30e7d87e85615298dbfdd1c",
+            schemas,
+            changing=True,
         )
 
 
@@ -587,6 +592,7 @@ locals {{
             ("schedule_expression", "rate(1 minute)"),
             ("schedule_expression", "cron(18 8,12 * * ? *)"),
             ("schedule_expression", "cron(0 8,12 * * ? *)"),
+            ("schedule_expression", "cron(0 9,13 * * ? *)"),
             ("alarm_actions", ["arn:aws:sns:us-east-1:000000000000:other"]),
             ("actions_enabled", False),
             ("evaluation_periods", 1),
@@ -998,6 +1004,7 @@ def test_provider_report_routes_keep_known_defaults(tmp_path: Path) -> None:
         ("development", "on_hour"),
         ("production", "current"),
         ("production", "daily"),
+        ("production", "on_hour"),
     ],
 )
 @pytest.mark.parametrize("phase", ["prepare", "promote", "recover"])
@@ -1018,7 +1025,7 @@ def test_first_billing_refresh_preserves_release_authority(
             "state": "ENABLED",
             "schedule_expression": "cron(17 8,12 * * ? *)"
             if suffix
-            else "cron(0 9,13 * * ? *)",
+            else "cron(17 9,13 * * ? *)",
             "is_enabled": True,
             "tags": None,
         },
@@ -1129,7 +1136,7 @@ def test_first_billing_refresh_preserves_release_authority(
         )
     elif observed_schedule == "on_hour":
         before["aws_cloudwatch_event_rule.costs"]["schedule_expression"] = (
-            "cron(0 8,12 * * ? *)"
+            "cron(0 8,12 * * ? *)" if suffix else "cron(0 9,13 * * ? *)"
         )
     for address, resource in before.items():
         after = deepcopy(resource)
@@ -1294,7 +1301,7 @@ def test_first_billing_refresh_preserves_release_authority(
             schedule["change"]["after"],
             schedule_expression="cron(17 8,12 * * ? *)"
             if suffix
-            else "cron(0 9,13 * * ? *)",
+            else "cron(17 9,13 * * ? *)",
         )
         document["resource_drift"] = drifts
         document["resource_changes"].append(
