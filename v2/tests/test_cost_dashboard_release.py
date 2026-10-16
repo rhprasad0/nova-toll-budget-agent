@@ -592,6 +592,7 @@ locals {{
             ("schedule_expression", "rate(1 minute)"),
             ("schedule_expression", "cron(18 8,12 * * ? *)"),
             ("schedule_expression", "cron(0 8,12 * * ? *)"),
+            ("schedule_expression", "cron(0 9,13 * * ? *)"),
             ("alarm_actions", ["arn:aws:sns:us-east-1:000000000000:other"]),
             ("actions_enabled", False),
             ("evaluation_periods", 1),
@@ -1003,6 +1004,7 @@ def test_provider_report_routes_keep_known_defaults(tmp_path: Path) -> None:
         ("development", "on_hour"),
         ("production", "current"),
         ("production", "daily"),
+        ("production", "on_hour"),
     ],
 )
 @pytest.mark.parametrize("phase", ["prepare", "promote", "recover"])
@@ -1023,7 +1025,7 @@ def test_first_billing_refresh_preserves_release_authority(
             "state": "ENABLED",
             "schedule_expression": "cron(17 8,12 * * ? *)"
             if suffix
-            else "cron(0 9,13 * * ? *)",
+            else "cron(17 9,13 * * ? *)",
             "is_enabled": True,
             "tags": None,
         },
@@ -1134,7 +1136,7 @@ def test_first_billing_refresh_preserves_release_authority(
         )
     elif observed_schedule == "on_hour":
         before["aws_cloudwatch_event_rule.costs"]["schedule_expression"] = (
-            "cron(0 8,12 * * ? *)"
+            "cron(0 8,12 * * ? *)" if suffix else "cron(0 9,13 * * ? *)"
         )
     for address, resource in before.items():
         after = deepcopy(resource)
@@ -1299,7 +1301,7 @@ def test_first_billing_refresh_preserves_release_authority(
             schedule["change"]["after"],
             schedule_expression="cron(17 8,12 * * ? *)"
             if suffix
-            else "cron(0 9,13 * * ? *)",
+            else "cron(17 9,13 * * ? *)",
         )
         document["resource_drift"] = drifts
         document["resource_changes"].append(

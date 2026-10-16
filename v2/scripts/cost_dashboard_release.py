@@ -290,9 +290,8 @@ def validate_drift(item: dict[str, Any], environment: str) -> None:
         recovery = "12" if environment == "development" else "13"
         daily = f"cron(0 {hour} * * ? *)"
         twice_daily = f"cron(0 {hour},{recovery} * * ? *)"
-        current = (
-            "cron(17 8,12 * * ? *)" if environment == "development" else twice_daily
-        )
+        # OpenAI's costs endpoint has returned 429s to on-the-hour refreshes.
+        current = f"cron(17 {hour},{recovery} * * ? *)"
         require(before["schedule_expression"] == after["schedule_expression"])
         require(after["schedule_expression"] in (daily, twice_daily, current))
         before["schedule_expression"] = after["schedule_expression"] = current
@@ -513,7 +512,7 @@ def validate(
             "event_bus_name": "default",
             "schedule_expression": "cron(17 8,12 * * ? *)"
             if suffix
-            else "cron(0 9,13 * * ? *)",
+            else "cron(17 9,13 * * ? *)",
             "state": "ENABLED",
             "is_enabled": True,
         }
