@@ -708,7 +708,7 @@ def test_third_party_actions_follow_explicit_deploy_credential_clears() -> None:
         "tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd"
     )
     assert names.index("Clear deploy credentials before evidence upload") < names.index(
-        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+        "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"
     )
     clear = next(
         step

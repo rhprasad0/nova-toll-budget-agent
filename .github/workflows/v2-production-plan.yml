@@ -154,7 +154,7 @@ jobs:
         ref: ${{ steps.admitted.outputs.candidate }}
         path: candidate
         persist-credentials: false
-    - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+    - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
       with:
         version: 0.12.5
         checksum: 68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2
@@ -441,7 +441,7 @@ jobs:
         run_private_stage release-status "$RUNNER_TEMP/production-result.out" "$RUNNER_TEMP/production-result.err" publish
     - id: upload
       if: ${{ always() }}
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
       with:
         name: v2-production-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
         path: ${{ runner.temp }}/production-release-evidence.json
