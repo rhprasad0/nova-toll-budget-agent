@@ -1,6 +1,6 @@
 {
   "status": "approved",
-  "corpus_sha256": "b1f6d680ca9e78a627e94ca7da44a17e6f610314dcb8914332e7c51cc7ade9e0",
+  "corpus_sha256": "737d740f42cf2c6ce7c07f81cd0cd0722695b16a2f75096cd0958c9a23c724e1",
   "reviewer": "Claude",
-  "evidence": "Approved by Claude at Ryan's request on 2026-10-14. Cases and prompt points are byte-identical to approved 5.2.2. Current-price fixtures and reference tool results only gained observed_time and evaluated_time, derived mechanically from their existing ISO timestamps for tool contract 1.6.0 and checked by the tool's display-time validators. Protected source identities changed for that tool and system prompt 2.3.17. No human case-by-case inspection occurred."
+  "evidence": "Approved by Claude at Ryan's request on 2026-10-16. Cases, prompt points and fixtures are byte-identical to approved 5.2.13. Only the protected v2/uv.lock identity changed, for the Dependabot upgrades of mcp to 1.30.0 and multidict to 6.9.1. No human case-by-case inspection occurred."
 }
