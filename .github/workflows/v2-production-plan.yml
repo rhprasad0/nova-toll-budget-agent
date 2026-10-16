@@ -441,7 +441,7 @@ jobs:
         run_private_stage release-status "$RUNNER_TEMP/production-result.out" "$RUNNER_TEMP/production-result.err" publish
     - id: upload
       if: ${{ always() }}
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
       with:
         name: v2-production-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
         path: ${{ runner.temp }}/production-release-evidence.json

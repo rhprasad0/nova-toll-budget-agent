@@ -467,7 +467,7 @@ jobs:
             rm -f -- "$RUNNER_TEMP/production-canary-evidence.json" || return
           }
           run_private_stage migration-evidence "$RUNNER_TEMP/delivery-evidence.out" "$RUNNER_TEMP/delivery-evidence.err" evidence
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: success()
         with:
           name: v2-production-migrations-evidence-${{ inputs.phase }}
