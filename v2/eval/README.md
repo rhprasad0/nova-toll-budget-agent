@@ -1,8 +1,10 @@
 # TollChat evaluation
 
-**Locally authored suite:** 50 training and 10 shadow cases (5.2.13) are
-active, with 25 holdout cases (5.2.13) stored externally. Harness 2.5.19 has an
-approved aggregate calibration receipt. The 100-case development corpus
+**Locally authored suite:** 50 training and 10 shadow cases (5.2.14) are
+active, with 25 holdout cases (5.2.14) stored externally. Harness 2.5.19 has an
+approved aggregate calibration receipt, but it binds the dependency set from
+before the October 16 mcp and multidict upgrade, so paid runs need a new
+combined calibration. The 100-case development corpus
 3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
 Its recorded scores and reviews remain historical; it cannot run or seed fresh inputs.
 The [experiment journal](EXPERIMENT_JOURNAL.md) preserves the findings and limitations.

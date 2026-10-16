@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "version": "5.2.13",
+  "version": "5.2.14",
   "evaluation_scope": "shadow",
   "case_count": 10,
   "trials_per_case": 1,
@@ -21,7 +21,7 @@
     "cases.jsonl": "0e0212deb5723ae15f8826675913256e53d4bb2389214c6ba998eaf262cacd52",
     "examples.json": "51b4df49ad27d464bc9f4dcb09689c5e62a6e207f7961eb9ba00cdef5ed95208",
     "prompt-points.json": "fe158b3b6c5c4e7a3fd3606c56633eac77683d365e2e93c82f3b065b8eb1879d",
-    "v2/uv.lock": "b7a2c24b78a17e1d6b19e12ef213c1341c02f283c992627941a791df2fb6b52b",
+    "v2/uv.lock": "4926fc94603725774e937fba4f42b20c903260efaa7f5901486cd2bdba4712eb",
     "v2/eval/corpus.py": "b5ffdfc5cdd87a52fe1408205032edcfd707e065978fc7a8e94bc90be12284b9",
     "v2/eval/contract.json": "2e36bdfed363f0480bf8f7741de76fa392aa20578ceb10449196b4bc3efa94c3",
     "v2/agent/toll_agent.py": "885ea00c2c3eb22972c17e911018ee0dc040346f7e8680a625a1def06e533b85",
@@ -39,5 +39,5 @@
     "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
-  "corpus_sha256": "14c12ac395b80b01341399fe3d2b2bd55bd61b61b18643310fa36d9fe1d2102b"
+  "corpus_sha256": "1d5215c18917a5e76c005430712fc341f6d10b0af2039c2162210c7003cb1124"
 }

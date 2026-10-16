@@ -1,7 +1,7 @@
 # Running the frozen training split
 
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
-Training, shadow and holdout corpus 5.2.13 run under harness 2.5.19.
+Training, shadow and holdout corpus 5.2.14 run under harness 2.5.19.
 Training application runs default to one trial per case; use `--trials-per-case 3`
 only on Ryan's explicit instruction. Shadow runs are manual and outside search.
 Actors have up to five delivered user turns. The application, actor, judge
@@ -343,7 +343,7 @@ new series. Repeated aggregate feedback can still influence tuning, so this is a
 hidden diagnostic, not fully blind accuracy or a production gate.
 The 5.1.14 holdout and its 5.2.0 repair were read case by case on October 10,
 2026 ([journal](journal/2026-10-05.md)). Do not use 5.1.14 for candidate
-checkpoints. Checkpoints on 5.2.x (now 5.2.13) give descriptive aggregate feedback, not blind
+checkpoints. Checkpoints on 5.2.x (now 5.2.14) give descriptive aggregate feedback, not blind
 evidence, until a fresh holdout replaces it.
 
 Never inspect external logs to diagnose a hidden measurement failure; have the
