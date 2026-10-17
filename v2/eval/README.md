@@ -21,6 +21,7 @@ cases on an external host path**. Use the [authoring guide](AUTHORING.md) and
 three trials require Ryan's explicit instruction. Shadow runs are local and
 manual; PR CI does not run them.
 TollChat's application model, prompt, SOP and tools remain unchanged on `gpt-6-luna`.
+Golden judges use Claude Haiku 5.5 at high effort (see the [runner](GOLDEN_RUNNER.md)).
 
 From a clean committed `v2/` checkout, validate the approved inputs and readiness:
 

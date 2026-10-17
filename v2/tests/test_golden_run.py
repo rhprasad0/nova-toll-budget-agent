@@ -425,7 +425,7 @@ def test_missing_usage_stops_future_calls_without_storing_exception(
     assert "secret-token" not in text and '"error_type": "RuntimeError"' in text
 
 
-@pytest.mark.parametrize("role", ["agent", "actor", "judge"])
+@pytest.mark.parametrize("role", ["agent", "actor"])
 def test_real_sdk_transport_has_no_retries_and_bounded_timeout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, role: str
 ) -> None:
@@ -437,16 +437,12 @@ def test_real_sdk_transport_has_no_retries_and_bounded_timeout(
     monkeypatch.setattr(run.toll_agent, "load_openai_api_key", lambda: "offline")
     monkeypatch.setattr(simulated, "load_openai_api_key", lambda: "offline")
     native = (
-        run.toll_agent._build_model()
-        if role == "agent"
-        else run.build_judge_model()
-        if role == "judge"
-        else run.build_eval_model()
+        run.toll_agent._build_model() if role == "agent" else run.build_eval_model()
     )
     requests: list[httpx.Request] = []
     clients: list[openai.AsyncOpenAI] = []
     original = openai.AsyncOpenAI
-    expected_timeout = 180 if role == "judge" else 60
+    expected_timeout = 60
 
     def respond(request: httpx.Request) -> httpx.Response:
         requests.append(request)
@@ -479,11 +475,8 @@ def test_real_sdk_transport_has_no_retries_and_bounded_timeout(
     assert journal.unknown_usage and not row.measurements[0].complete
     request = json.loads(requests[0].content)
     assert request["model"] == "gpt-6-luna"
-    assert (
-        request["reasoning"]["effort"]
-        == {"agent": "low", "actor": "medium", "judge": "xhigh"}[role]
-    )
-    expected_cap = 8192 if role == "judge" else 2048
+    assert request["reasoning"]["effort"] == {"agent": "low", "actor": "medium"}[role]
+    expected_cap = 2048
     assert request["max_output_tokens"] == expected_cap
     started = json.loads(
         (journal.directory / "events.jsonl").read_text().splitlines()[0]
@@ -833,7 +826,7 @@ def test_judges_receive_rejected_calls_without_pricing_evidence(
 
     monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
     native = Mock(client_args={})
-    monkeypatch.setattr(run, "build_eval_model", lambda: native)
+    monkeypatch.setattr(run, "build_judge_model", lambda: native)
     example = next(
         e for e in run.development_examples() if e.label == "rejected-call-honest"
     )
@@ -848,7 +841,6 @@ def test_judges_receive_rejected_calls_without_pricing_evidence(
         rejected_tools=example.rejected_tools,
     )
     run.judge(case, attempt, run.Journal(tmp_path / "judge", 25))
-    native.update_config.assert_called_once_with(params=run.JUDGE_MODEL_PARAMS)
     assert len(seen) == 3
     assert "GROUNDING ONLY" in prompts[1] and "RULES ONLY" not in prompts[1]
     assert "RULES ONLY" in prompts[2] and "GROUNDING ONLY" not in prompts[2]
@@ -881,6 +873,149 @@ def test_only_evaluators_force_structured_output(tmp_path: Path, role: str) -> N
 
     asyncio.run(consume())
     assert seen[0]["tool_choice"] == (None if role == "agent" else {"any": {}})
+
+
+def haiku_judge() -> Model:
+    return run._CachedAnthropicModel(  # pyright: ignore[reportPrivateUsage]
+        client_args={"api_key": "offline"},
+        model_id=run.corpus.JUDGE_MODEL,
+        max_tokens=run.JUDGE_MAX_TOKENS,
+        params={},
+    )
+
+
+def test_haiku_judge_may_think_before_its_tool_call(tmp_path: Path) -> None:
+    native = haiku_judge()
+    seen: list[dict[str, Any]] = []
+
+    async def stream(*args: Any, **kwargs: Any) -> AsyncIterator[dict[str, Any]]:  # noqa: ANN401
+        seen.append(kwargs)
+        yield {"metadata": {"usage": {"inputTokens": 100, "outputTokens": 20}}}
+
+    cast(Any, native).stream = stream
+    row = run.Attempt(id="think", case_id="greenway-current", trial=1)
+    model = run.Journal(tmp_path / "haiku", 25).model(native, "judge", row, 1)
+
+    async def consume() -> None:
+        async for _ in cast(Any, model).stream([], tool_choice=None):
+            pass
+
+    asyncio.run(consume())
+    assert seen[0]["tool_choice"] is None
+    assert row.measurements[0].cost_usd == pytest.approx(
+        run.cost({"inputTokens": 100, "outputTokens": 20}, run.corpus.JUDGE_MODEL)
+    )
+
+
+def test_haiku_judge_counts_cached_tokens_and_long_prompts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from strands.models.anthropic import AnthropicModel
+
+    async def parent(*args: Any, **kwargs: Any) -> AsyncIterator[dict[str, Any]]:  # noqa: ANN401
+        yield {
+            "metadata": {
+                "usage": {
+                    "inputTokens": 100,
+                    "outputTokens": 10,
+                    "totalTokens": 110,
+                    "cacheReadInputTokens": 900,
+                    "cacheWriteInputTokens": 50,
+                }
+            }
+        }
+
+    monkeypatch.setattr(AnthropicModel, "stream", parent)
+
+    async def collect() -> list[Any]:
+        return [event async for event in haiku_judge().stream([])]
+
+    usage = asyncio.run(collect())[0]["metadata"]["usage"]
+    assert usage["inputTokens"] == 1050 and usage["totalTokens"] == 1060
+    judge = run.corpus.JUDGE_MODEL
+    assert run.cost(usage, judge) == pytest.approx(
+        (100 * 0.10 + 900 * 0.01 + 50 * 0.125 + 10 * 0.50) / 1_000_000
+    )
+    long = {"inputTokens": 100_001, "outputTokens": 10}
+    base = (100_001 * 0.10 + 10 * 0.50) / 1_000_000
+    assert run.cost(long, judge) == pytest.approx(5 * base)
+    assert run.cost(long) == pytest.approx(base)  # Luna's long tier starts at 272K.
+
+
+@pytest.mark.parametrize("request_bytes", [90_000, 160_000])
+def test_haiku_judge_reservation_bounds_its_cost(
+    tmp_path: Path, request_bytes: int
+) -> None:
+    journal = run.Journal(tmp_path / "reserve", None)
+    row = run.Attempt(id="reserve", case_id="greenway-current", trial=1)
+    reserved = journal.reserve(row, "judge", request_bytes, run.corpus.JUDGE_MODEL)
+    # Tokens never exceed bytes: the worst case writes every byte to the cache.
+    worst = run.cost(
+        {
+            "inputTokens": request_bytes,
+            "outputTokens": run.JUDGE_MAX_TOKENS,
+            "cacheWriteInputTokens": request_bytes,
+        },
+        run.corpus.JUDGE_MODEL,
+    )
+    assert reserved >= worst
+
+
+def test_haiku_judge_transport_has_no_retries_and_caches_its_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import anthropic
+    import httpx
+
+    monkeypatch.setattr(run, "load_anthropic_api_key", lambda: "offline")
+    native = run.build_judge_model()
+    requests: list[httpx.Request] = []
+    clients: list[anthropic.AsyncAnthropic] = []
+    original = anthropic.AsyncAnthropic
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            500, json={"type": "error", "error": {"type": "api_error", "message": "x"}}
+        )
+
+    def client(**kwargs: Any) -> anthropic.AsyncAnthropic:  # noqa: ANN401
+        assert kwargs["max_retries"] == 0 and kwargs["timeout"] == 180
+        kwargs["http_client"] = httpx.AsyncClient(
+            transport=httpx.MockTransport(respond)
+        )
+        result = original(**kwargs)
+        clients.append(result)
+        return result
+
+    monkeypatch.setattr(anthropic, "AsyncAnthropic", client)
+    row = run.Attempt(id="transport", case_id="greenway-current", trial=1)
+    journal = run.Journal(tmp_path / "judge", 25)
+    model = journal.model(native, "judge", row, 4)
+
+    async def consume() -> None:
+        async for _ in cast(Any, model).stream(
+            [{"role": "user", "content": [{"text": "offline test"}]}],
+            system_prompt="SHARED JUDGE PROMPT",
+        ):
+            pass
+
+    with pytest.raises(anthropic.InternalServerError):
+        asyncio.run(consume())
+    assert len(clients) == len(requests) == len(row.measurements) == 1
+    assert journal.unknown_usage and not row.measurements[0].complete
+    request = json.loads(requests[0].content)
+    assert request["model"] == run.corpus.JUDGE_MODEL
+    assert request["max_tokens"] == run.JUDGE_MAX_TOKENS
+    assert request["output_config"] == {"effort": "high"}
+    assert "tool_choice" not in request
+    assert request["system"] == [
+        {
+            "type": "text",
+            "text": "SHARED JUDGE PROMPT",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
 
 
 def test_packaged_replay_records_rejections() -> None:
@@ -1004,27 +1139,26 @@ def test_eval_cache_prefix_and_write_accounting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(run.toll_agent, "load_openai_api_key", lambda: "offline")
+    monkeypatch.setattr(run, "load_anthropic_api_key", lambda: "offline")
     requests: list[dict[str, Any]] = []
 
     def evaluate(
         self: run.ConversationJudge, data: EvaluationData[str, str]
     ) -> list[EvaluationOutput]:
         model = cast(Any, self.model)
-        request = model._format_request(
+        request = model.format_request(
             [{"role": "user", "content": [{"text": data.actual_output}]}],
             system_prompt=self.reference_system_prompt,
         )
         requests.append(request)
-        assert request["reasoning"] == {"effort": "xhigh"}
-        assert request["max_output_tokens"] == 8192
-        assert request["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
-        assert request["prompt_cache_key"] == "tollchat-eval-v2"
-        assert request["store"] is False
-        assert "instructions" not in request
-        prefix = request["input"][0]
-        assert prefix["role"] == "developer"
-        assert prefix["content"][0]["prompt_cache_breakpoint"] == {"mode": "explicit"}
-        assert run.DOMAIN_FACTS in prefix["content"][0]["text"]
+        assert request["model"] == run.corpus.JUDGE_MODEL
+        assert request["thinking"] == {"type": "adaptive"}
+        assert request["output_config"] == {"effort": "high"}
+        assert request["max_tokens"] == run.JUDGE_MAX_TOKENS
+        assert "tool_choice" not in request
+        (prefix,) = request["system"]
+        assert prefix["cache_control"] == {"type": "ephemeral"}
+        assert run.DOMAIN_FACTS in prefix["text"]
         assert run.DOMAIN_FACTS not in (data.expected_assertion or "")
         return [EvaluationOutput(score=1.0, test_pass=True, reason="offline")]
 
@@ -1041,8 +1175,8 @@ def test_eval_cache_prefix_and_write_accounting(
         run.judge(case, row, journal)
     assert len(requests) == 6  # No verdict memoization.
     for first, second in zip(requests[:3], requests[3:], strict=True):
-        assert first["input"][0] == second["input"][0]
-        assert first["input"][1:] != second["input"][1:]
+        assert first["tools"] == second["tools"] and first["system"] == second["system"]
+        assert first["messages"] != second["messages"]
 
     model = cast(Any, run.build_eval_model())
     for written in (None, 0, 30):
@@ -1845,8 +1979,10 @@ def test_actor_check_uses_high_judge_and_medium_actor(
         e for e in run.development_examples() if e.label == "good" and len(e.turns) == 1
     )
     actor_model, judge_model = Mock(), Mock()
-    factory = Mock(side_effect=[actor_model, judge_model])
+    factory = Mock(return_value=actor_model)
+    judge_factory = Mock(return_value=judge_model)
     monkeypatch.setattr(run, "build_eval_model", factory)
+    monkeypatch.setattr(run, "build_judge_model", judge_factory)
     actor = Mock()
     actor.act.return_value.structured_output = SimpleNamespace(
         stop=True, message=None, stop_reason="goal_completed"
@@ -1856,6 +1992,8 @@ def test_actor_check_uses_high_judge_and_medium_actor(
 
     def measured(model: Model, role: str, row: run.Attempt, maximum: int) -> Model:
         assert model is (actor_model if role == "actor" else judge_model)
+        # Room for one validation retry on each of the two judge assessments.
+        assert role == "actor" or maximum == 6
         row.measurements.append(measurement())
         return model
 
@@ -1867,8 +2005,7 @@ def test_actor_check_uses_high_judge_and_medium_actor(
     row = golden_actor_check.check(example, 1, journal)
     assert row.status == "scored"
     actor_model.update_config.assert_not_called()
-    judge_model.update_config.assert_called_once_with(params=run.JUDGE_MODEL_PARAMS)
-    assert factory.call_count == 2
+    assert factory.call_count == judge_factory.call_count == 1
 
 
 @pytest.mark.parametrize("repetitions", [1, 3])
@@ -2069,3 +2206,15 @@ def test_recorded_repetitions_control_summary_and_render(
             cases[1:],
             trials_per_case=repetitions,
         )
+
+
+def test_empty_anthropic_key_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    def parameter(**_: object) -> object:
+        return {"Parameter": {"Value": ""}}
+
+    def ssm(*_args: object, **_kwargs: object) -> object:
+        return SimpleNamespace(get_parameter=parameter)
+
+    monkeypatch.setattr(run.boto3, "client", ssm)
+    with pytest.raises(ValueError, match="is empty"):
+        run.load_anthropic_api_key()

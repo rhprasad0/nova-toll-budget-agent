@@ -11,20 +11,25 @@ import subprocess
 import tarfile
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
-from typing import Any, ClassVar, Literal, Self, cast
+from typing import Any, ClassVar, Literal, Self, cast, override
 
+import anthropic
+import boto3
 from pydantic import Field, JsonValue, create_model, model_validator
 from strands import Agent, tool  # pyright: ignore[reportUnknownVariableType]
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
 from strands.models import Model
+from strands.models.anthropic import AnthropicModel
+from strands.types.content import Messages
 from strands.types.exceptions import MaxTokensReachedException
-from strands.types.tools import ToolContext, ToolSpec
+from strands.types.streaming import StreamEvent
+from strands.types.tools import ToolChoice, ToolContext, ToolSpec
 from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
 from strands_evals.types.simulation import ActorResponse
 from strands_evals.types.trace import Session, TraceLevelInput
@@ -34,7 +39,7 @@ from eval import corpus, golden
 from eval.repetition import report_trials, trial_numbers
 from eval.simulated import GroundedCorrectnessEvaluator
 
-VERSION = "2.5.19"
+VERSION = "2.5.20"
 # Lost-usage calls tolerated per run; each is charged its full reservation (an upper bound).
 LOST_USAGE_STOP = 3
 CALIBRATION_KEYS = (
@@ -48,6 +53,7 @@ CALIBRATION_KEYS = (
     "diagnostic_rubrics",
     "diagnostic_domain_facts",
     "model",
+    "judge_model",
     "reasoning_effort",
     "max_output_tokens",
     "transport",
@@ -61,6 +67,18 @@ PRICES = {
     "cached_per_million": 0.01,
     "write_per_million": 0.125,
     "output_per_million": 0.50,
+}
+# Haiku 5.5's rates up to 100K prompt tokens equal Luna's; above that every rate is 5x.
+JUDGE_PRICES = {
+    "model": corpus.JUDGE_MODEL,
+    "date": "2026-10-17",
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "input_per_million": 0.10,
+    "cached_per_million": 0.01,
+    "write_per_million": 0.125,
+    "output_per_million": 0.50,
+    "long_context_tokens": 100_000,
+    "long_context_multiplier": 5,
 }
 RUBRICS = {
     "grounding": """GROUNDING ONLY: Check affirmative factual claims and concrete financial/schedule
@@ -287,11 +305,14 @@ EVAL_MODEL_PARAMS: dict[str, Any] = {
     "prompt_cache_key": "tollchat-eval-v2",
     "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},
 }
+# High-effort judge outputs peaked near 7,800 tokens; a cutoff loses the whole attempt.
+JUDGE_MAX_TOKENS = 16_000
 JUDGE_MODEL_PARAMS: dict[str, Any] = {
-    **EVAL_MODEL_PARAMS,
-    "max_output_tokens": 8192,
-    "reasoning": {"effort": "xhigh"},
+    "thinking": {"type": "adaptive"},
+    "output_config": {"effort": "high"},
 }
+ANTHROPIC_API_KEY_PARAMETER = "/nova-toll/anthropic-api"
+ANSWER_TOOL_INSTRUCTION = "When your assessment is ready, record it by calling the supplied assessment tool. Do not write the assessment as prose; only the tool call is read."
 
 
 def build_eval_model() -> Model:
@@ -307,11 +328,89 @@ def build_eval_model() -> Model:
     )
 
 
+class _CachedAnthropicModel(AnthropicModel):
+    """Cache the shared judge prompt and report usage the way Luna's adapter does."""
+
+    def __init__(self, *, client_args: dict[str, Any], **model_config: Any) -> None:  # noqa: ANN401
+        super().__init__(client_args=client_args, **model_config)
+        # Journal.model writes transport policy here; each request builds its client from it.
+        self.client_args = dict(client_args)
+
+    @override
+    def format_request(
+        self,
+        messages: Messages,
+        tool_specs: list[ToolSpec] | None = None,
+        system_prompt: str | None = None,
+        tool_choice: ToolChoice | None = None,
+    ) -> dict[str, Any]:
+        request = super().format_request(
+            messages, tool_specs, system_prompt, tool_choice
+        )
+        if system_prompt:
+            request["system"] = [
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        return request
+
+    @override
+    async def stream(
+        self,
+        messages: Messages,
+        tool_specs: list[ToolSpec] | None = None,
+        system_prompt: str | None = None,
+        *,
+        tool_choice: ToolChoice | None = None,
+        **kwargs: Any,
+    ) -> AsyncGenerator[StreamEvent]:
+        # Each Strands Agent call runs its own event loop; a client pooled in an
+        # earlier loop fails there, so open one per request.
+        async with anthropic.AsyncAnthropic(**self.client_args) as client:
+            self.client = client
+            async for event in super().stream(
+                messages, tool_specs, system_prompt, tool_choice=tool_choice, **kwargs
+            ):
+                if "metadata" in event and "usage" in event["metadata"]:
+                    # Strands excludes cached tokens from inputTokens; cost() expects them included.
+                    usage = event["metadata"]["usage"]
+                    cached = usage.get("cacheReadInputTokens", 0) + usage.get(
+                        "cacheWriteInputTokens", 0
+                    )
+                    usage["inputTokens"] += cached
+                    usage["totalTokens"] += cached
+                yield event
+
+
+def load_anthropic_api_key() -> str:
+    ssm = cast(
+        Any,
+        boto3.client(  # pyright: ignore[reportUnknownMemberType]
+            "ssm", region_name="us-east-1"
+        ),
+    )
+    value = ssm.get_parameter(Name=ANTHROPIC_API_KEY_PARAMETER, WithDecryption=True)[
+        "Parameter"
+    ]["Value"]
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{ANTHROPIC_API_KEY_PARAMETER} is empty")
+    return value
+
+
 def build_judge_model() -> Model:
-    """Give judges more reasoning headroom without changing actor generation."""
-    model = build_eval_model()
-    model.update_config(params=deepcopy(JUDGE_MODEL_PARAMS))
-    return model
+    """Judge with Haiku 5.5 at high effort; the application and actor stay on Luna."""
+    return _CachedAnthropicModel(
+        client_args={
+            "api_key": load_anthropic_api_key(),
+            "base_url": "https://api.anthropic.com",
+        },
+        model_id=corpus.JUDGE_MODEL,
+        max_tokens=JUDGE_MAX_TOKENS,
+        params=deepcopy(JUDGE_MODEL_PARAMS),
+    )
 
 
 class Measurement(golden.Record):
@@ -638,7 +737,8 @@ def actor_message(response: ActorResponse) -> str | None:
     return response.message
 
 
-def cost(usage: dict[str, int]) -> float:
+def cost(usage: dict[str, int], model_id: str = "gpt-6-luna") -> float:
+    """Price one call by model; only the long-context tier differs between them."""
     total, output = usage["inputTokens"], usage["outputTokens"]
     read, write = (
         usage.get("cacheReadInputTokens", 0),
@@ -650,7 +750,10 @@ def cost(usage: dict[str, int]) -> float:
         or read + write > total
     ):
         raise ValueError("invalid usage")
-    input_multiplier, output_multiplier = (2, 1.5) if total > 272000 else (1, 1)
+    if model_id == corpus.JUDGE_MODEL:
+        input_multiplier = output_multiplier = 5 if total > 100_000 else 1
+    else:
+        input_multiplier, output_multiplier = (2, 1.5) if total > 272000 else (1, 1)
     return (
         ((total - read - write) * 0.10 + read * 0.01 + write * 0.125) * input_multiplier
         + output * 0.50 * output_multiplier
@@ -692,6 +795,11 @@ class Journal:
     ) -> Model:
         native = cast(Any, model)
         original = native.stream
+        model_id = (
+            corpus.JUDGE_MODEL
+            if isinstance(model, _CachedAnthropicModel)
+            else "gpt-6-luna"
+        )
         # Transport policy only; preserve the application model and sampling config.
         native.client_args["max_retries"] = 0
         native.client_args["timeout"] = 180 if role == "judge" else 60
@@ -699,10 +807,12 @@ class Journal:
 
         async def measured(*args: Any, **kwargs: Any) -> AsyncIterator[Any]:  # noqa: ANN401
             nonlocal count
-            # Actors and judges have only a structured-output tool. Require it
+            # Actors and Luna judges have only a structured-output tool. Require it
             # on the first call: prose followed by "format your previous answer"
             # can make the simulator think its undelivered reply already happened.
-            if role in {"actor", "judge"}:
+            # Haiku skips thinking on a forced call, so its judge prompt names the
+            # tool instead; Strands still forces it after a prose reply.
+            if role in {"actor", "judge"} and model_id != corpus.JUDGE_MODEL:
                 kwargs["tool_choice"] = {"any": {}}
             if failures:
                 raise TaskFailure(failures[0])
@@ -711,7 +821,7 @@ class Journal:
                     raise TaskFailure("model_call_budget")
                 raise StopRun("simulator_or_judge_call_budget")
             input_bound = len(json.dumps([args, kwargs], default=str).encode()) + 8192
-            reserve = self.reserve(attempt, role, input_bound)
+            reserve = self.reserve(attempt, role, input_bound, model_id)
             count += 1
             started = time.monotonic()
             usage: dict[str, int] | None = None
@@ -726,7 +836,13 @@ class Journal:
                 raise
             finally:
                 self.finish(
-                    attempt, role, reserve, usage, time.monotonic() - started, error
+                    attempt,
+                    role,
+                    reserve,
+                    usage,
+                    time.monotonic() - started,
+                    error,
+                    model_id,
                 )
 
         native.stream = measured
@@ -737,13 +853,21 @@ class Journal:
         attempt: Attempt,
         role: Literal["agent", "actor", "judge"],
         input_bound: int,
+        model_id: str = "gpt-6-luna",
     ) -> float:
         if type(input_bound) is not int or not 0 < input_bound <= 1_000_000:
             raise StopRun("input_budget")
-        output_bound = (
-            JUDGE_MODEL_PARAMS["max_output_tokens"] if role == "judge" else 2048
-        )
-        reserve = (input_bound * 0.25 + output_bound * 0.75) / 1_000_000
+        if model_id == corpus.JUDGE_MODEL:
+            # Prompt tokens never exceed request bytes, so only a large request can
+            # reach the 5x tier; price every input token as a cache write.
+            scale = 5 if input_bound > 100_000 else 1
+            reserve = (
+                (input_bound * 0.125 + JUDGE_MAX_TOKENS * 0.50) * scale / 1_000_000
+            )
+        else:
+            # Luna judges (scheduled calibration) keep their 8,192-token ceiling.
+            output_bound = 8192 if role == "judge" else 2048
+            reserve = (input_bound * 0.25 + output_bound * 0.75) / 1_000_000
         with self.lock:
             if (
                 self.stop_requested
@@ -773,6 +897,7 @@ class Journal:
         usage: dict[str, int] | None,
         seconds: float,
         error: str | None = None,
+        model_id: str = "gpt-6-luna",
     ) -> None:
         complete = (
             isinstance(usage, dict)
@@ -784,7 +909,9 @@ class Journal:
         )
         charged = reserve
         try:
-            charged = cost(usage) if complete and usage is not None else reserve
+            charged = (
+                cost(usage, model_id) if complete and usage is not None else reserve
+            )
         except (ValueError, TypeError):
             complete = False
         if not complete:
@@ -960,7 +1087,7 @@ def judge_prompt(key: str) -> str:
         prompt += "\nThe earliest_assistant_turn is a lower bound, not a deadline or prescribed transcript. A later matching call is not a workflow failure merely for being later. Assess whether an actual clarification was necessary from delivered facts; never invent a mandatory first-turn call from this lower bound."
     prompt += "\n" + ASSESSMENT_INSTRUCTIONS
     # Judges that may answer in prose first get a forced retry, which can skip their thinking.
-    prompt += "\nWhen your assessment is ready, record it by calling the supplied assessment tool. Do not write the assessment as prose; only the tool call is read."
+    prompt += "\n" + ANSWER_TOOL_INSTRUCTION
     return prompt
 
 
@@ -1075,6 +1202,8 @@ ACTOR_CONFIRMATION_PROMPT = (
     "Assistant answers cannot repair wrong driver facts or actions. "
     "Return evidence followed by status.\n"
     + ACTOR_ASSESSMENT_PROMPT[ACTOR_ASSESSMENT_PROMPT.index("For actor_validity,") :]
+    + "\n"
+    + ANSWER_TOOL_INSTRUCTION
 )
 
 
@@ -1615,6 +1744,8 @@ def failure_class(attempt: Attempt) -> str | None:
             "APIStatusError",
             "RateLimitError",
             "InternalServerError",
+            "OverloadedError",
+            "ServiceUnavailableError",
             "AuthenticationError",
         }:
             return "provider"
@@ -1918,22 +2049,34 @@ def identity(
         "diagnostic_domain_facts": DOMAIN_FACTS,
         "diagnostic_prompt": DIAGNOSTIC_PROMPT,
         "model": "gpt-6-luna",
-        "reasoning_effort": {"agent": "low", "actor": "medium", "judge": "xhigh"},
-        "max_output_tokens": {"agent": 2048, "actor": 2048, "judge": 8192},
+        "judge_model": corpus.JUDGE_MODEL,
+        "reasoning_effort": {"agent": "low", "actor": "medium", "judge": "high"},
+        "max_output_tokens": {"agent": 2048, "actor": 2048, "judge": JUDGE_MAX_TOKENS},
         "sampling": {"temperature": "provider default", "seed": "not supplied"},
         "transport": {
             "openai_max_retries": 0,
-            "evaluator_tool_choice": "required",
+            "anthropic_max_retries": 0,
+            "evaluator_tool_choice": {
+                "actor": "required",
+                "judge": "auto; Strands forces the tool after a prose reply",
+            },
             "timeout_seconds": 60,
             "judge_timeout_seconds": 180,
             "unknown_usage": f"charge the full reservation, leave that trial unscored, stop after {LOST_USAGE_STOP} such calls",
-            "evaluator_model_config": deepcopy(JUDGE_MODEL_PARAMS),
+            "evaluator_model_config": {
+                "max_tokens": JUDGE_MAX_TOKENS,
+                **deepcopy(JUDGE_MODEL_PARAMS),
+            },
             "actor_model_config": deepcopy(EVAL_MODEL_PARAMS),
             "cache_adapter_sha256": golden.digest(
                 inspect.getsource(toll_agent._CachedResponsesModel)
             ),
+            "judge_adapter_sha256": golden.digest(
+                inspect.getsource(_CachedAnthropicModel)
+            ),
         },
         "prices": PRICES,
+        "judge_prices": JUDGE_PRICES,
         "application_model_config": {
             "prompt_cache_key": "tollchat-agent-v2",
             "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},

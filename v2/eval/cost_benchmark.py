@@ -63,9 +63,23 @@ def select_cases(cases: list[golden.GoldenCase]) -> list[golden.GoldenCase]:
     return selected
 
 
+# The benchmark prices Luna throughout, so it keeps the Luna judge the harness used.
+LUNA_JUDGE_PARAMS: dict[str, Any] = {
+    **run.EVAL_MODEL_PARAMS,
+    "max_output_tokens": 8192,
+    "reasoning": {"effort": "xhigh"},
+}
+
+
+def luna_judge() -> Model:
+    model = run.build_eval_model()
+    model.update_config(params=deepcopy(LUNA_JUDGE_PARAMS))
+    return model
+
+
 @contextmanager
 def model_overrides() -> Generator[None]:
-    """Scoped factories; judges retain their existing xhigh configuration."""
+    """Scoped factories; judges retain their existing Luna xhigh configuration."""
     original_agent, original_actor = toll_agent._build_model, run.build_eval_model
 
     def configured(model: Model, effort: str) -> Model:
@@ -86,6 +100,7 @@ def model_overrides() -> Generator[None]:
             "build_eval_model",
             lambda: configured(original_actor(), EFFORTS["actor"]),
         ),
+        patch.object(run, "build_judge_model", luna_judge),
     ):
         yield
 

@@ -615,6 +615,7 @@ def test_holdout_run_rejects_partial_selection_before_paid_work(
     output = tmp_path / "partial"
     credentials = Mock(side_effect=AssertionError("must not load credentials"))
     monkeypatch.setattr(run.toll_agent, "load_openai_api_key", credentials)
+    monkeypatch.setattr(run, "load_anthropic_api_key", credentials)
     monkeypatch.setattr(
         "sys.argv",
         [

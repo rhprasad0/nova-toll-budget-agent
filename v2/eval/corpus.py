@@ -24,6 +24,8 @@ from eval import golden
 CONTRACT_PATH = Path(__file__).with_name("contract.json")
 CONTRACT = json.loads(CONTRACT_PATH.read_text())
 SPLITS = ("training", "holdout", "shadow")
+# The application and simulated user stay on gpt-6-luna; only golden judges changed.
+JUDGE_MODEL = "claude-haiku-5-5"
 PUBLIC = golden.V2 / "eval/active"
 digest = golden.digest
 
@@ -346,7 +348,7 @@ def contract(root: Path, split: str, corpus_version: str) -> dict[str, Any]:
         "case_count": CONTRACT["splits"][split]["count"],
         "trials_per_case": 1,
         "actor_model": "gpt-6-luna",
-        "judge_model": "gpt-6-luna",
+        "judge_model": JUDGE_MODEL,
         "tool_description_policy": golden.TOOL_DESCRIPTION_POLICY,
         "hashes": hashes,
         "corpus_sha256": digest(hashes),

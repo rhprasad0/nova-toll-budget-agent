@@ -51,6 +51,7 @@ def test_paid_entrypoints_stop_before_credentials_or_output(
     monkeypatch.setattr(golden, "ROOT", tmp_path / "absent-corpus")
     credentials = Mock(side_effect=AssertionError("must not load credentials"))
     monkeypatch.setattr(run.toll_agent, "load_openai_api_key", credentials)
+    monkeypatch.setattr(run, "load_anthropic_api_key", credentials)
     output = tmp_path / "paid-run"
     args = ["test", "--output", str(output)]
     if mode == "actor-check":
@@ -75,6 +76,7 @@ def test_application_run_requires_new_corpus_approval(
     credentials = Mock(side_effect=AssertionError("must not load credentials"))
     monkeypatch.setattr(run, "identity", identity)
     monkeypatch.setattr(run.toll_agent, "load_openai_api_key", credentials)
+    monkeypatch.setattr(run, "load_anthropic_api_key", credentials)
     output = tmp_path / "application"
     monkeypatch.setattr("sys.argv", ["test", "run", "--output", str(output)])
     with pytest.raises(SystemExit, match="2"):

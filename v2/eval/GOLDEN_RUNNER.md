@@ -15,9 +15,15 @@ Actors reply to necessary questions and outstanding triggered follow-ups. Once a
 choice has been delivered, a completed answer using it does not trigger it again;
 later necessary questions and separate profile actions still require replies.
 
-All golden judges, including the scripted actor-check assessment, use
-`gpt-6-luna` with xhigh reasoning and an 8,192-token output ceiling. Application
-generation remains low/2,048 and actor generation medium/2,048 on the same model.
+All golden judges, including the scripted actor-check assessment, use Claude
+Haiku 5.5 (`claude-haiku-5-5`) with high effort, adaptive thinking and a
+16,000-token output ceiling; its key comes from SSM `/nova-toll/anthropic-api`.
+Judges are not forced to call their answer tool, because Haiku skips thinking on
+a forced call: their instructions name the tool, and Strands forces it only after
+a prose reply. Each answer is checked against the conversation's disclosure,
+answer-line and money IDs, and a mismatch goes back to the judge for retry.
+Application generation remains low/2,048 and actor generation medium/2,048 on
+`gpt-6-luna`.
 Judge instructions require checking source and other factual claims before
 amounts, and evaluating missing qualifications by the meaning conveyed across
 the conversation.
@@ -29,7 +35,9 @@ confirmation checks consistency rather than inventing outside route geography.
 Useful answers pass despite optional detail or minor omissions that preserve
 material meaning. Missing final-answer disclosures affect Outcome; Rules checks
 prohibited actions, affirmative misrepresentations, and required workflow steps.
-Run identities and cost reservations record those role-specific limits. Legacy
+Run identities and cost reservations record those role-specific limits. A
+judge call reserves about $0.15–0.17, priced at Haiku's long-context rate as an
+upper bound, so a spend ceiling needs headroom of workers × that amount. Legacy
 scheduled evaluation settings are separate from this golden contract.
 
 The replay validator also determines Rules failures for mismatched tool arguments
