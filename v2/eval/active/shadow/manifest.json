@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "version": "5.2.14",
+  "version": "5.2.15",
   "evaluation_scope": "shadow",
   "case_count": 10,
   "trials_per_case": 1,
@@ -31,7 +31,7 @@
     "v2/agent_tools/currency.py": "09a6325499e46ef0eca57ac3dd2cebedd460cf6937ceb48860c58eb1ea238710",
     "v2/eval/simulated.py": "846d1c477cdba987a12cff3360c1eafdff7afa5d709062530404e4d8f7a9e6c4",
     "v2/eval/run_evaluation.py": "b4a9abb3ccd913d747b4227466d3138af0b5b681c89438f5c50406f2473da18b",
-    "v2/eval/golden_run.py": "552e196fafdbd8fd94fae15aaeec3fc840d5aa9a230018aea143ea82137f0334",
+    "v2/eval/golden_run.py": "1b97a38c54cf2d85f3f05534e7d7e66bfade031a2da6eb92c34b928404c84141",
     "v2/eval/golden_actor_check.py": "8ad4de1748fa40bbc1955bf9bced47c761c7521c758d88d66bfd305ce04d1882",
     "v2/eval/artifact_agent.py": "7e3b9d7d058a655fe848a3875aecea33ce1aa94f4aa45056e85ce4f0200b0f6b",
     "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
@@ -39,5 +39,5 @@
     "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
-  "corpus_sha256": "1d5215c18917a5e76c005430712fc341f6d10b0af2039c2162210c7003cb1124"
+  "corpus_sha256": "094df7520c8dd570ca4961dbec1374c9620c672709628d5e1a99632427bc6aae"
 }
