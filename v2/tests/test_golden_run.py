@@ -142,6 +142,19 @@ def test_cli_runs_independent_work_in_parallel(
     assert len([event for event in events if event["event"] == "attempt_started"]) == 3
 
 
+LOAD_ANTHROPIC_API_KEY = run.load_anthropic_api_key
+
+
+@pytest.fixture(autouse=True)
+def judge_credentials_stay_offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A test that reaches the real judge key is missing a fake judge."""
+    monkeypatch.setattr(
+        run,
+        "load_anthropic_api_key",
+        Mock(side_effect=AssertionError("fake the judge model offline")),
+    )
+
+
 def test_parallel_calls_reserve_shared_budget_before_provider_calls(
     tmp_path: Path,
 ) -> None:
@@ -654,7 +667,7 @@ def test_judge_receives_permitted_discovery_and_selection_contract(
     monkeypatch.setattr(run.ConversationJudge, "evaluate", evaluate)
     monkeypatch.setattr(
         run,
-        "build_eval_model",
+        "build_judge_model",
         lambda: OpenAIResponsesModel(
             model_id="offline", client_args={"api_key": "offline"}
         ),
@@ -1391,7 +1404,7 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
 
     factory = Mock(return_value=outcome)
     monkeypatch.setattr(run, "Agent", factory)
-    monkeypatch.setattr(run, "build_eval_model", lambda: Mock(client_args={}))
+    monkeypatch.setattr(run, "build_judge_model", lambda: Mock(client_args={}))
     monkeypatch.setattr(run.ConversationJudge, "evaluate", diagnostic)
     run.judge(
         case,
@@ -2224,4 +2237,4 @@ def test_empty_anthropic_key_is_rejected(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(run.boto3, "client", ssm)
     with pytest.raises(ValueError, match="is empty"):
-        run.load_anthropic_api_key()
+        LOAD_ANTHROPIC_API_KEY()
