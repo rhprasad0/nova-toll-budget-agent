@@ -1210,7 +1210,9 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
     diagnostic_prompts: list[str] = []
 
     def outcome(prompt: str, **kwargs: object) -> SimpleNamespace:
-        if kwargs["structured_output_model"] is run.GroundingAssessment:
+        if issubclass(
+            cast(type, kwargs["structured_output_model"]), run.GroundingAssessment
+        ):
             diagnostic_prompts.append(
                 factory.call_args.kwargs["system_prompt"] + prompt
             )
@@ -1220,7 +1222,9 @@ def test_v2_outcome_and_actor_assessments_keep_private_facts_out_of_diagnostics(
                 )
             )
         outcome_prompts.append(prompt)
-        assert kwargs["structured_output_model"] is run.OutcomeAssessment
+        assert issubclass(
+            cast(type, kwargs["structured_output_model"]), run.OutcomeAssessment
+        )
         return SimpleNamespace(
             structured_output=run.OutcomeAssessment(
                 outcome=run.RequirementAssessment(

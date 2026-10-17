@@ -17,9 +17,9 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
-from typing import Any, Literal, cast
+from typing import Any, ClassVar, Literal, Self, cast
 
-from pydantic import Field, JsonValue
+from pydantic import Field, JsonValue, create_model, model_validator
 from strands import Agent, tool  # pyright: ignore[reportUnknownVariableType]
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
 from strands.models import Model
@@ -362,6 +362,18 @@ class GroundingAssessment(RequirementAssessment):
     money: list[MoneyInterpretation] = Field(
         description="Classify every supplied money occurrence ID exactly once using its context: asserted/adopted amount, explicitly qualified whole-dollar restatement, or mentioned without asserting that amount. A quotation or tentative estimate can still assert a price. Return [] only for an empty catalog."
     )
+    # Set by bound_grounding_model; a mismatch goes back to the judge for retry.
+    expected_money: ClassVar[tuple[str, ...] | None] = None
+
+    @model_validator(mode="after")
+    def _each_money_once(self) -> Self:
+        if self.expected_money is not None:
+            each_once(
+                [m.id for m in self.money],
+                list(self.expected_money),
+                "money occurrence ID",
+            )
+        return self
 
 
 class ActorAssessment(golden.Record):
@@ -386,6 +398,57 @@ class OutcomeAssessment(golden.Record):
     )
     outcome: RequirementAssessment
     actor_validity: ActorAssessment
+    # Set by bound_outcome_model; a mismatch goes back to the judge for retry.
+    expected_disclosures: ClassVar[tuple[str, ...] | None] = None
+    answer_lines: ClassVar[frozenset[str]] = frozenset()
+
+    @model_validator(mode="after")
+    def _each_disclosure_once(self) -> Self:
+        if self.expected_disclosures is not None:
+            ids = [item.requirement_id for item in self.disclosures]
+            each_once(ids, list(self.expected_disclosures), "compiled disclosure ID")
+            cited = {line for item in self.disclosures for line in item.line_ids}
+            if unknown := sorted(cited - self.answer_lines):
+                raise ValueError(
+                    f"Cite only IDs from ASSISTANT ANSWER LINES. Unknown: {unknown}."
+                )
+        return self
+
+
+def each_once(given: list[str], expected: list[str], label: str) -> None:
+    missing = sorted(set(expected) - set(given))
+    invented = sorted(set(given) - set(expected))
+    repeated = sorted({item for item in given if given.count(item) > 1})
+    if missing or invented or repeated:
+        raise ValueError(
+            f"Assess every {label} exactly once. Missing: {missing}. "
+            f"Unknown: {invented}. Repeated: {repeated}."
+        )
+
+
+def bound_outcome_model(
+    requirements: dict[str, str], lines: dict[str, str]
+) -> type[OutcomeAssessment]:
+    """Check this attempt's IDs so Strands returns a miss to the judge for retry.
+
+    The schema stays identical across attempts; the tool definition precedes the
+    cached judge prompt, so per-attempt schemas would defeat prompt caching.
+    """
+    # shortcut: Strands caches each class's tool spec for the process (~34 KB per
+    # attempt); fine for runs of hundreds, revisit for long-lived processes.
+    model = create_model("OutcomeAssessment", __base__=OutcomeAssessment)
+    model.expected_disclosures = tuple(requirements)
+    model.answer_lines = frozenset(lines)
+    return model
+
+
+def bound_grounding_model(
+    catalog: list[golden.MoneyMention],
+) -> type[GroundingAssessment]:
+    """Check this attempt's money IDs so Strands returns a miss to the judge for retry."""
+    model = create_model("GroundingAssessment", __base__=GroundingAssessment)
+    model.expected_money = tuple(mention.id for mention in catalog)
+    return model
 
 
 class Attempt(golden.Record):
@@ -1249,7 +1312,9 @@ def assess_outcome(
         + json.dumps(attempt.actor_replies)
         + "\nAPPLICATION STOP (not an actor decision):\n"
         + json.dumps(attempt.application_stop),
-        structured_output_model=OutcomeAssessment,
+        structured_output_model=bound_outcome_model(
+            requirements, assistant_lines(attempt.turns)
+        ),
     )
     assessment = result.structured_output
     if not isinstance(assessment, OutcomeAssessment):
@@ -1391,7 +1456,7 @@ def assess_grounding(
         + "\nOffsets address each normalized_answer, after currency/Markdown normalization. "
         "The turn number identifies the original response above. Classify each occurrence separately; "
         "a denial never exempts a different asserted occurrence with the same value.",
-        structured_output_model=GroundingAssessment,
+        structured_output_model=bound_grounding_model(catalog),
     )
     assessment = result.structured_output
     if not isinstance(assessment, GroundingAssessment):

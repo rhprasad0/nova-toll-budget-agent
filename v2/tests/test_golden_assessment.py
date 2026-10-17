@@ -5,9 +5,11 @@ from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock
 
 import pytest
+from pydantic import ValidationError
 from strands.models import Model
 
 from eval import golden
@@ -495,3 +497,87 @@ def test_disclosure_lines_preserve_markdown_and_multiline_context() -> None:
     assert not run.disclosure_verdict(
         assessment, {"source": "Published source"}, turns
     ).passed
+
+
+def test_bound_judge_schemas_reject_id_mistakes_for_retry() -> None:
+    requirements = {
+        "turn_1.call_1.vehicle_assumption": "Vehicle",
+        "turn_1.call_1.peak": "Peak",
+    }
+    model = run.bound_outcome_model(requirements, {"turn_1.line_1": "Answer"})
+    # An unchanged tool schema keeps the cached judge prompt reusable across attempts.
+    assert model.__name__ == "OutcomeAssessment"
+    assert model.model_json_schema() == run.OutcomeAssessment.model_json_schema()
+    outcome = run.RequirementAssessment(evidence="Satisfied", unmet_requirements=[])
+    actor = run.ActorAssessment(evidence="Consistent", status="valid")
+
+    def disclosure(
+        requirement_id: str, line: str = "turn_1.line_1"
+    ) -> run.DisclosureAssessment:
+        return run.DisclosureAssessment(requirement_id=requirement_id, line_ids=[line])
+
+    complete = [disclosure(key) for key in requirements]
+    model(disclosures=complete, outcome=outcome, actor_validity=actor)
+    for disclosures in (
+        [],
+        complete[:1],
+        complete * 2,
+        [*complete, disclosure("invented")],
+        [disclosure(key, "turn_9.line_9") for key in requirements],
+    ):
+        with pytest.raises(ValidationError):
+            model(disclosures=disclosures, outcome=outcome, actor_validity=actor)
+    run.bound_outcome_model({}, {})(outcome=outcome, actor_validity=actor)
+
+    mention = golden.MoneyMention(
+        id="m1",
+        turn=1,
+        start=0,
+        end=2,
+        amount="$4",
+        normalized_answer="$4",
+        rounded_supported=False,
+    )
+    grounding = run.bound_grounding_model([mention])
+    assert grounding.model_json_schema() == run.GroundingAssessment.model_json_schema()
+
+    def money(money_id: str) -> run.MoneyInterpretation:
+        return run.MoneyInterpretation(id=money_id, evidence="Quoted", kind="asserted")
+
+    grounding(evidence="Supported", unmet_requirements=[], money=[money("m1")])
+    for answers in ([], [money("m2")]):
+        with pytest.raises(ValidationError):
+            grounding(evidence="Supported", unmet_requirements=[], money=answers)
+    # Unbound classes keep their post-hoc checked behavior.
+    run.OutcomeAssessment(outcome=outcome, actor_validity=actor)
+
+
+def test_judges_receive_each_attempts_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    case = golden_case(1)
+    turns = [
+        golden.Turn(
+            user="Price?", response="The toll is $4.25.\nPeak pricing.", calls=[]
+        )
+    ]
+    attempt = run.Attempt(id="ids", case_id=case.id, trial=1, turns=turns)
+    requirements = {"turn_1.call_1.peak": "Peak"}
+    monkeypatch.setattr(run, "disclosure_requirements", Mock(return_value=requirements))
+    models: list[type] = []
+
+    def capture(prompt: str, **kwargs: object) -> None:
+        models.append(cast(type, kwargs["structured_output_model"]))
+        raise RuntimeError("captured")
+
+    monkeypatch.setattr(run, "Agent", Mock(return_value=Mock(side_effect=capture)))
+    for assess in (run.assess_outcome, run.assess_grounding):
+        with pytest.raises(RuntimeError, match="captured"):
+            assess(case, attempt, Mock(spec=Model), "contract", "[]")
+    catalog: list[golden.MoneyMention] = []
+    golden.grade_assertions(case, turns, money_catalog=catalog)
+    outcome, grounding = (
+        cast(type[run.OutcomeAssessment], models[0]),
+        cast(type[run.GroundingAssessment], models[1]),
+    )
+    assert outcome.expected_disclosures == ("turn_1.call_1.peak",)
+    assert outcome.answer_lines == frozenset(run.assistant_lines(turns))
+    assert catalog and grounding.expected_money == tuple(m.id for m in catalog)
