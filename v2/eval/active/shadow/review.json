@@ -1,6 +1,6 @@
 {
   "status": "approved",
-  "corpus_sha256": "094df7520c8dd570ca4961dbec1374c9620c672709628d5e1a99632427bc6aae",
+  "corpus_sha256": "66df70eeed12fac2c7dae5d4e1d6d446fd14a477f5dfe9d6927be9d8baef3da7",
   "reviewer": "Claude",
-  "evidence": "Approved by Claude at Ryan's request on 2026-10-17. Cases, prompt points and fixtures are byte-identical to approved 5.2.14. Only the protected v2/eval/golden_run.py identity changed, for the judge's answer-tool sentence and per-attempt ID checks (PR #715). No human case-by-case inspection occurred."
+  "evidence": "Approved by Claude at Ryan's request on 2026-10-17. Cases, prompt points and fixtures are byte-identical to approved 5.2.15. Only the judge model (now claude-haiku-5-5) and the protected sources for the Haiku judge changed: v2/uv.lock (dev-only anthropic), golden_run.py, golden_actor_check.py, corpus.py and repetition.py (harness 2.5.20). No human case-by-case inspection occurred."
 }

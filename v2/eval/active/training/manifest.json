@@ -1,11 +1,11 @@
 {
   "format_version": 1,
-  "version": "5.2.15",
+  "version": "5.2.16",
   "evaluation_scope": "training",
   "case_count": 50,
   "trials_per_case": 1,
   "actor_model": "gpt-6-luna",
-  "judge_model": "gpt-6-luna",
+  "judge_model": "claude-haiku-5-5",
   "tool_description_policy": "literal-input-prose-v1",
   "hashes": {
     "fixtures/tr5-annual-abandoned-for-now-1.json": "f240afe3b729cdb4de1ca6020f12cdbfa492a919a2eea390b52353ab192c4329",
@@ -61,23 +61,23 @@
     "cases.jsonl": "7878f9cf4ada3e7436e1ac330b0bfc5c8bea865d2e1cacf9588e3a03d46a2262",
     "examples.json": "94812c839670a30ee6c05dcb0cf0a7d436188047e51bf25e82e338b70712e1ad",
     "prompt-points.json": "fe158b3b6c5c4e7a3fd3606c56633eac77683d365e2e93c82f3b065b8eb1879d",
-    "v2/uv.lock": "4926fc94603725774e937fba4f42b20c903260efaa7f5901486cd2bdba4712eb",
-    "v2/eval/corpus.py": "b5ffdfc5cdd87a52fe1408205032edcfd707e065978fc7a8e94bc90be12284b9",
+    "v2/uv.lock": "743154ac230cba556fd4286ccafb050d7fc832752eeffe2dbc99dec3cb6aa1d8",
+    "v2/eval/corpus.py": "5730cbd216784cb0c5473b92ec6d3db105b5f1c3c1d5e52eeb835e56d5b02905",
     "v2/eval/contract.json": "2e36bdfed363f0480bf8f7741de76fa392aa20578ceb10449196b4bc3efa94c3",
     "v2/agent/toll_agent.py": "885ea00c2c3eb22972c17e911018ee0dc040346f7e8680a625a1def06e533b85",
     "v2/agent_tools/get_current_toll_price.py": "03560678deb79a8665b47de80793e744a6072419f09e4ec95401019ab23befcc",
     "v2/eval/golden.py": "4aaacb3c2d237c36432bee556ef24d39dd4ea1053cf923664d4761982feac89d",
-    "v2/eval/repetition.py": "198bc5a5274decc172a0eaa24796b8f8c9b6a3b17ef4459d440802da02622f6c",
+    "v2/eval/repetition.py": "52d9ff65b7bc05c3f3b4fbd5f6b84d285fc3fd405915a45746329a01dd8c2cc1",
     "v2/agent_tools/currency.py": "09a6325499e46ef0eca57ac3dd2cebedd460cf6937ceb48860c58eb1ea238710",
     "v2/eval/simulated.py": "846d1c477cdba987a12cff3360c1eafdff7afa5d709062530404e4d8f7a9e6c4",
     "v2/eval/run_evaluation.py": "b4a9abb3ccd913d747b4227466d3138af0b5b681c89438f5c50406f2473da18b",
-    "v2/eval/golden_run.py": "1b97a38c54cf2d85f3f05534e7d7e66bfade031a2da6eb92c34b928404c84141",
-    "v2/eval/golden_actor_check.py": "8ad4de1748fa40bbc1955bf9bced47c761c7521c758d88d66bfd305ce04d1882",
+    "v2/eval/golden_run.py": "f058bb6d844997c6a100d588e83db478e9de2133e3a7192dd1ad064e86bbbe87",
+    "v2/eval/golden_actor_check.py": "0d82de0b3d7471e10b85578e4875e2a8a856380b39ae5bc1a9d674ee11f65536",
     "v2/eval/artifact_agent.py": "7e3b9d7d058a655fe848a3875aecea33ce1aa94f4aa45056e85ce4f0200b0f6b",
     "v2/eval/artifact_worker.py": "7c175fdc4e42cd24ad9df4b0e6850ebad5a8054b001a97ec12842e9570dc81bb",
     "v2/agent_tools/current_price_domain.py": "20b5f422c4aaa1d5e2b097e6ef638478ed047b871897c08e94837679b074b27a",
     "v2/agent_tools/get_annual_toll_ballpark.py": "46c3245a95544a5df1139f208a536940dfc7d659444a5c1e2fc7130526786a6e",
     "v2/agent_tools/validate_toll_route.py": "118265410bb42c0a52a854afd4ffac5340606bb2f15b59623d65801c8564254e"
   },
-  "corpus_sha256": "2b57932aef794d30cdff4041aafcb57b56aaed28c0429850a0097190d7475595"
+  "corpus_sha256": "e8bef7212ee0f3902dc9e8c561ab8fb72225f2c2d8ca31d8a2b8200037ea25e7"
 }
