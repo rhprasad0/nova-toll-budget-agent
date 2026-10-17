@@ -252,6 +252,11 @@ def main() -> None:
         identity = run.identity(cases)  # Requires validated inputs and a clean commit.
         identity["reasoning_effort"] = EFFORTS
         identity["transport"]["actor_model_config"]["reasoning"] = {"effort": "low"}
+        # Record the forced Luna judge this benchmark runs, not the golden Haiku judge.
+        identity["judge_model"] = "gpt-6-luna"
+        identity["max_output_tokens"]["judge"] = 8192
+        identity["transport"]["evaluator_tool_choice"] = "required"
+        identity["transport"]["evaluator_model_config"] = deepcopy(LUNA_JUDGE_PARAMS)
         journal = run.Journal(directory, float(BUDGET))
         (directory / "manifest.json").write_text(
             json.dumps(

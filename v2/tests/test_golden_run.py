@@ -1206,7 +1206,13 @@ def test_eval_cache_prefix_and_write_accounting(
 
 @pytest.mark.parametrize(
     "changed",
-    ["judge_prompt_sha256", "transport", "tool_description_policy", "reasoning_effort"],
+    [
+        "judge_prompt_sha256",
+        "transport",
+        "tool_description_policy",
+        "reasoning_effort",
+        "judge_model",
+    ],
 )
 def test_cli_rejects_changed_cache_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: str
@@ -1222,6 +1228,7 @@ def test_cli_rejects_changed_cache_contract(
         "diagnostic_rubrics",
         "diagnostic_domain_facts",
         "model",
+        "judge_model",
         "reasoning_effort",
         "max_output_tokens",
         "transport",

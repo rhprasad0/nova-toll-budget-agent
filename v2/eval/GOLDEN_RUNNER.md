@@ -35,7 +35,7 @@ Useful answers pass despite optional detail or minor omissions that preserve
 material meaning. Missing final-answer disclosures affect Outcome; Rules checks
 prohibited actions, affirmative misrepresentations, and required workflow steps.
 Run identities and cost reservations record those role-specific limits. A
-judge call reserves about $0.15–0.17, priced at Haiku's long-context rate as an
+judge call reserves up to about $0.27, priced at Haiku's long-context rate as an
 upper bound, so a spend ceiling needs headroom of workers × that amount. Legacy
 scheduled evaluation settings are separate from this golden contract.
 
