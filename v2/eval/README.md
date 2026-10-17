@@ -1,10 +1,8 @@
 # TollChat evaluation
 
-**Locally authored suite:** 50 training and 10 shadow cases (5.2.15) are
-active, with 25 holdout cases (5.2.14) stored externally. Harness 2.5.19 has an
-approved aggregate calibration receipt, but it binds the dependency set from
-before the October 16 mcp and multidict upgrade and the judge from before the
-October 17 answer-checking change, so paid runs need a new combined calibration. The 100-case development corpus
+**Locally authored suite:** 50 training and 10 shadow cases (5.2.16) are
+active, with 25 holdout cases (5.2.16) stored externally. Harness 2.5.20 has an
+approved aggregate calibration receipt for the Claude Haiku 5.5 judge. The 100-case development corpus
 3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
 Its recorded scores and reviews remain historical; it cannot run or seed fresh inputs.
 The [experiment journal](EXPERIMENT_JOURNAL.md) preserves the findings and limitations.
@@ -17,7 +15,7 @@ in a new external directory; it is no longer blind. See the
 The **50 training and 10 shadow cases** live under `eval/active/`, with **25 holdout
 cases on an external host path**. Use the [authoring guide](AUTHORING.md) and
 [coverage contract](contract.json). Harness
-2.5.19 searches the training split with **one trial per case and 16 workers**;
+2.5.20 searches the training split with **one trial per case and 16 workers**;
 three trials require Ryan's explicit instruction. Shadow runs are local and
 manual; PR CI does not run them.
 TollChat's application model, prompt, SOP and tools remain unchanged on `gpt-6-luna`.

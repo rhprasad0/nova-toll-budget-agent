@@ -1,9 +1,8 @@
 # Running the frozen training split
 
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
-Training and shadow corpus 5.2.15 and holdout 5.2.14 run under harness 2.5.19. Its
-approved calibration predates the October 16 dependency upgrade and the October 17
-judge answer checks, so paid runs need a new one.
+Training, shadow and holdout corpus 5.2.16 run under harness 2.5.20, whose
+approved combined calibration covers the Claude Haiku 5.5 judge.
 Training application runs default to one trial per case; use `--trials-per-case 3`
 only on Ryan's explicit instruction. Shadow runs are manual and outside search.
 Actors have up to five delivered user turns. The application, actor, judge
@@ -61,7 +60,7 @@ require perfect label agreement; document and assess each disagreement.
 
 ## Description-edit contract
 
-The local training contract / harness 2.5.19 uses `literal-input-prose-v1`. The corpus hashes
+The local training contract / harness 2.5.20 uses `literal-input-prose-v1`. The corpus hashes
 parsed source for the two pricing tool modules, masking only existing literal
 `TOOL_SPEC["description"]` strings and `Field(description=...)` strings in the
 allowlisted input models (`golden.TOOL_INPUT_MODELS`). All other syntax, including
@@ -353,7 +352,7 @@ new series. Repeated aggregate feedback can still influence tuning, so this is a
 hidden diagnostic, not fully blind accuracy or a production gate.
 The 5.1.14 holdout and its 5.2.0 repair were read case by case on October 10,
 2026 ([journal](journal/2026-10-05.md)). Do not use 5.1.14 for candidate
-checkpoints. Checkpoints on 5.2.x (now 5.2.14) give descriptive aggregate feedback, not blind
+checkpoints. Checkpoints on 5.2.x (now 5.2.16) give descriptive aggregate feedback, not blind
 evidence, until a fresh holdout replaces it.
 
 Never inspect external logs to diagnose a hidden measurement failure; have the
