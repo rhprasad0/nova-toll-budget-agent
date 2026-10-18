@@ -42,9 +42,10 @@ def golden_test_identity(
 
 
 @pytest.fixture
-def archival_reference_data(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Old reference assertions are offline tests, never an active set."""
+def grader_reference_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Grader-logic regressions over five retired cases, never an active set."""
     from eval import golden
 
-    monkeypatch.setattr(golden, "ROOT", golden.ARCHIVE)
-    monkeypatch.setattr(golden, "validate", golden.validate_archive)
+    monkeypatch.setattr(
+        golden, "ROOT", Path(__file__).parent / "fixtures/golden-grader"
+    )

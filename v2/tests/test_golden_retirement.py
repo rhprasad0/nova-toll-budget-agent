@@ -21,29 +21,6 @@ def test_retired_test_data_is_not_an_active_corpus(tmp_path: Path) -> None:
         golden.validate(TEST_DATA)
 
 
-def test_development_contract_binds_review_without_transferring_approval() -> None:
-    golden.validate_archive()
-    review = json.loads((golden.ARCHIVE / "review.json").read_text())
-    manifest = json.loads((golden.ARCHIVE / "manifest.json").read_text())
-    assert review["status"] in {"approved", "pending"}
-    assert review["authorization"].startswith("Ryan explicitly authorized")
-    assert review["human_trajectory_adjudication"] is False
-    assert review["evidence"]
-    if review["status"] == "approved":
-        assert (
-            review["reviewer"] and review["contract_commit"] and review["reviewed_at"]
-        )
-    else:
-        assert not review["reviewer"]
-        assert review["contract_commit"] is None and review["reviewed_at"] is None
-    assert manifest["tool_description_policy"] == golden.TOOL_DESCRIPTION_POLICY
-    assert review["corpus_sha256"] == manifest["corpus_sha256"]
-    assert manifest["evaluation_scope"] == "development"
-    assert not (golden.ARCHIVE / "calibration-reference.json").exists()
-    with pytest.raises(ValueError, match="archival references cannot execute"):
-        golden.validate(golden.ARCHIVE)
-
-
 @pytest.mark.parametrize("mode", ["calibrate", "run", "actor-check"])
 def test_paid_entrypoints_stop_before_credentials_or_output(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str

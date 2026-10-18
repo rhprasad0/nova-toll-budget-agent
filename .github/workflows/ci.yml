@@ -77,7 +77,7 @@ jobs:
           echo "$RUNNER_TEMP/repository-check-tools" >> "$GITHUB_PATH"
       - name: Check all authored code
         run: python3 scripts/check_repository.py
-      - name: Validate local corpus readiness, archival reference, and release isolation
+      - name: Validate local corpus readiness and release isolation
         run: |
           uv run python -m eval.golden --allow-uninitialized
       - run: uv run python scripts/check_tool_contract_versions.py "$TOOL_CONTRACT_BASE_REF"
