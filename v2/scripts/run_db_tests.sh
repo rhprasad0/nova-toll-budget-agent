@@ -541,10 +541,6 @@ test "$(psql --dbname "$development_db" --tuples-only --no-align --command \
 psql --dbname "$development_db" --set ON_ERROR_STOP=1 --command \
   "SET ROLE pricing_owner_development; UPDATE pricing.schema_version SET version = '1.3.0' WHERE singleton; RESET ROLE;"
 
-POSTGRES_CONTAINER_ID="$POSTGRES_CONTAINER_ID" \
-  PGHOST="$PGHOST" PGPORT="$PGPORT" PGUSER="$PGUSER" \
-  python3 v2/scripts/test_legacy_database_retirement.py
-
 createdb --template template0 "$bootstrap_db"
 psql --dbname "$bootstrap_db" \
   --file v2/db/migrations/001_create_pricing_schema.sql

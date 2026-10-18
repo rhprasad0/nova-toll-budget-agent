@@ -6,9 +6,9 @@ application infrastructure. Shared production foundations live in `../infra`.
 ## Shared foundation changes
 
 Run these commands from the repository root. Build and review the real fetcher
-package for every root `infra/` plan. The current development foundation handoff
-is the authorized #327/#333 replacement in the
-[development foundation replacement runbook](runbooks/development-foundation-replacement.md).
+package for every root `infra/` plan. Review and apply foundation changes as a
+separate operation through the
+[account-local foundation handoff](RUNBOOK.md#account-local-foundation-handoff).
 Do not use a generic plan display or unbounded apply command; application
 release remains a separately approved follow-on operation.
 
@@ -260,7 +260,7 @@ one saved private Terraform plan and gate, fixed-role migration, delivery-role
 re-assumption, and application of that same plan. The protected, manually
 dispatched [development migration workflow](../.github/workflows/v2-development-migrations.yml)
 remains a main-only recovery path after the foundation and fresh-bootstrap gates in
-the [protected development migration runbook](runbooks/development-foundation-replacement.md#protected-development-migration-workflow-305-slice-3).
+the [protected development migration runbook](RUNBOOK.md#protected-development-migration-workflow-305-slice-3).
 Both paths accept no arbitrary target, role, or migration-path input and emit
 sanitized evidence. This is separate from disposable local/PR checks and does
 not authorize production schema changes. Production uses its own

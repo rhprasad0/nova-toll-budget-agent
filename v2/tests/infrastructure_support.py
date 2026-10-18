@@ -66,55 +66,16 @@ DEVELOPMENT_MIGRATIONS_WORKFLOW = (
 DEVELOPMENT_MIGRATION_HELPER = (
     V2_ROOT / "scripts" / "run_development_migrations_workflow.sh"
 ).read_text()
-DEVELOPMENT_FOUNDATION_PLAN_VALIDATOR = (
-    V2_ROOT / "scripts" / "validate_development_foundation_plan.py"
-)
-FOUNDATION_DNS_WORKFLOW = (
-    REPO_ROOT / ".github" / "workflows" / "v2-production-foundation-dns.yml"
-).read_text()
 RUNBOOK = (V2_ROOT / "RUNBOOK.md").read_text()
 RUNBOOKS = V2_ROOT / "runbooks"
-DEVELOPMENT_BOOTSTRAP = (RUNBOOKS / "development-bootstrap-import.md").read_text()
 DEVELOPMENT_RELEASE = (RUNBOOKS / "development-release.md").read_text()
-DEVELOPMENT_FOUNDATION_330 = (
-    RUNBOOKS / "development-foundation-330-archive.md"
-).read_text()
-DEVELOPMENT_FOUNDATION_REPLACEMENT = (
-    RUNBOOKS / "development-foundation-replacement.md"
-).read_text()
-LEGACY_DEVELOPMENT_RETIREMENT = (
-    RUNBOOKS / "legacy-development-retirement.md"
-).read_text()
 
 
-# Preserve the original logical ordering for whole-runbook contract assertions.
-_BEFORE_HANDOFF, _AFTER_HANDOFF = RUNBOOK.split(
-    "### Development handoff (non-operative)", maxsplit=1
-)
-_NON_OPERATIVE, _PRODUCTION = _AFTER_HANDOFF.split(
-    "### Guarded production release", maxsplit=1
-)
-DEPLOYMENT = "\n".join(
-    (
-        _BEFORE_HANDOFF,
-        DEVELOPMENT_BOOTSTRAP,
-        DEVELOPMENT_RELEASE,
-        "### Development handoff (non-operative)",
-        _NON_OPERATIVE,
-        DEVELOPMENT_FOUNDATION_330,
-        DEVELOPMENT_FOUNDATION_REPLACEMENT,
-        "### Guarded production release",
-        _PRODUCTION,
-        LEGACY_DEVELOPMENT_RETIREMENT,
-    )
-)
+DEPLOYMENT = "\n".join((RUNBOOK, DEVELOPMENT_RELEASE))
 AGENTS = (REPO_ROOT / "AGENTS.md").read_text()
 ACCOUNT_CONTRACT = json.loads(
     (REPO_ROOT / "infra" / "account-contract.json").read_text()
 )
-LEGACY_DEVELOPMENT_INVENTORY = (
-    REPO_ROOT / "infra" / "legacy-development-inventory.md"
-).read_text()
 
 
 def terraform_block(source: str, header: str) -> str:
