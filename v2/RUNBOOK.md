@@ -450,8 +450,10 @@ alias and fixed `nova_toll_v2-W6989LEw44` `preview` endpoint; retain it with the
 release and never publish it with credentials, raw logs, private state, or
 manifest contents.
 
-Follow [the manual release instructions](manual-releases/README.md) to set
-`RELEASE_EVIDENCE` and capture the recovery record. From the repository root:
+Export `RELEASE_EVIDENCE` as a new file path in a directory you own that is
+not group- or world-writable and lies outside the checkout; the script never
+overwrites an existing record. Then, from the repository root and in the same
+shell:
 
 ```sh
 bash v2/manual-releases/capture_production_recovery.sh

@@ -118,8 +118,9 @@ costs. The existing scored-evaluation calibration gates are unchanged.
 
 The aggregate is frozen at its release byte pin in
 `v2/scripts/cost_dashboard_release.py`. The `eval.cost_benchmark` runner was
-retired because it selected cases from the retired 3.3.28 archive and cannot run
-on the active split; recover it from Git history if a refresh is ever needed.
+retired because its fixed case selection needs an unavailable annual-interpretation
+case, which the active training split no longer has; recover it from Git history
+if a refresh is ever needed.
 
 Agent spend across all attempts, including measured failed calls, is divided by
 completed assistant turns. A truncated or interrupted response is not a completed
