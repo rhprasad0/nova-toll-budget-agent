@@ -9,6 +9,7 @@ development releases now run through automatic protected delivery; see the
 
 **Do not run the historical procedures.** They remain in
 [Git history before this cleanup](https://github.com/rhprasad0/nova-toll-budget-agent/blob/ed784c8e/v2/runbooks/development-release.md).
+The "Keep trace archives" section below is current.
 
 ## Keep trace archives
 

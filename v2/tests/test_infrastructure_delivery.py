@@ -16,6 +16,7 @@ import yaml
 
 from tests.infrastructure_support import (
     CI_WORKFLOW,
+    DEPLOYMENT,
     DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW,
     DEVELOPMENT_DELIVERY_WORKFLOW,
     DEVELOPMENT_PLAN_WORKFLOW,
@@ -3158,3 +3159,13 @@ def test_retired_holdout_storage_keeps_data_protections() -> None:
         '"aws:SecureTransport" = "false"',
     ):
         assert protection in storage
+
+
+def test_runbooks_never_direct_plan_apply_target_or_workspaces() -> None:
+    guarded = RUNBOOK.split("### Guarded production release", maxsplit=1)[1].split(
+        "## Public report launch", maxsplit=1
+    )[0]
+    assert "terraform plan" not in guarded
+    assert "terraform apply" not in guarded
+    assert "terraform -target" not in DEPLOYMENT
+    assert "terraform workspace" not in DEPLOYMENT

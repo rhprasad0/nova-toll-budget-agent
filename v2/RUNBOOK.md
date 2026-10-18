@@ -39,6 +39,17 @@ this exact predicate:
 `vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor`,
 without restricting initial `main` pushes by owner ID.
 
+To stop development delivery, first delete that repository variable (or set it to
+literal `false`) with
+`gh variable delete DEVELOPMENT_DELIVERY_ENABLED --repo rhprasad0/nova-toll-budget-agent`
+and confirm a later delivery run is skipped without an OIDC request. Only then
+disable the development route or rotate its Tailscale OAuth clients, stored in
+the `development` environment: `TS_DEVELOPMENT_OAUTH_CLIENT_ID`/`_SECRET`
+(scope `auth_keys`, tag `tag:ci-development`, used by the Tailscale action) and
+`TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID`/`_SECRET` (only `devices:core:read`,
+`devices:routes:read` and `devices:routes`, used by the route helper). Neither
+step touches production.
+
 ## Delivery contract and production baseline
 
 PRs use disposable PostGIS migration validation only; the checks are
@@ -64,8 +75,8 @@ observation attempts one restoration after two consecutive probe failures.
 See the [blue-green delivery procedure](runbooks/blue-green-deployments.md).
 Configuration alone does not prove bootstrap or activation has completed.
 Production schema changes use the protected fixed-target migration component
-below. The one-time baseline adoption and manual Oracle migration 030
-procedures remain separate, explicitly approved operations. Application release
+below. The one-time baseline adoption is complete, and the manual Oracle
+migration 030 procedure remains a separate, explicitly approved operation. Application release
 artifacts alone do not authorize or execute schema changes.
 
 ### Protected development migration workflow (#305 slice 3)
@@ -128,7 +139,9 @@ demonstration still requires separate human authorization.
 
 The fixed manual recovery workflow remains available for an explicitly approved
 post-merge bootstrap or migration rehearsal after the reviewed foundation plan
-and fresh development bootstrap gates. Dispatch
+and fresh development bootstrap gates (see the
+[historical replacement procedure](runbooks/development-foundation-replacement.md)).
+Dispatch
    `.github/workflows/v2-development-migrations.yml` only from `refs/heads/main`;
 the job also requires GitHub actor ID `91573985` and
 `github.triggering_actor == github.actor`:
