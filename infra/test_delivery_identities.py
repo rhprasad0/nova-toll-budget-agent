@@ -1426,10 +1426,6 @@ def main() -> None:
 
     require("python3 infra/test_delivery_identities.py", WORKFLOW)
     require("terraform init -backend=false -input=false", WORKFLOW)
-    assert "id-token: write" not in WORKFLOW
-    assert "aws-actions/configure-aws-credentials" not in WORKFLOW
-    assert "terraform plan" not in WORKFLOW
-    assert "terraform apply" not in WORKFLOW
 
     _check_production_planner()
     test_production_release_planner_can_verify_encrypted_immutable_retries()

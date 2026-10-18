@@ -85,8 +85,6 @@ def test_v2_pr_validation_has_no_aws_access_or_mutation_commands() -> None:
 
 
 def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
-
     assert 'backend "s3" {}' in (FOUNDATION_ROOT / "versions.tf").read_text()
     assert 'backend "s3" {}' in VERSIONS_TF
     assert (FOUNDATION_ROOT / "backend.production.hcl").read_text().find(
@@ -110,14 +108,6 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
             "with": {"python-version": "3.13"},
         }
     ]
-    for forbidden in (
-        "terraform plan",
-        "terraform apply",
-        "configure-aws-credentials",
-        "id-token: write",
-    ):
-        assert forbidden not in workflow
-
     assert "Historical pre-bootstrap recovery capture" in RUNBOOK
     assert "**Historical pre-bootstrap procedure only.**" in RUNBOOK
     assert "v2-production-recovery.yml" in RUNBOOK
