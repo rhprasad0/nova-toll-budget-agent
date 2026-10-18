@@ -83,6 +83,7 @@ def test_loader_upserts_monotonically_for_agent_reads(
     monkeypatch.setenv("DB_NAME", DATABASE)
     monkeypatch.setenv("DB_USER", "pricing_loader_writer")
     monkeypatch.delenv("TOLLCHAT_ENVIRONMENT", raising=False)
+    caplog.set_level("INFO")
 
     now = datetime.now(UTC).replace(second=0, microsecond=0)
     current, earlier = now - timedelta(minutes=1), now - timedelta(hours=1)
@@ -116,6 +117,14 @@ def test_loader_upserts_monotonically_for_agent_reads(
     handler._load(
         "i66", [_i66(current, now - timedelta(minutes=3), "1.00")], s3_key=second
     )
+    handler._load(
+        "i66", [_i66(current, now - timedelta(minutes=2), "3.00")], s3_key=second
+    )
+    caplog.clear()
+    handler._load(
+        "i66", [_i66(current, now - timedelta(minutes=2), "9.00")], s3_key=second
+    )
+    assert "V2_LOAD_ROWS i66 0" in caplog.text
 
     with cast(Any, _connect("postgres")) as connection:
         i95 = connection.execute(
@@ -133,7 +142,7 @@ def test_loader_upserts_monotonically_for_agent_reads(
         Decimal("4.00"),
         Decimal("6.00"),
     ]
-    assert [row["zone_toll_rate_usd"] for row in i66] == [Decimal("2.00")]
+    assert [row["zone_toll_rate_usd"] for row in i66] == [Decimal("3.00")]
 
     comparisons = pricing_tool._fetch_i95_i495_comparisons(OD_PAIR)
     latest = next(row for row in comparisons if row.comparison_kind == "current")

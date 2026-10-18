@@ -140,6 +140,95 @@ def _greenway_route() -> ballpark._BallparkRouteDb:
     )
 
 
+def _i95_to_greenway_route() -> ballpark._BallparkRouteDb:
+    return ballpark._BallparkRouteDb.model_validate(
+        {
+            "status": "valid",
+            "reason": None,
+            "point_ids": [
+                "i95:2232SO",
+                "i495:1829ND",
+                "dtr:1819:entry:WB",
+                "dtr:28:exit:WB",
+                "greenway:28:entry:WB",
+                "greenway:1:exit:WB",
+            ],
+            "connection_ids": [
+                "source:i95_shared:Southbound:2232SO:1829ND",
+                "i495_1829_to_dulles_toll_road",
+                "source:dtr:WB:1819:28",
+                "dtr_to_greenway",
+                "source:greenway:WB:28:1",
+            ],
+            "connection_types": [
+                "general_purpose_gap",
+                "toll_handoff",
+                "within_facility",
+                "toll_handoff",
+                "within_facility",
+            ],
+            "general_purpose_gaps": [
+                {
+                    "connection_id": "source:i95_shared:Southbound:2232SO:1829ND",
+                    "boundary_point_id": "i495:192SD",
+                    "role": "prefix",
+                    "i95_direction": "SB",
+                    "fallback_required": None,
+                }
+            ],
+            "facility_legs": [
+                {
+                    "route_step_id": "step-1",
+                    "facility": "i95_i495",
+                    "point_ids": ["i95:2232SO", "i495:192SD"],
+                    "connection_ids": ["source:i95_shared:Southbound:2232SO:1829ND"],
+                    "pricing_key": {
+                        "source_route_key": "Southbound:2232SO:1829ND",
+                        "od_pair_id": 1204,
+                    },
+                },
+                {
+                    "route_step_id": "step-2",
+                    "facility": "i95_i495",
+                    "point_ids": ["i495:192SD", "i495:1829ND"],
+                    "connection_ids": ["source:i95_shared:Southbound:2232SO:1829ND"],
+                    "pricing_key": {
+                        "source_route_key": "Southbound:2232SO:1829ND",
+                        "od_pair_id": 1007,
+                    },
+                },
+                {
+                    "route_step_id": "step-3",
+                    "facility": "dtr",
+                    "point_ids": ["dtr:1819:entry:WB", "dtr:28:exit:WB"],
+                    "connection_ids": ["source:dtr:WB:1819:28"],
+                    "pricing_key": {
+                        "source_route_key": "WB:1819:28",
+                        "charge_index": 1,
+                    },
+                },
+                {
+                    "route_step_id": "step-4",
+                    "facility": "dtr",
+                    "point_ids": ["dtr:28:exit:WB", "greenway:28:entry:WB"],
+                    "connection_ids": ["dtr_to_greenway"],
+                    "pricing_key": {
+                        "source_route_key": "dtr_to_greenway",
+                        "charge_index": 1,
+                    },
+                },
+                {
+                    "route_step_id": "step-5",
+                    "facility": "greenway",
+                    "point_ids": ["greenway:28:entry:WB", "greenway:1:exit:WB"],
+                    "connection_ids": ["source:greenway:WB:28:1"],
+                    "pricing_key": {"source_route_key": "WB:28:1", "charge_index": 1},
+                },
+            ],
+        }
+    )
+
+
 def _summary(*, complete: int = 1) -> ballpark._SummaryRow:
     return ballpark._SummaryRow.model_validate(
         {
@@ -524,6 +613,86 @@ def test_streams_stages_and_returns_summary(monkeypatch: pytest.MonkeyPatch) -> 
     ]
     output = cast(Any, result["content"])[0]["json"]
     assert output["scenarios"]["p90"]["annual_toll_usd"] == "1296.00"
+
+
+def test_streams_i95_to_greenway_round_trip_to_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _callback_17(self: object) -> object:
+        return None
+
+    def _callback_18(self: object) -> object:
+        return None
+
+    def _strict_callback_13(self: object) -> object:
+        return None
+
+    connection = type(
+        "Connection",
+        (),
+        {
+            "commit": _strict_callback_13,
+            "rollback": _callback_17,
+            "close": _callback_18,
+        },
+    )()
+    outbound = _i95_to_greenway_route()
+    monkeypatch.setattr(
+        ballpark.route_validation, "connect_to_pricing_database", lambda: connection
+    )
+
+    def _callback_9(*_: object) -> object:
+        return (
+            datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
+            (outbound, _greenway_route()),
+            [date(2026, 8, 19)],
+            Decimal("20.00"),
+        )
+
+    monkeypatch.setattr(
+        ballpark,
+        "_start_transaction_and_fetch_routes_and_dates",
+        _callback_9,
+    )
+
+    def summary(
+        _: object,
+        routes: tuple[ballpark._BallparkRouteDb, ballpark._BallparkRouteDb],
+        *__: object,
+    ) -> ballpark._SummaryRow:
+        assert [leg.route_step_id for leg in routes[0].facility_legs] == [
+            "step-1",
+            "step-2",
+            "step-3",
+            "step-4",
+            "step-5",
+        ]
+        assert "i495_1829_to_dulles_toll_road" not in [
+            connection_id
+            for leg in routes[0].facility_legs
+            for connection_id in leg.connection_ids
+        ]
+        return _summary()
+
+    monkeypatch.setattr(ballpark, "_fetch_and_validate_summary", summary)
+    data = _input()
+    data["outbound"].update(
+        {
+            "origin_point_id": "i95:2232SO",
+            "destination_point_id": "greenway:1:exit:WB",
+        }
+    )
+    data["return"].update(
+        {
+            "origin_point_id": "greenway:1:entry:EB",
+            "destination_point_id": "greenway:28:exit:EB",
+        }
+    )
+    _, result = asyncio.run(_invoke(data))
+    assert (
+        cast(Any, result["content"])[0]["json"]["scenarios"]["p90"]["annual_toll_usd"]
+        == "1296.00"
+    )
 
 
 def test_route_unavailable_stops_before_summary(
