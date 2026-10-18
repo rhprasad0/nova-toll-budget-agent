@@ -2065,3 +2065,11 @@ def test_recorded_repetitions_control_summary_and_render(
             cases[1:],
             trials_per_case=repetitions,
         )
+
+
+def test_grounding_prompt_keeps_the_annual_day_acceptance_rule() -> None:
+    prompt = " ".join(run.judge_prompt("grounding").split())
+    assert "conditional annual-day question is grounded arithmetic" in prompt
+    assert "before user acceptance fails Grounding as well as Rules" in prompt
+    assert "even if proposed in the same assistant turn or accepted later" in prompt
+    assert "Supplied tool results can support reported amounts" in prompt
