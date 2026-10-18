@@ -1,8 +1,8 @@
 # Golden corpus authoring
 
-Author suite **5.0.0** locally: **50 training and 10 shadow cases** in the repo,
-plus **25 external holdout cases**. There is no active set until real inputs are
-validated, frozen and reviewed. Use the [authoring guide](AUTHORING.md) and
+The locally authored suite has **50 training and 10 shadow cases** in the repo,
+plus **25 external holdout cases** (corpus 5.2.14). New or changed inputs must be
+validated, frozen and reviewed before use. Use the [authoring guide](AUTHORING.md) and
 [coverage contract](contract.json). The executable schema is [golden.py](golden.py).
 
 Corpus 3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).

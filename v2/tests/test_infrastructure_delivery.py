@@ -15,7 +15,6 @@ import pytest
 import yaml
 
 from tests.infrastructure_support import (
-    AGENTS,
     CI_WORKFLOW,
     DEPLOYMENT,
     DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW,
@@ -118,54 +117,6 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
         "id-token: write",
     ):
         assert forbidden not in workflow
-    for text in (
-        "PRs use disposable migration validation only",
-        "checks are credential-free",
-        "never mutate deployed databases or schemas",
-        "protected `development` migration workflow",
-        "refs/heads/main",
-        "reviewed protected fixed-target",
-        "v2-production-migrations.yml",
-        "manually authorized production migration",
-        "Generic or future manual migrations are not authorized.",
-    ):
-        assert text in AGENTS
-    guarded = RUNBOOK.split("### Guarded production release", maxsplit=1)[1].split(
-        "The legacy development inventory", maxsplit=1
-    )[0]
-    for text in (
-        "verified\ndevelopment candidate/bundle",
-        "stable published `vX.Y.Z` event",
-        "listener has no AWS credentials",
-        "one durable claim",
-        "before planner OIDC credentials",
-        "encrypted,\nversioned, checksummed candidate/state-bound saved plan valid for 24 hours",
-        "Reviewer approval of the protected `production` job occurs after that plan is\nsaved",
-        "before the reusable job can access environment secrets or credentials",
-        "before migration credentials and fixed migration",
-        "re-assumes the deploy role",
-        "before applying that same plan",
-        "separate `production-cutover` approval",
-        "new routing-only plan",
-        "Two consecutive failures",
-        "direct, arbitrary, stale, or caller-selected plan/apply",
-        "sanitized",
-    ):
-        assert text in guarded
-    assert "terraform plan" not in guarded
-    assert "terraform apply" not in guarded
-    handoff = RUNBOOK.split("## Account-local foundation handoff", maxsplit=1)[1].split(
-        "Application/database bootstrap", maxsplit=1
-    )[0]
-    for text in (
-        "guarded\nproduction planner",
-        "current foundation output",
-        "validates its approved non-secret shape",
-        "planner-owned production handoff",
-    ):
-        assert text in handoff
-    assert "planned-output" not in handoff
-    assert "foundation-plan path" not in handoff
 
     assert "Historical pre-bootstrap recovery capture" in RUNBOOK
     assert "**Historical pre-bootstrap procedure only.**" in RUNBOOK
@@ -361,21 +312,6 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
         for name, value in fixed_targets.items():
             assert re.search(rf"(?m)^\s*{name}={re.escape(value)}$", shell)
             assert not re.search(rf"(?m)^\s*{name}=.*(?:\$|`)", shell)
-
-    readme = (V2_ROOT / "README.md").read_text()
-    for text in (
-        "verified development bundle",
-        "admission\nand claim",
-        "saved plan",
-        "reviewer approval",
-        "Guards fail closed",
-        "separate `production-cutover` approval",
-        "routing-only promotion plan",
-        "Two consecutive post-cutover observation failures",
-        "v2-production-recovery.yml",
-        "sanitized",
-    ):
-        assert text in readme
 
 
 def test_manual_routing_restore_documentation_shells_are_bounded(

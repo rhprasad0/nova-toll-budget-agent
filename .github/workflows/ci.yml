@@ -86,6 +86,8 @@ jobs:
       - run: uv run python -m scripts.check_agent_contract_versions "$AGENT_CONTRACT_BASE_REF"
         env:
           AGENT_CONTRACT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+      # Provider schemas let the cost-dashboard mock-plan tests run instead of skip.
+      - run: terraform -chdir=infra init -backend=false -input=false
       - run: uv run coverage run -m pytest --durations=30 --durations-min=1
       - run: uv run coverage report
       - run: node --test tests/*.mjs

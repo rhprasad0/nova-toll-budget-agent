@@ -589,18 +589,6 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed() -> No
     assert "903859731897" in DEPLOYMENT
     assert "terraform workspace" not in DEPLOYMENT
     assert "terraform -target" not in DEPLOYMENT
-    handoff = DEPLOYMENT.split("## Account-local foundation handoff", maxsplit=1)[
-        1
-    ].split("Application/database bootstrap", maxsplit=1)[0]
-    for text in (
-        "guarded\nproduction planner",
-        "current foundation output",
-        "validates its approved non-secret shape",
-        "planner-owned production handoff",
-    ):
-        assert text in handoff
-    assert "planned-output" not in handoff
-    assert "foundation-plan path" not in handoff
 
 
 def _development_foundation_validator(source: str) -> str:

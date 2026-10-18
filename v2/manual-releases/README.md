@@ -101,46 +101,6 @@ Do not substitute the old fixed-alias restore or rerun the legacy capture.
 
 ## Historical pre-bootstrap routing capture
 
-**Historical reference only:** this fixed-runtime capture cannot represent
-blue-green routing and grants no authority to restore current production.
-
-Requirements: Bash, AWS CLI, `jq`, Python 3, and an authenticated
-`nova-toll-prod` profile for account `920534282028`. The script uses `us-east-1`.
-
-Run the following from the repository root (the worktree root while these changes
-are unmerged). Replace the example tag with the intended release tag:
-
-```bash
-release_tag='v1.0.12'
-mkdir -p -m 700 "$HOME/tollchat-releases"
-RELEASE_EVIDENCE="$HOME/tollchat-releases/${release_tag}-recovery.txt" \
-  bash v2/manual-releases/capture_production_recovery.sh
-```
-
-Run the entire block in one shell invocation; separate command submissions may
-not preserve variables. Use `bash`, rather than sourcing the script with `.`.
-The recovery directory must be owned by you and not group- or world-writable.
-Keep it outside the checkout so removing the worktree does not remove your recovery evidence.
-
-The script reads the fixed Lambda `live` alias and AgentCore `preview` endpoint.
-It changes no AWS resources and creates a private file containing only their
-current versions. Success exits zero without output. After success, inspect it
-(substitute the same release tag):
-
-```bash
-cat "$HOME/tollchat-releases/v1.0.12-recovery.txt"
-```
-
-Keep this original record through deployment and recovery. Never overwrite it
-or recapture it after a failed deployment.
-
-If capture fails, stop before publishing:
-
-- `record-path`: check that `RELEASE_EVIDENCE` is supplied to the script and nonempty, its
-  parent directory exists with the required ownership/permissions, and the
-  destination does not already exist. An existing record is never overwritten.
-- `account-identity`: check authentication and the production profile/account.
-- `lambda-validate` or `agentcore-validate`: the read failed or routing was not
-  in the expected stable state. Investigate before continuing.
-- `record-write`: the private record could not be safely written. Treat any
-  file left by a failed capture as incomplete; investigate before retrying.
+The fixed-runtime capture script cannot represent blue-green routing and grants no
+authority to restore current production. Its historical procedure is in the
+[runbook](../RUNBOOK.md#historical-pre-bootstrap-recovery-capture).

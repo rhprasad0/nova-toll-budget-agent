@@ -2,19 +2,16 @@
 
 **Bootstrap must be reviewed before enabling `DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED`.**
 Production uses the same release phases behind `PRODUCTION_BLUE_GREEN_BOOTSTRAPPED`.
-Keep that flag disabled until a separate production bootstrap review after the
-development rehearsal. Its planner stages immutable objects and saves the exact
+Both flags are enabled (development since 2026-09-17, production since
+2026-09-18). The production planner stages immutable objects and saves the exact
 preparation plan; the protected migration workflow revalidates that plan, applies
 compatible migrations, and validates the candidate. **Production then waits for
 Ryan to approve cutover.** Green stays running as the candidate while blue keeps
 serving ordinary traffic (the colors alternate on subsequent releases).
 Production claims remain the existing numeric deployment IDs.
 
-For production bootstrap, populate `production_blue_green` in the foundation with
-the exact generated identities, and pass `--environment production` to the
-bootstrap binary-plan gate. The default gate only admits development plans.
-Review the production planner’s release-prefix-only object writes and the delivery
-role’s exact two-slot permissions; neither enables bootstrap resource creation.
+The bootstrap binary-plan gate admits only development plans unless given
+`--environment production`.
 
 ## Architecture
 
@@ -152,10 +149,7 @@ Resume does not reapply preparation, promote again, or execute migrations. Norma
 partial-preparation retries still create a fresh plan. Production keeps its
 existing approval and recovery procedures.
 
-GitHub reruns execute the original commit: runs created before this change cannot
-use it, and their failure records remain unchanged. Use a separately reviewed
-recovery or a new release for those historical runs. Re-running all jobs also
-remains subject to the retained immutable-artifact build guard.
+Re-running all jobs remains subject to the retained immutable-artifact build guard.
 
 ## Production cutover approval
 
@@ -173,11 +167,11 @@ checks the original claim and the selected recovery record's bundle digest, and
 verifies the bundle against the original checkout before receiving write credentials.
 These objects have no automatic expiry; retain them while either slot is recoverable.
 Releases predating archival retain the original GitHub-artifact recovery path and
-its retention limit. This change does not backfill historical releases.
+its retention limit.
 
 Production admission uses the exact successful development artifact and its
-provenance checks. The private holdout qualification workflows are retired. New
-saved plans use schema version 2; version 1 plans must be replaced with a fresh plan.
+provenance checks. The private holdout qualification workflows are retired. Saved
+plans use schema version 2.
 
 The existing `production` environment still protects preparation and migration.
 A separate `production-cutover` environment protects the later approval job,
@@ -274,65 +268,11 @@ before setup. **This inventory is not an approved plan.**
 AWS-generated IDs make bootstrap a sequence of dependent reviewed plans. Do not
 substitute wildcard final permissions or relax ordinary release gates.
 
-### Production ordering and approval packet
+### Production release and cutover
 
-Keep `PRODUCTION_BLUE_GREEN_BOOTSTRAPPED` disabled and hold the production
-serialization boundary below throughout setup. Complete source PR CI and human
-review, deliver the final merged SHA through protected development delivery, and
-verify its retained bundle/digest, readiness, installed schemas and canary evidence.
-Keep `DEVELOPMENT_DELIVERY_ENABLED=true` after verification so subsequent reviewed
-main changes continue through protected development delivery. Preserve the
-application model, prompt, schedules, fixed migration limits and account isolation.
-
-1. **Activate evaluation publishing before blue-green bootstrap.** Follow the
-   [evaluation activation procedure](eval-dashboard.md#production-runtime-activation).
-   For this activation only, retain PR #527's original checkout
-   `b5d91ee4f99270d40976a8aec2173b7e7897c65c` in an isolated worktree. Prove its
-   `v2/infra/timed_checks.tf` matches the merged reviewed change. Its pre-blue-green
-   infrastructure keeps staging resources out of the two-resource activation plan.
-   Recheck production identity, deployed packages, schema versions, writer grants
-   and recovery evidence. Generate a **fresh private saved plan** using the deployed
-   packages; old activation plans are invalid. Require only the timed-check Lambda's
-   two evaluation variables and its IAM policy's three dashboard statements to
-   change. Reject code/hash changes, removed permissions, schedules, routing or
-   other resource mutations. Present the binary checksum and exact effects for
-   human approval, then apply only that binary. This approval activates shared
-   publishing immediately, independently of traffic cutover.
-2. Verify the unchanged Lambda code hash and exact configuration. Use bounded
-   read-only production queries to check `pricing.evaluation_runs`, `eval_writer`
-   privileges and installed versions; do not rerun role creation or migration 033.
-   Follow the next real scheduled occurrence through **database record → production
-   `evals.json` → rendered dashboard**, matching occurrence identity, timestamps and
-   ToolCallCount/Completeness/Correctness verdicts. Capture browser evidence and
-   retain actual results, including failures. Never backfill or manufacture an
-   occurrence; investigate missing completion after the existing 25-minute allowance.
-3. Capture original serving runtime/proxy versions and retained assets. Reuse the
-   verified development release bundle with distinct blue/green bootstrap release
-   IDs. Review dependent saved setup plans for bucket versioning, immutable artifacts,
-   the production candidate-header SecureString and green runtime provisioning.
-   Establish exact green trace trust and generated resource identities. Perform only
-   declared moves, imports and retained-object handoffs; remove temporary provisioning
-   permissions after ownership transfers.
-4. Prepare the application bootstrap plan with **`active_slot=blue`**. Explicitly
-   review changes to serving blue and existing sessions: bootstrap may update blue
-   before the later cutover approval, and release/session fencing can expire existing
-   conversations. Preserve activated evaluation configuration. Show any package-path
-   normalization separately and prove deployed code hashes remain identical for
-   those normalization changes. Gate the same binary before human approval:
-   ```sh
-   python3 v2/scripts/blue_green.py bootstrap --environment production \
-     --plan "$PRIVATE/bootstrap.json" --saved-plan "$PRIVATE/bootstrap.tfplan" \
-     --approved-sha256 "$REVIEWED_PLAN_SHA256"
-   ```
-   Apply only that approved binary. Populate foundation `production_blue_green`
-   permissions using actual runtime, staging-distribution and deployment-policy IDs.
-5. Verify both slots' identities, immutable assets, origin restrictions, session
-   handling, guardrails and protected traces; ordinary public/private traffic must
-   still serve healthy blue. Require ordinary release plans to keep shared changes
-   within the reviewed code-only and billing boundaries. Have `pre_release_reviewer` assess the final candidate,
-   bootstrap evidence and remaining gates before enabling production delivery.
-   Retire the historical activation checkout after bootstrap; subsequent operations
-   use the current reviewed source.
+The one-time production bootstrap (ordering, evaluation activation, and the
+approval packet) completed on 2026-09-18. It is recoverable from
+[`ed784c8e`](https://github.com/rhprasad0/nova-toll-budget-agent/blob/ed784c8e/v2/runbooks/blue-green-deployments.md#production-ordering-and-approval-packet).
 
 Publish the next unused stable release tag at the exact development-verified SHA.
 Require release admission, artifact verification, a zero-change foundation plan and

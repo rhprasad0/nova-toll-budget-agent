@@ -45,6 +45,9 @@ Run `node tests/release_dashboard_browser.cjs` for the static page checks.
   [reviewed source-data builder](oracle/build_oracle_data.py)
 - [Shared route validation](agent_tools/validate_toll_route.py)
 - [Map corridor geometry and OpenStreetMap provenance](docs/commute-routes.md)
+- The unapplied [analytics retirement plan](plans/ANALYTICS-RETIREMENT-PLAN.md)
+  documents the source-retired usage and agent-route analytics scopes without
+  granting execution authority.
 
 ## Database bootstrap
 
@@ -99,10 +102,6 @@ The only separately authorized manual production migration remains the
 [Oracle migration 030 procedure](RUNBOOK.md#manual-oracle-migration-030).
 
 ## Verify the build
-
-The unapplied [analytics retirement plan](plans/ANALYTICS-RETIREMENT-PLAN.md)
-documents the source-retired usage and agent-route analytics scopes without
-granting execution authority.
 
 Install Node.js 22.22.1 and uv, then set up the locked development tools from
 the repository root (Linux amd64/arm64):
@@ -240,19 +239,10 @@ the release. Failure blocks the privileged deployment and is recorded through
 the existing release result. Production retains its successful-development and
 full tag-validation requirements.
 
-Credential-free PR CI never runs `terraform plan` or `apply`. The protected
-production sequence is verified development bundle, stable `vX.Y.Z` admission
-and claim, exact candidate validation before planner credentials, one encrypted
-versioned/checksummed 24-hour saved plan, reviewer approval of the protected
-`production` job, repeated plan/state validation before fixed migration and
-re-assumed deploy apply to the inactive slot, then candidate validation.
-A separate `production-cutover` approval gates fresh validation and a new
-routing-only promotion plan. Guards fail closed before later stages and terminal
-evidence remains sanitized. Two consecutive post-cutover observation failures
-trigger one recovery attempt. For recovery after the observation window,
-cancellation, or runner loss, use the protected `v2-production-recovery.yml`
-workflow with the original versioned recovery record. See the
-[blue-green delivery and recovery runbook](runbooks/blue-green-deployments.md).
+Credential-free PR CI never runs `terraform plan` or `apply`. Production follows
+the [guarded release sequence](RUNBOOK.md#guarded-production-release) and the
+[blue-green delivery and recovery runbook](runbooks/blue-green-deployments.md),
+including protected recovery through `v2-production-recovery.yml`.
 
 Development delivery reports an explicit `development-release` GitHub result
 only after exact-version readiness and bounded static/API/two-session agent

@@ -41,9 +41,9 @@ In each environment, the data operation may address only:
 
 - the DynamoDB item whose partition key is exactly `credential_hash = usage#all`
   in the shared session table (source resource:
-  [`tollchat_sessions`](../infra/agentcore.tf#L127-L145)); and
+  [`tollchat_sessions`](../infra/agentcore.tf#L148-L166)); and
 - the exact `usage.json` object in that environment's site bucket (source
-  object and retained lifecycle: [`site.tf`](../infra/site.tf#L89-L100)).
+  object and retained lifecycle: [`site.tf`](../infra/site.tf#L64-L76)).
 
 The source-derived candidates are `tollchat-v2-anonymous-sessions-dev` /
 `tollchat-v2-anonymous-sessions`, `tollchat-site-903859731897-dev` /
@@ -51,12 +51,12 @@ The source-derived candidates are `tollchat-v2-anonymous-sessions-dev` /
 which physical identity belongs to each record. Do not select ordinary session
 rows, the shared session table, the site bucket, the site KMS key, a wildcard,
 or the active report publisher. The retained log group
-`/aws/lambda/tollchat-v2-usage-publisher${suffix}` ([source](../infra/site.tf#L167-L170))
+`/aws/lambda/tollchat-v2-usage-publisher${suffix}` ([source](../infra/site.tf#L104-L107))
 is a separately named historical target with its own archive/delete approval;
 it is never part of the exact item/object operation.
 
 The proxy now uses only session `PutItem` and conditional `UpdateItem`
-operations ([handler](../lambdas/chat_proxy/handler.mjs#L121-L198)); absence of a
+operations ([handler](../lambdas/chat_proxy/handler.mjs#L142-L226)); absence of a
 current counter writer does not prove deployed producers stopped.
 
 ### Agent-route analytics: retained data and metadata
@@ -77,9 +77,9 @@ bucket and every separately approved scope below:
 
 The bucket, private-access/encryption controls, key/alias, lifecycle, registry,
 catalog, workgroup, and log group are declared in
-[`agent_measurement.tf`](../infra/agent_measurement.tf#L1-L43),
-[`agent_measurement.tf`](../infra/agent_measurement.tf#L45-L116), and
-[`agent_measurement.tf`](../infra/agent_measurement.tf#L118-L324). Dynamic
+[`agent_measurement.tf`](../infra/agent_measurement.tf#L1-L44),
+[`agent_measurement.tf`](../infra/agent_measurement.tf#L45-L120), and
+[`agent_measurement.tf`](../infra/agent_measurement.tf#L121-L359). Dynamic
 views, partitions, query history, and results are live-reconciliation items,
 not assertions that source still deploys them. The existing seven-day
 `AWSLogs/` and `athena-results/` expiration remains in force unless a separate
@@ -87,9 +87,9 @@ retention decision is approved. The rollup log group is separately
 archive/delete-approved, not an implicit consequence of deleting bucket data.
 
 The active publisher is not a retirement target: `handler` calls
-`_publish_streamed` and writes public route report objects, index, sitemap, and
+`_publish` and writes public route report objects, index, sitemap, and
 manifest ([handler.py](../lambdas/publisher/handler.py); symbols
-`_publish_streamed` and `handler`). Preserve report publication, freshness, and
+`_publish` and `handler`). Preserve report publication, freshness, and
 output contracts. Preserve independent WAF
 enforcement and security logging; if live logging still targets a listed
 location, map that dependency before any deletion and do not disable it as an

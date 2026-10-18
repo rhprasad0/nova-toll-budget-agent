@@ -63,7 +63,6 @@ Fresh validation gates a new routing-only plan before promotion. Post-cutover
 observation attempts one restoration after two consecutive probe failures.
 See the [blue-green delivery procedure](runbooks/blue-green-deployments.md).
 Configuration alone does not prove bootstrap or activation has completed.
-Root's IAM-only reconciliation remains required before the first production release.
 Production schema changes use the protected fixed-target migration component
 below. The one-time baseline adoption and manual Oracle migration 030
 procedures remain separate, explicitly approved operations. Application release
@@ -389,14 +388,11 @@ The active cost-allocation key is the lowercase `environment`. Its only values
 are `development`, `production`, and `shared`. Production foundation resources
 use `shared`; any existing `shared_with=development` tag is descriptive only
 and grants no development-account access. Do not attempt Cost Explorer
-activation. The two project-tagged KMS keys `640b50c9-72f7-4bd7-9a44-a00a59fc3f24`
-and `74f426f1-6016-4969-922a-7f8b99763f45` are the only temporary exceptions:
-both are `PendingDeletion` through 2026-09-22. Do not retag, cancel, or otherwise
-change their lifecycle.
+activation.
 
 Before and after a release, inventory every Resource Groups Tagging API page
 and retain only its sanitized page/resource/value counts. The foundation plan
-must be zero-change after this source update; never apply it. Save and inspect
+must stay zero-change for an application release; never apply it from one. Save and inspect
 each saved application plan as JSON, review every non-no-op action and sanitized
 before/after semantic delta, then apply only that exact reviewed plan.
 Keep ignored package builds and hash-identified saved plans until independent
@@ -414,13 +410,10 @@ file, validates its approved non-secret shape, passes it only to the matching
 v2 plan, and removes that file. This is a planner-owned production handoff, not
 a local release path or a development-state discovery mechanism.
 
-Application/database bootstrap remains #331. Cloudflare DNS reads and writes
-(zone lookup, ACM certificate-validation records, and apex/www records) are
-production-only in `v2/infra/site.tf`; development DNS/certificate validation
-belongs to #332.
+Cloudflare DNS reads and writes (zone lookup, ACM certificate-validation
+records, and apex/www records) are production-only in `v2/infra/site.tf`.
 `enable_public_dns = false` remains the production apex switch, while the
-development path has no Cloudflare data or resource instances. Legacy
-production-account development cleanup belongs to #333.
+development path has no Cloudflare data or resource instances.
 
 ## Build and review
 
@@ -1177,10 +1170,9 @@ former environment and qualification workflows are retired. A replacement approa
 will be designed separately.
 
 New saved-plan records use schema version 2 and omit holdout qualification fields.
-Version 1 plans are rejected; create a fresh plan after this change ships. Retained
+Version 1 plans are rejected. Retained
 recovery archives remain available through the protected recovery procedure.
 
 The Terraform configuration retires the holdout reader/reviewer roles while
 preserving the encrypted, versioned evidence bucket and deletion protections.
-This code change does not apply shared infrastructure. Existing cloud evidence
-and unused GitHub evaluation environments remain retained.
+Existing cloud evidence and unused GitHub evaluation environments remain retained.

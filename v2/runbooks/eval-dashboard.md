@@ -85,25 +85,9 @@ and this turn's tool calls and correlated results. Ordinary chat does not emit
 this event. The public proxy rejects additional request fields and private
 evidence events. Publication still uses the existing pricing-fact allowlist.
 
-Release the runtime protocol and private IAM/network prerequisites before
-activating the live eval consumer. Deliver through the protected development
-sequence, verify the next scheduled run against `/api/config`, then promote to
-production. Review the shared-package compatibility record against the observed
-serving release and deterministic package hashes. Deployment of this PR's new
-infra resources and policies requires the reviewed infrastructure prerequisite;
-ordinary release delivery retains its existing finite plan scope.
-
-After applying the prerequisite, reconcile the eval role's cached inline policy
-with a separately reviewed saved refresh-only plan. Confirm the live policy
-matches the approved prerequisite and that the refresh changes only cached policy
-state. The subsequent full release plan must have no IAM drift or permission
-changes.
-
-During the first transition, or after rollback to a runtime predating this
-protocol, evaluations record execution errors until a compatible application
-serves chat. Do not relabel prior runs or restore the local application fallback.
-Verify the application identity and low-actor/xhigh-judge metadata in the next
-real scheduled run in each environment. The focused eval tests use synthetic
+After rollback to a runtime predating this protocol, evaluations record execution
+errors until a compatible application serves chat. Do not relabel prior runs or
+restore the local application fallback. The focused eval tests use synthetic
 runtime responses; the existing CI chat browser smoke invokes the deployed
 development application.
 
