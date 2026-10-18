@@ -1157,8 +1157,12 @@ if psql --dbname "$unsafe_agent_db" \
   exit 1
 fi
 
-# This test owns a second, empty PostGIS 17-3.5 fixture. It exercises the
-# production profile after adoption, including the test-only local patch guard.
+# The adoption test owns a second, empty PostGIS 17-3.5 fixture and exercises the
+# production profile after adoption. The end-to-end tests read $bootstrap_db above
+# through the real least-privilege roles.
 uv run --project v2 pytest \
   v2/tests/test_adopt_production_baseline.py::test_disposable_postgis_adoption_and_rerun_guard \
+  v2/tests/test_development_migrations.py::test_psql_include_path_opens_exact_file \
+  v2/tests/test_database_e2e.py \
+  v2/lambdas/loader/tests/test_loader_database.py \
   -m live -q
