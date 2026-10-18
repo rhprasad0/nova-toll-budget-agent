@@ -33,15 +33,12 @@ For new inputs, `eval.corpus freeze` writes a per-split manifest and pending `re
 approval. A real reviewer identifies the exact corpus digest and evidence.
 Commit real public inputs, manifests and input reviews before paid execution.
 Changed inputs or protected sources need a newer corpus version and input review.
-Calibrate the harness across all three splits until Ryan approves it, then reuse
-that approval for every split and future corpus versions. Only an evaluator
-contract change requires a new combined harness calibration.
 Keep public detailed evidence in ignored `eval/private/`. The factory container,
 export/intake and handoff workflow are retired; existing private factory data stays
 untouched. Synthetic regressions and archival cases cannot seed a fresh suite.
 
-The [runner guide](GOLDEN_RUNNER.md) explains calibration reuse, paid execution,
-accounting and comparison. The [authoring contract](GOLDEN_EVAL_SPEC.md) describes
+The [runner guide](GOLDEN_RUNNER.md) explains calibration reuse, paid execution
+and accounting. The [authoring contract](GOLDEN_EVAL_SPEC.md) describes
 required inputs. Scores use all expected training slots; inconclusives remain
 visible. Strict gains require independent scope and material-regression review.
 An exposed training score cannot qualify production. Production retains its
@@ -50,7 +47,7 @@ An exposed training score cannot qualify production. Production retains its
 ## External holdout
 
 Keep holdout inputs and detailed evidence outside the repository, for example
-`/home/ryan/Documents/tollchat-eval-holdout/5.0.0/`. The host operator explicitly
+`/home/ryan/Documents/tollchat-eval-holdout/dataset-20261010/holdout-5.2.14/`. The host operator explicitly
 selects the corpus with `--corpus`; ordinary training commands never discover it.
 With authorization, the coding agent can invoke the host runner and use only its
 aggregate feedback. See the
@@ -99,17 +96,16 @@ records the result and limits.
 
 Historical golden demonstrations and calibrations are summarized in the
 [experiment journal](journal/2026-09-14.md#september-20-golden-demonstration-and-calibration).
-Exact approval records and release policies retain their original identities.
+The retired release policies and approval records are recoverable from
+[`ed784c8e`](https://github.com/rhprasad0/nova-toll-budget-agent/tree/ed784c8e/v2/eval/results/golden).
 Offline regression checks use focused synthetic inputs; historical run archives
 remain recoverable through the Git commit linked in the journal.
 
-The runner and comparison helpers derive execution slots from the recorded
+The runner derives execution slots from the recorded
 `trials_per_case` (1 or 3). The active training execution defaults to one repetition;
 three repetitions are available for explicitly authorized campaigns and historical
 development contracts.
 Single-pass reports use all expected slots for overall pass rate and record
 Pass³ fields as `null` (inapplicable). Missing slots remain in the denominator;
-inconclusives remain explicit. Comparisons reject missing or duplicate slots,
-unsupported harness contracts, mismatched repetition counts, and inconsistent
-aggregate usage. Historical three-trial reports retain their recorded scoring rules.
+inconclusives remain explicit. Historical three-trial reports retain their recorded scoring rules.
 Paid execution requires matching human-reviewed harness calibration.

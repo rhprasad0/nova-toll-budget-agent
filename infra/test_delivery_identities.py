@@ -1432,12 +1432,9 @@ def main() -> None:
     assert "terraform apply" not in WORKFLOW
 
     _check_production_planner()
+    test_production_release_planner_can_verify_encrypted_immutable_retries()
 
     print("delivery identity contract: ok")
-
-
-if __name__ == "__main__":
-    main()
 
 
 def test_production_release_planner_can_verify_encrypted_immutable_retries() -> None:
@@ -1459,3 +1456,7 @@ def test_production_release_planner_can_verify_encrypted_immutable_retries() -> 
     )
     assert '"lambda:GetFunctionCodeSigningConfig"' in delivery
     assert "alarm:tollchat-v2-chat-proxy-${metric}-green" in delivery
+
+
+if __name__ == "__main__":
+    main()

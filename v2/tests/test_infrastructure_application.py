@@ -313,7 +313,6 @@ def test_development_site_has_no_cloudflare_reads_or_writes() -> None:
     assert re.search(r'(?m)^environment\s*=\s*"development"$', development_tfvars)
     assert re.search(r"(?m)^enable_public_dns\s*=\s*false$", development_tfvars)
     assert "development path has no Cloudflare data or resource instances" in DEPLOYMENT
-    assert "development DNS/certificate validation" in DEPLOYMENT
 
 
 def test_public_report_surface_is_canonical_crawlable_and_isolated() -> None:

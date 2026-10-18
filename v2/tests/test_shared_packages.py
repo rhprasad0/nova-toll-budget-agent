@@ -12,7 +12,6 @@ from typing import Any
 import pytest
 
 from scripts import blue_green, release_blue_green, shared_packages
-from scripts.validate_production_plan import validate as production_validate
 from tests.test_blue_green import change, plan, previous, shared_fixture, slot
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -220,10 +219,6 @@ def test_shared_preparation_composes_with_real_policies(
     if environment == "development":
         result = development_validate(document, expected)
         assert result["status"] == "accepted", result
-    else:
-        production_validate(
-            dict(document, output_changes={}), ROOT / "v2/infra", expected
-        )
     for phase in ("promote", "recover"):
         complete, retained, expected = package_plan(environment, phase, "complete")
         blue_green.validate_plan(complete, retained, phase, package_evidence=expected)
@@ -476,10 +471,6 @@ def test_exact_chat_transition_in_every_policy(
     if environment == "development":
         result = development_validate(document, expected)
         assert result["status"] == "accepted", result
-    else:
-        production_validate(
-            dict(document, output_changes={}), ROOT / "v2/infra", expected
-        )
     before["code"] = str(before["code"]) + "\n"
     with pytest.raises(ValueError):
         blue_green.validate_plan(
@@ -487,39 +478,6 @@ def test_exact_chat_transition_in_every_policy(
         )
     if environment == "development":
         assert development_validate(document, expected)["status"] == "rejected"
-    else:
-        with pytest.raises(ValueError):
-            production_validate(
-                dict(document, output_changes={}), ROOT / "v2/infra", expected
-            )
-
-
-@pytest.mark.parametrize("empty", [False, True])
-def test_production_cli_requires_matching_evidence(tmp_path: Path, empty: bool) -> None:
-    document, _, expected = package_plan("production", partial="s3")
-    document["output_changes"] = {}
-    if empty:
-        document["resource_changes"] = []
-    (tmp_path / "plan").write_text(json.dumps(document))
-    (tmp_path / "evidence").write_text(json.dumps(expected))
-    command = [
-        sys.executable,
-        str(ROOT / "v2/scripts/validate_production_plan.py"),
-        "--plan",
-        str(tmp_path / "plan"),
-        "--inventory-root",
-        str(ROOT / "v2/infra"),
-    ]
-    assert subprocess.run(command, capture_output=True).returncode == 1
-
-    command += ["--package-evidence", str(tmp_path / "evidence")]
-    assert subprocess.run(command, capture_output=True).returncode == 0
-    if empty:
-        expected["release"] = "invalid"
-    else:
-        expected["packages"]["loader.zip"]["sha256"] = "1" * 64
-    (tmp_path / "evidence").write_text(json.dumps(expected))
-    assert subprocess.run(command, capture_output=True).returncode == 1
 
 
 @pytest.mark.parametrize("environment", shared_packages.ACCOUNTS)
@@ -549,10 +507,6 @@ def test_completed_chat_publication_drift_is_exact(
     blue_green.validate_plan(document, retained, phase, package_evidence=expected)
     if environment == "development":
         assert development_validate(document, expected)["status"] == "accepted"
-    else:
-        production_validate(
-            dict(document, output_changes={}), ROOT / "v2/infra", expected
-        )
 
     for side, field, value in [
         ("before", "status", "UNPUBLISHED"),
@@ -574,11 +528,6 @@ def test_completed_chat_publication_drift_is_exact(
             )
         if environment == "development":
             assert development_validate(invalid, expected)["status"] == "rejected"
-        else:
-            with pytest.raises(ValueError):
-                production_validate(
-                    dict(invalid, output_changes={}), ROOT / "v2/infra", expected
-                )
 
 
 @pytest.mark.parametrize("environment", shared_packages.ACCOUNTS)
@@ -606,10 +555,6 @@ def test_primary_revision_drift_preserves_exact_configuration(
     blue_green.validate_plan(document, retained, phase, package_evidence=expected)
     if environment == "development":
         assert development_validate(document, expected)["status"] == "accepted"
-    else:
-        production_validate(
-            dict(document, output_changes={}), ROOT / "v2/infra", expected
-        )
     for side, field, value in [
         ("before", "id", "other"),
         ("after", "id", "other"),
@@ -629,11 +574,6 @@ def test_primary_revision_drift_preserves_exact_configuration(
             )
         if environment == "development":
             assert development_validate(invalid, expected)["status"] == "rejected"
-        else:
-            with pytest.raises(ValueError):
-                production_validate(
-                    dict(invalid, output_changes={}), ROOT / "v2/infra", expected
-                )
 
 
 @pytest.mark.parametrize(

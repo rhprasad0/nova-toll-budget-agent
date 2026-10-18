@@ -6,8 +6,9 @@ It records the historical [live checks](../journal/2026-08-17.md#august-22-live-
 and [proxy validation](../journal/2026-09-21.md#i-95i-495-identity-proxy-validation).
 These have different scopes; their pass rates are not comparable.
 
-- [Golden release metadata](golden/README.md) retains versioned policies and
-  exact historical approvals.
+- The retired golden release policies, approvals and registry are recoverable
+  from commit
+  [`ed784c8e`](https://github.com/rhprasad0/nova-toll-budget-agent/tree/ed784c8e/v2/eval/results/golden).
 - [I-95/I-495 proxy guidance](i95-missing-od-pricing.md) describes the current
   mapping, modeled-label requirements and queries.
 - [Evaluation guide](../README.md) describes current commands. Keep granular

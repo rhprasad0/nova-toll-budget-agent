@@ -73,8 +73,8 @@ never transfer prior approvals or regenerate a candidate's corpus manifest.
 Training score is successful trials divided by **all expected training slots**
 (case count × recorded execution repetitions).
 Fully measured actor inconclusives stay visible and count as no success. Pass³
-fields are null (inapplicable) for one repetition. Scheduling, actor checks,
-rendering and comparison use recorded `trials_per_case`; historical three-trial
+fields are null (inapplicable) for one repetition. Scheduling, actor checks
+and rendering use recorded `trials_per_case`; historical three-trial
 reports keep their recorded scoring rules. Unsupported or mixed contracts fail.
 
 Optimize using training cases only. Do not use archived or shadow cases in
@@ -145,10 +145,10 @@ across different cases or evaluator contracts are not comparable application gai
 
 Author training and shadow under `eval/active/`. Use `eval.corpus validate` for
 draft checks, then `eval.corpus freeze --corpus PATH --split SPLIT --version
-5.0.0` to write each split's manifest and pending input review. It records protected
+VERSION` to write each split's manifest and pending input review. It records protected
 source hashes and never approves inputs. A changed contract needs a newer version
-and actual review. CI uses `eval.golden --allow-uninitialized` while waiting for
-real inputs; partial sets fail validation. Commit public inputs and their identities
+and actual review. CI runs `eval.golden --allow-uninitialized`; partial sets fail
+validation. Commit public inputs and their identities
 before paid execution. The archive remains historical reference only.
 
 ## Execution
@@ -166,7 +166,7 @@ to spend or reset a previous ledger.
 
 ```bash
 uv run python -m eval.golden_run calibrate \
-  --holdout /absolute/external/5.0.0 \
+  --holdout /absolute/external/holdout-VERSION \
   --output /absolute/external/runs/harness-calibration-N --budget-usd 25 --workers 16 \
   --prior-run eval/private/previous-run
 ```
@@ -291,21 +291,21 @@ checkpoint command and consume its aggregate output; it never directly reads
 external files.
 Keep the corpus, calibration, reviews, actor checks and application output outside
 the repository and coding-container mounts. An example layout is
-`~/Documents/tollchat-eval-holdout/{5.0.0,runs/}`. Separation is procedural: the
+`~/Documents/tollchat-eval-holdout/dataset-20261010/{holdout-VERSION,runs-HARNESS}/`. Separation is procedural: the
 coding agent must not read those files. These examples grant no paid budget.
 
 ```bash
-uv run python -m eval.corpus validate --holdout /absolute/external/5.0.0
-uv run python -m eval.corpus freeze --corpus /absolute/external/5.0.0 --split holdout --version 5.0.0
-uv run python -m eval.golden --corpus /absolute/external/5.0.0
+uv run python -m eval.corpus validate --holdout /absolute/external/holdout-VERSION
+uv run python -m eval.corpus freeze --corpus /absolute/external/holdout-VERSION --split holdout --version VERSION
+uv run python -m eval.golden --corpus /absolute/external/holdout-VERSION
 uv run python -m eval.golden_run calibrate \
   --corpus eval/active/training --shadow eval/active/shadow \
-  --holdout /absolute/external/5.0.0 \
+  --holdout /absolute/external/holdout-VERSION \
   --output /absolute/external/runs/harness-calibration-N --budget-usd 25
-uv run python -m eval.golden_actor_check --corpus /absolute/external/5.0.0 \
+uv run python -m eval.golden_actor_check --corpus /absolute/external/holdout-VERSION \
   --output /absolute/external/runs/actor-check-N --budget-usd 25 \
   --prior-run /absolute/external/runs/harness-calibration-N
-uv run python -m eval.golden_run run --corpus /absolute/external/5.0.0 \
+uv run python -m eval.golden_run run --corpus /absolute/external/holdout-VERSION \
   --output /absolute/external/runs/checkpoint-N --budget-usd 25 \
   --calibration /absolute/external/runs/harness-calibration-N \
   --prior-run /absolute/external/runs/actor-check-N
@@ -314,14 +314,11 @@ uv run python -m eval.golden_run aggregate --output /absolute/external/runs/chec
 
 Record actual input approval in the corpus's `review.json` and calibration approval
 in the combined calibration directory's `review.json` before `run`. Both bind exact digests.
-Repeat combined calibration while resolving harness defects until Ryan is
-satisfied, then keep that approval as the harness baseline. No per-split or
-per-corpus-version recalibration is required after approval. A changed evaluator
-contract requires a new combined calibration covering all three splits.
+Calibration reuse follows [Execution](#execution).
 Omit `--prior-run` only at the start of a new authorized spending chain; otherwise
 chain all public and hidden work to the immediately preceding run. Holdout
 references are included in the combined calibration and passing scripted actor
-checks. That same approved calibration qualifies training and shadow runs too.
+checks.
 
 Holdout console output contains aggregate status only. Diagnostics, including
 tracebacks and case progress, go to a sibling `.RUN_NAME.console.log` on the host.
@@ -368,13 +365,11 @@ The former private holdout qualification workflow is retired. Production
 uses the [existing delivery checks](../RUNBOOK.md#production-release-checks); development
 baselines do not establish independently measured agent accuracy.
 
-The runner and comparison helpers derive execution slots from the recorded
+The runner derives execution slots from the recorded
 `trials_per_case` (1 or 3). The active development contract uses one repetition;
 three repetitions are available for explicitly authorized campaigns and historical
 development contracts.
 Single-pass reports use all expected slots for overall pass rate and record
 Pass³ fields as `null` (inapplicable). Missing slots remain in the denominator;
-inconclusives remain explicit. Comparisons reject missing or duplicate slots,
-unsupported harness contracts, mismatched repetition counts, and inconsistent
-aggregate usage. Historical three-trial reports retain their recorded scoring rules.
+inconclusives remain explicit. Historical three-trial reports retain their recorded scoring rules.
 The repetition contract requires matching approved harness calibration before paid execution.

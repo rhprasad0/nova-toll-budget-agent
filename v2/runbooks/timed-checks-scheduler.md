@@ -31,11 +31,10 @@ bypass a stop. Only after that exact private saved plan is separately authorized
 and applied may ordinary protected timed package delivery proceed.
 
 Package delivery runs last and activates the reviewed handler; it cannot apply
-IAM or Lambda-environment changes. This PR and runbook do not themselves
-authorize either prerequisite apply.
+IAM or Lambda-environment changes. This runbook does not itself authorize
+either prerequisite apply.
 
-Until this administrator step, a missing alert flag deliberately preserves the
-generic Lambda error path. Inspect configuration and the existing terminal
+A missing alert flag deliberately preserves the generic Lambda error path. Inspect configuration and the existing terminal
 records without sending a test email or logging payloads/secrets. The email's
 CloudWatch log-stream URL is a best-effort console convenience link, not a
 stable AWS API contract.

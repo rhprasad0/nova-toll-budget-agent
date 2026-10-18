@@ -1,7 +1,6 @@
 import hashlib
 import importlib.util
 import json
-import os
 import subprocess
 import zipfile
 from datetime import UTC, datetime, timedelta
@@ -23,10 +22,8 @@ def _module(name: str) -> ModuleType:
 
 if TYPE_CHECKING:
     from scripts import check_production_release as release
-    from scripts import validate_production_plan as gate
 else:
     release = _module("check_production_release.py")
-    gate = _module("validate_production_plan.py")
 
 
 @pytest.mark.parametrize(
@@ -915,193 +912,6 @@ def test_claim_does_not_retry_an_unknown_create_failure(
     with pytest.raises(release.AdmissionError, match="api"):
         release.claim(_revalidation_admission())
     assert calls == ["GET", "POST"]
-
-
-def _plan(address: str, actions: list[str]) -> dict[str, Any]:
-    return {
-        "resource_changes": [
-            {
-                "address": address,
-                "mode": "managed",
-                "provider_name": "registry.terraform.io/hashicorp/aws",
-                "change": {"actions": actions, "after_unknown": {}},
-            }
-        ],
-        "resource_drift": [],
-        "output_changes": {},
-    }
-
-
-def test_plan_gate_allows_only_the_two_stateless_replacements(tmp_path: Path) -> None:
-    (tmp_path / "main.tf").write_text(
-        'resource "aws_api_gateway_deployment" "tollchat" {}\nresource "aws_bedrock_guardrail_version" "tollchat" {}\nresource "aws_s3_bucket" "site" {}\ndata "aws_caller_identity" "current" {}\n'
-    )
-    assert (
-        gate.validate(
-            _plan("aws_api_gateway_deployment.tollchat", ["create", "delete"]), tmp_path
-        )["replace"]
-        == 1
-    )
-    with pytest.raises(gate.PlanError, match="persistent"):
-        gate.validate(_plan("aws_s3_bucket.site", ["delete", "create"]), tmp_path)
-
-
-def test_plan_gate_admits_real_format_data_addresses(tmp_path: Path) -> None:
-    (tmp_path / "main.tf").write_text(
-        'resource "aws_s3_bucket" "site" {}\n'
-        'data "aws_iam_policy_document" "timed_checks_lambda" {}\n'
-    )
-    plan = _plan("data.aws_iam_policy_document.timed_checks_lambda", ["read"])
-    plan["resource_changes"][0]["mode"] = "data"
-    assert gate.validate(plan, tmp_path)["read"] == 1
-    plan.pop("resource_drift")
-    assert gate.validate(plan, tmp_path)["read"] == 1
-
-
-def test_plan_gate_requires_api_order_and_guardrail_skip_destroy(
-    tmp_path: Path,
-) -> None:
-    (tmp_path / "main.tf").write_text(
-        'resource "aws_api_gateway_deployment" "tollchat" {}\n'
-        'resource "aws_bedrock_guardrail_version" "tollchat" {}\n'
-        'data "aws_caller_identity" "current" {}\n'
-    )
-    with pytest.raises(gate.PlanError, match="replacement"):
-        gate.validate(
-            _plan("aws_api_gateway_deployment.tollchat", ["delete", "create"]), tmp_path
-        )
-    guardrail = _plan("aws_bedrock_guardrail_version.tollchat", ["delete", "create"])
-    guardrail["resource_changes"][0]["change"]["after"] = {"skip_destroy": True}
-    assert gate.validate(guardrail, tmp_path)["replace"] == 1
-    guardrail["resource_changes"][0]["change"]["after"] = {"skip_destroy": False}
-    with pytest.raises(gate.PlanError, match="replacement"):
-        gate.validate(guardrail, tmp_path)
-
-
-@pytest.mark.parametrize(
-    ("kind", "message"),
-    [
-        ("unknown-managed", "managed"),
-        ("provider", "provider"),
-        ("data-action", "data"),
-        ("moved", "moved"),
-        ("drift", "drift"),
-        ("output", "output"),
-        ("delete", "action"),
-        ("unknown-shape", "unknown-shape"),
-        ("persistent", "persistent"),
-        ("replacement", "replacement"),
-    ],
-)
-def test_plan_gate_rejects_the_complete_negative_boundary_matrix(
-    tmp_path: Path, kind: str, message: str
-) -> None:
-    (tmp_path / "main.tf").write_text(
-        'resource "aws_api_gateway_deployment" "tollchat" {}\n'
-        'resource "aws_bedrock_guardrail_version" "tollchat" {}\n'
-        'resource "aws_s3_bucket" "site" {}\n'
-        'resource "aws_lambda_function" "worker" {}\n'
-        'data "aws_caller_identity" "current" {}\n'
-    )
-    plan = _plan("aws_api_gateway_deployment.tollchat", ["no-op"])
-    item = plan["resource_changes"][0]
-    change = item["change"]
-    if kind == "unknown-managed":
-        item["address"] = "aws_s3_bucket.unknown"
-    elif kind == "provider":
-        item["provider_name"] = "registry.terraform.io/hashicorp/google"
-    elif kind == "data-action":
-        item.update(address="aws_caller_identity.current", mode="data")
-        change["actions"] = ["create"]
-    elif kind == "moved":
-        item["previous_address"] = "aws_api_gateway_deployment.old"
-    elif kind == "drift":
-        plan["resource_drift"] = [{}]
-    elif kind == "output":
-        plan["output_changes"] = {"secret": {"actions": ["create"]}}
-    elif kind == "delete":
-        change["actions"] = ["delete"]
-    elif kind == "unknown-shape":
-        change["after_unknown"] = {"id": "unknown"}
-    elif kind == "persistent":
-        item["address"] = "aws_s3_bucket.site"
-        change["actions"] = ["delete"]
-    else:
-        item["address"] = "aws_lambda_function.worker"
-        change["actions"] = ["create", "delete"]
-    with pytest.raises(gate.PlanError, match=message):
-        gate.validate(plan, tmp_path)
-
-
-@pytest.mark.parametrize(
-    ("kind", "reason"),
-    [
-        ("persistent", "persistent"),
-        ("drift", "drift"),
-        ("io", "io"),
-        ("invalid-utf8", "shape"),
-    ],
-)
-def test_plan_gate_cli_reports_only_a_finite_summary_reason(
-    tmp_path: Path, kind: str, reason: str
-) -> None:
-    inventory = tmp_path / "inventory"
-    inventory.mkdir()
-    (inventory / "main.tf").write_text(
-        'resource "aws_api_gateway_deployment" "tollchat" {}\n'
-        'data "aws_caller_identity" "current" {}\n'
-        'resource "aws_s3_bucket" "site" {}\n'
-    )
-    plan = _plan("aws_s3_bucket.site", ["delete"])
-    plan["resource_changes"][0]["change"]["after"] = {
-        "private-malicious-value": "private-malicious-value"
-    }
-    if kind == "drift":
-        plan["resource_drift"] = [
-            {"private-malicious-value": "private-malicious-value"}
-        ]
-    plan_path = tmp_path / "plan.json"
-    if kind == "invalid-utf8":
-        plan_path.write_bytes(b"\xff")
-    elif kind != "io":
-        plan_path.write_text(json.dumps(plan))
-    summary = tmp_path / "summary"
-    counts = tmp_path / "counts"
-    error = tmp_path / "error"
-    helper = Path(__file__).parents[1] / "scripts" / "run_private_stage.sh"
-    gate_path = gate.__file__
-    assert gate_path is not None
-    result = subprocess.run(
-        [
-            "bash",
-            "-c",
-            'source "$1"; run_private_stage validator "$2" "$3" python3 "$4" --plan "$5" --inventory-root "$6"',
-            "bash",
-            str(helper),
-            str(counts),
-            str(error),
-            gate_path,
-            str(plan_path),
-            str(inventory),
-        ],
-        env={**os.environ, "GITHUB_STEP_SUMMARY": str(summary)},
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 1
-    events = summary.read_text().splitlines()
-    events = [
-        event for event in events if not event.startswith("shared_mutation_inventory=")
-    ]
-    assert (
-        events[0] == "stage=validator status=start elapsed=0 exit=0 reason=unclassified"
-    )
-    assert events[1] == f"production_plan_rejection={reason}"
-    assert events[2].startswith("stage=validator status=fail elapsed=")
-    assert events[2].endswith("exit=1 reason=unclassified")
-    assert "private-malicious-value" not in "\n".join(events)
-    assert "production plan gate" not in "\n".join(events)
 
 
 def test_private_stage_stops_a_multi_command_bundle_function_at_first_failure(

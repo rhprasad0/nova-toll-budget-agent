@@ -4,7 +4,7 @@ Read this guide before planning or writing cases. Use the frozen schemas and
 [coverage contract](contract.json); keep **50 training, 25 holdout, and 10 shadow cases**, with the
 existing workflow and coverage-family allocations. Historical examples explain
 the file formats. Exposed packets are retired review material and cannot seed a
-fresh holdout. This guide governs locally authored suite 5.0.0. Keep the
+fresh holdout. This guide governs the locally authored 5.2.x suite. Keep the
 application model/SOP and historical archive unchanged.
 
 ## Plan coverage before writing
@@ -139,7 +139,7 @@ Synthetic regressions and exposed
 historical cases teach formats, not fresh holdout content.
 
 Freeze each split with `eval.corpus freeze --corpus PATH --split SPLIT --version
-5.0.0`. Each split owns `cases.jsonl`, `fixtures/*.json`, `examples.json`, and
+VERSION`. Each split owns `cases.jsonl`, `fixtures/*.json`, `examples.json`, and
 `prompt-points.json`, plus its generated `manifest.json` and `review.json`.
 Version and review changes before using them; never regenerate a candidate's
 manifest to bypass protected-source checks. New holdout versions should use new
