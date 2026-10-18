@@ -7,7 +7,8 @@ from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 import pytest
-from strands.types.tools import ToolResult, ToolUse
+from pydantic import TypeAdapter
+from strands.types.tools import AgentTool, ToolResult, ToolUse
 
 from agent import toll_agent
 from agent_tools import current_price_domain as pricing_tool
@@ -36,7 +37,9 @@ def connections(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
 
     def connect(user: str) -> object:
         # libpq PG* variables select the cluster (5432, or 5433 for the retained run).
-        connection = psycopg.connect(dbname=DATABASE, user=user, row_factory=dict_row)
+        connection = psycopg.connect(
+            dbname=DATABASE, user=user, row_factory=cast(Any, dict_row)
+        )
         opened.append((user, connection))
         return connection
 
@@ -46,11 +49,13 @@ def connections(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
     return opened
 
 
-def _stream(tool: Any, name: str, data: dict[str, Any]) -> list[dict[str, Any]]:
+def _stream(tool: AgentTool, name: str, data: dict[str, Any]) -> list[dict[str, Any]]:
     tool_use = cast(ToolUse, {"name": name, "toolUseId": "e2e", "input": data})
 
     async def collect() -> list[dict[str, Any]]:
-        return [dict(event) async for event in tool.stream(tool_use, {"agent": object()})]
+        return [
+            dict(event) async for event in tool.stream(tool_use, {"agent": object()})
+        ]
 
     return asyncio.run(collect())
 
@@ -65,7 +70,7 @@ def _stages(events: list[dict[str, Any]]) -> list[tuple[str, str]]:
     ]
 
 
-def _payload(events: list[dict[str, Any]], adapter: Any) -> dict[str, Any]:
+def _payload(events: list[dict[str, Any]], adapter: TypeAdapter[Any]) -> dict[str, Any]:
     result = cast(ToolResult, events[-1]["tool_result"])
     assert result["status"] == "success", result
     payload = cast(dict[str, Any], cast(Any, result["content"])[0]["json"])
@@ -79,7 +84,9 @@ def _assert_closed_as(connections: list[tuple[str, Any]], user: str) -> None:
     assert all(connection.closed for _, connection in connections)
 
 
-def test_prompt_points_load_as_tollchat_agent(connections: list[tuple[str, Any]]) -> None:
+def test_prompt_points_load_as_tollchat_agent(
+    connections: list[tuple[str, Any]],
+) -> None:
     points = toll_agent.load_prompt_points()
 
     assert "greenway:1:entry:EB" in {point.point_id for point in points}
@@ -149,7 +156,9 @@ def test_current_price_on_real_routes(
     _assert_closed_as(connections, "pricing_caller")
 
 
-def test_annual_ballpark_fixed_greenway_round_trip(connections: list[tuple[str, Any]]) -> None:
+def test_annual_ballpark_fixed_greenway_round_trip(
+    connections: list[tuple[str, Any]],
+) -> None:
     # The scheduled annual check's fixed case: fixed rates need no observed history.
     events = _stream(
         ballpark.get_annual_toll_ballpark,

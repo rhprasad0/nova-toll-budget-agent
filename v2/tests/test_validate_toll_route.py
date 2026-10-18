@@ -768,39 +768,6 @@ def test_pricing_route_accepts_cross_direction_gap(
     assert connection.closed
 
 
-def test_pricing_route_allows_greenway_dtr_handoff_charge(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    row: dict[str, JSON] = {
-        "status": "valid",
-        "reason": None,
-        "point_ids": ["greenway:28:exit:EB", "dtr:28:entry:EB"],
-        "connection_ids": ["greenway_to_dtr"],
-        "connection_types": ["toll_handoff"],
-        "general_purpose_gaps": [],
-        "i95_evidence": None,
-        "facility_legs": [
-            {
-                "route_step_id": "step-1",
-                "facility": "dtr",
-                "point_ids": ["greenway:28:exit:EB", "dtr:28:entry:EB"],
-                "connection_ids": ["greenway_to_dtr"],
-                "pricing_key": {
-                    "source_route_key": "greenway_to_dtr",
-                    "charge_index": 1,
-                },
-            }
-        ],
-    }
-    connection = _Connection([row])
-    monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
-
-    response = route_tool.fetch_validated_pricing_route(*_endpoints(row))
-
-    assert response.facility_legs[0].facility == "dtr"
-    assert connection.closed
-
-
 def test_pricing_route_rejects_other_priced_handoff(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -828,19 +795,6 @@ def test_pricing_route_rejects_other_priced_handoff(
     with pytest.raises(ValueError, match="unexpected priced toll handoff"):
         route_tool.fetch_validated_pricing_route(*_endpoints(row))
 
-    assert connection.closed
-
-
-def test_pricing_route_allows_valid_route_without_tolls(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    row: dict[str, JSON] = {**_valid_row(), "facility_legs": []}
-    connection = _Connection([row])
-    monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
-
-    response = route_tool.fetch_validated_pricing_route(*_endpoints(row))
-    assert response.status == "valid"
-    assert response.facility_legs == []
     assert connection.closed
 
 

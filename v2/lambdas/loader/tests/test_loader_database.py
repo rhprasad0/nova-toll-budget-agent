@@ -3,7 +3,7 @@
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from lambdas.loader import handler as handler
@@ -22,12 +22,12 @@ DATABASE = "nova_toll_v2_bootstrap_test"  # built by scripts/run_db_tests.sh
 OD_PAIR = 1089  # I-495 northbound 192NO -> 185ND; I-495 rows skip the direction check
 
 
-def _connect(user: str) -> Any:
+def _connect(user: str) -> object:
     import psycopg  # lazy: test_loader asserts the handler module imports without it
     from psycopg.rows import dict_row
 
     # libpq PG* variables select the cluster (5432, or 5433 for the retained run).
-    return psycopg.connect(dbname=DATABASE, user=user, row_factory=dict_row)
+    return psycopg.connect(dbname=DATABASE, user=user, row_factory=cast(Any, dict_row))
 
 
 def _i95(interval_end: datetime, calculated: datetime, rate: str) -> I95Row:
@@ -88,24 +88,36 @@ def test_loader_upserts_monotonically_for_agent_reads(
     current, earlier = now - timedelta(minutes=1), now - timedelta(hours=1)
     first, second = "raw/feed=i95/e2e/1200Z.csv", "raw/feed=i95/e2e/1210Z.csv"
 
-    handler._load("i95", [_i95(current, now - timedelta(minutes=2), "5.00")], s3_key=first)
+    handler._load(
+        "i95", [_i95(current, now - timedelta(minutes=2), "5.00")], s3_key=first
+    )
     # An older calculation loses even with a later key.
-    handler._load("i95", [_i95(current, now - timedelta(minutes=3), "1.00")], s3_key=second)
+    handler._load(
+        "i95", [_i95(current, now - timedelta(minutes=3), "1.00")], s3_key=second
+    )
     # The same calculation with a later key wins.
-    handler._load("i95", [_i95(current, now - timedelta(minutes=2), "6.00")], s3_key=second)
+    handler._load(
+        "i95", [_i95(current, now - timedelta(minutes=2), "6.00")], s3_key=second
+    )
     caplog.clear()
     # The same revision tuple is a no-op.
-    handler._load("i95", [_i95(current, now - timedelta(minutes=2), "7.00")], s3_key=second)
+    handler._load(
+        "i95", [_i95(current, now - timedelta(minutes=2), "7.00")], s3_key=second
+    )
     assert "V2_LOAD_ROWS i95 0" in caplog.text
     assert "V2_LOAD_OK i95" in caplog.text
     # An older interval is history, not a replacement.
     handler._load("i95", [_i95(earlier, earlier, "4.00")], s3_key=first)
     assert published == [1, 1, 1, 1, 1]
 
-    handler._load("i66", [_i66(current, now - timedelta(minutes=2), "2.00")], s3_key=first)
-    handler._load("i66", [_i66(current, now - timedelta(minutes=3), "1.00")], s3_key=second)
+    handler._load(
+        "i66", [_i66(current, now - timedelta(minutes=2), "2.00")], s3_key=first
+    )
+    handler._load(
+        "i66", [_i66(current, now - timedelta(minutes=3), "1.00")], s3_key=second
+    )
 
-    with _connect("postgres") as connection:
+    with cast(Any, _connect("postgres")) as connection:
         i95 = connection.execute(
             "SELECT zone_toll_rate_usd FROM pricing.trip_pricing_i95"
             " WHERE od_pair_id = %s AND interval_end_at IN (%s, %s)"
@@ -117,7 +129,10 @@ def test_loader_upserts_monotonically_for_agent_reads(
             " WHERE start_zone_id = 10 AND end_zone_id = 20 AND interval_end_at = %s",
             (current,),
         ).fetchall()
-    assert [row["zone_toll_rate_usd"] for row in i95] == [Decimal("4.00"), Decimal("6.00")]
+    assert [row["zone_toll_rate_usd"] for row in i95] == [
+        Decimal("4.00"),
+        Decimal("6.00"),
+    ]
     assert [row["zone_toll_rate_usd"] for row in i66] == [Decimal("2.00")]
 
     comparisons = pricing_tool._fetch_i95_i495_comparisons(OD_PAIR)
