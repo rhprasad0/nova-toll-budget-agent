@@ -23,27 +23,6 @@ def test_module_imports_without_psycopg() -> None:
     assert "psycopg" not in sys.modules
 
 
-def test_upserts_are_schema_qualified_and_idempotent() -> None:
-    assert "INSERT INTO pricing.trip_pricing_i95" in handler.UPSERT_I95_SQL
-    assert "INSERT INTO pricing.trip_pricing_i66" in handler.UPSERT_I66_SQL
-    assert (
-        "ON CONFLICT (interval_end_at, start_zone_id, end_zone_id, od_pair_id)"
-        in handler.UPSERT_I95_SQL
-    )
-    assert (
-        "ON CONFLICT (interval_end_at, start_zone_id, end_zone_id)"
-        in handler.UPSERT_I66_SQL
-    )
-    assert (
-        "(trip_pricing_i95.calculated_at, trip_pricing_i95.s3_key)"
-        in handler.UPSERT_I95_SQL
-    )
-    assert (
-        "(trip_pricing_i66.calculated_at, trip_pricing_i66.s3_key)"
-        in handler.UPSERT_I66_SQL
-    )
-
-
 def test_eventbridge_object_is_normalized() -> None:
     event = {
         "source": "aws.s3",

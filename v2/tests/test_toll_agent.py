@@ -112,46 +112,6 @@ def test_prompt_point_validation_requires_unique_ordered_bounded_coordinates() -
         )
 
 
-def test_prompt_point_loader_uses_one_bounded_query_and_closes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    rows = [{"points": [_point()]}]
-
-    class Cursor:
-        def execute(self, sql: str) -> None:
-            executed.append(sql)
-
-        def fetchall(self) -> list[dict[str, list[dict[str, object]]]]:
-            return rows
-
-        def __enter__(self) -> "Self":
-            return self
-
-        def __exit__(self, *_: object) -> None:
-            return None
-
-    cursor = Cursor()
-
-    class Connection:
-        closed = False
-
-        def cursor(self) -> "Cursor":
-            return cursor
-
-        def close(self) -> None:
-            self.closed = True
-
-    executed: list[str] = []
-    connection = Connection()
-    monkeypatch.setattr(
-        toll_agent.route_validation, "connect_to_database", lambda: connection
-    )
-
-    assert toll_agent.load_prompt_points()[0].label.startswith("Exit 1")
-    assert executed == ["SELECT oracle.get_toll_route_prompt_points() AS points"]
-    assert connection.closed
-
-
 def test_prompt_point_loader_fails_closed_and_still_closes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

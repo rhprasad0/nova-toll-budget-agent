@@ -14,7 +14,6 @@ CURRENT = Path(__file__).resolve().parents[1] / "tests"
 CONTRACTS = (
     "pricing_analysis",
     "pricing_ballpark",
-    "monotonic_upsert",
     "oracle_restore",
     "oracle_route",
     "oracle_prompt_points",

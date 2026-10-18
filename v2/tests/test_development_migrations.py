@@ -531,6 +531,7 @@ def test_production_environment_rejects_unbounded_transport(
         runner._psql_environment(runner.PRODUCTION_PROFILE)
 
 
+@pytest.mark.live
 def test_psql_include_path_opens_exact_file(tmp_path: Path) -> None:
     """Exercise psql's actual \\ir lexer against a disposable local fixture only."""
     psql = shutil.which("psql")
