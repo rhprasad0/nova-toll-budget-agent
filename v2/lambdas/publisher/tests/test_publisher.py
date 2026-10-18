@@ -34,6 +34,15 @@ class _PublicPage(HTMLParser):
         self.text.append(data)
 
 
+def _forbid(monkeypatch: pytest.MonkeyPatch, target: object, name: str) -> None:
+    """Fail the test if the handler reaches `target.name` past a failure boundary."""
+
+    def fail(*_args: object, **_kwargs: object) -> NoReturn:
+        pytest.fail(name)
+
+    monkeypatch.setattr(target, name, fail)
+
+
 def _row(
     order: int,
     group: int | None = None,
@@ -579,10 +588,7 @@ def test_handler_rejects_invalid_publication_switch_before_connections(
 ) -> None:
     monkeypatch.setenv("REPORT_PUBLICATION_ENABLED", "sometimes")
 
-    def _callback_8(**_kwargs: object) -> object:
-        return pytest.fail("connected")
-
-    monkeypatch.setattr(publisher, "_connect", _callback_8)
+    _forbid(monkeypatch, publisher, "_connect")
     with pytest.raises(ValueError, match="true or false"):
         publisher.handler({"trigger": "watchdog"}, None)
 
@@ -806,20 +812,11 @@ def test_reader_setup_failure_records_once_before_source_or_s3(
 
     monkeypatch.setattr(publisher, "_read_report_rows", _callback_20)
 
-    def _callback_21(*_args: object) -> object:
-        return pytest.fail("source read")
+    _forbid(monkeypatch, publisher, "_publish")
 
-    monkeypatch.setattr(publisher, "_publish", _callback_21)
+    _forbid(monkeypatch, publisher.boto3, "client")
 
-    def _callback_22(_service: object) -> object:
-        return pytest.fail("s3 client")
-
-    monkeypatch.setattr(publisher.boto3, "client", _callback_22)
-
-    def _callback_23(*_args: object) -> object:
-        return pytest.fail("success")
-
-    monkeypatch.setattr(publisher, "_log_success", _callback_23)
+    _forbid(monkeypatch, publisher, "_log_success")
     with pytest.raises(RuntimeError):
         publisher.handler({"trigger": "watchdog"}, None)
     if failure == "timeout":
@@ -845,20 +842,11 @@ def test_report_connection_acquisition_records_once_before_all_work(
         _callback_24,
     )
 
-    def _callback_25(*_args: object) -> object:
-        return pytest.fail("source")
+    _forbid(monkeypatch, publisher, "_publish")
 
-    monkeypatch.setattr(publisher, "_publish", _callback_25)
+    _forbid(monkeypatch, publisher.boto3, "client")
 
-    def _callback_26(_service: object) -> object:
-        return pytest.fail("s3")
-
-    monkeypatch.setattr(publisher.boto3, "client", _callback_26)
-
-    def _callback_27(*_args: object) -> object:
-        return pytest.fail("success")
-
-    monkeypatch.setattr(publisher, "_log_success", _callback_27)
+    _forbid(monkeypatch, publisher, "_log_success")
     with pytest.raises(RuntimeError, match="report connect failed"):
         publisher.handler({"trigger": "watchdog"}, None)
     assert caplog.text.count("V2_REPORT_PUBLICATION_FAILED phase=pre_mutation") == 1
@@ -895,20 +883,11 @@ def test_reader_connection_acquisition_records_once_and_closes_report(
 
     monkeypatch.setattr(publisher, "_read_report_rows", _callback_29)
 
-    def _callback_30(*_args: object) -> object:
-        return pytest.fail("source")
+    _forbid(monkeypatch, publisher, "_publish")
 
-    monkeypatch.setattr(publisher, "_publish", _callback_30)
+    _forbid(monkeypatch, publisher.boto3, "client")
 
-    def _callback_31(_service: object) -> object:
-        return pytest.fail("s3")
-
-    monkeypatch.setattr(publisher.boto3, "client", _callback_31)
-
-    def _callback_32(*_args: object) -> object:
-        return pytest.fail("success")
-
-    monkeypatch.setattr(publisher, "_log_success", _callback_32)
+    _forbid(monkeypatch, publisher, "_log_success")
     with pytest.raises(RuntimeError, match="reader connect failed"):
         publisher.handler({"trigger": "watchdog"}, None)
     assert caplog.text.count("V2_REPORT_PUBLICATION_FAILED phase=pre_mutation") == 1
@@ -964,15 +943,9 @@ def test_s3_client_construction_records_once_and_closes_connections(
         _callback_35,
     )
 
-    def _callback_36(*_args: object) -> object:
-        return pytest.fail("source")
+    _forbid(monkeypatch, publisher, "_publish")
 
-    monkeypatch.setattr(publisher, "_publish", _callback_36)
-
-    def _callback_37(*_args: object) -> object:
-        return pytest.fail("success")
-
-    monkeypatch.setattr(publisher, "_log_success", _callback_37)
+    _forbid(monkeypatch, publisher, "_log_success")
     with pytest.raises(RuntimeError, match="s3 construction failed"):
         publisher.handler({"trigger": "watchdog"}, None)
     assert caplog.text.count("V2_REPORT_PUBLICATION_FAILED phase=pre_mutation") == 1
@@ -1012,20 +985,11 @@ def test_missing_or_blank_bucket_records_once_before_reader_or_s3(
 
     monkeypatch.setattr(publisher, "_read_report_rows", _callback_39)
 
-    def _callback_40(_service: object) -> object:
-        return pytest.fail("s3")
+    _forbid(monkeypatch, publisher.boto3, "client")
 
-    monkeypatch.setattr(publisher.boto3, "client", _callback_40)
+    _forbid(monkeypatch, publisher, "_publish")
 
-    def _callback_41(*_args: object) -> object:
-        return pytest.fail("source")
-
-    monkeypatch.setattr(publisher, "_publish", _callback_41)
-
-    def _callback_42(*_args: object) -> object:
-        return pytest.fail("success")
-
-    monkeypatch.setattr(publisher, "_log_success", _callback_42)
+    _forbid(monkeypatch, publisher, "_log_success")
     with pytest.raises((KeyError, ValueError)):
         publisher.handler({"trigger": "watchdog"}, None)
     assert caplog.text.count("V2_REPORT_PUBLICATION_FAILED phase=pre_mutation") == 1
@@ -1095,10 +1059,7 @@ def test_close_failure_after_publication_records_once_and_suppresses_success(
         _callback_46,
     )
 
-    def _callback_47(*_args: object) -> object:
-        return pytest.fail("success")
-
-    monkeypatch.setattr(publisher, "_log_success", _callback_47)
+    _forbid(monkeypatch, publisher, "_log_success")
     with pytest.raises(RuntimeError, match=f"{failed_close} close failed"):
         publisher.handler({"trigger": "watchdog"}, None)
     assert caplog.text.count("V2_REPORT_PUBLICATION_FAILED phase=pre_mutation") == 1
@@ -1160,10 +1121,7 @@ def test_close_failure_keeps_underlying_publication_failure_evidence(
 
     monkeypatch.setattr(publisher, "_publish", publish_failure)
 
-    def _callback_51(*_args: object) -> object:
-        return pytest.fail("success")
-
-    monkeypatch.setattr(publisher, "_log_success", _callback_51)
+    _forbid(monkeypatch, publisher, "_log_success")
     with pytest.raises(RuntimeError, match="reader close failed"):
         publisher.handler({"trigger": "watchdog"}, None)
     assert caplog.text.count("V2_REPORT_PUBLICATION_FAILED") == 2
@@ -1239,10 +1197,7 @@ def test_reader_transaction_exit_after_success_records_once_and_suppresses_succe
         _callback_55,
     )
 
-    def _callback_56(*_args: object) -> object:
-        return pytest.fail("success")
-
-    monkeypatch.setattr(publisher, "_log_success", _callback_56)
+    _forbid(monkeypatch, publisher, "_log_success")
     with pytest.raises(RuntimeError, match="transaction exit failed"):
         publisher.handler({"trigger": "watchdog"}, None)
     assert caplog.text.count("V2_REPORT_PUBLICATION_FAILED phase=reader_finalize") == 1
@@ -1301,10 +1256,7 @@ def test_publish_failure_does_not_get_a_second_reader_boundary_record(
 
     monkeypatch.setattr(publisher, "_publish", publish_failure)
 
-    def _callback_60(*_args: object) -> object:
-        return pytest.fail("success")
-
-    monkeypatch.setattr(publisher, "_log_success", _callback_60)
+    _forbid(monkeypatch, publisher, "_log_success")
     with pytest.raises(RuntimeError, match="publication failed"):
         publisher.handler({"trigger": "watchdog"}, None)
     assert caplog.text.count("V2_REPORT_PUBLICATION_FAILED") == 1
@@ -1364,10 +1316,7 @@ def test_reader_exit_records_a_distinct_unwinding_failure_once(
 
     monkeypatch.setattr(publisher, "_read_report_rows", _callback_62)
 
-    def _callback_63(*_args: object) -> object:
-        return pytest.fail("success")
-
-    monkeypatch.setattr(publisher, "_log_success", _callback_63)
+    _forbid(monkeypatch, publisher, "_log_success")
     if inner_failure == "s3":
 
         def _callback_79(_service: object) -> object:
@@ -1379,10 +1328,7 @@ def test_reader_exit_records_a_distinct_unwinding_failure_once(
             _callback_79,
         )
 
-        def _callback_80(*_args: object) -> object:
-            return pytest.fail("publish")
-
-        monkeypatch.setattr(publisher, "_publish", _callback_80)
+        _forbid(monkeypatch, publisher, "_publish")
     else:
 
         def _callback_81(_service: object) -> object:
@@ -1406,10 +1352,7 @@ def test_reader_exit_records_a_distinct_unwinding_failure_once(
 def test_malformed_event_and_invalid_switch_record_once_before_io(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    def _callback_64(**_kwargs: object) -> object:
-        return pytest.fail("io")
-
-    monkeypatch.setattr(publisher, "_connect", _callback_64)
+    _forbid(monkeypatch, publisher, "_connect")
     with pytest.raises(ValueError, match="unsupported"):
         publisher.handler({"source": "unknown"}, None)
     assert caplog.text.count("V2_REPORT_PUBLICATION_FAILED phase=pre_mutation") == 1
@@ -1425,10 +1368,7 @@ def test_disabled_valid_event_returns_without_record_or_io(
 ) -> None:
     monkeypatch.setenv("REPORT_PUBLICATION_ENABLED", "false")
 
-    def _callback_65(**_kwargs: object) -> object:
-        return pytest.fail("io")
-
-    monkeypatch.setattr(publisher, "_connect", _callback_65)
+    _forbid(monkeypatch, publisher, "_connect")
     assert publisher.handler({"trigger": "watchdog"}, None) == {
         "status": "disabled",
         "facility_scope": "both",
