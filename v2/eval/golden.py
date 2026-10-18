@@ -1,4 +1,4 @@
-"""Offline training contracts and integrity checks for the archival reference."""
+"""Offline training contracts and integrity checks for the local golden corpus."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import ast
 import hashlib
 import json
 import re
-from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -20,7 +19,6 @@ from agent_tools import current_price_domain as current
 from agent_tools import get_annual_toll_ballpark as annual
 from agent_tools import validate_toll_route as routes
 from agent_tools.currency import CURRENCY_PATTERN, currency_decimal
-from eval.repetition import trial_numbers
 
 if TYPE_CHECKING:
     from strands.models import Model
@@ -31,20 +29,7 @@ if TYPE_CHECKING:
 
 V2 = Path(__file__).resolve().parents[1]
 ROOT = V2 / "eval/active/training"
-ARCHIVE = V2 / "eval/archive/development-3.3.28"
 ToolName = Literal["get_current_toll_price", "get_annual_toll_ballpark"]
-ARCHIVE_VERSION = "3.3.28"
-ARCHIVE_CASE_COUNT = 100
-ARCHIVE_COVERAGE = {
-    "current_complete": 20,
-    "current_state": 10,
-    "current_evidence": 10,
-    "annual_complete": 20,
-    "annual_inputs": 15,
-    "annual_routes": 10,
-    "annual_interpretation": 10,
-    "mixed": 5,
-}
 SOURCE_FILES = (
     "uv.lock",
     "eval/corpus.py",
@@ -1042,42 +1027,6 @@ def source_hashes() -> dict[str, str]:
     }
 
 
-def validate_archive_coverage(cases: list[GoldenCase]) -> None:
-    counts = Counter(c.coverage_family for c in cases)
-    if counts != Counter(ARCHIVE_COVERAGE) or any(c.held_out for c in cases):
-        raise ValueError("expected the 100-case development-only allocation")
-    if Counter(c.kind for c in cases) != {"current": 40, "annual": 55, "mixed": 5}:
-        raise ValueError("workflow allocation changed")
-    groups: dict[str, bool] = {}
-    fixtures: dict[str, bool] = {}
-    pairs: dict[str, list[GoldenCase]] = {}
-    for case in cases:
-        if case.contract_version != 2 or not case.split_group:
-            raise ValueError("v2 requires explicit scenario groups")
-        if groups.setdefault(case.split_group, case.held_out) != case.held_out:
-            raise ValueError("scenario group crosses development/reserved split")
-        for step in case.steps:
-            if fixtures.setdefault(step.fixture, case.held_out) != case.held_out:
-                raise ValueError("pricing fixture crosses development/reserved split")
-        for tag in case.coverage_tags:
-            if tag.startswith("pair:"):
-                pairs.setdefault(tag, []).append(case)
-    for members in pairs.values():
-        kinds = {
-            tag
-            for c in members
-            for tag in c.coverage_tags
-            if tag.startswith("pair_type:")
-        }
-        if (
-            len(members) != 2
-            or len({c.split_group for c in members}) != 1
-            or len(kinds) != 1
-            or not kinds <= {"pair_type:contrastive", "pair_type:invariance"}
-        ):
-            raise ValueError("behavioral pairs require two members in one split group")
-
-
 def validate_payload(
     cases: list[GoldenCase], root: Path, point_ids: set[str], *, complete: bool = True
 ) -> None:
@@ -1185,43 +1134,6 @@ def validate_payload(
         raise ValueError("each case needs a labeled good example")
 
 
-def validate_archive(root: Path | None = None) -> None:
-    root = root if root is not None else ARCHIVE
-    cases = load_cases(root)
-    if len(cases) != ARCHIVE_CASE_COUNT or {c.number for c in cases} != set(
-        range(1, ARCHIVE_CASE_COUNT + 1)
-    ):
-        raise ValueError("expected exactly 100 numbered cases")
-    if len({c.id for c in cases}) != ARCHIVE_CASE_COUNT:
-        raise ValueError("duplicate case ID")
-    validate_archive_coverage(cases)
-    manifest = json.loads((root / "manifest.json").read_text())
-    if (
-        manifest["version"] != ARCHIVE_VERSION
-        or manifest.get("case_count") != ARCHIVE_CASE_COUNT
-        or manifest.get("evaluation_scope") != "development"
-        or manifest["actor_model"] != "gpt-6-luna"
-        or manifest["judge_model"] != "gpt-6-luna"
-        or manifest.get("tool_description_policy") != TOOL_DESCRIPTION_POLICY
-    ):
-        raise ValueError("unsupported corpus configuration")
-    trial_numbers(manifest)
-    actual = hashes(root, sources=False)
-    expected = {k: v for k, v in manifest["hashes"].items() if not k.startswith("v2/")}
-    if expected != actual or manifest["corpus_sha256"] != digest(manifest["hashes"]):
-        raise ValueError("archival input hash drift")
-    review = json.loads((root / "review.json").read_text())
-    if review["status"] == "approved":
-        if (
-            review["corpus_sha256"] != manifest["corpus_sha256"]
-            or not review["reviewer"]
-            or not review["evidence"]
-        ):
-            raise ValueError("approval must identify this corpus and its human review")
-    elif review["status"] != "pending":
-        raise ValueError("invalid review status")
-
-
 def manifest(root: Path | None = None) -> dict[str, Any]:
     root = root if root is not None else ROOT
     # Explicit test identities remain local to their fixture directory.
@@ -1244,16 +1156,13 @@ def main() -> None:
     parser.add_argument("--allow-uninitialized", action="store_true")
     parser.add_argument("--corpus", type=Path)
     args = parser.parse_args()
-    validate_archive()
     root = args.corpus if args.corpus is not None else ROOT
     if (
         args.allow_uninitialized
         and not root.parent.exists()
         and not root.parent.is_symlink()
     ):
-        print(
-            "archival reference verified; awaiting the first real locally authored corpus"
-        )
+        print("awaiting the first real locally authored corpus")
     else:
         from eval import corpus
 

@@ -1,8 +1,6 @@
-"""Offline regression assertions over the archived development reference."""
+"""Offline grader-logic regressions over five retired development cases."""
 
 import json
-import shutil
-from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -11,7 +9,7 @@ from eval import golden
 from eval import golden_run as run
 from oracle.build_oracle_data import build_connections, build_points
 
-pytestmark = pytest.mark.usefixtures("archival_reference_data")
+pytestmark = pytest.mark.usefixtures("grader_reference_data")
 
 
 @pytest.mark.parametrize(
@@ -88,33 +86,13 @@ def test_tool_prose_keeps_pinned_corpus_but_runtime_changes_do_not(
     monkeypatch.setattr(golden, "V2", tmp_path)
     monkeypatch.setattr(golden, "SOURCE_FILES", (name,))
     target.write_text(source)
-    original = golden.hashes()
+    original = golden.source_hashes()
     description = "Canonical origin point ID for this leg; resolve its entry/airport role and direction independently."
     assert description in source
     target.write_text(source.replace(description, "Use the resolved origin point ID."))
-    assert golden.hashes() == original
+    assert golden.source_hashes() == original
     target.write_text(source + "\nUNAUTHORIZED_CHANGE = True\n")
-    assert golden.hashes() != original
-
-
-def test_complete_development_contract_and_reference_labels() -> None:
-    golden.validate()
-    cases = golden.load_cases()
-    assert len(cases) == 100
-    assert not any(case.held_out for case in cases)
-    examples = run.development_examples()
-    assert len(examples) == 176
-    assert Counter(example.label == "good" for example in examples) == {
-        True: 100,
-        False: 76,
-    }
-    assert Counter(e.actor_validity for e in examples) == {"valid": 172, "invalid": 4}
-    assert sum(e.application_stop is not None for e in examples) == 9
-    for case in cases:
-        assert case.actor.max_turns == 5
-        assert "three_axle" not in case.model_dump_json()
-        assert "adversarial_direct" not in case.coverage_tags
-        assert "adversarial_tool" not in case.coverage_tags
+    assert golden.source_hashes() != original
 
 
 @pytest.mark.parametrize(
@@ -150,37 +128,11 @@ def test_rounding_can_restate_prior_answer_but_not_superseded_evidence() -> None
     assert golden.unsupported_money("About $125", {golden.Decimal("140.20")}, previous)
 
 
-def test_annual_day_proposal_is_grounded_but_premature_use_is_not() -> None:
-    examples = {
-        e.label: e
-        for e in run.development_examples()
-        if e.case_id == "dev3-accept-three-day-annual-count"
-    }
-    good = examples["good"]
-    premature = examples["annual-call-before-day-acceptance"]
-    assert good.expected is not None and all(good.expected.model_dump().values())
-    assert premature.expected is not None
-    assert premature.expected.model_dump() == {
-        "outcome": False,
-        "grounding": False,
-        "rules": False,
-    }
-    # Identical conditional arithmetic and later acceptance; only call timing differs.
-    assert good.turns[0].response in premature.turns[0].response
-    assert not good.turns[0].calls
-    assert good.turns[1].user == premature.turns[1].user == "Use 156 days."
-    assert good.turns[1].calls[0].input == premature.turns[0].calls[0].input
-    assert premature.turns[0].calls[0].input["planned_annual_commute_days"] == 156
-    prompt = " ".join(run.judge_prompt("grounding").split())
-    assert "conditional annual-day question is grounded arithmetic" in prompt
-    assert "before user acceptance fails Grounding as well as Rules" in prompt
-    assert "even if proposed in the same assistant turn or accepted later" in prompt
-    assert "Supplied tool results can support reported amounts" in prompt
-
-
 def test_catalog_and_successful_routes_match_committed_oracle() -> None:
     points = build_points()
-    catalog = json.loads((golden.ROOT / "prompt-points.json").read_text())
+    catalog = json.loads(
+        (golden.V2 / "eval/active/training/prompt-points.json").read_text()
+    )
     assert len(catalog) == len(points) == 220
     for point in catalog:
         original = points[point["point_id"]]
@@ -251,81 +203,10 @@ def test_below_median_wording_preserves_amount_checks(
     assert "unsupported_money" in golden.grade_assertions(case, turns)
 
 
-def test_gallows_review_preserves_evidence_and_source_failure() -> None:
-    # Pin the three retained reference transcripts without a second run archive.
-    transcript_hashes = {
-        1: "eec624b77b5cfb09d8964d73ab520fa8f5e8388fd36ec8b2de341481ce1aa03f",
-        2: "d1bac1080f13d8073a149572ba31b0769cc622c64fdbc80ca5eea0778ad893d0",
-        3: "7bbec1d4aa61ce6d572a05ed8b4c8454d86d90ef8272e279d7d0543a1e18e437",
-    }
-    references = [
-        e
-        for e in run.development_examples()
-        if e.case_id == "dev3-gallows-hybrid-salary"
-        and e.label.startswith("review-annual-summary-")
-    ]
-    assert len(references) == 3
-    for example in references:
-        trial = int(example.label.rsplit("-", 1)[1])
-        assert (
-            golden.digest(
-                {
-                    "turns": [t.model_dump(mode="json") for t in example.turns],
-                    "actor_replies": example.actor_replies,
-                }
-            )
-            == transcript_hashes[trial]
-        )
-        assert example.expected is not None
-        assert example.expected.outcome is (trial != 3)
-        assert example.expected.grounding is (trial != 3)
-        assert example.expected.rules is (trial != 3)
-        assert example.actor_validity == "valid"
-        assert example.expected_failures == []
-
-
-@pytest.mark.parametrize(
-    "mutation,reason",
-    [
-        ("count", "exactly 100"),
-        ("duplicate", "duplicate case ID"),
-        ("held_out", "development-only"),
-        ("actor_leak", "hash drift"),
-        ("hash", "hash drift"),
-        ("version", "unsupported corpus"),
-    ],
-)
-def test_corrupted_corpus_is_rejected(
-    tmp_path: Path, mutation: str, reason: str
-) -> None:
-    root = tmp_path / "corpus"
-    shutil.copytree(golden.ROOT, root)
-    path = root / "cases.jsonl"
-    cases = [json.loads(line) for line in path.read_text().splitlines()]
-    if mutation == "count":
-        cases.pop()
-    elif mutation == "duplicate":
-        cases[1]["id"] = cases[0]["id"]
-    elif mutation == "held_out":
-        cases[0]["held_out"] = True
-    elif mutation == "actor_leak":
-        cases[0]["actor"]["facts"] += " get_current_toll_price"
-    elif mutation == "hash":
-        cases[0]["title"] += " changed"
-    elif mutation == "version":
-        manifest_path = root / "manifest.json"
-        manifest = json.loads(manifest_path.read_text())
-        manifest["version"] = "2.0.8"
-        manifest_path.write_text(json.dumps(manifest))
-    path.write_text("".join(json.dumps(case) + "\n" for case in cases))
-    with pytest.raises(ValueError, match=reason):
-        golden.validate(root)
-
-
 def test_planned_trials_and_empty_holdout_have_no_success_rate() -> None:
     cases = golden.load_cases()
     development = run.summary([], cases, trials_per_case=1)
-    assert development["expected_trials"] == 100
+    assert development["expected_trials"] == 5
     assert development["attempted_trials"] == 0
     assert development["pass_at_1"] is None
     assert development["pass_cubed"] is None
@@ -403,196 +284,6 @@ def test_approach_labels_do_not_make_duplicate_ids_interchangeable(
     leg["destination_point_id"] = endpoint[:-2] + "9ND"
     with pytest.raises(ValueError, match="tool_arguments"):
         golden.Replay(case).call(fixture.tool, wrong, [case.prompt])
-
-
-def test_schedule_provenance_contrast_preserves_price_and_calls() -> None:
-    references = {
-        e.label: e
-        for e in run.development_examples()
-        if e.case_id == "dev3-belmont-afternoon-eastbound"
-    }
-    passing = references["schedule-source-paraphrase"]
-    omitted = references["schedule-source-omitted"]
-    assert passing.turns[0].calls == omitted.turns[0].calls
-    assert passing.expected is not None and all(passing.expected.model_dump().values())
-    assert omitted.expected is not None
-    assert omitted.expected.model_dump() == {
-        "outcome": False,
-        "grounding": True,
-        "rules": True,
-    }
-    assert passing.expected_failures == omitted.expected_failures == []
-
-
-@pytest.mark.parametrize(
-    "positive,negative",
-    [
-        ("material-fixed-estimate", "material-guaranteed-budget"),
-        ("material-observed-estimate", "material-promised-future-price"),
-        ("material-modeled-estimate", "material-false-modeled-source"),
-        ("material-earlier-uncertainty", "material-false-annual-percentile"),
-    ],
-)
-def test_material_uncertainty_pairs_keep_supported_evidence(
-    positive: str,
-    negative: str,
-) -> None:
-    examples = {e.label: e for e in run.development_examples()}
-    good, bad = examples[positive], examples[negative]
-    case = next(c for c in golden.load_cases() if c.id == good.case_id)
-    assert good.case_id == bad.case_id
-    assert good.expected is not None and all(good.expected.model_dump().values())
-    assert bad.expected is not None and not any(bad.expected.model_dump().values())
-    assert good.turns[:-1] == bad.turns[:-1]
-    assert [t.calls for t in good.turns] == [t.calls for t in bad.turns]
-    assert bad.turns[-1].response.startswith(good.turns[-1].response + "\n")
-    for example in (good, bad):
-        assert golden.grade_assertions(case, example.turns) == []
-        attempt = run.Attempt(
-            id=example.label, case_id=case.id, trial=1, turns=example.turns
-        )
-        assert run.mechanical_rules(case, attempt) == []
-    # These contrasts require semantic judgments: supported numbers alone cannot
-    # detect promised future prices, false probabilities, or source contradictions.
-    answer = " ".join(t.response for t in good.turns).lower()
-    assert "forecast" not in answer and "guarantee" not in answer
-
-
-def test_income_suggestion_and_adoption_have_distinct_grounding_labels() -> None:
-    references = {
-        e.label: e
-        for e in run.development_examples()
-        if e.case_id == "dev3-range-becomes-user-chosen-salary"
-    }
-    suggestion = references["conditional-income-suggestion"]
-    adoption = references["salary-chosen-before-consent"]
-    assert suggestion.expected is not None and adoption.expected is not None
-    assert suggestion.expected.model_dump() == {
-        "outcome": False,
-        "grounding": True,
-        "rules": False,
-    }
-    assert adoption.expected.model_dump() == {
-        "outcome": False,
-        "grounding": False,
-        "rules": False,
-    }
-    assert suggestion.turns[0].calls == adoption.turns[0].calls == []
-    assert suggestion.turns[1:] == adoption.turns[1:]
-
-
-def test_grading_boundary_references_preserve_existing_evidence() -> None:
-    raw = [
-        {k: v for k, v in e.items() if k not in {"non_asserted_money", "rounded_money"}}
-        for e in json.loads((golden.ROOT / "examples.json").read_text())
-    ]
-    assert golden.digest(raw[:161]) == (
-        "b5b82100f3d4f8236e2afb1a2c207d500456c3685bfb5bb938033ef77fb0d334"
-    )
-    references = {(e.case_id, e.label): e for e in run.development_examples()}
-    optional = references[
-        "dev3-adjust-annual-count-downward", "optional-closing-offer-complete"
-    ]
-    required = references[
-        "dev3-beltway-endpoints-together", "baseline-1-2-actor-invalid"
-    ]
-    assert optional.actor_replies[-1] == required.actor_replies[-1]
-    assert optional.actor_validity == "valid" and required.actor_validity == "invalid"
-    assert optional.expected is not None and all(
-        optional.expected.model_dump().values()
-    )
-    assert optional.turns[-1].calls and not required.turns[-1].calls
-
-    days = references[
-        "dev3-supply-missing-weekdays", "supplied-days-background-example"
-    ]
-    original = references[days.case_id, "good"]
-    replacement = references[days.case_id, "supplied-days-replacement-demand"]
-    assert days.turns[-1] == original.turns[-1]
-    assert days.turns[:-1] == replacement.turns[:-1]
-    assert days.expected == original.expected
-    assert replacement.expected is not None
-    assert replacement.expected.model_dump() == {
-        "outcome": False,
-        "grounding": True,
-        "rules": False,
-    }
-    assert replacement.expected_failures == ["missing_call"]
-    assert not replacement.turns[-1].calls
-
-    inequality = references[
-        "dev3-supply-annual-salary", "fixed-scenarios-false-inequality"
-    ]
-    original = references[inequality.case_id, "good"]
-    assert inequality.turns[:-1] == original.turns[:-1]
-    assert [t.calls for t in inequality.turns] == [t.calls for t in original.turns]
-    assert inequality.turns[-1].response.startswith(original.turns[-1].response + "\n")
-    assert inequality.expected is not None
-    assert not any(inequality.expected.model_dump().values())
-
-
-def test_optional_refinement_and_sampling_window_boundaries() -> None:
-    raw = [
-        {k: v for k, v in e.items() if k not in {"non_asserted_money", "rounded_money"}}
-        for e in json.loads((golden.ROOT / "examples.json").read_text())
-    ]
-    assert golden.digest(raw[:165]) == (
-        "37cf335943234591f123a877847c80b77aeb5cf14aef351d63f68fa2fcc195a6"
-    )
-    references = {(e.case_id, e.label): e for e in run.development_examples()}
-    for case_id, label in (
-        ("dev3-reverse-dulles-road-offer", "optional-future-office-days"),
-        ("dev3-hunter-mill-four-day-job", "sampling-target-window"),
-        ("dev3-hunter-mill-four-day-job", "false-last-sample-date"),
-    ):
-        example = references[case_id, label]
-        original = references[case_id, "good"]
-        assert example.turns[-1].calls == original.turns[-1].calls
-        assert example.turns[-1].response.startswith(original.turns[-1].response + "\n")
-        assert example.expected is not None
-        assert set(example.expected.model_dump().values()) == {
-            label != "false-last-sample-date"
-        }
-    sample = references["dev3-hunter-mill-four-day-job", "sampling-target-window"]
-    result = sample.turns[-1].calls[0].result
-    available, target = result["available_date_range"], result["target_window"]
-    assert isinstance(available, dict) and isinstance(target, dict)
-    assert available["end_date"] == "2026-09-22"
-    assert target["end_date"] == "2026-09-23"
-
-
-def test_cancellation_and_zero_denial_reference_boundaries() -> None:
-    raw = [
-        {k: v for k, v in e.items() if k not in {"non_asserted_money", "rounded_money"}}
-        for e in json.loads((golden.ROOT / "examples.json").read_text())
-    ]
-    assert golden.digest(raw[:168]) == (
-        "8c0103b3d6d3f352fd891d9272ff45366b8737f030ad9754449fdec7b0fdc4fa"
-    )
-    cases = {c.id: c for c in golden.load_cases()}
-    refs = {e.label: e for e in run.development_examples()}
-    for positive, negative in (
-        ("missing-history-denies-zero", "missing-history-asserts-zero"),
-        ("cancel-request-acknowledged", "unsupported-external-cancellation"),
-    ):
-        good, bad = refs[positive], refs[negative]
-        assert good.turns[:-1] == bad.turns[:-1]
-        assert good.turns[-1].calls == bad.turns[-1].calls
-        assert good.turns[-1].user == bad.turns[-1].user
-        assert good.expected is not None and all(good.expected.model_dump().values())
-        assert bad.expected is not None and not any(bad.expected.model_dump().values())
-        assert (
-            golden.grade_assertions(
-                cases[good.case_id],
-                good.turns,
-                non_asserted_money=good.non_asserted_money,
-            )
-            == []
-        )
-    bad = refs["missing-history-asserts-zero"]
-    assert golden.grade_assertions(cases[bad.case_id], bad.turns) == [
-        "unsupported_money"
-    ]
 
 
 @pytest.mark.parametrize(

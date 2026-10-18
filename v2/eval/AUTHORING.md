@@ -5,7 +5,7 @@ Read this guide before planning or writing cases. Use the frozen schemas and
 existing workflow and coverage-family allocations. Historical examples explain
 the file formats. Exposed packets are retired review material and cannot seed a
 fresh holdout. This guide governs the locally authored 5.2.x suite. Keep the
-application model/SOP and historical archive unchanged.
+application model/SOP unchanged.
 
 ## Plan coverage before writing
 

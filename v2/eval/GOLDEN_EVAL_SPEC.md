@@ -1,13 +1,12 @@
 # Golden corpus authoring
 
 The locally authored suite has **50 training and 10 shadow cases** in the repo,
-plus **25 external holdout cases** (corpus 5.2.14). New or changed inputs must be
+plus **25 external holdout cases** (corpus 5.2.18). New or changed inputs must be
 validated, frozen and reviewed before use. Use the [authoring guide](AUTHORING.md) and
 [coverage contract](contract.json). The executable schema is [golden.py](golden.py).
 
-Corpus 3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
-Historical inputs, approvals and scores cannot activate fresh training or qualify
-production. See the [experiment journal](EXPERIMENT_JOURNAL.md) for prior findings.
+Historical inputs, approvals and scores, including the retired 3.3.28 corpus,
+cannot activate fresh training or qualify production. See the [experiment journal](EXPERIMENT_JOURNAL.md) for prior findings.
 
 The holdout, read for an October 10 diagnosis and repaired as 5.2.0, is no
 longer blind ([October 10 journal](journal/2026-10-05.md)); do not use it as

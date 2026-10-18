@@ -1,8 +1,9 @@
 # Running the frozen training split
 
 The local contract has **50 training, 10 shadow and 25 external holdout cases**.
-Training, shadow and holdout corpus 5.2.14 run under harness 2.5.19. Its approved
-calibration predates the October 16 dependency upgrade, so paid runs need a new one.
+Training, shadow and holdout corpus 5.2.18 run under harness 2.5.19. Its approved
+calibration predates the October 16 dependency upgrade and the October 18 evaluator
+cleanup, so paid runs need a new one.
 Training application runs default to one trial per case; use `--trials-per-case 3`
 only on Ryan's explicit instruction. Shadow runs are manual and outside search.
 Actors have up to five delivered user turns. The application, actor, judge
@@ -77,7 +78,7 @@ fields are null (inapplicable) for one repetition. Scheduling, actor checks
 and rendering use recorded `trials_per_case`; historical three-trial
 reports keep their recorded scoring rules. Unsupported or mixed contracts fail.
 
-Optimize using training cases only. Do not use archived or shadow cases in
+Optimize using training cases only. Do not use shadow cases in
 search. These measurements do not establish
 independent agent accuracy. The retired private holdout approach grants no new
 development spending authorization.
@@ -149,7 +150,7 @@ VERSION` to write each split's manifest and pending input review. It records pro
 source hashes and never approves inputs. A changed contract needs a newer version
 and actual review. CI runs `eval.golden --allow-uninitialized`; partial sets fail
 validation. Commit public inputs and their identities
-before paid execution. The archive remains historical reference only.
+before paid execution.
 
 ## Execution
 
@@ -341,7 +342,7 @@ new series. Repeated aggregate feedback can still influence tuning, so this is a
 hidden diagnostic, not fully blind accuracy or a production gate.
 The 5.1.14 holdout and its 5.2.0 repair were read case by case on October 10,
 2026 ([journal](journal/2026-10-05.md)). Do not use 5.1.14 for candidate
-checkpoints. Checkpoints on 5.2.x (now 5.2.14) give descriptive aggregate feedback, not blind
+checkpoints. Checkpoints on 5.2.x (now 5.2.18) give descriptive aggregate feedback, not blind
 evidence, until a fresh holdout replaces it.
 
 Never inspect external logs to diagnose a hidden measurement failure; have the

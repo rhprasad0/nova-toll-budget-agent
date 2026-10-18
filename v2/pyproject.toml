@@ -21,7 +21,6 @@ dev = [
     "pyyaml>=6.0.3",
     "ruff",
     "strands-agents-evals==1.4.0",
-    "tiktoken==0.14.0",
     "types-boto3[bedrock-agentcore,bedrock-runtime,ce,cloudwatch,events,iam,logs,rds,s3,ssm,sts]==1.43.72",
 ]
 
@@ -32,7 +31,6 @@ extraPaths = [".", "..", "scripts", "../infra"]
 venvPath = "."
 venv = ".venv"
 executionEnvironments = [
-  {root = "../.agents/skills/eval-climb/scripts"},
   {root = "lambdas/fetcher", extraPaths = ["lambdas/fetcher", ".", ".."]},
   {root = "lambdas/loader", extraPaths = ["lambdas/loader", ".", ".."]},
   {root = ".", extraPaths = [".", "..", "scripts", "../infra"]},

@@ -1,13 +1,12 @@
 # TollChat evaluation
 
-**Locally authored suite:** 50 training and 10 shadow cases (5.2.14) are
-active, with 25 holdout cases (5.2.14) stored externally. Harness 2.5.19 has an
+**Locally authored suite:** 50 training and 10 shadow cases (5.2.18) are
+active, with 25 holdout cases (5.2.18) stored externally. Harness 2.5.19 has an
 approved aggregate calibration receipt, but it binds the dependency set from
-before the October 16 mcp and multidict upgrade, so paid runs need a new
-combined calibration. The 100-case development corpus
-3.3.28 is retained unchanged as an [archival reference](archive/development-3.3.28/README.md).
-Its recorded scores and reviews remain historical; it cannot run or seed fresh inputs.
-The [experiment journal](EXPERIMENT_JOURNAL.md) preserves the findings and limitations.
+before the October 16 mcp and multidict upgrade and the evaluator sources from
+before the October 18 cleanup, so paid runs need a new combined calibration.
+The retired 100-case development corpus 3.3.28 is recoverable from Git history;
+the [experiment journal](EXPERIMENT_JOURNAL.md) preserves its findings and limitations.
 The holdout was read for an October 10, 2026 diagnosis and repaired as 5.2.0
 in a new external directory; it is no longer blind. See the
 [journal](journal/2026-10-05.md).
@@ -35,7 +34,7 @@ Commit real public inputs, manifests and input reviews before paid execution.
 Changed inputs or protected sources need a newer corpus version and input review.
 Keep public detailed evidence in ignored `eval/private/`. The factory container,
 export/intake and handoff workflow are retired; existing private factory data stays
-untouched. Synthetic regressions and archival cases cannot seed a fresh suite.
+untouched. Synthetic regressions cannot seed a fresh suite.
 
 The [runner guide](GOLDEN_RUNNER.md) explains calibration reuse, paid execution
 and accounting. The [authoring contract](GOLDEN_EVAL_SPEC.md) describes
@@ -47,7 +46,7 @@ An exposed training score cannot qualify production. Production retains its
 ## External holdout
 
 Keep holdout inputs and detailed evidence outside the repository, for example
-`/home/ryan/Documents/tollchat-eval-holdout/dataset-20261010/holdout-5.2.14/`. The host operator explicitly
+`/home/ryan/Documents/tollchat-eval-holdout/dataset-20261010/holdout-5.2.18/`. The host operator explicitly
 selects the corpus with `--corpus`; ordinary training commands never discover it.
 With authorization, the coding agent can invoke the host runner and use only its
 aggregate feedback. See the
@@ -84,16 +83,11 @@ env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll-dev \
 Results reflect the recorded cases, tools, and judges. Actor failures and missing
 measurements are inconclusive; sampled improvements are not whole-agent accuracy.
 
-## Focused batch grounding check
+## Historical results
 
-[ballpark_hallucination_batch.py](ballpark_hallucination_batch.py) prepares,
-submits, retrieves, and grades the frozen annual-ballpark Batch experiment.
-Its canonical input is [ballpark-hallucination-cases.jsonl](ballpark-hallucination-cases.jsonl);
-generated inputs and outputs belong in `eval/private/`. Inspect preparation and
-obtain authorization before submitting paid work. The
-[journal summary](journal/2026-09-21.md#annual-ballpark-grounding-experiment)
-records the result and limits.
-
+The annual-ballpark Batch grounding experiment is summarized in the
+[journal](journal/2026-09-21.md#annual-ballpark-grounding-experiment); its retired
+runner is recoverable from Git history.
 Historical golden demonstrations and calibrations are summarized in the
 [experiment journal](journal/2026-09-14.md#september-20-golden-demonstration-and-calibration).
 The retired release policies and approval records are recoverable from

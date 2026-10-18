@@ -165,7 +165,7 @@
     "v2/lambdas/publisher/costs.py": "61b82090f88090b0f5742dee2674c8ebc3ce2c38712f9e7dce0b8f2765783abf",
     "v2/lambdas/publisher/handler.py": "7ff9042626aedd46513868023496a71fab324f593a2f4c09f986dec15027e5fd",
     "v2/lambdas/timed_checks/handler.py": "b7f952df617bddccc03d4e34245a40b49fdb66f4af74e4f1ed884540221ae3ea",
-    "v2/pyproject.toml": "c2428ed9608ab151665f6e1578a24ba15800c6e51f88f25701f51a2097feb009",
+    "v2/pyproject.toml": "441565aedaa1a7f5c2ed745bfd0d691d097ae02a752faf16bd063e8040c11c1d",
     "v2/scripts/adopt_production_baseline.py": "77d574fc0bab36483224a5f8187cb80f107509e80290ab3cac9a2990f52c6737",
     "v2/scripts/blue_green.py": "660c18f6a985d715bc830456b5e3bcb1ace1f38ac15f3df125307b5a14649dbb",
     "v2/scripts/build_agentcore_zips.sh": "f05f2a40a4579600fa13e2a731a052325a2985eacf866e6fa920924c4d91eacc",
@@ -195,7 +195,7 @@
     "v2/scripts/timed-checks-requirements.txt": "29aafcf01ce0169d979b25b0fc057352ea86e6b0984ce59958cfbf6e88f10a18",
     "v2/scripts/verify_release_bundle.py": "ef5261e25b548727df96da06f01421bb18398b0fdda8d2f01d112e99a81f2a96",
     "v2/timed_checks.py": "97fe53756b8ef3fd9cf5b17a8b00d3c5d59496030ce955ea40a90b3271d1d6cf",
-    "v2/uv.lock": "4926fc94603725774e937fba4f42b20c903260efaa7f5901486cd2bdba4712eb"
+    "v2/uv.lock": "569504df60efeb8b46573e5b97a845af870ff6b7de0e5366eba36b92c5acf0dc"
   },
   "packages": {
     "agentcore.zip": "74bb287297544243f07862bf6a6db7a4b98d74ac88c7c3172823b6fcd0ff0de6",
