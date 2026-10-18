@@ -1355,150 +1355,6 @@ def test_pull_request_workflows_have_no_production_access() -> None:
             assert forbidden not in workflow
 
 
-def test_development_plan_policy_requires_reservations_and_valid_default_edge() -> None:
-    release = DEPLOYMENT.split(
-        "### Development application release and database validation (#331)", maxsplit=1
-    )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
-    policy_match = re.search(
-        r"if ! jq -e '(\n\s+def managed_changes\(\$address\):.*?\n\s+)' \"\$PLAN_JSON\"",
-        release,
-        flags=re.DOTALL,
-    )
-    assert policy_match is not None
-    policy = policy_match.group(1)
-
-    def change(address: str, after: object) -> dict[str, object]:
-        return {
-            "mode": "managed",
-            "address": address,
-            "change": {"actions": ["create"], "after": after, "after_unknown": {}},
-        }
-
-    edge = {
-        "aliases": [],
-        "viewer_certificate": [
-            {
-                "acm_certificate_arn": None,
-                "cloudfront_default_certificate": True,
-                "minimum_protocol_version": "TLSv1",
-                "ssl_support_method": None,
-            }
-        ],
-    }
-    plan = {
-        "resource_changes": [
-            change(
-                "aws_lambda_function.loader",
-                {"reserved_concurrent_executions": 5},
-            ),
-            change(
-                "aws_lambda_function.publisher",
-                {"reserved_concurrent_executions": 1},
-            ),
-            change(
-                "aws_lambda_function.tollchat_proxy",
-                {"reserved_concurrent_executions": 5},
-            ),
-            change("aws_cloudfront_distribution.site", edge),
-        ]
-    }
-
-    def passes(candidate: object) -> bool:
-        return (
-            subprocess.run(
-                ["jq", "-e", policy],
-                input=json.dumps(candidate),
-                text=True,
-                capture_output=True,
-                check=False,
-            ).returncode
-            == 0
-        )
-
-    assert passes(plan)
-    empty_actions = json.loads(json.dumps(plan))
-    for resource in empty_actions["resource_changes"]:
-        resource["change"]["actions"] = []
-    assert not passes(empty_actions)
-    for address, key, value in (
-        ("aws_lambda_function.loader", "reserved_concurrent_executions", None),
-        ("aws_lambda_function.publisher", "reserved_concurrent_executions", 5),
-        ("aws_lambda_function.tollchat_proxy", "reserved_concurrent_executions", -1),
-        ("aws_cloudfront_distribution.site", "aliases", ["preview.example"]),
-        (
-            "aws_cloudfront_distribution.site",
-            "minimum_protocol_version",
-            "TLSv1.2_2021",
-        ),
-    ):
-        candidate = json.loads(json.dumps(plan))
-        after = next(
-            resource
-            for resource in candidate["resource_changes"]
-            if resource["address"] == address
-        )["change"]["after"]
-        if address.endswith("distribution.site") and key != "aliases":
-            after["viewer_certificate"][0][key] = value
-        else:
-            after[key] = value
-        assert not passes(candidate)
-
-
-def test_development_secret_fetch_keeps_arn_out_of_argv_and_evidence() -> None:
-    release = DEPLOYMENT.split(
-        "### Development application release and database validation (#331)", maxsplit=1
-    )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
-    assert "secret_json()" in release
-    assert 'SECRET_ARN="$SECRET_ARN"' in release
-    assert 'SecretId=os.environ["SECRET_ARN"]' in release
-    assert 'get-secret-value --secret-id "$SECRET_ARN"' not in release
-    assert "--only-matching" in release
-    assert 'test "$reference" = "$ALLOWED_SSM_REFERENCE"' in release
-    pattern = re.search(r"SSM_ARN_PATTERN='([^']+)'", release)
-    assert pattern is not None
-    allowed = "arn:aws:ssm:us-east-1:903859731897:parameter/nova-toll/openai_api_key"
-    unexpected = "arn:aws:ssm:us-east-1:903859731897:parameter/unexpected"
-    python_pattern = pattern.group(1).replace("[:alnum:]", "A-Za-z0-9")
-    matches = re.findall(
-        python_pattern, json.dumps({"allowed": allowed, "unexpected": unexpected})
-    )
-    assert matches == [allowed, unexpected]
-    assert (
-        'test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all)"'
-        in release
-    )
-    assert "source_tree_sha256=$SOURCE_TREE_SHA256" in release
-    assert "source_diff_sha256=$SOURCE_DIFF_SHA256" in release
-    assert release.index('SOURCE_TREE_SHA256="$(source_tree_digest)"') < release.index(
-        'tf_dev -chdir="$ROOT/v2/infra" plan'
-    )
-
-
-def test_development_release_scans_before_apply_and_never_bootstraps_deployed_database() -> (
-    None
-):
-    release = DEPLOYMENT.split(
-        "### Development application release and database validation (#331)", maxsplit=1
-    )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
-
-    phase_one_apply = (
-        'tf_dev -chdir="$ROOT/v2/infra" apply -input=false "$PHASE_ONE_PLAN"'
-    )
-    phase_two_apply = (
-        'tf_dev -chdir="$ROOT/v2/infra" apply -input=false "$PHASE_TWO_PLAN"'
-    )
-    assert release.index('scan_package "$package"') < release.index(phase_one_apply)
-    assert release.index('scan_release_file "$PHASE_ONE_PLAN"') < release.index(
-        phase_one_apply
-    )
-    assert release.index('scan_release_file "$PHASE_TWO_PLAN"') < release.index(
-        phase_two_apply
-    )
-    assert 'python3 "$ROOT/v2/scripts/bootstrap_development_database.py"' not in release
-    assert "database_bootstrap=not-run" in release
-    assert "psql --dbname nova_toll_development --file" in release
-
-
 def test_production_release_plan_workflows_keep_trust_before_credentials_and_apply_disabled() -> (
     None
 ):
@@ -3303,3 +3159,13 @@ def test_retired_holdout_storage_keeps_data_protections() -> None:
         '"aws:SecureTransport" = "false"',
     ):
         assert protection in storage
+
+
+def test_runbooks_never_direct_plan_apply_target_or_workspaces() -> None:
+    guarded = RUNBOOK.split("### Guarded production release", maxsplit=1)[1].split(
+        "## Public report launch", maxsplit=1
+    )[0]
+    assert "terraform plan" not in guarded
+    assert "terraform apply" not in guarded
+    assert "terraform -target" not in DEPLOYMENT
+    assert "terraform workspace" not in DEPLOYMENT

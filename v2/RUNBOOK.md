@@ -39,6 +39,17 @@ this exact predicate:
 `vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor`,
 without restricting initial `main` pushes by owner ID.
 
+To stop development delivery, first delete that repository variable (or set it to
+literal `false`) with
+`gh variable delete DEVELOPMENT_DELIVERY_ENABLED --repo rhprasad0/nova-toll-budget-agent`
+and confirm a later delivery run is skipped without an OIDC request. Only then
+disable the development route or rotate its Tailscale OAuth clients, stored in
+the `development` environment: `TS_DEVELOPMENT_OAUTH_CLIENT_ID`/`_SECRET`
+(scope `auth_keys`, tag `tag:ci-development`, used by the Tailscale action) and
+`TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID`/`_SECRET` (only `devices:core:read`,
+`devices:routes:read` and `devices:routes`, used by the route helper). Neither
+step touches production.
+
 ## Delivery contract and production baseline
 
 PRs use disposable PostGIS migration validation only; the checks are
@@ -46,7 +57,7 @@ credential-free and never access or mutate deployed databases or schemas. The
 post-merge delivery path is separate from the explicit manual development
 migration workflow, which may be dispatched from `refs/heads/main` for the
 fixed development target and accepts no arbitrary target or migration-path
-inputs. See the [protected development migration workflow](runbooks/development-foundation-replacement.md#protected-development-migration-workflow-305-slice-3)
+inputs. See the [protected development migration workflow](#protected-development-migration-workflow-305-slice-3)
 for its foundation, bootstrap, identity, and evidence gates. Production uses
 the reviewer-protected reusable delivery job from `main`. After the separately
 reviewed blue-green bootstrap, it stores a gated preparation plan in the private
@@ -64,9 +75,101 @@ observation attempts one restoration after two consecutive probe failures.
 See the [blue-green delivery procedure](runbooks/blue-green-deployments.md).
 Configuration alone does not prove bootstrap or activation has completed.
 Production schema changes use the protected fixed-target migration component
-below. The one-time baseline adoption and manual Oracle migration 030
-procedures remain separate, explicitly approved operations. Application release
+below. The one-time baseline adoption is complete, and the manual Oracle
+migration 030 procedure remains a separate, explicitly approved operation. Application release
 artifacts alone do not authorize or execute schema changes.
+
+### Protected development migration workflow (#305 slice 3)
+
+This workflow is a post-merge, protected development operation. Only migration
+files whose backward-compatible status was reviewed by a human at merge may run
+automatically, and only against the fixed development database. The builder and
+CI checks do not assume the migration role, fetch an IAM token, connect to RDS,
+apply Terraform, bootstrap PostgreSQL, or dispatch a workflow.
+
+After human review and merge, the protected delivery job uses a clean checkout
+of protected `origin/main` and follows this exact order:
+
+1. Verify the release artifact, checkout `HEAD`, `GITHUB_SHA`, manifest commit,
+   migration inventory, registry, baseline, and canonical SQL bytes are exactly
+   equal before any delivery or migration credentials are available.
+2. Create one private saved Terraform plan and run the existing JSON
+   address/action gate. Do not apply or re-plan before migration; retain the
+   exact plan across the credential switch.
+3. After the RDS instance is available and the protected private route/
+   transport proof passes, assume only
+   `nova-toll-v2-development-migrations-dev` and run the fixed runner. Expected
+   `after` versions come from the verified release manifest. Keep the reviewed
+   administrator URL, password, and any IAM token in process memory only; never
+   write them to a file, argument, state, plan, log, summary, or artifact.
+
+   When a canonical schema version advances, add its contiguous migration
+   chain and append the matching immutable record to
+   `v2/db/migration-baselines.json`. Existing manifest records must never be
+   rewritten or deleted; this metadata change does not authorize a live action.
+
+4. Re-assume `nova-toll-v2-development-delivery` and apply the same saved plan
+   only after migration succeeds. The job uses the native
+   `v2-development-apply` queue shared with the manual migration workflow.
+
+5. While still holding that queue, verify the three application Lambda hashes
+   and the proxy's published `live` alias, CloudFront readiness, and the exact
+   AgentCore `preview` live/target version from private post-apply state. The
+   bounded helper then checks manifest-backed HTTPS static bytes, generated
+   development robots policy, API configuration, invalid-origin rejection, and
+   a small agent exchange in two isolated sessions. Reset/replay verifies
+   revocation without matching model prose; both sessions are cleaned up.
+
+The explicit GitHub `development-release` record starts after exact CI admission
+and before build. Its final status covers build through readiness/smoke; native
+`development` environment records used for OIDC are not end-to-end proof. Failed,
+cancelled, skipped, disabled, or stale attempts cannot produce release success.
+A failed-deploy rerun reuses the same run/SHA's verified immutable build and
+record, with the current attempt identified in its status link. The credentialed
+deploy job admits that rerun only when `github.triggering_actor == github.actor`;
+a different writer's rerun skips before development credentials. Status-publication
+failure is a failed workflow, not successful evidence. The summary contains only
+commit/run/attempt, artifact ID/digest, schema versions, job outcomes and the
+fixed public URL. State, plans, AWS responses, credentials, cookies and chat
+content are never published. The helper has a 15-minute deadline; failure does
+not roll back an applied release or expand migration authority.
+
+PR validation uses fake AWS/HTTP responses only. A visible post-merge live
+demonstration still requires separate human authorization.
+
+The fixed manual recovery workflow remains available for an explicitly approved
+post-merge bootstrap or migration rehearsal after the reviewed foundation plan
+and fresh development bootstrap gates (see the
+[historical replacement procedure](runbooks/development-foundation-replacement.md)).
+Dispatch
+   `.github/workflows/v2-development-migrations.yml` only from `refs/heads/main`;
+the job also requires GitHub actor ID `91573985` and
+`github.triggering_actor == github.actor`:
+
+   ```sh
+   gh workflow run v2-development-migrations.yml \
+     --repo rhprasad0/nova-toll-budget-agent --ref main
+   ```
+
+   The job joins only `tag:ci-development`, validates the fixed site-1 route,
+   keeps the verified RDS DNS name in `PGHOST`, uses only the derived 4via6
+   address in `PGHOSTADDR`, and authenticates only as
+   `schema_migrator_development`. It accepts no database, user, host, port,
+   migration-path, role, or production target input. Keep
+   `DEVELOPMENT_DELIVERY_ENABLED` absent or `false` during manual recovery.
+
+When the fresh bootstrap is current, the successful migration result must have
+canonical `after` versions equal to the verified release manifest with
+`applied=[]` (a non-current before state may contain only registered migration
+paths and must finish at those same manifest-bound versions). Runner history evidence
+uses exactly `commit=<40 lowercase hex>;run=<UUID>`; the workflow summary and
+artifact add only the commit, GitHub run identifiers, account, fixed role,
+database/user, before/after versions, applied paths, route/transport booleans,
+and `status=ok`. They never contain a token, password, endpoint, host/port URL,
+OAuth value, raw command output, error text, Terraform state, or plan. Preserve
+the sanitized evidence with the reviewed foundation/bootstrap records. Any
+failure stops for human review; do not retry an uncertain write or run a generic
+migration command.
 
 ### Protected production migration component (issue 304, slice 4)
 
@@ -114,27 +217,15 @@ Before release apply, require the foundation plan to be zero-change. Review ever
 action in the saved candidate application plan against intended reviewed release
 changes. Stop on any unexplained action or any replacement.
 
-## Production baseline adoption (issue 304, slice 1)
+## Production baseline adoption (issue 304, slice 1) [completed]
 
-The checked-in `v2/scripts/adopt_production_baseline.py` is a fixed-target,
-one-time adoption helper for the existing `nova_toll` database on
-`nova-toll-db`. It may run only after a human explicitly approves production
-adoption and records a fresh, read-only evidence packet covering the AWS
-account/region, private RDS endpoint, TLS CA, managed master secret, database
-identity, schema versions and source hashes, the 996 Oracle connections,
-runtime role memberships and `CONNECT`, and the explicit object-owner/ACL
-allowlist. The helper rejects drift and records verified deployed schemas as
-adopted; it never resets, bootstraps, migrates, or accepts caller-supplied
-targets or manifest paths.
-
-The operator must use the existing private-network route, the RDS-managed
-administrative secret held only in process memory, and `verify-full` TLS. The
-helper creates only `pricing_owner` and `schema_migrator_production`, transfers
-the named pricing objects, and writes the two immutable baseline rows in one
-bounded transaction. A SQL or postcondition failure is not a success signal;
-if commit acknowledgement is uncertain, stop and collect a new read-only
-state packet before retrying. This source PR performs no production invocation,
-Terraform plan/apply, or live database mutation.
+The one-time adoption of the existing `nova_toll` database recorded its verified
+schemas as the migration baseline before production migrations 033 onward ran
+through the protected component. Do not rerun it.
+`v2/scripts/adopt_production_baseline.py` remains because the migration runner
+imports its fixed targets and the PostGIS ACL guard below. Its original
+procedure is in
+[Git history before this cleanup](https://github.com/rhprasad0/nova-toll-budget-agent/blob/ed784c8e/v2/RUNBOOK.md#production-baseline-adoption-issue-304-slice-1).
 
 ## RDS PostGIS type ACL exception (issue 304)
 
@@ -469,38 +560,25 @@ activation path for this source cleanup: no deployment claim follows from
 removing the producer, and the retained measurement bucket, catalog, and
 historical objects remain pending a separately approved retirement procedure.
 
-## Development handoff and guarded production release
+## Guarded production release and related procedures
 
 Use only the procedure that owns the intended operation:
 
 - [Blue-green delivery and application recovery](runbooks/blue-green-deployments.md)
-  requires its separately reviewed bootstrap before activation.
-- [Development application release and database validation (#331)](runbooks/development-release.md)
-  is the operative development release path.
-- [Development bootstrap/import boundary (#332)](runbooks/development-bootstrap-import.md)
+  covers development and production releases, cutover and recovery.
 - [Timed-check Scheduler bootstrap and verification (#345)](runbooks/timed-checks-scheduler.md)
   is retained for its bounded bootstrap, Cloudflare/DNS, and recovery contracts.
-- [Development foundation replacement handoff (#327/#333)](runbooks/development-foundation-replacement.md)
-  is the current development foundation and protected migration path.
-- [Development foundation handoff (#330)](runbooks/development-foundation-330-archive.md)
-  is historical audit and recovery context, not an activation path.
-- [Legacy development retirement (#333)](runbooks/legacy-development-retirement.md)
-  owns the ordered legacy cleanup procedure.
+- The [protected development migration workflow](#protected-development-migration-workflow-305-slice-3)
+  is the post-merge development schema path.
+- The completed account-split procedures are historical stubs with permalinks:
+  [#330 foundation](runbooks/development-foundation-330-archive.md),
+  [#327/#333 foundation replacement](runbooks/development-foundation-replacement.md),
+  [#331 release bring-up](runbooks/development-release.md),
+  [#332 bootstrap/import](runbooks/development-bootstrap-import.md), and
+  [#333 legacy retirement](runbooks/legacy-development-retirement.md).
 
 Public report publication remains non-operative.
 An AWS-only identity cannot write Cloudflare DNS.
-
-### Development handoff (non-operative)
-
-After the #330 exact-plan handoff and state decision, pass only its reviewed
-non-secret development context into the #331 application/database bootstrap.
-That handoff is the retained plan root/path/digest and sanitized address/actions
-summary, not the guarded production release's `production.tfvars` or foundation
-output object. Do not use this runbook to reach the production-only Cloudflare
-resources in `v2/infra/site.tf`; #332 owns the separately trusted development
-DNS/certificate and CI cutover. Pull-request validation remains
-credential-free, and account-local backend/configuration isolation remains
-covered by the contract tests.
 
 ### Guarded production release
 
@@ -545,10 +623,6 @@ authorizes a direct, arbitrary, stale, or caller-selected plan/apply. Terminal
 evidence remains sanitized. Follow the [blue-green runbook](runbooks/blue-green-deployments.md)
 for candidate testing, approval, observation, and protected recovery.
 
-The legacy development inventory is historical read-only cleanup context for
-#333. Development account ownership and account-local backends are current;
-this issue does not perform the cleanup or any deployed migration.
-
 ## Public report launch (production only)
 
 The report publisher depends on the CloudFront distribution and `robots.txt`,
@@ -556,8 +630,7 @@ so enabling publication in the complete saved plan happens only after the edge
 rewrite has deployed. Wait for the distribution, enqueue one watchdog run, and
 verify the complete manifest before testing public URLs. Run this section only
 after the production guarded release; never run it while the development
-backend is selected. Development public report publication, Cloudflare, and DNS
-remain deferred to #332.
+backend is selected. Development public report publication remains deferred.
 
 ```sh
 set -euo pipefail

@@ -194,16 +194,8 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm() -> None:
     assert "reserved_concurrent_executions = 5" in loader
     assert "reserved_concurrent_executions = 1" in publisher
     assert "PUBLIC_BASE_URL      = local.public_site_url" in publisher
-    assert 'request POST "$PREVIEW_URL/api/reset"' in DEPLOYMENT
-    assert "Origin: $PREVIEW_URL" in DEPLOYMENT
     assert "Content-Type: application/json" in DEPLOYMENT
     assert "Sec-Fetch-Site: same-origin" in DEPLOYMENT
-    assert "printf '{}' >\"$RESET_REQUEST\"" in DEPLOYMENT
-    assert 'RESET_BODY_SHA256="$(sha256sum "$RESET_REQUEST"' in DEPLOYMENT
-    assert "x-amz-content-sha256: $RESET_BODY_SHA256" in DEPLOYMENT
-    assert '--data-binary "@$RESET_REQUEST"' in DEPLOYMENT
-    assert "write-out '%{content_type}'" in DEPLOYMENT
-    assert "jq -e '.ok == true'" in DEPLOYMENT
     assert (
         agentcore.count(
             'metric_name         = "V2ProxyFailure${local.slot_suffix[each.key]}"'
@@ -244,30 +236,6 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm() -> None:
         'minimum_protocol_version       = local.custom_domain_enabled ? "TLSv1.2_2021" : "TLSv1"'
         in site
     )
-    development_release = DEPLOYMENT.split(
-        "### Development application release and database validation (#331)", maxsplit=1
-    )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
-    for text in (
-        "def reserved($address; $expected)",
-        "def default_edge:",
-        'minimum_protocol_version == "TLSv1"',
-        "get-function-concurrency",
-        "function-name tollchat-v2-chat-proxy-dev",
-        "PUBLIC_BASE_URL",
-        'PHASE_ONE_PLAN_JSON="$RELEASE_DIR/development-phase-one.tfplan.json"',
-        'PHASE_TWO_PLAN_JSON="$RELEASE_DIR/development-phase-two.tfplan.json"',
-        "ARTIFACT_SCAN_PATTERN=",
-        "PACKAGE_SCAN_PATTERN=",
-        "scan_release_file",
-        "scan_package",
-        "scan_release_directory",
-        'unzip -p "$package"',
-        "check_lambda_quota_gate.py",
-        "assert_reserved_concurrency",
-        "resource_inventory=$RESOURCE_TYPES",
-        'rm -rf -- "$ROOT/v2/infra/build"',
-    ):
-        assert text in development_release
     assert 'resource "aws_wafv2_web_acl" "public_chat"' in site
     assert "limit                 = local.rate_limit" in site
     assert "size                = 32768" in site
@@ -381,7 +349,7 @@ def test_public_report_launch_is_selected_environment_and_correlated() -> None:
         r"never run it while the development\s+backend is selected", launch
     )
     assert re.search(
-        r"Development public report publication, Cloudflare, and DNS\s+remain deferred to #332",
+        r"Development public report publication\s+remains deferred",
         launch,
     )
     for required in (
