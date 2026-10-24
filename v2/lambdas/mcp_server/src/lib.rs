@@ -45,6 +45,8 @@ const AMBIGUOUS_MILES: f64 = 2.0;
 /// Approach variants of one interchange share a spot; keep them together.
 const SAME_INTERCHANGE_MILES: f64 = 0.1;
 const MAX_GROUPS_PER_SIDE: usize = 4;
+/// An extra toll road must save this many access miles to rank above a simpler route.
+const FACILITY_PENALTY_MILES: f64 = 2.0;
 const MAX_OPTIONS: usize = 3;
 const MAX_PLACE_CHARS: usize = 200;
 
@@ -93,6 +95,8 @@ pub fn router(app: App, allowed_hosts: &[&str]) -> Router {
             .with_json_response(true)
             .with_sse_keep_alive(None)
             .with_allowed_hosts(allowed_hosts.iter().copied())
+            // No browser clients: any request carrying an Origin header is rejected.
+            .enforce_origin_validation()
             .with_max_request_body_bytes(64 * 1024),
     );
     Router::new()
@@ -239,11 +243,7 @@ impl TollServer {
             each with an entry point ID, an exit point ID, the toll facilities used, and straight-line \
             access miles. Confirm the matched places and the chosen option with the user, and use the \
             returned point IDs exactly.",
-        annotations(
-            title = "Find toll ramps",
-            read_only_hint = true,
-            idempotent_hint = true
-        )
+        annotations(title = "Find toll ramps", read_only_hint = true)
     )]
     async fn find_toll_ramps(
         &self,
@@ -352,50 +352,55 @@ impl App {
         }
         let (origin_places, destination_places) =
             tokio::try_join!(self.search(origin), self.search(destination))?;
+        let points = self.load_points().await?;
 
         let mut response = json!({ "status": "resolved" });
-        let mut positions = Vec::new();
-        for (side, places) in [
-            ("origin", &origin_places),
-            ("destination", &destination_places),
+        let mut resolved = Vec::new();
+        for (side, role, places) in [
+            ("origin", "entry", &origin_places),
+            ("destination", "exit", &destination_places),
         ] {
-            response[side] = match places.as_slice() {
-                [] => json!({ "match": "place_not_found" }),
-                [top, rest @ ..]
-                    if rest
-                        .iter()
-                        .any(|other| miles(top.position, other.position) > AMBIGUOUS_MILES) =>
-                {
-                    json!({ "match": "ambiguous", "candidates": places.iter().map(Place::label).collect::<Vec<_>>() })
+            // Only matches near a supported toll road count, so "Leesburg" is not
+            // ambiguous with Leesburg, Florida.
+            let covered: Vec<_> = places
+                .iter()
+                .map(|place| (place, candidates_near(&points, place.position, role)))
+                .filter(|(_, candidates)| !candidates.is_empty())
+                .collect();
+            response[side] = match (places.first(), covered.as_slice()) {
+                (None, _) => json!({ "match": "place_not_found" }),
+                (Some(top), []) => {
+                    json!({ "match": "outside_coverage", "name": top.name, "address": top.address })
                 }
-                [top, ..] => {
-                    positions.push(top.position);
+                (_, [(top, _), rest @ ..])
+                    if rest.iter().any(|(other, _)| {
+                        miles(top.position, other.position) > AMBIGUOUS_MILES
+                    }) =>
+                {
+                    let labels: Vec<_> = covered.iter().map(|(place, _)| place.label()).collect();
+                    json!({ "match": "ambiguous", "candidates": labels })
+                }
+                (_, [(top, _), ..]) => {
                     json!({ "match": "resolved", "name": top.name, "address": top.address })
                 }
             };
-        }
-        if let [origin_at, destination_at] = positions[..] {
-            let points = self.load_points().await?;
-            let origins = candidates_near(&points, origin_at, "entry");
-            let destinations = candidates_near(&points, destination_at, "exit");
-            for (side, found) in [("origin", &origins), ("destination", &destinations)] {
-                if found.is_empty() {
-                    response[side]["match"] = json!("outside_coverage");
-                }
-            }
-            if !origins.is_empty() && !destinations.is_empty() {
-                let (status, options) = self.validated_options(&origins, &destinations).await?;
-                response["status"] = json!(status);
-                response["options"] = json!(options);
-                return Ok(response);
+            if let Some((_, candidates)) = covered.into_iter().next() {
+                resolved.push(candidates);
             }
         }
-        // Report the first side that needs attention; both sides' details are included.
+
         let problem = ["origin", "destination"]
             .iter()
             .map(|side| response[*side]["match"].clone())
-            .find(|m| m != "resolved");
-        response["status"] = problem.unwrap_or_else(|| json!("error"));
+            .find(|outcome| outcome != "resolved");
+        if let Some(problem) = problem {
+            // Report the first side that needs attention; both sides' details are included.
+            response["status"] = problem;
+            return Ok(response);
+        }
+        let (status, options) = self.validated_options(&resolved[0], &resolved[1]).await?;
+        response["status"] = json!(status);
+        response["options"] = json!(options);
         Ok(response)
     }
 
@@ -500,53 +505,60 @@ impl App {
             .await
             .map_err(|e| fail(e.into()))?;
 
-        let mut only_availability_failed = false;
+        let (mut lanes_closed, mut lanes_unknown) = (false, false);
         let mut ranked = Vec::new();
         for row in &rows {
             let status: String = row.get("status");
+            lanes_closed |= status == "currently_unavailable";
+            lanes_unknown |= status == "unknown_availability";
             let legs: Value = row.get("facility_legs");
-            if matches!(
-                status.as_str(),
-                "currently_unavailable" | "unknown_availability"
-            ) {
-                only_availability_failed = true;
-            }
-            let (Some((entry, origin_miles)), Some((exit, destination_miles))) = (
+            let (Some(entry), Some(exit)) = (
                 find(origins, row.get("origin")),
                 find(destinations, row.get("destination")),
             ) else {
                 continue;
             };
-            let mut facilities: Vec<&str> = legs
+            let mut facilities: Vec<String> = legs
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter_map(|leg| leg["facility"].as_str())
+                .filter_map(|leg| leg["facility"].as_str().map(str::to_owned))
                 .collect();
             facilities.dedup();
             if status != "valid" || facilities.is_empty() {
                 continue;
             }
             // shortcut: straight-line access miles, not drive time; upgrade to a Routes matrix if users get cross-river picks.
-            let access = origin_miles + destination_miles;
-            let option = json!({
-                "entry": { "point_id": entry.point_id, "label": entry.label, "direction": entry.direction },
-                "exit": { "point_id": exit.point_id, "label": exit.label, "direction": exit.direction },
-                "facilities": facilities,
-                "access_miles": { "origin": round_tenth(origin_miles), "destination": round_tenth(destination_miles) },
-            });
-            ranked.push((facilities.len(), access, option));
+            let score =
+                entry.miles + exit.miles + FACILITY_PENALTY_MILES * (facilities.len() - 1) as f64;
+            ranked.push((score, entry, exit, facilities));
         }
-        ranked.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
-        let options: Vec<Value> = ranked
-            .into_iter()
-            .take(MAX_OPTIONS)
-            .map(|(_, _, option)| option)
-            .collect();
-        let status = match (options.is_empty(), only_availability_failed) {
-            (false, _) => "resolved",
-            (true, true) => "currently_unavailable",
-            (true, false) => "no_valid_route",
+        ranked.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+        // Approach variants of one interchange validate separately; show each route once.
+        let mut seen = Vec::new();
+        let mut options = Vec::new();
+        for (_, entry, exit, facilities) in ranked {
+            let route = (spot(entry.point), spot(exit.point), facilities.clone());
+            if options.len() == MAX_OPTIONS || seen.contains(&route) {
+                continue;
+            }
+            seen.push(route);
+            options.push(json!({
+                "entry": { "point_id": entry.point.point_id, "label": entry.point.label, "direction": entry.point.direction },
+                "exit": { "point_id": exit.point.point_id, "label": exit.point.label, "direction": exit.point.direction },
+                "facilities": facilities,
+                "access_miles": { "origin": round_tenth(entry.miles), "destination": round_tenth(exit.miles) },
+            }));
+        }
+        let status = if !options.is_empty() {
+            "resolved"
+        } else if lanes_closed {
+            "currently_unavailable"
+        } else if lanes_unknown {
+            "availability_unknown"
+        } else {
+            "no_valid_route"
         };
         Ok((status, options))
     }
@@ -558,10 +570,14 @@ impl Place {
     }
 }
 
-fn find<'a>(side: &[Candidate<'a>], id: &str) -> Option<(&'a Point, f64)> {
-    side.iter()
-        .find(|c| c.point.point_id == id)
-        .map(|c| (c.point, c.miles))
+fn find<'s, 'a>(side: &'s [Candidate<'a>], id: &str) -> Option<&'s Candidate<'a>> {
+    side.iter().find(|c| c.point.point_id == id)
+}
+
+/// Where a point sits, comparable exactly.
+fn spot(point: &Point) -> Option<[u64; 2]> {
+    let [lon, lat] = point.location.as_ref()?.coordinates;
+    Some([lon.to_bits(), lat.to_bits()])
 }
 
 /// The nearest interchange per (facility, direction) for this side's role, within reach.

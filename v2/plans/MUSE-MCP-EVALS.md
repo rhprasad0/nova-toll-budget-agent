@@ -28,6 +28,11 @@ pairs and the expected `status`. Cover:
   or I-66);
 - straight-line traps, where the nearest ramp is across a river or highway from
   the place;
+- ranking trade-offs, where a closer ramp means one more toll road (for
+  example Ashburn → Tysons: Greenway then Dulles Toll Road, or a farther Dulles
+  Toll Road entry); the server counts each extra toll road as 2 access miles;
+- I-95/I-395 reversible-lane trips in both directions, with the lanes open,
+  closed, and with missing or stale lane data;
 - out-of-area places (Baltimore, Richmond, Manassas) and misspellings.
 
 **Metrics.**

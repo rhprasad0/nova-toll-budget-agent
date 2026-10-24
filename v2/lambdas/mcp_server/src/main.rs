@@ -2,6 +2,7 @@ use std::env;
 use std::time::Duration;
 
 use aws_config::BehaviorVersion;
+use aws_config::retry::RetryConfig;
 use aws_config::timeout::TimeoutConfig;
 use mcp_server::{App, BoxError, iam_database, log_filter, router};
 use tracing_subscriber::layer::SubscriberExt;
@@ -23,7 +24,12 @@ async fn main() -> Result<(), BoxError> {
         .load()
         .await;
     let app = App {
-        places: aws_sdk_geoplaces::Client::new(&sdk),
+        // One attempt per lookup: every SearchText request is billed.
+        places: aws_sdk_geoplaces::Client::from_conf(
+            aws_sdk_geoplaces::config::Builder::from(&sdk)
+                .retry_config(RetryConfig::standard().with_max_attempts(1))
+                .build(),
+        ),
         dynamodb: aws_sdk_dynamodb::Client::new(&sdk),
         lookup_table: env::var("LOOKUP_TABLE")?,
         database: iam_database(

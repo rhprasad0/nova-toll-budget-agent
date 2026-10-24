@@ -70,9 +70,11 @@ comparison, and ballpark sample views; it receives no other pricing privileges.
 `tollchat_agent`, `pricing_caller`, and `report_publisher` are distinct
 IAM-authenticated login roles. The agent role can execute only
 `validate_toll_route` and the bounded
-`get_toll_route_prompt_points` function; the Python-only pricing role can
-execute the eight endpoint-validation, current-price, and annual-ballpark
-operations. Both receive `rds_iam` and `USAGE` on `oracle`, but no direct table
+`get_toll_route_prompt_points` function; the MCP server
+(`v2/lambdas/mcp_server/`) also reads its ramp catalog through this role. The
+pricing role, used by the Python pricing tools and the MCP server's route
+validation, can execute the eight endpoint-validation, current-price, and
+annual-ballpark operations. Both receive `rds_iam` and `USAGE` on `oracle`, but no direct table
 or view access in `oracle` or `pricing`, write privilege, or schema-creation
 privilege. An additive install rejects either pre-existing runtime role when it
 has inherited membership other than `rds_iam` or direct privileges outside its

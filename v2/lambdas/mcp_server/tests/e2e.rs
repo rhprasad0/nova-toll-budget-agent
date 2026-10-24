@@ -14,7 +14,9 @@ use aws_sdk_dynamodb::types::{
     ScalarAttributeType,
 };
 use axum::extract::State;
+use axum::http::StatusCode;
 use axum::http::header::CONTENT_TYPE;
+use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::{Json, Router};
 use mcp_server::{App, Database, log_filter, router};
@@ -24,6 +26,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 const DATABASE: &str = "nova_toll_mcp_e2e";
+/// SearchText answers this query with an error whose message repeats the query.
+const FAILING_PLACE: &str = "Error Place 4417";
 
 /// Canned SearchText answers: (title, address, [lon, lat]).
 fn canned(query: &str) -> Vec<(&'static str, &'static str, [f64; 2])> {
@@ -53,11 +57,40 @@ fn canned(query: &str) -> Vec<(&'static str, &'static str, [f64; 2])> {
             "Leesburg, VA 20175, United States",
             [-77.5636, 39.1153],
         )],
+        "Dunn Loring" => vec![(
+            "Dunn Loring",
+            "Dunn Loring, VA, United States",
+            [-77.2286, 38.8836],
+        )],
+        "Rosslyn" => vec![(
+            "Rosslyn",
+            "Rosslyn, Arlington, VA, United States",
+            [-77.0707, 38.8966],
+        )],
+        "Dulles Airport" => vec![(
+            "Washington Dulles International Airport",
+            "1 Saarinen Cir, Dulles, VA 20166, United States",
+            [-77.4565, 38.9531],
+        )],
         "Richmond" => vec![(
             "Richmond",
             "Richmond, VA, United States",
             [-77.4360, 37.5407],
         )],
+        // Two covered places far apart: genuinely ambiguous.
+        "Washington" => vec![
+            (
+                "Washington",
+                "Washington, DC, United States",
+                [-77.0369, 38.9072],
+            ),
+            (
+                "Washington Dulles International Airport",
+                "Dulles, VA 20166, United States",
+                [-77.4565, 38.9531],
+            ),
+        ],
+        // The Massachusetts match is far from any toll road, so it must not make this ambiguous.
         "Springfield" => vec![
             (
                 "Springfield",
@@ -74,15 +107,20 @@ fn canned(query: &str) -> Vec<(&'static str, &'static str, [f64; 2])> {
     }
 }
 
-const PLACE_TEXTS: [&str; 8] = [
+const PLACE_TEXTS: [&str; 13] = [
     "Reston",
     "Tysons",
     "Potomac Mills",
     "Stafford",
     "Leesburg",
+    "Dunn Loring",
+    "Rosslyn",
+    "Dulles",
+    "Saarinen",
     "Richmond",
     "Springfield",
     "Nowhere Junction",
+    FAILING_PLACE,
 ];
 
 fn port(name: &str, default: u16) -> u16 {
@@ -90,6 +128,14 @@ fn port(name: &str, default: u16) -> u16 {
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(default)
+}
+
+fn today() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        / 86_400
 }
 
 #[derive(Clone, Default)]
@@ -134,8 +180,19 @@ struct Harness {
 async fn search_text(
     State(searches): State<Arc<Mutex<Vec<Value>>>>,
     Json(body): Json<Value>,
-) -> impl axum::response::IntoResponse {
-    let items: Vec<Value> = canned(body["QueryText"].as_str().unwrap_or_default())
+) -> Response {
+    let query = body["QueryText"].as_str().unwrap_or_default().to_owned();
+    searches.lock().unwrap().push(body);
+    if query == FAILING_PLACE {
+        let error = json!({ "message": format!("Invalid query: {query}") });
+        return (
+            StatusCode::BAD_REQUEST,
+            [("x-amzn-errortype", "ValidationException")],
+            Json(error),
+        )
+            .into_response();
+    }
+    let items: Vec<Value> = canned(&query)
         .into_iter()
         .enumerate()
         .map(|(i, (title, label, position))| {
@@ -143,7 +200,6 @@ async fn search_text(
                     "Address": { "Label": label }, "Position": position })
         })
         .collect();
-    searches.lock().unwrap().push(body);
     (
         [
             ("x-amz-geo-pricing-bucket", "Core"),
@@ -151,6 +207,7 @@ async fn search_text(
         ],
         Json(json!({ "ResultItems": items })),
     )
+        .into_response()
 }
 
 async fn serve(app: Router) -> String {
@@ -160,7 +217,7 @@ async fn serve(app: Router) -> String {
     format!("http://{address}")
 }
 
-fn pricing_database() -> Database {
+fn database() -> Database {
     let pg_port = port("MCP_E2E_PG_PORT", 55432);
     Database {
         // Same roles as production; only IAM/TLS is replaced for the local container.
@@ -182,7 +239,16 @@ fn pricing_database() -> Database {
     }
 }
 
+async fn connect_as(role: &str) -> tokio_postgres::Client {
+    (database().connect)(role.into()).await.unwrap()
+}
+
 async fn start() -> Harness {
+    start_with(true).await
+}
+
+/// `create_table: false` points the server at a lookup table that does not exist.
+async fn start_with(create_table: bool) -> Harness {
     logs();
     let searches = Arc::new(Mutex::new(Vec::new()));
     let stub = serve(
@@ -218,33 +284,35 @@ async fn start() -> Harness {
         std::process::id(),
         TABLES.fetch_add(1, Ordering::Relaxed)
     );
-    dynamodb
-        .create_table()
-        .table_name(&table)
-        .billing_mode(BillingMode::PayPerRequest)
-        .attribute_definitions(
-            AttributeDefinition::builder()
-                .attribute_name("day")
-                .attribute_type(ScalarAttributeType::N)
-                .build()
-                .unwrap(),
-        )
-        .key_schema(
-            KeySchemaElement::builder()
-                .attribute_name("day")
-                .key_type(KeyType::Hash)
-                .build()
-                .unwrap(),
-        )
-        .send()
-        .await
-        .unwrap();
+    if create_table {
+        dynamodb
+            .create_table()
+            .table_name(&table)
+            .billing_mode(BillingMode::PayPerRequest)
+            .attribute_definitions(
+                AttributeDefinition::builder()
+                    .attribute_name("day")
+                    .attribute_type(ScalarAttributeType::N)
+                    .build()
+                    .unwrap(),
+            )
+            .key_schema(
+                KeySchemaElement::builder()
+                    .attribute_name("day")
+                    .key_type(KeyType::Hash)
+                    .build()
+                    .unwrap(),
+            )
+            .send()
+            .await
+            .unwrap();
+    }
 
     let app = App {
         places,
         dynamodb: dynamodb.clone(),
         lookup_table: table.clone(),
-        database: pricing_database(),
+        database: database(),
     };
     let base = serve(router(app, &["127.0.0.1"])).await;
     let http = reqwest::Client::builder()
@@ -277,7 +345,8 @@ impl Harness {
         response.json().await.unwrap()
     }
 
-    async fn find(&self, origin: &str, destination: &str) -> Value {
+    /// The tool result: its structured content, and whether it is a tool error.
+    async fn call(&self, origin: &str, destination: &str) -> (Value, bool) {
         let arguments = json!({ "origin": origin, "destination": destination });
         let response = self
             .rpc(
@@ -285,21 +354,29 @@ impl Harness {
                 json!({ "name": "find_toll_ramps", "arguments": arguments }),
             )
             .await;
-        assert_eq!(response["result"]["isError"], false, "{response}");
-        response["result"]["structuredContent"].clone()
+        let result = &response["result"];
+        (
+            result["structuredContent"].clone(),
+            result["isError"] == true,
+        )
+    }
+
+    async fn find(&self, origin: &str, destination: &str) -> Value {
+        let (result, is_error) = self.call(origin, destination).await;
+        assert!(!is_error, "{result}");
+        result
+    }
+
+    fn searches(&self) -> usize {
+        self.searches.lock().unwrap().len()
     }
 
     async fn lookups_today(&self) -> Option<u64> {
-        let day = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            / 86_400;
         let item = self
             .dynamodb
             .get_item()
             .table_name(&self.table)
-            .key("day", AttributeValue::N(day.to_string()))
+            .key("day", AttributeValue::N(today().to_string()))
             .send()
             .await
             .unwrap();
@@ -307,15 +384,10 @@ impl Harness {
     }
 
     async fn set_lookups_today(&self, lookups: u64) {
-        let day = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            / 86_400;
         self.dynamodb
             .put_item()
             .table_name(&self.table)
-            .item("day", AttributeValue::N(day.to_string()))
+            .item("day", AttributeValue::N(today().to_string()))
             .item("lookups", AttributeValue::N(lookups.to_string()))
             .send()
             .await
@@ -324,10 +396,8 @@ impl Harness {
 }
 
 async fn revalidate(origin: &str, destination: &str) -> String {
-    let client = (pricing_database().connect)("pricing_caller".into())
+    let row = connect_as("pricing_caller")
         .await
-        .unwrap();
-    let row = client
         .query_one(
             "SELECT status FROM oracle.validate_pricing_route($1, $2)",
             &[&origin, &destination],
@@ -337,8 +407,12 @@ async fn revalidate(origin: &str, destination: &str) -> String {
     row.get("status")
 }
 
+fn options(result: &Value) -> &Vec<Value> {
+    result["options"].as_array().expect("options")
+}
+
 #[tokio::test]
-async fn resolved_trip_returns_only_validated_options() {
+async fn resolved_trip_returns_only_validated_ranked_options() {
     let harness = start().await;
     let result = harness
         .find("Reston Town Center", "Tysons Corner Center")
@@ -347,25 +421,20 @@ async fn resolved_trip_returns_only_validated_options() {
     assert_eq!(result["status"], "resolved", "{result}");
     assert_eq!(result["origin"]["match"], "resolved");
     assert_eq!(result["origin"]["name"], "Reston Town Center");
-    let options = result["options"].as_array().unwrap();
-    assert!((1..=3).contains(&options.len()), "{result}");
-    let mut previous = (0, 0.0);
-    for option in options {
-        let (entry, exit) = (
-            option["entry"]["point_id"].as_str().unwrap(),
-            option["exit"]["point_id"].as_str().unwrap(),
-        );
+    assert!((1..=3).contains(&options(&result).len()), "{result}");
+    let mut previous = f64::MIN;
+    for option in options(&result) {
+        let entry = option["entry"]["point_id"].as_str().unwrap();
+        let exit = option["exit"]["point_id"].as_str().unwrap();
         assert_eq!(revalidate(entry, exit).await, "valid", "{entry} -> {exit}");
-        let rank = (
-            option["facilities"].as_array().unwrap().len(),
-            option["access_miles"]["origin"].as_f64().unwrap()
-                + option["access_miles"]["destination"].as_f64().unwrap(),
-        );
-        assert!(
-            rank.0 > previous.0 || (rank.0 == previous.0 && rank.1 >= previous.1 - 0.1),
-            "{result}"
-        );
-        previous = rank;
+        // Total access miles, with each extra toll road counted as 2 miles (rounding allowed).
+        let access = &option["access_miles"];
+        let facilities = option["facilities"].as_array().unwrap().len() as f64;
+        let score = access["origin"].as_f64().unwrap()
+            + access["destination"].as_f64().unwrap()
+            + 2.0 * (facilities - 1.0);
+        assert!(score >= previous - 0.1, "{result}");
+        previous = score;
     }
 
     // Two lookups per call, biased (not boxed) to the service area, Core bucket, never stored.
@@ -380,18 +449,85 @@ async fn resolved_trip_returns_only_validated_options() {
 }
 
 #[tokio::test]
-async fn reversible_lanes_only_trip_is_currently_unavailable() {
-    // The disposable database has no I-95 lane-direction rows, so I-95 routes never validate.
-    let result = start().await.find("Potomac Mills", "Stafford").await;
-    assert_eq!(result["status"], "currently_unavailable", "{result}");
-    assert_eq!(result["options"], json!([]));
+async fn approach_variants_of_one_route_are_listed_once() {
+    // Several I-66 catalog points share the Beltway interchange near Dunn Loring.
+    let result = start().await.find("Dunn Loring", "Rosslyn").await;
+    assert_eq!(result["status"], "resolved", "{result}");
+    assert!(options(&result).len() >= 2, "{result}");
+    let routes: Vec<_> = options(&result)
+        .iter()
+        .map(|option| (option["access_miles"].clone(), option["facilities"].clone()))
+        .collect();
+    for (i, route) in routes.iter().enumerate() {
+        assert!(!routes[..i].contains(route), "duplicate route: {result}");
+    }
+}
+
+#[tokio::test]
+async fn airport_trip_starts_at_the_airport() {
+    let result = start()
+        .await
+        .find("Dulles Airport", "Tysons Corner Center")
+        .await;
+    assert_eq!(result["status"], "resolved", "{result}");
+    assert_eq!(
+        options(&result)[0]["entry"]["point_id"],
+        "airport_iad",
+        "{result}"
+    );
+    for option in options(&result) {
+        let entry = option["entry"]["point_id"].as_str().unwrap();
+        let exit = option["exit"]["point_id"].as_str().unwrap();
+        assert_eq!(revalidate(entry, exit).await, "valid", "{entry} -> {exit}");
+    }
+}
+
+#[tokio::test]
+async fn i95_trips_follow_the_live_lane_direction() {
+    let harness = start().await;
+    // The disposable database has no I-95 lane-direction data yet.
+    let unknown = harness.find("Potomac Mills", "Stafford").await;
+    assert_eq!(unknown["status"], "availability_unknown", "{unknown}");
+    assert_eq!(unknown["options"], json!([]));
+
+    // Fresh feed data: the reversible lanes run northbound.
+    let admin = connect_as("postgres").await;
+    admin
+        .batch_execute(
+            "INSERT INTO pricing.trip_pricing_i95 (interval_end_at, current_at, calculated_at, corridor_id,
+                 corridor_name, od_pair_id, od_pair_name, start_zone_id, end_zone_id, end_zone_name,
+                 zone_toll_rate_usd, link_status, s3_key)
+             VALUES (date_trunc('minute', now()), now(), now(), 1, 'I-95-NB', 1132, 'e2e', 1, 2, 'e2e', 0,
+                     'NORTHBOUND_OPEN', 'e2e-lanes'),
+                    (date_trunc('minute', now()), now(), now(), 2, 'I-95-SB', 1151, 'e2e', 3, 4, 'e2e', 0,
+                     'CLOSED', 'e2e-lanes')",
+        )
+        .await
+        .unwrap();
+
+    let southbound = harness.find("Potomac Mills", "Stafford").await;
+    let northbound = harness.find("Stafford", "Potomac Mills").await;
+    admin
+        .batch_execute("DELETE FROM pricing.trip_pricing_i95 WHERE s3_key = 'e2e-lanes'")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        southbound["status"], "currently_unavailable",
+        "{southbound}"
+    );
+    assert_eq!(southbound["options"], json!([]));
+    assert_eq!(northbound["status"], "resolved", "{northbound}");
+    for option in options(&northbound) {
+        assert_eq!(option["facilities"], json!(["i95_i495"]), "{northbound}");
+    }
 }
 
 #[tokio::test]
 async fn unresolvable_trips_explain_which_side_needs_attention() {
     let harness = start().await;
     for (origin, destination, status) in [
-        ("Springfield", "Tysons Corner Center", "ambiguous"),
+        ("Washington", "Tysons Corner Center", "ambiguous"),
         (
             "Nowhere Junction",
             "Tysons Corner Center",
@@ -412,24 +548,29 @@ async fn unresolvable_trips_explain_which_side_needs_attention() {
             "{result}"
         );
     }
-    let ambiguous = harness.find("Springfield", "Tysons Corner Center").await;
+    let ambiguous = harness.find("Washington", "Tysons Corner Center").await;
     assert_eq!(
         ambiguous["origin"]["candidates"].as_array().map(Vec::len),
         Some(2)
     );
     assert_eq!(ambiguous["destination"]["match"], "resolved");
+
+    let springfield = harness.find("Springfield", "Tysons Corner Center").await;
+    assert_eq!(springfield["origin"]["match"], "resolved", "{springfield}");
+    assert_eq!(
+        springfield["origin"]["address"],
+        "Springfield, VA, United States"
+    );
 }
 
 #[tokio::test]
 async fn daily_lookup_limit_stops_exactly_at_the_cap() {
     let harness = start().await;
     harness.set_lookups_today(998).await;
-    assert_eq!(
-        harness
-            .find("Reston Town Center", "Tysons Corner Center")
-            .await["status"],
-        "resolved"
-    );
+    let last = harness
+        .find("Reston Town Center", "Tysons Corner Center")
+        .await;
+    assert_eq!(last["status"], "resolved");
     assert_eq!(harness.lookups_today().await, Some(1_000));
 
     let limited = harness
@@ -437,11 +578,38 @@ async fn daily_lookup_limit_stops_exactly_at_the_cap() {
         .await;
     assert_eq!(limited["status"], "daily_lookup_limit", "{limited}");
     assert_eq!(harness.lookups_today().await, Some(1_000));
-    assert_eq!(
-        harness.searches.lock().unwrap().len(),
-        2,
-        "no lookups after the cap"
-    );
+    assert_eq!(harness.searches(), 2, "no lookups after the cap");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn concurrent_calls_cannot_overspend_the_cap() {
+    let harness = Arc::new(start().await);
+    harness.set_lookups_today(990).await;
+    let mut calls = tokio::task::JoinSet::new();
+    for _ in 0..12 {
+        let harness = harness.clone();
+        calls.spawn(async move {
+            harness
+                .find("Reston Town Center", "Tysons Corner Center")
+                .await
+        });
+    }
+    let results = calls.join_all().await;
+    let count = |status: &str| results.iter().filter(|r| r["status"] == status).count();
+    assert_eq!((count("resolved"), count("daily_lookup_limit")), (5, 7));
+    assert_eq!(harness.lookups_today().await, Some(1_000));
+    assert_eq!(harness.searches(), 10);
+}
+
+#[tokio::test]
+async fn lookup_budget_failure_fails_closed() {
+    let harness = start_with(false).await;
+    let (result, is_error) = harness
+        .call("Reston Town Center", "Tysons Corner Center")
+        .await;
+    assert!(is_error, "{result}");
+    assert_eq!(result["status"], "error");
+    assert_eq!(harness.searches(), 0, "no lookups without a budget");
 }
 
 #[tokio::test]
@@ -462,7 +630,7 @@ async fn invalid_arguments_are_rejected_without_spending_lookups() {
         assert_eq!(response["result"]["isError"], true, "{response}");
     }
     assert_eq!(harness.lookups_today().await, None);
-    assert!(harness.searches.lock().unwrap().is_empty());
+    assert_eq!(harness.searches(), 0);
 }
 
 #[tokio::test]
@@ -485,7 +653,7 @@ async fn http_boundary_answers_json_and_rejects_bad_requests() {
         body["result"]["instructions"]
             .as_str()
             .unwrap()
-            .contains("point IDs")
+            .contains("ambiguous")
     );
 
     let wrong_host = harness
@@ -495,6 +663,14 @@ async fn http_boundary_answers_json_and_rejects_bad_requests() {
         .await
         .unwrap();
     assert_eq!(wrong_host.status(), 403);
+
+    let browser = harness
+        .post(initialize.to_string())
+        .header("Origin", "https://evil.example")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(browser.status(), 403);
 
     let oversized = harness
         .post(format!("{{\"padding\":\"{}\"}}", "x".repeat(70 * 1024)))
@@ -562,7 +738,7 @@ async fn connect_doc_examples_work_verbatim() {
 }
 
 #[tokio::test]
-async fn docs_cover_every_tool_and_privacy() {
+async fn docs_cover_every_tool_status_and_privacy() {
     let harness = start().await;
     let doc = harness
         .http
@@ -584,6 +760,22 @@ async fn docs_cover_every_tool_and_privacy() {
         );
         assert_eq!(tool["annotations"]["readOnlyHint"], true);
     }
+    for status in [
+        "resolved",
+        "ambiguous",
+        "place_not_found",
+        "outside_coverage",
+        "no_valid_route",
+        "currently_unavailable",
+        "availability_unknown",
+        "daily_lookup_limit",
+        "error",
+    ] {
+        assert!(
+            doc.contains(&format!("| `{status}`")),
+            "connect doc misses {status}"
+        );
+    }
     let privacy = harness
         .http
         .get(format!("{}/privacy", harness.base))
@@ -601,11 +793,16 @@ async fn logs_never_contain_places_or_coordinates() {
         .find("Reston Town Center", "Tysons Corner Center")
         .await;
     harness.find("Springfield", "Richmond").await;
+    let (failed, is_error) = harness.call(FAILING_PLACE, "Rosslyn").await;
+    assert!(is_error, "{failed}");
+    assert_eq!(failed["status"], "error");
+
     let logged = String::from_utf8(logs().0.lock().unwrap().clone()).unwrap();
     assert!(
         logged.contains("\"tool\":\"find_toll_ramps\""),
         "capture works: {logged}"
     );
+    assert!(logged.contains("\"stage\":\"search_text\""), "{logged}");
     // Longitudes (negative here) cannot collide with timestamps the way latitudes can.
     for text in PLACE_TEXTS.iter().chain(&["-77.", "-72.", "Market St"]) {
         assert!(!logged.contains(text), "log contains {text:?}: {logged}");

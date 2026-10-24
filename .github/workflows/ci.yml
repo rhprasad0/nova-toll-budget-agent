@@ -239,6 +239,7 @@ jobs:
 
   mcp-server:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: v2/lambdas/mcp_server
