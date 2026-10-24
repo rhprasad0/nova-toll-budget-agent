@@ -27,6 +27,7 @@ CLAUDE.local.md
 /v2/infra/*.tfstate.*
 /v2/infra/build/
 /v2/infra/*.tfplan
+/v2/lambdas/mcp_server/target/
 *.tfvars
 !infra/production.tfvars
 !v2/infra/production.tfvars
