@@ -237,6 +237,23 @@ jobs:
           DATABASE_PROFILE: ${{ steps.database-profile.outputs.profile }}
           DB_CONTRACT_IDENTITY: all
 
+  mcp-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: v2/lambdas/mcp_server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The runner's rustup installs the toolchain pinned in rust-toolchain.toml.
+      - name: Format and lint
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+      - name: End-to-end against throwaway PostGIS and DynamoDB Local
+        run: ./e2e.sh
   trusted-development-plan:
     if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true'
     uses: rhprasad0/nova-toll-budget-agent/.github/workflows/v2-development-plan.yml@main

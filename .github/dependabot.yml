@@ -4,3 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  - package-ecosystem: cargo
+    directory: /v2/lambdas/mcp_server
+    schedule:
+      interval: weekly
+    # Two-week rule for new releases, as when the pins were chosen.
+    cooldown:
+      default-days: 14
