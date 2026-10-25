@@ -121,6 +121,7 @@ resource "aws_vpc_endpoint" "dynamodb" {
       Resource = [
         "arn:aws:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/tollchat-v2-anonymous-sessions",
         "arn:aws:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/tollchat-v2-anonymous-sessions-dev",
+        "arn:aws:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/tollchat-v2-mcp-lookups-dev",
       ]
     }]
   })
