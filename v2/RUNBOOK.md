@@ -568,6 +568,8 @@ Use only the procedure that owns the intended operation:
   covers development and production releases, cutover and recovery.
 - [Timed-check Scheduler bootstrap and verification (#345)](runbooks/timed-checks-scheduler.md)
   is retained for its bounded bootstrap, Cloudflare/DNS, and recovery contracts.
+- The [MCP server runbook](runbooks/mcp-server.md) covers its administrator-applied
+  resources, code deploys, and Muse connection (development only).
 - The [protected development migration workflow](#protected-development-migration-workflow-305-slice-3)
   is the post-merge development schema path.
 - The completed account-split procedures are historical stubs with permalinks:
