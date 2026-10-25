@@ -1,6 +1,6 @@
 {
   "status": "approved",
-  "corpus_sha256": "9b8071c7e13331acbf8281e56571c43e381b1229a55d536e706a36ca2f46b5d5",
+  "corpus_sha256": "b6794102ae4573241127eb69c44e973220a8603051e0eda63ff20c9096510871",
   "reviewer": "Claude",
-  "evidence": "Approved by Claude at Ryan's request on 2026-10-18. Cases, prompt points and fixtures are byte-identical to approved 5.2.14. Only the protected v2/uv.lock and v2/eval/golden.py identities changed: tiktoken was removed with the retired ballpark batch experiment, and golden.py lost the retired 3.3.28 archive checks. 5.2.15-5.2.17 were used by unmerged branches. No human case-by-case inspection occurred."
+  "evidence": "Approved by Claude at Ryan's request on 2026-10-24. Cases, prompt points and fixtures are byte-identical to approved 5.2.18. Only the protected v2/uv.lock identity changed, for certifi 2026.10.19 (GHSA-6q48-6c7w-9gw2) and aiohttp 3.14.4 with yarl 1.25.1. No human case-by-case inspection occurred."
 }
