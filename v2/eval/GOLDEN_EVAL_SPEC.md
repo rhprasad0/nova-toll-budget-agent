@@ -1,7 +1,7 @@
 # Golden corpus authoring
 
 The locally authored suite has **50 training and 10 shadow cases** in the repo,
-plus **25 external holdout cases** (corpus 5.2.18). New or changed inputs must be
+plus **25 external holdout cases** (corpus 5.2.19). New or changed inputs must be
 validated, frozen and reviewed before use. Use the [authoring guide](AUTHORING.md) and
 [coverage contract](contract.json). The executable schema is [golden.py](golden.py).
 

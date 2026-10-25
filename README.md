@@ -89,7 +89,7 @@ Promotion changes routing to the validated candidate and retains the previous re
 
 ## Evaluation status
 
-**Corpus 5.2.18 is active: 50 training and 10 shadow cases in the repo, 25 holdout
+**Corpus 5.2.19 is active: 50 training and 10 shadow cases in the repo, 25 holdout
 cases stored externally.** Training hill-climbing defaults to one trial per case;
 shadow runs are manual, not a CI gate. The holdout is not blind (it was read for an
 October 10 diagnosis), and exposed development measurements do not qualify

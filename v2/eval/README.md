@@ -1,9 +1,9 @@
 # TollChat evaluation
 
-**Locally authored suite:** 50 training and 10 shadow cases (5.2.18) are
-active, with 25 holdout cases (5.2.18) stored externally. Harness 2.5.19 has an
+**Locally authored suite:** 50 training and 10 shadow cases (5.2.19) are
+active, with 25 holdout cases (5.2.19) stored externally. Harness 2.5.19 has an
 approved aggregate calibration receipt, but it binds the dependency set from
-before the October 16 mcp and multidict upgrade and the evaluator sources from
+before the October 16 and 24 upgrades and the evaluator sources from
 before the October 18 cleanup, so paid runs need a new combined calibration.
 The retired 100-case development corpus 3.3.28 is recoverable from Git history;
 the [experiment journal](EXPERIMENT_JOURNAL.md) preserves its findings and limitations.
@@ -46,7 +46,7 @@ An exposed training score cannot qualify production. Production retains its
 ## External holdout
 
 Keep holdout inputs and detailed evidence outside the repository, for example
-`/home/ryan/Documents/tollchat-eval-holdout/dataset-20261010/holdout-5.2.18/`. The host operator explicitly
+`/home/ryan/Documents/tollchat-eval-holdout/dataset-20261010/holdout-5.2.19/`. The host operator explicitly
 selects the corpus with `--corpus`; ordinary training commands never discover it.
 With authorization, the coding agent can invoke the host runner and use only its
 aggregate feedback. See the
