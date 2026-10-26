@@ -15,7 +15,7 @@ The server compares the coordinates with TollChat's ramp catalog and returns mat
 - The server does not store coordinates, routes, or results.
 - Server logs record which tool ran, its outcome, and how long it took, never coordinates or routes. They are kept for seven days.
 - Amazon Web Services monitoring keeps per-minute counts of requests and errors, with no request content or network addresses, for up to 15 months.
-- The daily lookup counter used before 2026-10-26 is no longer updated. It held only a count, with no query content, and its entries expire on their own.
+- The daily lookup counter used before 2026-10-26, which held only a count with no query content, has been deleted.
 
 ## Your assistant
 

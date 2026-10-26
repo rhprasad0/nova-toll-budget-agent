@@ -25,9 +25,8 @@ cargo run                      # http://127.0.0.1:8080, real AWS, needs the env 
 `cargo run` reads `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_CA_BUNDLE_PATH`, `DB_USER`
 and `PRICING_DB_USER`, the same variables the Lambda gets from `mcp.tf`.
 
-Since server 0.2.0 the tool takes coordinates and makes no Amazon Location
-lookups. The counter table, the `geo-places` grant, the HTTPS egress rule and
-`LOOKUP_TABLE` in `mcp.tf` are unused until a follow-up change removes them.
+The server calls no AWS service API: it signs RDS IAM tokens locally, so its
+security group allows egress only to RDS.
 
 ## Build
 
@@ -57,11 +56,9 @@ MCP_TARGETS=(
   -target='aws_iam_role.mcp_server[0]'
   -target='aws_iam_role_policy_attachment.mcp_server_vpc[0]'
   -target='aws_iam_role_policy.mcp_server[0]'
-  -target='aws_dynamodb_table.mcp_lookups[0]'
   -target='aws_security_group.mcp_server[0]'
   -target='aws_vpc_security_group_ingress_rule.rds_from_mcp_server[0]'
   -target='aws_vpc_security_group_egress_rule.mcp_server_to_rds[0]'
-  -target='aws_vpc_security_group_egress_rule.mcp_server_https[0]'
   -target='aws_lambda_function.mcp_server[0]'
   -target='aws_apigatewayv2_api.mcp[0]'
   -target='aws_apigatewayv2_integration.mcp[0]'
@@ -86,8 +83,7 @@ resources. Merge first, then apply from `main`:
    exist yet. Until step 7, every delivery and every trusted PR plan fails the
    same way, so **merge nothing else until then**.
 2. **Foundation:** apply `infra/` for development. This adds the read-only MCP
-   policies to the plan and delivery roles, and the counter table to the
-   DynamoDB gateway endpoint policy.
+   policies to the plan and delivery roles.
 3. **Certificate:** `terraform -chdir=v2/infra plan -input=false "${VARS[@]}"
    -target='aws_acm_certificate.mcp[0]' -out="$W/certificate.tfplan"`. After the
    apply, read the validation record with
@@ -100,7 +96,7 @@ resources. Merge first, then apply from `main`:
 5. **Code:** deploy it as described in [Deploy code](#deploy-code), including the
    sync.
 6. **Sync everything:** run the same plan with `-refresh-only`. Expect drift only
-   in computed fields: the security group's `egress` (now listing its two rules),
+   in computed fields: the security group's `egress` (now listing its RDS rule),
    the certificate's `renewal_eligibility` and `in_use_by`, and the stage's
    `deployment_id`. Apply it. A second `-refresh-only` plan must show no drift.
 7. **Release:** re-run the merge's failed delivery jobs (as the original actor),
@@ -132,9 +128,21 @@ renewals need the same sync for `aws_acm_certificate.mcp[0]`.
 
 Follow the bootstrap order: merge the reviewed change, and its delivery stops at
 `phase_boundary`. Apply a plan targeting only the changed MCP addresses from
-`main`, run the step 6 sync (route and integration changes move the stage's
-`deployment_id`), then re-run the failed delivery jobs. Merge nothing else in
-between.
+`main`, run the step 6 sync, then re-run the failed delivery jobs. Merge nothing
+else in between.
+
+- **Removed resources** are no longer in `MCP_TARGETS`; add each removed address
+  to `-target` yourself, or its destroy is never planned and delivery keeps
+  stopping at `phase_boundary`.
+- **The sync** picks up computed drift that delivery would reject as
+  `incomplete_or_drift`: route and integration changes move the stage's
+  `deployment_id`, and adding or removing a security group rule changes the
+  group's `egress`.
+- **Read grants** in `infra/mcp-delivery.tf` are added before the `v2/infra`
+  apply and removed after it, because plans refresh every MCP resource still in
+  state.
+- **Code first:** never apply infrastructure that the deployed binary still
+  needs; check its `CodeSha256` against a reproducible build first.
 
 ## Verify
 
