@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use axum::Router;
 use axum::http::header::CONTENT_TYPE;
-use mcp_server::{App, Database, log_filter, router};
+use mcp_server::{App, Database, fixed_price, log_filter, router};
 use serde_json::{Value, json};
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tokio_postgres::NoTls;
@@ -106,6 +106,8 @@ fn database(points_role: &str) -> Database {
                     .port(pg_port)
                     .dbname(DATABASE)
                     .user(&user)
+                    // Production's per-connection limit, so slow queries fail here too.
+                    .options("-c statement_timeout=5000")
                     .connect(NoTls)
                     .await?;
                 tokio::spawn(connection);
@@ -162,10 +164,14 @@ impl Harness {
     }
 
     async fn call_with(&self, arguments: Value) -> Called {
+        self.call_tool("find_toll_ramps", arguments).await
+    }
+
+    async fn call_tool(&self, name: &str, arguments: Value) -> Called {
         let response = self
             .rpc(
                 "tools/call",
-                json!({ "name": "find_toll_ramps", "arguments": arguments }),
+                json!({ "name": name, "arguments": arguments }),
             )
             .await;
         let result = &response["result"];
@@ -182,6 +188,12 @@ impl Harness {
     async fn call(&self, origin: (f64, f64), destination: (f64, f64)) -> Called {
         self.call_with(json!({ "origin": at(origin), "destination": at(destination) }))
             .await
+    }
+
+    async fn estimate(&self, arguments: Value) -> Value {
+        let called = self.call_tool("estimate_annual_tolls", arguments).await;
+        assert!(!called.is_error, "{} {}", called.text, called.result);
+        called.result
     }
 
     async fn find(&self, origin: (f64, f64), destination: (f64, f64)) -> Value {
@@ -639,7 +651,7 @@ async fn http_boundary_answers_json_and_rejects_bad_requests() {
     );
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["result"]["serverInfo"]["name"], "tollchat");
-    assert_eq!(body["result"]["serverInfo"]["version"], "0.2.0");
+    assert_eq!(body["result"]["serverInfo"]["version"], "0.3.0");
     assert!(
         body["result"]["instructions"]
             .as_str()
@@ -690,8 +702,8 @@ async fn connect_doc_examples_work_verbatim() {
         .collect();
     assert_eq!(
         examples.len(),
-        5,
-        "2025 handshake (4 requests) and one 2026-07-28 call"
+        6,
+        "2025 handshake (4 requests), an estimate, and one 2026-07-28 call"
     );
 
     for example in examples {
@@ -720,8 +732,13 @@ async fn connect_doc_examples_work_verbatim() {
         let reply: Value = serde_json::from_str(&text).unwrap();
         assert!(reply.get("error").is_none(), "{reply}");
         if body.contains("\"tools/call\"") {
+            let expected = if body.contains("estimate_annual_tolls") {
+                "estimated"
+            } else {
+                "resolved"
+            };
             assert_eq!(
-                reply["result"]["structuredContent"]["status"], "resolved",
+                reply["result"]["structuredContent"]["status"], expected,
                 "{reply}"
             );
         }
@@ -753,7 +770,8 @@ async fn docs_cover_every_tool_status_and_privacy() {
         assert_eq!(tool["annotations"]["idempotentHint"], true);
     }
     // Both ends are documented as named latitude/longitude fields, never an array.
-    let schema = tools[0]["inputSchema"].to_string();
+    let ramps = tools.iter().find(|tool| tool["name"] == "find_toll_ramps");
+    let schema = ramps.expect("find_toll_ramps")["inputSchema"].to_string();
     assert!(
         schema.contains("latitude") && schema.contains("longitude"),
         "{schema}"
@@ -766,6 +784,9 @@ async fn docs_cover_every_tool_status_and_privacy() {
         "currently_unavailable",
         "availability_unknown",
         "error",
+        "estimated",
+        "too_few_recent_prices",
+        "no_return_route",
     ] {
         assert!(
             doc.contains(&format!("| `{status}`")),
@@ -787,6 +808,9 @@ async fn logs_never_contain_coordinates() {
     let harness = start().await;
     harness.find(RESTON_TOWN_CENTER, TYSONS_CORNER_CENTER).await;
     harness.find(NEW_YORK, TYSONS_CORNER_CENTER).await;
+    let mut schedule = commute("dtr:12:entry:EB", "dtr:1819:exit:EB");
+    schedule["weekdays"] = json!(["wednesday"]);
+    harness.estimate(schedule).await;
     let failed = start_with(database("no_such_role"))
         .await
         .call(RESTON_TOWN_CENTER, ROSSLYN)
@@ -799,6 +823,11 @@ async fn logs_never_contain_coordinates() {
         "capture works: {logged}"
     );
     assert!(logged.contains("\"stage\":\"load_points\""), "{logged}");
+    assert!(logged.contains("\"tool\":\"estimate_annual_tolls\""));
+    // Nor the ramps and schedule of an estimate.
+    for text in ["dtr:12:entry:EB", "dtr:1819", "wednesday"] {
+        assert!(!logged.contains(text), "log contains {text:?}: {logged}");
+    }
     for text in [
         "38.96165",
         "-77.36346",
@@ -809,5 +838,382 @@ async fn logs_never_contain_coordinates() {
         "-77.0707",
     ] {
         assert!(!logged.contains(text), "log contains {text:?}: {logged}");
+    }
+}
+
+fn commute(entry: &str, exit: &str) -> Value {
+    json!({ "entry_point_id": entry, "exit_point_id": exit })
+}
+
+fn typical(result: &Value, field: &str) -> f64 {
+    result[field]["typical"].as_f64().expect("typical amount")
+}
+
+#[tokio::test]
+async fn fixed_rates_match_every_catalog_charge() {
+    let rows = connect_as("postgres")
+        .await
+        .query(
+            "SELECT facility, source_route_key, component_order, charge
+             FROM oracle.route_pricing_component WHERE facility IN ('dtr', 'greenway')",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert!(rows.len() > 200, "{} charges", rows.len());
+    for row in rows {
+        let (facility, key): (&str, &str) = (row.get("facility"), row.get("source_route_key"));
+        let (order, charge): (i32, Value) = (row.get("component_order"), row.get("charge"));
+        // The published windows, Mon-Fri: eastbound 06:30 to 09:00, westbound 16:00 to 18:30.
+        let (peak, off) = ("price_peak_usd", "price_off_peak_usd");
+        let cases: &[(i32, &str, &str)] = if key.starts_with("WB") {
+            &[
+                (1, "15:59", off),
+                (1, "16:00", peak),
+                (5, "18:29", peak),
+                (1, "18:30", off),
+                (1, "07:00", off),
+                (6, "17:00", off),
+            ]
+        } else {
+            &[
+                (1, "06:29", off),
+                (1, "06:30", peak),
+                (5, "08:59", peak),
+                (1, "09:00", off),
+                (1, "17:00", off),
+                (6, "07:00", off),
+            ]
+        };
+        for (isodow, time, expected) in cases {
+            assert_eq!(
+                fixed_price(facility, key, order as u64, *isodow, time),
+                charge[*expected].as_str(),
+                "{facility} {key} charge {order} on day {isodow} at {time}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn dtr_commute_estimate_uses_published_rates() {
+    let harness = start().await;
+    let result = harness
+        .estimate(commute("dtr:12:entry:EB", "dtr:1819:exit:EB"))
+        .await;
+    assert_eq!(result["status"], "estimated", "{result}");
+    assert_eq!(
+        result["schedule"],
+        json!({ "depart_at": "08:30", "return_at": "17:30", "timezone": "America/New_York",
+                "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+                "annual_commute_days": 250 })
+    );
+    // $2 entrance ramp + $4 main plaza out, $4 + $2 exit ramp back.
+    assert_eq!(typical(&result, "daily_round_trip_usd"), 12.0);
+    assert_eq!(
+        result["annual_toll_usd"],
+        json!({ "low": 3000.0, "typical": 3000.0, "high": 3000.0 })
+    );
+    assert_eq!(
+        result["outbound"]["route_id"],
+        "dtr:12:entry:EB>dtr:1819:exit:EB"
+    );
+    assert_eq!(result["return"]["facilities"], json!(["dtr"]), "{result}");
+    assert_eq!(result["return"]["entry"]["direction"], "WB");
+    let basis = &result["basis"];
+    assert_eq!(basis["coverage_percent"], 100.0, "{basis}");
+    assert_eq!(basis["sample_status"], "complete");
+    assert_eq!(basis["uses_published_fixed_rates"], true);
+    assert_eq!(basis["priced_days"], basis["eligible_days"]);
+    assert_eq!(result["by_facility"][0]["facility"], "dtr");
+    let text = harness
+        .call_tool(
+            "estimate_annual_tolls",
+            commute("dtr:12:entry:EB", "dtr:1819:exit:EB"),
+        )
+        .await
+        .text;
+    assert_eq!(
+        text,
+        "estimated: about $3000 a year in tolls (range $3000 to $3000), from 60 recent commute \
+         days. Full details are in the structured result."
+    );
+}
+
+#[tokio::test]
+async fn greenway_rates_follow_the_peak_windows() {
+    let harness = start().await;
+    let route = commute("greenway:1:entry:EB", "greenway:5:exit:EB");
+    let peak = harness.estimate(route.clone()).await;
+    assert_eq!(peak["status"], "estimated", "{peak}");
+    assert_eq!(peak["return"]["facilities"], json!(["greenway"]), "{peak}");
+    // 08:30 eastbound and 17:30 westbound are both weekday peak: $5.10 each way.
+    assert_eq!(typical(&peak, "daily_round_trip_usd"), 10.2);
+
+    let mut off_peak = route.clone();
+    off_peak["depart_at"] = json!("10:00");
+    off_peak["return_at"] = json!("19:00");
+    let off_peak = harness.estimate(off_peak).await;
+    assert_eq!(
+        typical(&off_peak, "daily_round_trip_usd"),
+        9.1,
+        "{off_peak}"
+    );
+
+    let mut weekend = route;
+    weekend["weekdays"] = json!(["saturday"]);
+    let weekend = harness.estimate(weekend).await;
+    assert_eq!(weekend["schedule"]["annual_commute_days"], 50);
+    assert_eq!(typical(&weekend, "daily_round_trip_usd"), 9.1, "{weekend}");
+    assert_eq!(typical(&weekend, "annual_toll_usd"), 455.0);
+}
+
+#[tokio::test]
+async fn commute_days_default_to_fifty_weeks_of_the_chosen_weekdays() {
+    let harness = start().await;
+    let mut hybrid = commute("dtr:12:entry:EB", "dtr:1819:exit:EB");
+    hybrid["weekdays"] = json!(["thursday", "tuesday", "wednesday"]);
+    let result = harness.estimate(hybrid.clone()).await;
+    assert_eq!(
+        result["schedule"]["weekdays"],
+        json!(["tuesday", "wednesday", "thursday"])
+    );
+    assert_eq!(result["schedule"]["annual_commute_days"], 150);
+    assert_eq!(typical(&result, "annual_toll_usd"), 1800.0);
+
+    hybrid["annual_commute_days"] = json!(100);
+    let result = harness.estimate(hybrid).await;
+    assert_eq!(result["schedule"]["annual_commute_days"], 100);
+    assert_eq!(typical(&result, "annual_toll_usd"), 1200.0);
+}
+
+#[tokio::test]
+async fn i66_commute_without_history_has_too_few_prices() {
+    let harness = start().await;
+    let result = harness
+        .estimate(commute("i66:1:entry:EB", "i66:14:exit:EB"))
+        .await;
+    // Toll-free holidays still price at $0; they must not pass for a year of $0 tolls.
+    assert_eq!(result["status"], "too_few_recent_prices", "{result}");
+    assert!(
+        result["basis"]["priced_days"].as_i64().unwrap() < 5,
+        "{result}"
+    );
+    assert!(result.get("annual_toll_usd").is_none());
+    assert!(
+        result["message"]
+            .as_str()
+            .unwrap()
+            .contains("at least half")
+    );
+    assert_eq!(result["return"]["facilities"], json!(["i66"]), "{result}");
+
+    // I-66 is toll-free on weekends; those $0 days must not cover for a priced Friday.
+    let mut long_weekend = commute("i66:1:entry:EB", "i66:14:exit:EB");
+    long_weekend["weekdays"] = json!(["friday", "saturday", "sunday"]);
+    let result = harness.estimate(long_weekend).await;
+    assert_eq!(result["status"], "too_few_recent_prices", "{result}");
+    assert!(
+        result["message"].as_str().unwrap().contains("fridays"),
+        "{result}"
+    );
+    let fridays = &result["basis"]["coverage_by_weekday"][0];
+    assert_eq!(fridays["weekday"], "friday", "{result}");
+}
+
+#[tokio::test]
+async fn return_trip_uses_the_same_roads_in_reverse() {
+    let harness = start().await;
+    // From I-66 at Route 7 onto I-495 north: the way back must leave I-495 for I-66 eastbound,
+    // whose usable exit is not the nearest one, and must not take a toll-free connector instead.
+    for exit in ["i495:186ND", "i495:181ND"] {
+        let result = harness.estimate(commute("i66:4:entry:WB", exit)).await;
+        assert_ne!(result["status"], "no_return_route", "{exit}: {result}");
+        assert_eq!(result["outbound"]["facilities"], json!(["i66", "i95_i495"]));
+        assert_eq!(
+            result["return"]["facilities"],
+            json!(["i95_i495", "i66"]),
+            "{exit}: {result}"
+        );
+    }
+}
+
+/// Seeds one price per weekday at `local_time` for an I-495 OD pair, leaving out about a fifth of
+/// the days the way feed outages do (never a whole weekday).
+async fn seed_i495_history(
+    admin: &tokio_postgres::Client,
+    corridor: &str,
+    od_pair_id: i32,
+    local_time: &str,
+    price: &str,
+) {
+    admin
+        .execute(
+            "INSERT INTO pricing.trip_pricing_i95 (interval_end_at, current_at, calculated_at,
+                 corridor_id, corridor_name, od_pair_id, od_pair_name, start_zone_id, end_zone_id,
+                 end_zone_name, zone_toll_rate_usd, link_status, s3_key)
+             SELECT at, at, at, 1, $1, $2, 'e2e', $2, $2, 'e2e', $4::text::numeric, 'OPEN', 'e2e-history'
+             FROM generate_series((now() AT TIME ZONE 'America/New_York')::date - 84,
+                                  (now() AT TIME ZONE 'America/New_York')::date - 1,
+                                  interval '1 day') AS day,
+                  LATERAL (SELECT (day::date + $3::text::time) AT TIME ZONE 'America/New_York' AS at) AS t
+             WHERE extract(isodow FROM day) BETWEEN 1 AND 5 AND extract(day FROM day)::int % 5 <> 0",
+            &[&corridor, &od_pair_id, &local_time, &price],
+        )
+        .await
+        .unwrap();
+}
+
+async fn od_pair(admin: &tokio_postgres::Client, entry: &str, exit: &str) -> i32 {
+    let row = admin
+        .query_one(
+            "SELECT (facility_legs->0->'pricing_key'->>'od_pair_id')::int AS od
+             FROM oracle.validate_ballpark_route($1, $2)",
+            &[&entry, &exit],
+        )
+        .await
+        .unwrap();
+    row.get("od")
+}
+
+// Writes I-95/I-495 history, so it runs alone like the lane test.
+#[tokio::test]
+async fn i495_commute_prices_recent_history() {
+    let _exclusive = LANES.write().await;
+    let harness = start_with(database("tollchat_agent")).await;
+    let admin = connect_as("postgres").await;
+    let route = commute("i495:187NO", "i495:185ND");
+    let before = harness.estimate(route.clone()).await;
+    assert_eq!(before["status"], "too_few_recent_prices", "{before}");
+    assert_eq!(before["basis"]["priced_days"], 0);
+    let back = (
+        before["return"]["entry"]["point_id"]
+            .as_str()
+            .unwrap()
+            .to_owned(),
+        before["return"]["exit"]["point_id"]
+            .as_str()
+            .unwrap()
+            .to_owned(),
+    );
+    assert_eq!(
+        before["return"]["facilities"],
+        json!(["i95_i495"]),
+        "{before}"
+    );
+
+    let outbound_od = od_pair(&admin, "i495:187NO", "i495:185ND").await;
+    let return_od = od_pair(&admin, &back.0, &back.1).await;
+    seed_i495_history(&admin, "I-495-NB", outbound_od, "08:33", "3.25").await;
+    seed_i495_history(&admin, "I-495-SB", return_od, "17:33", "4.50").await;
+    let after = harness.estimate(route).await;
+    admin
+        .execute(
+            "DELETE FROM pricing.trip_pricing_i95 WHERE s3_key = 'e2e-history'",
+            &[],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(after["status"], "estimated", "{after}");
+    assert_eq!(typical(&after, "daily_round_trip_usd"), 7.75);
+    assert_eq!(typical(&after, "annual_toll_usd"), 1937.5);
+    let basis = &after["basis"];
+    assert_eq!(basis["sample_status"], "partial", "{basis}");
+    assert!(basis["coverage_percent"].as_f64().unwrap() < 100.0);
+    assert!(basis["priced_days"].as_i64().unwrap() > 0);
+    assert_eq!(basis["uses_modeled_prices"], false);
+    assert_eq!(basis["uses_published_fixed_rates"], false);
+    assert_eq!(after["by_facility"][0]["facility"], "i95_i495");
+    assert!(after.get("message").is_none());
+}
+
+#[tokio::test]
+async fn estimate_inputs_get_errors_that_say_what_to_fix() {
+    let harness = start().await;
+    let route = commute("dtr:12:entry:EB", "dtr:1819:exit:EB");
+    let with = |field: &str, value: Value| {
+        let mut arguments = route.clone();
+        arguments[field] = value;
+        arguments
+    };
+    for (arguments, message) in [
+        (
+            commute("dtr:99:entry:EB", "dtr:1819:exit:EB"),
+            "entry_point_id dtr:99:entry:EB is not a TollChat point",
+        ),
+        (
+            commute("dtr:1819:exit:EB", "dtr:12:exit:EB"),
+            "entry_point_id dtr:1819:exit:EB is an exit point, not an entry point",
+        ),
+        (
+            commute("dtr:1819:entry:EB", "dtr:12:exit:EB"),
+            "is not a toll route TollChat can price",
+        ),
+        (
+            with("entry_point_id", json!(null)),
+            "entry_point_id must be a point ID string",
+        ),
+        (
+            with("depart_at", json!("8:30am")),
+            "depart_at must be HH:MM in 24-hour time",
+        ),
+        (
+            with("return_at", json!("25:00")),
+            "return_at must be HH:MM in 24-hour time",
+        ),
+        (
+            with("return_at", json!("08:30")),
+            "return_at 08:30 must be later than depart_at 08:30",
+        ),
+        (
+            json!({ "entry_point_id": "dtr:12:entry:EB", "exit_point_id": "dtr:1819:exit:EB",
+                    "depart_at": "17:30", "return_at": "08:30" }),
+            "overnight schedules are not supported",
+        ),
+        (
+            commute("dtr:1819:entry:EB", "dtr:66:exit:EB"),
+            "is not a toll route TollChat can price",
+        ),
+        (
+            with("weekdays", json!(["monday", "monday"])),
+            "weekdays lists \"monday\" twice",
+        ),
+        (
+            with("weekdays", json!(["Monday"])),
+            "weekdays has \"Monday\"",
+        ),
+        (
+            with("weekdays", json!([])),
+            "weekdays must be a list of 1 to 7 day names",
+        ),
+        (
+            with("annual_commute_days", json!(0)),
+            "annual_commute_days must be a whole number from 1 to 265",
+        ),
+        (
+            with("annual_commute_days", json!(300)),
+            "annual_commute_days must be a whole number from 1 to 265",
+        ),
+        (
+            with("annual_commute_days", json!(2.5)),
+            "annual_commute_days must be a whole number",
+        ),
+        (with("extra", json!(1)), "unknown field `extra`"),
+        (
+            json!({ "entry_point_id": "dtr:12:entry:EB" }),
+            "missing field `exit_point_id`",
+        ),
+    ] {
+        let called = harness
+            .call_tool("estimate_annual_tolls", arguments.clone())
+            .await;
+        assert!(called.is_error, "{arguments}");
+        assert!(
+            called.text.contains(message),
+            "{arguments}: {}",
+            called.text
+        );
+        assert!(called.result.is_null(), "no result for bad input");
     }
 }
