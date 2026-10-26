@@ -44,12 +44,41 @@ const MAX_GROUPS_PER_SIDE: usize = 4;
 /// An extra toll road must save this many access miles to rank above a simpler route.
 const FACILITY_PENALTY_MILES: f64 = 2.0;
 const MAX_OPTIONS: usize = 3;
+/// The way back may need a farther ramp than the nearest one per road (the nearest can be one the
+/// return cannot reach); every extra mile adds ramp pairs to validate.
+const RETURN_SEARCH_MILES: f64 = 3.0;
+/// Leaves Lambda's 25 s for the reply; a timeout then answers as a tool error, not a gateway 5xx.
+const ESTIMATE_BUDGET: Duration = Duration::from_secs(20);
 
 const POINTS_SQL: &str = "SELECT oracle.get_toll_route_prompt_points() AS points";
 const VALIDATE_SQL: &str = "SELECT o.id AS origin, d.id AS destination, route.status, \
      route.facility_legs, route.i95_evidence \
      FROM unnest($1::text[]) AS o(id) CROSS JOIN unnest($2::text[]) AS d(id) \
      CROSS JOIN LATERAL oracle.validate_pricing_route(o.id, d.id) AS route";
+/// The same check without today's reversible-lane state: an estimate prices past days.
+const BALLPARK_ROUTES_SQL: &str = "SELECT o.id AS origin, d.id AS destination, route.status, \
+     route.facility_legs, route.point_ids \
+     FROM unnest($1::text[]) AS o(id) CROSS JOIN unnest($2::text[]) AS d(id) \
+     CROSS JOIN LATERAL oracle.validate_ballpark_route(o.id, d.id) AS route";
+/// The 84 completed local days the oracle samples, on the commute's weekdays.
+const SAMPLE_DAYS_SQL: &str = "WITH today AS ( \
+         SELECT (transaction_timestamp() AT TIME ZONE 'America/New_York')::date AS day) \
+     SELECT sample.day::date::text AS day, extract(isodow FROM sample.day)::int AS isodow, \
+         (today.day - 84)::text AS window_start, (today.day - 1)::text AS window_end \
+     FROM today, generate_series(today.day - 84, today.day - 1, interval '1 day') AS sample(day) \
+     WHERE extract(isodow FROM sample.day)::int = ANY($1::int[]) \
+     ORDER BY sample.day";
+/// Numbers come back as text, so no decimal or date types are needed.
+const BALLPARK_SQL: &str = "SELECT complete_pair_count, eligible_date_count, coverage_percent, \
+     sample_status, uses_modeled, uses_current_fixed_rates, facility_scenarios, coverage_by_weekday, \
+     p25_daily_usd::text AS daily_low, p50_daily_usd::text AS daily_typical, \
+     p90_daily_usd::text AS daily_high, p25_annualized_usd::text AS annual_low, \
+     p50_annualized_usd::text AS annual_typical, p90_annualized_usd::text AS annual_high \
+     FROM oracle.get_annual_ballpark_summary($1::jsonb, $2::text::time, $3::text::time, \
+         $4::text[]::date[], $5::jsonb, $6::int, transaction_timestamp())";
+/// Sampling 84 days of history (and validating many return pairs) can outlast the connection's 5 s
+/// default; `ESTIMATE_BUDGET` still bounds the whole estimate.
+const BALLPARK_TIMEOUT_SQL: &str = "SET LOCAL statement_timeout = '15s'";
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 pub type Connect = Arc<
@@ -229,6 +258,162 @@ struct FindTollRamps {
     destination: Value,
 }
 
+// Fields are read one by one in `commute`, so each error names the field to fix.
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct EstimateAnnualTolls {
+    /// The chosen find_toll_ramps option's `entry.point_id`, exactly as returned.
+    #[schemars(with = "String")]
+    entry_point_id: Value,
+    /// The same option's `exit.point_id`, exactly as returned.
+    #[schemars(with = "String")]
+    exit_point_id: Value,
+    /// When the trip from the origin starts, as HH:MM 24-hour America/New_York time. Default 08:30.
+    #[serde(default)]
+    #[schemars(with = "Option<String>")]
+    depart_at: Value,
+    /// When the return trip starts, the same day, as HH:MM. Default 17:30.
+    #[serde(default)]
+    #[schemars(with = "Option<String>")]
+    return_at: Value,
+    /// Commute days of the week as lowercase English names, such as ["tuesday", "thursday"].
+    /// Default monday through friday.
+    #[serde(default)]
+    #[schemars(with = "Option<Vec<String>>")]
+    weekdays: Value,
+    /// Commute days per year. Default 50 weeks: 50 times the number of weekdays.
+    #[serde(default)]
+    #[schemars(with = "Option<u32>", range(min = 1, max = 366))]
+    annual_commute_days: Value,
+}
+
+const WEEKDAYS: [&str; 7] = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+];
+
+/// A validated commute schedule; America/New_York wall times.
+struct Commute {
+    entry: String,
+    exit: String,
+    depart_at: String,
+    return_at: String,
+    /// ISO weekday numbers, Monday = 1, in calendar order.
+    isodows: Vec<i32>,
+    annual_days: i32,
+}
+
+impl EstimateAnnualTolls {
+    fn commute(self) -> Result<Commute, String> {
+        let point_id = |field: &str, value: &Value| match value.as_str() {
+            Some(id) if !id.is_empty() && id.len() <= 64 => Ok(id.to_owned()),
+            _ => Err(format!(
+                "{field} must be a point ID string from find_toll_ramps, not {value}"
+            )),
+        };
+        let clock = |field: &str, value: &Value, default: &str| {
+            let text = match value {
+                Value::Null => return Ok(default.to_owned()),
+                value => value.as_str().unwrap_or_default(),
+            };
+            let two_digits_below = |part: &str, limit: u8| {
+                part.len() == 2
+                    && part.bytes().all(|b| b.is_ascii_digit())
+                    && part.parse::<u8>().is_ok_and(|n| n < limit)
+            };
+            let valid = text
+                .split_once(':')
+                .is_some_and(|(h, m)| two_digits_below(h, 24) && two_digits_below(m, 60));
+            if valid {
+                Ok(text.to_owned())
+            } else {
+                Err(format!(
+                    "{field} must be HH:MM in 24-hour time, such as \"08:30\", not {value}"
+                ))
+            }
+        };
+        let isodows = match &self.weekdays {
+            Value::Null => vec![1, 2, 3, 4, 5],
+            Value::Array(days) if (1..=7).contains(&days.len()) => {
+                let mut isodows = Vec::new();
+                for day in days {
+                    let Some(index) = WEEKDAYS.iter().position(|name| day.as_str() == Some(*name))
+                    else {
+                        return Err(format!(
+                            "weekdays has {day}; use lowercase English day names such as \"monday\""
+                        ));
+                    };
+                    let isodow = i32::try_from(index).unwrap_or_default() + 1;
+                    if isodows.contains(&isodow) {
+                        return Err(format!("weekdays lists {day} twice"));
+                    }
+                    isodows.push(isodow);
+                }
+                isodows.sort_unstable();
+                isodows
+            }
+            other => {
+                return Err(format!(
+                    "weekdays must be a list of 1 to 7 day names, not {other}"
+                ));
+            }
+        };
+        // 53 weeks of the chosen weekdays is the most a year can hold (the oracle's own limit).
+        let most = 53 * isodows.len() as i32;
+        let annual_days = match &self.annual_commute_days {
+            Value::Null => 50 * isodows.len() as i32,
+            value => match value.as_i64().and_then(|days| i32::try_from(days).ok()) {
+                Some(days) if (1..=366.min(most)).contains(&days) => days,
+                _ => {
+                    return Err(format!(
+                        "annual_commute_days must be a whole number from 1 to {}, not {value}",
+                        366.min(most)
+                    ));
+                }
+            },
+        };
+        let depart_at = clock("depart_at", &self.depart_at, "08:30")?;
+        let return_at = clock("return_at", &self.return_at, "17:30")?;
+        // Zero-padded HH:MM compares correctly as text.
+        if return_at <= depart_at {
+            return Err(format!(
+                "return_at {return_at} must be later than depart_at {depart_at} on the same day; \
+                 overnight schedules are not supported"
+            ));
+        }
+        Ok(Commute {
+            entry: point_id("entry_point_id", &self.entry_point_id)?,
+            exit: point_id("exit_point_id", &self.exit_point_id)?,
+            depart_at,
+            return_at,
+            isodows,
+            annual_days,
+        })
+    }
+}
+
+impl Commute {
+    fn schedule(&self) -> Value {
+        let weekdays: Vec<&str> = self
+            .isodows
+            .iter()
+            .map(|d| WEEKDAYS[*d as usize - 1])
+            .collect();
+        json!({
+            "depart_at": self.depart_at,
+            "return_at": self.return_at,
+            "timezone": "America/New_York",
+            "weekdays": weekdays,
+            "annual_commute_days": self.annual_days,
+        })
+    }
+}
+
 #[derive(Clone)]
 struct TollServer {
     app: Arc<App>,
@@ -270,37 +455,85 @@ impl TollServer {
             Err(message) => return fix(message),
         };
         let started = Instant::now();
-        let (mut value, is_error) = match self.app.find_toll_ramps(origin, destination).await {
-            Ok(Ok(value)) => {
-                tracing::info!(
-                    tool = "find_toll_ramps",
-                    status = value["status"].as_str(),
-                    elapsed_ms = elapsed_ms(started)
-                );
-                (value, false)
-            }
-            Ok(Err(message)) => return fix(message),
-            Err(failure) => {
-                tracing::error!(tool = "find_toll_ramps", stage = failure.stage, code = %failure.code, elapsed_ms = elapsed_ms(started));
-                let message = "TollChat could not look up ramps right now. Try again later.";
-                let end = |[lon, lat]: [f64; 2]| json!({ "latitude": lat, "longitude": lon });
-                let (origin, destination) = (end(origin), end(destination));
-                let error = json!({ "status": "error", "message": message, "origin": origin, "destination": destination });
-                (error, true)
-            }
-        };
-        let now = DateTime::from(SystemTime::now()).fmt(Format::DateTime);
-        value["calculated_at"] = json!(now.expect("the current time is a valid RFC 3339 date"));
-        // The text is a short summary; structuredContent is the result, not repeated as JSON text.
-        let text = vec![ContentBlock::text(summary(&value))];
-        let mut result = if is_error {
-            CallToolResult::error(text)
-        } else {
-            CallToolResult::success(text)
-        };
-        result.structured_content = Some(value);
-        Ok(result)
+        let outcome = self.app.find_toll_ramps(origin, destination).await;
+        let end = |[lon, lat]: [f64; 2]| json!({ "latitude": lat, "longitude": lon });
+        let error = json!({
+            "message": "TollChat could not look up ramps right now. Try again later.",
+            "origin": end(origin),
+            "destination": end(destination),
+        });
+        Ok(respond("find_toll_ramps", started, outcome, error))
     }
+
+    #[tool(
+        name = "estimate_annual_tolls",
+        description = "Estimate a commuter's annual tolls, as a ballpark range, for one route option \
+            from find_toll_ramps. Pass that option's entry and exit point IDs; TollChat picks the \
+            return trip itself. Defaults: leave at 08:30, return at 17:30 (America/New_York), Monday to \
+            Friday, 50 weeks a year; override any of them. Prices come from the last 84 days. Returns \
+            low, typical, and high annual and daily tolls, not a quote.",
+        annotations(
+            title = "Estimate annual tolls",
+            read_only_hint = true,
+            idempotent_hint = true
+        )
+    )]
+    async fn estimate_annual_tolls(
+        &self,
+        Parameters(request): Parameters<EstimateAnnualTolls>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let commute = match request.commute() {
+            Ok(commute) => commute,
+            Err(message) => return Ok(CallToolResult::error(vec![ContentBlock::text(message)])),
+        };
+        let started = Instant::now();
+        let outcome =
+            tokio::time::timeout(ESTIMATE_BUDGET, self.app.estimate_annual_tolls(&commute))
+                .await
+                .unwrap_or_else(|_| Err(Failure::new("estimate", "timeout")));
+        let error = json!({
+            "message": "TollChat could not estimate tolls right now. Try again later.",
+            "schedule": commute.schedule(),
+        });
+        Ok(respond("estimate_annual_tolls", started, outcome, error))
+    }
+}
+
+/// Every tool's ending: log the outcome (never its inputs), stamp the time, and return the
+/// structured result with a short text summary instead of a JSON copy. `Ok(Err(message))` is an
+/// input mistake, returned as a tool error like rmcp's own argument errors so the model can fix it.
+fn respond(
+    tool: &'static str,
+    started: Instant,
+    outcome: Result<Result<Value, String>, Failure>,
+    mut error: Value,
+) -> CallToolResult {
+    let (mut value, is_error) = match outcome {
+        Ok(Ok(value)) => {
+            tracing::info!(
+                tool,
+                status = value["status"].as_str(),
+                elapsed_ms = elapsed_ms(started)
+            );
+            (value, false)
+        }
+        Ok(Err(message)) => return CallToolResult::error(vec![ContentBlock::text(message)]),
+        Err(failure) => {
+            tracing::error!(tool, stage = failure.stage, code = %failure.code, elapsed_ms = elapsed_ms(started));
+            error["status"] = json!("error");
+            (error, true)
+        }
+    };
+    let now = DateTime::from(SystemTime::now()).fmt(Format::DateTime);
+    value["calculated_at"] = json!(now.expect("the current time is a valid RFC 3339 date"));
+    let text = vec![ContentBlock::text(summary(&value))];
+    let mut result = if is_error {
+        CallToolResult::error(text)
+    } else {
+        CallToolResult::success(text)
+    };
+    result.structured_content = Some(value);
+    result
 }
 
 #[tool_handler(router = self.tool_router)]
@@ -369,6 +602,20 @@ fn summary(value: &Value) -> String {
                 .map(|codes| codes.iter().map(text).collect::<Vec<_>>().join(", "))
                 .unwrap_or_default(),
         ),
+        _ if value["status"] == "estimated" => {
+            let dollars = |level: &str| {
+                let amount = value["annual_toll_usd"][level].as_f64().unwrap_or_default();
+                format!("${amount:.0}")
+            };
+            format!(
+                "{status}: about {} a year in tolls (range {} to {}), from {} recent commute \
+                 days. Full details are in the structured result.",
+                dollars("typical"),
+                dollars("low"),
+                dollars("high"),
+                value["basis"]["priced_days"],
+            )
+        }
         _ => match value["message"].as_str() {
             Some(message) => format!("{status}: {message}"),
             None => {
@@ -525,19 +772,11 @@ impl App {
             ) else {
                 continue;
             };
-            let mut facilities: Vec<String> = legs
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|leg| leg["facility"].as_str().map(str::to_owned))
-                .collect();
-            facilities.dedup();
+            let facilities = facilities(&legs);
             if status != "valid" || facilities.is_empty() {
                 continue;
             }
-            // shortcut: straight-line access miles, not drive time; upgrade to a Routes matrix if users get cross-river picks.
-            let score =
-                entry.miles + exit.miles + FACILITY_PENALTY_MILES * (facilities.len() - 1) as f64;
+            let score = score(entry, exit, &facilities);
             ranked.push((score, entry, exit, facilities, legs, lanes));
         }
         // Equal scores are common (one interchange, two exits); break ties the same way every time.
@@ -595,6 +834,393 @@ impl App {
             })
             .flatten();
         Ok((status, options, lanes))
+    }
+
+    /// `Ok(Err(message))` is an input mistake the caller should fix.
+    async fn estimate_annual_tolls(
+        &self,
+        commute: &Commute,
+    ) -> Result<Result<Value, String>, Failure> {
+        let points = self.load_points().await?;
+        let point = |field: &str, id: &str, role: &str| {
+            let point = points
+                .iter()
+                .find(|p| p.point_id == id && p.location.is_some())
+                .ok_or_else(|| {
+                    format!("{field} {id} is not a TollChat point; use an ID from find_toll_ramps")
+                })?;
+            if point.point_type == role || point.point_type == "airport" {
+                Ok(point)
+            } else {
+                Err(format!(
+                    "{field} {id} is an {} point, not an {role} point",
+                    point.point_type
+                ))
+            }
+        };
+        let ends = point("entry_point_id", &commute.entry, "entry")
+            .and_then(|entry| Ok((entry, point("exit_point_id", &commute.exit, "exit")?)));
+        let (entry, exit) = match ends {
+            Ok(ends) => ends,
+            Err(message) => return Ok(Err(message)),
+        };
+
+        let fail = |stage| move |error: BoxError| Failure::database(stage, &error);
+        let mut client = (self.database.connect)(self.database.pricing_role.clone())
+            .await
+            .map_err(fail("estimate_connect"))?;
+        // One transaction: the oracle checks that its sample window ends at this transaction's start.
+        let transaction = client
+            .build_transaction()
+            .read_only(true)
+            .start()
+            .await
+            .map_err(|e| fail("estimate_connect")(e.into()))?;
+        transaction
+            .batch_execute(BALLPARK_TIMEOUT_SQL)
+            .await
+            .map_err(|e| fail("estimate_connect")(e.into()))?;
+        let query = |stage, rows: Result<Vec<tokio_postgres::Row>, tokio_postgres::Error>| {
+            rows.map_err(|e| fail(stage)(e.into()))
+        };
+
+        let outbound = query(
+            "estimate_routes",
+            transaction
+                .query(
+                    BALLPARK_ROUTES_SQL,
+                    &[&vec![&entry.point_id], &vec![&exit.point_id]],
+                )
+                .await,
+        )?;
+        let status: String = outbound
+            .first()
+            .map(|row| row.get("status"))
+            .unwrap_or_default();
+        let outbound_legs: Value = outbound
+            .first()
+            .map(|row| row.get("facility_legs"))
+            .unwrap_or_default();
+        // find_toll_ramps never offers a toll-free route, so one here was not taken from it.
+        if status != "valid" || facilities(&outbound_legs).is_empty() {
+            return Ok(Err(format!(
+                "{} to {} is not a toll route TollChat can price ({status}); pass the entry and exit \
+                 of one find_toll_ramps option",
+                entry.point_id, exit.point_id
+            )));
+        }
+        let mut response = json!({
+            "schedule": commute.schedule(),
+            "outbound": priced_route(&points, entry, exit, &outbound_legs)?,
+        });
+
+        // The way back starts near the outbound exit and ends near its entry. The exact ramps barely
+        // change the price, but a different road can, so routes over the same roads (by the
+        // networks they pass through, tolled or not) come first.
+        let location = |point: &Point| point.location.as_ref().map(|l| l.coordinates);
+        let (Some(from), Some(to)) = (location(exit), location(entry)) else {
+            return Err(Failure::new("estimate_routes", "shape"));
+        };
+        let (starts, finishes) = (
+            return_candidates(&points, from, "entry"),
+            return_candidates(&points, to, "exit"),
+        );
+        let ids = |side: &[Candidate<'_>]| {
+            side.iter()
+                .map(|c| c.point.point_id.clone())
+                .collect::<Vec<_>>()
+        };
+        let rows = query(
+            "estimate_routes",
+            transaction
+                .query(BALLPARK_ROUTES_SQL, &[&ids(&starts), &ids(&finishes)])
+                .await,
+        )?;
+        let outbound_ids: Vec<String> = outbound
+            .first()
+            .map(|row| row.get("point_ids"))
+            .unwrap_or_default();
+        let mut same_roads = networks(&points, &outbound_ids);
+        same_roads.reverse();
+        let back = rows
+            .iter()
+            .filter(|row| row.get::<_, &str>("status") == "valid")
+            .filter_map(|row| {
+                let start = find(&starts, row.get("origin"))?;
+                let finish = find(&finishes, row.get("destination"))?;
+                let legs: Value = row.get("facility_legs");
+                let score = score(start, finish, &facilities(&legs));
+                let roads = networks(&points, &row.get::<_, Vec<String>>("point_ids"));
+                Some((roads != same_roads, score, start, finish, legs))
+            })
+            .min_by(|a, b| {
+                (a.0.cmp(&b.0)).then(a.1.total_cmp(&b.1)).then_with(|| {
+                    (&a.2.point.point_id, &a.3.point.point_id)
+                        .cmp(&(&b.2.point.point_id, &b.3.point.point_id))
+                })
+            });
+        let Some((_, _, start, finish, return_legs)) = back else {
+            response["status"] = json!("no_return_route");
+            response["message"] =
+                json!("TollChat found no toll route back near the outbound ramps.");
+            return Ok(Ok(response));
+        };
+        response["return"] = priced_route(&points, start.point, finish.point, &return_legs)?;
+
+        let days = query(
+            "estimate_days",
+            transaction
+                .query(SAMPLE_DAYS_SQL, &[&commute.isodows])
+                .await,
+        )?;
+        let (mut legs, mut fixed_prices) = (Vec::new(), Vec::new());
+        for (direction, route_legs, wall_time) in [
+            ("outbound", &outbound_legs, &commute.depart_at),
+            ("return", &return_legs, &commute.return_at),
+        ] {
+            for leg in route_legs.as_array().into_iter().flatten() {
+                let (facility, key) = (
+                    leg["facility"].as_str().unwrap_or_default(),
+                    &leg["pricing_key"],
+                );
+                let mut item = json!({ "direction": direction, "facility": facility, "route_step_id": leg["route_step_id"] });
+                match facility {
+                    "i66" => {
+                        item["start_zone_id"] = key["start_zone_id"].clone();
+                        item["end_zone_id"] = key["end_zone_id"].clone();
+                    }
+                    "i95_i495" => item["od_pair_id"] = key["od_pair_id"].clone(),
+                    // Published rates: one price for every sampled day.
+                    _ => {
+                        for day in &days {
+                            let price = fixed_price(
+                                facility,
+                                key["source_route_key"].as_str().unwrap_or_default(),
+                                key["charge_index"].as_u64().unwrap_or_default(),
+                                day.get::<_, i32>("isodow"),
+                                wall_time,
+                            )
+                            .ok_or_else(|| Failure::new("estimate_fixed_prices", "shape"))?;
+                            fixed_prices.push(json!({
+                                "sample_date": day.get::<_, &str>("day"),
+                                "direction": direction,
+                                "route_step_id": leg["route_step_id"],
+                                "price_usd": price,
+                            }));
+                        }
+                    }
+                }
+                legs.push(item);
+            }
+        }
+
+        let sample_days: Vec<&str> = days.iter().map(|day| day.get("day")).collect();
+        let summary = query(
+            "estimate_prices",
+            transaction
+                .query(
+                    BALLPARK_SQL,
+                    &[
+                        &json!(legs),
+                        &commute.depart_at,
+                        &commute.return_at,
+                        &sample_days,
+                        &json!(fixed_prices),
+                        &commute.annual_days,
+                    ],
+                )
+                .await,
+        )?;
+        let summary = summary
+            .first()
+            .ok_or_else(|| Failure::new("estimate_prices", "shape"))?;
+        let priced_days: i32 = summary.get("complete_pair_count");
+        let eligible_days: i32 = summary.get("eligible_date_count");
+        let (window_start, window_end): (&str, &str) = days
+            .first()
+            .map(|day| (day.get("window_start"), day.get("window_end")))
+            .unwrap_or_default();
+        let by_weekday: Vec<Value> = summary
+            .get::<_, Value>("coverage_by_weekday")
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|day| {
+                let isodow = day["sample_isodow"].as_u64().unwrap_or_default() as usize;
+                json!({
+                    "weekday": WEEKDAYS.get(isodow.wrapping_sub(1)),
+                    "eligible_days": day["eligible_date_count"],
+                    "priced_days": day["complete_pair_count"],
+                })
+            })
+            .collect();
+        response["basis"] = json!({
+            "method": "recent_complete_same_date_round_trips",
+            "window": { "start_date": window_start, "end_date": window_end },
+            "eligible_days": eligible_days,
+            "priced_days": priced_days,
+            "coverage_percent": summary.get::<_, &str>("coverage_percent").parse::<f64>().ok(),
+            "coverage_by_weekday": by_weekday,
+            "sample_status": summary.get::<_, &str>("sample_status"),
+            "uses_modeled_prices": summary.get::<_, bool>("uses_modeled"),
+            "uses_published_fixed_rates": summary.get::<_, bool>("uses_current_fixed_rates"),
+        });
+        // Toll-free days (I-66 weekends and holidays) price as $0 even with no feed data, so every
+        // commute weekday needs at least half its days priced, or missing data reads as low tolls.
+        let thin: Vec<String> = by_weekday
+            .iter()
+            .filter(|day| {
+                2 * day["priced_days"].as_i64().unwrap_or_default()
+                    < day["eligible_days"].as_i64().unwrap_or_default()
+            })
+            .filter_map(|day| day["weekday"].as_str().map(|name| format!("{name}s")))
+            .collect();
+        if !thin.is_empty() || priced_days == 0 {
+            response["status"] = json!("too_few_recent_prices");
+            response["message"] = json!(format!(
+                "Too few recent {} had prices for every toll on both trips at these times \
+                 ({priced_days} of {eligible_days} commute days priced); TollChat needs at least \
+                 half of each weekday's days for an estimate.",
+                thin.join(", ")
+            ));
+            return Ok(Ok(response));
+        }
+        let usd = |column: &str| {
+            summary
+                .get::<_, Option<&str>>(column)
+                .and_then(|text| text.parse::<f64>().ok())
+        };
+        let range = |prefix: &str| {
+            json!({
+                "low": usd(&format!("{prefix}_low")),
+                "typical": usd(&format!("{prefix}_typical")),
+                "high": usd(&format!("{prefix}_high")),
+            })
+        };
+        let by_facility: Vec<Value> = summary
+            .get::<_, Value>("facility_scenarios")
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|facility| {
+                let annual = |pct: &str| {
+                    facility["scenarios"][pct]["annualized_usd"]
+                        .as_str()
+                        .and_then(|text| text.parse::<f64>().ok())
+                };
+                json!({
+                    "facility": facility["facility"],
+                    "annual_toll_usd": { "low": annual("p25"), "typical": annual("p50"), "high": annual("p90") },
+                    "priced_days": facility["sample_count"],
+                })
+            })
+            .collect();
+        response["status"] = json!("estimated");
+        response["annual_toll_usd"] = range("annual");
+        response["daily_round_trip_usd"] = range("daily");
+        response["by_facility"] = json!(by_facility);
+        Ok(Ok(response))
+    }
+}
+
+/// A priced route as callers see it: the same fields as a find_toll_ramps option's ends.
+fn priced_route(
+    points: &[Point],
+    entry: &Point,
+    exit: &Point,
+    legs: &Value,
+) -> Result<Value, Failure> {
+    let (segments, _) = segments(points, legs)?;
+    Ok(json!({
+        "route_id": route_id(&entry.point_id, &segments, &exit.point_id),
+        "entry": entry.describe(),
+        "exit": exit.describe(),
+        "facilities": facilities(legs),
+    }))
+}
+
+/// The toll facilities of a route's priced legs, in travel order.
+fn facilities(legs: &Value) -> Vec<String> {
+    let mut facilities: Vec<String> = legs
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|leg| leg["facility"].as_str().map(str::to_owned))
+        .collect();
+    facilities.dedup();
+    facilities
+}
+
+/// Total access miles, with each toll facility after the first counted as extra miles.
+fn score(entry: &Candidate<'_>, exit: &Candidate<'_>, facilities: &[String]) -> f64 {
+    // shortcut: straight-line access miles, not drive time; upgrade to a Routes matrix if users get cross-river picks.
+    entry.miles + exit.miles + FACILITY_PENALTY_MILES * facilities.len().saturating_sub(1) as f64
+}
+
+/// One Dulles Toll Road or Greenway charge at the published rate, as dollars text, for a leg's
+/// `source_route_key` and `charge_index` at an ISO weekday and HH:MM America/New_York time.
+/// Public so the e2e suite can check it against every charge in the oracle catalog.
+///
+/// shortcut: rules and rates copied from `v2/agent_tools/current_price_domain.py`
+/// (`price_dtr_leg`, `price_greenway_leg`); update both when the operators change rates. Unlike
+/// that code it does not skip DST-ambiguous times, which only matters 1-3 AM on two days a year.
+pub fn fixed_price(
+    facility: &str,
+    route_key: &str,
+    charge_index: u64,
+    isodow: i32,
+    wall_time: &str,
+) -> Option<&'static str> {
+    const DTR_EXITS: [&str; 11] = [
+        "28", "10", "11", "12", "13", "14", "15", "16", "17", "1819", "66",
+    ];
+    const DTR_RAMPS: [&str; 6] = ["10", "11", "12", "13", "14", "17"];
+    // The $2 connection charge between the Greenway and the Dulles Toll Road at Route 28.
+    if facility == "dtr" && matches!(route_key, "greenway_to_dtr" | "dtr_to_greenway") {
+        return (charge_index == 1).then_some("2.00");
+    }
+    let mut parts = route_key.split(':');
+    let (Some(direction), Some(entry), Some(exit), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return None;
+    };
+    match facility {
+        "dtr" => {
+            let position = |exit: &str| DTR_EXITS.iter().position(|e| *e == exit);
+            let (from, to, plaza) = (position(entry)?, position(exit)?, position("16")?);
+            // In travel order: an entrance ramp, the main plaza if passed, an exit ramp.
+            let mut charges = Vec::new();
+            if DTR_RAMPS.contains(&entry) {
+                charges.push("2.00");
+            }
+            if from.min(to) <= plaza && plaza < from.max(to) {
+                charges.push("4.00");
+            }
+            if DTR_RAMPS.contains(&exit) || (direction == "EB" && exit == "16") {
+                charges.push("2.00");
+            }
+            charges
+                .get(usize::try_from(charge_index).ok()?.checked_sub(1)?)
+                .copied()
+        }
+        "greenway" => {
+            // Peak: weekday mornings eastbound, weekday evenings westbound (HH:MM compares as text).
+            let peak = isodow <= 5
+                && match direction {
+                    "EB" => ("06:30".."09:00").contains(&wall_time),
+                    "WB" => ("16:00".."18:30").contains(&wall_time),
+                    _ => false,
+                };
+            let main_plaza = entry == "28" || exit == "28";
+            (charge_index == 1).then_some(match (main_plaza, peak) {
+                (false, false) => "4.55",
+                (false, true) => "5.10",
+                (true, false) => "5.25",
+                (true, true) => "5.80",
+            })
+        }
+        _ => None,
     }
 }
 
@@ -677,18 +1303,53 @@ fn spot(point: &Point) -> Option<[u64; 2]> {
     Some([lon.to_bits(), lat.to_bits()])
 }
 
+/// Whether a point can serve this side's role (`entry` or `exit`) at this distance.
+fn fits(point: &Point, role: &str, distance: f64, radius: f64) -> bool {
+    match point.point_type.as_str() {
+        // An airport is a candidate only for a trip that starts or ends at that airport.
+        "airport" => distance <= AIRPORT_MATCH_MILES,
+        kind => kind == role && distance <= radius,
+    }
+}
+
+/// Ramps for the way back: the nearest per road, as for a trip, plus every ramp close by.
+fn return_candidates<'a>(points: &'a [Point], at: [f64; 2], role: &str) -> Vec<Candidate<'a>> {
+    let mut candidates = candidates_near(points, at, role);
+    for point in points {
+        let Some(location) = &point.location else {
+            continue;
+        };
+        let distance = miles(at, location.coordinates);
+        if fits(point, role, distance, RETURN_SEARCH_MILES)
+            && find(&candidates, &point.point_id).is_none()
+        {
+            candidates.push(Candidate {
+                point,
+                miles: distance,
+            });
+        }
+    }
+    candidates
+}
+
+/// The networks a route passes through, in order, from its walked point IDs.
+fn networks<'a>(points: &'a [Point], ids: &[String]) -> Vec<&'a str> {
+    let mut networks: Vec<&str> = ids
+        .iter()
+        .filter_map(|id| points.iter().find(|p| &p.point_id == id))
+        .map(|p| p.network_id.as_str())
+        .collect();
+    networks.dedup();
+    networks
+}
+
 /// The nearest interchange per (facility, direction) for this side's role, within reach.
 fn candidates_near<'a>(points: &'a [Point], at: [f64; 2], role: &str) -> Vec<Candidate<'a>> {
     let reachable: Vec<Candidate<'a>> = points
         .iter()
         .filter_map(|point| {
             let distance = miles(at, point.location.as_ref()?.coordinates);
-            let fits = match point.point_type.as_str() {
-                // An airport is a candidate only when the user named that airport.
-                "airport" => distance <= AIRPORT_MATCH_MILES,
-                kind => kind == role && distance <= MAX_ACCESS_MILES,
-            };
-            fits.then_some(Candidate {
+            fits(point, role, distance, MAX_ACCESS_MILES).then_some(Candidate {
                 point,
                 miles: distance,
             })

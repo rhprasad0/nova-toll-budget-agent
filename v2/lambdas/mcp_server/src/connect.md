@@ -1,16 +1,17 @@
 # TollChat MCP server
 
-TollChat finds the toll-road ramps for a Northern Virginia trip: the I-495 and I-95/I-395 Express Lanes, I-66 inside the Beltway, the Dulles Toll Road, the Dulles Greenway, and the IAD/DCA airport connections.
+TollChat finds the toll-road ramps for a Northern Virginia trip and estimates what a regular commute on them costs in tolls per year. It covers the I-495 and I-95/I-395 Express Lanes, I-66 inside the Beltway, the Dulles Toll Road, the Dulles Greenway, and the IAD/DCA airport connections.
 
 - **Endpoint:** `https://mcp.tollchat.ai/mcp`
 - **Transport:** MCP Streamable HTTP, stateless. Every `POST` gets one `application/json` response; there are no sessions and no `GET` event stream.
 - **Authentication:** none. Call from server-side code: requests carrying a browser `Origin` header get `403`.
 - **Protocol versions:** `2025-11-25` and earlier (with the `initialize` handshake) and `2026-07-28` (no handshake; each request carries its version).
 - **Privacy:** https://mcp.tollchat.ai/privacy
-- **Version:** 0.2.0 (`serverInfo.version`)
+- **Version:** 0.3.0 (`serverInfo.version`)
 
 ## Changes
 
+- **0.3.0, 2026-10-26:** new tool `estimate_annual_tolls`, a ballpark annual toll range for one `find_toll_ramps` option. `find_toll_ramps` is unchanged.
 - **0.2.0, 2026-10-26:** `find_toll_ramps` takes each end as latitude and longitude. Place text inputs were removed on 2026-10-26, together with the server's place lookups (Amazon Location) and their daily limit; a call that still sends place text gets a tool error. Results gain `calculated_at`, `route_id`, `segments`, `score`, and `reversible_lanes`, and the text content is now a short summary. The `match`, `ambiguous`, `place_not_found`, and `daily_lookup_limit` results are gone, and `same_location` is new. Facility codes, the ordering rule, and the other statuses are unchanged.
 
 ## Connect with the 2025 handshake
@@ -54,6 +55,18 @@ Accept: application/json, text/event-stream
 MCP-Protocol-Version: 2025-11-25
 
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"find_toll_ramps","arguments":{"origin":{"latitude":38.96165,"longitude":-77.36346},"destination":{"latitude":38.9173,"longitude":-77.22093}}}}
+```
+
+Then estimate the yearly tolls for the first option it returns:
+
+```http
+POST /mcp HTTP/1.1
+Host: mcp.tollchat.ai
+Content-Type: application/json
+Accept: application/json, text/event-stream
+MCP-Protocol-Version: 2025-11-25
+
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"estimate_annual_tolls","arguments":{"entry_point_id":"dtr:12:entry:EB","exit_point_id":"dtr:1819:exit:EB"}}}
 ```
 
 ## Call with protocol 2026-07-28
@@ -136,7 +149,7 @@ Each option has:
 
 Miles are rounded to 0.1, so parts can differ from a total by 0.1.
 
-**Miles and prices.** `straight_line_miles` is the straight-line distance between a segment's ends; the road is longer. TollChat has no road-mile data (a future source would be the operators' published segment lengths), and its own annual estimate uses the same straight-line basis. Prices are not returned yet. A segment's point IDs and `pricing_keys` (opaque keys into the operators' toll tables, one per toll charged on that stretch) are the join keys for a later pricing tool, and the option shape will not change for it. The Dulles Toll Road charges two tolls on some stretches, so such a segment has two keys. A facility appears in consecutive segments when its operator prices the trip in parts, for example the I-495 and I-95/I-395 Express Lanes.
+**Miles and prices.** `straight_line_miles` is the straight-line distance between a segment's ends; the road is longer. TollChat has no road-mile data (a future source would be the operators' published segment lengths), and its own annual estimate uses the same straight-line basis. This tool returns no prices; `estimate_annual_tolls` turns an option into an annual toll range. A segment's point IDs and `pricing_keys` (opaque keys into the operators' toll tables, one per toll charged on that stretch) are the join keys for a later pricing tool, and the option shape will not change for it. The Dulles Toll Road charges two tolls on some stretches, so such a segment has two keys. A facility appears in consecutive segments when its operator prices the trip in parts, for example the I-495 and I-95/I-395 Express Lanes.
 
 **Ordering and the 3-option cap.** Options are ranked by `score.total`: the shortest total access distance, with each extra toll facility counting as 2 more miles. Ordering uses the unrounded score, so options showing the same rounded total can still differ; exact ties are ordered by entry, then exit point ID. Approach variants of one interchange appear once. The ranking ignores price and toll distance, so a long detour with short access legs can rank well (compare `total_straight_line_miles`). At most 3 options are returned, so the cheapest-toll route can be left out.
 
@@ -180,11 +193,74 @@ Miles are rounded to 0.1, so parts can differ from a total by 0.1.
 
 Invalid arguments get a tool error (`isError: true`, no structured content) whose text says what to fix.
 
+## Tool: `estimate_annual_tolls`
+
+**Classification: Read.** It reads TollChat's ramp catalog and recent toll prices. It changes nothing, calls no other service, and counts against no daily limit, so repeating a call is safe.
+
+It estimates what a regular commute on one `find_toll_ramps` option costs in tolls per year. It is a ballpark from recent prices, not a quote: present it as a range.
+
+**Input**
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `entry_point_id` | string | required | The chosen option's `entry.point_id`. |
+| `exit_point_id` | string | required | The same option's `exit.point_id`. |
+| `depart_at` | `HH:MM` | `08:30` | When the trip from the origin starts, 24-hour America/New_York time. |
+| `return_at` | `HH:MM` | `17:30` | When the return trip starts, later the same day (overnight schedules are not supported). |
+| `weekdays` | list of day names | `monday` to `friday` | Commute days of the week, as lowercase English names. |
+| `annual_commute_days` | integer | 50 × weekdays | Commute days per year: 250 for five weekdays, 150 for three. At most 53 × weekdays. |
+
+Each invalid field gets a tool error naming it, and unknown fields are rejected. `null` for an optional field means its default. The entry and exit must form a toll route, as every `find_toll_ramps` option does.
+
+**Return trip.** Pass only the outbound option. TollChat picks the way back itself, from entries near the outbound exit to exits near the outbound entry (the nearest per road, plus any within 3 miles). It prefers routes through the same roads in reverse, judged by the road networks they pass through whether tolled or not, then the shortest access distance, scored like `find_toll_ramps`. Its ramps can differ from the outbound ones (out from Franconia-Springfield, back to Backlick Road, say), which barely changes the price.
+
+**How it is estimated**
+
+- Both trips are validated without today's reversible-lane state, because past days are priced. So `outbound.route_id` can differ from the route `find_toll_ramps` showed live.
+- For each of the last 84 completed days that falls on a commute weekday, TollChat prices the outbound trip at `depart_at` and the return trip at `return_at`. I-66 and I-95/I-495 use the operators' recorded prices at that time (the 6- or 10-minute interval containing it). The Dulles Toll Road and Greenway use their current published rates, applied to past dates.
+- A day counts only if every toll on both trips has a price. I-66's toll-free times and holidays count as $0.
+- `daily_round_trip_usd` is the 25th, 50th, and 90th percentile (`low`, `typical`, `high`) of those days' round-trip totals; `annual_toll_usd` multiplies each by `annual_commute_days`.
+- If any commute weekday has fewer than half of its recent days priced, the result is `too_few_recent_prices` instead of an estimate. Without this, I-66's toll-free weekends and holidays would still price at $0 when data is missing, and read as low or zero tolls.
+- Some I-95 trips use modeled prices for origin-destination pairs the operator does not publish; `basis.uses_modeled_prices` says so.
+
+**Worked example:** the first Reston Town Center → Tysons option above, with the defaults, as in the request above. The Dulles Toll Road charges $2 at the Exit 12 ramp and $4 at the main plaza each way, so $12 a day. An excerpt of the result, without the `entry`, `exit`, `window`, and `coverage_by_weekday` fields:
+
+```json
+{
+  "status": "estimated",
+  "schedule": {"depart_at": "08:30", "return_at": "17:30", "timezone": "America/New_York", "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"], "annual_commute_days": 250},
+  "outbound": {"route_id": "dtr:12:entry:EB>dtr:1819:exit:EB", "facilities": ["dtr"]},
+  "return": {"route_id": "dtr:1819:entry:WB>dtr:12:exit:WB", "facilities": ["dtr"]},
+  "annual_toll_usd": {"low": 3000.0, "typical": 3000.0, "high": 3000.0},
+  "daily_round_trip_usd": {"low": 12.0, "typical": 12.0, "high": 12.0},
+  "by_facility": [{"facility": "dtr", "annual_toll_usd": {"low": 3000.0, "typical": 3000.0, "high": 3000.0}, "priced_days": 60}],
+  "basis": {"method": "recent_complete_same_date_round_trips", "eligible_days": 60, "priced_days": 60, "coverage_percent": 100.0, "sample_status": "complete", "uses_modeled_prices": false, "uses_published_fixed_rates": true}
+}
+```
+
+**Output.** `structuredContent` is the result. The text content is a one-line summary.
+
+- `status`: one of the values in the table below. `calculated_at`: when the result was computed, in UTC.
+- `schedule`: the times (America/New_York), weekdays, and annual days used, with defaults filled in.
+- `outbound`, `return`: `route_id`, `entry`, `exit`, and `facilities`, as in a `find_toll_ramps` option.
+- `annual_toll_usd`, `daily_round_trip_usd`: `low`, `typical`, and `high`, in US dollars, only when `status` is `estimated`.
+- `by_facility`: each toll road's `annual_toll_usd` range and `priced_days`. The roads' ranges do not add up to the total, because percentiles are taken over whole days.
+- `basis` (absent for `no_return_route`): `method`; `window` (`start_date` and `end_date` of the 84 days); `eligible_days` (commute weekdays in the window); `priced_days`; `coverage_percent`; `coverage_by_weekday` (`weekday`, `eligible_days`, `priced_days`); `sample_status` (`complete` when every eligible day is priced, otherwise `partial`); `uses_modeled_prices`; and `uses_published_fixed_rates`.
+- `message`: for statuses without an estimate.
+
+| `status` | Meaning | What to do |
+| --- | --- | --- |
+| `estimated` | Enough recent days were priced. | Quote `annual_toll_usd.typical` as a ballpark with the low–high range, and mention partial coverage. |
+| `too_few_recent_prices` | For some commute weekday, fewer than half its recent days had prices for every toll on both trips at these times: the data is missing, or the I-95/I-395 reversible lanes rarely ran the needed way then. | Tell the user TollChat cannot estimate this schedule; try other times or another option. Never treat it as zero tolls. |
+| `no_return_route` | No toll route back was found near the outbound ramps. | Tell the user TollChat could not price a round trip; try another option. |
+| `error` (with `isError: true`) | Something failed on TollChat's side. | Retry as below; if it keeps failing, tell the user. |
+
 ## Limits
 
 - No daily limit: the server makes no paid lookups.
 - About 2 requests per second across all clients, with bursts up to 5; excess requests get HTTP `429`.
 - Request bodies up to 64 KiB.
+- An estimate reads 84 days of prices and can take several seconds. One that takes more than 20 seconds stops with `status: error`.
 
 ## Retries
 
@@ -198,6 +274,7 @@ Invalid arguments get a tool error (`isError: true`, no structured content) whos
 
 - Geocode the user's places yourself; a landmark, neighborhood, or nearby intersection is precise enough. Do not press for an exact home location.
 - Confirm the chosen option with the user before relying on it.
+- For a yearly cost, pass the chosen option's entry and exit to `estimate_annual_tolls` and quote its range as a ballpark.
 - Use returned point IDs exactly; never invent or edit them.
-- Miles are straight-line, no prices are returned, and results are estimates.
+- Miles are straight-line, `find_toll_ramps` returns no prices, and every result is an estimate.
 - Save this connector so it can be reused instead of rebuilt each conversation.

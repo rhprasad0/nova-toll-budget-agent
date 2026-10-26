@@ -1,7 +1,7 @@
 # MCP server for Muse (development only)
 
 `https://mcp.tollchat.ai/mcp` is an authless MCP server for Muse, Meta's personal
-agent. It has one tool, `find_toll_ramps`, and serves its connect guide at `/` and
+agent. It has two tools, `find_toll_ramps` and `estimate_annual_tolls`, and serves its connect guide at `/` and
 its privacy notice at `/privacy`. The code is in
 [`v2/lambdas/mcp_server/`](../lambdas/mcp_server/), and the resources are in
 [`v2/infra/mcp.tf`](../infra/mcp.tf). It runs only in the development account

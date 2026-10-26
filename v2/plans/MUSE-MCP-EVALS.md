@@ -44,6 +44,14 @@ entry/exit pairs and the expected `status`. Cover:
 | Latency | p50 and p99 |
 | Cost | dollars per 100 calls |
 
+**`estimate_annual_tolls`.** Same harness, one case per labeled option and
+schedule. Cover Dulles Toll Road and Greenway commutes (exact amounts from the
+published rates, peak and off-peak), I-66 and I-95/I-495 commutes against the
+agent's `get_annual_toll_ballpark` on the same inputs, I-95/I-395 reversible
+commutes (northbound out, southbound back), hybrid weekdays, and schedules too
+thin to estimate. Metrics: status accuracy, amounts within one cent of the
+agent's, the chosen return route's facilities, and latency p50 and p99.
+
 ## 2. Muse evals
 
 Conversation-level checks of Muse using the server.
@@ -65,6 +73,9 @@ Center and work at Tysons", graded on the transcript and tool calls.
   errors honestly, never as zero tolls.
 - Makes no redundant calls for the same coordinates.
 - Presents options with their access miles and says results are estimates.
+- Quotes an annual estimate as a range with its typical value, passes the
+  user's own schedule when given, and never reports `too_few_recent_prices`
+  as zero tolls.
 
 **Onboarding.** From the runbook's connect message, does the Muse app build a
 working Custom Connector from `https://mcp.tollchat.ai/`, and does it save it
