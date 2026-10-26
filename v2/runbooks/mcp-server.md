@@ -18,13 +18,16 @@ the Lambda from the shared placeholder package and ignores its code afterwards.
 Rust comes from `v2/lambdas/mcp_server/rust-toolchain.toml`. From that directory:
 
 ```bash
-./e2e.sh                       # PostGIS + DynamoDB Local; SearchText is stubbed
+./e2e.sh                       # throwaway PostGIS with the real oracle catalog
 cargo run                      # http://127.0.0.1:8080, real AWS, needs the env below
 ```
 
-`cargo run` reads `LOOKUP_TABLE`, `DB_HOST`, `DB_PORT`, `DB_NAME`,
-`DB_CA_BUNDLE_PATH`, `DB_USER` and `PRICING_DB_USER`, the same variables the
-Lambda gets from `mcp.tf`.
+`cargo run` reads `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_CA_BUNDLE_PATH`, `DB_USER`
+and `PRICING_DB_USER`, the same variables the Lambda gets from `mcp.tf`.
+
+Since server 0.2.0 the tool takes coordinates and makes no Amazon Location
+lookups. The counter table, the `geo-places` grant, the HTTPS egress rule and
+`LOOKUP_TABLE` in `mcp.tf` are unused until a follow-up change removes them.
 
 ## Build
 
@@ -140,9 +143,25 @@ between.
 - A burst of more than five requests a second gets some 429s (stage throttle).
 - Logs, kept 7 days, hold only the tool, status and duration:
   `aws logs tail /aws/lambda/tollchat-v2-mcp-server-dev --since 1h`.
-- The daily counter is item `day = floor(epoch / 86400)` in
-  `tollchat-v2-mcp-lookups-dev`; at 1,000 lookups the tool returns
-  `daily_lookup_limit` until 00:00 UTC.
+- **Drop accounting.** Compare per-minute API Gateway requests with Lambda
+  invocations (kept 15 days at one-minute resolution, no request content):
+
+  ```bash
+  API=$(aws --region us-east-1 apigatewayv2 get-apis --query "Items[?Name=='tollchat-v2-mcp-server-dev'].ApiId" --output text)
+  for m in Count 4xx 5xx; do aws --region us-east-1 cloudwatch get-metric-statistics --namespace AWS/ApiGateway \
+    --metric-name $m --dimensions Name=ApiId,Value=$API Name=Stage,Value='$default' \
+    --start-time START --end-time END --period 60 --statistics Sum --output text; done
+  for m in Invocations Errors Throttles; do aws --region us-east-1 cloudwatch get-metric-statistics --namespace AWS/Lambda \
+    --metric-name $m --dimensions Name=FunctionName,Value=tollchat-v2-mcp-server-dev \
+    --start-time START --end-time END --period 60 --statistics Sum --output text; done
+  ```
+
+  `Count` above `Invocations` with matching `4xx` means requests stopped at the
+  gateway (usually the 429 throttle); `5xx` or Lambda `Errors` are server
+  failures. A drop the client saw with neither is outside TollChat: requests
+  that never reach API Gateway are invisible here by design, since there are no
+  access logs. Lambda's own `START`/`REPORT` log lines give each invocation's
+  time to the millisecond for seven days.
 
 ## Connect Muse
 

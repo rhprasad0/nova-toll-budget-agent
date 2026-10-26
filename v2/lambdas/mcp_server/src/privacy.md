@@ -4,17 +4,18 @@ Benevolent Clankers LLC operates the TollChat MCP server at `https://mcp.tollcha
 
 ## What the server receives
 
-The server receives the tool arguments your assistant sends: the start and end places of a trip, as text. It does not create accounts and does not receive your name, email address, or conversation. Like any web service it sees the network address of the connecting computer (for Muse, Meta's cloud), which it does not log. Avoid sending exact home or work addresses; a landmark, neighborhood, or nearby intersection works.
+The server receives the tool arguments your assistant sends: the latitude and longitude of a trip's start and end. Since 2026-10-26 it no longer receives place names or addresses. It does not create accounts and does not receive your name, email address, or conversation. Like any web service it sees the network address of the connecting computer (for Muse, Meta's cloud), which it does not log. The coordinates of a landmark, neighborhood, or nearby intersection work; your assistant does not need to send your exact home or work location.
 
 ## How it is used
 
-To find ramps, the server sends each place text to Amazon Location Service. Amazon Location removes customer and account information from the query before passing it to its map data providers. The server compares the result with TollChat's ramp catalog and returns matching toll routes.
+The server compares the coordinates with TollChat's ramp catalog and returns matching toll routes. It does not send the coordinates, or anything derived from them, to any third party. Before 2026-10-26 it sent place text to Amazon Location Service to find coordinates; that step has been removed.
 
 ## What is kept
 
-- The server does not store place text, lookup results, or locations.
-- It keeps one daily counter of how many lookups were made, with no query content; each day's counter expires after two days.
-- Server logs record which tool ran, its outcome, and how long it took, never the places or locations. They are kept for seven days.
+- The server does not store coordinates, routes, or results.
+- Server logs record which tool ran, its outcome, and how long it took, never coordinates or routes. They are kept for seven days.
+- Amazon Web Services monitoring keeps per-minute counts of requests and errors, with no request content or network addresses, for up to 15 months.
+- The daily lookup counter used before 2026-10-26 is no longer updated. It held only a count, with no query content, and its entries expire on their own.
 
 ## Your assistant
 
