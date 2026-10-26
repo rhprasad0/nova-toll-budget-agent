@@ -4,16 +4,14 @@ use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime};
 
 use aws_credential_types::provider::{ProvideCredentials, SharedCredentialsProvider};
-use aws_sdk_dynamodb::operation::update_item::UpdateItemError;
-use aws_sdk_dynamodb::types::AttributeValue;
-use aws_sdk_geoplaces::types::{SearchTextFilter, SearchTextIntendedUse};
 use aws_sigv4::http_request::{
     SignableBody, SignableRequest, SignatureLocation, SigningSettings, sign,
 };
 use aws_sigv4::sign::v4;
+use aws_smithy_types::date_time::{DateTime, Format};
 use axum::Router;
 use axum::http::header::CONTENT_TYPE;
 use axum::routing::get;
@@ -35,23 +33,21 @@ const INSTRUCTIONS: &str = include_str!("instructions.md");
 const CONNECT_DOC: &str = include_str!("connect.md");
 const PRIVACY_DOC: &str = include_str!("privacy.md");
 
-const DAILY_LOOKUP_LIMIT: u64 = 1_000;
-const LOOKUPS_PER_CALL: u64 = 2;
-/// Fairfax, the middle of the covered network, as [lon, lat].
-const SERVICE_AREA_CENTER: [f64; 2] = [-77.30, 38.88];
 const MAX_ACCESS_MILES: f64 = 8.0;
+/// An airport point is a candidate only for a trip that starts or ends at that airport.
 const AIRPORT_MATCH_MILES: f64 = 1.5;
-const AMBIGUOUS_MILES: f64 = 2.0;
 /// Approach variants of one interchange share a spot; keep them together.
 const SAME_INTERCHANGE_MILES: f64 = 0.1;
+/// Closer than this, the two ends are one place and there is no trip to route.
+const SAME_LOCATION_MILES: f64 = 0.1;
 const MAX_GROUPS_PER_SIDE: usize = 4;
 /// An extra toll road must save this many access miles to rank above a simpler route.
 const FACILITY_PENALTY_MILES: f64 = 2.0;
 const MAX_OPTIONS: usize = 3;
-const MAX_PLACE_CHARS: usize = 200;
 
 const POINTS_SQL: &str = "SELECT oracle.get_toll_route_prompt_points() AS points";
-const VALIDATE_SQL: &str = "SELECT o.id AS origin, d.id AS destination, route.status, route.facility_legs \
+const VALIDATE_SQL: &str = "SELECT o.id AS origin, d.id AS destination, route.status, \
+     route.facility_legs, route.i95_evidence \
      FROM unnest($1::text[]) AS o(id) CROSS JOIN unnest($2::text[]) AS d(id) \
      CROSS JOIN LATERAL oracle.validate_pricing_route(o.id, d.id) AS route";
 
@@ -72,9 +68,6 @@ pub struct Database {
 }
 
 pub struct App {
-    pub places: aws_sdk_geoplaces::Client,
-    pub dynamodb: aws_sdk_dynamodb::Client,
-    pub lookup_table: String,
     pub database: Database,
 }
 
@@ -209,16 +202,31 @@ async fn rds_auth_token(
     Ok(url.as_str()["https://".len()..].to_owned())
 }
 
+/// A WGS-84 position in decimal degrees.
+// Describes the input schema only; `position` reads the fields so its errors can name each one.
+#[derive(schemars::JsonSchema)]
+#[schemars(deny_unknown_fields)]
+#[expect(dead_code, reason = "schema only")]
+struct Coordinate {
+    /// Degrees north, -90 to 90. Covered trips are near 38.9.
+    #[schemars(range(min = -90.0, max = 90.0))]
+    latitude: f64,
+    /// Degrees east, -180 to 180. Covered trips are near -77.3.
+    #[schemars(range(min = -180.0, max = 180.0))]
+    longitude: f64,
+}
+
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct FindTollRamps {
-    /// Where the trip starts, as the user described it: a landmark, neighborhood, town, or
-    /// nearby intersection. An exact home address is not needed.
-    #[schemars(length(min = 1, max = 200))]
-    origin: String,
-    /// Where the trip ends, described the same way.
-    #[schemars(length(min = 1, max = 200))]
-    destination: String,
+    /// Where the trip starts. A landmark or nearby intersection is precise enough; an exact
+    /// home location is not needed.
+    // Parsed per side by `position`, so an error can say which end to fix.
+    #[schemars(with = "Coordinate")]
+    origin: Value,
+    /// Where the trip ends, given the same way.
+    #[schemars(with = "Coordinate")]
+    destination: Value,
 }
 
 #[derive(Clone)]
@@ -239,43 +247,58 @@ impl TollServer {
     #[tool(
         name = "find_toll_ramps",
         description = "Find the toll-road entry and exit ramps for a Northern Virginia trip. Pass the \
-            start and end places as the user described them. Returns up to 3 validated route options, \
-            each with an entry point ID, an exit point ID, the toll facilities used, and straight-line \
-            access miles. Confirm the matched places and the chosen option with the user, and use the \
-            returned point IDs exactly.",
-        annotations(title = "Find toll ramps", read_only_hint = true)
+            start and end as WGS-84 latitude and longitude in decimal degrees (geocode places first). \
+            Returns up to 3 validated route options, each with entry and exit point IDs, the toll \
+            facilities used, a per-facility segment breakdown, and its ordering score. Confirm the \
+            chosen option with the user, and use the returned point IDs exactly.",
+        annotations(
+            title = "Find toll ramps",
+            read_only_hint = true,
+            idempotent_hint = true
+        )
     )]
     async fn find_toll_ramps(
         &self,
         Parameters(request): Parameters<FindTollRamps>,
     ) -> Result<CallToolResult, ErrorData> {
-        let (origin, destination) = (request.origin.trim(), request.destination.trim());
-        for place in [origin, destination] {
-            if place.is_empty() || place.chars().count() > MAX_PLACE_CHARS {
-                // A tool error, like rmcp's own argument errors, so the model can correct itself.
-                return Ok(CallToolResult::error(vec![ContentBlock::text(
-                    "origin and destination must each be 1 to 200 characters",
-                )]));
-            }
-        }
+        // A tool error, like rmcp's own argument errors, so the model can correct itself.
+        let fix = |message: String| Ok(CallToolResult::error(vec![ContentBlock::text(message)]));
+        let ends = position("origin", request.origin)
+            .and_then(|origin| Ok((origin, position("destination", request.destination)?)));
+        let (origin, destination) = match ends {
+            Ok(ends) => ends,
+            Err(message) => return fix(message),
+        };
         let started = Instant::now();
-        let result = match self.app.find_toll_ramps(origin, destination).await {
-            Ok(value) => {
+        let (mut value, is_error) = match self.app.find_toll_ramps(origin, destination).await {
+            Ok(Ok(value)) => {
                 tracing::info!(
                     tool = "find_toll_ramps",
                     status = value["status"].as_str(),
                     elapsed_ms = elapsed_ms(started)
                 );
-                CallToolResult::structured(value)
+                (value, false)
             }
+            Ok(Err(message)) => return fix(message),
             Err(failure) => {
                 tracing::error!(tool = "find_toll_ramps", stage = failure.stage, code = %failure.code, elapsed_ms = elapsed_ms(started));
-                CallToolResult::structured_error(json!({
-                    "status": "error",
-                    "message": "TollChat could not look up ramps right now. Try again later.",
-                }))
+                let message = "TollChat could not look up ramps right now. Try again later.";
+                let end = |[lon, lat]: [f64; 2]| json!({ "latitude": lat, "longitude": lon });
+                let (origin, destination) = (end(origin), end(destination));
+                let error = json!({ "status": "error", "message": message, "origin": origin, "destination": destination });
+                (error, true)
             }
         };
+        let now = DateTime::from(SystemTime::now()).fmt(Format::DateTime);
+        value["calculated_at"] = json!(now.expect("the current time is a valid RFC 3339 date"));
+        // The text is a short summary; structuredContent is the result, not repeated as JSON text.
+        let text = vec![ContentBlock::text(summary(&value))];
+        let mut result = if is_error {
+            CallToolResult::error(text)
+        } else {
+            CallToolResult::success(text)
+        };
+        result.structured_content = Some(value);
         Ok(result)
     }
 }
@@ -291,6 +314,68 @@ impl ServerHandler for TollServer {
 
 fn elapsed_ms(started: Instant) -> u64 {
     u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
+}
+
+/// One end of the trip as [lon, lat], used at full precision, or a message saying what to fix.
+fn position(side: &str, value: Value) -> Result<[f64; 2], String> {
+    // Never positional: a bare pair could be [lon, lat] or [lat, lon].
+    let Some(fields) = value.as_object() else {
+        return Err(format!(
+            "{side} must be an object with named latitude and longitude fields, \
+             for example {{\"latitude\": 38.96, \"longitude\": -77.36}}"
+        ));
+    };
+    if let Some(extra) = fields
+        .keys()
+        .find(|k| !["latitude", "longitude"].contains(&k.as_str()))
+    {
+        return Err(format!(
+            "{side}.{extra} is not accepted; send only latitude and longitude"
+        ));
+    }
+    let degrees = |field: &str, limit: f64| {
+        let value = fields
+            .get(field)
+            .ok_or_else(|| format!("{side}.{field} is missing"))?;
+        let degrees = value
+            .as_f64()
+            .ok_or_else(|| format!("{side}.{field} must be a number, not {value}"))?;
+        if degrees.abs() > limit {
+            return Err(format!(
+                "{side}.{field} {degrees} is outside -{limit} to {limit}"
+            ));
+        }
+        Ok(degrees)
+    };
+    let latitude = degrees("latitude", 90.0)?;
+    Ok([degrees("longitude", 180.0)?, latitude])
+}
+
+/// One line for people; the structured result carries everything.
+fn summary(value: &Value) -> String {
+    let status = value["status"].as_str().unwrap_or_default();
+    let text = |value: &Value| value.as_str().unwrap_or_default().to_owned();
+    match value["options"].as_array().map(Vec::as_slice) {
+        Some([best, ..]) => format!(
+            "{status}: {count} option(s). Best: enter at {entry} ({entry_id}), exit at {exit} \
+             ({exit_id}), via {facilities}. Full details are in the structured result.",
+            count = value["options"].as_array().map_or(0, Vec::len),
+            entry = text(&best["entry"]["label"]),
+            entry_id = text(&best["entry"]["point_id"]),
+            exit = text(&best["exit"]["label"]),
+            exit_id = text(&best["exit"]["point_id"]),
+            facilities = best["facilities"]
+                .as_array()
+                .map(|codes| codes.iter().map(text).collect::<Vec<_>>().join(", "))
+                .unwrap_or_default(),
+        ),
+        _ => match value["message"].as_str() {
+            Some(message) => format!("{status}: {message}"),
+            None => {
+                format!("{status}: no route options. Full details are in the structured result.")
+            }
+        },
+    }
 }
 
 /// An internal failure, logged by stage and service code only (never message text).
@@ -316,12 +401,6 @@ impl Failure {
     }
 }
 
-struct Place {
-    name: String,
-    address: Option<String>,
-    position: [f64; 2],
-}
-
 #[derive(Deserialize)]
 struct Point {
     point_id: String,
@@ -343,132 +422,54 @@ struct Candidate<'a> {
 }
 
 impl App {
-    async fn find_toll_ramps(&self, origin: &str, destination: &str) -> Result<Value, Failure> {
-        if !self.reserve_lookups().await? {
-            return Ok(json!({
-                "status": "daily_lookup_limit",
-                "message": "TollChat's daily place-lookup limit is used up. Try again after midnight UTC.",
-            }));
-        }
-        let (origin_places, destination_places) =
-            tokio::try_join!(self.search(origin), self.search(destination))?;
+    /// `Ok(Err(message))` is an input mistake the caller should fix.
+    async fn find_toll_ramps(
+        &self,
+        origin: [f64; 2],
+        destination: [f64; 2],
+    ) -> Result<Result<Value, String>, Failure> {
         let points = self.load_points().await?;
-
-        let mut response = json!({ "status": "resolved" });
-        let mut resolved = Vec::new();
-        for (side, role, places) in [
-            ("origin", "entry", &origin_places),
-            ("destination", "exit", &destination_places),
+        let origins = candidates_near(&points, origin, "entry");
+        let destinations = candidates_near(&points, destination, "exit");
+        for (side, [lon, lat], role, candidates) in [
+            ("origin", origin, "entry", &origins),
+            ("destination", destination, "exit", &destinations),
         ] {
-            // Only matches near a supported toll road count, so "Leesburg" is not
-            // ambiguous with Leesburg, Florida.
-            let covered: Vec<_> = places
-                .iter()
-                .map(|place| (place, candidates_near(&points, place.position, role)))
-                .filter(|(_, candidates)| !candidates.is_empty())
-                .collect();
-            response[side] = match (places.first(), covered.as_slice()) {
-                (None, _) => json!({ "match": "place_not_found" }),
-                (Some(top), []) => {
-                    json!({ "match": "outside_coverage", "name": top.name, "address": top.address })
-                }
-                (_, [(top, _), rest @ ..])
-                    if rest.iter().any(|(other, _)| {
-                        miles(top.position, other.position) > AMBIGUOUS_MILES
-                    }) =>
-                {
-                    let labels: Vec<_> = covered.iter().map(|(place, _)| place.label()).collect();
-                    json!({ "match": "ambiguous", "candidates": labels })
-                }
-                (_, [(top, _), ..]) => {
-                    json!({ "match": "resolved", "name": top.name, "address": top.address })
-                }
-            };
-            if let Some((_, candidates)) = covered.into_iter().next() {
-                resolved.push(candidates);
+            // A Virginia longitude given as latitude lands in Antarctica; swapped back, it is covered.
+            if candidates.is_empty() && !candidates_near(&points, [lat, lon], role).is_empty() {
+                return Ok(Err(format!(
+                    "{side}.latitude {lat} is outside the plausible range for this service; \
+                     did you swap latitude and longitude?"
+                )));
             }
         }
 
-        let problem = ["origin", "destination"]
-            .iter()
-            .map(|side| response[*side]["match"].clone())
-            .find(|outcome| outcome != "resolved");
-        if let Some(problem) = problem {
-            // Report the first side that needs attention; both sides' details are included.
-            response["status"] = problem;
-            return Ok(response);
-        }
-        let (status, options) = self.validated_options(&resolved[0], &resolved[1]).await?;
+        let end = |[lon, lat]: [f64; 2], candidates: &[Candidate<'_>]| {
+            let coverage = if candidates.is_empty() {
+                "outside_coverage"
+            } else {
+                "covered"
+            };
+            json!({ "latitude": lat, "longitude": lon, "coverage": coverage })
+        };
+        let mut response = json!({
+            "origin": end(origin, &origins),
+            "destination": end(destination, &destinations),
+        });
+        let (status, options, lanes) = if origins.is_empty() || destinations.is_empty() {
+            ("outside_coverage", Vec::new(), None)
+        } else if miles(origin, destination) < SAME_LOCATION_MILES {
+            ("same_location", Vec::new(), None)
+        } else {
+            self.validated_options(&points, &origins, &destinations)
+                .await?
+        };
         response["status"] = json!(status);
         response["options"] = json!(options);
-        Ok(response)
-    }
-
-    /// Reserve this call's lookups against the shared UTC-day budget before spending any.
-    async fn reserve_lookups(&self) -> Result<bool, Failure> {
-        let day = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs()
-            / 86_400;
-        let number = |value: u64| AttributeValue::N(value.to_string());
-        let reserved = self
-            .dynamodb
-            .update_item()
-            .table_name(&self.lookup_table)
-            .key("day", number(day))
-            .update_expression("ADD lookups :count SET expires_at = :expires")
-            .condition_expression("attribute_not_exists(lookups) OR lookups <= :last_start")
-            .expression_attribute_values(":count", number(LOOKUPS_PER_CALL))
-            .expression_attribute_values(":expires", number((day + 2) * 86_400))
-            .expression_attribute_values(
-                ":last_start",
-                number(DAILY_LOOKUP_LIMIT - LOOKUPS_PER_CALL),
-            )
-            .send()
-            .await;
-        match reserved {
-            Ok(_) => Ok(true),
-            Err(error) => match error.into_service_error() {
-                UpdateItemError::ConditionalCheckFailedException(_) => Ok(false),
-                other => Err(Failure::new(
-                    "lookup_budget",
-                    other.meta().code().unwrap_or("unavailable"),
-                )),
-            },
+        if let Some(direction) = lanes {
+            response["reversible_lanes"] = json!({ "direction": direction });
         }
-    }
-
-    async fn search(&self, place: &str) -> Result<Vec<Place>, Failure> {
-        let output = self
-            .places
-            .search_text()
-            .query_text(place)
-            .set_bias_position(Some(SERVICE_AREA_CENTER.to_vec()))
-            .filter(SearchTextFilter::builder().include_countries("USA").build())
-            .max_results(3)
-            .intended_use(SearchTextIntendedUse::SingleUse)
-            .send()
-            .await
-            .map_err(|error| {
-                let code = error
-                    .as_service_error()
-                    .and_then(|e| e.meta().code())
-                    .unwrap_or("unavailable");
-                Failure::new("search_text", code)
-            })?;
-        Ok(output
-            .result_items()
-            .iter()
-            .filter_map(|item| match item.position() {
-                &[lon, lat] => Some(Place {
-                    name: item.title().to_owned(),
-                    address: item.address().and_then(|a| a.label()).map(str::to_owned),
-                    position: [lon, lat],
-                }),
-                _ => None,
-            })
-            .collect())
+        Ok(Ok(response))
     }
 
     async fn load_points(&self) -> Result<Vec<Point>, Failure> {
@@ -486,11 +487,13 @@ impl App {
     }
 
     /// Every option is validated with the pricing tools' own route check before it is returned.
+    /// The third value is the reversible lanes' direction when they are why no option is usable.
     async fn validated_options(
         &self,
+        points: &[Point],
         origins: &[Candidate<'_>],
         destinations: &[Candidate<'_>],
-    ) -> Result<(&'static str, Vec<Value>), Failure> {
+    ) -> Result<(&'static str, Vec<Value>, Option<Value>), Failure> {
         let fail = |error: BoxError| Failure::database("validate_routes", &error);
         let ids = |side: &[Candidate<'_>]| {
             side.iter()
@@ -512,6 +515,10 @@ impl App {
             lanes_closed |= status == "currently_unavailable";
             lanes_unknown |= status == "unknown_availability";
             let legs: Value = row.get("facility_legs");
+            // Present only for routes whose use depends on the I-95/I-395 reversible lanes.
+            let lanes = row
+                .get::<_, Option<Value>>("i95_evidence")
+                .map(|evidence| evidence["availability"].clone());
             let (Some(entry), Some(exit)) = (
                 find(origins, row.get("origin")),
                 find(destinations, row.get("destination")),
@@ -531,25 +538,43 @@ impl App {
             // shortcut: straight-line access miles, not drive time; upgrade to a Routes matrix if users get cross-river picks.
             let score =
                 entry.miles + exit.miles + FACILITY_PENALTY_MILES * (facilities.len() - 1) as f64;
-            ranked.push((score, entry, exit, facilities));
+            ranked.push((score, entry, exit, facilities, legs, lanes));
         }
-        ranked.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // Equal scores are common (one interchange, two exits); break ties the same way every time.
+        let key = |c: &Candidate<'_>| c.point.point_id.clone();
+        ranked.sort_by(|a, b| {
+            (a.0.total_cmp(&b.0)).then_with(|| (key(a.1), key(a.2)).cmp(&(key(b.1), key(b.2))))
+        });
 
         // Approach variants of one interchange validate separately; show each route once.
         let mut seen = Vec::new();
         let mut options = Vec::new();
-        for (_, entry, exit, facilities) in ranked {
+        for (score, entry, exit, facilities, legs, lanes) in ranked {
             let route = (spot(entry.point), spot(exit.point), facilities.clone());
             if options.len() == MAX_OPTIONS || seen.contains(&route) {
                 continue;
             }
             seen.push(route);
-            options.push(json!({
-                "entry": { "point_id": entry.point.point_id, "label": entry.point.label, "direction": entry.point.direction },
-                "exit": { "point_id": exit.point.point_id, "label": exit.point.label, "direction": exit.point.direction },
+            let (segments, straight_line) = segments(points, &legs)?;
+            let access = entry.miles + exit.miles;
+            let mut option = json!({
+                "route_id": route_id(&entry.point.point_id, &segments, &exit.point.point_id),
+                "entry": entry.point.describe(),
+                "exit": exit.point.describe(),
                 "facilities": facilities,
+                "segments": segments,
+                "total_straight_line_miles": round_tenth(straight_line),
                 "access_miles": { "origin": round_tenth(entry.miles), "destination": round_tenth(exit.miles) },
-            }));
+                "score": {
+                    "access_miles": round_tenth(access),
+                    "facility_penalty_miles": round_tenth(score - access),
+                    "total": round_tenth(score),
+                },
+            });
+            if let Some(direction) = lanes {
+                option["reversible_lanes"] = json!({ "direction": direction });
+            }
+            options.push(option);
         }
         let status = if !options.is_empty() {
             "resolved"
@@ -560,14 +585,86 @@ impl App {
         } else {
             "no_valid_route"
         };
-        Ok((status, options))
+        // One lane state per query, so any route's evidence gives the direction.
+        let lanes = matches!(status, "currently_unavailable" | "availability_unknown")
+            .then(|| {
+                rows.iter().find_map(|row| {
+                    row.get::<_, Option<Value>>("i95_evidence")
+                        .map(|evidence| evidence["availability"].clone())
+                })
+            })
+            .flatten();
+        Ok((status, options, lanes))
     }
 }
 
-impl Place {
-    fn label(&self) -> String {
-        self.address.clone().unwrap_or_else(|| self.name.clone())
+impl Point {
+    /// The catalog fields a caller needs; airports have no direction, so theirs is left out.
+    fn describe(&self) -> Value {
+        let mut point = json!({
+            "point_id": self.point_id,
+            "network": self.network_id,
+            "role": self.point_type,
+            "label": self.label,
+        });
+        if let Some(direction) = &self.direction {
+            point["direction"] = json!(direction);
+        }
+        point
     }
+}
+
+/// One segment per stretch of toll road, with the straight-line distance between its ends (the
+/// catalog has no road miles) and the pricing key of every toll charged on it.
+fn segments(points: &[Point], legs: &Value) -> Result<(Vec<Value>, f64), Failure> {
+    let located = |id: &Value| {
+        let point = points.iter().find(|p| id.as_str() == Some(&p.point_id))?;
+        Some(point.location.as_ref()?.coordinates)
+    };
+    let mut total = 0.0;
+    let mut segments: Vec<Value> = Vec::new();
+    for leg in legs.as_array().into_iter().flatten() {
+        let (from, to) = (&leg["point_ids"][0], &leg["point_ids"][1]);
+        // The Dulles Toll Road and Greenway can charge twice for one stretch, as separate legs.
+        if let Some(same) = segments.last_mut().filter(|segment| {
+            segment["facility"] == leg["facility"]
+                && segment["entry_point_id"] == *from
+                && segment["exit_point_id"] == *to
+        }) {
+            if let Some(keys) = same["pricing_keys"].as_array_mut() {
+                keys.push(leg["pricing_key"].clone());
+            }
+            continue;
+        }
+        let (Some(a), Some(b)) = (located(from), located(to)) else {
+            return Err(Failure::new("segments", "shape"));
+        };
+        total += miles(a, b);
+        segments.push(json!({
+            "facility": leg["facility"],
+            "entry_point_id": from,
+            "exit_point_id": to,
+            "straight_line_miles": round_tenth(miles(a, b)),
+            "pricing_keys": [leg["pricing_key"]],
+        }));
+    }
+    Ok((segments, total))
+}
+
+/// The entry, each toll segment's ends, and the exit, joined by `>`: one pair of ramps can be
+/// routed differently as the reversible lanes change, and then gets a different ID.
+fn route_id(entry: &str, segments: &[Value], exit: &str) -> String {
+    let mut chain = vec![entry];
+    let ends = segments
+        .iter()
+        .flat_map(|s| [&s["entry_point_id"], &s["exit_point_id"]])
+        .filter_map(Value::as_str);
+    for id in ends.chain([exit]) {
+        if chain.last() != Some(&id) {
+            chain.push(id);
+        }
+    }
+    chain.join(">")
 }
 
 fn find<'s, 'a>(side: &'s [Candidate<'a>], id: &str) -> Option<&'s Candidate<'a>> {

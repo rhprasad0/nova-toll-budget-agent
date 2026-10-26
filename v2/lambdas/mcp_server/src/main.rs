@@ -1,9 +1,6 @@
 use std::env;
-use std::time::Duration;
 
 use aws_config::BehaviorVersion;
-use aws_config::retry::RetryConfig;
-use aws_config::timeout::TimeoutConfig;
 use mcp_server::{App, BoxError, iam_database, log_filter, router};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -15,23 +12,9 @@ async fn main() -> Result<(), BoxError> {
         .with(log_filter())
         .init();
 
-    let sdk = aws_config::defaults(BehaviorVersion::latest())
-        .timeout_config(
-            TimeoutConfig::builder()
-                .operation_timeout(Duration::from_secs(3))
-                .build(),
-        )
-        .load()
-        .await;
+    // Only for the RDS IAM auth token: the server calls no AWS service APIs.
+    let sdk = aws_config::defaults(BehaviorVersion::latest()).load().await;
     let app = App {
-        // One attempt per lookup: every SearchText request is billed.
-        places: aws_sdk_geoplaces::Client::from_conf(
-            aws_sdk_geoplaces::config::Builder::from(&sdk)
-                .retry_config(RetryConfig::standard().with_max_attempts(1))
-                .build(),
-        ),
-        dynamodb: aws_sdk_dynamodb::Client::new(&sdk),
-        lookup_table: env::var("LOOKUP_TABLE")?,
         database: iam_database(
             &sdk,
             env::var("DB_HOST")?,

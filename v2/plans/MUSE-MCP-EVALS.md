@@ -11,18 +11,15 @@ harness digests, or release gates with `v2/eval/`.
 ## 1. Tool evals: `find_toll_ramps`
 
 Deterministic checks of the tool alone, with no model in the loop. They run
-against the development server with real Amazon Location lookups, because the
-e2e suite replaces SearchText with canned answers and so never tests lookup
-quality.
+against the development server, so they see live reversible-lane data. The tool
+takes coordinates; geocoding place names is Muse's job and is graded in the Muse
+evals below.
 
-**Cases.** Each case is an origin and destination as a user might phrase them,
-labeled by a person (from operator maps) with the set of acceptable entry/exit
-pairs and the expected `status`. Cover:
+**Cases.** Each case is an origin and destination as coordinates of public
+landmarks, labeled by a person (from operator maps) with the set of acceptable
+entry/exit pairs and the expected `status`. Cover:
 
-- landmarks, towns and neighborhoods, intersections, and synthetic or
-  public-building street addresses;
-- ambiguous names: Tysons, "Washington" / DC, Springfield vs. Franconia,
-  Pentagon vs. Pentagon City, Reston;
+- landmarks, towns and neighborhoods, and intersections;
 - airports (IAD, DCA) as either end;
 - cross-facility trips (Greenway → Dulles Toll Road, Dulles Toll Road → I-495
   or I-66);
@@ -33,7 +30,8 @@ pairs and the expected `status`. Cover:
   Toll Road entry); the server counts each extra toll road as 2 access miles;
 - I-95/I-395 reversible-lane trips in both directions, with the lanes open,
   closed, and with missing or stale lane data;
-- out-of-area places (Baltimore, Richmond, Manassas) and misspellings.
+- out-of-area places (Baltimore, Richmond, Manassas), same-place trips, and
+  swapped latitude and longitude.
 
 **Metrics.**
 
@@ -43,7 +41,6 @@ pairs and the expected `status`. Cover:
 | An acceptable pair is among the options | top-3 rate |
 | `status` matches the label | status accuracy |
 | Returned routes that fail `oracle.validate_pricing_route` when re-checked | **must be 0** |
-| Lookups per call | 2, always |
 | Latency | p50 and p99 |
 | Cost | dollars per 100 calls |
 
@@ -58,21 +55,22 @@ Center and work at Tysons", graded on the transcript and tool calls.
 
 **Behaviors to grade.**
 
-- Confirms the matched places before relying on them.
-- Asks the user on `ambiguous` instead of guessing.
+- Geocodes the user's places correctly, and asks when a name is ambiguous
+  (Tysons, "Washington" / DC, Springfield vs. Franconia, Pentagon vs. Pentagon
+  City) instead of guessing.
+- Confirms the chosen option before relying on it.
 - Offers a landmark or intersection instead of pressing for an exact address.
 - Uses returned point IDs verbatim and never invents or edits one.
-- Reports `daily_lookup_limit`, `currently_unavailable`, `outside_coverage`,
-  and errors honestly.
-- Makes no redundant calls for the same places.
+- Reports `same_location`, `currently_unavailable`, `outside_coverage`, and
+  errors honestly, never as zero tolls.
+- Makes no redundant calls for the same coordinates.
 - Presents options with their access miles and says results are estimates.
 
 **Onboarding.** From the runbook's connect message, does the Muse app build a
 working Custom Connector from `https://mcp.tollchat.ai/`, and does it save it
 for reuse? Record the success rate and the number of turns to connect.
 
-**Metrics.** pass^k over 3 trials per scenario, plus tool calls and lookups per
-conversation.
+**Metrics.** pass^k over 3 trials per scenario, plus tool calls per conversation.
 
 ## 3. Ground rules
 
@@ -81,8 +79,8 @@ conversation.
 - Keep granular output (transcripts, per-case results) in ignored
   `v2/eval/private/`. Record each campaign in the experiment journal's weekly
   page with its purpose, versions, aggregate result, limitations, and cost.
-- Each campaign needs a budget approved by Ryan before it runs. Tool evals use
-  the shared daily lookup limit, so schedule them to leave room for users.
+- Each campaign needs a budget approved by Ryan before it runs. Tool evals
+  share the server's 2 requests per second with users, so pace them.
 
 ## 4. Open questions
 

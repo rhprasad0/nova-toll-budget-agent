@@ -252,7 +252,7 @@ jobs:
         run: |
           cargo fmt --check
           cargo clippy --locked --all-targets -- -D warnings
-      - name: End-to-end against throwaway PostGIS and DynamoDB Local
+      - name: End-to-end against throwaway PostGIS
         run: ./e2e.sh
   trusted-development-plan:
     if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && vars.DEVELOPMENT_BLUE_GREEN_BOOTSTRAPPED == 'true'
