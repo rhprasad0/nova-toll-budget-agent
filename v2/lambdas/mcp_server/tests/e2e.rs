@@ -651,7 +651,7 @@ async fn http_boundary_answers_json_and_rejects_bad_requests() {
     );
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["result"]["serverInfo"]["name"], "tollchat");
-    assert_eq!(body["result"]["serverInfo"]["version"], "0.3.0");
+    assert_eq!(body["result"]["serverInfo"]["version"], "0.3.1");
     assert!(
         body["result"]["instructions"]
             .as_str()
@@ -935,8 +935,8 @@ async fn dtr_commute_estimate_uses_published_rates() {
         .text;
     assert_eq!(
         text,
-        "estimated: about $3000 a year in tolls (range $3000 to $3000), from 60 recent commute \
-         days. Full details are in the structured result."
+        "estimated: about $3000 a year in tolls (range $3000 to $3000), from 60 of 60 recent \
+         commute days. Full details are in the structured result."
     );
 }
 
@@ -1004,7 +1004,7 @@ async fn i66_commute_without_history_has_too_few_prices() {
         result["message"]
             .as_str()
             .unwrap()
-            .contains("at least half")
+            .contains("at least half of each")
     );
     assert_eq!(result["return"]["facilities"], json!(["i66"]), "{result}");
 
@@ -1019,6 +1019,12 @@ async fn i66_commute_without_history_has_too_few_prices() {
     );
     let fridays = &result["basis"]["coverage_by_weekday"][0];
     assert_eq!(fridays["weekday"], "friday", "{result}");
+
+    // Two Monday holidays plus weekends all price at $0 with no data; that is not "$0 a year".
+    let mut holidays = commute("i66:1:entry:EB", "i66:14:exit:EB");
+    holidays["weekdays"] = json!(["monday", "saturday", "sunday"]);
+    let result = harness.estimate(holidays).await;
+    assert_eq!(result["status"], "too_few_recent_prices", "{result}");
 }
 
 #[tokio::test]
@@ -1038,28 +1044,30 @@ async fn return_trip_uses_the_same_roads_in_reverse() {
     }
 }
 
-/// Seeds one price per weekday at `local_time` for an I-495 OD pair, leaving out about a fifth of
-/// the days the way feed outages do (never a whole weekday).
+/// Seeds one price per weekday at `local_time` for an I-495 OD pair on the 12-week window's days
+/// that `days` keeps (a SQL predicate over `day` and its 0-based `week`).
 async fn seed_i495_history(
     admin: &tokio_postgres::Client,
     corridor: &str,
     od_pair_id: i32,
     local_time: &str,
     price: &str,
+    days: &str,
 ) {
+    let sql = format!(
+        "INSERT INTO pricing.trip_pricing_i95 (interval_end_at, current_at, calculated_at,
+             corridor_id, corridor_name, od_pair_id, od_pair_name, start_zone_id, end_zone_id,
+             end_zone_name, zone_toll_rate_usd, link_status, s3_key)
+         SELECT at, at, at, 1, $1, $2, 'e2e', $2, $2, 'e2e', $4::text::numeric, 'OPEN', 'e2e-history'
+         FROM generate_series((now() AT TIME ZONE 'America/New_York')::date - 84,
+                              (now() AT TIME ZONE 'America/New_York')::date - 1,
+                              interval '1 day') WITH ORDINALITY AS window_day(day, position),
+              LATERAL (SELECT (day::date + $3::text::time) AT TIME ZONE 'America/New_York' AS at,
+                              (position - 1) / 7 AS week) AS t
+         WHERE extract(isodow FROM day) BETWEEN 1 AND 5 AND ({days})"
+    );
     admin
-        .execute(
-            "INSERT INTO pricing.trip_pricing_i95 (interval_end_at, current_at, calculated_at,
-                 corridor_id, corridor_name, od_pair_id, od_pair_name, start_zone_id, end_zone_id,
-                 end_zone_name, zone_toll_rate_usd, link_status, s3_key)
-             SELECT at, at, at, 1, $1, $2, 'e2e', $2, $2, 'e2e', $4::text::numeric, 'OPEN', 'e2e-history'
-             FROM generate_series((now() AT TIME ZONE 'America/New_York')::date - 84,
-                                  (now() AT TIME ZONE 'America/New_York')::date - 1,
-                                  interval '1 day') AS day,
-                  LATERAL (SELECT (day::date + $3::text::time) AT TIME ZONE 'America/New_York' AS at) AS t
-             WHERE extract(isodow FROM day) BETWEEN 1 AND 5 AND extract(day FROM day)::int % 5 <> 0",
-            &[&corridor, &od_pair_id, &local_time, &price],
-        )
+        .execute(&sql, &[&corridor, &od_pair_id, &local_time, &price])
         .await
         .unwrap();
 }
@@ -1104,16 +1112,31 @@ async fn i495_commute_prices_recent_history() {
 
     let outbound_od = od_pair(&admin, "i495:187NO", "i495:185ND").await;
     let return_od = od_pair(&admin, &back.0, &back.1).await;
-    seed_i495_history(&admin, "I-495-NB", outbound_od, "08:33", "3.25").await;
-    seed_i495_history(&admin, "I-495-SB", return_od, "17:33", "4.50").await;
-    let after = harness.estimate(route).await;
-    admin
-        .execute(
-            "DELETE FROM pricing.trip_pricing_i95 WHERE s3_key = 'e2e-history'",
-            &[],
-        )
-        .await
-        .unwrap();
+    // Each scenario seeds both legs on the same days, estimates, and clears the rows again.
+    let priced_on = |days: &'static str| {
+        let (admin, route, harness) = (&admin, route.clone(), &harness);
+        async move {
+            seed_i495_history(admin, "I-495-NB", outbound_od, "08:33", "3.25", days).await;
+            seed_i495_history(admin, "I-495-SB", return_od, "17:33", "4.50", days).await;
+            let result = harness.estimate(route).await;
+            admin
+                .execute(
+                    "DELETE FROM pricing.trip_pricing_i95 WHERE s3_key = 'e2e-history'",
+                    &[],
+                )
+                .await
+                .unwrap();
+            result
+        }
+    };
+    // About a fifth of the days missing, as feed outages leave them.
+    let after = priced_on("extract(day FROM day)::int % 5 <> 0").await;
+    // One week in three, like a feed that misses most intervals: thin but still an estimate.
+    let sparse = priced_on("week % 3 = 0").await;
+    // A single week: too little to stand for a year.
+    let thin = priced_on("week = 0").await;
+    // Two weeks: two of every weekday, but only a sixth of the days.
+    let sixth = priced_on("week % 6 = 0").await;
 
     assert_eq!(after["status"], "estimated", "{after}");
     assert_eq!(typical(&after, "daily_round_trip_usd"), 7.75);
@@ -1125,6 +1148,18 @@ async fn i495_commute_prices_recent_history() {
     assert_eq!(basis["uses_modeled_prices"], false);
     assert_eq!(basis["uses_published_fixed_rates"], false);
     assert_eq!(after["by_facility"][0]["facility"], "i95_i495");
+
+    assert_eq!(sparse["status"], "estimated", "{sparse}");
+    assert_eq!(typical(&sparse, "annual_toll_usd"), 1937.5);
+    assert_eq!(sparse["basis"]["priced_days"], 20, "{sparse}");
+    assert_eq!(thin["status"], "too_few_recent_prices", "{thin}");
+    assert!(thin.get("annual_toll_usd").is_none());
+    assert_eq!(sixth["status"], "too_few_recent_prices", "{sixth}");
+    let message = sixth["message"].as_str().unwrap();
+    assert!(
+        message.starts_with("Only 10 of 60") && !message.contains("too few"),
+        "{message}"
+    );
     assert!(after.get("message").is_none());
 }
 
