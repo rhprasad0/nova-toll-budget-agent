@@ -154,7 +154,7 @@ jobs:
         ref: ${{ steps.admitted.outputs.candidate }}
         path: candidate
         persist-credentials: false
-    - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+    - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       with:
         version: 0.12.5
         checksum: 68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2
