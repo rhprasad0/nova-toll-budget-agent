@@ -1,13 +1,26 @@
 //! End to end: the real router over HTTP and real MCP JSON-RPC, against the disposable oracle
-//! database with its real catalog and least-privilege roles. Nothing is faked.
-//! Run through `e2e.sh`, which starts the container.
+//! database with its real catalog and least-privilege roles, and DynamoDB Local for the salary
+//! cap. Only OpenWeb Ninja, the paid, credentialed salary source, is faked.
+//! Run through `e2e.sh`, which starts the containers.
 
+use std::collections::HashMap;
 use std::io::Write;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use axum::Router;
-use axum::http::header::CONTENT_TYPE;
-use mcp_server::{App, Database, fixed_price, log_filter, router};
+use aws_config::{BehaviorVersion, Region};
+use aws_sdk_dynamodb::types::{
+    AttributeDefinition, AttributeValue, BillingMode, KeySchemaElement, KeyType,
+    ScalarAttributeType,
+};
+use axum::extract::Query;
+use axum::http::header::{CONTENT_TYPE, LOCATION};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::routing::get;
+use axum::{Json, Router};
+use mcp_server::{App, BoxError, Database, Salaries, fixed_price, log_filter, router};
 use serde_json::{Value, json};
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tokio_postgres::NoTls;
@@ -35,6 +48,11 @@ const SPRINGFIELD: (f64, f64) = (38.7893, -77.1872);
 const WHITE_HOUSE: (f64, f64) = (38.8977, -77.0365);
 const JONES_BRANCH: (f64, f64) = (38.9265, -77.2190);
 const NEW_YORK: (f64, f64) = (40.7128, -74.0060);
+
+/// The fake OpenWeb Ninja's one known job, from its OpenAPI example.
+fn developer_in_new_york() -> Value {
+    json!({ "job_title": "software developer", "location": "New York" })
+}
 
 fn at((latitude, longitude): (f64, f64)) -> Value {
     json!({ "latitude": latitude, "longitude": longitude })
@@ -70,6 +88,7 @@ fn logs() -> &'static LogBuffer {
             .with(
                 tracing_subscriber::fmt::layer()
                     .json()
+                    .with_span_list(false)
                     .with_writer(move || writer.clone()),
             )
             .with(log_filter())
@@ -81,6 +100,11 @@ fn logs() -> &'static LogBuffer {
 struct Harness {
     base: String,
     http: reqwest::Client,
+    /// How many times the server read its OpenWeb Ninja key.
+    key_loads: Arc<AtomicUsize>,
+    /// The salary cap's counter table, one per harness.
+    dynamodb: aws_sdk_dynamodb::Client,
+    table: String,
     _lanes: Option<RwLockReadGuard<'static, ()>>,
 }
 
@@ -136,8 +160,26 @@ async fn start() -> Harness {
 }
 
 async fn start_with(database: Database) -> Harness {
+    start_app(database, |_| Ok("test-key".into())).await
+}
+
+/// `key` answers each key read, given how many reads came before it.
+async fn start_app(database: Database, key: fn(usize) -> Result<String, BoxError>) -> Harness {
     logs();
-    let base = serve(router(App { database }, &["127.0.0.1"])).await;
+    let key_loads = Arc::new(AtomicUsize::new(0));
+    let loads = key_loads.clone();
+    let (dynamodb, table) = lookup_table().await;
+    let salaries = Salaries::new(
+        fake_openwebninja().await,
+        Arc::new(move || {
+            let attempt = loads.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async move { key(attempt) })
+        }),
+        dynamodb.clone(),
+        table.clone(),
+    )
+    .unwrap();
+    let base = serve(router(App { database, salaries }, &["127.0.0.1"])).await;
     let http = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
@@ -145,8 +187,111 @@ async fn start_with(database: Database) -> Harness {
     Harness {
         base,
         http,
+        key_loads,
+        dynamodb,
+        table,
         _lanes: None,
     }
+}
+
+/// A new counter table in DynamoDB Local, shaped like `aws_dynamodb_table.mcp_lookups`.
+async fn lookup_table() -> (aws_sdk_dynamodb::Client, String) {
+    let dynamodb = aws_sdk_dynamodb::Client::from_conf(
+        aws_sdk_dynamodb::Config::builder()
+            .behavior_version(BehaviorVersion::latest())
+            .region(Region::new("us-east-1"))
+            .credentials_provider(aws_sdk_dynamodb::config::Credentials::new(
+                "e2e", "e2e", None, None, "e2e",
+            ))
+            .endpoint_url(format!(
+                "http://127.0.0.1:{}",
+                port("MCP_E2E_DDB_PORT", 58000)
+            ))
+            .build(),
+    );
+    static TABLES: AtomicUsize = AtomicUsize::new(0);
+    let table = format!("lookups-{}", TABLES.fetch_add(1, Ordering::Relaxed));
+    dynamodb
+        .create_table()
+        .table_name(&table)
+        .billing_mode(BillingMode::PayPerRequest)
+        .attribute_definitions(
+            AttributeDefinition::builder()
+                .attribute_name("day")
+                .attribute_type(ScalarAttributeType::N)
+                .build()
+                .unwrap(),
+        )
+        .key_schema(
+            KeySchemaElement::builder()
+                .attribute_name("day")
+                .key_type(KeyType::Hash)
+                .build()
+                .unwrap(),
+        )
+        .send()
+        .await
+        .unwrap();
+    (dynamodb, table)
+}
+
+fn today() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        / 86_400
+}
+
+/// OpenWeb Ninja's Glassdoor salary endpoint, answering as its OpenAPI example and live no-data
+/// replies do. Any other title is a request the server should not have sent.
+async fn fake_openwebninja() -> String {
+    async fn salary_estimation(
+        headers: HeaderMap,
+        Query(query): Query<HashMap<String, String>>,
+    ) -> Response {
+        let error = Json(json!({ "status": "ERROR" }));
+        if headers.get("x-api-key").is_none_or(|key| key != "test-key") {
+            return (StatusCode::UNAUTHORIZED, error).into_response();
+        }
+        let experience = query.get("years_of_experience").map(String::as_str);
+        let median = if experience == Some("ALL") {
+            166275.36
+        } else {
+            200000.0
+        };
+        let data = match (query["job_title"].as_str(), query["location"].as_str()) {
+            ("software developer", "New York") => json!({
+                "location": "New York City, NY", "job_title": "Software Developer",
+                "min_salary": 128117.25, "max_salary": 218872.06, "median_salary": median,
+                "min_base_salary": 94192.41, "max_base_salary": 155545.69,
+                "median_base_salary": 121042.24, "min_additional_pay": 33924.84,
+                "max_additional_pay": 63326.37, "median_additional_pay": 45233.12,
+                "salary_period": "YEAR", "salary_currency": "USD", "salary_count": 213898,
+                "salaries_updated_at": "2024-06-06T23:59:59.000Z",
+                "link": "https://www.glassdoor.com/Salaries/company-salaries.htm",
+                "confidence": "CONFIDENT",
+            }),
+            ("qzxv florbish wrangler", _) => json!({}),
+            ("rate limited", _) => return (StatusCode::TOO_MANY_REQUESTS, error).into_response(),
+            ("not ok", _) => return error.into_response(),
+            // Followed, this would succeed; the server must not follow it, as the key goes along.
+            ("redirected", _) => {
+                let known =
+                    "?job_title=software+developer&location=New+York&years_of_experience=ALL";
+                return (StatusCode::FOUND, [(LOCATION, known)]).into_response();
+            }
+            _ => return (StatusCode::BAD_REQUEST, error).into_response(),
+        };
+        let reply =
+            json!({ "status": "OK", "request_id": "fake", "parameters": query, "data": data });
+        Json(reply).into_response()
+    }
+    serve(Router::new().route(
+        "/realtime-glassdoor-data/salary-estimation",
+        get(salary_estimation),
+    ))
+    .await
 }
 
 impl Harness {
@@ -197,6 +342,33 @@ impl Harness {
         let called = self.call_tool("estimate_annual_tolls", arguments).await;
         assert!(!called.is_error, "{} {}", called.text, called.result);
         called.result
+    }
+
+    async fn salary(&self, arguments: Value) -> Called {
+        self.call_tool("estimate_salary", arguments).await
+    }
+
+    async fn lookups_today(&self) -> Option<u64> {
+        let item = self
+            .dynamodb
+            .get_item()
+            .table_name(&self.table)
+            .key("day", AttributeValue::N(today().to_string()))
+            .send()
+            .await
+            .unwrap();
+        Some(item.item()?.get("lookups")?.as_n().ok()?.parse().unwrap())
+    }
+
+    async fn set_lookups_today(&self, lookups: u64) {
+        self.dynamodb
+            .put_item()
+            .table_name(&self.table)
+            .item("day", AttributeValue::N(today().to_string()))
+            .item("lookups", AttributeValue::N(lookups.to_string()))
+            .send()
+            .await
+            .unwrap();
     }
 
     async fn find(&self, origin: (f64, f64), destination: (f64, f64)) -> Value {
@@ -728,7 +900,7 @@ async fn http_boundary_answers_json_and_rejects_bad_requests() {
     );
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["result"]["serverInfo"]["name"], "tollchat");
-    assert_eq!(body["result"]["serverInfo"]["version"], "0.4.0");
+    assert_eq!(body["result"]["serverInfo"]["version"], "0.5.0");
     assert!(
         body["result"]["instructions"]
             .as_str()
@@ -862,6 +1034,8 @@ async fn docs_cover_every_tool_status_and_privacy() {
         "estimated",
         "too_few_recent_prices",
         "no_return_route",
+        "no_salary_data",
+        "daily_limit",
     ] {
         assert!(
             doc.contains(&format!("| `{status}`")),
@@ -879,13 +1053,23 @@ async fn docs_cover_every_tool_status_and_privacy() {
 }
 
 #[tokio::test]
-async fn logs_never_contain_coordinates() {
+async fn logs_name_salary_jobs_but_never_coordinates_or_keys() {
     let harness = start().await;
     harness.find(RESTON_TOWN_CENTER, TYSONS_CORNER_CENTER).await;
     harness.find(NEW_YORK, TYSONS_CORNER_CENTER).await;
     let mut schedule = commute("dtr:12:entry:EB", "dtr:1819:exit:EB");
     schedule["weekdays"] = json!(["wednesday"]);
     harness.estimate(schedule).await;
+    harness.salary(developer_in_new_york()).await;
+    harness
+        .salary(json!({ "job_title": "rate limited", "location": "Arlington, VA" }))
+        .await;
+    start_app(database("tollchat_agent"), |_| {
+        Err("AccessDeniedException".into())
+    })
+    .await
+    .salary(json!({ "job_title": "registered nurse", "location": "Fairfax, VA" }))
+    .await;
     let failed = start_with(database("no_such_role"))
         .await
         .call(RESTON_TOWN_CENTER, ROSSLYN)
@@ -899,8 +1083,25 @@ async fn logs_never_contain_coordinates() {
     );
     assert!(logged.contains("\"stage\":\"load_points\""), "{logged}");
     assert!(logged.contains("\"tool\":\"estimate_annual_tolls\""));
-    // Nor the ramps and schedule of an estimate.
-    for text in ["dtr:12:entry:EB", "dtr:1819", "wednesday"] {
+    // A salary call's outcome line names its job, place and experience, and OpenWeb Ninja's answer.
+    for text in [
+        r#""tool":"estimate_salary","status":"estimated""#,
+        r#""job_title":"software developer""#,
+        r#""location":"New York""#,
+        r#""years_of_experience":"ALL""#,
+        r#""upstream_status":200"#,
+        r#""request_id":"fake""#,
+        r#""upstream_ms":"#,
+        r#""code":"http_429""#,
+        r#""upstream_status":429"#,
+        r#""location":"Arlington, VA""#,
+        r#""code":"key_AccessDeniedException""#,
+        r#""job_title":"registered nurse""#,
+    ] {
+        assert!(logged.contains(text), "log misses {text:?}: {logged}");
+    }
+    // Never the ramps and schedule of a toll estimate, nor the OpenWeb Ninja key.
+    for text in ["dtr:12:entry:EB", "dtr:1819", "wednesday", "test-key"] {
         assert!(!logged.contains(text), "log contains {text:?}: {logged}");
     }
     for text in [
@@ -1371,4 +1572,218 @@ async fn estimate_inputs_get_errors_that_say_what_to_fix() {
         );
         assert!(called.result.is_null(), "no result for bad input");
     }
+}
+
+#[tokio::test]
+async fn salary_estimate_reports_glassdoor_pay_bands() {
+    let harness = start().await;
+    // Padding is trimmed: the fake answers only the exact title.
+    let called = harness
+        .salary(json!({ "job_title": " software developer ", "location": "New York" }))
+        .await;
+    assert!(!called.is_error, "{} {}", called.text, called.result);
+    let result = &called.result;
+    for (field, expected) in [
+        ("status", json!("estimated")),
+        ("job_title", json!("Software Developer")),
+        ("location", json!("New York City, NY")),
+        ("years_of_experience", json!("ALL")),
+        ("period", json!("YEAR")),
+        ("currency", json!("USD")),
+        (
+            "total_pay",
+            json!({ "low": 128117.25, "typical": 166275.36, "high": 218872.06 }),
+        ),
+        (
+            "base_pay",
+            json!({ "low": 94192.41, "typical": 121042.24, "high": 155545.69 }),
+        ),
+        (
+            "additional_pay",
+            json!({ "low": 33924.84, "typical": 45233.12, "high": 63326.37 }),
+        ),
+        ("salary_count", json!(213898)),
+        ("confidence", json!("CONFIDENT")),
+        ("salaries_updated_at", json!("2024-06-06T23:59:59.000Z")),
+        ("source", json!("Glassdoor via OpenWeb Ninja")),
+    ] {
+        assert_eq!(result[field], expected, "{field}: {result}");
+    }
+    assert!(result["calculated_at"].is_string());
+    assert!(
+        result.get("link").is_none(),
+        "only listed fields pass through"
+    );
+    assert_eq!(
+        called.text,
+        "estimated: Glassdoor's typical total pay for Software Developer in New York City, NY is \
+         166275.36 USD per year (range 128117.25 to 218872.06), from 213898 salary reports. Full \
+         details are in the structured result."
+    );
+
+    let mut senior = developer_in_new_york();
+    senior["years_of_experience"] = json!("TEN_TO_FOURTEEN");
+    let senior = harness.salary(senior).await.result;
+    assert_eq!(senior["years_of_experience"], "TEN_TO_FOURTEEN");
+    assert_eq!(
+        senior["total_pay"]["typical"], 200000.0,
+        "range forwarded: {senior}"
+    );
+    assert_eq!(harness.key_loads.load(Ordering::SeqCst), 1, "key read once");
+}
+
+#[tokio::test]
+async fn salary_lookups_fail_closed() {
+    let harness = start().await;
+    let limited = harness
+        .salary(json!({ "job_title": "rate limited", "location": "Reston, VA" }))
+        .await;
+    assert!(limited.is_error, "{}", limited.result);
+    assert_eq!(limited.result["status"], "error");
+    assert!(limited.result["total_pay"].is_null());
+    assert_eq!(
+        limited.text,
+        "error: TollChat could not estimate this salary right now. Try again later."
+    );
+
+    for job_title in ["not ok", "redirected"] {
+        let called = harness
+            .salary(json!({ "job_title": job_title, "location": "Reston, VA" }))
+            .await;
+        assert_eq!(
+            called.result["status"], "error",
+            "{job_title}: {}",
+            called.result
+        );
+    }
+
+    let unknown = harness
+        .salary(json!({ "job_title": "qzxv florbish wrangler", "location": "Reston, VA" }))
+        .await;
+    assert!(!unknown.is_error, "{}", unknown.result);
+    assert_eq!(unknown.result["status"], "no_salary_data");
+    assert!(unknown.result["total_pay"].is_null());
+    assert_eq!(
+        unknown.text,
+        "no_salary_data: Glassdoor has no salary estimate for this job title and location."
+    );
+
+    // A failed key read answers an error, and the next call reads the key again.
+    let harness = start_app(database("tollchat_agent"), |attempt| match attempt {
+        0 => Err("SSM is unavailable".into()),
+        _ => Ok("test-key".into()),
+    })
+    .await;
+    let failed = harness.salary(developer_in_new_york()).await;
+    assert!(failed.is_error, "{}", failed.result);
+    assert_eq!(failed.result["status"], "error");
+    let retried = harness.salary(developer_in_new_york()).await;
+    assert_eq!(retried.result["status"], "estimated", "{}", retried.result);
+    assert_eq!(harness.key_loads.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn salary_inputs_get_errors_that_say_what_to_fix() {
+    let harness = start().await;
+    let long = "x".repeat(101);
+    for (arguments, message) in [
+        (
+            json!({ "job_title": "  ", "location": "Reston, VA" }),
+            "job_title must be 1 to 100 characters",
+        ),
+        (
+            json!({ "job_title": "nurse", "location": long }),
+            "location must be 1 to 100 characters",
+        ),
+        (
+            json!({ "job_title": "nurse", "location": "Reston, VA", "years_of_experience": "5" }),
+            "unknown variant `5`",
+        ),
+        (
+            json!({ "job_title": "nurse", "location": "Reston, VA", "company": "Acme" }),
+            "unknown field `company`",
+        ),
+        (
+            json!({ "location": "Reston, VA" }),
+            "missing field `job_title`",
+        ),
+    ] {
+        let called = harness.salary(arguments.clone()).await;
+        assert!(called.is_error, "{arguments}");
+        assert!(
+            called.text.contains(message),
+            "{arguments}: {}",
+            called.text
+        );
+        assert!(called.result.is_null(), "no result for bad input");
+    }
+    assert_eq!(
+        harness.key_loads.load(Ordering::SeqCst),
+        0,
+        "no lookup for bad input"
+    );
+}
+
+/// The cap: $10 a day at $0.003 a lookup.
+const DAILY_SALARY_LOOKUPS: u64 = 3_333;
+
+#[tokio::test]
+async fn salary_cap_stops_exactly_at_ten_dollars_a_day() {
+    let harness = start().await;
+    harness.salary(developer_in_new_york()).await;
+    assert_eq!(
+        harness.lookups_today().await,
+        Some(1),
+        "each lookup is counted"
+    );
+
+    harness.set_lookups_today(DAILY_SALARY_LOOKUPS - 1).await;
+    let last = harness.salary(developer_in_new_york()).await;
+    assert_eq!(last.result["status"], "estimated", "{}", last.result);
+    assert_eq!(harness.lookups_today().await, Some(DAILY_SALARY_LOOKUPS));
+
+    let limited = harness.salary(developer_in_new_york()).await;
+    assert!(!limited.is_error, "{}", limited.result);
+    assert_eq!(limited.result["status"], "daily_limit");
+    assert!(limited.result["total_pay"].is_null());
+    assert_eq!(
+        limited.text,
+        "daily_limit: TollChat's daily salary-lookup budget is used up. Try again after midnight UTC."
+    );
+    assert_eq!(harness.lookups_today().await, Some(DAILY_SALARY_LOOKUPS));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn concurrent_salary_calls_cannot_overspend_the_cap() {
+    let harness = Arc::new(start().await);
+    harness.set_lookups_today(DAILY_SALARY_LOOKUPS - 3).await;
+    let mut calls = tokio::task::JoinSet::new();
+    for _ in 0..8 {
+        let harness = harness.clone();
+        calls.spawn(async move { harness.salary(developer_in_new_york()).await.result });
+    }
+    let results = calls.join_all().await;
+    let count = |status: &str| results.iter().filter(|r| r["status"] == status).count();
+    assert_eq!(
+        (count("estimated"), count("daily_limit")),
+        (3, 5),
+        "{results:?}"
+    );
+    assert_eq!(harness.lookups_today().await, Some(DAILY_SALARY_LOOKUPS));
+}
+
+#[tokio::test]
+async fn salary_cap_failure_fails_closed() {
+    let harness = start().await;
+    harness
+        .dynamodb
+        .delete_table()
+        .table_name(&harness.table)
+        .send()
+        .await
+        .unwrap();
+    let called = harness.salary(developer_in_new_york()).await;
+    assert!(called.is_error, "{}", called.result);
+    assert_eq!(called.result["status"], "error");
+    assert!(called.result["total_pay"].is_null(), "no uncounted lookup");
 }
