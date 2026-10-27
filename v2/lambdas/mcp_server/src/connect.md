@@ -7,10 +7,11 @@ TollChat finds the toll-road ramps for a Northern Virginia trip and estimates wh
 - **Authentication:** none. Call from server-side code: requests carrying a browser `Origin` header get `403`.
 - **Protocol versions:** `2025-11-25` and earlier (with the `initialize` handshake) and `2026-07-28` (no handshake; each request carries its version).
 - **Privacy:** https://mcp.tollchat.ai/privacy
-- **Version:** 0.3.1 (`serverInfo.version`)
+- **Version:** 0.4.0 (`serverInfo.version`)
 
 ## Changes
 
+- **0.4.0, 2026-10-27:** `find_toll_ramps` returns one path per trip: the best route, plus other ramps onto the same roads in the same direction, never a second way around (Springfield to DC gets I-395, without the I-495 and I-66 alternative). The ranking now counts toll miles at half alongside access miles (`score.toll_miles`), so long detours rank last. Routes are chosen as the estimate prices them, without today's reversible-lane state, so the answer no longer changes with the time of day: an option that uses the I-95/I-395 reversible lanes is listed even while they run the other way, and its `reversible_lanes.usable_now` says whether it can be driven right now. The `currently_unavailable` and `availability_unknown` statuses and the top-level `reversible_lanes` field are gone, and a `route_id` no longer changes when the lanes do. `estimate_annual_tolls` prices I-495 southbound from Jones Branch Drive to the express lanes' end near Braddock Road, which the operator's feed always reports as $0, as the trip from Route 267 one entrance upstream, and ranks return trips by access distance as before.
 - **0.3.1, 2026-10-27:** for routes with an I-95/I-495 leg, `estimate_annual_tolls` now estimates from whichever recent days have prices, so gaps in that feed rarely cause refusals. It refuses only when a commute weekday has fewer than two priced days or under a quarter of all days are priced. Other routes keep the half-of-each-weekday rule.
 - **0.3.0, 2026-10-26:** new tool `estimate_annual_tolls`, a ballpark annual toll range for one `find_toll_ramps` option. `find_toll_ramps` is unchanged.
 - **0.2.0, 2026-10-26:** `find_toll_ramps` takes each end as latitude and longitude. Place text inputs were removed on 2026-10-26, together with the server's place lookups (Amazon Location) and their daily limit; a call that still sends place text gets a tool error. Results gain `calculated_at`, `route_id`, `segments`, `score`, and `reversible_lanes`, and the text content is now a short summary. The `match`, `ambiguous`, `place_not_found`, and `daily_lookup_limit` results are gone, and `same_location` is new. Facility codes, the ordering rule, and the other statuses are unchanged.
@@ -111,7 +112,7 @@ Mcp-Name: find_toll_ramps
 {"origin":{"latitude":38.96165,"longitude":-77.36346},"destination":{"latitude":38.9173,"longitude":-77.22093}}
 ```
 
-The result has `status: "resolved"` and three options. The first:
+The result has `status: "resolved"` and two options, both on the Dulles Toll Road. The first:
 
 ```json
 {
@@ -125,7 +126,7 @@ The result has `status: "resolved"` and three options. The first:
   ],
   "total_straight_line_miles": 7.9,
   "access_miles": {"origin": 0.8, "destination": 1.1},
-  "score": {"access_miles": 1.9, "facility_penalty_miles": 0.0, "total": 1.9}
+  "score": {"access_miles": 1.9, "toll_miles": 3.9, "facility_penalty_miles": 0.0, "total": 5.8}
 }
 ```
 
@@ -134,25 +135,24 @@ The result has `status: "resolved"` and three options. The first:
 - `status`: one of the values in the table below. A `status: error` result also echoes `origin` and `destination`.
 - `calculated_at`: when the result was computed, RFC 3339 in UTC, for example `2026-10-26T18:17:00.123456Z`.
 - `origin`, `destination`: the coordinates as received, with `coverage` (`covered` or `outside_coverage`).
-- `options`: up to 3 routes, best first; `[]` unless `status` is `resolved`. Every option has passed TollChat's pricing route validation.
-- `reversible_lanes`: `{"direction": …}`, only for `currently_unavailable` and `availability_unknown`.
+- `options`: the best route first, then up to 2 other ramp choices on the same roads; `[]` unless `status` is `resolved`. Every option has passed TollChat's pricing route validation.
 
 Each option has:
 
-- `route_id`: the entry, each toll segment's ends, and the exit, joined by `>`, such as `dtr:12:entry:EB>dtr:1819:exit:EB` or `dtr:12:entry:EB>dtr:1819:exit:EB>i495:182SO>i495:185SD`. The same ID always means the same priced route. One entry/exit pair can be routed differently when the reversible lanes change direction, and it then gets a different ID.
+- `route_id`: the entry, each toll segment's ends, and the exit, joined by `>`, such as `dtr:12:entry:EB>dtr:1819:exit:EB` or `dtr:12:entry:EB>dtr:1819:exit:EB>i495:182SO>i495:185SD`. The same ID always means the same priced route.
 - `entry`, `exit`: `point_id`, `network`, `role` (`entry`, `exit`, or `airport`), `direction` (`NB`, `SB`, `EB`, or `WB`; omitted for airport points), and `label`.
 - `facilities`: the toll facilities used, in travel order.
 - `segments`: one per stretch of toll road, in travel order, with `facility`, `entry_point_id`, `exit_point_id`, `straight_line_miles`, and `pricing_keys`. Untolled connections, such as airport access roads or the free stretch from I-66 to the Dulles Toll Road's Exit 18/19, have no segment, and their intermediate points are not in `route_id`; so an entry's or exit's `network` can differ from the first or last facility. A transfer between the Greenway and the Dulles Toll Road adds a 0.0-mile `dtr` segment, from one road's Route 28 point to the other's, for the $2 DTR connection charge.
 - `total_straight_line_miles`: the segments' sum.
 - `access_miles`: straight-line miles from the origin to the entry and from the exit to the destination. These are not toll miles.
-- `score`: `access_miles` (both access legs), `facility_penalty_miles` (2 per toll facility after the first), and `total`, which orders the options.
-- `reversible_lanes`: `{"direction": …}`, only when the option depends on the I-95/I-395 reversible lanes. It is usable only while they run that way.
+- `score`: `access_miles` (both access legs), `toll_miles` (half of `total_straight_line_miles`), `facility_penalty_miles` (2 per toll facility after the first), and `total`, their sum, which orders the options.
+- `reversible_lanes`: `{"direction": …, "usable_now": …}`, only when the option depends on the I-95/I-395 reversible lanes. `direction` is where they run now; `usable_now` is `true` when that suits this option, `false` when they are closed or run the other way, and `null` when the direction is unknown. The option is listed either way, because a commute uses the lanes at commute time, not now.
 
 Miles are rounded to 0.1, so parts can differ from a total by 0.1.
 
 **Miles and prices.** `straight_line_miles` is the straight-line distance between a segment's ends; the road is longer. TollChat has no road-mile data (a future source would be the operators' published segment lengths), and its own annual estimate uses the same straight-line basis. This tool returns no prices; `estimate_annual_tolls` turns an option into an annual toll range. A segment's point IDs and `pricing_keys` (opaque keys into the operators' toll tables, one per toll charged on that stretch) are the join keys for a later pricing tool, and the option shape will not change for it. The Dulles Toll Road charges two tolls on some stretches, so such a segment has two keys. A facility appears in consecutive segments when its operator prices the trip in parts, for example the I-495 and I-95/I-395 Express Lanes.
 
-**Ordering and the 3-option cap.** Options are ranked by `score.total`: the shortest total access distance, with each extra toll facility counting as 2 more miles. Ordering uses the unrounded score, so options showing the same rounded total can still differ; exact ties are ordered by entry, then exit point ID. Approach variants of one interchange appear once. The ranking ignores price and toll distance, so a long detour with short access legs can rank well (compare `total_straight_line_miles`). At most 3 options are returned, so the cheapest-toll route can be left out.
+**One path, ordering, and the 3-option cap.** Routes are ranked by `score.total`: the straight-line access miles plus half the toll miles (the express lanes run about twice as fast as the roads to the ramps), with each extra toll facility counting as 2 more miles. The best route sets the path: only routes over the same roads in the same direction are listed, so a trip to DC gets I-395 or I-66, whichever ranks first, never both. Ordering uses the unrounded score, so options showing the same rounded total can still differ; exact ties are ordered by entry, then exit point ID. Approach variants of one interchange appear once, and at most 3 options are returned. The ranking ignores price, so on the rare trip where two paths are close, the cheaper one can be left out.
 
 **Point IDs.** Use them exactly as returned; never build or edit one.
 
@@ -178,9 +178,9 @@ Miles are rounded to 0.1, so parts can differ from a total by 0.1.
 
 **Labels** are display text from the operators' feeds, naming the interchange rather than the toll road: an I-495 ramp at the I-66 interchange is labeled "Interstate 66" though its facility is `i95_i495`. Never use a label as a key.
 
-**Airports.** An airport point is used only when that end is within 1.5 miles of it; otherwise the airport is reached like any other place, by an access leg to a nearby entry or exit. Dulles (`airport_iad`) connects to the Dulles Toll Road, I-66, and I-495, so Dulles trips can start or end there, alongside nearby ordinary entries and exits. Reagan National (`airport_dca`) connects only to the I-95/I-395 reversible lanes: its departures need the lanes running in the trip's direction, and its arrivals need them northbound. When they are not, a DCA trip starts or ends at an ordinary entry or exit, often on I-66.
+**Airports.** An airport point is used only when that end is within 1.5 miles of it; otherwise the airport is reached like any other place, by an access leg to a nearby entry or exit. Dulles (`airport_iad`) connects to the Dulles Toll Road, I-66, and I-495, so Dulles trips usually start or end there. Reagan National (`airport_dca`) connects only to the I-95/I-395 reversible lanes: its departures need the lanes running in the trip's direction, and its arrivals need them northbound. A DCA route that uses them carries `reversible_lanes`; one that ranks better through an ordinary entry or exit, often on I-66, is listed instead.
 
-**Reversible lanes.** The I-95/I-395 Express Lanes change direction during the day. `direction` is `northbound`, `southbound`, `closed`, or `unknown`, read from the operator's feed; data more than 20 minutes old, missing, or contradictory is `unknown`. TollChat has no lane schedule, so it cannot say when the direction will next change. Call again near the time of travel.
+**Reversible lanes.** The I-95/I-395 Express Lanes change direction during the day, typically northbound on weekday mornings and southbound in the afternoon and evening. Routes are chosen as if the lanes ran the trip's way. An option's `reversible_lanes.direction` is `northbound`, `southbound`, `closed`, or `unknown`, read from the operator's feed now; data more than 20 minutes old, missing, or contradictory is `unknown`. TollChat cannot say when the direction will next change. For a trip now, an option with `usable_now: false` cannot be driven until the lanes turn; for a commute estimate, it does not matter.
 
 | `status` | Meaning | What to do |
 | --- | --- | --- |
@@ -188,8 +188,6 @@ Miles are rounded to 0.1, so parts can differ from a total by 0.1.
 | `same_location` | Both ends are covered and within 0.1 mile of each other, so there is no trip. | Ask for distinct start and end points. It is not a zero-toll trip. |
 | `outside_coverage` | An end is not covered (see each end's `coverage`). | Tell the user TollChat does not cover it. |
 | `no_valid_route` | Both ends are covered, but no supported toll route connects them. | Tell the user. It is not a zero-toll trip. |
-| `currently_unavailable` | The only routes use the I-95/I-395 reversible lanes, which are closed or open the other way right now. | Tell the user and suggest trying later. |
-| `availability_unknown` | The only routes use the reversible lanes, and their current direction is unknown. | Tell the user TollChat cannot confirm the lanes are open; suggest trying later. |
 | `error` (with `isError: true`) | Something failed on TollChat's side. | Retry as below; if it keeps failing, tell the user. |
 
 Invalid arguments get a tool error (`isError: true`, no structured content) whose text says what to fix.
@@ -213,17 +211,19 @@ It estimates what a regular commute on one `find_toll_ramps` option costs in tol
 
 Each invalid field gets a tool error naming it, and unknown fields are rejected. `null` for an optional field means its default. The entry and exit must form a toll route, as every `find_toll_ramps` option does.
 
-**Return trip.** Pass only the outbound option. TollChat picks the way back itself, from entries near the outbound exit to exits near the outbound entry (the nearest per road, plus any within 3 miles). It prefers routes through the same roads in reverse, judged by the road networks they pass through whether tolled or not, then the shortest access distance, scored like `find_toll_ramps`. Its ramps can differ from the outbound ones (out from Franconia-Springfield, back to Backlick Road, say), which barely changes the price.
+**Return trip.** Pass only the outbound option. TollChat picks the way back itself, from entries near the outbound exit to exits near the outbound entry (the nearest per road, plus any within 3 miles). It prefers routes through the same roads in reverse, judged by the road networks they pass through whether tolled or not, then the shortest access distance, with 2 miles added per extra toll facility. Its ramps can differ from the outbound ones (out from Franconia-Springfield, back to Backlick Road, say), which barely changes the price.
 
 **How it is estimated**
 
-- Both trips are validated without today's reversible-lane state, because past days are priced. So `outbound.route_id` can differ from the route `find_toll_ramps` showed live.
+- Both trips are validated without today's reversible-lane state, because past days are priced; `find_toll_ramps` chooses routes the same way, so `outbound.route_id` matches the option's.
+- The I-95/I-395 reversible lanes are priced only on days they ran the trip's way at that time. A trip against their usual direction (southbound at 08:30, say) has no priced days and gets `too_few_recent_prices`.
 - For each of the last 84 completed days that falls on a commute weekday, TollChat prices the outbound trip at `depart_at` and the return trip at `return_at`. I-66 and I-95/I-495 use the operators' recorded prices at that time (the 6- or 10-minute interval containing it). The Dulles Toll Road and Greenway use their current published rates, applied to past dates.
 - A day counts only if every toll on both trips has a price. I-66's toll-free times and holidays count as $0.
 - `daily_round_trip_usd` is the 25th, 50th, and 90th percentile (`low`, `typical`, `high`) of those days' round-trip totals; `annual_toll_usd` multiplies each by `annual_commute_days`.
 - **Routes with an I-95/I-495 leg:** that leg needs feed data every day, so gaps in the feed drop days at random. That thins the sample without biasing it, so the estimate uses whichever days are priced, and `basis` says how many. It refuses, with `too_few_recent_prices`, only when a commute weekday has fewer than two priced days or fewer than a quarter of all eligible days are priced.
 - **Other routes** need at least half of each commute weekday's days priced. I-66 prices its toll-free weekends and holidays at $0 even when data is missing, so its gaps drop only tolled days. Without this rule, missing data would read as low or zero tolls.
 - Some I-95 trips use modeled prices for origin-destination pairs the operator does not publish; `basis.uses_modeled_prices` says so.
+- The operator's feed reports I-495 southbound from Jones Branch Drive to the express lanes' end near Braddock Road as $0 at all times, so that stretch is priced as the trip from Route 267, one entrance upstream, to the same place.
 
 **Worked example:** the first Reston Town Center → Tysons option above, with the defaults, as in the request above. The Dulles Toll Road charges $2 at the Exit 12 ramp and $4 at the main plaza each way, so $12 a day. An excerpt of the result, without the `entry`, `exit`, `window`, and `coverage_by_weekday` fields:
 

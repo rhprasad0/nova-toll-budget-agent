@@ -31,6 +31,9 @@ const POTOMAC_MILLS: (f64, f64) = (38.6418, -77.2989);
 const STAFFORD: (f64, f64) = (38.4890, -77.3700);
 const DULLES_AIRPORT: (f64, f64) = (38.9531, -77.4565);
 const REAGAN_AIRPORT: (f64, f64) = (38.8512, -77.0402);
+const SPRINGFIELD: (f64, f64) = (38.7893, -77.1872);
+const WHITE_HOUSE: (f64, f64) = (38.8977, -77.0365);
+const JONES_BRANCH: (f64, f64) = (38.9265, -77.2190);
 const NEW_YORK: (f64, f64) = (40.7128, -74.0060);
 
 fn at((latitude, longitude): (f64, f64)) -> Value {
@@ -203,11 +206,17 @@ impl Harness {
     }
 }
 
-async fn revalidate(origin: &str, destination: &str) -> String {
+/// The pair's status from the oracle's lane-independent check, or with `live`, its live check.
+async fn revalidate(origin: &str, destination: &str, live: bool) -> String {
+    let check = if live {
+        "validate_pricing_route"
+    } else {
+        "validate_ballpark_route"
+    };
     let row = connect_as("pricing_caller")
         .await
         .query_one(
-            "SELECT status FROM oracle.validate_pricing_route($1, $2)",
+            &format!("SELECT status FROM oracle.{check}($1, $2)"),
             &[&origin, &destination],
         )
         .await
@@ -219,24 +228,40 @@ fn options(result: &Value) -> &Vec<Value> {
     result["options"].as_array().expect("options")
 }
 
-fn entry_ids(result: &Value) -> Vec<&str> {
-    options(result)
-        .iter()
-        .map(|option| option["entry"]["point_id"].as_str().unwrap())
-        .collect()
-}
-
 fn close(a: &Value, b: f64) -> bool {
     (a.as_f64().unwrap() - b).abs() <= 0.11
 }
 
-/// Every option is a validated route, ranked by its stated score, with consistent parts.
+/// Every option is a validated route on the best option's roads, ranked by its stated score,
+/// with consistent parts.
 async fn assert_well_formed(result: &Value) {
     let mut previous = f64::MIN;
     for option in options(result) {
         let entry = option["entry"]["point_id"].as_str().unwrap();
         let exit = option["exit"]["point_id"].as_str().unwrap();
-        assert_eq!(revalidate(entry, exit).await, "valid", "{entry} -> {exit}");
+        assert_eq!(
+            revalidate(entry, exit, false).await,
+            "valid",
+            "{entry} -> {exit}"
+        );
+        let lanes = &option["reversible_lanes"];
+        if lanes.is_null() || lanes["usable_now"] == true {
+            assert_eq!(revalidate(entry, exit, true).await, "valid", "{option}");
+        }
+        // One path: the same roads from the same entry road to the same exit road and direction.
+        let first = &options(result)[0];
+        for path in [
+            "/facilities",
+            "/entry/network",
+            "/exit/network",
+            "/exit/direction",
+        ] {
+            assert_eq!(
+                option.pointer(path),
+                first.pointer(path),
+                "one path: {result}"
+            );
+        }
         let route_id = option["route_id"].as_str().unwrap();
         assert!(
             route_id.starts_with(&format!("{entry}>")) && route_id.ends_with(&format!(">{exit}"))
@@ -252,7 +277,15 @@ async fn assert_well_formed(result: &Value) {
             &score["facility_penalty_miles"],
             2.0 * (facilities.len() as f64 - 1.0)
         ));
+        // Toll miles count at half in the score.
+        let toll_miles = option["total_straight_line_miles"].as_f64().unwrap();
+        assert!(close(&score["toll_miles"], toll_miles / 2.0), "{option}");
+        let parts: f64 = ["access_miles", "toll_miles", "facility_penalty_miles"]
+            .iter()
+            .map(|part| score[part].as_f64().unwrap())
+            .sum();
         let total = score["total"].as_f64().unwrap();
+        assert!((total - parts).abs() <= 0.16, "{option}");
         assert!(total >= previous - 0.1, "ranked by score: {result}");
         previous = total;
 
@@ -389,7 +422,6 @@ async fn muse_reston_to_tysons_returns_validated_ranked_options() {
     );
     assert!((1..=3).contains(&options(&result).len()), "{result}");
     assert_well_formed(&result).await;
-    assert!(result.get("reversible_lanes").is_none());
     let best = &options(&result)[0];
     assert_eq!(best["entry"]["role"], "entry");
     assert_eq!(best["entry"]["network"], "dtr");
@@ -508,73 +540,118 @@ async fn set_lanes(admin: &tokio_postgres::Client, statuses: Option<(&str, &str)
 }
 
 #[tokio::test]
-async fn reversible_lane_trips_follow_the_live_direction() {
+async fn reversible_lane_routes_do_not_change_with_the_live_direction() {
     let _exclusive = LANES.write().await;
     let harness = start_with(database("tollchat_agent")).await;
     let admin = connect_as("postgres").await;
-    let uses_dca = |result: &Value| entry_ids(result).contains(&"airport_dca");
-
-    // The disposable database starts with no lane data.
-    set_lanes(&admin, None).await;
-    let unknown = harness.find(POTOMAC_MILLS, STAFFORD).await;
-    assert_eq!(unknown["status"], "availability_unknown", "{unknown}");
-    assert_eq!(unknown["options"], json!([]));
-    assert_eq!(
-        unknown["reversible_lanes"],
-        json!({ "direction": "unknown" })
-    );
-    let dca_unknown = harness.find(REAGAN_AIRPORT, TYSONS_CORNER_CENTER).await;
-    assert_eq!(dca_unknown["status"], "resolved", "{dca_unknown}");
-    assert_well_formed(&dca_unknown).await;
-    assert!(!uses_dca(&dca_unknown), "{dca_unknown}");
-
-    set_lanes(&admin, Some(("NORTHBOUND_OPEN", "CLOSED"))).await;
-    let southbound = harness.find(POTOMAC_MILLS, STAFFORD).await;
-    assert_eq!(
-        southbound["status"], "currently_unavailable",
-        "{southbound}"
-    );
-    assert_eq!(southbound["options"], json!([]));
-    assert_eq!(
-        southbound["reversible_lanes"],
-        json!({ "direction": "northbound" })
-    );
-    let northbound = harness.find(STAFFORD, POTOMAC_MILLS).await;
-    assert_eq!(northbound["status"], "resolved", "{northbound}");
-    assert!(northbound.get("reversible_lanes").is_none());
-    assert_well_formed(&northbound).await;
-    for option in options(&northbound) {
-        assert_eq!(option["facilities"], json!(["i95_i495"]), "{northbound}");
-        assert_eq!(
-            option["reversible_lanes"],
-            json!({ "direction": "northbound" })
-        );
+    let route_ids = |result: &Value| -> Vec<Value> {
+        options(result)
+            .iter()
+            .map(|o| o["route_id"].clone())
+            .collect()
+    };
+    let lanes = |result: &Value| -> Vec<Value> {
+        options(result)
+            .iter()
+            .map(|o| o["reversible_lanes"].clone())
+            .collect()
+    };
+    let trips = [
+        (POTOMAC_MILLS, STAFFORD),
+        (STAFFORD, POTOMAC_MILLS),
+        (SPRINGFIELD, WHITE_HOUSE),
+        (REAGAN_AIRPORT, TYSONS_CORNER_CENTER),
+    ];
+    let mut by_state = Vec::new();
+    // The disposable database starts with no lane data, so the direction is unknown.
+    for state in [
+        None,
+        Some(("NORTHBOUND_OPEN", "CLOSED")),
+        Some(("CLOSED", "SOUTHBOUND_OPEN")),
+    ] {
+        set_lanes(&admin, state).await;
+        let mut results = Vec::new();
+        for (origin, destination) in trips {
+            let result = harness.find(origin, destination).await;
+            assert_eq!(result["status"], "resolved", "{result}");
+            assert_well_formed(&result).await;
+            results.push(result);
+        }
+        by_state.push(results);
     }
-    // DCA connects only through the reversible lanes: southbound departures, else a normal entry.
-    let dca_northbound = harness.find(REAGAN_AIRPORT, TYSONS_CORNER_CENTER).await;
-    assert_well_formed(&dca_northbound).await;
-    assert!(!uses_dca(&dca_northbound), "{dca_northbound}");
+    set_lanes(&admin, None).await;
 
-    set_lanes(&admin, Some(("CLOSED", "SOUTHBOUND_OPEN"))).await;
-    let dca_southbound = harness.find(REAGAN_AIRPORT, TYSONS_CORNER_CENTER).await;
-    assert_well_formed(&dca_southbound).await;
-    assert!(uses_dca(&dca_southbound), "{dca_southbound}");
-    for option in options(&dca_southbound) {
-        if option["entry"]["point_id"] == "airport_dca" {
-            assert!(option["entry"].get("direction").is_none());
-            assert_eq!(
-                option["reversible_lanes"],
-                json!({ "direction": "southbound" })
-            );
+    for (trip, _) in trips.iter().enumerate() {
+        let ids = route_ids(&by_state[0][trip]);
+        for results in &by_state[1..] {
+            assert_eq!(route_ids(&results[trip]), ids, "{}", results[trip]);
         }
     }
-    set_lanes(&admin, None).await;
-    eprintln!(
-        "dca->tysons entries: unknown {:?}, northbound {:?}, southbound {:?}",
-        entry_ids(&dca_unknown),
-        entry_ids(&dca_northbound),
-        entry_ids(&dca_southbound)
+    let [unknown, northbound, southbound] = &by_state[..] else {
+        unreachable!()
+    };
+    let flag = |direction: &str, usable_now: Value| json!({ "direction": direction, "usable_now": usable_now });
+    // Potomac Mills to Stafford needs the lanes southbound; Stafford to Potomac Mills, northbound.
+    for (results, south, north) in [
+        (
+            unknown,
+            flag("unknown", Value::Null),
+            flag("unknown", Value::Null),
+        ),
+        (
+            northbound,
+            flag("northbound", json!(false)),
+            flag("northbound", json!(true)),
+        ),
+        (
+            southbound,
+            flag("southbound", json!(true)),
+            flag("southbound", json!(false)),
+        ),
+    ] {
+        assert!(
+            lanes(&results[0]).iter().all(|l| *l == south),
+            "{}",
+            results[0]
+        );
+        assert!(
+            lanes(&results[1]).iter().all(|l| *l == north),
+            "{}",
+            results[1]
+        );
+        // Inbound to DC uses I-395 at any hour, flagged when the lanes run the other way.
+        assert_eq!(results[2]["options"][0]["facilities"], json!(["i95_i495"]));
+        assert!(
+            lanes(&results[2]).iter().all(|l| *l == north),
+            "{}",
+            results[2]
+        );
+    }
+    // DCA to Tysons takes I-66, not the reversible lanes' long way round via I-395 and I-495.
+    assert_eq!(
+        unknown[3]["options"][0]["facilities"],
+        json!(["i66"]),
+        "{}",
+        unknown[3]
     );
+}
+
+#[tokio::test]
+async fn one_answer_takes_one_path() {
+    let harness = start().await;
+    // From Springfield, I-395 goes straight to DC; I-495 then I-66 is a second, longer way.
+    let result = harness.find(SPRINGFIELD, WHITE_HOUSE).await;
+    assert_eq!(result["status"], "resolved", "{result}");
+    assert_well_formed(&result).await;
+    assert_eq!(
+        options(&result)[0]["route_id"],
+        "i95:202NO>i95:224ND",
+        "{result}"
+    );
+    let detour = options(&result)
+        .iter()
+        .any(|o| o["facilities"].as_array().unwrap().contains(&json!("i66")));
+    assert!(!detour, "{result}");
 }
 
 #[tokio::test]
@@ -651,7 +728,7 @@ async fn http_boundary_answers_json_and_rejects_bad_requests() {
     );
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["result"]["serverInfo"]["name"], "tollchat");
-    assert_eq!(body["result"]["serverInfo"]["version"], "0.3.1");
+    assert_eq!(body["result"]["serverInfo"]["version"], "0.4.0");
     assert!(
         body["result"]["instructions"]
             .as_str()
@@ -781,8 +858,6 @@ async fn docs_cover_every_tool_status_and_privacy() {
         "same_location",
         "outside_coverage",
         "no_valid_route",
-        "currently_unavailable",
-        "availability_unknown",
         "error",
         "estimated",
         "too_few_recent_prices",
@@ -1042,6 +1117,51 @@ async fn return_trip_uses_the_same_roads_in_reverse() {
             "{exit}: {result}"
         );
     }
+    // Springfield to McLean on I-495 comes back from the same interchange, not one exit later.
+    let result = harness.estimate(commute("i495:191NO", "i495:182ND")).await;
+    assert_eq!(
+        result["return"]["route_id"], "i495:182SO>i495:191SD",
+        "{result}"
+    );
+}
+
+// Writes I-95/I-495 history, so it runs alone like the lane test.
+#[tokio::test]
+async fn a_leg_the_feed_prices_at_zero_uses_its_upstream_neighbor() {
+    let _exclusive = LANES.write().await;
+    let harness = start_with(database("tollchat_agent")).await;
+    let admin = connect_as("postgres").await;
+    // Jones Branch Drive is offered as is; only its price is borrowed.
+    let found = harness.find(JONES_BRANCH, SPRINGFIELD).await;
+    assert_eq!(
+        options(&found)[0]["route_id"],
+        "i495:183SO>i495:191SD",
+        "{found}"
+    );
+    // The feed's OD 1056, Jones Branch to the Springfield interchange, is always $0.
+    let route = commute("i495:183SO", "i495:191SD");
+    let before = harness.estimate(route.clone()).await;
+    let back = |end: &str| {
+        before["return"][end]["point_id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    assert_eq!(od_pair(&admin, "i495:183SO", "i495:191SD").await, 1056);
+    let return_od = od_pair(&admin, &back("entry"), &back("exit")).await;
+    seed_i495_history(&admin, "I-495-SB", 1056, "08:33", "0.00", "true").await;
+    seed_i495_history(&admin, "I-495-SB", 1049, "08:33", "9.00", "true").await;
+    seed_i495_history(&admin, "I-495-NB", return_od, "17:33", "4.50", "true").await;
+    let result = harness.estimate(route).await;
+    admin
+        .execute(
+            "DELETE FROM pricing.trip_pricing_i95 WHERE s3_key = 'e2e-history'",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(result["status"], "estimated", "{result}");
+    assert_eq!(typical(&result, "daily_round_trip_usd"), 13.5, "{result}");
 }
 
 /// Seeds one price per weekday at `local_time` for an I-495 OD pair on the 12-week window's days

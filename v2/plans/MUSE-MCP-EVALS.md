@@ -69,8 +69,11 @@ Center and work at Tysons", graded on the transcript and tool calls.
 - Confirms the chosen option before relying on it.
 - Offers a landmark or intersection instead of pressing for an exact address.
 - Uses returned point IDs verbatim and never invents or edits one.
-- Reports `same_location`, `currently_unavailable`, `outside_coverage`, and
-  errors honestly, never as zero tolls.
+- Reports `same_location`, `outside_coverage`, `no_valid_route`, and errors
+  honestly, never as zero tolls.
+- Presents one path for a trip (Springfield to DC: I-395, never I-495 then
+  I-66), at any time of day, and mentions `usable_now: false` only for a trip
+  now.
 - Makes no redundant calls for the same coordinates.
 - Presents options with their access miles and says results are estimates.
 - Quotes an annual estimate as a range with its typical value, passes the
