@@ -1,12 +1,15 @@
-//! TollChat MCP server: Muse-facing toll tools over the TollChat routing oracle.
+//! TollChat MCP server: Muse-facing toll tools over the TollChat routing oracle, and a salary
+//! estimate for the job at the end of the commute.
 
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use aws_credential_types::provider::{ProvideCredentials, SharedCredentialsProvider};
+use aws_sdk_dynamodb::operation::update_item::UpdateItemError;
+use aws_sdk_dynamodb::types::AttributeValue;
 use aws_sigv4::http_request::{
     SignableBody, SignableRequest, SignatureLocation, SigningSettings, sign,
 };
@@ -23,9 +26,12 @@ use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, Stream
 use rmcp::{ErrorData, ServerHandler, schemars, tool, tool_handler, tool_router};
 use rustls_pki_types::CertificateDer;
 use rustls_pki_types::pem::PemObject;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tokio::sync::OnceCell;
 use tokio_postgres::config::SslMode;
+use tracing::Instrument;
+use tracing::field::Empty;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::filter::Targets;
 
@@ -58,6 +64,12 @@ const RETURN_SEARCH_MILES: f64 = 3.0;
 const MIN_PRICED_PER_WEEKDAY: i64 = 2;
 /// Leaves Lambda's 25 s for the reply; a timeout then answers as a tool error, not a gateway 5xx.
 const ESTIMATE_BUDGET: Duration = Duration::from_secs(20);
+/// The key read (first use only) and the lookup together, well inside Lambda's 25 s.
+const SALARY_BUDGET: Duration = Duration::from_secs(15);
+const SALARY_PATH: &str = "/realtime-glassdoor-data/salary-estimation";
+/// OpenWeb Ninja lookups per UTC day across all instances: $10 at $0.003 each, the highest
+/// per-lookup overage price of its paid plans.
+const DAILY_SALARY_LOOKUPS: u64 = 3_333;
 
 const POINTS_SQL: &str = "SELECT oracle.get_toll_route_prompt_points() AS points";
 /// Each pair's route without today's reversible-lane state, as an estimate prices it, and for a
@@ -101,6 +113,10 @@ pub type Connect = Arc<
         + Sync,
 >;
 
+/// Reads the OpenWeb Ninja key. Its error text is logged, so it must be a short code, never the key.
+pub type LoadKey =
+    Arc<dyn Fn() -> Pin<Box<dyn Future<Output = Result<String, BoxError>> + Send>> + Send + Sync>;
+
 /// The oracle database, reached as one of two least-privilege roles.
 pub struct Database {
     pub connect: Connect,
@@ -112,6 +128,77 @@ pub struct Database {
 
 pub struct App {
     pub database: Database,
+    pub salaries: Salaries,
+}
+
+/// Glassdoor salary estimates from OpenWeb Ninja: the server's only paid, third-party call.
+pub struct Salaries {
+    /// `https://api.openwebninja.com` in production; a local stand-in in the e2e tests.
+    base_url: String,
+    load_key: LoadKey,
+    /// Loaded on first use, so a key problem never stops the toll tools; a failed load retries.
+    // shortcut: a rotated key reaches warm instances only when they recycle (the runbook redeploys);
+    // drop the cached key on a 401 if keys start rotating often.
+    key: OnceCell<String>,
+    http: reqwest::Client,
+    /// Counts each UTC day's lookups, so every instance shares one cap.
+    dynamodb: aws_sdk_dynamodb::Client,
+    lookup_table: String,
+}
+
+impl Salaries {
+    pub fn new(
+        base_url: String,
+        load_key: LoadKey,
+        dynamodb: aws_sdk_dynamodb::Client,
+        lookup_table: String,
+    ) -> Result<Self, BoxError> {
+        Ok(Self {
+            base_url,
+            load_key,
+            key: OnceCell::new(),
+            dynamodb,
+            lookup_table,
+            // A redirect would carry the key to another host.
+            http: reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(3))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()?,
+        })
+    }
+
+    /// Count one lookup against today's cap before spending it; false once the cap is used up.
+    async fn reserve_lookup(&self) -> Result<bool, Failure> {
+        let day = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            / 86_400;
+        let number = |value: u64| AttributeValue::N(value.to_string());
+        let reserved = self
+            .dynamodb
+            .update_item()
+            .table_name(&self.lookup_table)
+            .key("day", number(day))
+            .update_expression("ADD lookups :one SET expires_at = :expires")
+            .condition_expression("attribute_not_exists(lookups) OR lookups < :cap")
+            .expression_attribute_values(":one", number(1))
+            .expression_attribute_values(":expires", number((day + 2) * 86_400))
+            .expression_attribute_values(":cap", number(DAILY_SALARY_LOOKUPS))
+            .send()
+            .await;
+        match reserved {
+            Ok(_) => Ok(true),
+            Err(error) => match error.into_service_error() {
+                UpdateItemError::ConditionalCheckFailedException(_) => Ok(false),
+                // Fails closed: a lookup that cannot be counted is not made.
+                other => Err(Failure::new(
+                    "salary_budget",
+                    other.meta().code().unwrap_or("unavailable"),
+                )),
+            },
+        }
+    }
 }
 
 /// Fixed so `RUST_LOG` can never turn on request-body logging.
@@ -299,6 +386,43 @@ struct EstimateAnnualTolls {
     #[serde(default)]
     #[schemars(with = "Option<u32>", range(min = 1, max = 366))]
     annual_commute_days: Value,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct EstimateSalary {
+    /// The job's title as posted, such as "software engineer".
+    job_title: String,
+    /// Where the job is, as city and state, such as "Reston, VA".
+    location: String,
+    /// The candidate's years of experience, as one of Glassdoor's ranges. Default ALL.
+    #[serde(default)]
+    years_of_experience: Option<Experience>,
+}
+
+/// Glassdoor's experience ranges, in years.
+#[derive(Clone, Copy, Deserialize, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum Experience {
+    All,
+    LessThanOne,
+    OneToThree,
+    FourToSix,
+    SevenToNine,
+    TenToFourteen,
+    AboveFifteen,
+}
+
+/// Trimmed text of 1 to 100 characters, or a message naming the field to fix.
+fn bounded<'a>(field: &str, value: &'a str, example: &str) -> Result<&'a str, String> {
+    let text = value.trim();
+    if (1..=100).contains(&text.chars().count()) {
+        Ok(text)
+    } else {
+        Err(format!(
+            "{field} must be 1 to 100 characters, such as \"{example}\""
+        ))
+    }
 }
 
 const WEEKDAYS: [&str; 7] = [
@@ -512,6 +636,59 @@ impl TollServer {
         });
         Ok(respond("estimate_annual_tolls", started, outcome, error))
     }
+
+    #[tool(
+        name = "estimate_salary",
+        description = "Estimate the pay for a job that posts no salary range, from Glassdoor's \
+            salary reports (via OpenWeb Ninja). Pass the job title and the job's city and state, \
+            and optionally the candidate's experience range. Returns low, typical, and high total \
+            pay, split into base and additional pay, for the stated period and currency, with how \
+            many salary reports it rests on and Glassdoor's confidence. An estimate, not an offer.",
+        annotations(
+            title = "Estimate salary",
+            read_only_hint = true,
+            idempotent_hint = true
+        )
+    )]
+    async fn estimate_salary(
+        &self,
+        Parameters(request): Parameters<EstimateSalary>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let query = bounded("job_title", &request.job_title, "software engineer")
+            .and_then(|title| Ok((title, bounded("location", &request.location, "Reston, VA")?)));
+        let (job_title, location) = match query {
+            Ok(query) => query,
+            Err(message) => return Ok(CallToolResult::error(vec![ContentBlock::text(message)])),
+        };
+        let experience = request.years_of_experience.unwrap_or(Experience::All);
+        // Unlike the toll tools' inputs, a salary call's job, place and experience are logged, on
+        // the outcome line `respond` writes inside this span, with what OpenWeb Ninja answered.
+        let experience_name = json!(experience);
+        let span = tracing::info_span!(
+            "estimate_salary",
+            job_title,
+            location,
+            years_of_experience = experience_name.as_str(),
+            upstream_status = Empty,
+            upstream_ms = Empty,
+            request_id = Empty,
+        );
+        async {
+            let started = Instant::now();
+            let outcome = tokio::time::timeout(
+                SALARY_BUDGET,
+                self.app.estimate_salary(job_title, location, experience),
+            )
+            .await
+            .unwrap_or_else(|_| Err(Failure::new("salary", "timeout")));
+            let error = json!({
+                "message": "TollChat could not estimate this salary right now. Try again later.",
+            });
+            Ok(respond("estimate_salary", started, outcome.map(Ok), error))
+        }
+        .instrument(span)
+        .await
+    }
 }
 
 /// Every tool's ending: log the outcome (never its inputs), stamp the time, and return the
@@ -617,6 +794,26 @@ fn summary(value: &Value) -> String {
                 .map(|codes| codes.iter().map(text).collect::<Vec<_>>().join(", "))
                 .unwrap_or_default(),
         ),
+        _ if value["total_pay"].is_object() => {
+            let text = |field: &str| value[field].as_str().unwrap_or("?").to_owned();
+            let pay = |level: &str| {
+                value["total_pay"][level]
+                    .as_f64()
+                    .map_or("?".to_owned(), |amount| amount.to_string())
+            };
+            format!(
+                "{status}: Glassdoor's typical total pay for {} in {} is {} {} per {} (range {} to \
+                 {}), from {} salary reports. Full details are in the structured result.",
+                text("job_title"),
+                text("location"),
+                pay("typical"),
+                text("currency"),
+                text("period").to_lowercase(),
+                pay("low"),
+                pay("high"),
+                value["salary_count"],
+            )
+        }
         _ if value["status"] == "estimated" => {
             let dollars = |level: &str| {
                 let amount = value["annual_toll_usd"][level].as_f64().unwrap_or_default();
@@ -730,6 +927,100 @@ impl App {
         response["status"] = json!(status);
         response["options"] = json!(options);
         Ok(Ok(response))
+    }
+
+    /// Glassdoor's estimate, keeping only the fields listed here from the third-party reply.
+    async fn estimate_salary(
+        &self,
+        job_title: &str,
+        location: &str,
+        experience: Experience,
+    ) -> Result<Value, Failure> {
+        let salaries = &self.salaries;
+        let key = salaries
+            .key
+            .get_or_try_init(|| (salaries.load_key)())
+            .await
+            .map_err(|error| Failure::new("salary", format!("key_{error}")))?;
+        let experience = json!(experience);
+        if !salaries.reserve_lookup().await? {
+            return Ok(json!({
+                "status": "daily_limit",
+                "message": "TollChat's daily salary-lookup budget is used up. Try again after \
+                    midnight UTC.",
+            }));
+        }
+        let url = url::Url::parse_with_params(
+            &format!("{}{SALARY_PATH}", salaries.base_url),
+            [
+                ("job_title", job_title),
+                ("location", location),
+                ("years_of_experience", experience.as_str().unwrap_or("ALL")),
+            ],
+        )
+        .map_err(|_| Failure::new("salary", "url"))?;
+        // Fixed codes only: a reqwest error's text includes the URL, and so the job and place.
+        let sent = Instant::now();
+        let response = salaries
+            .http
+            .get(url)
+            .header("x-api-key", key)
+            .send()
+            .await
+            .map_err(|error| {
+                let code = if error.is_connect() {
+                    "connect"
+                } else {
+                    "request"
+                };
+                Failure::new("salary", code)
+            })?;
+        let span = tracing::Span::current();
+        span.record("upstream_status", response.status().as_u16());
+        span.record("upstream_ms", elapsed_ms(sent));
+        if !response.status().is_success() {
+            let code = format!("http_{}", response.status().as_u16());
+            return Err(Failure::new("salary", code));
+        }
+        let body: Value = response
+            .json()
+            .await
+            .map_err(|_| Failure::new("salary", "body"))?;
+        let request_id = body["request_id"].as_str().filter(|id| id.len() <= 64);
+        span.record("request_id", request_id);
+        if body["status"] != "OK" {
+            return Err(Failure::new("salary", "upstream"));
+        }
+        let data = &body["data"];
+        // Glassdoor knows nothing for this title and place: upstream answers `"data": {}`.
+        if !data["median_salary"].is_number() {
+            return Ok(json!({
+                "status": "no_salary_data",
+                "message": "Glassdoor has no salary estimate for this job title and location.",
+                "years_of_experience": experience,
+            }));
+        }
+        let text = |field: &str| data[field].as_str().filter(|text| text.len() <= 100);
+        // Unrounded: an hourly rate needs its cents.
+        let band = |pay: &str| {
+            let amount = |level: &str| data[format!("{level}_{pay}")].as_f64();
+            json!({ "low": amount("min"), "typical": amount("median"), "high": amount("max") })
+        };
+        Ok(json!({
+            "status": "estimated",
+            "job_title": text("job_title"),
+            "location": text("location"),
+            "years_of_experience": experience,
+            "period": text("salary_period"),
+            "currency": text("salary_currency"),
+            "total_pay": band("salary"),
+            "base_pay": band("base_salary"),
+            "additional_pay": band("additional_pay"),
+            "salary_count": data["salary_count"].as_u64(),
+            "confidence": text("confidence"),
+            "salaries_updated_at": text("salaries_updated_at"),
+            "source": "Glassdoor via OpenWeb Ninja",
+        }))
     }
 
     async fn load_points(&self) -> Result<Vec<Point>, Failure> {

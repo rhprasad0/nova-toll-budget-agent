@@ -1,7 +1,7 @@
-TollChat finds Northern Virginia toll-road ramps and estimates a commute's annual tolls (I-495 and I-95/I-395 Express Lanes, I-66 inside the Beltway, the Dulles Toll Road, the Dulles Greenway, and the IAD/DCA airport connections).
+TollChat finds Northern Virginia toll-road ramps and estimates a commute's annual tolls (I-495 and I-95/I-395 Express Lanes, I-66 inside the Beltway, the Dulles Toll Road, the Dulles Greenway, and the IAD/DCA airport connections). For a job that posts no salary range, it also estimates the pay from Glassdoor's salary reports.
 
 - Pass each end as `{"latitude": …, "longitude": …}` in WGS-84 decimal degrees; geocode the user's places first. A landmark, neighborhood, or nearby intersection is precise enough; do not press for an exact home location.
-- Calls are read-only and count against no limit, so a retry is safe; still, do not repeat a call for the same coordinates without a reason.
+- Toll calls are read-only and count against no limit, so a retry is safe; still, do not repeat a call for the same coordinates without a reason. `estimate_salary` is a paid lookup with a shared daily cap: call it once per job and place, and retry it only after an `error`.
 - `resolved`: the options are one path (the best route and other ramps onto the same roads); confirm the chosen option with the user before relying on it. Keep returned point IDs exactly as given; labels are display text only.
 - `same_location`: the two ends are the same place; ask for distinct start and end points.
 - `outside_coverage` or `no_valid_route`: tell the user TollChat cannot route that trip. Neither means zero tolls.
@@ -11,3 +11,5 @@ TollChat finds Northern Virginia toll-road ramps and estimates a commute's annua
 - For a yearly cost, call `estimate_annual_tolls` with the chosen option's entry and exit point IDs. It assumes 08:30 out, 17:30 back, Monday to Friday, 50 weeks a year; pass the user's own times, weekdays, or days per year instead when they give them. Quote `annual_toll_usd.typical` with its low–high range as a ballpark, not a quote, and mention partial coverage.
 - `too_few_recent_prices`: TollChat cannot estimate that schedule; never present it as zero tolls. `no_return_route`: try another option.
 - Miles are straight-line, not driving distance, and `find_toll_ramps` returns no prices. Results are estimates, not guarantees of which ramp is best.
+- For a job without a posted salary range, call `estimate_salary` with its title and city and state (such as "Reston, VA"), plus the user's experience range if known. Quote `total_pay.typical` with its low–high range per `period` as Glassdoor's estimate, not an offer, and check that the returned `job_title` and `location` are what the user meant. A posted range beats the estimate.
+- `no_salary_data`: Glassdoor has no estimate; try a more common title or a broader place. Never treat it as zero pay. `daily_limit`: salary estimates are used up until after midnight UTC; say so and do not retry.

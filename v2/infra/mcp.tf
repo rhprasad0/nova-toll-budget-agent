@@ -38,8 +38,43 @@ resource "aws_iam_role_policy" "mcp_server" {
         Resource = [for role in [local.database_roles.agent, local.database_roles.pricing_caller] :
         "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${role}"]
       },
+      {
+        Sid      = "CountDailySalaryLookups"
+        Effect   = "Allow"
+        Action   = ["dynamodb:UpdateItem"]
+        Resource = aws_dynamodb_table.mcp_lookups[0].arn
+      },
+      {
+        # SecureString under the AWS managed aws/ssm key, which needs no KMS grant.
+        Sid      = "ReadOpenWebNinjaKey"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/nova-toll/openwebninja-api"
+      },
     ]
   })
+}
+
+# One item per UTC day counts salary lookups against the server's daily cap.
+resource "aws_dynamodb_table" "mcp_lookups" {
+  count        = local.is_production ? 0 : 1
+  name         = "tollchat-v2-mcp-lookups-dev"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "day"
+
+  attribute {
+    name = "day"
+    type = "N"
+  }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
 }
 
 resource "aws_security_group" "mcp_server" {
@@ -69,6 +104,17 @@ resource "aws_vpc_security_group_egress_rule" "mcp_server_to_rds" {
   ip_protocol                  = "tcp"
 }
 
+# SSM and OpenWeb Ninja have no endpoint in this VPC; DynamoDB routes through its gateway endpoint.
+resource "aws_vpc_security_group_egress_rule" "mcp_server_https" {
+  count             = local.is_production ? 0 : 1
+  security_group_id = aws_security_group.mcp_server[0].id
+  description       = "HTTPS through the private subnet NAT path"
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+}
+
 resource "aws_lambda_function" "mcp_server" {
   count         = local.is_production ? 0 : 1
   function_name = local.mcp_name
@@ -76,7 +122,7 @@ resource "aws_lambda_function" "mcp_server" {
   runtime       = "provided.al2023"
   handler       = "bootstrap"
   architectures = ["x86_64"]
-  # Worst case is about 16 s: two 3 s connects with 5 s statements.
+  # Worst cases: about 16 s for two 3 s connects with 5 s statements; 20 s and 15 s tool budgets.
   timeout     = 25
   memory_size = 256
 
@@ -93,6 +139,7 @@ resource "aws_lambda_function" "mcp_server" {
 
   environment {
     variables = {
+      LOOKUP_TABLE      = aws_dynamodb_table.mcp_lookups[0].name
       DB_HOST           = var.foundation.db_instance.address
       DB_PORT           = tostring(var.foundation.db_instance.port)
       DB_NAME           = local.database_name

@@ -1,7 +1,7 @@
 # MCP server for Muse (development only)
 
 `https://mcp.tollchat.ai/mcp` is an authless MCP server for Muse, Meta's personal
-agent. It has two tools, `find_toll_ramps` and `estimate_annual_tolls`, and serves its connect guide at `/` and
+agent. It has three tools, `find_toll_ramps`, `estimate_annual_tolls` and `estimate_salary`, and serves its connect guide at `/` and
 its privacy notice at `/privacy`. The code is in
 [`v2/lambdas/mcp_server/`](../lambdas/mcp_server/), and the resources are in
 [`v2/infra/mcp.tf`](../infra/mcp.tf). It runs only in the development account
@@ -18,15 +18,25 @@ the Lambda from the shared placeholder package and ignores its code afterwards.
 Rust comes from `v2/lambdas/mcp_server/rust-toolchain.toml`. From that directory:
 
 ```bash
-./e2e.sh                       # throwaway PostGIS with the real oracle catalog
+./e2e.sh                       # throwaway PostGIS (real oracle catalog) and DynamoDB Local
 cargo run                      # http://127.0.0.1:8080, real AWS, needs the env below
 ```
 
-`cargo run` reads `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_CA_BUNDLE_PATH`, `DB_USER`
-and `PRICING_DB_USER`, the same variables the Lambda gets from `mcp.tf`.
+`cargo run` reads `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_CA_BUNDLE_PATH`, `DB_USER`,
+`PRICING_DB_USER` and `LOOKUP_TABLE`, the same variables the Lambda gets from `mcp.tf`.
 
-The server calls no AWS service API: it signs RDS IAM tokens locally, so its
-security group allows egress only to RDS.
+The server signs RDS IAM tokens locally. On its first `estimate_salary` call it
+reads the OpenWeb Ninja key from the SSM SecureString
+`/nova-toll/openwebninja-api` (so `cargo run` also needs `ssm:GetParameter` on
+it), then calls `https://api.openwebninja.com`. Its security group therefore
+allows egress to RDS and HTTPS, the latter through the private subnets' NAT
+path. Each salary call is a paid OpenWeb Ninja lookup. Before each one, the server
+counts it in the DynamoDB table `tollchat-v2-mcp-lookups-dev` (one item per UTC
+day, through the VPC's gateway endpoint) and stops at 3,333 a day, $10 at
+$0.003 a lookup (`DAILY_SALARY_LOOKUPS` in `src/lib.rs`), answering
+`daily_limit`. If the count fails, the call fails without a lookup.
+Each Lambda instance keeps the key it read, so after rotating the parameter,
+redeploy the code (with its sync) to replace the warm instances.
 
 ## Build
 
@@ -56,9 +66,11 @@ MCP_TARGETS=(
   -target='aws_iam_role.mcp_server[0]'
   -target='aws_iam_role_policy_attachment.mcp_server_vpc[0]'
   -target='aws_iam_role_policy.mcp_server[0]'
+  -target='aws_dynamodb_table.mcp_lookups[0]'
   -target='aws_security_group.mcp_server[0]'
   -target='aws_vpc_security_group_ingress_rule.rds_from_mcp_server[0]'
   -target='aws_vpc_security_group_egress_rule.mcp_server_to_rds[0]'
+  -target='aws_vpc_security_group_egress_rule.mcp_server_https[0]'
   -target='aws_lambda_function.mcp_server[0]'
   -target='aws_apigatewayv2_api.mcp[0]'
   -target='aws_apigatewayv2_integration.mcp[0]'
@@ -83,7 +95,8 @@ resources. Merge first, then apply from `main`:
    exist yet. Until step 7, every delivery and every trusted PR plan fails the
    same way, so **merge nothing else until then**.
 2. **Foundation:** apply `infra/` for development. This adds the read-only MCP
-   policies to the plan and delivery roles.
+   policies to the plan and delivery roles, and the counter table to the
+   DynamoDB gateway endpoint policy.
 3. **Certificate:** `terraform -chdir=v2/infra plan -input=false "${VARS[@]}"
    -target='aws_acm_certificate.mcp[0]' -out="$W/certificate.tfplan"`. After the
    apply, read the validation record with
@@ -96,7 +109,7 @@ resources. Merge first, then apply from `main`:
 5. **Code:** deploy it as described in [Deploy code](#deploy-code), including the
    sync.
 6. **Sync everything:** run the same plan with `-refresh-only`. Expect drift only
-   in computed fields: the security group's `egress` (now listing its RDS rule),
+   in computed fields: the security group's `egress` (now listing its RDS and HTTPS rules),
    the certificate's `renewal_eligibility` and `in_use_by`, and the stage's
    `deployment_id`. Apply it. A second `-refresh-only` plan must show no drift.
 7. **Release:** re-run the merge's failed delivery jobs (as the original actor),
@@ -108,6 +121,9 @@ resources. Merge first, then apply from `main`:
    public on-switch; delete it to take the server offline.
 
 ## Deploy code
+
+Server 0.5.0 and later will not start without `LOOKUP_TABLE` set on the function,
+so apply the MCP resources before deploying it.
 
 ```bash
 v2/scripts/build_mcp_server_zip.sh
@@ -141,16 +157,49 @@ else in between.
 - **Read grants** in `infra/mcp-delivery.tf` are added before the `v2/infra`
   apply and removed after it, because plans refresh every MCP resource still in
   state.
-- **Code first:** never apply infrastructure that the deployed binary still
-  needs; check its `CodeSha256` against a reproducible build first.
+- **Removals go code first:** never remove infrastructure that the deployed
+  binary still needs; check its `CodeSha256` against a reproducible build first.
+- **Additions go infrastructure first:** apply what the new binary needs (for
+  0.5.0: the foundation's DynamoDB endpoint policy and read grants, then the
+  counter table, grants, HTTPS egress and `LOOKUP_TABLE`) before deploying it.
 
 ## Verify
 
 - `curl -s https://mcp.tollchat.ai/` returns the connect guide. Its `curl`
   examples should all return 200.
 - A burst of more than five requests a second gets some 429s (stage throttle).
-- Logs, kept 7 days, hold only the tool, status and duration:
-  `aws logs tail /aws/lambda/tollchat-v2-mcp-server-dev --since 1h`.
+- Logs, kept 7 days, hold the tool, status and duration, and for a failure its
+  `stage` and `code`: `aws logs tail /aws/lambda/tollchat-v2-mcp-server-dev --since 1h`.
+  Toll calls never log their coordinates, routes or schedules.
+- **Salary calls** also log, under `span`, the `job_title`, `location` and
+  `years_of_experience` sent, and OpenWeb Ninja's `upstream_status`,
+  `upstream_ms` and `request_id` (quote it to OpenWeb Ninja support). The key is
+  never logged. Failure codes: `key_<SSM error code>` (such as
+  `key_AccessDeniedException` or `key_ParameterNotFound`), `key_no_response`,
+  `key_empty_value`, `url`, `connect`, `request`,
+  `http_<status>` (`http_429` is a rate limit or exhausted quota), `body`,
+  `upstream`, `timeout`, and `salary_budget` stage failures (the counter is
+  unavailable). The counter is the upper bound on billed lookups; today's:
+  `aws dynamodb get-item --table-name
+  tollchat-v2-mcp-lookups-dev --key "{\"day\":{\"N\":\"$(( $(date -u +%s) / 86400 ))\"}}"`.
+  Run these in CloudWatch Logs Insights on
+  `/aws/lambda/tollchat-v2-mcp-server-dev` (or with `aws logs start-query`):
+
+  ```text
+  # Calls, and lookups OpenWeb Ninja answered (a lower bound on billed ones), per day
+  filter fields.tool = "estimate_salary"
+  | stats count(*) as calls, count(span.upstream_status) as answered,
+      pct(fields.elapsed_ms, 90) as p90_ms by bin(1d)
+
+  # How calls ended
+  filter fields.tool = "estimate_salary"
+  | stats count(*) as calls by fields.status, fields.code, span.upstream_status
+
+  # Most asked-about jobs
+  filter fields.tool = "estimate_salary"
+  | stats count(*) as calls by span.job_title, span.location
+  | sort calls desc | limit 20
+  ```
 - **Drop accounting.** Compare per-minute API Gateway requests with Lambda
   invocations (kept 15 days at one-minute resolution, no request content):
 

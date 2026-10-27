@@ -4,8 +4,8 @@ TollChat runs inside private AWS networking. The public CloudFront and WAF edge
 reaches an IAM-authenticated Lambda URL; the proxy reaches the private AgentCore
 endpoint, and runtime database access uses narrowly scoped RDS IAM roles.
 
-SSM Parameter Store is the source of truth for feed, OpenAI, Cloudflare, and
-Tailscale credentials. Secrets must never be written to repository files,
+SSM Parameter Store is the source of truth for feed, OpenAI, OpenWeb Ninja,
+Cloudflare, and Tailscale credentials. Secrets must never be written to repository files,
 Terraform variables, plans, logs, or build artifacts.
 
 Shared production controls live in [`infra/`](infra/); application-specific

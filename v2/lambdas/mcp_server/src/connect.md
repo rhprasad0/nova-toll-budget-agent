@@ -1,16 +1,17 @@
 # TollChat MCP server
 
-TollChat finds the toll-road ramps for a Northern Virginia trip and estimates what a regular commute on them costs in tolls per year. It covers the I-495 and I-95/I-395 Express Lanes, I-66 inside the Beltway, the Dulles Toll Road, the Dulles Greenway, and the IAD/DCA airport connections.
+TollChat finds the toll-road ramps for a Northern Virginia trip and estimates what a regular commute on them costs in tolls per year. It covers the I-495 and I-95/I-395 Express Lanes, I-66 inside the Beltway, the Dulles Toll Road, the Dulles Greenway, and the IAD/DCA airport connections. For a job that posts no salary range, it also estimates the pay from Glassdoor's salary reports, so a commute's tolls can be weighed against it.
 
 - **Endpoint:** `https://mcp.tollchat.ai/mcp`
 - **Transport:** MCP Streamable HTTP, stateless. Every `POST` gets one `application/json` response; there are no sessions and no `GET` event stream.
 - **Authentication:** none. Call from server-side code: requests carrying a browser `Origin` header get `403`.
 - **Protocol versions:** `2025-11-25` and earlier (with the `initialize` handshake) and `2026-07-28` (no handshake; each request carries its version).
 - **Privacy:** https://mcp.tollchat.ai/privacy
-- **Version:** 0.4.0 (`serverInfo.version`)
+- **Version:** 0.5.0 (`serverInfo.version`)
 
 ## Changes
 
+- **0.5.0, 2026-10-27:** new tool `estimate_salary`, Glassdoor's pay estimate for a job title and location, through OpenWeb Ninja. It is the server's only paid lookup and its only third-party call, capped at 3,333 lookups (about $10) per UTC day; the toll tools are unchanged.
 - **0.4.0, 2026-10-27:** `find_toll_ramps` returns one path per trip: the best route, plus other ramps onto the same roads in the same direction, never a second way around (Springfield to DC gets I-395, without the I-495 and I-66 alternative). The ranking now counts toll miles at half alongside access miles (`score.toll_miles`), so long detours rank last. Routes are chosen as the estimate prices them, without today's reversible-lane state, so the answer no longer changes with the time of day: an option that uses the I-95/I-395 reversible lanes is listed even while they run the other way, and its `reversible_lanes.usable_now` says whether it can be driven right now. The `currently_unavailable` and `availability_unknown` statuses and the top-level `reversible_lanes` field are gone, and a `route_id` no longer changes when the lanes do. `estimate_annual_tolls` prices I-495 southbound from Jones Branch Drive to the express lanes' end near Braddock Road, which the operator's feed always reports as $0, as the trip from Route 267 one entrance upstream, and ranks return trips by access distance as before.
 - **0.3.1, 2026-10-27:** for routes with an I-95/I-495 leg, `estimate_annual_tolls` now estimates from whichever recent days have prices, so gaps in that feed rarely cause refusals. It refuses only when a commute weekday has fewer than two priced days or under a quarter of all days are priced. Other routes keep the half-of-each-weekday rule.
 - **0.3.0, 2026-10-26:** new tool `estimate_annual_tolls`, a ballpark annual toll range for one `find_toll_ramps` option. `find_toll_ramps` is unchanged.
@@ -257,17 +258,71 @@ Each invalid field gets a tool error naming it, and unknown fields are rejected.
 | `no_return_route` | No toll route back was found near the outbound ramps. | Tell the user TollChat could not price a round trip; try another option. |
 | `error` (with `isError: true`) | Something failed on TollChat's side. | Retry as below; if it keeps failing, tell the user. |
 
+## Tool: `estimate_salary`
+
+**Classification: Read.** It changes nothing, but it sends the job title, location, and experience range to OpenWeb Ninja, TollChat logs them for seven days (see the privacy notice), and each call is a paid lookup for TollChat. All clients share a daily cap, so do not repeat a call for the same job and place.
+
+Use it for a job that posts no salary range, to weigh the pay against the commute's tolls. Prefer the posted range when there is one. The estimate is Glassdoor's, from salaries its users report: present it as a range, not an offer.
+
+**Input**
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `job_title` | string | required | The job's title as posted, 1 to 100 characters, such as `software engineer`. |
+| `location` | string | required | Where the job is, as city and state, 1 to 100 characters, such as `Reston, VA`. |
+| `years_of_experience` | string | `ALL` | The candidate's experience: `ALL`, `LESS_THAN_ONE`, `ONE_TO_THREE`, `FOUR_TO_SIX`, `SEVEN_TO_NINE`, `TEN_TO_FOURTEEN`, or `ABOVE_FIFTEEN` years. |
+
+Invalid input gets a tool error saying what to fix (a wrong experience value lists the allowed ones), and unknown fields are rejected. Surrounding spaces are trimmed.
+
+**Worked example:** `{"job_title": "software developer", "location": "New York"}`. An excerpt of the result, with OpenWeb Ninja's published sample figures:
+
+```json
+{
+  "status": "estimated",
+  "job_title": "Software Developer",
+  "location": "New York City, NY",
+  "years_of_experience": "ALL",
+  "period": "YEAR",
+  "currency": "USD",
+  "total_pay": {"low": 128117.25, "typical": 166275.36, "high": 218872.06},
+  "base_pay": {"low": 94192.41, "typical": 121042.24, "high": 155545.69},
+  "additional_pay": {"low": 33924.84, "typical": 45233.12, "high": 63326.37},
+  "salary_count": 213898,
+  "confidence": "CONFIDENT",
+  "source": "Glassdoor via OpenWeb Ninja"
+}
+```
+
+**Output.** `structuredContent` is the result. The text content is a one-line summary.
+
+- `status`: one of the values in the table below. `calculated_at`: when the result was computed, in UTC.
+- `job_title`, `location`: the job and place Glassdoor matched, which can differ from the input (`New York` becomes `New York City, NY`). Check that they are the job and place the user meant.
+- `years_of_experience`: the range used.
+- `period` and `currency`: as Glassdoor gives them (`YEAR` and `USD` for most US jobs; read them rather than assuming). Amounts are not converted.
+- `total_pay`, `base_pay`, `additional_pay`: `low`, `typical`, and `high`, as Glassdoor gives them. Total pay is base pay plus additional pay such as bonuses, commission, and profit sharing; each band is Glassdoor's own, so they do not add up exactly.
+- `salary_count`: how many reported salaries the estimate rests on. `confidence`: Glassdoor's label for it, such as `CONFIDENT`. `salaries_updated_at`: when Glassdoor last updated it.
+- `source`: always `Glassdoor via OpenWeb Ninja`.
+- `message`: for statuses without an estimate.
+
+| `status` | Meaning | What to do |
+| --- | --- | --- |
+| `estimated` | Glassdoor has an estimate. | Quote `total_pay.typical` with its low–high range as Glassdoor's estimate, and mention a low `salary_count` or weak `confidence`. |
+| `no_salary_data` | Glassdoor has no estimate for this title and place. | Try a more common title (`registered nurse`, not `RN II, nights`) or a broader place (the metro area or state). Never treat it as zero pay. |
+| `daily_limit` | TollChat's daily salary-lookup budget is used up. | Tell the user salary estimates are unavailable until after midnight UTC; do not retry before then. |
+| `error` (with `isError: true`) | The lookup failed, on TollChat's side or OpenWeb Ninja's. | Retry as below; if it keeps failing, tell the user. |
+
 ## Limits
 
-- No daily limit: the server makes no paid lookups.
+- `estimate_salary`: at most 3,333 lookups (about $10) per UTC day across all clients; after that it answers `daily_limit` until midnight UTC. The toll tools have no daily limit.
 - About 2 requests per second across all clients, with bursts up to 5; excess requests get HTTP `429`.
 - Request bodies up to 64 KiB.
 - An estimate reads 84 days of prices and can take several seconds. One that takes more than 20 seconds stops with `status: error`.
+- A salary lookup that takes more than 15 seconds stops with `status: error`.
 
 ## Retries
 
 - Retry a transport failure (no response, reset, or timeout), HTTP `429` or `5xx`, or `status: error` at most twice, waiting about 1 then 2 seconds plus random jitter.
-- Calls are read-only and count against no limit, so a retry after a lost response double-counts nothing.
+- Toll calls are read-only and count against no limit, so a retry after a lost response double-counts nothing. A retried `estimate_salary` counts against the daily cap again, so retry it only after a failure, never after `daily_limit`.
 - Log each attempt's UTC time to the millisecond; TollChat can match it against its per-minute request counts.
 - A call that never got an answer is unknown: never report it as "no route" or "zero tolls".
 - Pace bulk tests below 2 requests per second, or the throttle answers `429`.
@@ -277,6 +332,7 @@ Each invalid field gets a tool error naming it, and unknown fields are rejected.
 - Geocode the user's places yourself; a landmark, neighborhood, or nearby intersection is precise enough. Do not press for an exact home location.
 - Confirm the chosen option with the user before relying on it.
 - For a yearly cost, pass the chosen option's entry and exit to `estimate_annual_tolls` and quote its range as a ballpark.
+- For a job without a posted salary range, call `estimate_salary` once with its title and city, and set its pay range against the annual tolls.
 - Use returned point IDs exactly; never invent or edit them.
 - Miles are straight-line, `find_toll_ramps` returns no prices, and every result is an estimate.
 - Save this connector so it can be reused instead of rebuilt each conversation.
