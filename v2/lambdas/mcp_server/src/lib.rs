@@ -46,6 +46,11 @@ const FACILITY_PENALTY_MILES: f64 = 2.0;
 /// A straight-line mile in the express lanes against one on the local roads to the ramps.
 const TOLL_MILE_WEIGHT: f64 = 0.5;
 const MAX_OPTIONS: usize = 3;
+/// I-495 OD pairs the operator feed reports as $0 at every time, priced as a neighbor instead.
+// shortcut: checked against dev data on 2026-10-27. Jones Branch Drive to the I-95/I-395
+// interchange (1056) is $0 while Route 267, one entrance upstream, to the same place (1049) is
+// about $10; drop this once the feed prices 1056.
+const STAND_IN_OD_PAIRS: [(i64, i64); 1] = [(1056, 1049)];
 /// The way back may need a farther ramp than the nearest one per road (the nearest can be one the
 /// return cannot reach); every extra mile adds ramp pairs to validate.
 const RETURN_SEARCH_MILES: f64 = 3.0;
@@ -979,12 +984,9 @@ impl App {
                 continue;
             };
             let legs: Value = row.get("facility_legs");
-            let score = score(
-                start,
-                finish,
-                &facilities(&legs),
-                segments(&points, &legs)?.1,
-            );
+            // Access only, without toll miles: those would favor getting off early, which prices a
+            // shorter trip back than the one out.
+            let score = score(start, finish, &facilities(&legs), 0.0);
             let roads = networks(&points, &row.get::<_, Vec<String>>("point_ids"));
             back.push((roads != same_roads, score, start, finish, legs));
         }
@@ -1024,7 +1026,12 @@ impl App {
                         item["start_zone_id"] = key["start_zone_id"].clone();
                         item["end_zone_id"] = key["end_zone_id"].clone();
                     }
-                    "i95_i495" => item["od_pair_id"] = key["od_pair_id"].clone(),
+                    "i95_i495" => {
+                        let od = key["od_pair_id"].as_i64();
+                        let stand_in = STAND_IN_OD_PAIRS.iter().find(|(id, _)| Some(*id) == od);
+                        item["od_pair_id"] =
+                            stand_in.map_or(key["od_pair_id"].clone(), |pair| json!(pair.1));
+                    }
                     // Published rates: one price for every sampled day.
                     _ => {
                         for day in &days {

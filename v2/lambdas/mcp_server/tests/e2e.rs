@@ -33,6 +33,7 @@ const DULLES_AIRPORT: (f64, f64) = (38.9531, -77.4565);
 const REAGAN_AIRPORT: (f64, f64) = (38.8512, -77.0402);
 const SPRINGFIELD: (f64, f64) = (38.7893, -77.1872);
 const WHITE_HOUSE: (f64, f64) = (38.8977, -77.0365);
+const JONES_BRANCH: (f64, f64) = (38.9265, -77.2190);
 const NEW_YORK: (f64, f64) = (40.7128, -74.0060);
 
 fn at((latitude, longitude): (f64, f64)) -> Value {
@@ -1116,6 +1117,51 @@ async fn return_trip_uses_the_same_roads_in_reverse() {
             "{exit}: {result}"
         );
     }
+    // Springfield to McLean on I-495 comes back from the same interchange, not one exit later.
+    let result = harness.estimate(commute("i495:191NO", "i495:182ND")).await;
+    assert_eq!(
+        result["return"]["route_id"], "i495:182SO>i495:191SD",
+        "{result}"
+    );
+}
+
+// Writes I-95/I-495 history, so it runs alone like the lane test.
+#[tokio::test]
+async fn a_leg_the_feed_prices_at_zero_uses_its_upstream_neighbor() {
+    let _exclusive = LANES.write().await;
+    let harness = start_with(database("tollchat_agent")).await;
+    let admin = connect_as("postgres").await;
+    // Jones Branch Drive is offered as is; only its price is borrowed.
+    let found = harness.find(JONES_BRANCH, SPRINGFIELD).await;
+    assert_eq!(
+        options(&found)[0]["route_id"],
+        "i495:183SO>i495:191SD",
+        "{found}"
+    );
+    // The feed's OD 1056, Jones Branch to the Springfield interchange, is always $0.
+    let route = commute("i495:183SO", "i495:191SD");
+    let before = harness.estimate(route.clone()).await;
+    let back = |end: &str| {
+        before["return"][end]["point_id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    assert_eq!(od_pair(&admin, "i495:183SO", "i495:191SD").await, 1056);
+    let return_od = od_pair(&admin, &back("entry"), &back("exit")).await;
+    seed_i495_history(&admin, "I-495-SB", 1056, "08:33", "0.00", "true").await;
+    seed_i495_history(&admin, "I-495-SB", 1049, "08:33", "9.00", "true").await;
+    seed_i495_history(&admin, "I-495-NB", return_od, "17:33", "4.50", "true").await;
+    let result = harness.estimate(route).await;
+    admin
+        .execute(
+            "DELETE FROM pricing.trip_pricing_i95 WHERE s3_key = 'e2e-history'",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(result["status"], "estimated", "{result}");
+    assert_eq!(typical(&result, "daily_round_trip_usd"), 13.5, "{result}");
 }
 
 /// Seeds one price per weekday at `local_time` for an I-495 OD pair on the 12-week window's days
