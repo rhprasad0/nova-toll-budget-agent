@@ -1581,7 +1581,7 @@ async fn salary_estimate_reports_glassdoor_pay_bands() {
     let called = harness
         .salary(json!({ "job_title": " software developer ", "location": "New York" }))
         .await;
-    assert!(!called.is_error, "{} {}", called.text, called.result);
+    assert!(!called.is_error);
     let result = &called.result;
     for (field, expected) in [
         ("status", json!("estimated")),
@@ -1607,7 +1607,7 @@ async fn salary_estimate_reports_glassdoor_pay_bands() {
         ("salaries_updated_at", json!("2024-06-06T23:59:59.000Z")),
         ("source", json!("Glassdoor via OpenWeb Ninja")),
     ] {
-        assert_eq!(result[field], expected, "{field}: {result}");
+        assert_eq!(result[field], expected, "{field}");
     }
     assert!(result["calculated_at"].is_string());
     assert!(
@@ -1625,10 +1625,7 @@ async fn salary_estimate_reports_glassdoor_pay_bands() {
     senior["years_of_experience"] = json!("TEN_TO_FOURTEEN");
     let senior = harness.salary(senior).await.result;
     assert_eq!(senior["years_of_experience"], "TEN_TO_FOURTEEN");
-    assert_eq!(
-        senior["total_pay"]["typical"], 200000.0,
-        "range forwarded: {senior}"
-    );
+    assert_eq!(senior["total_pay"]["typical"], 200000.0, "range forwarded");
     assert_eq!(harness.key_loads.load(Ordering::SeqCst), 1, "key read once");
 }
 
@@ -1638,7 +1635,7 @@ async fn salary_lookups_fail_closed() {
     let limited = harness
         .salary(json!({ "job_title": "rate limited", "location": "Reston, VA" }))
         .await;
-    assert!(limited.is_error, "{}", limited.result);
+    assert!(limited.is_error);
     assert_eq!(limited.result["status"], "error");
     assert!(limited.result["total_pay"].is_null());
     assert_eq!(
@@ -1650,17 +1647,13 @@ async fn salary_lookups_fail_closed() {
         let called = harness
             .salary(json!({ "job_title": job_title, "location": "Reston, VA" }))
             .await;
-        assert_eq!(
-            called.result["status"], "error",
-            "{job_title}: {}",
-            called.result
-        );
+        assert_eq!(called.result["status"], "error", "{job_title}");
     }
 
     let unknown = harness
         .salary(json!({ "job_title": "qzxv florbish wrangler", "location": "Reston, VA" }))
         .await;
-    assert!(!unknown.is_error, "{}", unknown.result);
+    assert!(!unknown.is_error);
     assert_eq!(unknown.result["status"], "no_salary_data");
     assert!(unknown.result["total_pay"].is_null());
     assert_eq!(
@@ -1675,10 +1668,10 @@ async fn salary_lookups_fail_closed() {
     })
     .await;
     let failed = harness.salary(developer_in_new_york()).await;
-    assert!(failed.is_error, "{}", failed.result);
+    assert!(failed.is_error);
     assert_eq!(failed.result["status"], "error");
     let retried = harness.salary(developer_in_new_york()).await;
-    assert_eq!(retried.result["status"], "estimated", "{}", retried.result);
+    assert_eq!(retried.result["status"], "estimated");
     assert_eq!(harness.key_loads.load(Ordering::SeqCst), 2);
 }
 
@@ -1710,11 +1703,7 @@ async fn salary_inputs_get_errors_that_say_what_to_fix() {
     ] {
         let called = harness.salary(arguments.clone()).await;
         assert!(called.is_error, "{arguments}");
-        assert!(
-            called.text.contains(message),
-            "{arguments}: {}",
-            called.text
-        );
+        assert!(called.text.contains(message), "{arguments}: {message}");
         assert!(called.result.is_null(), "no result for bad input");
     }
     assert_eq!(
@@ -1739,11 +1728,11 @@ async fn salary_cap_stops_exactly_at_ten_dollars_a_day() {
 
     harness.set_lookups_today(DAILY_SALARY_LOOKUPS - 1).await;
     let last = harness.salary(developer_in_new_york()).await;
-    assert_eq!(last.result["status"], "estimated", "{}", last.result);
+    assert_eq!(last.result["status"], "estimated");
     assert_eq!(harness.lookups_today().await, Some(DAILY_SALARY_LOOKUPS));
 
     let limited = harness.salary(developer_in_new_york()).await;
-    assert!(!limited.is_error, "{}", limited.result);
+    assert!(!limited.is_error);
     assert_eq!(limited.result["status"], "daily_limit");
     assert!(limited.result["total_pay"].is_null());
     assert_eq!(
@@ -1764,11 +1753,7 @@ async fn concurrent_salary_calls_cannot_overspend_the_cap() {
     }
     let results = calls.join_all().await;
     let count = |status: &str| results.iter().filter(|r| r["status"] == status).count();
-    assert_eq!(
-        (count("estimated"), count("daily_limit")),
-        (3, 5),
-        "{results:?}"
-    );
+    assert_eq!((count("estimated"), count("daily_limit")), (3, 5));
     assert_eq!(harness.lookups_today().await, Some(DAILY_SALARY_LOOKUPS));
 }
 
@@ -1783,7 +1768,7 @@ async fn salary_cap_failure_fails_closed() {
         .await
         .unwrap();
     let called = harness.salary(developer_in_new_york()).await;
-    assert!(called.is_error, "{}", called.result);
+    assert!(called.is_error);
     assert_eq!(called.result["status"], "error");
     assert!(called.result["total_pay"].is_null(), "no uncounted lookup");
 }
