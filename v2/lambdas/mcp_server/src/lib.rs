@@ -41,8 +41,10 @@ const SAME_INTERCHANGE_MILES: f64 = 0.1;
 /// Closer than this, the two ends are one place and there is no trip to route.
 const SAME_LOCATION_MILES: f64 = 0.1;
 const MAX_GROUPS_PER_SIDE: usize = 4;
-/// An extra toll road must save this many access miles to rank above a simpler route.
+/// Each toll road after the first adds this many miles to a route's score.
 const FACILITY_PENALTY_MILES: f64 = 2.0;
+/// A straight-line mile in the express lanes against one on the local roads to the ramps.
+const TOLL_MILE_WEIGHT: f64 = 0.5;
 const MAX_OPTIONS: usize = 3;
 /// The way back may need a farther ramp than the nearest one per road (the nearest can be one the
 /// return cannot reach); every extra mile adds ramp pairs to validate.
@@ -53,11 +55,15 @@ const MIN_PRICED_PER_WEEKDAY: i64 = 2;
 const ESTIMATE_BUDGET: Duration = Duration::from_secs(20);
 
 const POINTS_SQL: &str = "SELECT oracle.get_toll_route_prompt_points() AS points";
-const VALIDATE_SQL: &str = "SELECT o.id AS origin, d.id AS destination, route.status, \
-     route.facility_legs, route.i95_evidence \
+/// Each pair's route without today's reversible-lane state, as an estimate prices it, and the live
+/// check of the same pair, which says whether that route is usable right now.
+const ROUTES_SQL: &str = "SELECT o.id AS origin, d.id AS destination, route.status, \
+     route.facility_legs, route.point_ids, live.status AS live_status, \
+     live.point_ids AS live_point_ids, live.i95_evidence \
      FROM unnest($1::text[]) AS o(id) CROSS JOIN unnest($2::text[]) AS d(id) \
-     CROSS JOIN LATERAL oracle.validate_pricing_route(o.id, d.id) AS route";
-/// The same check without today's reversible-lane state: an estimate prices past days.
+     CROSS JOIN LATERAL oracle.validate_ballpark_route(o.id, d.id) AS route \
+     CROSS JOIN LATERAL oracle.validate_pricing_route(o.id, d.id) AS live";
+/// Routes without today's reversible-lane state: an estimate prices past days.
 const BALLPARK_ROUTES_SQL: &str = "SELECT o.id AS origin, d.id AS destination, route.status, \
      route.facility_legs, route.point_ids \
      FROM unnest($1::text[]) AS o(id) CROSS JOIN unnest($2::text[]) AS d(id) \
@@ -435,9 +441,10 @@ impl TollServer {
         name = "find_toll_ramps",
         description = "Find the toll-road entry and exit ramps for a Northern Virginia trip. Pass the \
             start and end as WGS-84 latitude and longitude in decimal degrees (geocode places first). \
-            Returns up to 3 validated route options, each with entry and exit point IDs, the toll \
-            facilities used, a per-facility segment breakdown, and its ordering score. Confirm the \
-            chosen option with the user, and use the returned point IDs exactly.",
+            Returns the shortest validated route and up to 2 other ramp choices on the same roads, \
+            each with entry and exit point IDs, the toll facilities used, a per-facility segment \
+            breakdown, and its ordering score. Confirm the chosen option with the user, and use the \
+            returned point IDs exactly.",
         annotations(
             title = "Find toll ramps",
             read_only_hint = true,
@@ -706,19 +713,16 @@ impl App {
             "origin": end(origin, &origins),
             "destination": end(destination, &destinations),
         });
-        let (status, options, lanes) = if origins.is_empty() || destinations.is_empty() {
-            ("outside_coverage", Vec::new(), None)
+        let (status, options) = if origins.is_empty() || destinations.is_empty() {
+            ("outside_coverage", Vec::new())
         } else if miles(origin, destination) < SAME_LOCATION_MILES {
-            ("same_location", Vec::new(), None)
+            ("same_location", Vec::new())
         } else {
             self.validated_options(&points, &origins, &destinations)
                 .await?
         };
         response["status"] = json!(status);
         response["options"] = json!(options);
-        if let Some(direction) = lanes {
-            response["reversible_lanes"] = json!({ "direction": direction });
-        }
         Ok(Ok(response))
     }
 
@@ -737,13 +741,14 @@ impl App {
     }
 
     /// Every option is validated with the pricing tools' own route check before it is returned.
-    /// The third value is the reversible lanes' direction when they are why no option is usable.
+    /// Routes are chosen as the estimate prices them, without today's reversible-lane state, so the
+    /// answer does not change with the time of day; each option only says whether it is usable now.
     async fn validated_options(
         &self,
         points: &[Point],
         origins: &[Candidate<'_>],
         destinations: &[Candidate<'_>],
-    ) -> Result<(&'static str, Vec<Value>, Option<Value>), Failure> {
+    ) -> Result<(&'static str, Vec<Value>), Failure> {
         let fail = |error: BoxError| Failure::database("validate_routes", &error);
         let ids = |side: &[Candidate<'_>]| {
             side.iter()
@@ -754,21 +759,20 @@ impl App {
             .await
             .map_err(fail)?;
         let rows = client
-            .query(VALIDATE_SQL, &[&ids(origins), &ids(destinations)])
+            .query(ROUTES_SQL, &[&ids(origins), &ids(destinations)])
             .await
             .map_err(|e| fail(e.into()))?;
 
-        let (mut lanes_closed, mut lanes_unknown) = (false, false);
+        // One lane state per query, so any route's evidence gives the direction.
+        let lanes_now = rows
+            .iter()
+            .find_map(|row| row.get::<_, Option<Value>>("i95_evidence"))
+            .map_or(json!("unknown"), |evidence| {
+                evidence["availability"].clone()
+            });
         let mut ranked = Vec::new();
         for row in &rows {
-            let status: String = row.get("status");
-            lanes_closed |= status == "currently_unavailable";
-            lanes_unknown |= status == "unknown_availability";
             let legs: Value = row.get("facility_legs");
-            // Present only for routes whose use depends on the I-95/I-395 reversible lanes.
-            let lanes = row
-                .get::<_, Option<Value>>("i95_evidence")
-                .map(|evidence| evidence["availability"].clone());
             let (Some(entry), Some(exit)) = (
                 find(origins, row.get("origin")),
                 find(destinations, row.get("destination")),
@@ -776,11 +780,35 @@ impl App {
                 continue;
             };
             let facilities = facilities(&legs);
-            if status != "valid" || facilities.is_empty() {
+            if row.get::<_, &str>("status") != "valid" || facilities.is_empty() {
                 continue;
             }
-            let score = score(entry, exit, &facilities);
-            ranked.push((score, entry, exit, facilities, legs, lanes));
+            let point_ids: Vec<String> = row.get("point_ids");
+            let evidence: Option<Value> = row.get("i95_evidence");
+            // The live check routes around lanes running the wrong way, so if it found another route
+            // for this pair, this one needs the lanes and is not usable now.
+            let usable_now = if row.get::<_, Vec<String>>("live_point_ids") != point_ids {
+                Some((lanes_now != "unknown").then_some(false))
+            } else {
+                evidence
+                    .as_ref()
+                    .map(|_| match row.get::<_, &str>("live_status") {
+                        "valid" => Some(true),
+                        "unknown_availability" => None,
+                        _ => Some(false),
+                    })
+            };
+            // Present only for routes whose use depends on the I-95/I-395 reversible lanes.
+            let lanes = usable_now.map(|usable_now| {
+                let direction = evidence.map_or(lanes_now.clone(), |e| e["availability"].clone());
+                json!({ "direction": direction, "usable_now": usable_now })
+            });
+            let (segments, toll_miles) = segments(points, &legs)?;
+            let score = score(entry, exit, &facilities, toll_miles);
+            let roads = roads(points, &point_ids);
+            ranked.push((
+                score, entry, exit, facilities, segments, toll_miles, roads, lanes,
+            ));
         }
         // Equal scores are common (one interchange, two exits); break ties the same way every time.
         let key = |c: &Candidate<'_>| c.point.point_id.clone();
@@ -788,16 +816,21 @@ impl App {
             (a.0.total_cmp(&b.0)).then_with(|| (key(a.1), key(a.2)).cmp(&(key(b.1), key(b.2))))
         });
 
+        // One path per answer: the best route, and other ramps onto the same roads in the same
+        // direction, never a second way around (I-495 and I-66 when I-395 goes there directly).
+        let best_roads = ranked.first().map(|best| best.6.clone());
         // Approach variants of one interchange validate separately; show each route once.
         let mut seen = Vec::new();
         let mut options = Vec::new();
-        for (score, entry, exit, facilities, legs, lanes) in ranked {
+        for (score, entry, exit, facilities, segments, toll_miles, roads, lanes) in ranked {
             let route = (spot(entry.point), spot(exit.point), facilities.clone());
-            if options.len() == MAX_OPTIONS || seen.contains(&route) {
+            if options.len() == MAX_OPTIONS
+                || Some(&roads) != best_roads.as_ref()
+                || seen.contains(&route)
+            {
                 continue;
             }
             seen.push(route);
-            let (segments, straight_line) = segments(points, &legs)?;
             let access = entry.miles + exit.miles;
             let mut option = json!({
                 "route_id": route_id(&entry.point.point_id, &segments, &exit.point.point_id),
@@ -805,38 +838,26 @@ impl App {
                 "exit": exit.point.describe(),
                 "facilities": facilities,
                 "segments": segments,
-                "total_straight_line_miles": round_tenth(straight_line),
+                "total_straight_line_miles": round_tenth(toll_miles),
                 "access_miles": { "origin": round_tenth(entry.miles), "destination": round_tenth(exit.miles) },
                 "score": {
                     "access_miles": round_tenth(access),
-                    "facility_penalty_miles": round_tenth(score - access),
+                    "toll_miles": round_tenth(TOLL_MILE_WEIGHT * toll_miles),
+                    "facility_penalty_miles": round_tenth(score - access - TOLL_MILE_WEIGHT * toll_miles),
                     "total": round_tenth(score),
                 },
             });
-            if let Some(direction) = lanes {
-                option["reversible_lanes"] = json!({ "direction": direction });
+            if let Some(lanes) = lanes {
+                option["reversible_lanes"] = lanes;
             }
             options.push(option);
         }
-        let status = if !options.is_empty() {
-            "resolved"
-        } else if lanes_closed {
-            "currently_unavailable"
-        } else if lanes_unknown {
-            "availability_unknown"
-        } else {
+        let status = if options.is_empty() {
             "no_valid_route"
+        } else {
+            "resolved"
         };
-        // One lane state per query, so any route's evidence gives the direction.
-        let lanes = matches!(status, "currently_unavailable" | "availability_unknown")
-            .then(|| {
-                rows.iter().find_map(|row| {
-                    row.get::<_, Option<Value>>("i95_evidence")
-                        .map(|evidence| evidence["availability"].clone())
-                })
-            })
-            .flatten();
-        Ok((status, options, lanes))
+        Ok((status, options))
     }
 
     /// `Ok(Err(message))` is an input mistake the caller should fix.
@@ -945,23 +966,33 @@ impl App {
             .unwrap_or_default();
         let mut same_roads = networks(&points, &outbound_ids);
         same_roads.reverse();
-        let back = rows
+        let mut back = Vec::new();
+        for row in rows
             .iter()
             .filter(|row| row.get::<_, &str>("status") == "valid")
-            .filter_map(|row| {
-                let start = find(&starts, row.get("origin"))?;
-                let finish = find(&finishes, row.get("destination"))?;
-                let legs: Value = row.get("facility_legs");
-                let score = score(start, finish, &facilities(&legs));
-                let roads = networks(&points, &row.get::<_, Vec<String>>("point_ids"));
-                Some((roads != same_roads, score, start, finish, legs))
+        {
+            let (Some(start), Some(finish)) = (
+                find(&starts, row.get("origin")),
+                find(&finishes, row.get("destination")),
+            ) else {
+                continue;
+            };
+            let legs: Value = row.get("facility_legs");
+            let score = score(
+                start,
+                finish,
+                &facilities(&legs),
+                segments(&points, &legs)?.1,
+            );
+            let roads = networks(&points, &row.get::<_, Vec<String>>("point_ids"));
+            back.push((roads != same_roads, score, start, finish, legs));
+        }
+        let back = back.into_iter().min_by(|a, b| {
+            (a.0.cmp(&b.0)).then(a.1.total_cmp(&b.1)).then_with(|| {
+                (&a.2.point.point_id, &a.3.point.point_id)
+                    .cmp(&(&b.2.point.point_id, &b.3.point.point_id))
             })
-            .min_by(|a, b| {
-                (a.0.cmp(&b.0)).then(a.1.total_cmp(&b.1)).then_with(|| {
-                    (&a.2.point.point_id, &a.3.point.point_id)
-                        .cmp(&(&b.2.point.point_id, &b.3.point.point_id))
-                })
-            });
+        });
         let Some((_, _, start, finish, return_legs)) = back else {
             response["status"] = json!("no_return_route");
             response["message"] =
@@ -1171,10 +1202,20 @@ fn facilities(legs: &Value) -> Vec<String> {
     facilities
 }
 
-/// Total access miles, with each toll facility after the first counted as extra miles.
-fn score(entry: &Candidate<'_>, exit: &Candidate<'_>, facilities: &[String]) -> f64 {
-    // shortcut: straight-line access miles, not drive time; upgrade to a Routes matrix if users get cross-river picks.
-    entry.miles + exit.miles + FACILITY_PENALTY_MILES * facilities.len().saturating_sub(1) as f64
+/// The trip's straight-line length, with toll miles counted at half (express lanes run about twice
+/// as fast as the local roads to the ramps) and each toll facility after the first as extra miles:
+/// the quicker trip on fewer toll roads ranks first.
+fn score(
+    entry: &Candidate<'_>,
+    exit: &Candidate<'_>,
+    facilities: &[String],
+    toll_miles: f64,
+) -> f64 {
+    // shortcut: straight-line miles, not drive time; upgrade to a Routes matrix if users get cross-river picks.
+    entry.miles
+        + exit.miles
+        + TOLL_MILE_WEIGHT * toll_miles
+        + FACILITY_PENALTY_MILES * facilities.len().saturating_sub(1) as f64
 }
 
 /// One Dulles Toll Road or Greenway charge at the published rate, as dollars text, for a leg's
@@ -1297,8 +1338,8 @@ fn segments(points: &[Point], legs: &Value) -> Result<(Vec<Value>, f64), Failure
     Ok((segments, total))
 }
 
-/// The entry, each toll segment's ends, and the exit, joined by `>`: one pair of ramps can be
-/// routed differently as the reversible lanes change, and then gets a different ID.
+/// The entry, each toll segment's ends, and the exit, joined by `>`, so the same ID always means
+/// the same route.
 fn route_id(entry: &str, segments: &[Value], exit: &str) -> String {
     let mut chain = vec![entry];
     let ends = segments
@@ -1352,13 +1393,21 @@ fn return_candidates<'a>(points: &'a [Point], at: [f64; 2], role: &str) -> Vec<C
     candidates
 }
 
-/// The networks a route passes through, in order, from its walked point IDs.
-fn networks<'a>(points: &'a [Point], ids: &[String]) -> Vec<&'a str> {
-    let mut networks: Vec<&str> = ids
+/// The roads a route passes through, tolled or not, as (network, direction) in order, from its
+/// walked point IDs.
+fn roads<'a>(points: &'a [Point], ids: &[String]) -> Vec<(&'a str, Option<&'a str>)> {
+    let mut roads: Vec<_> = ids
         .iter()
         .filter_map(|id| points.iter().find(|p| &p.point_id == id))
-        .map(|p| p.network_id.as_str())
+        .map(|p| (p.network_id.as_str(), p.direction.as_deref()))
         .collect();
+    roads.dedup();
+    roads
+}
+
+/// The networks a route passes through, in order, whatever the direction.
+fn networks<'a>(points: &'a [Point], ids: &[String]) -> Vec<&'a str> {
+    let mut networks: Vec<&str> = roads(points, ids).into_iter().map(|(n, _)| n).collect();
     networks.dedup();
     networks
 }
