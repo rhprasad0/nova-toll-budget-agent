@@ -55,14 +55,15 @@ const MIN_PRICED_PER_WEEKDAY: i64 = 2;
 const ESTIMATE_BUDGET: Duration = Duration::from_secs(20);
 
 const POINTS_SQL: &str = "SELECT oracle.get_toll_route_prompt_points() AS points";
-/// Each pair's route without today's reversible-lane state, as an estimate prices it, and the live
-/// check of the same pair, which says whether that route is usable right now.
+/// Each pair's route without today's reversible-lane state, as an estimate prices it, and for a
+/// valid one, the live check of the same pair, which says whether that route is usable right now.
 const ROUTES_SQL: &str = "SELECT o.id AS origin, d.id AS destination, route.status, \
      route.facility_legs, route.point_ids, live.status AS live_status, \
      live.point_ids AS live_point_ids, live.i95_evidence \
      FROM unnest($1::text[]) AS o(id) CROSS JOIN unnest($2::text[]) AS d(id) \
      CROSS JOIN LATERAL oracle.validate_ballpark_route(o.id, d.id) AS route \
-     CROSS JOIN LATERAL oracle.validate_pricing_route(o.id, d.id) AS live";
+     LEFT JOIN LATERAL (SELECT * FROM oracle.validate_pricing_route(o.id, d.id) \
+         WHERE route.status = 'valid') AS live ON true";
 /// Routes without today's reversible-lane state: an estimate prices past days.
 const BALLPARK_ROUTES_SQL: &str = "SELECT o.id AS origin, d.id AS destination, route.status, \
      route.facility_legs, route.point_ids \
@@ -441,7 +442,7 @@ impl TollServer {
         name = "find_toll_ramps",
         description = "Find the toll-road entry and exit ramps for a Northern Virginia trip. Pass the \
             start and end as WGS-84 latitude and longitude in decimal degrees (geocode places first). \
-            Returns the shortest validated route and up to 2 other ramp choices on the same roads, \
+            Returns the best validated route and up to 2 other ramp choices on the same roads, \
             each with entry and exit point IDs, the toll facilities used, a per-facility segment \
             breakdown, and its ordering score. Confirm the chosen option with the user, and use the \
             returned point IDs exactly.",
@@ -843,7 +844,7 @@ impl App {
                 "score": {
                     "access_miles": round_tenth(access),
                     "toll_miles": round_tenth(TOLL_MILE_WEIGHT * toll_miles),
-                    "facility_penalty_miles": round_tenth(score - access - TOLL_MILE_WEIGHT * toll_miles),
+                    "facility_penalty_miles": round_tenth(penalty(&facilities)),
                     "total": round_tenth(score),
                 },
             });
@@ -1212,10 +1213,11 @@ fn score(
     toll_miles: f64,
 ) -> f64 {
     // shortcut: straight-line miles, not drive time; upgrade to a Routes matrix if users get cross-river picks.
-    entry.miles
-        + exit.miles
-        + TOLL_MILE_WEIGHT * toll_miles
-        + FACILITY_PENALTY_MILES * facilities.len().saturating_sub(1) as f64
+    entry.miles + exit.miles + TOLL_MILE_WEIGHT * toll_miles + penalty(facilities)
+}
+
+fn penalty(facilities: &[String]) -> f64 {
+    FACILITY_PENALTY_MILES * facilities.len().saturating_sub(1) as f64
 }
 
 /// One Dulles Toll Road or Greenway charge at the published rate, as dollars text, for a leg's

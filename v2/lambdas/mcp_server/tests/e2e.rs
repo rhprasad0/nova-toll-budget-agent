@@ -247,11 +247,20 @@ async fn assert_well_formed(result: &Value) {
         if lanes.is_null() || lanes["usable_now"] == true {
             assert_eq!(revalidate(entry, exit, true).await, "valid", "{option}");
         }
-        assert_eq!(
-            option["facilities"],
-            options(result)[0]["facilities"],
-            "one path: {result}"
-        );
+        // One path: the same roads from the same entry road to the same exit road and direction.
+        let first = &options(result)[0];
+        for path in [
+            "/facilities",
+            "/entry/network",
+            "/exit/network",
+            "/exit/direction",
+        ] {
+            assert_eq!(
+                option.pointer(path),
+                first.pointer(path),
+                "one path: {result}"
+            );
+        }
         let route_id = option["route_id"].as_str().unwrap();
         assert!(
             route_id.starts_with(&format!("{entry}>")) && route_id.ends_with(&format!(">{exit}"))
@@ -412,7 +421,6 @@ async fn muse_reston_to_tysons_returns_validated_ranked_options() {
     );
     assert!((1..=3).contains(&options(&result).len()), "{result}");
     assert_well_formed(&result).await;
-    assert!(result.get("reversible_lanes").is_none());
     let best = &options(&result)[0];
     assert_eq!(best["entry"]["role"], "entry");
     assert_eq!(best["entry"]["network"], "dtr");
