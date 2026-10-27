@@ -53,7 +53,7 @@ jobs:
             test "$VERIFICATION_PHASE" = pre-bootstrap || \
             test "$VERIFICATION_PHASE" = full
 
-      - uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
+      - uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4.3.0
         if: inputs.phase == 'pre-bootstrap' || inputs.phase == 'full' || inputs.phase == ''
         with:
           oauth-client-id: ${{ secrets.TS_DEVELOPMENT_OAUTH_CLIENT_ID }}
