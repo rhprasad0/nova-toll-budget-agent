@@ -47,6 +47,8 @@ const MAX_OPTIONS: usize = 3;
 /// The way back may need a farther ramp than the nearest one per road (the nearest can be one the
 /// return cannot reach); every extra mile adds ramp pairs to validate.
 const RETURN_SEARCH_MILES: f64 = 3.0;
+/// Fewest priced days of each commute weekday an estimate with an I-95/I-495 leg needs.
+const MIN_PRICED_PER_WEEKDAY: i64 = 2;
 /// Leaves Lambda's 25 s for the reply; a timeout then answers as a tool error, not a gateway 5xx.
 const ESTIMATE_BUDGET: Duration = Duration::from_secs(20);
 
@@ -608,12 +610,13 @@ fn summary(value: &Value) -> String {
                 format!("${amount:.0}")
             };
             format!(
-                "{status}: about {} a year in tolls (range {} to {}), from {} recent commute \
-                 days. Full details are in the structured result.",
+                "{status}: about {} a year in tolls (range {} to {}), from {} of {} recent \
+                 commute days. Full details are in the structured result.",
                 dollars("typical"),
                 dollars("low"),
                 dollars("high"),
                 value["basis"]["priced_days"],
+                value["basis"]["eligible_days"],
             )
         }
         _ => match value["message"].as_str() {
@@ -1065,23 +1068,40 @@ impl App {
             "uses_modeled_prices": summary.get::<_, bool>("uses_modeled"),
             "uses_published_fixed_rates": summary.get::<_, bool>("uses_current_fixed_rates"),
         });
-        // Toll-free days (I-66 weekends and holidays) price as $0 even with no feed data, so every
-        // commute weekday needs at least half its days priced, or missing data reads as low tolls.
+        // An I-95/I-495 leg needs feed data on every day, so its gaps drop days at random: they
+        // thin the sample without biasing it, and the estimate uses whatever days are priced.
+        // Without one, I-66 prices its toll-free weekends and holidays at $0 even with no data, so
+        // gaps drop only tolled days; those routes need half of each weekday's days priced.
+        let gaps_are_random = legs.iter().any(|leg| leg["facility"] == "i95_i495");
         let thin: Vec<String> = by_weekday
             .iter()
             .filter(|day| {
-                2 * day["priced_days"].as_i64().unwrap_or_default()
-                    < day["eligible_days"].as_i64().unwrap_or_default()
+                let priced = day["priced_days"].as_i64().unwrap_or_default();
+                let eligible = day["eligible_days"].as_i64().unwrap_or_default();
+                if gaps_are_random {
+                    priced < MIN_PRICED_PER_WEEKDAY
+                } else {
+                    2 * priced < eligible
+                }
             })
             .filter_map(|day| day["weekday"].as_str().map(|name| format!("{name}s")))
             .collect();
-        if !thin.is_empty() || priced_days == 0 {
+        if !thin.is_empty() || (gaps_are_random && 4 * priced_days < eligible_days) {
+            let weekdays = if thin.is_empty() {
+                String::new()
+            } else {
+                format!(", too few {}", thin.join(", "))
+            };
+            let needed = if gaps_are_random {
+                "at least two of each commute weekday and a quarter of all days"
+            } else {
+                "at least half of each commute weekday's days"
+            };
             response["status"] = json!("too_few_recent_prices");
             response["message"] = json!(format!(
-                "Too few recent {} had prices for every toll on both trips at these times \
-                 ({priced_days} of {eligible_days} commute days priced); TollChat needs at least \
-                 half of each weekday's days for an estimate.",
-                thin.join(", ")
+                "Only {priced_days} of {eligible_days} recent commute days had prices for every \
+                 toll on both trips at these times{weekdays}; TollChat needs {needed} for an \
+                 estimate."
             ));
             return Ok(Ok(response));
         }

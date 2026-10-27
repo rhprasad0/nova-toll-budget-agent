@@ -7,10 +7,11 @@ TollChat finds the toll-road ramps for a Northern Virginia trip and estimates wh
 - **Authentication:** none. Call from server-side code: requests carrying a browser `Origin` header get `403`.
 - **Protocol versions:** `2025-11-25` and earlier (with the `initialize` handshake) and `2026-07-28` (no handshake; each request carries its version).
 - **Privacy:** https://mcp.tollchat.ai/privacy
-- **Version:** 0.3.0 (`serverInfo.version`)
+- **Version:** 0.3.1 (`serverInfo.version`)
 
 ## Changes
 
+- **0.3.1, 2026-10-27:** for routes with an I-95/I-495 leg, `estimate_annual_tolls` now estimates from whichever recent days have prices, so gaps in that feed rarely cause refusals. It refuses only when a commute weekday has fewer than two priced days or under a quarter of all days are priced. Other routes keep the half-of-each-weekday rule.
 - **0.3.0, 2026-10-26:** new tool `estimate_annual_tolls`, a ballpark annual toll range for one `find_toll_ramps` option. `find_toll_ramps` is unchanged.
 - **0.2.0, 2026-10-26:** `find_toll_ramps` takes each end as latitude and longitude. Place text inputs were removed on 2026-10-26, together with the server's place lookups (Amazon Location) and their daily limit; a call that still sends place text gets a tool error. Results gain `calculated_at`, `route_id`, `segments`, `score`, and `reversible_lanes`, and the text content is now a short summary. The `match`, `ambiguous`, `place_not_found`, and `daily_lookup_limit` results are gone, and `same_location` is new. Facility codes, the ordering rule, and the other statuses are unchanged.
 
@@ -220,7 +221,8 @@ Each invalid field gets a tool error naming it, and unknown fields are rejected.
 - For each of the last 84 completed days that falls on a commute weekday, TollChat prices the outbound trip at `depart_at` and the return trip at `return_at`. I-66 and I-95/I-495 use the operators' recorded prices at that time (the 6- or 10-minute interval containing it). The Dulles Toll Road and Greenway use their current published rates, applied to past dates.
 - A day counts only if every toll on both trips has a price. I-66's toll-free times and holidays count as $0.
 - `daily_round_trip_usd` is the 25th, 50th, and 90th percentile (`low`, `typical`, `high`) of those days' round-trip totals; `annual_toll_usd` multiplies each by `annual_commute_days`.
-- If any commute weekday has fewer than half of its recent days priced, the result is `too_few_recent_prices` instead of an estimate. Without this, I-66's toll-free weekends and holidays would still price at $0 when data is missing, and read as low or zero tolls.
+- **Routes with an I-95/I-495 leg:** that leg needs feed data every day, so gaps in the feed drop days at random. That thins the sample without biasing it, so the estimate uses whichever days are priced, and `basis` says how many. It refuses, with `too_few_recent_prices`, only when a commute weekday has fewer than two priced days or fewer than a quarter of all eligible days are priced.
+- **Other routes** need at least half of each commute weekday's days priced. I-66 prices its toll-free weekends and holidays at $0 even when data is missing, so its gaps drop only tolled days. Without this rule, missing data would read as low or zero tolls.
 - Some I-95 trips use modeled prices for origin-destination pairs the operator does not publish; `basis.uses_modeled_prices` says so.
 
 **Worked example:** the first Reston Town Center → Tysons option above, with the defaults, as in the request above. The Dulles Toll Road charges $2 at the Exit 12 ramp and $4 at the main plaza each way, so $12 a day. An excerpt of the result, without the `entry`, `exit`, `window`, and `coverage_by_weekday` fields:
@@ -251,7 +253,7 @@ Each invalid field gets a tool error naming it, and unknown fields are rejected.
 | `status` | Meaning | What to do |
 | --- | --- | --- |
 | `estimated` | Enough recent days were priced. | Quote `annual_toll_usd.typical` as a ballpark with the low–high range, and mention partial coverage. |
-| `too_few_recent_prices` | For some commute weekday, fewer than half its recent days had prices for every toll on both trips at these times: the data is missing, or the I-95/I-395 reversible lanes rarely ran the needed way then. | Tell the user TollChat cannot estimate this schedule; try other times or another option. Never treat it as zero tolls. |
+| `too_few_recent_prices` | Too few recent days had prices for every toll on both trips at these times (see the rules above): the data is missing, or the I-95/I-395 reversible lanes rarely ran the needed way then. | Tell the user TollChat cannot estimate this schedule; try other times or another option. Never treat it as zero tolls. |
 | `no_return_route` | No toll route back was found near the outbound ramps. | Tell the user TollChat could not price a round trip; try another option. |
 | `error` (with `isError: true`) | Something failed on TollChat's side. | Retry as below; if it keeps failing, tell the user. |
 
