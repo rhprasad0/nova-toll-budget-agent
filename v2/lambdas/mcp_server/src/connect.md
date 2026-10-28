@@ -7,10 +7,11 @@ TollChat finds the toll-road ramps for a Northern Virginia trip and estimates wh
 - **Authentication:** none. Call from server-side code: requests carrying a browser `Origin` header get `403`.
 - **Protocol versions:** `2025-11-25` and earlier (with the `initialize` handshake) and `2026-07-28` (no handshake; each request carries its version).
 - **Privacy:** https://mcp.tollchat.ai/privacy
-- **Version:** 0.5.0 (`serverInfo.version`)
+- **Version:** 0.6.0 (`serverInfo.version`)
 
 ## Changes
 
+- **0.6.0, 2026-10-27:** `estimate_salary` returns a figure only for the place and title asked about and only when it rests on at least one report. `location` must be `City, ST`; a region such as "NoVA" or a different matched place (Glassdoor turned "NoVA" into Novato, CA) gets the new status `ambiguous_location`, and a figure resting on 0 reports, which Glassdoor still labelled `CONFIDENT`, gets `no_salary_data`. Results carry `requested` and `matched` objects in place of the top-level `job_title`, `location`, and `years_of_experience`, and `confidence` is gone. The toll tools are unchanged.
 - **0.5.0, 2026-10-27:** new tool `estimate_salary`, Glassdoor's pay estimate for a job title and location, through OpenWeb Ninja. It is the server's only paid lookup and its only third-party call, capped at 3,333 lookups (about $10) per UTC day; the toll tools are unchanged.
 - **0.4.0, 2026-10-27:** `find_toll_ramps` returns one path per trip: the best route, plus other ramps onto the same roads in the same direction, never a second way around (Springfield to DC gets I-395, without the I-495 and I-66 alternative). The ranking now counts toll miles at half alongside access miles (`score.toll_miles`), so long detours rank last. Routes are chosen as the estimate prices them, without today's reversible-lane state, so the answer no longer changes with the time of day: an option that uses the I-95/I-395 reversible lanes is listed even while they run the other way, and its `reversible_lanes.usable_now` says whether it can be driven right now. The `currently_unavailable` and `availability_unknown` statuses and the top-level `reversible_lanes` field are gone, and a `route_id` no longer changes when the lanes do. `estimate_annual_tolls` prices I-495 southbound from Jones Branch Drive to the express lanes' end near Braddock Road, which the operator's feed always reports as $0, as the trip from Route 267 one entrance upstream, and ranks return trips by access distance as before.
 - **0.3.1, 2026-10-27:** for routes with an I-95/I-495 leg, `estimate_annual_tolls` now estimates from whichever recent days have prices, so gaps in that feed rarely cause refusals. It refuses only when a commute weekday has fewer than two priced days or under a quarter of all days are priced. Other routes keep the half-of-each-weekday rule.
@@ -262,33 +263,45 @@ Each invalid field gets a tool error naming it, and unknown fields are rejected.
 
 **Classification: Read.** It changes nothing, but it sends the job title, location, and experience range to OpenWeb Ninja, TollChat logs them for seven days (see the privacy notice), and each call is a paid lookup for TollChat. All clients share a daily cap, so do not repeat a call for the same job and place.
 
-Use it for a job that posts no salary range, to weigh the pay against the commute's tolls. Prefer the posted range when there is one. The estimate is Glassdoor's, from salaries its users report: present it as a range, not an offer.
+Use it for a job that posts no salary range, to weigh the pay against the commute's tolls. Prefer the posted range when there is one. The estimate is Glassdoor's, from salaries its users report: present it as a rough range, not an offer.
+
+**Upstream data is not robust.** In testing, OpenWeb Ninja returned figures labelled `CONFIDENT` that rested on 0 salary reports (for "Chief Vibes Officer", and for "sr data analyst"), and matched "NoVA" to Novato, CA. TollChat checks every reply before returning a figure (below), but still: check `salary_count`, never quote a figure with 0 reports, and read back the matched job title and location and confirm them with the user before relying on the figure.
 
 **Input**
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `job_title` | string | required | The job's title as posted, 1 to 100 characters, such as `software engineer`. |
-| `location` | string | required | Where the job is, as city and state, 1 to 100 characters, such as `Reston, VA`. |
+| `job_title` | string | required | The job's title as posted, 1 to 100 characters with at least one letter or digit, such as `software engineer`. |
+| `location` | string | required | Where the job is, as `City, ST` with the two-letter postal code of a US state or DC, 1 to 100 characters, such as `Reston, VA`. A region (`NoVA`), a city alone, a spelled-out state, a place outside the US, or more than one comma gets `ambiguous_location` without a lookup. |
 | `years_of_experience` | string | `ALL` | The candidate's experience: `ALL`, `LESS_THAN_ONE`, `ONE_TO_THREE`, `FOUR_TO_SIX`, `SEVEN_TO_NINE`, `TEN_TO_FOURTEEN`, or `ABOVE_FIFTEEN` years. |
 
 Invalid input gets a tool error saying what to fix (a wrong experience value lists the allowed ones), and unknown fields are rejected. Surrounding spaces are trimmed.
 
-**Worked example:** `{"job_title": "software developer", "location": "New York"}`. An excerpt of the result, with OpenWeb Ninja's published sample figures:
+**How a reply is checked.** TollChat returns a figure only when all of these hold; otherwise it returns no pay figures at all:
+
+1. **Same place:** the matched location's state equals the requested one, and its city is the same, ignoring case, spaces, and punctuation, or is one of Glassdoor's known names for it (`Tysons` → `Tysons Corner`, `New York` → `New York City`). `Reston, VA` accepts `Reston, VA`, `McLean, VA` accepts `Mc Lean, VA`, and `Tysons, VA` accepts `Tysons Corner, VA`. A longer or different name is another place: `Manassas, VA` rejects `Manassas Park, VA`, `Nova, VA` rejects `Novato, CA`, and `Arlington, VA` rejects `Arlington, TX`. Failing this is `ambiguous_location`. Spelling variants count as different places too (`St. Louis` and `Saint Louis`); if that happens, retry with the spelling Glassdoor returned in `matched`, after confirming with the user that it is the same city.
+2. **Same title:** the matched title has the same words as the requested one, ignoring case and punctuation (`sr data analyst` and `Sr Data Analyst` are the same). Glassdoor echoed every title in testing; a different one is `no_salary_data`.
+3. **At least one report:** `salary_count` is 1 or more. Otherwise `no_salary_data`.
+
+TollChat never substitutes another title, city, state, or national figure. Any alternative in a `message` is a suggestion to ask the user about, not an estimate.
+
+**Location type.** OpenWeb Ninja's optional `location_type` (`ANY`, `CITY`, `STATE`, `COUNTRY`) is not exposed and not sent, so it stays `ANY`. On 2026-10-27, `CITY` and `ANY` gave identical replies for four test requests, including "NoVA" (Novato, CA either way), so it does not fix fuzzy matching; the place check above does. State and country figures are not a job's local pay. The Glassdoor domain stays `www.glassdoor.com` (US).
+
+**Confidence.** TollChat reports no confidence label. Glassdoor's `confidence` was `CONFIDENT` even for figures resting on 0 reports, so it is dropped. `salary_count`, in every result that has a figure, is the only measure of how much data stands behind it; TollChat sets no threshold above 1, so judge a small count yourself and mention it.
+
+**Worked example:** `{"job_title": "software developer", "location": "New York, NY"}`. An excerpt of the result, with OpenWeb Ninja's published sample figures:
 
 ```json
 {
   "status": "estimated",
-  "job_title": "Software Developer",
-  "location": "New York City, NY",
-  "years_of_experience": "ALL",
+  "requested": {"job_title": "software developer", "location": "New York, NY", "years_of_experience": "ALL"},
+  "matched": {"job_title": "Software Developer", "location": "New York City, NY"},
   "period": "YEAR",
   "currency": "USD",
   "total_pay": {"low": 128117.25, "typical": 166275.36, "high": 218872.06},
   "base_pay": {"low": 94192.41, "typical": 121042.24, "high": 155545.69},
   "additional_pay": {"low": 33924.84, "typical": 45233.12, "high": 63326.37},
   "salary_count": 213898,
-  "confidence": "CONFIDENT",
   "source": "Glassdoor via OpenWeb Ninja"
 }
 ```
@@ -296,18 +309,19 @@ Invalid input gets a tool error saying what to fix (a wrong experience value lis
 **Output.** `structuredContent` is the result. The text content is a one-line summary.
 
 - `status`: one of the values in the table below. `calculated_at`: when the result was computed, in UTC.
-- `job_title`, `location`: the job and place Glassdoor matched, which can differ from the input (`New York` becomes `New York City, NY`). Check that they are the job and place the user meant.
-- `years_of_experience`: the range used.
+- `requested`: the `job_title`, `location`, and `years_of_experience` used, after trimming and defaults. Every status except `error` has it.
+- `matched`: the `job_title` and `location` Glassdoor answered for (either can be `null` when Glassdoor named none), or `null` when no lookup was made or Glassdoor named neither. Every status except `error` has it, so you can show the user both.
 - `period` and `currency`: as Glassdoor gives them (`YEAR` and `USD` for most US jobs; read them rather than assuming). Amounts are not converted.
-- `total_pay`, `base_pay`, `additional_pay`: `low`, `typical`, and `high`, as Glassdoor gives them. Total pay is base pay plus additional pay such as bonuses, commission, and profit sharing; each band is Glassdoor's own, so they do not add up exactly.
-- `salary_count`: how many reported salaries the estimate rests on. `confidence`: Glassdoor's label for it, such as `CONFIDENT`. `salaries_updated_at`: when Glassdoor last updated it.
+- `total_pay`, `base_pay`, `additional_pay`: `low`, `typical`, and `high`, as Glassdoor gives them, only when `status` is `estimated`. Total pay is base pay plus additional pay such as bonuses, commission, and profit sharing; each band is Glassdoor's own, so they do not add up exactly.
+- `salary_count`: how many reported salaries the figures rest on, always 1 or more with `estimated`. With `no_salary_data` it appears only when Glassdoor answered for the exact title and place, as its count (0) or `null`; a rejected reply's count belongs to another title or place, so it is left out. `salaries_updated_at`: when Glassdoor last updated the estimate.
 - `source`: always `Glassdoor via OpenWeb Ninja`.
 - `message`: for statuses without an estimate.
 
 | `status` | Meaning | What to do |
 | --- | --- | --- |
-| `estimated` | Glassdoor has an estimate. | Quote `total_pay.typical` with its low–high range as Glassdoor's estimate, and mention a low `salary_count` or weak `confidence`. |
-| `no_salary_data` | Glassdoor has no estimate for this title and place. | Try a more common title (`registered nurse`, not `RN II, nights`) or a broader place (the metro area or state). Never treat it as zero pay. |
+| `estimated` | Glassdoor has reports for this exact title and place. | Read back `matched` and confirm it, then quote `total_pay.typical` with its low–high range and `salary_count` as Glassdoor's rough estimate. Mention a small `salary_count`. |
+| `no_salary_data` | Glassdoor has no reports for this title in this place (0 or none), or answered for a different title. No pay figures. | Check the city with the user, or suggest a more common title for the same job (`registered nurse`, not `RN II, nights`) and ask before trying it. Never treat it as zero pay. |
+| `ambiguous_location` | The location is not `City, ST`, or Glassdoor matched a different place (shown in `matched`). No pay figures. | Ask the user for the job's city and state as `City, ST`. A nearby city's figure is that city's estimate, not this job's. |
 | `daily_limit` | TollChat's daily salary-lookup budget is used up. | Tell the user salary estimates are unavailable until after midnight UTC; do not retry before then. |
 | `error` (with `isError: true`) | The lookup failed, on TollChat's side or OpenWeb Ninja's. | Retry as below; if it keeps failing, tell the user. |
 
@@ -332,7 +346,7 @@ Invalid input gets a tool error saying what to fix (a wrong experience value lis
 - Geocode the user's places yourself; a landmark, neighborhood, or nearby intersection is precise enough. Do not press for an exact home location.
 - Confirm the chosen option with the user before relying on it.
 - For a yearly cost, pass the chosen option's entry and exit to `estimate_annual_tolls` and quote its range as a ballpark.
-- For a job without a posted salary range, call `estimate_salary` once with its title and city, and set its pay range against the annual tolls.
+- For a job without a posted salary range, call `estimate_salary` once with its title and `City, ST`, confirm the matched job and place with the user, and set its pay range against the annual tolls.
 - Use returned point IDs exactly; never invent or edit them.
 - Miles are straight-line, `find_toll_ramps` returns no prices, and every result is an estimate.
 - Save this connector so it can be reused instead of rebuilt each conversation.

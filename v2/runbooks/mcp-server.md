@@ -172,8 +172,9 @@ else in between.
   `stage` and `code`: `aws logs tail /aws/lambda/tollchat-v2-mcp-server-dev --since 1h`.
   Toll calls never log their coordinates, routes or schedules.
 - **Salary calls** also log, under `span`, the `job_title`, `location` and
-  `years_of_experience` sent, and OpenWeb Ninja's `upstream_status`,
-  `upstream_ms` and `request_id` (quote it to OpenWeb Ninja support). The key is
+  `years_of_experience` sent, OpenWeb Ninja's `upstream_status`, `upstream_ms`
+  and `request_id` (quote it to OpenWeb Ninja support), and the
+  `matched_job_title` and `matched_location` it answered for. The key is
   never logged. Failure codes: `key_<SSM error code>` (such as
   `key_AccessDeniedException` or `key_ParameterNotFound`), `key_no_response`,
   `key_empty_value`, `url`, `connect`, `request`,
@@ -194,6 +195,10 @@ else in between.
   # How calls ended
   filter fields.tool = "estimate_salary"
   | stats count(*) as calls by fields.status, fields.code, span.upstream_status
+
+  # Places Glassdoor matched to somewhere else (status ambiguous_location)
+  filter fields.tool = "estimate_salary" and fields.status = "ambiguous_location"
+  | stats count(*) as calls by span.location, span.matched_location
 
   # Most asked-about jobs
   filter fields.tool = "estimate_salary"

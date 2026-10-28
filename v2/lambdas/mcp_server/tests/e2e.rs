@@ -51,7 +51,7 @@ const NEW_YORK: (f64, f64) = (40.7128, -74.0060);
 
 /// The fake OpenWeb Ninja's one known job, from its OpenAPI example.
 fn developer_in_new_york() -> Value {
-    json!({ "job_title": "software developer", "location": "New York" })
+    json!({ "job_title": "software developer", "location": "New York, NY" })
 }
 
 fn at((latitude, longitude): (f64, f64)) -> Value {
@@ -243,8 +243,10 @@ fn today() -> u64 {
         / 86_400
 }
 
-/// OpenWeb Ninja's Glassdoor salary endpoint, answering as its OpenAPI example and live no-data
-/// replies do. Any other title is a request the server should not have sent.
+/// OpenWeb Ninja's Glassdoor salary endpoint, answering as its OpenAPI example and live replies do:
+/// it echoes the title, matches the place loosely (sometimes to another one), and sends figures and
+/// CONFIDENT even for a title nobody has reported. Any other title is a request the server should
+/// not have sent.
 async fn fake_openwebninja() -> String {
     async fn salary_estimation(
         headers: HeaderMap,
@@ -260,25 +262,46 @@ async fn fake_openwebninja() -> String {
         } else {
             200000.0
         };
-        let data = match (query["job_title"].as_str(), query["location"].as_str()) {
-            ("software developer", "New York") => json!({
-                "location": "New York City, NY", "job_title": "Software Developer",
+        let place = match query["location"].as_str() {
+            "New York, NY" => "New York City, NY",
+            "Tysons, VA" => "Tysons Corner, VA",
+            "McLean, VA" => "Mc Lean, VA",
+            // Wrong places, as "NoVA" became Novato, CA.
+            "Nova, VA" => "Novato, CA",
+            "Chantilly, VA" | "Fair, VA" => "Fairfax, VA",
+            "Manassas, VA" => "Manassas Park, VA",
+            "Arlington, VA" => "Arlington, TX",
+            other => other,
+        };
+        let estimate = |job_title: &str, salary_count: u64| {
+            json!({
+                "location": place, "job_title": job_title,
                 "min_salary": 128117.25, "max_salary": 218872.06, "median_salary": median,
                 "min_base_salary": 94192.41, "max_base_salary": 155545.69,
                 "median_base_salary": 121042.24, "min_additional_pay": 33924.84,
                 "max_additional_pay": 63326.37, "median_additional_pay": 45233.12,
-                "salary_period": "YEAR", "salary_currency": "USD", "salary_count": 213898,
+                "salary_period": "YEAR", "salary_currency": "USD", "salary_count": salary_count,
                 "salaries_updated_at": "2024-06-06T23:59:59.000Z",
                 "link": "https://www.glassdoor.com/Salaries/company-salaries.htm",
                 "confidence": "CONFIDENT",
-            }),
-            ("qzxv florbish wrangler", _) => json!({}),
-            ("rate limited", _) => return (StatusCode::TOO_MANY_REQUESTS, error).into_response(),
-            ("not ok", _) => return error.into_response(),
+            })
+        };
+        let data = match query["job_title"].as_str() {
+            "software developer" => estimate("Software Developer", 213898),
+            "chief vibes officer" => estimate("Chief Vibes Officer", 0),
+            "renamed job" => estimate("Software Developer", 213898),
+            "uncounted job" => {
+                let mut data = estimate("Uncounted Job", 0);
+                data.as_object_mut().unwrap().remove("salary_count");
+                data
+            }
+            "qzxv florbish wrangler" => json!({}),
+            "rate limited" => return (StatusCode::TOO_MANY_REQUESTS, error).into_response(),
+            "not ok" => return error.into_response(),
             // Followed, this would succeed; the server must not follow it, as the key goes along.
-            ("redirected", _) => {
-                let known =
-                    "?job_title=software+developer&location=New+York&years_of_experience=ALL";
+            "redirected" => {
+                let known = "?job_title=software+developer&location=New+York%2C+NY\
+                    &years_of_experience=ALL";
                 return (StatusCode::FOUND, [(LOCATION, known)]).into_response();
             }
             _ => return (StatusCode::BAD_REQUEST, error).into_response(),
@@ -900,7 +923,7 @@ async fn http_boundary_answers_json_and_rejects_bad_requests() {
     );
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["result"]["serverInfo"]["name"], "tollchat");
-    assert_eq!(body["result"]["serverInfo"]["version"], "0.5.0");
+    assert_eq!(body["result"]["serverInfo"]["version"], "0.6.0");
     assert!(
         body["result"]["instructions"]
             .as_str()
@@ -1035,6 +1058,7 @@ async fn docs_cover_every_tool_status_and_privacy() {
         "too_few_recent_prices",
         "no_return_route",
         "no_salary_data",
+        "ambiguous_location",
         "daily_limit",
     ] {
         assert!(
@@ -1087,7 +1111,8 @@ async fn logs_name_salary_jobs_but_never_coordinates_or_keys() {
     for text in [
         r#""tool":"estimate_salary","status":"estimated""#,
         r#""job_title":"software developer""#,
-        r#""location":"New York""#,
+        r#""location":"New York, NY""#,
+        r#""matched_location":"New York City, NY""#,
         r#""years_of_experience":"ALL""#,
         r#""upstream_status":200"#,
         r#""request_id":"fake""#,
@@ -1579,15 +1604,21 @@ async fn salary_estimate_reports_glassdoor_pay_bands() {
     let harness = start().await;
     // Padding is trimmed: the fake answers only the exact title.
     let called = harness
-        .salary(json!({ "job_title": " software developer ", "location": "New York" }))
+        .salary(json!({ "job_title": " software developer ", "location": "New York, NY" }))
         .await;
     assert!(!called.is_error);
     let result = &called.result;
     for (field, expected) in [
         ("status", json!("estimated")),
-        ("job_title", json!("Software Developer")),
-        ("location", json!("New York City, NY")),
-        ("years_of_experience", json!("ALL")),
+        (
+            "requested",
+            json!({ "job_title": "software developer", "location": "New York, NY",
+                    "years_of_experience": "ALL" }),
+        ),
+        (
+            "matched",
+            json!({ "job_title": "Software Developer", "location": "New York City, NY" }),
+        ),
         ("period", json!("YEAR")),
         ("currency", json!("USD")),
         (
@@ -1603,28 +1634,30 @@ async fn salary_estimate_reports_glassdoor_pay_bands() {
             json!({ "low": 33924.84, "typical": 45233.12, "high": 63326.37 }),
         ),
         ("salary_count", json!(213898)),
-        ("confidence", json!("CONFIDENT")),
         ("salaries_updated_at", json!("2024-06-06T23:59:59.000Z")),
         ("source", json!("Glassdoor via OpenWeb Ninja")),
     ] {
         assert_eq!(result[field], expected, "{field}");
     }
     assert!(result["calculated_at"].is_string());
-    assert!(
-        result.get("link").is_none(),
-        "only listed fields pass through"
-    );
+    for field in ["link", "confidence", "job_title", "location"] {
+        assert!(result.get(field).is_none(), "only listed fields: {field}");
+    }
     assert_eq!(
         called.text,
         "estimated: Glassdoor's typical total pay for Software Developer in New York City, NY is \
-         166275.36 USD per year (range 128117.25 to 218872.06), from 213898 salary reports. Full \
-         details are in the structured result."
+         166275.36 USD per year (range 128117.25 to 218872.06), from 213898 salary reports. \
+         Confirm the matched job and place before relying on it; full details are in the \
+         structured result."
     );
 
     let mut senior = developer_in_new_york();
     senior["years_of_experience"] = json!("TEN_TO_FOURTEEN");
     let senior = harness.salary(senior).await.result;
-    assert_eq!(senior["years_of_experience"], "TEN_TO_FOURTEEN");
+    assert_eq!(
+        senior["requested"]["years_of_experience"],
+        "TEN_TO_FOURTEEN"
+    );
     assert_eq!(senior["total_pay"]["typical"], 200000.0, "range forwarded");
     assert_eq!(harness.key_loads.load(Ordering::SeqCst), 1, "key read once");
 }
@@ -1650,17 +1683,6 @@ async fn salary_lookups_fail_closed() {
         assert_eq!(called.result["status"], "error", "{job_title}");
     }
 
-    let unknown = harness
-        .salary(json!({ "job_title": "qzxv florbish wrangler", "location": "Reston, VA" }))
-        .await;
-    assert!(!unknown.is_error);
-    assert_eq!(unknown.result["status"], "no_salary_data");
-    assert!(unknown.result["total_pay"].is_null());
-    assert_eq!(
-        unknown.text,
-        "no_salary_data: Glassdoor has no salary estimate for this job title and location."
-    );
-
     // A failed key read answers an error, and the next call reads the key again.
     let harness = start_app(database("tollchat_agent"), |attempt| match attempt {
         0 => Err("SSM is unavailable".into()),
@@ -1685,12 +1707,21 @@ async fn salary_inputs_get_errors_that_say_what_to_fix() {
             "job_title must be 1 to 100 characters",
         ),
         (
+            json!({ "job_title": "???", "location": "Reston, VA" }),
+            "job_title must contain letters or digits",
+        ),
+        (
             json!({ "job_title": "nurse", "location": long }),
             "location must be 1 to 100 characters",
         ),
         (
             json!({ "job_title": "nurse", "location": "Reston, VA", "years_of_experience": "5" }),
             "unknown variant `5`",
+        ),
+        (
+            json!({ "job_title": "nurse", "location": "Reston, VA",
+                    "years_of_experience": "FIVE_YEARS" }),
+            "unknown variant `FIVE_YEARS`, expected one of `ALL`",
         ),
         (
             json!({ "job_title": "nurse", "location": "Reston, VA", "company": "Acme" }),
@@ -1734,6 +1765,7 @@ async fn salary_cap_stops_exactly_at_ten_dollars_a_day() {
     let limited = harness.salary(developer_in_new_york()).await;
     assert!(!limited.is_error);
     assert_eq!(limited.result["status"], "daily_limit");
+    assert_eq!(limited.result.get("matched"), Some(&Value::Null));
     assert!(limited.result["total_pay"].is_null());
     assert_eq!(
         limited.text,
@@ -1771,4 +1803,99 @@ async fn salary_cap_failure_fails_closed() {
     assert!(called.is_error);
     assert_eq!(called.result["status"], "error");
     assert!(called.result["total_pay"].is_null(), "no uncounted lookup");
+}
+
+#[tokio::test]
+async fn salary_estimates_only_the_place_asked_about() {
+    let harness = start().await;
+    let ask = |location: &str| json!({ "job_title": "software developer", "location": location });
+    // Glassdoor's own name for the same place passes.
+    for (location, matched) in [
+        ("Tysons, VA", "Tysons Corner, VA"),
+        ("McLean, VA", "Mc Lean, VA"),
+        ("Reston, VA", "Reston, VA"),
+    ] {
+        let result = harness.salary(ask(location)).await.result;
+        assert_eq!(result["status"], "estimated", "{location}");
+        assert_eq!(result["matched"]["location"], matched, "{location}");
+    }
+    // Another state or city gets no figure, only both names.
+    for (location, matched) in [
+        ("Nova, VA", "Novato, CA"),
+        ("Arlington, VA", "Arlington, TX"),
+        ("Chantilly, VA", "Fairfax, VA"),
+        ("Fair, VA", "Fairfax, VA"),
+        ("Manassas, VA", "Manassas Park, VA"),
+    ] {
+        let called = harness.salary(ask(location)).await;
+        assert!(!called.is_error, "{location}");
+        assert_eq!(called.result["status"], "ambiguous_location", "{location}");
+        assert_eq!(called.result["requested"]["location"], location);
+        assert_eq!(called.result["matched"]["location"], matched, "{location}");
+        for field in ["total_pay", "salary_count"] {
+            assert!(called.result.get(field).is_none(), "{location}: {field}");
+        }
+        assert!(called.text.contains("\"City, ST\""), "{location}");
+    }
+    // Without a state, no lookup is spent.
+    let spent = harness.lookups_today().await;
+    for location in [
+        "NoVA",
+        "Reston",
+        "Reston, Virginia",
+        "Reston, XX",
+        "London, UK",
+        "Reston, Fairfax County, VA",
+    ] {
+        let called = harness.salary(ask(location)).await;
+        assert_eq!(called.result["status"], "ambiguous_location", "{location}");
+        assert!(called.result["matched"].is_null(), "{location}");
+        assert!(called.result.get("total_pay").is_none(), "{location}");
+        assert!(called.text.contains("explicit \"City, ST\""), "{location}");
+    }
+    assert_eq!(
+        harness.lookups_today().await,
+        spent,
+        "no lookup without a state"
+    );
+}
+
+#[tokio::test]
+async fn salary_without_reports_for_the_title_has_no_figures() {
+    let harness = start().await;
+    // Upstream sends figures and CONFIDENT for a title nobody has reported, or nothing at all.
+    let reston = json!({ "job_title": "Chief Vibes Officer", "location": "Reston, VA" });
+    for (job_title, salary_count, matched) in [
+        ("chief vibes officer", json!(0), reston),
+        ("qzxv florbish wrangler", json!(null), json!(null)),
+        (
+            "uncounted job",
+            json!(null),
+            json!({ "job_title": "Uncounted Job", "location": "Reston, VA" }),
+        ),
+    ] {
+        let called = harness
+            .salary(json!({ "job_title": job_title, "location": "Reston, VA" }))
+            .await;
+        assert!(!called.is_error, "{job_title}");
+        assert_eq!(called.result["status"], "no_salary_data", "{job_title}");
+        assert_eq!(called.result["salary_count"], salary_count, "{job_title}");
+        assert_eq!(called.result["matched"], matched, "{job_title}");
+        for field in ["total_pay", "base_pay", "additional_pay", "confidence"] {
+            assert!(called.result.get(field).is_none(), "{job_title}: {field}");
+        }
+        assert!(
+            called.text.contains("try a more common title"),
+            "{job_title}"
+        );
+    }
+    // Never another title's pay.
+    let renamed = harness
+        .salary(json!({ "job_title": "renamed job", "location": "Reston, VA" }))
+        .await;
+    assert_eq!(renamed.result["status"], "no_salary_data");
+    assert_eq!(renamed.result["matched"]["job_title"], "Software Developer");
+    for field in ["total_pay", "salary_count"] {
+        assert!(renamed.result.get(field).is_none(), "{field}");
+    }
 }

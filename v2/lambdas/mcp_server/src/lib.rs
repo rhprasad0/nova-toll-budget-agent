@@ -393,7 +393,7 @@ struct EstimateAnnualTolls {
 struct EstimateSalary {
     /// The job's title as posted, such as "software engineer".
     job_title: String,
-    /// Where the job is, as city and state, such as "Reston, VA".
+    /// Where the job is, as "City, ST" with a two-letter state code, such as "Reston, VA".
     location: String,
     /// The candidate's years of experience, as one of Glassdoor's ranges. Default ALL.
     #[serde(default)]
@@ -423,6 +423,53 @@ fn bounded<'a>(field: &str, value: &'a str, example: &str) -> Result<&'a str, St
             "{field} must be 1 to 100 characters, such as \"{example}\""
         ))
     }
+}
+
+/// Lowercase letters and digits of each word: "Tysons Corner" becomes ["tysons", "corner"].
+fn words(text: &str) -> Vec<String> {
+    text.split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+        .collect()
+}
+
+/// Postal codes of the 50 states and DC, the places glassdoor.com estimates.
+const STATES: [&str; 51] = [
+    "AK", "AL", "AR", "AZ", "CA", "CO", "CT", "DC", "DE", "FL", "GA", "HI", "IA", "ID", "IL", "IN",
+    "KS", "KY", "LA", "MA", "MD", "ME", "MI", "MN", "MO", "MS", "MT", "NC", "ND", "NE", "NH", "NJ",
+    "NM", "NV", "NY", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VA", "VT", "WA",
+    "WI", "WV", "WY",
+];
+
+/// Glassdoor's own name for a requested city, as (requested, matched) joined words: Tysons from a
+/// live reply, New York from OpenWeb Ninja's published example.
+const CITY_RENAMES: [(&str, &str); 2] = [("tysons", "tysonscorner"), ("newyork", "newyorkcity")];
+
+/// "City, ST" as the city and its state's postal code, or None for anything else.
+fn city_and_state(location: &str) -> Option<(&str, String)> {
+    let (city, state) = location.rsplit_once(',')?;
+    let state = state
+        .chars()
+        .filter(char::is_ascii_alphabetic)
+        .collect::<String>()
+        .to_uppercase();
+    let valid = !city.contains(',') && !words(city).is_empty() && STATES.contains(&state.as_str());
+    valid.then_some((city, state))
+}
+
+/// Whether Glassdoor's matched place is the requested one: the same state, and the same city
+/// ignoring case, spaces and punctuation ("McLean" is "Mc Lean"), or a known rename ("Tysons" is
+/// "Tysons Corner"). A longer name is another place: "Manassas, VA" rejects "Manassas Park, VA",
+/// and "Nova, VA" rejects "Novato, CA".
+fn same_place(requested: &str, matched: &str) -> bool {
+    let (Some((city, state)), Some((matched_city, matched_state))) =
+        (city_and_state(requested), city_and_state(matched))
+    else {
+        return false;
+    };
+    let (wanted, got) = (words(city).concat(), words(matched_city).concat());
+    state == matched_state
+        && (wanted == got || CITY_RENAMES.contains(&(wanted.as_str(), got.as_str())))
 }
 
 const WEEKDAYS: [&str; 7] = [
@@ -639,11 +686,16 @@ impl TollServer {
 
     #[tool(
         name = "estimate_salary",
-        description = "Estimate the pay for a job that posts no salary range, from Glassdoor's \
-            salary reports (via OpenWeb Ninja). Pass the job title and the job's city and state, \
-            and optionally the candidate's experience range. Returns low, typical, and high total \
-            pay, split into base and additional pay, for the stated period and currency, with how \
-            many salary reports it rests on and Glassdoor's confidence. An estimate, not an offer.",
+        description = "Estimate pay for a job with no posted range, from Glassdoor reports via \
+            OpenWeb Ninja. Pass the job title and the job's location as \"City, ST\", and \
+            optionally the candidate's experience range. Upstream data is not robust: it can return \
+            a figure resting on 0 reports with confidence CONFIDENT, and it can fuzzy-match a \
+            location to a different place (\"NoVA\" matched to Novato, CA). TollChat checks for \
+            these and returns no figure when it catches them (no_salary_data or \
+            ambiguous_location), but always check \
+            salary_count, never quote a figure with 0 reports, always read back the matched \
+            job_title and location and confirm them before relying on the figure, and present \
+            results as a rough estimate, not an offer.",
         annotations(
             title = "Estimate salary",
             read_only_hint = true,
@@ -655,6 +707,13 @@ impl TollServer {
         Parameters(request): Parameters<EstimateSalary>,
     ) -> Result<CallToolResult, ErrorData> {
         let query = bounded("job_title", &request.job_title, "software engineer")
+            .and_then(|title| {
+                if words(title).is_empty() {
+                    Err("job_title must contain letters or digits".to_owned())
+                } else {
+                    Ok(title)
+                }
+            })
             .and_then(|title| Ok((title, bounded("location", &request.location, "Reston, VA")?)));
         let (job_title, location) = match query {
             Ok(query) => query,
@@ -672,6 +731,8 @@ impl TollServer {
             upstream_status = Empty,
             upstream_ms = Empty,
             request_id = Empty,
+            matched_job_title = Empty,
+            matched_location = Empty,
         );
         async {
             let started = Instant::now();
@@ -795,7 +856,10 @@ fn summary(value: &Value) -> String {
                 .unwrap_or_default(),
         ),
         _ if value["total_pay"].is_object() => {
-            let text = |field: &str| value[field].as_str().unwrap_or("?").to_owned();
+            let text = |path: &str| {
+                let text = value.pointer(path).and_then(Value::as_str);
+                text.unwrap_or("?").to_owned()
+            };
             let pay = |level: &str| {
                 value["total_pay"][level]
                     .as_f64()
@@ -803,12 +867,13 @@ fn summary(value: &Value) -> String {
             };
             format!(
                 "{status}: Glassdoor's typical total pay for {} in {} is {} {} per {} (range {} to \
-                 {}), from {} salary reports. Full details are in the structured result.",
-                text("job_title"),
-                text("location"),
+                 {}), from {} salary reports. Confirm the matched job and place before relying on \
+                 it; full details are in the structured result.",
+                text("/matched/job_title"),
+                text("/matched/location"),
                 pay("typical"),
-                text("currency"),
-                text("period").to_lowercase(),
+                text("/currency"),
+                text("/period").to_lowercase(),
                 pay("low"),
                 pay("high"),
                 value["salary_count"],
@@ -929,25 +994,44 @@ impl App {
         Ok(Ok(response))
     }
 
-    /// Glassdoor's estimate, keeping only the fields listed here from the third-party reply.
+    /// Glassdoor's estimate, keeping only the fields listed here from the third-party reply, and
+    /// only when it is for the requested job and place and rests on at least one report.
     async fn estimate_salary(
         &self,
         job_title: &str,
         location: &str,
         experience: Experience,
     ) -> Result<Value, Failure> {
+        let requested = json!({
+            "job_title": job_title,
+            "location": location,
+            "years_of_experience": experience,
+        });
+        // Before any lookup is spent: Glassdoor guesses at a place without a state.
+        if city_and_state(location).is_none() {
+            return Ok(json!({
+                "status": "ambiguous_location",
+                "message": format!(
+                    "Give the job's location as an explicit \"City, ST\", such as \"Reston, VA\"; \
+                     \"{location}\" does not name a city and a two-letter state."
+                ),
+                "requested": requested,
+                "matched": null,
+            }));
+        }
         let salaries = &self.salaries;
         let key = salaries
             .key
             .get_or_try_init(|| (salaries.load_key)())
             .await
             .map_err(|error| Failure::new("salary", format!("key_{error}")))?;
-        let experience = json!(experience);
         if !salaries.reserve_lookup().await? {
             return Ok(json!({
                 "status": "daily_limit",
                 "message": "TollChat's daily salary-lookup budget is used up. Try again after \
                     midnight UTC.",
+                "requested": requested,
+                "matched": null,
             }));
         }
         let url = url::Url::parse_with_params(
@@ -955,7 +1039,10 @@ impl App {
             [
                 ("job_title", job_title),
                 ("location", location),
-                ("years_of_experience", experience.as_str().unwrap_or("ALL")),
+                (
+                    "years_of_experience",
+                    requested["years_of_experience"].as_str().unwrap_or("ALL"),
+                ),
             ],
         )
         .map_err(|_| Failure::new("salary", "url"))?;
@@ -992,15 +1079,68 @@ impl App {
             return Err(Failure::new("salary", "upstream"));
         }
         let data = &body["data"];
+        // Room for Glassdoor to lengthen a 100-character input ("Tysons" to "Tysons Corner").
+        let text = |field: &str| {
+            data[field]
+                .as_str()
+                .filter(|text| text.chars().count() <= 200)
+        };
+        let (matched_title, matched_location) = (text("job_title"), text("location"));
+        span.record("matched_job_title", matched_title);
+        span.record("matched_location", matched_location);
+        let matched = match (matched_title, matched_location) {
+            (None, None) => Value::Null,
+            (job_title, location) => json!({ "job_title": job_title, "location": location }),
+        };
+        let salary_count = data["salary_count"].as_u64();
+        // No count here: a rejected reply's count is another title's or place's.
+        let none = |status: &str, message: String| {
+            json!({
+                "status": status,
+                "message": message,
+                "requested": requested,
+                "matched": matched,
+            })
+        };
+        let no_reports = "Glassdoor has no salary reports for this job title in this location, so \
+            TollChat gives no estimate. Check the city, or try a more common title for the same \
+            job, such as \"registered nurse\" rather than \"RN II, nights\".";
+        // Never another place's pay: "NoVA" came back as Novato, CA.
+        let wrong_place = |place: &str| {
+            none(
+                "ambiguous_location",
+                format!(
+                    "Glassdoor matched \"{place}\", not \"{location}\", so TollChat gives no \
+                     estimate. Ask the user for the job's city as \"City, ST\"."
+                ),
+            )
+        };
+        if let Some(place) = matched_location.filter(|place| !same_place(location, place)) {
+            return Ok(wrong_place(place));
+        }
         // Glassdoor knows nothing for this title and place: upstream answers `"data": {}`.
         if !data["median_salary"].is_number() {
-            return Ok(json!({
-                "status": "no_salary_data",
-                "message": "Glassdoor has no salary estimate for this job title and location.",
-                "years_of_experience": experience,
-            }));
+            return Ok(none("no_salary_data", no_reports.to_owned()));
         }
-        let text = |field: &str| data[field].as_str().filter(|text| text.len() <= 100);
+        if matched_location.is_none() {
+            return Ok(wrong_place("no place"));
+        }
+        if matched_title.map(words) != Some(words(job_title)) {
+            let title = matched_title.unwrap_or("no title");
+            return Ok(none(
+                "no_salary_data",
+                format!(
+                    "Glassdoor answered for a different job title, \"{title}\", so TollChat gives \
+                     no estimate for \"{job_title}\"."
+                ),
+            ));
+        }
+        // Upstream still sends figures, and CONFIDENT, for a title nobody has reported.
+        if salary_count.is_none_or(|count| count == 0) {
+            let mut none = none("no_salary_data", no_reports.to_owned());
+            none["salary_count"] = json!(salary_count);
+            return Ok(none);
+        }
         // Unrounded: an hourly rate needs its cents.
         let band = |pay: &str| {
             let amount = |level: &str| data[format!("{level}_{pay}")].as_f64();
@@ -1008,16 +1148,14 @@ impl App {
         };
         Ok(json!({
             "status": "estimated",
-            "job_title": text("job_title"),
-            "location": text("location"),
-            "years_of_experience": experience,
+            "requested": requested,
+            "matched": matched,
             "period": text("salary_period"),
             "currency": text("salary_currency"),
             "total_pay": band("salary"),
             "base_pay": band("base_salary"),
             "additional_pay": band("additional_pay"),
-            "salary_count": data["salary_count"].as_u64(),
-            "confidence": text("confidence"),
+            "salary_count": salary_count,
             "salaries_updated_at": text("salaries_updated_at"),
             "source": "Glassdoor via OpenWeb Ninja",
         }))
