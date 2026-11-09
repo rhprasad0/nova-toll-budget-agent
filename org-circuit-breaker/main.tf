@@ -191,7 +191,38 @@ resource "aws_lambda_permission" "hourly" {
 
 # Without this alarm, a failing breaker looks like one with nothing to do.
 resource "aws_sns_topic" "alerts" {
-  name = local.name
+  name              = local.name
+  kms_master_key_id = aws_kms_key.alerts.arn
+}
+
+# CloudWatch cannot publish through the AWS-managed SNS key.
+resource "aws_kms_key" "alerts" {
+  description             = "Org circuit breaker alarm notifications"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${local.management}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Effect    = "Allow"
+        Principal = { Service = "cloudwatch.amazonaws.com" }
+        Action    = ["kms:Decrypt", "kms:GenerateDataKey*"]
+        Resource  = "*"
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount"                      = local.management
+            "kms:EncryptionContext:aws:sns:topicArn" = "arn:aws:sns:us-east-1:${local.management}:${local.name}"
+          }
+        }
+      },
+    ]
+  })
 }
 
 resource "aws_sns_topic_subscription" "alerts" {

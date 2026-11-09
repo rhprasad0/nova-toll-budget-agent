@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 from decimal import Decimal
 from typing import Any
@@ -25,6 +25,8 @@ ROLE = "OrganizationAccountAccessRole"
 
 Client = Any
 Failures = list[str]
+# This repo installs no type stubs for budgets or organizations.
+aws: Any = boto3
 
 
 def pages(client: Client, operation: str, key: str, **kwargs: object) -> Iterator[Any]:
@@ -33,7 +35,7 @@ def pages(client: Client, operation: str, key: str, **kwargs: object) -> Iterato
 
 
 @contextmanager
-def recorded(failures: Failures, label: str) -> Iterator[None]:
+def recorded(failures: Failures, label: str) -> Generator[None]:
     """One stuck resource must not stop the rest of the sweep."""
     try:
         yield
@@ -210,11 +212,11 @@ def restore_cloudfront(cloudfront: Client, failures: Failures) -> None:
 
 
 def sweep(account: str, restore: bool, failures: Failures) -> None:
-    credentials = boto3.client("sts").assume_role(
+    credentials = aws.client("sts").assume_role(
         RoleArn=f"arn:aws:iam::{account}:role/{ROLE}",
         RoleSessionName="circuit-breaker",
     )["Credentials"]
-    session = boto3.Session(
+    session = aws.Session(
         aws_access_key_id=credentials["AccessKeyId"],
         aws_secret_access_key=credentials["SecretAccessKey"],
         aws_session_token=credentials["SessionToken"],
@@ -238,7 +240,7 @@ def sweep(account: str, restore: bool, failures: Failures) -> None:
 def handler(event: dict[str, Any], _context: object = None) -> dict[str, Any]:
     targets = os.environ["TARGET_ACCOUNT_IDS"].split(",")
     policy_id = os.environ["SCP_POLICY_ID"]
-    budget = boto3.client("budgets").describe_budget(
+    budget = aws.client("budgets").describe_budget(
         AccountId=os.environ["MANAGEMENT_ACCOUNT_ID"],
         BudgetName=os.environ["BUDGET_NAME"],
     )["Budget"]
@@ -246,7 +248,7 @@ def handler(event: dict[str, Any], _context: object = None) -> dict[str, Any]:
     limit = Decimal(budget["BudgetLimit"]["Amount"])
     over = spend > limit
 
-    organizations = boto3.client("organizations")
+    organizations = aws.client("organizations")
     attached = {
         target["TargetId"]
         for target in pages(

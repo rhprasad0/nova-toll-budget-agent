@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -31,18 +32,32 @@ class Account:
     """Resources in one child account, shared by its service clients."""
 
     def __init__(self) -> None:
-        self.db = {
+        self.db: dict[str, Any] = {
             "DBInstanceArn": "db",
             "DBInstanceIdentifier": "db",
             "DBInstanceStatus": "available",
             "TagList": [],
         }
-        self.ec2 = {"InstanceId": "i-1", "State": {"Name": "running"}, "Tags": []}
+        self.ec2: dict[str, Any] = {
+            "InstanceId": "i-1",
+            "State": {"Name": "running"},
+            "Tags": [],
+        }
         self.concurrency: dict[str, int | None] = {"capped": 5, "open": None}
         self.function_tags: dict[str, dict[str, str]] = {"capped": {}, "open": {}}
         self.provisioned: dict[str, dict[str, int]] = {"capped": {}, "open": {}}
-        self.primary = {"Id": "P", "ARN": "P", "Enabled": True, "Staging": False}
-        self.staging = {"Id": "S", "ARN": "S", "Enabled": True, "Staging": True}
+        self.primary: dict[str, Any] = {
+            "Id": "P",
+            "ARN": "P",
+            "Enabled": True,
+            "Staging": False,
+        }
+        self.staging: dict[str, Any] = {
+            "Id": "S",
+            "ARN": "S",
+            "Enabled": True,
+            "Staging": True,
+        }
         self.cf_tags: dict[str, list[dict[str, str]]] = {"P": [], "S": []}
         self.fail_rds_stop = False
 
@@ -56,6 +71,8 @@ class Account:
 
 
 class Service:
+    pages: dict[str, Callable[[], dict[str, Any]]]
+
     def __init__(self, account: Account) -> None:
         self.account = account
 
