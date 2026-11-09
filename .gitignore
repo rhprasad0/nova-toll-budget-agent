@@ -25,6 +25,9 @@ CLAUDE.local.md
 /v2/infra/.terraform/
 /v2/infra/*.tfstate
 /v2/infra/*.tfstate.*
+/org-circuit-breaker/.terraform/
+/org-circuit-breaker/*.tfstate
+/org-circuit-breaker/*.tfstate.*
 /v2/infra/build/
 /v2/infra/*.tfplan
 /v2/lambdas/mcp_server/target/
