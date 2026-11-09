@@ -34,9 +34,9 @@ provider "aws" {
   allowed_account_ids = [local.management]
 }
 
-variable "alert_email" {
-  type      = string
-  sensitive = true
+# Kept out of this public repo; see README.md.
+data "aws_ssm_parameter" "alert_email" {
+  name = "/org-circuit-breaker/alert-email"
 }
 
 variable "monthly_limit_usd" {
@@ -64,7 +64,7 @@ resource "aws_budgets_budget" "org" {
     notification_type          = "ACTUAL"
     threshold                  = 100
     threshold_type             = "PERCENTAGE"
-    subscriber_email_addresses = [var.alert_email]
+    subscriber_email_addresses = [data.aws_ssm_parameter.alert_email.value]
   }
 }
 
@@ -228,7 +228,7 @@ resource "aws_kms_key" "alerts" {
 resource "aws_sns_topic_subscription" "alerts" {
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
-  endpoint  = var.alert_email
+  endpoint  = data.aws_ssm_parameter.alert_email.value
 }
 
 resource "aws_cloudwatch_metric_alarm" "errors" {

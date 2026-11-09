@@ -20,11 +20,14 @@ Use the management account (`nova-toll-org`). Enabling SCPs is one-time:
 ```sh
 ROOT=$(aws organizations list-roots --query 'Roots[0].Id' --output text)
 aws organizations enable-policy-type --root-id "$ROOT" --policy-type SERVICE_CONTROL_POLICY
+aws ssm put-parameter --name /org-circuit-breaker/alert-email --type String --value you@example.com
 terraform init
-TF_VAR_alert_email=you@example.com terraform apply
+terraform apply
 ```
 
 Confirm the SNS subscription email, or Lambda failure alarms will not arrive.
+To change the recipient, update that parameter with `--overwrite`, apply, and
+confirm the new subscription.
 
 ## Test on development only
 
