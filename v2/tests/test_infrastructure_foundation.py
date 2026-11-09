@@ -445,9 +445,9 @@ def test_foundation_publishes_raw_events_without_a_legacy_loader() -> None:
 def test_foundation_has_no_site_and_terraform_ci_only_validates() -> None:
     assert not (FOUNDATION_ROOT / "site.tf").exists()
     workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
-    assert workflow.count("terraform fmt -check -recursive") == 2
-    assert workflow.count("terraform init -backend=false -input=false") == 2
-    assert workflow.count("terraform validate") == 2
+    assert workflow.count("terraform fmt -check -recursive") == 3
+    assert workflow.count("terraform init -backend=false -input=false") == 3
+    assert workflow.count("terraform validate") == 3
     assert 'resource "aws_iam_role" "terraform_apply"' not in FOUNDATION_IAM
     assert 'resource "aws_iam_role" "github_ci"' not in FOUNDATION_IAM
 
