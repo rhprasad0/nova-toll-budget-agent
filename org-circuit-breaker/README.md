@@ -58,3 +58,24 @@ aws lambda invoke --function-name org-circuit-breaker --cli-read-timeout 0 \
 Restore uses the `circuit-breaker-prior` tag on each changed resource and detaches
 the SCP from an account only after that account is fully restored. RDS and
 CloudFront can take several minutes to come back.
+
+## Sync Terraform state after a restore
+
+A trip changes computed fields outside Terraform, such as CloudFront's `etag` and
+`last_modified_time` and each Lambda's `last_modified`. Deployments to that
+account fail with `incomplete_or_drift` until its `v2/infra` state is synced. The
+`infra/` root can drift too, but delivery only reads its outputs.
+
+For each tripped account, use a clean checkout of `main` with that account's
+administrator credentials and set `W` and `VARS` as in
+[Plan variables](../v2/runbooks/mcp-server.md#plan-variables). For production,
+use `backend.production.hcl` and `production.tfvars` instead. Then:
+
+```sh
+terraform -chdir=v2/infra plan -refresh-only -input=false "${VARS[@]}" -out="$W/refresh.tfplan"
+terraform -chdir=v2/infra apply -input=false "$W/refresh.tfplan"
+```
+
+Before applying, check that the plan reports drift only in computed fields. After
+applying, a second `-refresh-only` plan must show no drift. Then re-run any failed
+delivery or plan jobs.
