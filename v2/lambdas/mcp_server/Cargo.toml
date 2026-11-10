@@ -9,7 +9,7 @@ publish = false
 # The SDK crates drop their default legacy `rustls` client (rustls 0.21, GHSA-82j2-j2ch-gfr8).
 [dependencies]
 aws-config = "=1.12.0"
-aws-credential-types = "=1.3.0"
+aws-credential-types = "=1.3.1"
 aws-sdk-dynamodb = { version = "=1.130.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-sdk-ssm = { version = "=1.128.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-sigv4 = "=1.6.0"
