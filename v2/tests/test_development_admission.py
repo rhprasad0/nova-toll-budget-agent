@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import re
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
@@ -340,7 +342,6 @@ def test_retained_artifact_guard_rejects_malformed_metadata() -> None:
 def test_workflow_waits_thirty_minutes_without_relaxing_evidence(
     monkeypatch: pytest.MonkeyPatch, ending: str
 ) -> None:
-    import re
 
     workflow = (
         Path(__file__).parents[2] / ".github/workflows/v2-development-delivery.yml"
@@ -422,3 +423,108 @@ def test_predecessor_has_a_separate_bounded_wait(
         with pytest.raises(admission.AdmissionError, match="timed out"):
             run()
         assert elapsed == 7200
+
+
+@pytest.mark.parametrize(
+    ("paths", "expected"),
+    [
+        (["v2/eval/journal/2026-11-09.md", "README.md"], True),
+        ([], False),  # No evidence of what changed: deliver.
+        (["README.md", "v2/agent/dev_chat.html"], False),
+        (["v2/agent-sops/nova-toll-pricing-assistant.sop.md"], False),  # Pinned.
+        (["v2/agent/notes.md.py"], False),
+        # --no-renames lists both sides of a rename, so the old code path shows.
+        (["v2/agent_tools/currency.py", "v2/agent_tools/currency.md"], False),
+    ],
+)
+def test_only_unpinned_markdown_skips_delivery(
+    paths: list[str], expected: bool
+) -> None:
+    assert admission.docs_only(paths) is expected
+
+
+def test_unreadable_pin_list_delivers(tmp_path: Path) -> None:
+    assert admission.docs_only(["README.md"], tmp_path / "missing.json") is False
+    malformed = tmp_path / "manifest.json"
+    malformed.write_text("[]")
+    assert admission.docs_only(["README.md"], malformed) is False
+
+
+def test_predecessor_that_skipped_delivery_releases_ordering() -> None:
+    api = FakeAPI()
+    api.predecessor["conclusion"] = "success"
+    api.jobs[800] = [
+        _job("Admit exact main delivery", 800, BEFORE),
+        _job("Record exact development release", 800, BEFORE, conclusion="skipped"),
+        _job("Deploy v2 to development", 800, BEFORE, conclusion="skipped"),
+    ]
+    assert _admit(api) is True
+
+
+def test_workflow_skips_delivery_only_on_the_scripts_exact_token(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).parents[2] / ".github/workflows/v2-development-delivery.yml"
+        ).read_text()
+    )
+    jobs = workflow["jobs"]
+    assert jobs["admission"]["outputs"] == {
+        "deliver": "${{ steps.admit.outputs.deliver }}"
+    }
+    assert jobs["release-record"]["if"] == "needs.admission.outputs.deliver != 'false'"
+    # A failed admission leaves the output empty, so the result is still recorded.
+    assert (
+        jobs["release-result"]["if"]
+        == "always() && needs.admission.outputs.deliver != 'false'"
+    )
+    source = next(
+        step["run"] for step in jobs["admission"]["steps"] if step.get("id") == "admit"
+    )
+    assert "git diff --name-only --no-renames" in source
+    pattern = re.search(r"grep -qx '([^']+)'", source)
+    assert pattern
+
+    event = tmp_path / "event.json"
+    event.write_text(
+        json.dumps(
+            {
+                "ref": "refs/heads/main",
+                "after": SHA,
+                "before": BEFORE,
+                "repository": {"full_name": REPOSITORY},
+            }
+        )
+    )
+    monkeypatch.setenv("GH_TOKEN", "token")
+
+    def admitted(*_: object, **__: object) -> bool:
+        return True
+
+    monkeypatch.setattr(admission, "admit", admitted)
+    for changed, skips in (("README.md\n", True), ("v2/timed_checks.py\n", False)):
+        paths = tmp_path / "paths"
+        paths.write_text(changed)
+        assert (
+            admission.main(
+                [
+                    "--repository",
+                    REPOSITORY,
+                    "--sha",
+                    SHA,
+                    "--event-file",
+                    str(event),
+                    "--paths-file",
+                    str(paths),
+                ]
+            )
+            == 0
+        )
+        line = capsys.readouterr().out
+        matched = subprocess.run(
+            ["grep", "-qx", pattern[1]], input=line, text=True, check=False
+        )
+        assert (matched.returncode == 0) is skips

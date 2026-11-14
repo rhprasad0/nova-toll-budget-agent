@@ -29,6 +29,9 @@ TERRAFORM_PATHS = (
     ".github/workflows/terraform.yml",
     ".github/workflows/v2-production-plan.yml",
 )
+MANIFEST = Path(__file__).resolve().parents[2] / (
+    "infra/development-release-manifest.json"
+)
 TERMINAL_STATUSES = {"completed"}
 ADMISSION_REASONS = {
     "unclassified",
@@ -270,6 +273,19 @@ def terraform_applicable(paths: list[str]) -> bool:
     return any(
         path.startswith(TERRAFORM_PATH_PREFIXES) or path in TERRAFORM_PATHS
         for path in paths
+    )
+
+
+def docs_only(paths: list[str], manifest: Path = MANIFEST) -> bool:
+    """Markdown that no release pins cannot change what is deployed."""
+    try:
+        pinned = set(
+            json.loads(manifest.read_text(encoding="utf-8"))["deployment_inputs"]
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        return False  # Without the pin list, deliver.
+    return bool(paths) and all(
+        path.endswith(".md") and path not in pinned for path in paths
     )
 
 
@@ -540,7 +556,11 @@ def main(argv: list[str] | None = None) -> int:
         print("development admission rejected", file=sys.stderr)
         return 1
     terraform = "required" if terraform_applicable(paths) else "not-required"
-    print(f"development admission accepted: sha={args.sha} terraform={terraform}")
+    delivery = "not-required" if docs_only(paths) else "required"
+    print(
+        f"development admission accepted: sha={args.sha} terraform={terraform}"
+        f" delivery={delivery}"
+    )
     return 0
 
 
