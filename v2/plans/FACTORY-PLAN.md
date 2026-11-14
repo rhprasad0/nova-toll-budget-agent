@@ -16,18 +16,17 @@ Decisions section. Still open:
 - **Is the processor fast enough?** Stage 2 times it.
 - **Does unattended use fit the subscription's limits on Opus?** Stage 2
   measures one run.
-- **How does a production replay reach Phoenix?** This plan proposes running it
-  from the workstation through an SSH tunnel (Stage 8).
+- **Does replaying production traces into Phoenix fit the public privacy
+  notice?** Check before building the production mode (Stage 8).
 - **Training evals on factory PRs** (see Not in this plan).
 
 ## Stage 1: Reformat the thin client
 
-**Status on 2026-11-14: done except Tailscale and the tools in step 5.**
+**Status on 2026-11-14: steps 1 to 3 are done; steps 4 to 6 are open.**
 
 The machine is an HP EliteDesk 800 G2 mini: a four-core Core i5-6500T from
 2015, 16 GB of memory, and a 224 GB SSD with 86 GB free on the root volume and
-120 GB unallocated. It runs Ubuntu Server 26.04.1 LTS with the hostname
-`factory`. Memory and disk are enough. **Processor speed is the open risk**;
+120 GB unallocated. It runs Ubuntu Server 26.04.1 LTS. Memory and disk are enough. **Processor speed is the open risk**;
 Stage 2 measures it.
 
 **It is a home lab box, by Ryan's decision.** It has no disk encryption, Secure
@@ -51,11 +50,11 @@ or any production profile.
 
 **Reaching Phoenix.** The thin client has no screen and Phoenix listens only on
 its loopback. Browse it from the workstation through an SSH tunnel over
-Tailscale: `ssh -L 6006:127.0.0.1:6006 ryan@factory`, then open
+Tailscale: `ssh -L 6006:127.0.0.1:6006 <user>@<thin client>`, then open
 `http://localhost:6006`. Phoenix links in issue comments work only while that
 tunnel is open.
 
-**Done when:** from the workstation, `ssh ryan@factory` works over Tailscale,
+**Done when:** from the workstation, `ssh <user>@<thin client>` works over Tailscale,
 and `docker run hello-world` succeeds without `sudo`.
 
 ## Stage 2: Run the spikes that need no AWS
@@ -87,11 +86,12 @@ in the experiment journal.
    oracle, the host graders, Grafana, and Tetragon.
 2. Apply the spec's differences that need no AWS: bearer-token injection, the
    `factory` label trigger, and the TollChat toolchains in the worker image.
-3. Keep the copied tests passing, and add one for the new trigger.
-   Add the throwaway PostGIS container and the Playwright browser to the
+3. Add the throwaway PostGIS container and the Playwright browser to the
    sandbox, and write `factory/verify.sh`.
-4. Add a CI job for them. Today's `ci.yml` jobs all run under `v2/`, so nothing
-   would run `factory/` tests otherwise.
+4. Keep the copied tests passing, add one for the new trigger, and add a CI
+   job that runs the `factory/` tests. Today's `ci.yml` jobs all run under
+   `v2/`, so nothing would run them otherwise. **Ryan** then makes that job a
+   required check, since the dispatcher waits only on required checks.
 5. Before opening the PR, check how development delivery and the release
    manifest treat a new top-level directory. PR CI has missed delivery
    rejections before.
@@ -108,8 +108,9 @@ development delivery that follows the merge is green.
    workstation.
 2. Terraform in `infra/`, through a normal PR: the Roles Anywhere trust anchor
    and profile, and the factory role with its trust policy and the four
-   permissions the spec lists. The same PR records the two approved exceptions
-   in `SECURITY.md`: the certificate's private key and the GitHub token.
+   permissions the spec lists. The same PR notes in `SECURITY.md` the two
+   factory credentials kept outside SSM: the certificate's private key and
+   the GitHub token.
 3. **Ryan:** apply it by hand after the merge. CI only formats and validates
    `infra/`; no workflow applies it. No apply while the circuit breaker is
    tripped.
@@ -152,14 +153,19 @@ credentials from `serve`, and stopping Phoenix makes the preflight fail.
 2. Finish the dispatcher: the three stations (author, reviewer, verify), the
    guard (secrets scan and protected paths), push and PR, the CI watch, the
    shared budget of three fix rounds, and the outcome comment.
-3. Test the guard before trusting it. Three work orders must each end with no
-   branch pushed: one whose diff touches a protected path, one that contains a
-   planted fake secret, and one that deletes a line from the experiment
-   journal. One that only appends to the journal must pass. A diff that adds a
-   `CLAUDE.md` or `AGENTS.md` in any directory must be refused, and a work
-   order whose verify step fails must push nothing. Then test the two outer checks: an issue written by
-   another account is refused, and a direct push with the factory token that
-   edits a workflow file is rejected by GitHub.
+3. Test the guard before trusting it. Each of these work orders must end with
+   no branch pushed:
+   - its diff touches a protected path;
+   - it contains a planted fake secret;
+   - it deletes a line from the experiment journal;
+   - it adds a `CLAUDE.md` or `AGENTS.md` in any directory;
+   - its verify step fails, including when the worker has edited
+     `factory/verify.sh` to make it pass.
+
+   One that only appends to the journal must pass. Then test the outer
+   checks: an issue written by another account is refused, and direct pushes
+   with the factory token that edit a workflow file, change `main`, or move a
+   release tag are all rejected by GitHub.
 4. **Ryan:** label one small, real issue.
 5. Enable the systemd unit so the poller survives a reboot. It runs the
    dispatcher from a checkout of `main` that only Ryan updates.
@@ -183,11 +189,12 @@ PR can be read from Phoenix for the first five work orders.
 
 Run replays **from the workstation**, through the SSH tunnel from Stage 1. The
 workstation already has the profiles that read `agentcore-traces/`; the factory
-role does not, and should not gain them. This would also settle the spec's open
-item 7, and keeps the production profile off the thin client.
+role does not, and should not gain them. This keeps the production profile off
+the thin client.
 
 1. Write the replay script for development traces.
-2. Add the production mode behind its explicit flag.
+2. Check the production mode against the public privacy notice, then add it
+   behind its explicit flag.
 
 **Done when:** one hour of development agent traces is browsable in the
 `tollchat-agent-dev` project.

@@ -51,11 +51,11 @@ differs for TollChat:
 - The thin client is a home lab box: no disk encryption, and its secrets are
   plain files. Strictness goes into what is public or in AWS.
 - The thin client gets AWS credentials through IAM Roles Anywhere and holds no
-  production profile. The certificate's private key is a local file, as an
-  approved exception to `SECURITY.md` (see AWS credentials).
+  production profile. The certificate's private key is a plain local file,
+  which Ryan approved (see AWS credentials).
 - The GitHub login is a fine-grained token for this repository only, with no
-  Workflows permission. Its file is a second approved exception to
-  `SECURITY.md`.
+  Workflows permission. Its token is the second secret Ryan approved as a
+  plain local file.
 - Only issues that Ryan wrote are admitted. There are no other contributors.
 - Adding the `factory` label is Ryan's authorization to push
   `factory/issue-N`, open its PR, and push up to three CI fixes to that branch.
@@ -98,14 +98,16 @@ flowchart TB
     proxy["Egress proxy<br/>allowlist, token injection"]
     collector["OTel collector"]
     phoenix["Phoenix<br/>127.0.0.1:6006"]
-    replay["Replay script<br/>on demand"]
   end
+
+  replay["Replay script<br/>on Ryan's workstation"]
 
   subgraph aws["AWS development account"]
     rds[("RDS Postgres 17<br/>database phoenix")]
     archive[("S3 factory-traces/")]
-    agenttraces[("S3 agentcore-traces/<br/>existing")]
   end
+
+  agenttraces[("S3 agentcore-traces/<br/>existing, one bucket per account")]
 
   issue -->|"1 poll"| dispatcher
   dispatcher -->|"2 base bundle, prompt"| sandbox
@@ -121,7 +123,7 @@ flowchart TB
   collector --> phoenix
   collector --> archive
   phoenix -->|"Tailscale + IAM"| rds
-  agenttraces --> replay --> phoenix
+  agenttraces --> replay -->|"SSH tunnel"| phoenix
 ```
 
 ## Components
@@ -141,18 +143,23 @@ and updates that checkout by hand.
 
 - it is open and carries the `factory` label, and the repository owner both
   wrote the issue and added the label;
-- no open PR already references it and no `factory/issue-N` branch exists;
-- Phoenix answers its health check and the proxy preflight passes. With no trace
-  store, the factory does not run.
+- no `factory/issue-N` branch exists in this repository, and no open PR comes
+  from one. PRs from forks that mention the issue do not count, so a stranger
+  cannot block it.
 
-An issue that fails admission gets one comment saying why, and loses the label.
+An issue that fails these checks gets one comment saying why, and loses the
+label. An admitted issue gets a "started" comment.
+
+Separately, the factory admits nothing while Phoenix's health check or the
+proxy preflight fails. With no trace store, the factory does not run. Labeled
+issues keep their label and wait.
 
 **Run.** The dispatcher copies a git bundle of current `main` and a prompt (issue
 number, title, and body) into a new sandbox container, then runs the three
 stations below in it.
 
 **Stations.** Each is a separate step the dispatcher starts, with its own child
-span in the trace.
+span in the trace. Each later fix round gets a span too.
 
 1. **Author.** A `claude -p` session implements the issue and commits.
 2. **Reviewer.** A second `claude -p` session with a fresh context. It gets the
@@ -161,9 +168,12 @@ span in the trace.
    it. It checks the change against the issue, looks for missing or weakened
    tests, bloat, and slop, then **fixes what it finds and commits**. Its prompt
    is adapted from the `factory-scoreboard` reviewer subagent, which only
-   reports. It runs once per work order, before the first push.
+   reports. It runs once per work order, before the first push. Commits from
+   later fix rounds are verified and guarded but not reviewed again.
 3. **Verify.** The dispatcher, not a model, runs `factory/verify.sh` in the
-   sandbox: the credential-free checks that CI requires and the sandbox can run,
+   sandbox. It copies the script in from its own checkout of `main` each time,
+   because the worker may edit `factory/` and could otherwise rewrite the
+   check it has to pass. The script runs the credential-free checks that CI requires and the sandbox can run,
    including the end-to-end tests against the throwaway PostGIS. If it fails,
    the output goes back to the author session as a fix round, and verify runs
    again. **No branch is pushed until verify passes.**
@@ -198,14 +208,19 @@ application code that makes a lambda or the agent do more work per call; the
 $250 circuit breaker and Ryan's review cover that.
 
 A work order that fails the guard is not pushed; the issue gets a comment saying
-which check failed. The application agent's model and prompt are also off
-limits. The worker is told so, and the reviewer of each PR checks it.
+which check failed.
+
+One exception to "everything else is open" has no path check: the application
+agent's model and prompt stay as they are unless the issue asks for that
+change. The worker and the reviewer are both told so, and Ryan checks it in
+each PR.
 
 **Push and watch.** The dispatcher pushes the branch and opens the PR, ready for
 review, with the host's `gh` login. It then waits for the required checks. On
-failure it sends the failed job logs into the same Claude session
-(`claude -p --resume`, run in the same container), for at most **3 rounds**. Each
-round's new commits pass the guard again before they are pushed.
+failure it sends the failed job logs into the author's Claude session
+(`claude -p --resume`, run in the same container), within the shared budget of
+3 fix rounds. Each round's new commits pass verify and the guard again before
+they are pushed.
 
 **Outcome.** One comment on the issue replaces the "started" comment: PR link,
 CI result, rounds used, token totals, and a link to the trace in Phoenix. The
@@ -263,7 +278,9 @@ and the factory's AWS credentials but none of Ryan's other work. As in
 4. Commit on the branch. Do not push.
 5. End with a final message that summarizes the change and shows the test's
    output before and after. The dispatcher uses it as the PR body.
-6. If the issue needs a product decision, make no commit and start the final
+6. Leave the application agent's model and prompt unchanged unless the issue
+   explicitly asks to change them.
+7. If the issue needs a product decision, make no commit and start the final
    message with `NEEDS CLARIFICATION`, followed by the questions. The dispatcher
    posts them on the issue and opens no PR.
 
@@ -283,7 +300,9 @@ trace stack.
 
 The dispatcher reads the subscription token (minted with `claude setup-token`)
 from SSM Parameter Store when it starts the proxy and passes it in the process
-environment. It is never written to a local file, per `SECURITY.md`.
+environment. The factory never writes it to a file of its own. Docker does
+keep a container's environment in its own configuration on disk while the
+container exists.
 
 ### Tracing
 
@@ -335,8 +354,9 @@ receiver and two exporters that fail independently.
 - **Exposure:** ports published on `127.0.0.1` only, with Phoenix authentication
   off. It is not on the sandbox's network.
 - **Retention:** `PHOENIX_DEFAULT_RETENTION_POLICY_DAYS=30`. Recorded tool
-  content is large, and the 20 GB RDS volume is shared with the application's
-  development database, which goes down if the volume fills. Phoenix holds a
+  content is large, and the RDS volume is shared with the application's
+  development database. It starts at 20 GB and autoscales to 40 GB, so trace
+  growth first raises the AWS bill and then fills the volume. Phoenix holds a
   working window and S3 holds the long-term copy. Measure the database's size
   after the first five work orders and raise the number if there is room.
 - **Projects:** `tollchat-factory` for factory runs; `tollchat-agent-dev` and
@@ -350,8 +370,15 @@ database stays under the registered migration set.
 
 A small script that reads a bounded time window of `agentcore-traces/` from S3,
 converts the archive's flattened span JSON to OTLP, and posts it to Phoenix. It
-defaults to development; production requires an explicit flag and the
-`nova-toll-prod` profile. The production agent's export path does not change.
+runs on Ryan's workstation, which already has the profiles that read those
+buckets, and reaches Phoenix through an SSH tunnel to the thin client. The
+factory role gets no read access to agent traces. It defaults to development;
+production requires an explicit flag and the `nova-toll-prod` profile. The
+production agent's export path does not change.
+
+Before the production mode is built, check it against the public privacy
+notice, which says traces are archived privately in encrypted S3. Replay copies
+redacted production traces into the development database.
 
 ## Public repository
 
@@ -369,8 +396,9 @@ pushes or posts is visible before Ryan reviews it. These rules follow from that.
   second line, not the first.
 - **The GitHub token cannot change workflows.** It is limited to this
   repository and granted no Workflows permission, so GitHub itself rejects a
-  push that edits `.github/workflows/`, even if the guard had a bug. Branch and
-  tag rules already stop it from changing `main` or release tags.
+  push that edits `.github/workflows/`, even if the guard had a bug. Branch
+  protection and the tag ruleset should also stop it from changing `main` or
+  release tags; confirm that an owner's token is not exempt from them.
 - **Factory branches get no credentials in CI.** PR checks build and test the
   branch's code without credentials. The one PR job that assumes an AWS role
   (the development plan) runs Terraform and scripts from `main`, not from the
@@ -379,8 +407,8 @@ pushes or posts is visible before Ryan reviews it. These rules follow from that.
 - **Traces stay private.** Trace content goes to Phoenix and S3 only. The
   Phoenix link in an issue comment is a `localhost` address that works for no
   one else.
-- **Machine-specific values stay off GitHub.** Tailnet hostnames, the
-  certificate's common name, and the Roles Anywhere ARNs are read from the
+- **Machine-specific values stay off GitHub.** The certificate's common name
+  and the Roles Anywhere ARNs are read from the
   thin client's environment, not committed in `factory/`.
 
 ## AWS credentials
@@ -404,15 +432,15 @@ one-hour credentials for the factory role.
 - **Revocation.** Disable the trust anchor, or issue a new certificate under a
   new common name and update the trust policy.
 
-**The private key is a long-lived secret in a local file.** `SECURITY.md` says
-credentials never live in a local secrets file, and this key cannot live in SSM
+**The private key is a long-lived secret in a local file.** `SECURITY.md` makes
+SSM Parameter Store the home for credentials, and this key cannot live there
 because it is what unlocks SSM. It is narrower than an access key: it works for
 one role and expires with its certificate. It cannot move into the machine's
 TPM, which is version 1.2; the helper needs 2.0. The thin client is a home lab
 box with no disk encryption, by Ryan's decision on 2026-11-14, so the limits
 on the role are what protect the account. Ryan approved this file, and the
-GitHub token's file, as exceptions to `SECURITY.md` on 2026-11-14. The PRs that
-introduce them record the exceptions in `SECURITY.md` itself.
+GitHub token's file, on 2026-11-14 as the only two factory credentials kept
+outside SSM. The PR that introduces them notes both in `SECURITY.md`.
 
 Alternatives considered: an IAM user access key (a static secret that never
 expires) and an Identity Center login (no secret on disk, but an unattended
@@ -466,20 +494,15 @@ Granular output stays in Phoenix and S3, never in commits.
 | Phoenix, Tailscale, or the proxy preflight is down | No new work orders are admitted. |
 | The $250 circuit breaker has tripped | Development RDS is down, so the same applies. No one works around it. |
 | The session crashes or times out | Comment on the issue, remove the label, keep the container's transcript in the job's state directory. |
-| CI still fails after 3 rounds | The PR stays open with a comment; `outcome` is `ci_exhausted`. |
+| Verify never passes within the 3 fix rounds | No PR opens; `outcome` is `verify_failed`. |
+| CI still fails after the 3 fix rounds | The PR stays open with a comment; `outcome` is `ci_exhausted`. |
 | The subscription rate limit is hit | The run ends as `crashed`; re-label later. |
 
 ## Build order
 
-1. **Spikes** (see open items), each under an hour.
-2. **Setup:** the four one-time items above.
-3. **Trace stack:** one Compose file for the proxy, collector, and Phoenix,
-   adapted from `factory-scoreboard/sandbox/compose.yaml`. Done when a
-   sandboxed `claude -p "hello"` appears in Phoenix and in S3.
-4. **Dispatcher and sandbox:** done when one real issue becomes a ready PR with
-   one trace.
-5. **Outcome annotations and the sweep.**
-6. **Replay script.**
+See [FACTORY-PLAN.md](FACTORY-PLAN.md) for the staged build order. In short:
+the spikes that need no AWS, the factory code, AWS access and the two spikes
+that need it, the trace stack, the first work order, scoring, then replay.
 
 ## Open items to settle in the spikes
 
@@ -489,8 +512,7 @@ Granular output stays in Phoenix and S3, never in commits.
 2. **AWS credentials for the Phoenix and collector containers.** They must be
    narrow and refreshable. The plan is the signing helper's `serve` mode,
    which listens on the host's `127.0.0.1:9911`. Confirm that a container can
-   reach it (host networking or another bind address), that the sandbox
-   cannot, and that Phoenix's IAM database login and the collector's S3
+   reach it without Phoenix leaving loopback, that the sandbox cannot, and that Phoenix's IAM database login and the collector's S3
    exporter both accept credentials from it.
 3. **Tailscale from a container.** Confirm a container can reach the RDS
    endpoint over the host's route.
@@ -500,11 +522,8 @@ Granular output stays in Phoenix and S3, never in commits.
 5. **`TRACEPARENT` with `--resume`.** Confirm resumed turns join the same trace.
 6. **Subscription headroom.** Measure one real run's token use against the
    plan's limits before running several a day.
-7. **Thin client access.** `nova-toll-prod` stays off the thin
-   client, but the replay script's production mode needs that profile and
-   Phoenix listens only on the thin client's loopback. Decide how a production
-   replay run from the workstation reaches Phoenix. Also confirm the thin
-   client can join the tailnet and run the Docker stack.
+7. **Thin client access.** Confirm the thin client can join the tailnet and
+   reach the development RDS endpoint under the tailnet's access rules.
 
 ## Deferred
 
