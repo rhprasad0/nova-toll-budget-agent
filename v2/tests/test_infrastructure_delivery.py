@@ -1974,8 +1974,18 @@ def _assert_required_event_callers(source: str) -> None:
         "github.event.pull_request.base.sha || "
         "github.event.merge_group.base_sha || github.event.before"
     )
-    for variable in ("SCHEMA_BASE_REF", "BASE_REF"):
-        assert f"{variable}: ${{{{ {base_expression} }}}}" in source
+    assert f"SCHEMA_BASE_REF: ${{{{ {base_expression} }}}}" in source
+    loader = [
+        step
+        for step in cast(list[dict[str, object]], ci_jobs["v2-loader"]["steps"])
+        if "verify.sh" in str(step.get("run", ""))
+    ]
+    assert [(step["run"], step["env"]) for step in loader] == [
+        (
+            '../.github/scripts/verify.sh loader "$BASE_REF"',
+            {"BASE_REF": f"${{{{ {base_expression} }}}}"},
+        )
+    ]
     # v2-loader, frontend-browser and v2-database.
     assert source.count(base_expression) == 3
 

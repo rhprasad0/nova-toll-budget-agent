@@ -158,6 +158,8 @@ def test_workflow_profiles() -> None:
     )[0]
     assert "    if:" not in database
     assert '.github/scripts/verify.sh database "$SCHEMA_BASE_REF"' in database
+    # Setting it would bypass the selector below.
+    assert "DATABASE_PROFILE" not in ci
     verify = (root / ".github/scripts/verify.sh").read_text()
     assert 'run_db_tests.sh "$base" --profile "$DATABASE_PROFILE"' in verify
     assert "select_db_test_profile.py" in verify

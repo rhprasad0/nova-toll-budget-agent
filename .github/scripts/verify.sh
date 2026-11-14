@@ -21,6 +21,11 @@ event="${GITHUB_EVENT_NAME:-pull_request}"
 # Only loader and database compare against a base; terraform.yml's shallow
 # checkout has no main to find one in.
 need_base() {
+  # In CI a missing base is a workflow bug; guessing one would compare HEAD with itself.
+  if [[ -z "$base" && -n "${GITHUB_ACTIONS:-}" ]]; then
+    echo 'verify: CI must pass BASE_GIT_REF' >&2
+    exit 2
+  fi
   base="${base:-$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main)}" || {
     echo 'verify: no main branch to compare against; pass BASE_GIT_REF' >&2
     exit 2
