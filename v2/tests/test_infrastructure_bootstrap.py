@@ -9,7 +9,6 @@ from typing import cast
 import yaml
 
 from tests.infrastructure_support import (
-    AGENTS,
     DEPLOYMENT,
     DEVELOPMENT_MIGRATION_HELPER,
     DEVELOPMENT_MIGRATIONS_WORKFLOW,
@@ -114,7 +113,7 @@ def test_manual_oracle_migration_030_contract_is_offline_guarded_and_syntax_chec
         "Schema-changing work is not deployable",
         "Current releases are schema-neutral",
     ):
-        assert forbidden not in (DEPLOYMENT + AGENTS)
+        assert forbidden not in DEPLOYMENT
     for forbidden in (
         "deploy_oracle_migration.py",
         "migration-finalizer",

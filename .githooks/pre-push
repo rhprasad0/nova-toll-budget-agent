@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# CI's quick credential-free checks (a few seconds). Setup: v2/README.md. CI remains authoritative.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)/v2"
+base=$(git merge-base HEAD origin/main)
+uv run --locked python scripts/check_tool_contract_versions.py "$base"
+uv run --locked python -m scripts.check_agent_contract_versions "$base"
+uv run --locked python -m eval.golden --allow-uninitialized
+uv run --locked python oracle/build_oracle_data.py --check

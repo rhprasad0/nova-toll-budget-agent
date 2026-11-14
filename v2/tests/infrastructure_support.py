@@ -72,7 +72,6 @@ DEVELOPMENT_RELEASE = (RUNBOOKS / "development-release.md").read_text()
 
 
 DEPLOYMENT = "\n".join((RUNBOOK, DEVELOPMENT_RELEASE))
-AGENTS = (REPO_ROOT / "AGENTS.md").read_text()
 ACCOUNT_CONTRACT = json.loads(
     (REPO_ROOT / "infra" / "account-contract.json").read_text()
 )

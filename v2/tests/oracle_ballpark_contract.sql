@@ -7,11 +7,13 @@ DECLARE
     sample_day date := (
         SELECT max(day::date)
         FROM generate_series(
-            (transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 7,
+            (transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 14,
             (transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1,
             interval '1 day'
         ) AS days(day)
         WHERE extract(isodow FROM day) = 3
+          -- Skip a Wednesday that is a federal holiday, when I-66 is free.
+          AND oracle.i66_tolling_active('EB', day::date + time '08:00')
     );
     older_at timestamptz := (sample_day + time '08:01') AT TIME ZONE 'America/New_York';
     newer_at timestamptz := (sample_day + time '08:05') AT TIME ZONE 'America/New_York';
@@ -152,11 +154,13 @@ DECLARE
     sample_day date := (
         SELECT max(day::date)
         FROM generate_series(
-            (transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 7,
+            (transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 14,
             (transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1,
             interval '1 day'
         ) AS days(day)
         WHERE extract(isodow FROM day) = 3
+          -- Skip a Wednesday that is a federal holiday, when I-66 is free.
+          AND oracle.i66_tolling_active('EB', day::date + time '08:00')
     );
     i66 record;
     observed record;
