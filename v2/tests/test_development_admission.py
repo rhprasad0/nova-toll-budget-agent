@@ -459,6 +459,10 @@ def test_predecessor_that_skipped_delivery_releases_ordering() -> None:
         _job("Deploy v2 to development", 800, BEFORE, conclusion="skipped"),
     ]
     assert _admit(api) is True
+    assert admission.predecessor_succeeded(cast(Any, api), REPOSITORY, BEFORE)
+    api.predecessor["conclusion"] = "cancelled"
+    assert not admission.predecessor_succeeded(cast(Any, api), REPOSITORY, BEFORE)
+    assert not admission.predecessor_succeeded(cast(Any, api), REPOSITORY, "0" * 40)
 
 
 def test_workflow_skips_delivery_only_on_the_scripts_exact_token(
@@ -504,8 +508,20 @@ def test_workflow_skips_delivery_only_on_the_scripts_exact_token(
     def admitted(*_: object, **__: object) -> bool:
         return True
 
+    api = FakeAPI()
     monkeypatch.setattr(admission, "admit", admitted)
-    for changed, skips in (("README.md\n", True), ("v2/timed_checks.py\n", False)):
+
+    def fake_api(*_: object) -> FakeAPI:
+        return api
+
+    monkeypatch.setattr(admission, "GitHubAPI", fake_api)
+    for changed, predecessor, skips in (
+        ("README.md\n", "success", True),
+        ("v2/timed_checks.py\n", "success", False),
+        # The failed predecessor's code still has to be deployed.
+        ("README.md\n", "failure", False),
+    ):
+        api.predecessor["conclusion"] = predecessor
         paths = tmp_path / "paths"
         paths.write_text(changed)
         assert (

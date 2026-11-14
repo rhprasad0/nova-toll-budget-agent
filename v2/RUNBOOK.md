@@ -81,11 +81,13 @@ artifacts alone do not authorize or execute schema changes.
 
 A merge that changes only Markdown, none of it pinned in
 `infra/development-release-manifest.json`, is admitted but not built or
-deployed: every deployed file is pinned there, so such a merge cannot change
-what runs. Its delivery run ends after admission and leaves no release
-evidence. Production admission needs that evidence for the exact release
-commit, so publish a release from a commit that was delivered, not from a
-Markdown-only one.
+deployed, provided the previous commit's delivery run succeeded. The only
+Markdown that reaches a package or the release bundle is the pinned agent SOP,
+so such a merge changes nothing that runs; if the previous delivery failed,
+the merge delivers as usual so that code is not left undeployed. A skipped run
+ends after admission and leaves no release evidence. Production admission needs
+that evidence for the exact release commit and rejects a Markdown-only commit
+as `ambiguous`, so publish a release from a commit that was delivered.
 
 ### Protected development migration workflow (#305 slice 3)
 

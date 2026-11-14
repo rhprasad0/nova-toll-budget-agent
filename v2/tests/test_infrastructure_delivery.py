@@ -102,7 +102,7 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
         for step in cast(list[dict[str, object]], ci_jobs["v2-database"]["steps"])
         if cast(str, step.get("uses", "")).startswith("astral-sh/setup-uv@")
     ]
-    # Any full-SHA pin: Dependabot moves it, and the pin test covers the format.
+    # Any full-SHA pin: Dependabot moves it; test_workflow_lint checks the format.
     assert [step["with"] for step in database_setup_uv] == [{"python-version": "3.13"}]
     assert "Historical pre-bootstrap recovery capture" in RUNBOOK
     assert "**Historical pre-bootstrap procedure only.**" in RUNBOOK

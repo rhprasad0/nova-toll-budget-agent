@@ -289,6 +289,15 @@ def docs_only(paths: list[str], manifest: Path = MANIFEST) -> bool:
     )
 
 
+def predecessor_succeeded(api: GitHubAPI, repository: str, before: str) -> bool:
+    """Skipping on top of a failed delivery would leave its code undeployed."""
+    try:
+        _one_run(api, repository, DELIVERY_WORKFLOW, before, require_success=True)
+    except AdmissionError:
+        return False
+    return True
+
+
 def _delivery_jobs_terminal(api: GitHubAPI, run: Mapping[str, object]) -> None:
     run_id = run.get("id")
     if not isinstance(run_id, int):
@@ -540,8 +549,9 @@ def main(argv: list[str] | None = None) -> int:
         token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
         if not token:
             raise AdmissionError("GitHub actions-read token is unavailable")
+        api = GitHubAPI(args.repository, token)
         admit(
-            GitHubAPI(args.repository, token),
+            api,
             repository=args.repository,
             sha=args.sha,
             before=before,
@@ -551,12 +561,13 @@ def main(argv: list[str] | None = None) -> int:
             poll_seconds=args.poll_seconds,
             check_predecessor=not args.recheck,
         )
+        skip = docs_only(paths) and predecessor_succeeded(api, args.repository, before)
     except AdmissionError as error:
         _emit_progress("fail", _admission_reason(error), 1)
         print("development admission rejected", file=sys.stderr)
         return 1
     terraform = "required" if terraform_applicable(paths) else "not-required"
-    delivery = "not-required" if docs_only(paths) else "required"
+    delivery = "not-required" if skip else "required"
     print(
         f"development admission accepted: sha={args.sha} terraform={terraform}"
         f" delivery={delivery}"

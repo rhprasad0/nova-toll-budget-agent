@@ -213,8 +213,11 @@ is mounted into the sandbox.
   That keeps the
   `mutations` and `permissions` lists, which decide what a release may do in
   AWS, out of reach. The dispatcher makes this comparison itself. The worker
-  refreshes the digests with `python3 v2/scripts/update_release_manifest.py`,
-  and verify runs the test that checks every pin.
+  refreshes the file digests with `python3 v2/scripts/update_release_manifest.py`
+  and verify runs the test that checks them. A change to packaged code also
+  moves a package digest, which that test does not check: the worker must
+  build the zips and pass their checksum listing to the same script, or the
+  first CI round fails on it.
 
 Everything else is open, including `factory/`, database migrations, the pricing
 tools and oracle, and the evaluation harness. The path list cannot catch
