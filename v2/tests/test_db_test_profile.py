@@ -1,8 +1,8 @@
 """Profile selection is conservative, including unusual filenames and deletions."""
 
 import os
+import shutil
 import subprocess
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -17,13 +17,14 @@ from scripts.select_db_test_profile import select_profile
 def test_ci_workers_use_separate_targets_and_fail_if_either_fails(
     tmp_path: Path, profile: str, retained_exit: int, candidate_exit: int
 ) -> None:
-    workflow = (
-        Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
-    ).read_text()
-    step = workflow.split("- name: Validate disposable database contracts\n", 1)[1]
-    script = textwrap.dedent(step.split("run: |\n", 1)[1].split("        env:\n", 1)[0])
+    verify = tmp_path / ".github/scripts/verify.sh"
+    verify.parent.mkdir(parents=True)
+    shutil.copy(
+        Path(__file__).resolve().parents[2] / verify.relative_to(tmp_path), verify
+    )
     runner = tmp_path / "v2/scripts/run_db_tests.sh"
     runner.parent.mkdir(parents=True)
+    (runner.parent / "check_schema_versions.py").write_text("")
     runner.write_text(
         "#!/usr/bin/env bash\nset -eu\n"
         'echo "worker=$DB_CONTRACT_IDENTITY"\n'
@@ -36,14 +37,10 @@ def test_ci_workers_use_separate_targets_and_fail_if_either_fails(
     )
     runner.chmod(0o755)
     result = subprocess.run(
-        ["bash", "-e", "-o", "pipefail", "-c", script],
-        cwd=tmp_path,
+        [str(verify), "database", "base"],
         env={
             **os.environ,
-            "RUNNER_TEMP": str(tmp_path),
             "DATABASE_PROFILE": profile,
-            "SCHEMA_BASE_REF": "base",
-            "DB_CONTRACT_IDENTITY": "all",
             "PGPORT": "5432",
             "POSTGRES_CONTAINER_ID": "candidate",
             "RETAINED_POSTGRES_CONTAINER_ID": "retained",
@@ -160,12 +157,12 @@ def test_workflow_profiles() -> None:
         "\n  trusted-development-plan:", 1
     )[0]
     assert "    if:" not in database
-    assert (
-        'run_db_tests.sh "$SCHEMA_BASE_REF" --profile "$DATABASE_PROFILE"' in database
-    )
-    assert "select_db_test_profile.py" in database
-    assert "PROFILE_HEAD: ${{ github.sha }}" in database
-    assert "DATABASE_PROFILE: ${{ steps.database-profile.outputs.profile }}" in database
+    assert '.github/scripts/verify.sh database "$SCHEMA_BASE_REF"' in database
+    verify = (root / ".github/scripts/verify.sh").read_text()
+    assert 'run_db_tests.sh "$base" --profile "$DATABASE_PROFILE"' in verify
+    assert "select_db_test_profile.py" in verify
+    assert '--event "$event"' in verify
+    assert '--head "${GITHUB_SHA:-HEAD}"' in verify
     job_lines: list[str] = []
     for line in delivery.split("  build:\n", 1)[1].splitlines():
         if line.startswith("  ") and not line.startswith("   ") and line.strip():

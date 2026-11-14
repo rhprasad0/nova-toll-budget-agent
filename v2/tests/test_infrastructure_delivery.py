@@ -26,6 +26,7 @@ from tests.infrastructure_support import (
     RUNBOOK,
     TERRAFORM_WORKFLOW,
     V2_ROOT,
+    VERIFY_SCRIPT,
     VERSIONS_TF,
     must_reject,
     workflow_run_source,
@@ -42,24 +43,18 @@ def test_ci_installs_proxy_dependencies_once_before_testing() -> None:
         "v2/package-lock.json",
         "v2/lambdas/chat_proxy/package-lock.json",
     ]
-    install = next(
-        step
-        for step in steps
-        if step.get("run") == "npm ci --prefix lambdas/chat_proxy"
+    assert [step["run"] for step in steps if "verify.sh" in step.get("run", "")] == [
+        '../.github/scripts/verify.sh loader "$BASE_REF"'
+    ]
+    loader = VERIFY_SCRIPT.split("\nloader() (\n", 1)[1].split("\n)\n", 1)[0]
+    install = (
+        '  if [[ "$event" != pull_request ]]; then\n'
+        "    step npm ci --prefix lambdas/chat_proxy\n  fi\n"
     )
-    build = next(
-        step for step in steps if step.get("run") == "./scripts/build_agentcore_zips.sh"
-    )
-    test = next(
-        step
-        for step in steps
-        if step.get("run") == "npm test --prefix lambdas/chat_proxy"
-    )
-    assert install["if"] == "github.event_name != 'pull_request'"
-    assert build["if"] == "github.event_name == 'pull_request'"
-    assert "if" not in test
-    assert steps.index(install) < steps.index(test)
-    assert steps.index(build) < steps.index(test)
+    build = "    step ./scripts/build_agentcore_zips.sh\n  fi\n"
+    test = "\n  step npm test --prefix lambdas/chat_proxy\n"
+    assert loader.index(install) < loader.index(test)
+    assert loader.index(build) < loader.index(test)
     assert (
         'npm ci --omit=dev --prefix "$V2_ROOT/lambdas/chat_proxy"'
         in (V2_ROOT / "scripts/build_agentcore_zips.sh").read_text()
@@ -94,8 +89,9 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
         'key          = "nova-toll/v2/terraform.tfstate"'
     ) >= 0
     assert "postgis/postgis" in CI_WORKFLOW
-    assert "python3 v2/scripts/check_schema_versions.py" in CI_WORKFLOW
-    assert "v2/scripts/run_db_tests.sh" in CI_WORKFLOW
+    assert '.github/scripts/verify.sh database "$SCHEMA_BASE_REF"' in CI_WORKFLOW
+    assert "step python3 v2/scripts/check_schema_versions.py" in VERIFY_SCRIPT
+    assert "v2/scripts/run_db_tests.sh" in VERIFY_SCRIPT
     ci_jobs = cast(dict[str, dict[str, object]], yaml.safe_load(CI_WORKFLOW)["jobs"])
     database_setup_uv = [
         step
@@ -1978,14 +1974,10 @@ def _assert_required_event_callers(source: str) -> None:
         "github.event.pull_request.base.sha || "
         "github.event.merge_group.base_sha || github.event.before"
     )
-    for variable in (
-        "TOOL_CONTRACT_BASE_REF",
-        "AGENT_CONTRACT_BASE_REF",
-        "SCHEMA_BASE_REF",
-        "BASE_REF",
-    ):
+    for variable in ("SCHEMA_BASE_REF", "BASE_REF"):
         assert f"{variable}: ${{{{ {base_expression} }}}}" in source
-    assert source.count(base_expression) == 4
+    # v2-loader, frontend-browser and v2-database.
+    assert source.count(base_expression) == 3
 
     caller = ci_jobs["trusted-development-plan"]
     assert (

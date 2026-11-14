@@ -16,6 +16,8 @@ SITE_TF = (V2_ROOT / "infra" / "site.tf").read_text()
 DEVELOPMENT_TFVARS = (V2_ROOT / "infra" / "development.tfvars").read_text()
 CI_WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 TERRAFORM_WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
+# ci.yml and terraform.yml run their checks through this script.
+VERIFY_SCRIPT = (REPO_ROOT / ".github" / "scripts" / "verify.sh").read_text()
 PRODUCTION_PLAN_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-production-plan.yml"
 ).read_text()

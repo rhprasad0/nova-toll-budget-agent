@@ -116,6 +116,10 @@ git config core.hooksPath .githooks
 python3 v2/scripts/check_repository.py
 ```
 
+`.github/scripts/verify.sh [loader|terraform|database|all]` then runs what the
+required CI jobs run; CI calls the same script. `database` needs two empty
+`postgis/postgis:17-3.5` containers (see the script).
+
 The installer verifies pinned release checksums for ShellCheck 0.11.0,
 actionlint 1.7.12 and Gitleaks 8.30.1. On other platforms install those same
 versions yourself. Python dependencies are locked in `uv.lock`; ESLint and

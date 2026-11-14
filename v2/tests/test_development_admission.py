@@ -310,19 +310,20 @@ def test_workflow_keeps_retained_artifact_guard_and_pr_only_packages() -> None:
     ci = (root / ".github/workflows/ci.yml").read_text()
     assert "Reject retained exact release artifact" in delivery
     assert 'type == "object" and (.artifacts | type == "array")' in delivery
-    assert "github.event_name == 'pull_request'" in ci
+    assert '../.github/scripts/verify.sh loader "$BASE_REF"' in ci
     assert delivery.index("Reject retained exact release artifact") < delivery.index(
         "astral-sh/setup-uv@"
     )
-    steps = yaml.safe_load(ci)["jobs"]["v2-loader"]["steps"]
-    for command in (
-        "build_fetcher_zip.sh",
-        "build_loader_zip.sh",
-        "build_publisher_zip.sh",
-        "build_agentcore_zips.sh",
-    ):
-        build = next(step for step in steps if command in step.get("run", ""))
-        assert build["if"] == "github.event_name == 'pull_request'"
+    verify = (root / ".github/scripts/verify.sh").read_text()
+    assert 'event="${GITHUB_EVENT_NAME:-pull_request}"' in verify
+    assert (
+        '  if [[ "$event" == pull_request ]]; then\n'
+        "    step ./scripts/build_fetcher_zip.sh\n"
+        "    step ./scripts/build_loader_zip.sh\n"
+        "    step ./scripts/build_publisher_zip.sh\n"
+        "    step ./scripts/build_agentcore_zips.sh\n"
+        "  fi\n"
+    ) in verify
 
 
 def test_retained_artifact_guard_rejects_malformed_metadata() -> None:
