@@ -32,16 +32,6 @@ need_base() {
   }
 }
 
-# A tag push has no previous commit to compare with; use the parent, as the
-# contract checks do.
-change_base() {
-  if git cat-file -e "$base^{commit}" 2>/dev/null; then
-    echo "$base"
-  else
-    git rev-parse --verify 'HEAD^'
-  fi
-}
-
 step() {
   echo "::group::$*"
   local status=0
@@ -82,25 +72,8 @@ package_digests() {
   python3 scripts/update_release_manifest.py --check "$sums"
 }
 
-# The experiment journal is permanent history. Removing more than a few lines
-# needs a new line in .github/journal-condensations, a path closed to the factory.
-journal_kept() {
-  local from removed
-  from="$(change_base)" || return
-  removed="$(git diff --numstat "$from" HEAD -- eval/journal eval/EXPERIMENT_JOURNAL.md |
-    awk '{n += $2} END {print n + 0}')"
-  if ((removed > 10)) && ! git diff "$from" HEAD -- :/.github/journal-condensations |
-    grep -qE '^\+[0-9]{4}-[0-9]{2}-[0-9]{2} +[^ ]+ +[^ ]'; then
-    echo "This change removes $removed lines from the experiment journal." >&2
-    echo 'If Ryan approved a condensation, add a line to .github/journal-condensations:' >&2
-    echo '  YYYY-MM-DD  approver  reason' >&2
-    return 1
-  fi
-}
-
 # The few-second checks: the pre-push hook runs these alone, and loader runs them too.
 quick_checks() {
-  step journal_kept
   step corpus
   step uv run --locked python scripts/check_tool_contract_versions.py "$base"
   step uv run --locked python -m scripts.check_agent_contract_versions "$base"

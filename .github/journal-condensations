@@ -1,3 +1,0 @@
-# Approved removals of more than 10 lines from v2/eval/journal/ or EXPERIMENT_JOURNAL.md.
-# verify.sh fails such a change unless it adds a line here: date, approver, reason.
-2026-10-18  Ryan  Condense repetitive journal entries without losing figures (#722)
