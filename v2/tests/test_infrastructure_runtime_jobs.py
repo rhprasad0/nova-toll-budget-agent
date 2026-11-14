@@ -24,6 +24,11 @@ def test_timed_lambda_scheduler_and_failure_contract() -> None:
     )
 
     assert TIMED_CHECKS_TF.count("alarm_actions       = local.alarm_actions") == 2
+    # Production-only branches: the development plan cannot see them.
+    assert (
+        "local.is_production || var.enable_development_timed_check_alerts"
+        in TIMED_CHECKS_TF
+    )
 
     lambda_trust = terraform_block(
         TIMED_CHECKS_TF,
@@ -157,6 +162,11 @@ def test_eventbridge_has_both_failure_paths_and_bounded_retries() -> None:
     assert_assignment(
         loader_delivery_policy, "values", "[aws_cloudwatch_event_rule.raw_objects.arn]"
     )
+    assert_assignment(
+        loader_freshness_alarm,
+        "dimensions",
+        "local.is_production ? { feed = each.key } : { feed = each.key, Environment = var.environment }",
+    )
     for alarm in (loader_error_alarm, loader_freshness_alarm, loader_failure_alarms):
         assert_assignment(alarm, "alarm_actions", "local.alarm_actions")
     assert 'resource "aws_vpc_endpoint" "eventbridge"' in FOUNDATION_AGENTCORE
@@ -215,6 +225,8 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege() -> None:
     )[1].split(
         'resource "aws_lambda_function_event_invoke_config" "publisher"', maxsplit=1
     )[0]
+    # Computed at apply, so absent from the planned environment.
+    assert "SITE_BUCKET_NAME           = aws_s3_bucket.site.id" in publisher_lambda
     assert "aws_cloudfront_distribution.site" in publisher_lambda
     assert "aws_iam_role_policy.publisher" in publisher_lambda
     assert "aws_s3_object.robots" in publisher_lambda

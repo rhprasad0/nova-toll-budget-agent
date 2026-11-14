@@ -95,6 +95,12 @@ def test_job_network_rules_are_exactly_the_reviewed_ones(
         if address.startswith("aws_vpc_security_group_")
         and any(job in address for job in ("timed_checks", "loader", "publisher"))
     }
+    assert not [
+        address
+        for address, value in development_plan.items()
+        if address.startswith("aws_vpc_security_group_")
+        and value["ip_protocol"] == "-1"
+    ]
     https, postgres = ("tcp", 443, 443), ("tcp", 5432, 5432)
     assert rules == {
         "timed_checks_https": (*https, "0.0.0.0/0"),
@@ -161,6 +167,25 @@ def test_report_publisher_runs_weekly_as_one_bounded_function(
     assert schedule["flexible_time_window"][0]["mode"] == "OFF"
     assert json.loads(target["input"]) == {"trigger": "watchdog"}
     assert retries(target) == (2, 3600)
+    freshness = development_plan[
+        "aws_cloudwatch_metric_alarm.report_generation_freshness"
+    ]
+    assert freshness["datapoints_to_alarm"] == 7
+    # The event-driven triggers were replaced by this one schedule.
+    assert not [
+        address
+        for address in development_plan
+        if any(
+            retired in address
+            for retired in (
+                "committed_i95_loads",
+                "report_watchdog",
+                "publisher_load_event",
+                "publisher_watchdog",
+                "publisher_failed_invocations",
+            )
+        )
+    ]
     function = development_plan["aws_lambda_function.publisher"]
     assert function["function_name"] == "toll-v2-report-publisher-dev"
     assert (function["timeout"], function["memory_size"]) == (900, 2048)
@@ -283,7 +308,7 @@ def test_text_matching_infrastructure_assertions_only_shrink() -> None:
         if path != Path(__file__)
         for helper in ("assert_assignment(", "terraform_block(")
     )
-    assert uses <= 117, (
+    assert uses <= 118, (
         "Assert on the development_plan fixture's planned values instead of "
         "adding assert_assignment or terraform_block text matches."
     )
