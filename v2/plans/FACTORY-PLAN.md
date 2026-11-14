@@ -86,9 +86,12 @@ in the experiment journal.
    oracle, the host graders, Grafana, and Tetragon.
 2. Apply the spec's differences that need no AWS: bearer-token injection, the
    `factory` label trigger, and the TollChat toolchains in the worker image.
-   The image runs `v2/scripts/install_check_tools.sh`, and the worker's clone
-   runs `git config core.hooksPath .githooks`, so the pre-commit hook catches
-   lint and type errors before a commit rather than in CI.
+   The worker's clone runs the setup block under "Verify the build" in
+   `v2/README.md` (`uv sync`, both `npm ci` runs, `install_check_tools.sh`,
+   and `git config core.hooksPath .githooks`), so the pre-commit hook catches
+   lint and type errors before a commit rather than in CI. The hook installs
+   nothing and fails without that setup. Set `core.hooksPath` only in the
+   sandbox clone, never in the dispatcher's host clone.
 3. Add the throwaway PostGIS container and the Playwright browser to the
    sandbox, and write `factory/verify.sh`. Its first step is the full
    `python3 v2/scripts/check_repository.py`, since the hook only checks what

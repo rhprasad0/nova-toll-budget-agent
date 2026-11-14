@@ -184,7 +184,9 @@ runs again before every later push. If the budget runs out before verify has
 ever passed, no PR opens and the outcome is `verify_failed`.
 
 **Handoff.** Work leaves the sandbox only as a git bundle, which carries commits
-but never hooks or config. The dispatcher fetches it into a host-only clone. It
+but never hooks or config. The worker can still edit the tracked `.githooks/`,
+so the host clone never enables `core.hooksPath`. The dispatcher fetches the
+bundle into a host-only clone. It
 never runs git in a directory the worker could write to, and no host directory
 is mounted into the sandbox.
 
@@ -245,7 +247,8 @@ and is deleted when the work order ends.
 - **Image:** the repo's toolchains (Python with `uv`, Rust, Node), the pinned
   checkers from `v2/scripts/install_check_tools.sh`, the browser that the
   Playwright tests drive, and Claude Code, running as a non-root user. The
-  worker's clone sets `core.hooksPath` to `.githooks`, so the repo's
+  worker's clone runs the README's build setup and sets `core.hooksPath` to
+  `.githooks` (the dispatcher's host clone never does), so the repo's
   pre-commit hook shows the author lint, format, and type errors when it
   commits. That is feedback only: the worker can edit or skip the hook, so
   verify runs the full check again.
