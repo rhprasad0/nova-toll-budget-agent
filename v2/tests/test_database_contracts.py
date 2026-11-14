@@ -334,4 +334,3 @@ def test_retained_ballpark_contract_skips_a_holiday_wednesday() -> None:
     assert guarded.count(b"oracle.i66_tolling_active('EB'") == 2
     assert b"date - 7" not in guarded and guarded.count(b"date - 14") == 2
     assert contracts.retained_holiday_guard(b"unrelated") == b"unrelated"
-
