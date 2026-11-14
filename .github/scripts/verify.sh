@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # The credential-free checks behind the required CI jobs, runnable anywhere.
 #
-#   .github/scripts/verify.sh [loader|terraform|database|all] [BASE_GIT_REF]
+#   .github/scripts/verify.sh [loader|terraform|database|all|quick] [BASE_GIT_REF]
 #
 # ci.yml and terraform.yml call this, so a local or sandbox run checks what CI
 # checks. Setup (toolchains, the pinned checkers, PostGIS for `database`) is the
 # caller's: see "Verify the build" in v2/README.md. golden-artifact-smoke needs
-# an ARM64 host and stays in ci.yml only.
+# an ARM64 host and stays in ci.yml only. `quick` is the pre-push hook's subset.
 #
 # It lives under .github/ because that path is closed to the factory, so a work
 # order cannot drop a check from this list. `database` needs the Docker CLI.
@@ -56,7 +56,7 @@ no_em_dashes() {
 }
 
 corpus() {
-  uv run python -m eval.golden --allow-uninitialized || {
+  uv run --locked python -m eval.golden --allow-uninitialized || {
     echo 'If corpus inputs or protected sources changed, freeze each split, from v2:' >&2
     echo '  uv run python -m eval.corpus freeze --corpus eval/active/SPLIT --split SPLIT --version NEWER' >&2
     return 1
@@ -72,6 +72,20 @@ package_digests() {
   python3 scripts/update_release_manifest.py --check "$sums"
 }
 
+# The few-second checks: the pre-push hook runs these alone, and loader runs them too.
+quick_checks() {
+  step corpus
+  step uv run --locked python scripts/check_tool_contract_versions.py "$base"
+  step uv run --locked python -m scripts.check_agent_contract_versions "$base"
+  step uv run --locked python oracle/build_oracle_data.py --check
+}
+
+quick() (
+  need_base
+  cd v2
+  quick_checks
+)
+
 loader() (
   need_base
   cd v2
@@ -80,9 +94,7 @@ loader() (
   step npm ci --ignore-scripts
   step npm ci --ignore-scripts --prefix lambdas/chat_proxy
   step python3 scripts/check_repository.py
-  step corpus
-  step uv run python scripts/check_tool_contract_versions.py "$base"
-  step uv run python -m scripts.check_agent_contract_versions "$base"
+  quick_checks
   # Provider schemas let the cost-dashboard mock-plan tests run instead of skip.
   step terraform -chdir=infra init -backend=false -input=false
   step uv run coverage run -m pytest --durations=30 --durations-min=1
@@ -91,7 +103,6 @@ loader() (
   if [[ "$event" != pull_request ]]; then
     step npm ci --prefix lambdas/chat_proxy
   fi
-  step uv run python oracle/build_oracle_data.py --check
   if [[ "$event" == pull_request ]]; then
     step ./scripts/build_fetcher_zip.sh
     step ./scripts/build_loader_zip.sh
@@ -150,13 +161,14 @@ case "$job" in
   loader) loader ;;
   terraform) terraform_checks ;;
   database) database ;;
+  quick) quick ;;
   all)
     loader
     terraform_checks
     database
     ;;
   *)
-    echo "usage: $0 [loader|terraform|database|all] [BASE_GIT_REF]" >&2
+    echo "usage: $0 [loader|terraform|database|all|quick] [BASE_GIT_REF]" >&2
     exit 2
     ;;
 esac
