@@ -513,10 +513,8 @@ jobs:
           fetch_rds_ca() {
           set -euo pipefail
           mkdir -p v2/infra/build/ca
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-            https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-            -o v2/infra/build/ca/rds-ca-bundle.pem
-          echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  v2/infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status
+          source v2/scripts/build_loader_zip.sh
+          download_rds_ca_bundle v2/infra/build/ca/rds-ca-bundle.pem
           chmod 600 v2/infra/build/ca/rds-ca-bundle.pem
           }
           run_private_stage "rds-ca" "$RUNNER_TEMP/development-rds-ca.log" "$RUNNER_TEMP/development-rds-ca.log" \

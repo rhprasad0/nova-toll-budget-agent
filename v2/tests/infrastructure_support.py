@@ -22,6 +22,10 @@ PRODUCTION_PLAN_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-production-plan.yml"
 ).read_text()
 TIMED_CHECKS_MODULE = (V2_ROOT / "timed_checks.py").read_text()
+# The one place to change on an AWS rotation; the copies below are checked against it.
+RDS_CA_SHA256 = re.findall(
+    r'ca_sha256="([0-9a-f]{64})"', (V2_ROOT / "scripts/build_loader_zip.sh").read_text()
+)[0]
 VERSIONS_TF = (V2_ROOT / "infra" / "versions.tf").read_text()
 FOUNDATION_ROOT = REPO_ROOT / "infra"
 FOUNDATION_TRIGGERS = (FOUNDATION_ROOT / "triggers.tf").read_text()
