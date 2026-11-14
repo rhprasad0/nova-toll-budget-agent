@@ -9,8 +9,8 @@ from typing import Any
 import pytest
 
 # GitHub's runners ship these; a bare image does not, and the tests that shell out
-# to them fail far from the cause. Terraform, Gitleaks, Docker and psql are optional:
-# their tests skip.
+# to them fail far from the cause. Gitleaks, Docker and psql are optional: their
+# tests skip. Terraform is not checked here, so one test file can run without it.
 REQUIRED_TOOLS = ("jq", "xxd", "zip", "unzip")
 
 
@@ -80,6 +80,9 @@ def pytest_runtest_makereport(item: pytest.Item) -> Generator[None, Any]:
     if report.when != "call" or not report.failed or tmp_path is None:
         return
     for log in sorted(tmp_path.rglob("*.err")):
-        text = log.read_text(errors="replace").strip()
+        try:
+            text = log.read_text(errors="replace").strip()
+        except OSError:  # a directory or dangling link must not abort the session
+            continue
         if text:
             report.sections.append((f"private stage stderr: {log.name}", text[-2000:]))

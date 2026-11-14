@@ -124,8 +124,9 @@ JavaScript compilation is required.
 
 The tests also shell out to `jq`, `xxd`, `zip` and `unzip` (on Debian, the
 packages of the same names) and stop at startup if one is missing. GitHub's
-runners ship them; a bare container image does not. Tests that need Terraform
-1.15.8, Gitleaks, Docker or `psql` skip without them, so a skip locally can
+runners ship them; a bare container image does not. The full suite also needs
+Terraform 1.15.8: some of its tests fail without it and others skip. Tests
+that need Gitleaks, Docker or `psql` skip without them, so a skip locally can
 still be a failure in CI.
 
 Fresh clones need this setup: Git does not automatically enable repository hooks.

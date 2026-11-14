@@ -229,7 +229,7 @@ def validate_schema_update(
             if len(matches) != 1:
                 raise ValueError(
                     f"{schema_name} {previous} -> {current} lacks a new upgrade "
-                    "migration chain contiguous from previous to current; add "
+                    "migration chain contiguous from previous to current; expected one "
                     f"v2/db/migrations/NNN_upgrade_{schema_name}_"
                     f"{chain_version.replace('.', '_')}_to_<next, as 1_2_3>.sql"
                 )
