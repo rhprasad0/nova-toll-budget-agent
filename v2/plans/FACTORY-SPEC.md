@@ -58,6 +58,8 @@ differs for TollChat:
 - Phoenix keeps 90 days of traces; S3 keeps everything.
 - The protected-path list below.
 - Sonnet is the default worker model.
+- The thin client gets AWS credentials through IAM Roles Anywhere (see AWS
+  credentials), and holds no production profile.
 
 ## Architecture
 
@@ -284,6 +286,38 @@ converts the archive's flattened span JSON to OTLP, and posts it to Phoenix. It
 defaults to development; production requires an explicit flag and the
 `nova-toll-prod` profile. The production agent's export path does not change.
 
+## AWS credentials
+
+**Proposed, not yet confirmed.** The thin client runs unattended, so it needs
+credentials that renew without a browser login, and it should not hold an IAM
+user access key. [IAM Roles Anywhere](https://docs.aws.amazon.com/rolesanywhere/latest/userguide/getting-started.html)
+does this at no charge: the machine presents an X.509 certificate and receives
+one-hour credentials for the factory role.
+
+- **CA.** Ryan creates a small certificate authority with `openssl` on his
+  workstation and keeps its key there. Only the CA certificate is uploaded, as
+  the trust anchor. No AWS Private CA is needed.
+- **Client certificate.** One certificate for the thin client, valid for about
+  a year. The role's trust policy accepts only that certificate's common name,
+  through that trust anchor.
+- **Helper.** AWS's `aws_signing_helper` (1.4.0 or later) turns the certificate
+  into credentials. The dispatcher uses it as a `credential_process`; its
+  `serve` mode offers the same credentials to containers on a local endpoint
+  shaped like the EC2 metadata service.
+- **Revocation.** Disable the trust anchor, or issue a new certificate under a
+  new common name and update the trust policy.
+
+**The private key is a long-lived secret in a local file.** `SECURITY.md` says
+credentials never live in a local secrets file, and this key cannot live in SSM
+because it is what unlocks SSM. It is narrower than an access key: it works for
+one role, expires with its certificate, and can later move into the machine's
+TPM, which the helper supports. Accepting this file is an exception to
+`SECURITY.md` that needs Ryan's approval.
+
+Alternatives considered: an IAM user access key (a static secret that never
+expires) and an Identity Center login (no secret on disk, but an unattended
+poller stops when the session lapses).
+
 ## One-time setup
 
 Each item needs a human; the factory does none of it.
@@ -295,7 +329,9 @@ Each item needs a human; the factory does none of it.
 2. **IAM (Terraform in `infra/`, through a normal PR).** A narrow role for the
    local factory: `rds-db:connect` as `phoenix_factory`, `s3:PutObject` on
    `factory-traces/*`, the bucket key's encrypt permissions, and
-   `ssm:GetParameter` on the subscription-token parameter.
+   `ssm:GetParameter` on the subscription-token parameter. If the Roles
+   Anywhere proposal is accepted, the same PR adds the trust anchor, a profile,
+   and the role's trust policy, and Ryan issues the client certificate.
 3. **SSM.** Store the output of `claude setup-token` as a SecureString.
 4. **GitHub.** Create the `factory` label.
 
@@ -354,9 +390,11 @@ Granular output stays in Phoenix and S3, never in commits.
    can inject the subscription token as a bearer header, and that Claude Code
    accepts a placeholder token. The whole design depends on this one.
 2. **AWS credentials for the Phoenix and collector containers.** They must be
-   narrow and refreshable. Mounting `~/.aws` would expose every profile,
-   including production; exported short-lived credentials expire mid-run. Find
-   the smallest safe mechanism before building.
+   narrow and refreshable. The proposal is the signing helper's `serve` mode,
+   which listens on the host's `127.0.0.1:9911`. Confirm that a container can
+   reach it (host networking or another bind address), that the sandbox
+   cannot, and that Phoenix's IAM database login and the collector's S3
+   exporter both accept credentials from it.
 3. **Tailscale from a container.** Confirm a container can reach the RDS
    endpoint over the host's route.
 4. **Span rendering.** Confirm Phoenix shows raw `claude_code.*` spans usefully.
@@ -365,11 +403,11 @@ Granular output stays in Phoenix and S3, never in commits.
 5. **`TRACEPARENT` with `--resume`.** Confirm resumed turns join the same trace.
 6. **Subscription headroom.** Measure one real run's token use against the
    plan's limits before running several a day.
-7. **Thin client access.** Decide which AWS profiles the thin client holds. The
-   replay script's production mode needs `nova-toll-prod`; keeping that profile
-   off the factory machine means running production replays from the
-   workstation instead. Also confirm the thin client can join the tailnet and
-   run the Docker stack.
+7. **Thin client access.** The proposal keeps `nova-toll-prod` off the thin
+   client, but the replay script's production mode needs that profile and
+   Phoenix listens only on the thin client's loopback. Decide how a production
+   replay run from the workstation reaches Phoenix. Also confirm the thin
+   client can join the tailnet and run the Docker stack.
 
 ## Deferred
 
