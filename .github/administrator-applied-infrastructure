@@ -1,0 +1,4 @@
+# v2/infra addresses an administrator applied by hand, outside an application release.
+# verify.sh fails a change to a shared resource unless its address has a line here:
+#   YYYY-MM-DD  approver  ADDRESS  reason
+# A line lapses 30 days after its date. This path is closed to the factory.
