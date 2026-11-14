@@ -459,7 +459,8 @@ def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str) -
         "aws_kms_key.site.arn": json.dumps(
             f"arn:aws:kms:us-east-1:{account}:key/{gate.SITE_KEYS[environment]}"
         ),
-        "${path.module}/../agent/": str(ROOT / "v2/agent") + "/",
+        # Relative, as in a real plan: the gate reads "prod" in a checkout path as a production target.
+        "${path.module}/../agent/": "agent/",
         "var.foundation.alerts_topic_arn": json.dumps(
             f"arn:aws:sns:us-east-1:{account}:nova-toll-alerts"
         ),
@@ -480,6 +481,7 @@ def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str) -
         "",
         source,
     )
+    (tmp_path / "agent").symlink_to(ROOT / "v2/agent", target_is_directory=True)
     (tmp_path / "costs.tf").write_text(source)
     (tmp_path / "main.tf").write_text(
         """terraform {
