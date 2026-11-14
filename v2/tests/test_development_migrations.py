@@ -556,16 +556,21 @@ def test_psql_include_path_opens_exact_file(tmp_path: Path) -> None:
     )
     assert running.returncode == 0
     assert running.stdout.strip() == "true"
-    published = subprocess.run(
-        [docker, "port", container, "5432/tcp"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert published.returncode == 0
-    endpoint = published.stdout.strip().splitlines()[0].rsplit(":", 1)
-    assert len(endpoint) == 2
-    host, port = endpoint
+    if os.environ.get("DISPOSABLE_DOCKER_NETWORK"):
+        # The factory sandbox shares the fixture's network namespace, where
+        # Docker publishes nothing; PGPORT names the fixture's port there.
+        host, port = "127.0.0.1", os.environ["PGPORT"]
+    else:
+        published = subprocess.run(
+            [docker, "port", container, "5432/tcp"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert published.returncode == 0
+        endpoint = published.stdout.strip().splitlines()[0].rsplit(":", 1)
+        assert len(endpoint) == 2
+        host, port = endpoint
     assert host in {"127.0.0.1", "localhost", "0.0.0.0", "::1", "[::]"}
 
     include = tmp_path / "migration with 'single' \"double\" \\backslash.sql"
