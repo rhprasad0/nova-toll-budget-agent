@@ -99,6 +99,12 @@ experiments, so they do not go in the experiment journal.
 
 ## Stage 3: Bring the factory code into the repo
 
+**Status on 2026-11-14: in progress, as a stack of PRs.** `.github/scripts/verify.sh`
+passes inside the sandbox on the stack's branch, with the full database
+profile, in 890 s, and pytest's counts match CI's. Still open: the label
+trigger and the inbox (step 4, the next layer), the spike 5 re-test, and the
+`factory` job becoming required.
+
 1. Copy the needed pieces of `factory-scoreboard/sandbox/` into `factory/`:
    the dispatcher (`host/`), the worker image (`agent/`), the proxy, the
    collector config, and the Compose file. Leave out the oracle, the host
@@ -106,8 +112,9 @@ experiments, so they do not go in the experiment journal.
 2. Apply the spec's differences that need no AWS: bearer-token injection, the
    `factory` label trigger, and the TollChat toolchains in the worker image.
    The worker's clone runs the setup block under "Verify the build" in
-   `v2/README.md` (`uv sync`, both `npm ci` runs, `install_check_tools.sh`,
-   and `git config core.hooksPath .githooks`), so the pre-commit hook catches
+   `v2/README.md` (`uv sync`, both `npm ci` runs, and
+   `git config core.hooksPath .githooks`; the checkers are baked into the
+   image), so the pre-commit hook catches
    lint and type errors before a commit rather than in CI. The hook installs
    nothing and fails without that setup. Set `core.hooksPath` only in the
    sandbox clone, never in the dispatcher's host clone.

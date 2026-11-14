@@ -420,7 +420,8 @@ It stays alive across CI feedback rounds so the Claude session can be resumed,
 and is deleted when the work order ends.
 
 - **Image:** the repo's toolchains (Python with `uv`, Rust, Node), the pinned
-  checkers from `v2/scripts/install_check_tools.sh`, the browser that the
+  checkers from `v2/scripts/install_check_tools.sh` (baked in at build time),
+  the browser that the
   Playwright tests drive, and Claude Code, running as a non-root user. The
   worker's clone runs the README's build setup and sets `core.hooksPath` to
   `.githooks` (the dispatcher's host clone never does), so the repo's
@@ -429,8 +430,12 @@ and is deleted when the work order ends.
   verify runs the full check again.
 - **Test database:** throwaway PostGIS containers per work order (CI's
   database job uses two, and the MCP server's tests also need DynamoDB Local),
-  on the same internal network, using the images CI uses. It holds no data and is deleted
-  with the work order. Without it the worker could not run the end-to-end
+  using the images CI uses. The candidate database owns a network namespace
+  on the internal network, and the retained database and the sandbox join it,
+  so both are on `localhost` at 5432 and 5433, as in CI. Docker publishes no
+  ports on an internal network, so the three tests that start or read a
+  published port follow `DISPOSABLE_DOCKER_NETWORK` instead. It holds no data
+  and is deleted with the work order. Without it the worker could not run the end-to-end
   tests and would learn of failures only from CI.
 - **Docker socket:** mounted, with the Docker CLI in the image.
   `v2/scripts/run_db_tests.sh` inspects and execs into the PostGIS containers,
@@ -488,9 +493,12 @@ changes:
   subscription token as a bearer header, instead of setting an API key header.
 - Its OTLP reverse listener forwards to the collector instead of Grafana LGTM.
 
-It allows only the Anthropic hosts and the package registries (PyPI, npm,
-crates.io, the Terraform registry, and the GitHub release downloads that
-`install_check_tools.sh` uses), and logs every flow. **The sandbox cannot reach Phoenix**, which runs without authentication
+It allows only the Anthropic hosts, the package registries (PyPI, npm,
+crates.io, and the Terraform registry and HashiCorp releases), and three
+downloads by exact path: the Cloudflare Terraform provider's GitHub releases,
+the CPython builds that the package scripts install with `uv`, and the RDS CA
+bundle the loader package pins. An entry with a path opens its host only under
+that path. It logs every flow, tagged with the work order. **The sandbox cannot reach Phoenix**, which runs without authentication
 and holds replayed production traces; the OTLP listener is its only path to the
 trace stack.
 
@@ -777,6 +785,9 @@ Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
    runs them in parallel in about 4. It ran outside the sandbox shape (root,
    host network, host Docker socket, open internet), the golden smoke exited
    early, and eight pytest tests failed, so treat it as a lower bound.
+   In the real sandbox shape (Stage 3, 2026-11-14), verify on the full database
+   profile passed in 890 s (14.8 minutes) with cold caches, and pytest's counts
+   matched CI's (2138 passed, 4 skipped).
 7. **Thin client access:** it joined the tailnet as `factory`; reaching the RDS
    endpoint is open, Stage 4.
 
