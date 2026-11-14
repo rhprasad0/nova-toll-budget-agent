@@ -11,6 +11,6 @@ test. Use prose only for judgment calls. Drop a rule once its mistake cannot hap
 | Work in a git worktree. | Nothing; judgment. |
 | Fix root causes, not symptoms. | Nothing; judgment. |
 | Set up each new worktree before committing. | `v2/scripts/setup.sh`; the pre-commit hook fails on a missing tool. |
-| Run what CI runs. | `.github/scripts/verify.sh`, called by CI and by the pre-push hook. |
-| Keep the experiment journal's history. | `journal_kept` in `verify.sh`; exceptions in `.github/journal-condensations`. |
+| Run what CI runs. | `.github/scripts/verify.sh` is what CI calls; the pre-push hook runs its `quick` subset. |
+| Keep the experiment journal's history. | `journal_kept` in `verify.sh` fails a change that removes more than 10 lines; exceptions in `.github/journal-condensations`. |
 | Changes reach `main` by a PR that passes CI. | Branch protection. |
