@@ -28,7 +28,7 @@ services:
       # dispatcher reads it from SSM in Stage 4). Never written to a file.
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
     volumes:
-      # The image's entrypoint runs mitmdump as whoever owns the CA directory.
+      # Owned by uid 1000, the user the proxy image runs as (see proxy/Dockerfile).
       - ${HOME}/.local/state/factory/certs:/home/mitmproxy/.mitmproxy
       # Only the flow log and the job tag: never the host-only git clone.
       - ${HOME}/.local/state/factory/flows:/state/flows
