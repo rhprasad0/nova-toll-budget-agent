@@ -40,14 +40,27 @@ def test_release_check_blocks_the_rate_limit_change_that_stranded_delivery(
     assert not infrastructure_plan.blocked(development_plan, changed, {waf})
 
 
-def test_release_check_allows_only_the_fields_a_release_may_change() -> None:
-    base = {RUNTIME: {"environment_variables": {"A": "1"}, "role_arn": "role"}}
-    release = {RUNTIME: {"environment_variables": {"A": "2"}, "role_arn": "role"}}
-    rewired = {RUNTIME: {"environment_variables": {"A": "1"}, "role_arn": "other"}}
+def test_release_check_admits_only_what_the_gate_has_a_path_for() -> None:
+    site = "aws_cloudfront_distribution.site"
+    loader = "aws_lambda_function.loader"
+    alarm = "aws_cloudwatch_metric_alarm.costs_errors"
+    base: dict[str, dict[str, Any]] = {
+        RUNTIME: {"environment_variables": {"A": "1"}},
+        site: {"ordered_cache_behavior": [], "price_class": "PriceClass_100"},
+        loader: {"timeout": 90},
+    }
 
-    assert not infrastructure_plan.blocked(base, release, set())
-    assert infrastructure_plan.blocked(base, rewired, set()) == {RUNTIME: {"role_arn"}}
-    assert infrastructure_plan.blocked(base, {}, set()) == {RUNTIME: set(base[RUNTIME])}
+    def blocked(address: str, **fields: object) -> dict[str, set[str]]:
+        head = {**base, address: {**base.get(address, {}), **fields}}
+        return infrastructure_plan.blocked(base, head, set())
+
+    # Both plans share their release inputs, so a slot difference is configuration.
+    assert blocked(RUNTIME, environment_variables={"A": "2"})
+    assert blocked(loader, timeout=900) == {loader: {"timeout"}}
+    assert blocked(site, price_class="PriceClass_All") == {site: {"price_class"}}
+    assert not blocked(site, ordered_cache_behavior=[{"path_pattern": "/costs.html"}])
+    assert not blocked(alarm, threshold=1)
+    assert infrastructure_plan.blocked(base, {}, set()).keys() == base.keys()
 
 
 def test_administrator_entries_lapse(
@@ -59,6 +72,8 @@ def test_administrator_entries_lapse(
         "2026-11-01  Ryan  aws_wafv2_web_acl.public_chat  raise the limit\n"
         "2026-09-01  Ryan  aws_sns_topic.old  long merged\n"
         "2026-11-01  Ryan  aws_sns_topic.no_reason\n"
+        "2099-01-01  Ryan  aws_sns_topic.future  never lapses\n"
+        "Nov 1 2026  Ryan  aws_sns_topic.unparsed  not an ISO date\n"
     )
     monkeypatch.setattr(infrastructure_plan, "ADMINISTRATOR_APPLIED", record)
 

@@ -8,6 +8,10 @@ and fails when the difference is one an application release may not apply.
 Development delivery rejects such a change only after merge, as
 `phase_boundary`, and every later delivery fails with it.
 
+Both plans get the same inputs, so a difference comes from the repository's
+Terraform or the files it reads. It sees planned values only: IAM policy text
+is unknown at plan time, so a policy change passes here unseen.
+
 Providers are mocked by v2/infra/tests/development.tftest.hcl, so this needs
 only `terraform -chdir=v2/infra init -backend=false`.
 """
@@ -30,6 +34,11 @@ sys.path.insert(0, str(ROOT / "v2" / "scripts"))
 import blue_green  # noqa: E402
 import cost_dashboard_release  # noqa: E402
 import shared_packages  # noqa: E402
+
+DISTRIBUTIONS = {
+    "aws_cloudfront_distribution.site",
+    "aws_cloudfront_distribution.staging",
+}
 
 FIXTURE = ROOT / "v2/infra/tests/development.tftest.hcl"
 PROVIDERS = ROOT / "v2/infra/.terraform/providers"
@@ -99,35 +108,38 @@ def planned(tree: Path) -> Plan:
 
 
 def releasable(address: str, fields: set[str], added_or_removed: bool) -> bool:
-    """Whether the release gate has any path for this difference."""
-    # The cost and shared-package releases validate their own resources, creates included.
-    if (
-        address in shared_packages.RESOURCES
-        or address in cost_dashboard_release.RESOURCES
-        or address in shared_packages.COMPONENTS
-    ):
+    """Whether the release gate has a path for this repository-made difference.
+
+    Slot and shared-package resources change through release inputs, which are
+    the same in both plans; a difference here is a configuration change the
+    gate rejects. See the `prepare` branch of blue_green.validate_plan.
+    """
+    # The cost release validates its own resources, creates included.
+    if address in cost_dashboard_release.RESOURCES:
         return True
     if added_or_removed:
         return False
-    name = re.sub(r"\[[^\]]*\]$", "", address)
-    allowed = blue_green.SLOT_RESOURCES.get(name) or blue_green.ROUTING_RESOURCES.get(
-        address
-    )
-    return allowed is not None and fields <= allowed
+    if address == shared_packages.CHAT_ROUTES:
+        return fields <= {"code"}
+    return address in DISTRIBUTIONS and fields <= {"ordered_cache_behavior"}
 
 
 def administrator_applied(today: date) -> set[str]:
-    """Addresses with an unexpired `YYYY-MM-DD approver ADDRESS reason` line."""
+    """Addresses with a current `YYYY-MM-DD approver ADDRESS reason` line."""
     if not ADMINISTRATOR_APPLIED.exists():
         return set()
-    entries = (line.split() for line in ADMINISTRATOR_APPLIED.read_text().splitlines())
-    return {
-        entry[2]
-        for entry in entries
-        if len(entry) >= 4
-        and not entry[0].startswith("#")
-        and today - date.fromisoformat(entry[0]) <= ENTRY_LIFETIME
-    }
+    current: set[str] = set()
+    for line in ADMINISTRATOR_APPLIED.read_text().splitlines():
+        entry = line.split()
+        if len(entry) < 4 or entry[0].startswith("#"):
+            continue
+        try:
+            age = today - date.fromisoformat(entry[0])
+        except ValueError:
+            continue
+        if timedelta(0) <= age <= ENTRY_LIFETIME:
+            current.add(entry[2])
+    return current
 
 
 def blocked(base: Plan, head: Plan, approved: set[str]) -> dict[str, set[str]]:
@@ -149,13 +161,17 @@ def main(arguments: list[str]) -> int:
     if len(arguments) != 1:
         print(__doc__, file=sys.stderr)
         return 2
-    unchanged = not subprocess.run(
-        ["git", "-C", str(ROOT), "diff", "--quiet", arguments[0], "--", "v2/infra"],
+    # The plan reads these paths; exit 1 means they differ from the base.
+    differs = subprocess.run(
+        ["git", "-C", str(ROOT), "diff", "--quiet", arguments[0], "--", *READ_PATHS],
         check=False,
     ).returncode
-    if unchanged:
-        print("v2/infra is unchanged")
+    if differs == 0:
+        print("nothing v2/infra plans from has changed")
         return 0
+    if differs != 1:
+        print(f"Cannot compare with {arguments[0]}.", file=sys.stderr)
+        return 2
     with tempfile.TemporaryDirectory() as scratch:
         archive = subprocess.run(
             ["git", "-C", str(ROOT), "archive", arguments[0], *READ_PATHS],
@@ -163,6 +179,8 @@ def main(arguments: list[str]) -> int:
             capture_output=True,
         ).stdout
         subprocess.run(["tar", "-x", "-C", scratch], input=archive, check=True)
+        # shortcut: uses this change's fixture; a change that drops a required input
+        # fails here. Plan the base with its own fixture if that happens.
         base = planned(Path(scratch))
     problems = blocked(
         base, planned(ROOT), administrator_applied(datetime.now(UTC).date())

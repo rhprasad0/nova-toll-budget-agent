@@ -14,5 +14,9 @@ for tool in shellcheck actionlint gitleaks; do
     break
   fi
 done
+# Without the providers, the tests that plan v2/infra skip.
+if command -v terraform >/dev/null; then
+  terraform -chdir=v2/infra init -backend=false -input=false >/dev/null
+fi
 git config core.hooksPath .githooks
 python3 v2/scripts/check_repository.py

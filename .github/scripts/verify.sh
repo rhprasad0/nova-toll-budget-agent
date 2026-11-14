@@ -98,7 +98,7 @@ loader() (
   # Provider schemas let the cost-dashboard mock-plan tests run instead of skip.
   step terraform -chdir=infra init -backend=false -input=false
   # Delivery rejects a shared-resource change only after merge; this catches it here.
-  step python3 scripts/infrastructure_plan.py "$base"
+  step python3 scripts/infrastructure_plan.py "$(change_base)"
   step uv run coverage run -m pytest --durations=30 --durations-min=1
   step uv run coverage report
   step node --test tests/*.mjs
