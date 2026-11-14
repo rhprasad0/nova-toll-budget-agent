@@ -113,6 +113,8 @@ def wait_ready(container: str, port: int) -> None:
                 "exec",
                 container,
                 "pg_isready",
+                "-h",  # TCP, so the image's temporary first-start server does not count
+                "127.0.0.1",
                 "-U",
                 "postgres",
                 "-p",

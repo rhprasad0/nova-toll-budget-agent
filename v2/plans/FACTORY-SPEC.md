@@ -439,7 +439,7 @@ and is deleted when the work order ends.
   tests and would learn of failures only from CI.
 - **Docker socket:** mounted, with the Docker CLI in the image.
   `v2/scripts/run_db_tests.sh` inspects and execs into the PostGIS containers,
-  and one test starts a container of its own. **This makes the container a
+  and two tests start a container of their own. **This makes the container a
   convention, not a boundary:** a process with the socket can start a
   container that mounts the host's files or joins another network, which
   reaches the GitHub token, the certificate key, the inbox, and the network
@@ -493,12 +493,18 @@ changes:
   subscription token as a bearer header, instead of setting an API key header.
 - Its OTLP reverse listener forwards to the collector instead of Grafana LGTM.
 
-It allows only the Anthropic hosts, the package registries (PyPI, npm,
-crates.io, and the Terraform registry and HashiCorp releases), and three
-downloads by exact path: the Cloudflare Terraform provider's GitHub releases,
-the CPython builds that the package scripts install with `uv`, and the RDS CA
-bundle the loader package pins. An entry with a path opens its host only under
-that path. It logs every flow, tagged with the work order. **The sandbox cannot reach Phoenix**, which runs without authentication
+It allows HTTPS on port 443 only, judged by the connection's real target
+rather than the Host header, and drops traffic that is not HTTP
+(`rawtcp=false`). The allowed hosts are Anthropic's, the package registries
+(PyPI, npm, crates.io, and the Terraform registry and HashiCorp releases), and
+three GitHub-hosted downloads limited by path: the Cloudflare Terraform
+provider's releases and the CPython builds that the package scripts install
+with `uv`, plus the host GitHub redirects release downloads to. The RDS CA
+bundle the loader package pins is allowed as that one file. Paths are decoded
+before matching, and `.` and `..` segments are refused. The token goes only on
+HTTPS requests to `api.anthropic.com`. `factory/host/test_proxy.py` checks
+these rules against the real proxy image. It logs every flow, tagged with the
+work order. **The sandbox cannot reach Phoenix**, which runs without authentication
 and holds replayed production traces; the OTLP listener is its only path to the
 trace stack.
 

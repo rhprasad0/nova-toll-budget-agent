@@ -1,4 +1,6 @@
-# Hosts the sandbox may reach through the proxy. Exact names, one per line.
+# Where the sandbox may go through the proxy, HTTPS on port 443 only. One entry
+# per line: a host, or host/path. A path ending in / allows everything under it;
+# any other path allows that one file. See allowlist.py.
 # Claude:
 api.anthropic.com
 # Package registries the README's build setup and verify download from:
@@ -14,6 +16,7 @@ releases.hashicorp.com
 # releases.hashicorp.com, and the CPython the package builds install with uv.
 github.com/cloudflare/terraform-provider-cloudflare/releases/download/
 github.com/astral-sh/python-build-standalone/releases/download/
+# GitHub redirects release downloads here, to signed URLs only it can issue.
 release-assets.githubusercontent.com
 # The RDS CA bundle the loader package pins:
 truststore.pki.rds.amazonaws.com/global/global-bundle.pem

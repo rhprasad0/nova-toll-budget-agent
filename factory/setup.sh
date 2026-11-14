@@ -6,6 +6,7 @@ cd "$(dirname "$0")"
 
 state="$HOME/.local/state/factory"
 mkdir -p "$state/certs" "$state/flows" "$state/jobs"
+[[ -f "$state/current-job" ]] || echo none >"$state/current-job"
 
 if [[ ! -f "$state/certs/mitmproxy-ca-cert.pem" ]]; then
   docker run --rm --user "$(id -u):$(id -g)" -v "$state/certs:/certs" mitmproxy/mitmproxy:12.2.3 \

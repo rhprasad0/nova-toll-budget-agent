@@ -14,18 +14,24 @@ services:
   proxy:
     build: ./proxy
     image: factory-proxy:dev
+    # host/test_proxy.py runs this exact command.
     command:
       - mitmdump
+      - --set
+      - rawtcp=false
       - --mode
       - regular@8080
       - -s
       - /addon/allowlist.py
     environment:
-      # Passed in by the dispatcher's environment; never written to a file.
+      # From the environment of whoever starts the proxy (setup.sh today; the
+      # dispatcher reads it from SSM in Stage 4). Never written to a file.
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
     volumes:
       # The image's entrypoint runs mitmdump as whoever owns the CA directory.
       - ${HOME}/.local/state/factory/certs:/home/mitmproxy/.mitmproxy
-      - ${HOME}/.local/state/factory:/state
+      # Only the flow log and the job tag: never the host-only git clone.
+      - ${HOME}/.local/state/factory/flows:/state/flows
+      - ${HOME}/.local/state/factory/current-job:/state/current-job:ro
     networks: [internal, egress]
     restart: unless-stopped

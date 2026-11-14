@@ -1,10 +1,17 @@
 """mitmproxy addon: the sandbox's only way out.
 
+- Only HTTPS to port 443 is allowed. Checks use the connection's real target
+  (the CONNECT host), never the Host header, and a request whose Host header
+  names a different host is refused.
 - Hosts not in allowlist.txt get a 403, both at CONNECT and per request. An entry
-  with a path (host/prefix) allows that host only for paths under the prefix.
+  with a path allows that host only for that path: a trailing slash allows paths
+  under it, and no trailing slash allows that one file. Paths are decoded first,
+  and empty, `.` or `..` segments are refused.
 - Requests to api.anthropic.com lose whatever credential the client sent and get the
   real subscription token from the proxy's own environment as a bearer header, so the
   agent never holds it. Without a token they are refused.
+- Run with `--set rawtcp=false`, so traffic that is not HTTP is dropped instead of
+  relayed past these checks.
 - Every flow is appended to /state/flows/flows.jsonl, tagged with the current job id,
   with Anthropic's rate-limit headers (never credentials) on API responses.
 """
@@ -15,6 +22,7 @@ import os
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 # mitmproxy exists only in the proxy image; the repository's type checks run without it.
 http = importlib.import_module("mitmproxy.http")
@@ -27,16 +35,16 @@ ENTRIES = [
     if line.strip() and not line.startswith("#")
 ]
 ALLOWED = {entry for entry in ENTRIES if "/" not in entry}
-PREFIXES: dict[str, list[str]] = {}
+PATHS: dict[str, list[str]] = {}
 for entry in ENTRIES:
     if "/" in entry:
         host, path = entry.split("/", 1)
-        PREFIXES.setdefault(host, []).append("/" + path)
+        PATHS.setdefault(host, []).append("/" + path)
 API_HOST = "api.anthropic.com"
+PORT = 443
 OTLP_PORT = 4318  # the reverse listener that forwards telemetry to the collector
 JOB_FILE = Path("/state/current-job")
 LOG = Path("/state/flows/flows.jsonl")
-LOG.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _job() -> str:
@@ -53,7 +61,8 @@ def _log(flow: Flow, allowed: bool, kind: str) -> None:
         "job_id": _job(),
         "kind": kind,
         "client": flow.client_conn.peername[0] if flow.client_conn.peername else None,
-        "host": req.pretty_host,
+        "host": req.host,
+        "port": req.port,
         "method": req.method,
         "path": req.path if kind != "connect" else None,
         "status": flow.response.status_code if flow.response else None,
@@ -61,7 +70,7 @@ def _log(flow: Flow, allowed: bool, kind: str) -> None:
         "bytes_in": len(flow.response.raw_content or b"") if flow.response else 0,
         "allowed": allowed,
     }
-    if flow.response and req.pretty_host == API_HOST:
+    if flow.response and req.host == API_HOST:
         record["ratelimit"] = {
             k: v
             for k, v in flow.response.headers.items()
@@ -84,16 +93,32 @@ def _deny(flow: Flow) -> None:
     )
 
 
-def _allowed(host: str, path: str | None) -> bool:
+def _path_allowed(path: str, allowed: list[str]) -> bool:
+    decoded = unquote(path.split("?", 1)[0])
+    if not decoded.startswith("/") or "\\" in decoded:
+        return False
+    segments = decoded.split("/")[1:]
+    # A trailing slash leaves one empty last segment; any other empty segment is "//".
+    if any(s in {"", ".", ".."} for s in segments[:-1]) or segments[-1] in {".", ".."}:
+        return False
+    return any(
+        decoded.startswith(entry) if entry.endswith("/") else decoded == entry
+        for entry in allowed
+    )
+
+
+def _allowed(host: str, port: int, path: str | None) -> bool:
     """path is None at CONNECT, before the request line is visible."""
+    if port != PORT:
+        return False
     if host in ALLOWED:
         return True
-    prefixes = PREFIXES.get(host, [])
-    return bool(prefixes) and (path is None or path.startswith(tuple(prefixes)))
+    allowed = PATHS.get(host, [])
+    return bool(allowed) and (path is None or _path_allowed(path, allowed))
 
 
 def http_connect(flow: Flow) -> None:
-    if not _allowed(flow.request.pretty_host, None):
+    if not _allowed(flow.request.host, flow.request.port, None):
         _deny(flow)
         _log(flow, allowed=False, kind="connect")
 
@@ -101,19 +126,25 @@ def http_connect(flow: Flow) -> None:
 def request(flow: Flow) -> None:
     if _is_telemetry(flow):
         return
-    if not _allowed(flow.request.pretty_host, flow.request.path):
+    req = flow.request
+    claimed = (req.host_header or req.host).rsplit(":", 1)[0].strip("[]").lower()
+    if (
+        req.scheme != "https"
+        or claimed != req.host.lower()
+        or not _allowed(req.host, req.port, req.path)
+    ):
         _deny(flow)
         _log(flow, allowed=False, kind="request")
         return
-    if flow.request.pretty_host == API_HOST:
+    if req.host == API_HOST:
         for header in ("authorization", "x-api-key"):
-            flow.request.headers.pop(header, None)
+            req.headers.pop(header, None)
         token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
         if not token:
             _deny(flow)
             _log(flow, allowed=False, kind="request")
             return
-        flow.request.headers["authorization"] = f"Bearer {token}"
+        req.headers["authorization"] = f"Bearer {token}"
 
 
 def response(flow: Flow) -> None:
