@@ -87,3 +87,17 @@ def test_file_leading_directives_are_rejected(
     assert checker.unused_directives(
         "sample.sh", ["must-not-run"], [], workflow=workflow
     ) == ["sample.sh:3: file-leading ShellCheck exceptions are forbidden"]
+
+
+def test_every_third_party_action_is_pinned_to_a_full_commit() -> None:
+    import re
+
+    workflows = sorted((Path(__file__).parents[2] / ".github/workflows").glob("*.yml"))
+    assert workflows
+    for workflow in workflows:
+        for action in re.findall(
+            r"^\s*(?:- )?uses:\s*(\S+)", workflow.read_text(), re.M
+        ):
+            # Reusable workflows in this repository run from main on purpose.
+            if "/.github/workflows/" not in action:
+                assert re.fullmatch(r"[^@]+@[0-9a-f]{40}", action), (workflow, action)

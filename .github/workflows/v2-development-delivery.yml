@@ -15,6 +15,9 @@ jobs:
     permissions:
       contents: read
       actions: read
+    outputs:
+      # 'false' only for an admitted push that changes nothing but unpinned Markdown.
+      deliver: ${{ steps.admit.outputs.deliver }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -22,6 +25,7 @@ jobs:
           persist-credentials: false
 
       - name: Check exact CI evidence and predecessor
+        id: admit
         env:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_SHA: ${{ github.sha }}
@@ -46,7 +50,7 @@ jobs:
           if [[ "$PREDECESSOR_SHA" == "0000000000000000000000000000000000000000" ]]; then
             git ls-tree -r --name-only "$CANDIDATE_SHA" >"$changed_paths"
           else
-            git diff --name-only "$PREDECESSOR_SHA" "$CANDIDATE_SHA" >"$changed_paths"
+            git diff --name-only --no-renames "$PREDECESSOR_SHA" "$CANDIDATE_SHA" >"$changed_paths"
           fi
           if python3 v2/scripts/check_development_admission.py \
               --repository "$REPOSITORY" \
@@ -75,11 +79,16 @@ jobs:
             _run_private_stage_emit 'stage=admission status=fail elapsed=0 exit=125 reason=diagnostic_unavailable'
             exit 125
           fi
+          if grep -qx 'development admission accepted: sha=[0-9a-f]\{40\} terraform=[a-z-]* delivery=not-required' \
+              "$RUNNER_TEMP/development-admission.result"; then
+            echo 'deliver=false' >>"$GITHUB_OUTPUT"
+          fi
           trap - EXIT
 
   release-record:
     name: Record exact development release
     needs: admission
+    if: needs.admission.outputs.deliver != 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -347,7 +356,7 @@ jobs:
   release-result:
     name: Record end-to-end development result
     needs: [admission, release-record, build, deploy]
-    if: always()
+    if: always() && needs.admission.outputs.deliver != 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read

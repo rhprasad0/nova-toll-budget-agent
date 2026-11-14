@@ -4,6 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # One PR a week, so the release pins are refreshed once, not per action.
+    groups:
+      actions:
+        patterns: ["*"]
   - package-ecosystem: cargo
     directory: /v2/lambdas/mcp_server
     schedule:
@@ -11,3 +15,6 @@ updates:
     # Two-week rule for new releases, as when the pins were chosen.
     cooldown:
       default-days: 14
+    groups:
+      cargo:
+        patterns: ["*"]

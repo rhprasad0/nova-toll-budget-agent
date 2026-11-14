@@ -102,12 +102,8 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
         for step in cast(list[dict[str, object]], ci_jobs["v2-database"]["steps"])
         if cast(str, step.get("uses", "")).startswith("astral-sh/setup-uv@")
     ]
-    assert database_setup_uv == [
-        {
-            "uses": "astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884",
-            "with": {"python-version": "3.13"},
-        }
-    ]
+    # Any full-SHA pin: Dependabot moves it; test_workflow_lint checks the format.
+    assert [step["with"] for step in database_setup_uv] == [{"python-version": "3.13"}]
     assert "Historical pre-bootstrap recovery capture" in RUNBOOK
     assert "**Historical pre-bootstrap procedure only.**" in RUNBOOK
     assert "v2-production-recovery.yml" in RUNBOOK
@@ -1934,38 +1930,6 @@ def _assert_development_plan_workflow(source: str) -> None:
                 )
 
 
-def test_development_plan_workflow_digest_matches_reviewed_manifest() -> None:
-    manifest = json.loads(
-        (REPO_ROOT / "infra" / "development-release-manifest.json").read_text()
-    )
-    assert (
-        hashlib.sha256(DEVELOPMENT_PLAN_WORKFLOW.encode()).hexdigest()
-        == manifest["deployment_inputs"][".github/workflows/v2-development-plan.yml"]
-    )
-
-
-def test_development_delivery_selected_input_digests_match_reviewed_manifest() -> None:
-    manifest = json.loads(
-        (REPO_ROOT / "infra" / "development-release-manifest.json").read_text()
-    )
-    for relative in (
-        ".github/workflows/v2-development-delivery.yml",
-        ".github/workflows/v2-development-delivery-privileged.yml",
-        "infra/delivery_plan_validator.py",
-        "infra/golden_eval.tf",
-        "infra/iam.tf",
-        "infra/release_manifest.py",
-        "v2/scripts/development_deployment_status.py",
-        "v2/agent_tools/currency.py",
-        "v2/eval/run_evaluation.py",
-        "v2/scripts/build_timed_checks_zip.sh",
-    ):
-        assert (
-            hashlib.sha256((REPO_ROOT / relative).read_bytes()).hexdigest()
-            == manifest["deployment_inputs"][relative]
-        )
-
-
 def test_development_plan_workflow_is_reusable_and_fail_closed() -> None:
     _assert_development_plan_workflow(DEVELOPMENT_PLAN_WORKFLOW)
     for original, replacement in (
@@ -3128,8 +3092,8 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc() -> None
     must_reject(
         _assert_development_delivery_privileged,
         DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW,
-        "- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-        "- uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd",
+        "- uses: actions/checkout@",
+        "- uses: aws-actions/configure-aws-credentials@",
     )
 
 

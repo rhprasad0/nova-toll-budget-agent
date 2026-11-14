@@ -79,6 +79,16 @@ below. The one-time baseline adoption is complete, and the manual Oracle
 migration 030 procedure remains a separate, explicitly approved operation. Application release
 artifacts alone do not authorize or execute schema changes.
 
+A merge that changes only Markdown, none of it pinned in
+`infra/development-release-manifest.json`, is admitted but not built or
+deployed, provided the previous commit's delivery run succeeded. The only
+Markdown that reaches a package or the release bundle is the pinned agent SOP,
+so such a merge changes nothing that runs; if the previous delivery failed,
+the merge delivers as usual so that code is not left undeployed. A skipped run
+ends after admission and leaves no release evidence. Production admission needs
+that evidence for the exact release commit and rejects a Markdown-only commit
+as `ambiguous`, so publish a release from a commit that was delivered.
+
 ### Protected development migration workflow (#305 slice 3)
 
 This workflow is a post-merge, protected development operation. Only migration
@@ -521,6 +531,16 @@ npm test --prefix lambdas/chat_proxy
 ./scripts/build_fetcher_zip.sh
 (cd infra/build && sha256sum --check AGENTCORE_SHA256SUMS)
 ```
+
+After changing a pinned file, refresh the release pins and review the diff:
+
+```sh
+python3 scripts/update_release_manifest.py
+```
+
+To refresh the package digests as well, build the zips and pass their
+`sha256sum` listing (`agentcore.zip`, `chat-proxy.zip`, `loader.zip`,
+`publisher.zip`, `timed-checks.zip`) as the argument.
 
 For current blue-green releases, delivery creates the private, versioned recovery
 record used by the protected `v2-production-recovery.yml` workflow. Retain the
