@@ -175,7 +175,11 @@ span in the trace. Each later fix round gets a span too.
    because the worker may edit `factory/` and could otherwise rewrite the
    check it has to pass. The script runs the credential-free checks that CI requires and the sandbox can run,
    starting with `v2/scripts/check_repository.py` (CI's lint, format, and
-   type gate) and including the end-to-end tests against the throwaway PostGIS. If it fails,
+   type gate) and including the end-to-end tests against the throwaway PostGIS.
+   Two gaps from spike 6: `v2/scripts/run_db_tests.sh`, two pytest files, and
+   the MCP server's `e2e.sh` drive Postgres through `docker exec`, which the
+   sandbox cannot do, so they need a network-only path first; and the golden
+   artifact smoke runs only on ARM, which the thin client is not. If it fails,
    the output goes back to the author session as a fix round, and verify runs
    again. **No branch is pushed until verify passes.**
 
@@ -339,6 +343,17 @@ TRACEPARENT=<dispatcher span context>
   Claude turn nests under it.
 - **Content is on.** Prompts, tool inputs, and tool output are recorded, because
   evals need them. The repo is public and the sandbox holds no real secrets.
+  Tool output arrives as `tool.output` span events. The model's own prompts and
+  responses are not on any span, so evals read them from the round's
+  `transcript.jsonl`.
+- **Delete the cached settings before every round.** With
+  `~/.claude/remote-settings.json` or `policy-limits.json` left by an earlier
+  round, Claude Code 2.1.325 starts the turn before telemetry is ready: no
+  `interaction` span, `TRACEPARENT` ignored, and every other span a root of its
+  own trace. The dispatcher deletes both files and their sibling files from the worker's `~/.claude` before each round. Spike 5 traced 6 of
+  6 resumed rounds with the deletion and 0 of 3 without. This is upstream bug
+  [anthropics/claude-code#99607](https://github.com/anthropics/claude-code/issues/99607);
+  re-test after each Claude Code upgrade and drop the step once it is fixed.
 - **`factory.version`** is the commit of the `factory/` directory. It is the key
   that evals compare across.
 
@@ -347,7 +362,11 @@ TRACEPARENT=<dispatcher span context>
 The OpenTelemetry Collector (contrib image), with one traces pipeline: an OTLP
 receiver and two exporters that fail independently.
 
-- `otlphttp` to Phoenix.
+- `otlphttp` to Phoenix, after a `transform` processor that copies Claude
+  Code's token attributes (`input_tokens`, `output_tokens`,
+  `cache_read_tokens`, `cache_creation_tokens`) into OpenInference's
+  `llm.token_count.*`. Without it Phoenix counts zero tokens; with it, spike 6's
+  totals matched Claude Code's own count exactly.
 - `awss3` to the existing development measurement bucket under a new
   `factory-traces/` prefix, as gzipped OTLP JSON partitioned by hour. The
   bucket's lifecycle rules expire only `AWSLogs/` and `athena-results/`, so this
@@ -361,7 +380,19 @@ receiver and two exporters that fail independently.
   `PHOENIX_POSTGRES_USER=phoenix_factory`,
   `PHOENIX_POSTGRES_USE_AWS_IAM_AUTH=true`. No password exists.
 - **Exposure:** ports published on `127.0.0.1` only, with Phoenix authentication
-  off. It is not on the sandbox's network.
+  off. It is not on the sandbox's network. Phoenix 21 turns authentication on
+  for any non-loopback listen address, which inside a container is always, so
+  set `PHOENIX_ENABLE_AUTH=false` explicitly.
+- **Features off:** Phoenix 21 also enables, by default, an agent assistant with
+  server-side bash, web access, and GitHub tools, every code-sandbox provider,
+  and usage telemetry. With authentication off, anything that reaches the port
+  could use them. Set `PHOENIX_DISABLE_AGENT_ASSISTANT=true`,
+  `PHOENIX_AGENTS_DISABLE_BASH=true`, `PHOENIX_AGENTS_DISABLE_WEB_ACCESS=true`,
+  `PHOENIX_AGENTS_DISABLE_GITHUB=true`, `PHOENIX_ALLOWED_SANDBOX_PROVIDERS=NONE`,
+  and `PHOENIX_TELEMETRY_ENABLED=false`.
+- **Cost:** Phoenix's built-in price for Opus 5.5 came out about 30% below
+  Claude Code's list-price estimate. List-price cost per PR comes from the token
+  counts and our own price table, not from Phoenix's cost column.
 - **Retention:** `PHOENIX_DEFAULT_RETENTION_POLICY_DAYS=30`. Recorded tool
   content is large, and the RDS volume is shared with the application's
   development database. The volume is 20 GB and must not autoscale, because
@@ -515,26 +546,45 @@ See [FACTORY-PLAN.md](FACTORY-PLAN.md) for the staged build order. In short:
 the spikes that need no AWS, the factory code, AWS access and the two spikes
 that need it, the trace stack, the first work order, scoring, then replay.
 
-## Open items to settle in the spikes
+## Spike results
 
-1. **Token injection.** The existing proxy injects an API key header. Confirm it
-   can inject the subscription token as a bearer header, and that Claude Code
-   accepts a placeholder token. The whole design depends on this one.
-2. **AWS credentials for the Phoenix and collector containers.** They must be
-   narrow and refreshable. The plan is the signing helper's `serve` mode,
-   which listens on the host's `127.0.0.1:9911`. Confirm that a container can
-   reach it without Phoenix leaving loopback, that the sandbox cannot, and that Phoenix's IAM database login and the collector's S3
-   exporter both accept credentials from it.
-3. **Tailscale from a container.** Confirm a container can reach the RDS
-   endpoint over the host's route.
-4. **Span rendering.** Confirm Phoenix shows raw `claude_code.*` spans usefully.
-   If not, add Arize's
-   [collector bridge](https://github.com/Arize-ai/claude-code-otlp-collector).
-5. **`TRACEPARENT` with `--resume`.** Confirm resumed turns join the same trace.
-6. **Subscription headroom.** Measure one real run's token use against the
-   plan's limits before running several a day.
-7. **Thin client access.** Confirm the thin client can join the tailnet and
-   reach the development RDS endpoint under the tailnet's access rules.
+Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
+
+1. **Token injection: passed.** The proxy replaced the `x-api-key` header with
+   `Authorization: Bearer <CLAUDE_CODE_OAUTH_TOKEN>`; a sandboxed `claude -p`
+   holding only a placeholder answered on Opus. The client called only
+   `api.anthropic.com` (`/api/claude_code/settings`,
+   `/api/claude_code/policy_limits`, `/v1/messages`). `claude setup-token`
+   prints the token and writes nothing to disk.
+2. **AWS credentials for the Phoenix and collector containers:** open, Stage 4.
+3. **Tailscale from a container:** open, Stage 4.
+4. **Span rendering: passed, with the collector mapping and Phoenix settings
+   above.** Phoenix shows the interaction as AGENT, model calls as LLM, and
+   tools as TOOL, nested under `TRACEPARENT`. The bridge is not needed: its
+   repository has no releases, and its model-content path reads files the
+   worker wrote.
+5. **`TRACEPARENT` with `--resume`: passed with a workaround.** Resumed rounds
+   join one trace only after the cached-settings deletion under Tracing.
+6. **Subscription headroom and speed: passed.** A worker on a real issue (#737,
+   cut at its parent commit, Rust) finished in 341 s and 29 turns and touched
+   the same five files as the merged fix; `cargo fmt --check`, `clippy -D
+   warnings`, and `test --no-run` passed when re-run on its commit. Its new
+   e2e tests have not run anywhere. It used 1.23 M tokens (1.16 M cache reads,
+   15.5 k output), $0.97 at list price. The response header
+   `anthropic-ratelimit-unified-7d-utilization` read 0.08 before and after, so
+   one author round is under 1% of the weekly limit; the header has 0.01
+   resolution and no shorter-window header appeared. A full work order (author,
+   reviewer, up to three fix rounds) is unmeasured; the proxy can log the
+   header per work order. That round ran no test suite, so a round with pytest
+   in the loop (275 s per run) is also unmeasured.
+   A verify round of CI's required credential-free checks took 13.9 minutes
+   warm (pytest 275 s, Terraform `fmt-validate` 215 s, full-profile database
+   tests 262 s), within the 30-minute limit but run one after another, where CI
+   runs them in parallel in about 4. It ran outside the sandbox shape (root,
+   host network, host Docker socket, open internet), the golden smoke exited
+   early, and eight pytest tests failed, so treat it as a lower bound.
+7. **Thin client access:** it joined the tailnet as `factory`; reaching the RDS
+   endpoint is open, Stage 4.
 
 ## Deferred
 
