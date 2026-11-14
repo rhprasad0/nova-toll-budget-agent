@@ -94,7 +94,7 @@ def retained_version_guard(
     return source
 
 
-_WEDNESDAY_PICKER = b"""::date - 7,
+WEDNESDAY_PICKER = b"""::date - 7,
             (transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1,
             interval '1 day'
         ) AS days(day)
@@ -107,8 +107,8 @@ def retained_holiday_guard(source: bytes) -> bytes:
     # shortcut: only needed while the retained baseline predates the holiday-aware
     # picker in oracle_ballpark_contract.sql; delete once the baseline includes it.
     return source.replace(
-        _WEDNESDAY_PICKER,
-        _WEDNESDAY_PICKER.replace(b"date - 7", b"date - 14")
+        WEDNESDAY_PICKER,
+        WEDNESDAY_PICKER.replace(b"date - 7", b"date - 14")
         + b"          AND oracle.i66_tolling_active('EB', day::date + time '08:00')\n",
     )
 
