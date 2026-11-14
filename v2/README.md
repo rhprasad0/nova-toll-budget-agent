@@ -129,6 +129,9 @@ Checker/configuration changes select every group; additions, renames and deletio
 count. It rejects index/working-copy differences in checked inputs, including
 partially staged files. Resolve or stage those changes before committing; the hook
 never stashes, rewrites, restages, installs packages, or runs behavioral tests.
+A pre-push hook runs CI's quick contract-version, corpus, and oracle checks
+against the merge base with `origin/main`; it does not run pytest or the
+database contracts.
 
 The full runner checks authored Python, JavaScript, shell and workflows, including
 tests. It uses explicit configurations and resolves paths independently of the
