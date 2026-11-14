@@ -26,8 +26,9 @@ Decisions section. Still open:
 
 The machine is an HP EliteDesk 800 G2 mini: a four-core Core i5-6500T from
 2015, 16 GB of memory, and a 224 GB SSD with 86 GB free on the root volume and
-120 GB unallocated. It runs Ubuntu Server 26.04.1 LTS. Memory and disk are enough. **Processor speed is the open risk**;
-Stage 2 measures it.
+120 GB unallocated. It runs Ubuntu Server 26.04.1 LTS. Memory and disk are enough. Stage 2 found
+the processor fast enough so far: a verify round took 13.9 minutes, measured
+outside the sandbox.
 
 **It is a home lab box, by Ryan's decision.** It has no disk encryption, Secure
 Boot is off, and its TPM is version 1.2, which the signing helper cannot use.
@@ -61,10 +62,12 @@ and `docker run hello-world` succeeds without `sudo`.
 
 ## Stage 2: Run the spikes that need no AWS
 
-**Status on 2026-11-14: done.** All four passed; results, workarounds, and the
-spec changes they forced are in the spec's Spike results section. The processor
-is fast enough (a verify round took 13.9 minutes, a lower bound), and one Opus
-author round used under 1% of the weekly subscription limit.
+**Status on 2026-11-14: done.** Spikes 1, 4, and 5 passed (5 with a
+workaround); spike 6 is partly settled. Results, workarounds, and the spec
+changes they forced are in the spec's Spike results section. A verify round
+took 13.9 minutes outside the sandbox shape, and one Opus author round used
+under 1% of the weekly subscription limit. Stage 3 must show verify passing
+inside the sandbox.
 
 Run these on the thin client with a copy of `factory-scoreboard/sandbox/`, so
 they also prove the machine. Mint a subscription token with
@@ -104,9 +107,14 @@ experiments, so they do not go in the experiment journal.
    `python3 v2/scripts/check_repository.py`, since the hook only checks what
    is staged and the worker can skip it. Spike 6 found three gaps to close
    here:
-   - `v2/scripts/run_db_tests.sh`, two pytest files, and the MCP server's
-     `e2e.sh` reach Postgres through `docker exec`. Give them a path that
-     needs only the network, since the sandbox has no Docker.
+   - The database tests need Docker, which the sandbox lacks.
+     `v2/scripts/run_db_tests.sh` uses `docker exec` on the Postgres container;
+     `test_adopt_production_baseline.py` starts and stops its own database per
+     test; `test_development_migrations.py` and it skip, rather than fail,
+     without Docker; and the MCP server's `e2e.sh` starts PostGIS and DynamoDB
+     Local and copies files in with `docker cp`. Give them a path that needs
+     only the network (two PostGIS services, as CI has, plus DynamoDB Local),
+     and make `verify.sh` fail if any of them skips.
    - The golden artifact smoke needs ARM. Leave it to CI and say so in
      `verify.sh`.
    - Eight tests in `test_production_plan_workflow.py` and
@@ -115,10 +123,11 @@ experiments, so they do not go in the experiment journal.
      lacks something the GitHub runner has, or the clone differed (made from a
      bundle, with no `origin` remote and no tags).
    Build the image with `postgresql-client` (for `psql`), Node 22.22.1, and
-   Terraform 1.15.8, and bake in the Python and npm dependencies and the
-   Terraform providers for `infra/`, `v2/infra/`, and `org-circuit-breaker/`,
-   since the sandbox cannot reach PyPI, npm, or the Terraform registry. The dispatcher also deletes the worker's
-   cached settings files before every round (see the spec's Tracing section).
+   Terraform 1.15.8. Allow the hosts the setup downloads from on the proxy, as
+   the spec's Egress proxy section lists; the spike's copy allowed only
+   Anthropic and crates.io. Re-test spike 5's trace workaround in the
+   long-lived container, deleting `~/.claude.json` as well (see the spec's
+   Tracing section).
 4. Keep the copied tests passing, add one for the new trigger, and add a CI
    job that runs the `factory/` tests. Today's `ci.yml` jobs all run under
    `v2/`, so nothing would run them otherwise. **Ryan** then makes that job a
@@ -128,8 +137,10 @@ experiments, so they do not go in the experiment journal.
    rejections before.
 6. Ship as a normal PR. Nothing runs yet.
 
-**Done when:** the PR is merged, its `factory/` job passed, and the
-development delivery that follows the merge is green.
+**Done when:** `factory/verify.sh` passes on an unmodified `main` inside the
+sandbox, with none of the database tests skipped; the PR is merged, its
+`factory/` job passed, and the development delivery that follows the merge is
+green.
 
 ## Stage 4: AWS access
 
@@ -166,7 +177,9 @@ denied.
 ## Stage 5: Trace stack
 
 1. One Compose file for the proxy, the collector, and Phoenix, with Phoenix on
-   RDS through IAM authentication and published on `127.0.0.1` only.
+   RDS through IAM authentication and published on `127.0.0.1` only. Use the
+   spec's Phoenix settings (version pin, authentication and assistant off)
+   and the collector's token-count `transform`.
 2. Add the collector's S3 exporter to `factory-traces/`.
 3. Add the admission preflight: Phoenix health, proxy, and Tailscale.
 
@@ -183,7 +196,9 @@ credentials from `serve`, and stopping Phoenix makes the preflight fail.
    more. In particular, **no Workflows permission**.
 2. Finish the dispatcher: the three stations (author, reviewer, verify), the
    guard (secrets scan and protected paths), push and PR, the CI watch, the
-   shared budget of three fix rounds, and the outcome comment.
+   shared budget of three fix rounds, and the outcome comment. Have the proxy
+   log the `anthropic-ratelimit-unified-7d-utilization` response header per
+   work order, as spike 6 did.
 3. Test the guard before trusting it. Each of these work orders must end with
    no branch pushed:
    - its diff touches a protected path;

@@ -176,10 +176,11 @@ span in the trace. Each later fix round gets a span too.
    check it has to pass. The script runs the credential-free checks that CI requires and the sandbox can run,
    starting with `v2/scripts/check_repository.py` (CI's lint, format, and
    type gate) and including the end-to-end tests against the throwaway PostGIS.
-   Two gaps from spike 6: `v2/scripts/run_db_tests.sh`, two pytest files, and
-   the MCP server's `e2e.sh` drive Postgres through `docker exec`, which the
-   sandbox cannot do, so they need a network-only path first; and the golden
-   artifact smoke runs only on ARM, which the thin client is not. If it fails,
+   Spike 6 found gaps that Stage 3 of the plan must close first: the database
+   tests and the MCP server's `e2e.sh` need Docker, which the sandbox lacks
+   (and two pytest files skip rather than fail without it); the golden artifact
+   smoke runs only on ARM; and eight production-workflow tests failed outside
+   CI for an unknown reason. If it fails,
    the output goes back to the author session as a fix round, and verify runs
    again. **No branch is pushed until verify passes.**
 
@@ -256,8 +257,9 @@ and is deleted when the work order ends.
   pre-commit hook shows the author lint, format, and type errors when it
   commits. That is feedback only: the worker can edit or skip the hook, so
   verify runs the full check again.
-- **Test database:** a throwaway PostGIS container per work order, on the same
-  internal network, using the image CI uses. It holds no data and is deleted
+- **Test database:** throwaway PostGIS containers per work order (CI's
+  database job uses two, and the MCP server's tests also need DynamoDB Local),
+  on the same internal network, using the images CI uses. It holds no data and is deleted
   with the work order. Without it the worker could not run the end-to-end
   tests and would learn of failures only from CI.
 - **Credentials:** none that are real. **No GitHub token and no AWS
@@ -306,8 +308,9 @@ changes:
   subscription token as a bearer header, instead of setting an API key header.
 - Its OTLP reverse listener forwards to the collector instead of Grafana LGTM.
 
-It allows only the Anthropic hosts and the package registries, and logs every
-flow. **The sandbox cannot reach Phoenix**, which runs without authentication
+It allows only the Anthropic hosts and the package registries (PyPI, npm,
+crates.io, the Terraform registry, and the GitHub release downloads that
+`install_check_tools.sh` uses), and logs every flow. **The sandbox cannot reach Phoenix**, which runs without authentication
 and holds replayed production traces; the OTLP listener is its only path to the
 trace stack.
 
@@ -344,14 +347,19 @@ TRACEPARENT=<dispatcher span context>
 - **Content is on.** Prompts, tool inputs, and tool output are recorded, because
   evals need them. The repo is public and the sandbox holds no real secrets.
   Tool output arrives as `tool.output` span events. The model's own prompts and
-  responses are not on any span, so evals read them from the round's
-  `transcript.jsonl`.
-- **Delete the cached settings before every round.** With
-  `~/.claude/remote-settings.json` or `policy-limits.json` left by an earlier
+  responses are not on any span, so evals read them from each round's
+  `transcript.jsonl`. The dispatcher copies every transcript to
+  `factory-traces/` before it deletes the container.
+- **Delete the cached settings before every round.** With both
+  `~/.claude/remote-settings.json` and `policy-limits.json` left by an earlier
   round, Claude Code 2.1.325 starts the turn before telemetry is ready: no
   `interaction` span, `TRACEPARENT` ignored, and every other span a root of its
-  own trace. The dispatcher deletes both files and their sibling files from the worker's `~/.claude` before each round. Spike 5 traced 6 of
-  6 resumed rounds with the deletion and 0 of 3 without. This is upstream bug
+  own trace. The dispatcher deletes `~/.claude/remote-settings.json*`,
+  `~/.claude/policy-limits.json*`, and `~/.claude.json` before each round.
+  Spike 5 traced 6 of 6 resumed rounds with the first two deleted and 0 of 3
+  without, but each of its rounds ran in a fresh container, so `~/.claude.json`
+  was always new; upstream reports say a warm `~/.claude.json` (cached feature
+  flags) also breaks tracing. Re-test in the long-lived container in Stage 3. This is upstream bug
   [anthropics/claude-code#99607](https://github.com/anthropics/claude-code/issues/99607);
   re-test after each Claude Code upgrade and drop the step once it is fixed.
 - **`factory.version`** is the commit of the `factory/` directory. It is the key
@@ -362,10 +370,10 @@ TRACEPARENT=<dispatcher span context>
 The OpenTelemetry Collector (contrib image), with one traces pipeline: an OTLP
 receiver and two exporters that fail independently.
 
-- `otlphttp` to Phoenix, after a `transform` processor that copies Claude
+- `otlphttp` to Phoenix, after a `transform` processor that maps Claude
   Code's token attributes (`input_tokens`, `output_tokens`,
   `cache_read_tokens`, `cache_creation_tokens`) into OpenInference's
-  `llm.token_count.*`. Without it Phoenix counts zero tokens; with it, spike 6's
+  `llm.token_count.*` (prompt = input + cache read + cache write). Without it Phoenix counts zero tokens; with it, spike 6's
   totals matched Claude Code's own count exactly.
 - `awss3` to the existing development measurement bucket under a new
   `factory-traces/` prefix, as gzipped OTLP JSON partitioned by hour. The
@@ -374,8 +382,9 @@ receiver and two exporters that fail independently.
 
 ### Phoenix
 
-- **Image:** `arizephoenix/phoenix`, pinned to a version at or above 12.9.0 (the
-  first with RDS IAM authentication; the image ships the needed AWS libraries).
+- **Image:** `arizephoenix/phoenix:version-21.0.0`. RDS IAM authentication
+  needs 12.9.0 or later, and the settings below were checked against 21.0.0;
+  re-check them before any upgrade.
 - **Database:** `PHOENIX_POSTGRES_HOST`, `PHOENIX_POSTGRES_DB=phoenix`,
   `PHOENIX_POSTGRES_USER=phoenix_factory`,
   `PHOENIX_POSTGRES_USE_AWS_IAM_AUTH=true`. No password exists.
@@ -389,9 +398,10 @@ receiver and two exporters that fail independently.
   could use them. Set `PHOENIX_DISABLE_AGENT_ASSISTANT=true`,
   `PHOENIX_AGENTS_DISABLE_BASH=true`, `PHOENIX_AGENTS_DISABLE_WEB_ACCESS=true`,
   `PHOENIX_AGENTS_DISABLE_GITHUB=true`, `PHOENIX_ALLOWED_SANDBOX_PROVIDERS=NONE`,
-  and `PHOENIX_TELEMETRY_ENABLED=false`.
+  `PHOENIX_TELEMETRY_ENABLED=false`, and `PHOENIX_ENABLE_MCP_SERVER=false`.
 - **Cost:** Phoenix's built-in price for Opus 5.5 came out about 30% below
-  Claude Code's list-price estimate. List-price cost per PR comes from the token
+  Claude Code's list-price estimate, and Phoenix updates its price table from
+  GitHub while running. List-price cost per PR comes from the token
   counts and our own price table, not from Phoenix's cost column.
 - **Retention:** `PHOENIX_DEFAULT_RETENTION_POLICY_DAYS=30`. Recorded tool
   content is large, and the RDS volume is shared with the application's
@@ -565,7 +575,7 @@ Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
    worker wrote.
 5. **`TRACEPARENT` with `--resume`: passed with a workaround.** Resumed rounds
    join one trace only after the cached-settings deletion under Tracing.
-6. **Subscription headroom and speed: passed.** A worker on a real issue (#737,
+6. **Subscription headroom and speed: partly settled.** A worker on a real issue (#737,
    cut at its parent commit, Rust) finished in 341 s and 29 turns and touched
    the same five files as the merged fix; `cargo fmt --check`, `clippy -D
    warnings`, and `test --no-run` passed when re-run on its commit. Its new
