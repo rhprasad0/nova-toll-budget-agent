@@ -63,13 +63,12 @@ def refresh_origin(branch: str = "main") -> str:
 def database_args(work_order: str) -> list[str]:
     """The candidate PostGIS, which owns the work order's network namespace.
 
-    The published ports are never used from the host: the tests read them with
-    `docker port` and connect to 127.0.0.1 inside the shared namespace.
+    Nothing is published: Docker publishes no ports on an internal network, so
+    tests that would read `docker port` follow DISPOSABLE_DOCKER_NETWORK instead.
     """
     return [
         "--detach", "--name", f"{work_order}-db", "--label", f"{LABEL}={work_order}",
         "--network", NETWORK,
-        "--publish", "127.0.0.1:5432:5432", "--publish", "127.0.0.1:5433:5433",
         "--env", "POSTGRES_HOST_AUTH_METHOD=trust",
         POSTGIS,
     ]  # fmt: skip
@@ -161,6 +160,7 @@ def verify(job: str, profile: str | None, branch: str = "main") -> int:
             IMAGE, "run-verify.sh", job)  # fmt: skip
         run("docker", "cp", job_dir / "in", f"{work_order}:/work/in")
         started = time.monotonic()
+        (STATE / "current-job").write_text(work_order)  # the proxy tags flows with it
         with (job_dir / "verify.log").open("w") as log:
             try:
                 code = subprocess.run(["docker", "start", "--attach", work_order], stdout=log,
@@ -173,6 +173,7 @@ def verify(job: str, profile: str | None, branch: str = "main") -> int:
         )
         return code
     finally:
+        (STATE / "current-job").write_text("none")
         cleanup(work_order)
 
 
@@ -182,7 +183,7 @@ def preflight() -> None:
     mitmproxy keeps serving if its addon unloads, and then it is an open proxy.
     """
     probe = (
-        "code() { curl -s -o /dev/null -w '%{http_code}' -m 10 \"$1\"; }; "
+        "code() { curl -s --head -o /dev/null -w '%{http_code}' -m 10 \"$1\"; }; "
         'echo "$(code https://example.com) $(code https://pypi.org/simple/)"'
     )
     out = run("docker", "run", "--rm", "--network", NETWORK, "--cap-drop", "ALL",

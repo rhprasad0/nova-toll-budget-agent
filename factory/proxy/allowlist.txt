@@ -10,3 +10,10 @@ index.crates.io
 static.crates.io
 registry.terraform.io
 releases.hashicorp.com
+# GitHub release downloads, by path only: a Terraform provider that is not on
+# releases.hashicorp.com, and the CPython the package builds install with uv.
+github.com/cloudflare/terraform-provider-cloudflare/releases/download/
+github.com/astral-sh/python-build-standalone/releases/download/
+release-assets.githubusercontent.com
+# The RDS CA bundle the loader package pins:
+truststore.pki.rds.amazonaws.com/global/global-bundle.pem

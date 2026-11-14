@@ -11,7 +11,8 @@ ARG TERRAFORM_VERSION=1.15.8
 ARG TERRAFORM_SHA256=d25ce7b6902013ad905db3d2eab0be4cd905887fe88b81a6171b8d5503c31f3d
 ARG PLAYWRIGHT_VERSION=1.63.0
 
-# Debian trixie's python3 is 3.13, which v2 requires; uv never downloads one.
+# Debian trixie's python3 is 3.13, which v2 requires. The package builds still
+# have uv download its own CPython 3.13, through the proxy, as in CI.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends ca-certificates curl git jq xxd zip unzip \
       xz-utils make gcc libc6-dev python3 python3-venv postgresql-client \
@@ -56,7 +57,7 @@ ENV PATH="/home/agent/.local/bin:${PATH}" \
     SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
     NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt \
-    UV_NATIVE_TLS=1 \
-    UV_PYTHON_DOWNLOADS=never \
-    DISABLE_AUTOUPDATER=1
+    UV_SYSTEM_CERTS=1 \
+    DISABLE_AUTOUPDATER=1 \
+    CHECKPOINT_DISABLE=1
 WORKDIR /work

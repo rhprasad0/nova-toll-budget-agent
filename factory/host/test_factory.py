@@ -54,14 +54,17 @@ def test_databases_share_one_namespace_on_the_internal_network() -> None:
     )
 
 
-def test_proxy_allowlist_has_no_wildcards_or_github() -> None:
+def test_proxy_allowlist_has_no_wildcards_and_github_only_by_path() -> None:
     hosts = [
         line.strip()
         for line in (factory.FACTORY / "proxy/allowlist.txt").read_text().splitlines()
         if line.strip() and not line.startswith("#")
     ]
     assert "api.anthropic.com" in hosts
-    assert not [h for h in hosts if "*" in h or "github" in h]
+    assert not [h for h in hosts if "*" in h]
+    # GitHub only by path, and only for release downloads.
+    github = [h for h in hosts if h.startswith("github.com")]
+    assert github and all("/releases/download/" in h for h in github)
 
 
 def test_verify_script_comes_from_this_checkout() -> None:

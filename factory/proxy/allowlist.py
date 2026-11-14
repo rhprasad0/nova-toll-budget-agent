@@ -1,6 +1,7 @@
 """mitmproxy addon: the sandbox's only way out.
 
-- Hosts not in allowlist.txt get a 403, both at CONNECT and per request.
+- Hosts not in allowlist.txt get a 403, both at CONNECT and per request. An entry
+  with a path (host/prefix) allows that host only for paths under the prefix.
 - Requests to api.anthropic.com lose whatever credential the client sent and get the
   real subscription token from the proxy's own environment as a bearer header, so the
   agent never holds it. Without a token they are refused.
@@ -20,11 +21,17 @@ http = importlib.import_module("mitmproxy.http")
 Flow = Any  # mitmproxy.http.HTTPFlow
 
 HERE = Path(__file__).parent
-ALLOWED = {
+ENTRIES = [
     line.strip()
     for line in (HERE / "allowlist.txt").read_text().splitlines()
     if line.strip() and not line.startswith("#")
-}
+]
+ALLOWED = {entry for entry in ENTRIES if "/" not in entry}
+PREFIXES: dict[str, list[str]] = {}
+for entry in ENTRIES:
+    if "/" in entry:
+        host, path = entry.split("/", 1)
+        PREFIXES.setdefault(host, []).append("/" + path)
 API_HOST = "api.anthropic.com"
 OTLP_PORT = 4318  # the reverse listener that forwards telemetry to the collector
 JOB_FILE = Path("/state/current-job")
@@ -77,8 +84,16 @@ def _deny(flow: Flow) -> None:
     )
 
 
+def _allowed(host: str, path: str | None) -> bool:
+    """path is None at CONNECT, before the request line is visible."""
+    if host in ALLOWED:
+        return True
+    prefixes = PREFIXES.get(host, [])
+    return bool(prefixes) and (path is None or path.startswith(tuple(prefixes)))
+
+
 def http_connect(flow: Flow) -> None:
-    if flow.request.pretty_host not in ALLOWED:
+    if not _allowed(flow.request.pretty_host, None):
         _deny(flow)
         _log(flow, allowed=False, kind="connect")
 
@@ -86,7 +101,7 @@ def http_connect(flow: Flow) -> None:
 def request(flow: Flow) -> None:
     if _is_telemetry(flow):
         return
-    if flow.request.pretty_host not in ALLOWED:
+    if not _allowed(flow.request.pretty_host, flow.request.path):
         _deny(flow)
         _log(flow, allowed=False, kind="request")
         return
