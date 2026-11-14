@@ -174,7 +174,8 @@ span in the trace. Each later fix round gets a span too.
    sandbox. It copies the script in from its own checkout of `main` each time,
    because the worker may edit `factory/` and could otherwise rewrite the
    check it has to pass. The script runs the credential-free checks that CI requires and the sandbox can run,
-   including the end-to-end tests against the throwaway PostGIS. If it fails,
+   starting with `v2/scripts/check_repository.py` (CI's lint, format, and
+   type gate) and including the end-to-end tests against the throwaway PostGIS. If it fails,
    the output goes back to the author session as a fix round, and verify runs
    again. **No branch is pushed until verify passes.**
 
@@ -241,8 +242,13 @@ One container per work order, adapted from `factory-scoreboard/sandbox/agent/`.
 It stays alive across CI feedback rounds so the Claude session can be resumed,
 and is deleted when the work order ends.
 
-- **Image:** the repo's toolchains (Python with `uv`, Rust, Node), the browser
-  that the Playwright tests drive, and Claude Code, running as a non-root user.
+- **Image:** the repo's toolchains (Python with `uv`, Rust, Node), the pinned
+  checkers from `v2/scripts/install_check_tools.sh`, the browser that the
+  Playwright tests drive, and Claude Code, running as a non-root user. The
+  worker's clone sets `core.hooksPath` to `.githooks`, so the repo's
+  pre-commit hook shows the author lint, format, and type errors when it
+  commits. That is feedback only: the worker can edit or skip the hook, so
+  verify runs the full check again.
 - **Test database:** a throwaway PostGIS container per work order, on the same
   internal network, using the image CI uses. It holds no data and is deleted
   with the work order. Without it the worker could not run the end-to-end
