@@ -128,7 +128,11 @@ def test_asset_pins_and_archive_contract() -> None:
             content = (
                 ROOT / "v2/agent" / ("" if name.endswith(".js") else "assets") / name
             ).read_bytes()
-        assert hashlib.sha256(content).hexdigest() == digest
+        actual = hashlib.sha256(content).hexdigest()
+        assert actual == digest, (
+            f"{name} changed: set its ASSET_SHA256 pin in "
+            f"v2/scripts/cost_dashboard_release.py to {actual}"
+        )
     builder = (ROOT / "v2/scripts/build_publisher_zip.sh").read_text()
     assert '"$V2_ROOT/lambdas/publisher/costs.py"' in builder
     assert not (ROOT / "v2/prototypes").exists()
