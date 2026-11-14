@@ -530,3 +530,39 @@ def test_bundle_trust_boundaries_fail_closed(
             expected_commit,
             schema_versions,
         )
+
+
+def test_reviewed_manifest_pins_every_deployment_input() -> None:
+    root = Path(__file__).resolve().parents[2]
+    manifest = json.loads(
+        (root / "infra/development-release-manifest.json").read_text()
+    )
+    try:
+        release_manifest.verify_inputs(root, manifest["deployment_inputs"])
+    except release_manifest.Invalid as error:
+        pytest.fail(f"{error}: run python3 v2/scripts/update_release_manifest.py")
+
+
+def test_manifest_updater_refreshes_digests_and_leaves_policy_alone(
+    tmp_path: Path,
+) -> None:
+    root = Path(__file__).resolve().parents[2]
+    subprocess.run(["git", "clone", "-q", "--shared", root, tmp_path], check=True)
+    path = tmp_path / "infra/development-release-manifest.json"
+    before = json.loads(path.read_text())
+    with (tmp_path / "v2/agent_tools/currency.py").open("a") as handle:
+        handle.write("# changed\n")
+    script = tmp_path / "v2/scripts/update_release_manifest.py"
+    shutil.copy(root / "v2/scripts/update_release_manifest.py", script)
+    subprocess.run([sys.executable, script], check=True)
+    after = json.loads(path.read_text())
+    release_manifest.verify_inputs(tmp_path, after["deployment_inputs"])
+    changed = {
+        name
+        for name in before["deployment_inputs"]
+        if before["deployment_inputs"][name] != after["deployment_inputs"][name]
+    }
+    assert "v2/agent_tools/currency.py" in changed
+    assert {k: v for k, v in after.items() if k != "deployment_inputs"} == {
+        k: v for k, v in before.items() if k != "deployment_inputs"
+    }

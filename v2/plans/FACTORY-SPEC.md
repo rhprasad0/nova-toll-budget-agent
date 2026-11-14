@@ -204,6 +204,20 @@ is mounted into the sandbox.
 - in `v2/eval/EXPERIMENT_JOURNAL.md` and `v2/eval/journal/`, the diff may add
   lines but not delete or rewrite existing ones. The journal's history is
   permanent.
+- one file under `infra/` is partly open:
+  `infra/development-release-manifest.json`. It pins the digest of every
+  deployed file, most of them files the factory may edit (migrations, the
+  agent, the pricing tools), so CI fails any such change until its digest is
+  refreshed. The diff may add, remove, or change entries in `deployment_inputs`
+  and `packages` only; everything else in the file must equal `main`'s copy.
+  That keeps the
+  `mutations` and `permissions` lists, which decide what a release may do in
+  AWS, out of reach. The dispatcher makes this comparison itself. The worker
+  refreshes the file digests with `python3 v2/scripts/update_release_manifest.py`
+  and verify runs the test that checks them. A change to packaged code also
+  moves a package digest, which that test does not check: the worker must
+  build the zips and pass their checksum listing to the same script, or the
+  first CI round fails on it.
 
 Everything else is open, including `factory/`, database migrations, the pricing
 tools and oracle, and the evaluation harness. The path list cannot catch
