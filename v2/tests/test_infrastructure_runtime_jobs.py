@@ -3,7 +3,6 @@ import re
 
 from tests.infrastructure_support import (
     APPLICATION_VARIABLES,
-    CI_WORKFLOW,
     DEVELOPMENT_PLAN_WORKFLOW,
     DEVELOPMENT_TFVARS,
     ENVIRONMENT_TF,
@@ -15,6 +14,7 @@ from tests.infrastructure_support import (
     TIMED_CHECKS_MODULE,
     TIMED_CHECKS_TF,
     V2_ROOT,
+    VERIFY_SCRIPT,
     assert_assignment,
     terraform_block,
 )
@@ -424,9 +424,9 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege() -> None:
     assert "Environment = var.environment" in freshness_alarm
     assert "alarm_actions       = local.alarm_actions" in freshness_alarm
     assert (V2_ROOT / "scripts" / "build_publisher_zip.sh").exists()
-    assert "./scripts/build_publisher_zip.sh" in CI_WORKFLOW
+    assert "./scripts/build_publisher_zip.sh" in VERIFY_SCRIPT
     assert (V2_ROOT / "scripts" / "build_timed_checks_zip.sh").exists()
-    assert "./scripts/build_timed_checks_zip.sh" in CI_WORKFLOW
+    assert "./scripts/build_timed_checks_zip.sh" in VERIFY_SCRIPT
 
     publisher_invoke = terraform_block(
         MAIN_TF, 'resource "aws_lambda_function_event_invoke_config" "publisher"'

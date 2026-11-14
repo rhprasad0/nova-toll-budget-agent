@@ -78,6 +78,8 @@ differs for TollChat:
   the browser test dependencies.
 - Ryan edits factory PRs by hand when they need changes. There is no lane that
   sends review feedback back to the factory yet.
+- The sandbox gets the thin client's Docker socket, so verify can run the
+  database checks. This is a home lab trade: see Sandbox for what it gives up.
 - The root `AGENTS.md` and `CLAUDE.md` were stale and are removed in the PR
   that adds this spec. The factory may not add files with those names.
 
@@ -170,17 +172,21 @@ span in the trace. Each later fix round gets a span too.
    is adapted from the `factory-scoreboard` reviewer subagent, which only
    reports. It runs once per work order, before the first push. Commits from
    later fix rounds are verified and guarded but not reviewed again.
-3. **Verify.** The dispatcher, not a model, runs `factory/verify.sh` in the
-   sandbox. It copies the script in from its own checkout of `main` each time,
-   because the worker may edit `factory/` and could otherwise rewrite the
-   check it has to pass. The script runs the credential-free checks that CI requires and the sandbox can run,
-   starting with `v2/scripts/check_repository.py` (CI's lint, format, and
-   type gate) and including the end-to-end tests against the throwaway PostGIS.
-   Spike 6 found gaps that Stage 3 of the plan must close first: the database
-   tests and the MCP server's `e2e.sh` need Docker, which the sandbox lacks
-   (and two pytest files skip rather than fail without it); the golden artifact
-   smoke runs only on ARM; and eight production-workflow tests failed outside
-   CI for an unknown reason. If it fails,
+3. **Verify.** The dispatcher, not a model, runs `.github/scripts/verify.sh`
+   in the sandbox. That script is the body of the required `v2-loader`,
+   `fmt-validate` and `v2-database` CI jobs, so verify and CI cannot drift.
+   The dispatcher copies it in from its own checkout of `main` each time, and
+   the guard already closes `.github/` to the worker, so a work order cannot
+   drop a check from the list. The checkers and tests the script calls are
+   still open paths; Ryan's review covers a weakened test. It runs lint,
+   format and types, the tests, the package builds, and the database
+   contracts against the throwaway PostGIS. Of the gaps spike 6 found: the
+   database tests need Docker, so the sandbox gets the Docker socket (see
+   Sandbox); the golden artifact smoke runs only on ARM and stays CI-only, so
+   a failure there costs a fix round; and the eight production-workflow tests
+   failed because the image had no `xxd`, which the image must include along
+   with `jq`, `zip` and `unzip`. The MCP server's `e2e.sh` is not a required
+   check and is not part of verify. If it fails,
    the output goes back to the author session as a fix round, and verify runs
    again. **No branch is pushed until verify passes.**
 
@@ -276,6 +282,14 @@ and is deleted when the work order ends.
   on the same internal network, using the images CI uses. It holds no data and is deleted
   with the work order. Without it the worker could not run the end-to-end
   tests and would learn of failures only from CI.
+- **Docker socket:** mounted, with the Docker CLI in the image.
+  `v2/scripts/run_db_tests.sh` inspects and execs into the PostGIS containers,
+  and one test starts a container of its own. **This makes the container a
+  convention, not a boundary:** a process with the socket can start a
+  container that mounts the host's files or joins another network, which
+  reaches the GitHub token, the certificate key, and the network past the
+  proxy. The limits that still hold are the ones outside the machine: what the
+  token and the factory role may do. Ryan accepted this on 2026-11-14.
 - **Credentials:** none that are real. **No GitHub token and no AWS
   credentials.** It holds only a placeholder `CLAUDE_CODE_OAUTH_TOKEN`.
 - **Network:** an internal Docker network with no route out. The proxy is the

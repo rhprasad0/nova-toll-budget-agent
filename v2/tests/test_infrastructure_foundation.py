@@ -28,6 +28,7 @@ from tests.infrastructure_support import (
     REPO_ROOT,
     TIMED_CHECKS_TF,
     V2_ROOT,
+    VERIFY_SCRIPT,
     hcl_attribute,
     must_reject,
     terraform_block,
@@ -445,9 +446,16 @@ def test_foundation_publishes_raw_events_without_a_legacy_loader() -> None:
 def test_foundation_has_no_site_and_terraform_ci_only_validates() -> None:
     assert not (FOUNDATION_ROOT / "site.tf").exists()
     workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
-    assert workflow.count("terraform fmt -check -recursive") == 3
-    assert workflow.count("terraform init -backend=false -input=false") == 3
-    assert workflow.count("terraform validate") == 3
+    assert workflow.count("run:") == 2  # the provider cache, then the checks
+    assert "- run: .github/scripts/verify.sh terraform\n" in workflow
+    checks = VERIFY_SCRIPT.split("\nterraform_checks() {\n", 1)[1].split("\n}\n", 1)[0]
+    assert "for directory in infra v2/infra org-circuit-breaker; do" in checks
+    for command in (
+        "fmt -check -recursive",
+        "init -backend=false -input=false",
+        "validate",
+    ):
+        assert f'step terraform -chdir="$directory" {command}\n' in checks
     assert 'resource "aws_iam_role" "terraform_apply"' not in FOUNDATION_IAM
     assert 'resource "aws_iam_role" "github_ci"' not in FOUNDATION_IAM
 

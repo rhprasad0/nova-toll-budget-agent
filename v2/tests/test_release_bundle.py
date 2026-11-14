@@ -192,6 +192,14 @@ def test_timed_checks_zip_is_flat_deterministic_and_importable(tmp_path: Path) -
 
     assert digests[0] == digests[1]
     assert inventories[0] == inventories[1]
+    # pytest runs inside a virtualenv; the build must not depend on that.
+    pinned = json.loads(
+        (builder.parents[2] / "infra/development-release-manifest.json").read_text()
+    )["packages"]["timed-checks.zip"]
+    assert digests[0] == pinned, (
+        "timed-checks.zip changed: build the zips and pass their sha256sum "
+        "listing to v2/scripts/update_release_manifest.py (see v2/RUNBOOK.md)"
+    )
 
     stage = tmp_path / "timed-checks-stage"
     with zipfile.ZipFile(package) as archive:
@@ -554,7 +562,10 @@ def test_manifest_updater_refreshes_digests_and_leaves_policy_alone(
         handle.write("# changed\n")
     script = tmp_path / "v2/scripts/update_release_manifest.py"
     shutil.copy(root / "v2/scripts/update_release_manifest.py", script)
+    stale = subprocess.run([sys.executable, script, "--check"], check=False)
+    assert stale.returncode == 1 and json.loads(path.read_text()) == before
     subprocess.run([sys.executable, script], check=True)
+    subprocess.run([sys.executable, script, "--check"], check=True)
     after = json.loads(path.read_text())
     release_manifest.verify_inputs(tmp_path, after["deployment_inputs"])
     changed = {
