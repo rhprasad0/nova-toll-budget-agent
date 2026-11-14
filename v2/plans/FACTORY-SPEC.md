@@ -355,8 +355,10 @@ receiver and two exporters that fail independently.
   off. It is not on the sandbox's network.
 - **Retention:** `PHOENIX_DEFAULT_RETENTION_POLICY_DAYS=30`. Recorded tool
   content is large, and the RDS volume is shared with the application's
-  development database. It starts at 20 GB and autoscales to 40 GB, so trace
-  growth first raises the AWS bill and then fills the volume. Phoenix holds a
+  development database. The volume is 20 GB and must not autoscale, because
+  that would raise the AWS bill; a separate infrastructure change turns
+  autoscaling off for development. If traces fill the volume, the
+  development database goes down. Phoenix holds a
   working window and S3 holds the long-term copy. Measure the database's size
   after the first five work orders and raise the number if there is room.
 - **Projects:** `tollchat-factory` for factory runs; `tollchat-agent-dev` and
