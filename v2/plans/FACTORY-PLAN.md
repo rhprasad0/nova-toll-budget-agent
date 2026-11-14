@@ -19,6 +19,14 @@ Decisions section. Still open:
 - **Does replaying production traces into Phoenix fit the public privacy
   notice?** Check before building the production mode (Stage 8).
 - **Training evals on factory PRs** (see Not in this plan).
+- **Confirm the inbox and dashboard details** in the spec's Inbox and Dashboard
+  sections before Stage 3 step 4: SQLite on the thin client, admission at
+  dequeue, cancel by removing the label, one retry after the runner dies with
+  nothing pushed, and a read-only dashboard on `127.0.0.1:6007`.
+- **What the runner does on a 7-day subscription limit.** The spec's one-hour
+  pause suits a short window; a weekly limit would fail every queued work
+  order an hour apart. Decide once the per-work-order utilization readings
+  from Stage 6 show how close the factory runs to it.
 
 ## Stage 1: Reformat the thin client
 
@@ -51,11 +59,12 @@ GitHub and AWS: what the token and the role are allowed to do.
 **Do not copy onto it:** the evaluation holdout, `~/.aws` from the workstation,
 or any production profile.
 
-**Reaching Phoenix.** The thin client has no screen and Phoenix listens only on
-its loopback. Browse it from the workstation through an SSH tunnel over
-Tailscale: `ssh -L 6006:127.0.0.1:6006 <user>@<thin client>`, then open
-`http://localhost:6006`. Phoenix links in issue comments work only while that
-tunnel is open.
+**Reaching Phoenix and the dashboard.** The thin client has no screen, and
+Phoenix and the dashboard listen only on its loopback. Browse them from the
+workstation through an SSH tunnel over Tailscale:
+`ssh -L 6006:127.0.0.1:6006 -L 6007:127.0.0.1:6007 <user>@<thin client>`, then
+open `http://localhost:6006` (Phoenix) or `http://localhost:6007` (dashboard).
+Phoenix links in issue comments work only while that tunnel is open.
 
 **Done when:** from the workstation, `ssh <user>@<thin client>` works over Tailscale,
 and `docker run hello-world` succeeds without `sudo`.
@@ -92,8 +101,8 @@ experiments, so they do not go in the experiment journal.
 
 1. Copy the needed pieces of `factory-scoreboard/sandbox/` into `factory/`:
    the dispatcher (`host/`), the worker image (`agent/`), the proxy, the
-   collector config, the Compose file, and the systemd unit. Leave out the
-   oracle, the host graders, Grafana, and Tetragon.
+   collector config, and the Compose file. Leave out the oracle, the host
+   graders, Grafana, Tetragon, and the systemd units, which step 4 replaces.
 2. Apply the spec's differences that need no AWS: bearer-token injection, the
    `factory` label trigger, and the TollChat toolchains in the worker image.
    The worker's clone runs the setup block under "Verify the build" in
@@ -124,14 +133,36 @@ experiments, so they do not go in the experiment journal.
    Anthropic and crates.io. Re-test spike 5's trace workaround in the
    long-lived container, deleting `~/.claude.json` as well (see the spec's
    Tracing section).
-4. Keep the copied tests passing, add one for the new trigger, and add a CI
+4. Split the dispatcher into poller and runner around the inbox and add the
+   dashboard, as the spec's Inbox and Dashboard sections describe. Three
+   systemd units replace `factory-scoreboard`'s one-shot poll pass with its
+   45-minute timeout: a timer that runs the poller every 60 seconds and
+   finishes in seconds, a long-running runner service, and the dashboard
+   service. The stations, push, and outcome steps are Stage 6 work, so stub
+   them here. Test the inbox with GitHub's responses faked (it is a
+   credentialed service):
+   - the overlapping re-read records nothing twice;
+   - a cold start rebuilds the queue from labeled open issues;
+   - two `labeled` events run oldest first;
+   - an `unlabeled` event drops a queued one but not a newer re-label, and
+     marks a running work order cancelled only if it is newer than the event
+     that started it;
+   - a stale event whose label is gone is dropped silently;
+   - a second runner exits on the lock;
+   - on restart, an orphaned `running` event returns to `pending`, and a
+     work order that died with no branch on GitHub is queued again once,
+     while one with a branch ends `crashed`.
+
+   Test the dashboard against a seeded inbox: it renders every section,
+   escapes an issue title containing HTML, and refuses `POST`.
+5. Keep the copied tests passing, add one for the new trigger, and add a CI
    job that runs the `factory/` tests. Today's `ci.yml` jobs all run under
    `v2/`, so nothing would run them otherwise. **Ryan** then makes that job a
    required check, since the dispatcher waits only on required checks.
-5. Before opening the PR, check how development delivery and the release
+6. Before opening the PR, check how development delivery and the release
    manifest treat a new top-level directory. PR CI has missed delivery
    rejections before.
-6. Ship as a normal PR. Nothing runs yet.
+7. Ship as a normal PR. Nothing runs yet.
 
 **Done when:** `.github/scripts/verify.sh` passes on an unmodified `main` inside the
 sandbox, with none of the database tests skipped; the PR is merged, its
@@ -190,11 +221,13 @@ credentials from `serve`, and stopping Phoenix makes the preflight fail.
    pull requests, and issues, and to read check results and failed job logs.
    Confirm the exact permission names when creating it, and grant nothing
    more. In particular, **no Workflows permission**.
-2. Finish the dispatcher: the three stations (author, reviewer, verify), the
+2. Finish the runner: the three stations (author, reviewer, verify), the
    guard (secrets scan and protected paths), push and PR, the CI watch, the
-   shared budget of three fix rounds, and the outcome comment. Have the proxy
-   log the `anthropic-ratelimit-unified-7d-utilization` response header per
-   work order, as spike 6 did.
+   shared budget of three fix rounds, the cancel checks, the outcome comment
+   and label removal, and the sweep of `closed` events. Have the proxy log the
+   `anthropic-ratelimit-unified-7d-utilization` response header per work
+   order, as spike 6 did, and the runner store the reading in the inbox for
+   the dashboard.
 3. Test the guard before trusting it. Each of these work orders must end with
    no branch pushed:
    - its diff touches a protected path;
@@ -208,20 +241,31 @@ credentials from `serve`, and stopping Phoenix makes the preflight fail.
    checks: an issue written by another account is refused, and direct pushes
    with the factory token that edit a workflow file, change `main`, or move a
    release tag are all rejected by GitHub.
+
+   Then test the inbox against real GitHub: two issues labeled a minute apart
+   run one after the other; removing the label mid-round stops the container
+   and pushes nothing more, and the label stays off; removing and re-adding
+   it mid-run cancels the run and then starts a new one; killing the runner
+   after its first push and restarting it pushes nothing more and ends
+   `crashed`; and stopping the
+   dashboard changes nothing. Note how long a label takes to appear in the
+   issue events feed.
 4. **Ryan:** label one small, real issue.
-5. Enable the systemd unit so the poller survives a reboot. It runs the
-   dispatcher from a checkout of `main` that only Ryan updates.
+5. Enable the three systemd units (poller timer, runner, dashboard) so the
+   factory survives a reboot. They run from a checkout of `main` that only
+   Ryan updates.
 
 **Done when:** that issue becomes a PR that is ready for review, with one trace
-in Phoenix and the outcome comment on the issue.
+in Phoenix and the outcome comment on the issue, and the dashboard showed it
+move through its stations while it ran.
 
 ## Stage 7: Scoring plumbing
 
 No experiments yet; this stage only makes sure the data exists.
 
-1. Write the outcome annotations onto the `work_order` span.
-2. Add the sweep that records how each factory PR closed.
-3. Measure the Phoenix database's size and raise the 30-day retention if there
+1. Write the outcome annotations onto the `work_order` span, and the sweep's
+   `merged` and `human_commits` (the sweep itself is built in Stage 6).
+2. Measure the Phoenix database's size and raise the 30-day retention if there
    is room.
 
 **Done when:** merge rate, first-pass CI rate, and list-price cost per merged
@@ -243,8 +287,11 @@ the thin client.
 
 ## Not in this plan
 
-- The spec's deferred items: factory experiments, a lane for PR review
-  feedback, a separate test author, a rubric grader, and the other lanes.
+- The spec's deferred items: factory experiments, lanes for PR review
+  feedback and clarification replies, dashboard controls, the article's
+  timers and outbox, parallel work orders, AWS alarm events in the inbox, a
+  separate test author, a rubric
+  grader, and the other lanes.
 - Workstation Claude Code telemetry. Ryan dropped it.
 - Running training evals on factory PRs. Required CI does not include them
   today, so the first version does not verify agent behaviour. Decide after

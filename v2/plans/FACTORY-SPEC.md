@@ -26,6 +26,8 @@ differs for TollChat:
 | Result | Lands on `main`, no PR | PR, ready for review; a human merges |
 | Verification | Hidden oracle and host graders | The repo's required CI checks |
 | Trace store | Grafana LGTM | Phoenix on RDS, plus S3 |
+| Intake | One-shot poll pass runs each job inline | A poller fills a SQLite inbox; one runner empties it |
+| Run view | Grafana run dashboard | Local read-only dashboard, plus Phoenix |
 
 ## Decisions
 
@@ -82,6 +84,14 @@ differs for TollChat:
   database checks. This is a home lab trade: see Sandbox for what it gives up.
 - The root `AGENTS.md` and `CLAUDE.md` were stale and are removed in the PR
   that adds this spec. The factory may not add files with those names.
+- Ryan has since added a new two-line root `CLAUDE.md` (work in git worktrees;
+  fix root causes). The worker loads it from its copy of `main`, so the worker
+  instructions override the worktree rule (see Sandbox).
+- After reading [Building always-on agents](https://claude.com/resources/articles/building-always-on-agents):
+  work arrives through a durable event inbox, and a dashboard served locally
+  on the thin client shows the factory's state (see Inbox and Dashboard). The
+  details in those sections are proposals until Ryan confirms them; see the
+  plan's open decisions.
 
 ## Architecture
 
@@ -94,7 +104,10 @@ flowchart TB
   end
 
   subgraph machine["Factory thin client (Docker)"]
-    dispatcher["Dispatcher<br/>poll, admit, guard, push, watch"]
+    poller["Poller<br/>every 60 s, records events"]
+    inbox[("Inbox<br/>SQLite")]
+    dispatcher["Runner<br/>admit, guard, push, watch"]
+    dashboard["Dashboard<br/>127.0.0.1:6007, read-only"]
     sandbox["Sandbox container<br/>author, reviewer, verify"]
     testdb[("Throwaway PostGIS<br/>for tests")]
     proxy["Egress proxy<br/>allowlist, token injection"]
@@ -111,7 +124,9 @@ flowchart TB
 
   agenttraces[("S3 agentcore-traces/<br/>existing, one bucket per account")]
 
-  issue -->|"1 poll"| dispatcher
+  issue -->|"1 poll"| poller -->|"enqueue"| inbox
+  inbox -->|"one at a time"| dispatcher
+  inbox -.->|"read"| dashboard
   dispatcher -->|"2 base bundle, prompt"| sandbox
   sandbox -->|"3 work bundle"| dispatcher
   sandbox --- testdb
@@ -132,16 +147,25 @@ flowchart TB
 
 ### Dispatcher
 
-A single Python script adapted from `factory-scoreboard/sandbox/host/factory.py`.
-It polls every 60 seconds and handles **one work order at a time**. It holds the
-GitHub login; the sandbox never does.
+One Python script adapted from `factory-scoreboard/sandbox/host/factory.py`,
+run as two processes that share the inbox below: a **poller** that records what
+changed on GitHub every 60 seconds and exits, and a long-running **runner** that
+takes events from the inbox and handles **one work order at a time**. Both hold
+the GitHub login; the sandbox, and the `claude -p` worker in it, never do.
+"Dispatcher" below means either process; "worker" always means the sandboxed
+agent. In `factory-scoreboard` one poll pass
+ran each job inline, so nothing new was seen while a job ran.
 
 **It runs from a checkout of `main` on the thin client, never from a branch it
 is pushing.** The factory may propose changes to its own guard, path list, and
 worker prompt, so those changes must take effect only after Ryan merges them
 and updates that checkout by hand.
 
-**Admission.** An issue is admitted when all of these hold:
+**Admission.** The runner checks admission when it takes a `labeled` event from
+the inbox, not when the poller records it, because a queued event can wait for
+hours. If the issue no longer carries the label by then, the event is dropped
+without a comment: it was cancelled or already handled. Otherwise the issue is
+admitted when all of these hold:
 
 - it is open and carries the `factory` label, and the repository owner both
   wrote the issue and added the label;
@@ -154,11 +178,12 @@ label. An admitted issue gets a "started" comment.
 
 Separately, the factory admits nothing while Phoenix's health check or the
 proxy preflight fails. With no trace store, the factory does not run. Labeled
-issues keep their label and wait.
+issues keep their label and their place in the queue.
 
-**Run.** The dispatcher copies a git bundle of current `main` and a prompt (issue
-number, title, and body) into a new sandbox container, then runs the three
-stations below in it.
+**Run.** At admission the runner fetches the issue's current title and body and
+a git bundle of current `main`, copies them into a new sandbox container as the
+prompt and base, then runs the three stations below in it. The inbox stores
+only the issue number and the event, never the text.
 
 **Stations.** Each is a separate step the dispatcher starts, with its own child
 span in the trace. Each later fix round gets a span too.
@@ -170,7 +195,8 @@ span in the trace. Each later fix round gets a span too.
    it. It checks the change against the issue, looks for missing or weakened
    tests, bloat, and slop, then **fixes what it finds and commits**. Its prompt
    is adapted from the `factory-scoreboard` reviewer subagent, which only
-   reports. It runs once per work order, before the first push. Commits from
+   reports, and carries worker instruction 4 (no git worktree), since it also
+   loads the repo's `CLAUDE.md`. It runs once per work order, before the first push. Commits from
    later fix rounds are verified and guarded but not reviewed again.
 3. **Verify.** The dispatcher, not a model, runs `.github/scripts/verify.sh`
    in the sandbox. That script is the body of the required `v2-loader`,
@@ -250,18 +276,142 @@ failure it sends the failed job logs into the author's Claude session
 3 fix rounds. Each round's new commits pass verify and the guard again before
 they are pushed.
 
+**Cancel.** Removing the `factory` label cancels the work order. The poller
+marks the cancel on the work order row (see Inbox). The runner checks that mark
+once a minute while a round or the CI wait runs, between stations, and
+immediately before every push, PR, or comment. On a cancel it stops and deletes
+the work order's containers, pushes nothing further, leaves any open PR as it
+is, posts the outcome comment, and ends with outcome `cancelled`. It does not
+touch the label: Ryan already removed it, and he may have added it back to
+start over. A round is not resumed after a cancel.
+
 **Outcome.** One comment on the issue replaces the "started" comment: PR link,
 CI result, rounds used, token totals, and a link to the trace in Phoenix. The
-label is removed and the container is deleted.
+label is removed (except after a cancel) and the work order's containers are
+deleted.
 
 **After the PR opens, changes are Ryan's.** He edits the branch by hand. To
 have the factory start over instead, he closes the PR, deletes the branch, and
 re-adds the label; admission refuses an issue that still has a PR or branch.
 
-**Sweep.** On each poll the dispatcher also looks for factory PRs that have
-closed since the last poll and records how they ended (see Evals).
+**Sweep.** The poller also records a `closed` event when a PR that a work order
+opened closes. The runner handles these between work orders and records how
+each PR ended, on the work order row and in Phoenix (see Evals).
 
 The factory never requests Codex reviews.
+
+### Inbox
+
+The design follows the event inbox in
+[Building always-on agents](https://claude.com/resources/articles/building-always-on-agents):
+sources write events to a durable list, a handler records them quickly, and a
+single worker reads the list. Here the handler is the poller, the reader is the
+runner, and the list is a SQLite file in the host state directory,
+`~/.local/state/factory/inbox.db`, read and written with Python's standard
+`sqlite3` module in WAL mode. It is not mounted into the sandbox and is not on
+RDS, which goes down with the circuit breaker and shares the development
+database's 20 GB volume.
+
+- **Sources.** One: the repository's issue events
+  (`GET /repos/{owner}/{repo}/issues/events`, newest first). Each poll reads
+  until it reaches events more than five minutes older than the newest one the
+  previous poll saw, so an event GitHub lists late is still picked up. It
+  records three kinds: `labeled` and `unlabeled` for the `factory` label, and
+  `closed` for PRs that work orders opened. Everything else is ignored. Each
+  event names its actor, which is how admission knows who added the label.
+  Events also carry the full issue body; the poller keeps only the fields
+  under Rows. Webhooks are not used: the thin client has no public address.
+- **Cold start.** With no inbox (first start, or a lost file), the poller lists
+  the open issues that carry the label and records each one's latest `labeled`
+  event from that issue's own events, oldest first. Ordinary polling then
+  takes over.
+- **Deduplication.** Each event's key is GitHub's event ID, which is unique, so
+  the overlapping re-read records nothing twice, and a re-label after Ryan
+  closes a PR is a new event.
+- **Rows.**
+  - An event: key, kind, issue number, actor, time, and a status (`pending`,
+    `running`, `done`, or `dropped`).
+  - A work order: the issue, its title as fetched at admission (for the
+    dashboard only), the event that started it, start and end times, base
+    commit, current station and round, trace ID, PR link, a cancel mark,
+    outcome, whether the outcome comment and label removal were posted,
+    tokens, list-price cost, the subscription utilization reading, and, from
+    the sweep, whether the PR merged and when it closed. Transcripts stay on
+    disk and in `factory-traces/`; the row keeps the path.
+  - One status row: the poll position, the last poll time, the runner's
+    heartbeat (updated every minute, idle or busy), the last preflight result,
+    and any rate-limit pause.
+- **Order.** `labeled` events run oldest first, one work order at a time. The
+  runner does not start a second work order while one waits on CI, because the
+  machine has four cores and verify takes about 14 minutes. The poller applies
+  each `unlabeled` event in the same transaction that records it:
+  - it drops every pending `labeled` event for that issue with a smaller ID;
+  - it sets the cancel mark on that issue's running work order if the event
+    that started the work order has a smaller ID and no outcome is recorded.
+
+  The runner records an outcome before it removes a label, and a cancel
+  removes no label, so the factory's own removals cancel and drop nothing that
+  Ryan started.
+- **One runner.** The runner takes an exclusive `flock` on a separate lock file
+  next to the inbox before it starts, so a second copy, such as a manual run
+  beside the systemd service, exits at once.
+- **Restart.** When the runner starts, it settles what the previous runner left:
+  - An event marked `running` with no work order goes back to `pending`.
+  - A work order with an outcome that was not posted gets its outcome comment
+    and label removal now.
+  - A work order with no outcome means the previous runner died mid-run (a
+    crash, an out-of-memory kill, or a reboot). The runner copies the leftover
+    transcripts, deletes every container and network labeled with that work
+    order's ID (the sandbox, the test databases, and anything the tests
+    started through the socket), records outcome `crashed`, and ends its
+    `work_order` span so evals see the dead attempt. It then asks GitHub
+    whether `factory/issue-N` exists, because a local "pushed" flag could lag a
+    push the runner died during. If the branch does not exist and the event
+    has not been retried, the event goes back to `pending` and passes normal
+    admission again, so a cancel recorded while the runner was down still
+    applies. Otherwise it posts the crash comment and removes the label. The
+    label covers one run, so the factory never pushes to a branch a dead
+    runner left.
+
+Not built, because the factory does not need them yet: the article's timers
+(follow-ups and schedules) and its outbox. Comments and pushes go to GitHub
+directly.
+
+### Dashboard
+
+A page that answers "what is the factory doing now" without reading logs. It
+complements Phoenix, which answers "what did a run do".
+
+- **Server.** A small Python script using the standard `http.server` and
+  `sqlite3` modules. It opens the inbox read-only and renders one HTML page
+  that reloads every 10 seconds. No JavaScript, no external assets. It runs as
+  its own systemd service, so it stays up when the runner is stopped or has
+  crashed, which is when it is most useful.
+- **Exposure.** Like Phoenix: listening on `127.0.0.1:6007` on the host only,
+  not on the sandbox network, no authentication, and browsed from the
+  workstation through the same SSH tunnel.
+- **Read-only.** It answers only `GET`. Controls stay where they already are:
+  add or remove the `factory` label on GitHub, and stop or start the systemd
+  units. With the Docker socket a work order can reach the host's loopback, so
+  a write endpoint would be one more thing it could drive.
+- **Content.**
+  - health: time of the last poll, the runner's heartbeat, the last admission
+    preflight result for Phoenix, the proxy, and Tailscale, and any rate-limit
+    pause with its end time, so an idle queue is not mistaken for a hang;
+  - now: the running work order's issue, station, fix rounds used of 3,
+    time since it started, and its Phoenix trace link;
+  - queue: pending events by issue number, oldest first (titles appear once a
+    work order has fetched them);
+  - history: recent work orders with outcome, rounds, tokens, list-price cost,
+    PR link, and whether it merged;
+  - the latest `anthropic-ratelimit-unified-7d-utilization` reading.
+- **Not shown:** trace content, transcripts, and proxy flow logs. Those stay in
+  Phoenix, S3, and the state directory. Issue titles come from GitHub and are
+  HTML-escaped.
+- A dashboard that is down stops nothing. Admission does not check it.
+
+It replaces the Grafana run dashboard that `factory-scoreboard` linked from
+its job reports. Outcome comments keep only the Phoenix link.
 
 ### Sandbox
 
@@ -287,8 +437,8 @@ and is deleted when the work order ends.
   and one test starts a container of its own. **This makes the container a
   convention, not a boundary:** a process with the socket can start a
   container that mounts the host's files or joins another network, which
-  reaches the GitHub token, the certificate key, and the network past the
-  proxy. The limits that still hold are the ones outside the machine: what the
+  reaches the GitHub token, the certificate key, the inbox, and the network
+  past the proxy. The limits that still hold are the ones outside the machine: what the
   token and the factory role may do. Ryan accepted this on 2026-11-14.
 - **Credentials:** none that are real. **No GitHub token and no AWS
   credentials.** It holds only a placeholder `CLAUDE_CODE_OAUTH_TOKEN`.
@@ -318,7 +468,9 @@ and the factory's AWS credentials but none of Ryan's other work. As in
 2. Before changing behavior, write a test that fails for the reported reason.
    Prefer end-to-end tests; fake only paid or credentialed services.
 3. Make the smallest change that passes it. Run only the relevant tests.
-4. Commit on the branch. Do not push.
+4. Commit on the branch in the clone you were given. Do not create a git
+   worktree, even though the repo's `CLAUDE.md` asks for one: the sandbox is
+   already isolated, and the dispatcher bundles only that branch. Do not push.
 5. End with a final message that summarizes the change and shows the test's
    output before and after. The dispatcher uses it as the PR body.
 6. Leave the application agent's model and prompt unchanged unless the issue
@@ -486,7 +638,7 @@ pushes or posts is visible before Ryan reviews it. These rules follow from that.
   branch code with credentials would break it.
 - **Traces stay private.** Trace content goes to Phoenix and S3 only. The
   Phoenix link in an issue comment is a `localhost` address that works for no
-  one else.
+  one else. The dashboard is loopback-only in the same way.
 - **Machine-specific values stay off GitHub.** The certificate's common name
   and the Roles Anywhere ARNs are read from the
   thin client's environment, not committed in `factory/`.
@@ -554,7 +706,7 @@ span in Phoenix:
 
 | Annotation | Written | Meaning |
 | --- | --- | --- |
-| `outcome` | At the end of the run | `pr_ready`, `needs_clarification`, `guard_blocked`, `verify_failed`, `ci_exhausted`, or `crashed`. |
+| `outcome` | At the end of the run | `pr_ready`, `needs_clarification`, `guard_blocked`, `verify_failed`, `ci_exhausted`, `cancelled`, or `crashed`. |
 | `reviewer_changed` | At the end of the run | Whether the reviewer committed anything, and how many lines. |
 | `ci_first_pass` | At the end of the run | Required checks passed with no feedback round. |
 | `ci_rounds` | At the end of the run | Fix rounds used (0 to 3), counting verify and CI failures. |
@@ -576,7 +728,11 @@ Granular output stays in Phoenix and S3, never in commits.
 | The session crashes or times out | Comment on the issue, remove the label, keep the container's transcript in the job's state directory. |
 | Verify never passes within the 3 fix rounds | No PR opens; `outcome` is `verify_failed`. |
 | CI still fails after the 3 fix rounds | The PR stays open with a comment; `outcome` is `ci_exhausted`. |
-| The subscription rate limit is hit | The run ends as `crashed`; re-label later. |
+| The subscription rate limit is hit | The run ends as `crashed`; re-label later. The runner waits an hour before taking the next event, so the queue behind it is not burned the same way; queued events keep their place. |
+| The runner dies mid-run (crash, out-of-memory kill, reboot) | On restart: run the event again once if nothing was pushed, otherwise `crashed` (see Inbox). |
+| The `factory` label is removed during a run | The work order is cancelled; `outcome` is `cancelled`. |
+| The inbox file is lost | The poller rebuilds the queue from the open issues that carry the label (see Inbox). An issue whose run ended without a branch, and whose label removal was lost with the inbox, can run once more; admission refuses any issue that has a branch or PR. |
+| The dashboard is down | Nothing else changes. |
 
 ## Build order
 
@@ -633,7 +789,28 @@ rough order of likely value:
   base commit), rerun at a new `factory.version` to compare a prompt, model, or
   station, with each experiment recorded in the journal. Reruns push nothing;
 - a lane that sends Ryan's PR review comments back to the factory for another
-  round on the same branch;
+  round on the same branch, and one that resumes a `NEEDS CLARIFICATION` work
+  order from Ryan's reply. The inbox makes both cheaper: each is one more event
+  kind that resumes an existing session;
+- dashboard controls (cancel, retry, pause), the article's timers and outbox,
+  and running more than one work order at a time;
+- AWS events as an inbox source, pulled from one SQS queue in the development
+  account that the poller reads and deletes from, keyed by the source event's
+  ID. CloudWatch alarm state changes and AWS Health events arrive through
+  EventBridge rules. Rules are regional and a cross-account target must be in
+  the rule's Region, so each account needs a rule in every Region whose alarms
+  matter, or a queue per Region. Production's rules send across accounts,
+  which needs an execution role in production as well as the queue's policy,
+  so production IAM is part of the change. Budgets and Cost Anomaly Detection
+  alerts do not go to EventBridge; they go to SNS, with the queue subscribed to
+  the topic. The factory role stays in development and gains only receive and
+  delete on that one queue. All of it is Terraform in `infra/`, through a
+  normal PR that Ryan applies. An alarm never authorizes a push: it opens or
+  comments on an issue, or shows on the dashboard, and Ryan's label still
+  starts the work, which makes this part of the triage lane below. Alarm text
+  is evidence, not instructions. The circuit breaker's own alert stays on
+  email, because when it trips the factory is stopped, and the breaker's SCPs
+  may block both the delivery and the read;
 - a separate agent that writes and reruns the acceptance test, so the author does
   not verify its own fix;
 - a rubric grader that sends the session back to revise;
