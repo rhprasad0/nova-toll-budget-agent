@@ -1,0 +1,31 @@
+# Long-running factory services. Sandbox and test-database containers are
+# started per work order by host/dispatcher.py, never by compose. The collector
+# and Phoenix join in Stage 5.
+name: factory
+
+networks:
+  internal:
+    name: factory-internal
+    internal: true # no route out: the proxy is the only way off this network
+  egress:
+    name: factory-egress
+
+services:
+  proxy:
+    build: ./proxy
+    image: factory-proxy:dev
+    command:
+      - mitmdump
+      - --mode
+      - regular@8080
+      - -s
+      - /addon/allowlist.py
+    environment:
+      # Passed in by the dispatcher's environment; never written to a file.
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+    volumes:
+      # The image's entrypoint runs mitmdump as whoever owns the CA directory.
+      - ${HOME}/.local/state/factory/certs:/home/mitmproxy/.mitmproxy
+      - ${HOME}/.local/state/factory:/state
+    networks: [internal, egress]
+    restart: unless-stopped
