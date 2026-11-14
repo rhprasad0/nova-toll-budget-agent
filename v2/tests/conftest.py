@@ -2,9 +2,26 @@
 
 import json
 import shutil
+from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
+
+# GitHub's runners ship these; a bare image does not, and the tests that shell out
+# to them fail far from the cause. Terraform, Gitleaks, Docker and psql are optional:
+# their tests skip.
+REQUIRED_TOOLS = ("jq", "xxd", "zip", "unzip")
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    missing = [tool for tool in REQUIRED_TOOLS if shutil.which(tool) is None]
+    if missing:
+        pytest.exit(
+            f"Missing required tools: {', '.join(missing)}. See 'Verify the build' "
+            "in v2/README.md.",
+            returncode=2,
+        )
 
 
 @pytest.fixture
@@ -49,3 +66,20 @@ def grader_reference_data(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         golden, "ROOT", Path(__file__).parent / "fixtures/golden-grader"
     )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item: pytest.Item) -> Generator[None, Any]:
+    """Show private-stage stderr logs when a test fails.
+
+    run_private_stage.sh keeps a stage's stderr out of the workflow log by design,
+    so a failing workflow-shell test otherwise reports only reason=unclassified.
+    """
+    report = (yield).get_result()
+    tmp_path = getattr(item, "funcargs", {}).get("tmp_path")
+    if report.when != "call" or not report.failed or tmp_path is None:
+        return
+    for log in sorted(tmp_path.rglob("*.err")):
+        text = log.read_text(errors="replace").strip()
+        if text:
+            report.sections.append((f"private stage stderr: {log.name}", text[-2000:]))

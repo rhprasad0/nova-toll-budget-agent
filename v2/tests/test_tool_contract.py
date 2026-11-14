@@ -28,6 +28,14 @@ def _manifest() -> dict[str, Release]:
     return json.loads(_MANIFEST_PATH.read_text())
 
 
+def _bump(digest: str) -> str:
+    return (
+        "the tool contract changed: add a newer release with digest "
+        f"{digest} to v2/agent_tools/contract-manifest.json, make it current, "
+        "and update the version asserted in this test"
+    )
+
+
 def _digest(value: object) -> str:
     canonical = json.dumps(
         value,
@@ -66,9 +74,8 @@ def test_runtime_spec_and_generated_contract_match_models() -> None:
 def test_generated_contract_matches_versioned_digest() -> None:
     manifest = _manifest()["get_current_toll_price"]
     assert manifest["current"] == "1.6.0"
-    assert (
-        _digest(pricing_tool.TOOL_CONTRACT) == manifest["releases"][manifest["current"]]
-    )
+    digest = _digest(pricing_tool.TOOL_CONTRACT)
+    assert digest == manifest["releases"][manifest["current"]], _bump(digest)
 
 
 def test_ballpark_runtime_contract_matches_models_and_manifest() -> None:
@@ -97,7 +104,8 @@ def test_ballpark_runtime_contract_matches_models_and_manifest() -> None:
     assert expected == ballpark_tool.TOOL_CONTRACT
     manifest = _manifest()["get_annual_toll_ballpark"]
     assert manifest["current"] == "3.0.1"
-    assert _digest(expected) == manifest["releases"][manifest["current"]]
+    digest = _digest(expected)
+    assert digest == manifest["releases"][manifest["current"]], _bump(digest)
 
 
 def test_manifest_accepts_new_contract_with_preserved_one_dot_zero_release() -> None:

@@ -122,6 +122,12 @@ versions yourself. Python dependencies are locked in `uv.lock`; ESLint and
 TypeScript are development dependencies locked in `package-lock.json`. No
 JavaScript compilation is required.
 
+The tests also shell out to `jq`, `xxd`, `zip` and `unzip` (on Debian, the
+packages of the same names) and stop at startup if one is missing. GitHub's
+runners ship them; a bare container image does not. Tests that need Terraform
+1.15.8, Gitleaks, Docker or `psql` skip without them, so a skip locally can
+still be a failure in CI.
+
 Fresh clones need this setup: Git does not automatically enable repository hooks.
 **CI is the authoritative gate** because local hooks can be bypassed. The hook
 requires Gitleaks on every commit and checks each affected language group in full.

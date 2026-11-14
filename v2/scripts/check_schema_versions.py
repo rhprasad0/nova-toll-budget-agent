@@ -216,7 +216,11 @@ def validate_schema_update(
         if version_tuple(current) <= version_tuple(previous):
             raise ValueError(
                 f"{schema_name} contract changed without advancing {previous}; "
-                f"current is {current}: {', '.join(versioned_changes)}"
+                f"current is {current}: {', '.join(versioned_changes)}. Raise the "
+                f"{schema_name} schema version in its canonical SQL (the header "
+                "comment and the schema_version insert) and add "
+                f"v2/db/migrations/NNN_upgrade_{schema_name}_{previous.replace('.', '_')}"
+                "_to_<new, as 1_2_3>.sql"
             )
         remaining = added_versions.copy()
         chain_version = previous
@@ -225,7 +229,9 @@ def validate_schema_update(
             if len(matches) != 1:
                 raise ValueError(
                     f"{schema_name} {previous} -> {current} lacks a new upgrade "
-                    "migration chain contiguous from previous to current"
+                    "migration chain contiguous from previous to current; add "
+                    f"v2/db/migrations/NNN_upgrade_{schema_name}_"
+                    f"{chain_version.replace('.', '_')}_to_<next, as 1_2_3>.sql"
                 )
             migration = matches[0]
             remaining.remove(migration)
