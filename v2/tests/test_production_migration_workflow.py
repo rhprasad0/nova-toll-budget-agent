@@ -13,9 +13,12 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.infrastructure_support import RDS_CA_SHA256
+
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/v2-production-migrations.yml"
-CA_SHA = "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
+# A stale pin in the production script fails these tests at its CA check.
+CA_SHA = RDS_CA_SHA256
 FAKE = r"""
 import json, os, pathlib, subprocess, sys
 from datetime import UTC, datetime, timedelta
