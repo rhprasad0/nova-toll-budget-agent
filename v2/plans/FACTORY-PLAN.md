@@ -102,26 +102,22 @@ experiments, so they do not go in the experiment journal.
    lint and type errors before a commit rather than in CI. The hook installs
    nothing and fails without that setup. Set `core.hooksPath` only in the
    sandbox clone, never in the dispatcher's host clone.
-3. Add the throwaway PostGIS container and the Playwright browser to the
-   sandbox, and write `factory/verify.sh`. Its first step is the full
-   `python3 v2/scripts/check_repository.py`, since the hook only checks what
-   is staged and the worker can skip it. Spike 6 found three gaps to close
-   here:
-   - The database tests need Docker, which the sandbox lacks.
-     `v2/scripts/run_db_tests.sh` uses `docker exec` on the Postgres container;
+3. Add the two throwaway PostGIS containers and the Playwright browser to the
+   sandbox. Verify is `.github/scripts/verify.sh`, the script the required CI
+   jobs already run; the dispatcher copies it from its checkout of `main`.
+   Spike 6 found three gaps, now settled:
+   - The database tests need Docker. `v2/scripts/run_db_tests.sh` uses
+     `docker exec` on the Postgres container, and
      `test_adopt_production_baseline.py` starts and stops its own database per
-     test; `test_development_migrations.py` and it skip, rather than fail,
-     without Docker; and the MCP server's `e2e.sh` starts PostGIS and DynamoDB
-     Local and copies files in with `docker cp`. Give them a path that needs
-     only the network (two PostGIS services, as CI has, plus DynamoDB Local),
-     and make `verify.sh` fail if any of them skips.
-   - The golden artifact smoke needs ARM. Leave it to CI and say so in
-     `verify.sh`.
-   - Eight tests in `test_production_plan_workflow.py` and
-     `test_production_migration_workflow.py` failed in the spike but pass in
-     CI, as root and as a normal user. The cause is unknown: either the image
-     lacks something the GitHub runner has, or the clone differed (made from a
-     bundle, with no `origin` remote and no tags).
+     test. Mount the Docker socket and add the Docker CLI to the image, as the
+     spec's Sandbox section records. Confirm in the first verify round that
+     the two test files that skip without Docker now run.
+   - The golden artifact smoke needs ARM. It stays CI-only; `verify.sh` does
+     not run it.
+   - The eight failing tests in `test_production_plan_workflow.py` and
+     `test_production_migration_workflow.py` needed `xxd`, which the image
+     lacked. The image needs `jq`, `xxd`, `zip` and `unzip`; the test suite
+     now stops at startup and names any that are missing.
    Build the image with `postgresql-client` (for `psql`), Node 22.22.1, and
    Terraform 1.15.8. Allow the hosts the setup downloads from on the proxy, as
    the spec's Egress proxy section lists; the spike's copy allowed only
@@ -137,7 +133,7 @@ experiments, so they do not go in the experiment journal.
    rejections before.
 6. Ship as a normal PR. Nothing runs yet.
 
-**Done when:** `factory/verify.sh` passes on an unmodified `main` inside the
+**Done when:** `.github/scripts/verify.sh` passes on an unmodified `main` inside the
 sandbox, with none of the database tests skipped; the PR is merged, its
 `factory/` job passed, and the development delivery that follows the merge is
 green.
@@ -206,7 +202,7 @@ credentials from `serve`, and stopping Phoenix makes the preflight fail.
    - it deletes a line from the experiment journal;
    - it adds a `CLAUDE.md` or `AGENTS.md` in any directory;
    - its verify step fails, including when the worker has edited
-     `factory/verify.sh` to make it pass.
+     `.github/scripts/verify.sh` to make it pass.
 
    One that only appends to the journal must pass. Then test the outer
    checks: an issue written by another account is refused, and direct pushes
