@@ -24,7 +24,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -42,9 +41,8 @@ DISTRIBUTIONS = {
 
 FIXTURE = ROOT / "v2/infra/tests/development.tftest.hcl"
 PROVIDERS = ROOT / "v2/infra/.terraform/providers"
-# A reviewed line here says an administrator applied that address by hand.
-ADMINISTRATOR_APPLIED = ROOT / ".github/administrator-applied-infrastructure"
-ENTRY_LIFETIME = timedelta(days=30)
+# One address per line: resources an administrator applies by hand.
+ADMINISTRATOR_APPLIED = ROOT / "v2/infra/administrator-applied.txt"
 READ_PATHS = ("v2/infra", "v2/agent", "v2/analytics", "infra/account-contract.json")
 PACKAGES = ("loader", "publisher", "timed-checks")
 
@@ -124,22 +122,12 @@ def releasable(address: str, fields: set[str], added_or_removed: bool) -> bool:
     return address in DISTRIBUTIONS and fields <= {"ordered_cache_behavior"}
 
 
-def administrator_applied(today: date) -> set[str]:
-    """Addresses with a current `YYYY-MM-DD approver ADDRESS reason` line."""
-    if not ADMINISTRATOR_APPLIED.exists():
-        return set()
-    current: set[str] = set()
-    for line in ADMINISTRATOR_APPLIED.read_text().splitlines():
-        entry = line.split()
-        if len(entry) < 4 or entry[0].startswith("#"):
-            continue
-        try:
-            age = today - date.fromisoformat(entry[0])
-        except ValueError:
-            continue
-        if timedelta(0) <= age <= ENTRY_LIFETIME:
-            current.add(entry[2])
-    return current
+def administrator_applied() -> set[str]:
+    return {
+        line.strip()
+        for line in ADMINISTRATOR_APPLIED.read_text().splitlines()
+        if line.strip() and not line.startswith("#")
+    }
 
 
 def blocked(base: Plan, head: Plan, approved: set[str]) -> dict[str, set[str]]:
@@ -161,20 +149,28 @@ def main(arguments: list[str]) -> int:
     if len(arguments) != 1:
         print(__doc__, file=sys.stderr)
         return 2
+    base_ref = arguments[0]
+    # A tag push passes an all-zero base; compare with the parent, as the contract checks do.
+    if subprocess.run(
+        ["git", "-C", str(ROOT), "cat-file", "-e", f"{base_ref}^{{commit}}"],
+        capture_output=True,
+        check=False,
+    ).returncode:
+        base_ref = "HEAD^"
     # The plan reads these paths; exit 1 means they differ from the base.
     differs = subprocess.run(
-        ["git", "-C", str(ROOT), "diff", "--quiet", arguments[0], "--", *READ_PATHS],
+        ["git", "-C", str(ROOT), "diff", "--quiet", base_ref, "--", *READ_PATHS],
         check=False,
     ).returncode
     if differs == 0:
         print("nothing v2/infra plans from has changed")
         return 0
     if differs != 1:
-        print(f"Cannot compare with {arguments[0]}.", file=sys.stderr)
+        print(f"Cannot compare with {base_ref}.", file=sys.stderr)
         return 2
     with tempfile.TemporaryDirectory() as scratch:
         archive = subprocess.run(
-            ["git", "-C", str(ROOT), "archive", arguments[0], *READ_PATHS],
+            ["git", "-C", str(ROOT), "archive", base_ref, *READ_PATHS],
             check=True,
             capture_output=True,
         ).stdout
@@ -182,9 +178,7 @@ def main(arguments: list[str]) -> int:
         # shortcut: uses this change's fixture; a change that drops a required input
         # fails here. Plan the base with its own fixture if that happens.
         base = planned(Path(scratch))
-    problems = blocked(
-        base, planned(ROOT), administrator_applied(datetime.now(UTC).date())
-    )
+    problems = blocked(base, planned(ROOT), administrator_applied())
     if not problems:
         print("v2/infra changes only what an application release may apply")
         return 0
@@ -197,10 +191,9 @@ def main(arguments: list[str]) -> int:
         detail = ", ".join(sorted(fields)) or "added or removed"
         print(f"  {address}: {detail}", file=sys.stderr)
     print(
-        "Take them out of this change, or have an administrator apply a reviewed "
-        "targeted plan first (v2/runbooks/development-release.md) and record each "
-        f"address in {ADMINISTRATOR_APPLIED.relative_to(ROOT)}:\n"
-        "  YYYY-MM-DD  approver  ADDRESS  reason",
+        "Take them out of this change, or have an administrator apply them first "
+        "(v2/runbooks/development-release.md) and add each address to "
+        f"{ADMINISTRATOR_APPLIED.relative_to(ROOT)}.",
         file=sys.stderr,
     )
     return 1

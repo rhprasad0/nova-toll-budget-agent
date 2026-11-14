@@ -1,0 +1,2 @@
+# v2/infra addresses an administrator applies by hand, one per line.
+# v2/scripts/infrastructure_plan.py lets a change to these through.

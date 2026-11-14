@@ -13,4 +13,4 @@ test. Use prose only for judgment calls. Drop a rule once its mistake cannot hap
 | Set up each new worktree before committing. | `v2/scripts/setup.sh`; the pre-commit hook fails on a missing tool. |
 | Run what CI runs. | `.github/scripts/verify.sh` is what CI calls; the pre-push hook runs its `quick` subset. |
 | Changes reach `main` by a PR that passes CI. | Branch protection. |
-| Keep shared-resource changes out of application releases. | `v2/scripts/infrastructure_plan.py` in `verify.sh` fails on planned-value changes; it cannot see IAM policy text. Exceptions in `.github/administrator-applied-infrastructure`. |
+| Keep shared-resource changes out of application releases. | `v2/scripts/infrastructure_plan.py` in `verify.sh` fails on planned-value changes; it cannot see IAM policy text. List hand-applied addresses in `v2/infra/administrator-applied.txt`. |

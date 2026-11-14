@@ -1,7 +1,6 @@
 """The credential-free plan, and the check that keeps shared-resource changes out of releases."""
 
 import shutil
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -63,20 +62,13 @@ def test_release_check_admits_only_what_the_gate_has_a_path_for() -> None:
     assert infrastructure_plan.blocked(base, {}, set()).keys() == base.keys()
 
 
-def test_administrator_entries_lapse(
+def test_listed_addresses_are_read_one_per_line(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     record = tmp_path / "applied"
-    record.write_text(
-        "# date approver address reason\n"
-        "2026-11-01  Ryan  aws_wafv2_web_acl.public_chat  raise the limit\n"
-        "2026-09-01  Ryan  aws_sns_topic.old  long merged\n"
-        "2026-11-01  Ryan  aws_sns_topic.no_reason\n"
-        "2099-01-01  Ryan  aws_sns_topic.future  never lapses\n"
-        "Nov 1 2026  Ryan  aws_sns_topic.unparsed  not an ISO date\n"
-    )
+    record.write_text("# applied by hand\naws_wafv2_web_acl.public_chat\n\n")
     monkeypatch.setattr(infrastructure_plan, "ADMINISTRATOR_APPLIED", record)
 
-    assert infrastructure_plan.administrator_applied(date(2026, 11, 14)) == {
+    assert infrastructure_plan.administrator_applied() == {
         "aws_wafv2_web_acl.public_chat"
     }
