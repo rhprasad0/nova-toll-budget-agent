@@ -58,6 +58,15 @@ corpus() {
   }
 }
 
+# The trusted development plan rejects a stale package digest, but it needs AWS;
+# this catches it here, straight after the builds.
+package_digests() {
+  local sums
+  sums="$(mktemp)"
+  (cd infra/build && sha256sum agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip) >"$sums"
+  python3 scripts/update_release_manifest.py --check "$sums"
+}
+
 loader() (
   need_base
   cd v2
@@ -87,6 +96,7 @@ loader() (
   step npm test --prefix lambdas/chat_proxy
   if [[ "$event" == pull_request ]]; then
     step ./scripts/build_timed_checks_zip.sh
+    step package_digests
   fi
 )
 
