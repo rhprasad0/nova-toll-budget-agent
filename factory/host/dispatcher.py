@@ -244,25 +244,29 @@ def start_sandbox(work_order: str, branch: str) -> Path:
         job_dir / "in/base.bundle",
         "refs/heads/main",
     )
-    run(
-        "docker",
-        "volume",
-        "create",
-        "--label",
-        f"{LABEL}={work_order}",
-        f"{work_order}-work",
-    )
-    run("docker", "run", *database_args(work_order))
-    run("docker", "run", *retained_database_args(work_order))
-    wait_ready(f"{work_order}-db", 5432)
-    wait_ready(f"{work_order}-db-retained", 5433)
-    run("docker", "run", "--detach", *sandbox_args(work_order, DOCKER_SOCKET.stat().st_gid),
-        "--volume", f"{work_order}-work:/work", *worker_env(work_order),
-        IMAGE, "sleep", "infinity")  # fmt: skip
-    run("docker", "cp", job_dir / "in", f"{work_order}:/work/in")
-    with (job_dir / "setup.log").open("w") as log:
-        subprocess.run(["docker", "exec", work_order, "prepare-work.sh", branch], stdout=log,
-                       stderr=subprocess.STDOUT, timeout=SETUP_TIMEOUT_SECONDS, check=True)  # fmt: skip
+    try:
+        run(
+            "docker",
+            "volume",
+            "create",
+            "--label",
+            f"{LABEL}={work_order}",
+            f"{work_order}-work",
+        )
+        run("docker", "run", *database_args(work_order))
+        run("docker", "run", *retained_database_args(work_order))
+        wait_ready(f"{work_order}-db", 5432)
+        wait_ready(f"{work_order}-db-retained", 5433)
+        run("docker", "run", "--detach", *sandbox_args(work_order, DOCKER_SOCKET.stat().st_gid),
+            "--volume", f"{work_order}-work:/work", *worker_env(work_order),
+            IMAGE, "sleep", "infinity")  # fmt: skip
+        run("docker", "cp", job_dir / "in", f"{work_order}:/work/in")
+        with (job_dir / "setup.log").open("w") as log:
+            subprocess.run(["docker", "exec", work_order, "prepare-work.sh", branch], stdout=log,
+                           stderr=subprocess.STDOUT, timeout=SETUP_TIMEOUT_SECONDS, check=True)  # fmt: skip
+    except BaseException:
+        stop_sandbox(work_order)
+        raise
     return job_dir
 
 
