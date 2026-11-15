@@ -34,7 +34,9 @@ import sys
 import time
 import urllib.request
 import uuid
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast
 
 if not __package__:  # run as a script, python3 factory/host/dispatcher.py
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -53,6 +55,12 @@ DOCKER_SOCKET = Path("/var/run/docker.sock")
 TIMEOUT_SECONDS = 30 * 60
 LABEL = "factory.work_order"
 PHOENIX_READY = "http://127.0.0.1:6006/readyz"
+MODEL = os.environ.get("FACTORY_MODEL", "claude-opus-5-5")
+MAX_TURNS = "60"
+SETUP_TIMEOUT_SECONDS = 20 * 60
+PLACEHOLDER_TOKEN = "placeholder-the-proxy-sets-the-real-token"
+CACHED_SETTINGS = "rm -f ~/.claude/remote-settings.json* ~/.claude/policy-limits.json*"
+ENV_FILE = Path.home() / ".config/factory/factory.env"
 
 
 def run(
@@ -154,17 +162,21 @@ def cleanup(work_order: str) -> None:
         run("docker", "rm", "--force", "--volumes", *ids, check=False)
 
 
-def verify(job: str, profile: str | None, branch: str = "main") -> int:
-    """Run verify.sh on BRANCH in a fresh sandbox; return its exit code."""
+def verify(
+    job: str, profile: str | None, branch: str = "main", source: Path | None = None
+) -> int:
+    """Run verify.sh on BRANCH of SOURCE (default: GitHub) in a fresh sandbox; return its exit code."""
     work_order = (
         f"factory-verify-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
     )
     job_dir = STATE / "jobs" / work_order
     (job_dir / "in").mkdir(parents=True)
-    sha = refresh_origin(branch)
-    # main rides along so verify.sh can find the merge base.
+    if source is None:
+        sha, repo = refresh_origin(branch), ORIGIN
+    else:
+        sha, repo = run("git", "-C", source, "rev-parse", branch).stdout.strip(), source
     heads = sorted({"refs/heads/main", f"refs/heads/{branch}"})
-    run("git", "-C", ORIGIN, "bundle", "create", job_dir / "in/base.bundle", *heads)
+    run("git", "-C", repo, "bundle", "create", job_dir / "in/base.bundle", *heads)
     shutil.copy(CHECKOUT / ".github/scripts/verify.sh", job_dir / "in/verify.sh")
     env = ["--env", f"FACTORY_BRANCH={branch}"]
     env += ["--env", f"DATABASE_PROFILE={profile}"] if profile else []
@@ -193,6 +205,190 @@ def verify(job: str, profile: str | None, branch: str = "main") -> int:
     finally:
         (STATE / "current-job").write_text("none")
         cleanup(work_order)
+
+
+def factory_version() -> str:
+    return run(
+        "git", "-C", CHECKOUT, "log", "-1", "--format=%H", "--", "factory"
+    ).stdout.strip()
+
+
+def worker_env(work_order: str) -> list[str]:
+    env = {
+        "CLAUDE_CODE_OAUTH_TOKEN": PLACEHOLDER_TOKEN,
+        "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+        "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        "OTEL_TRACES_EXPORTER": "otlp",
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://proxy:4318",
+        "OTEL_LOG_USER_PROMPTS": "1",
+        "OTEL_LOG_TOOL_DETAILS": "1",
+        "OTEL_LOG_TOOL_CONTENT": "1",
+        "OTEL_RESOURCE_ATTRIBUTES": f"factory.version={factory_version()},factory.work_order={work_order}",
+    }
+    return [arg for key, value in env.items() for arg in ("--env", f"{key}={value}")]
+
+
+def start_sandbox(work_order: str, branch: str) -> Path:
+    """Start the work order's databases and long-lived sandbox, with main cloned on BRANCH."""
+    job_dir = STATE / "jobs" / work_order
+    (job_dir / "in").mkdir(parents=True)
+    refresh_origin()
+    run(
+        "git",
+        "-C",
+        ORIGIN,
+        "bundle",
+        "create",
+        job_dir / "in/base.bundle",
+        "refs/heads/main",
+    )
+    run(
+        "docker",
+        "volume",
+        "create",
+        "--label",
+        f"{LABEL}={work_order}",
+        f"{work_order}-work",
+    )
+    run("docker", "run", *database_args(work_order))
+    run("docker", "run", *retained_database_args(work_order))
+    wait_ready(f"{work_order}-db", 5432)
+    wait_ready(f"{work_order}-db-retained", 5433)
+    run("docker", "run", "--detach", *sandbox_args(work_order, DOCKER_SOCKET.stat().st_gid),
+        "--volume", f"{work_order}-work:/work", *worker_env(work_order),
+        IMAGE, "sleep", "infinity")  # fmt: skip
+    run("docker", "cp", job_dir / "in", f"{work_order}:/work/in")
+    with (job_dir / "setup.log").open("w") as log:
+        subprocess.run(["docker", "exec", work_order, "prepare-work.sh", branch], stdout=log,
+                       stderr=subprocess.STDOUT, timeout=SETUP_TIMEOUT_SECONDS, check=True)  # fmt: skip
+    return job_dir
+
+
+def run_round(
+    work_order: str,
+    transcript: Path,
+    prompt: str,
+    traceparent: str,
+    resume: str | None = None,
+    stop: Callable[[], bool] = lambda: False,
+) -> tuple[dict[str, Any], str]:
+    """One claude -p round in the sandbox; return its result event and how it ended."""
+    if resume:
+        run("docker", "exec", work_order, "sh", "-c", CACHED_SETTINGS)
+    command = [
+        "docker", "exec", "-i", "--env", f"TRACEPARENT={traceparent}", "--workdir", "/work/repo",
+        work_order, "claude", "-p", "--input-format", "stream-json",
+        "--output-format", "stream-json", "--verbose", "--model", MODEL,
+        "--max-turns", MAX_TURNS, "--dangerously-skip-permissions",
+        "--disallowedTools", "WebSearch,WebFetch", *(["--resume", resume] if resume else []),
+    ]  # fmt: skip
+    message = {
+        "type": "user",
+        "message": {"role": "user", "content": [{"type": "text", "text": prompt}]},
+    }
+    ended = "done"
+    (STATE / "current-job").write_text(work_order)
+    try:
+        with transcript.open("w") as out:
+            process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=out,
+                                       stderr=subprocess.DEVNULL, text=True)  # fmt: skip
+            assert process.stdin is not None
+            process.stdin.write(json.dumps(message) + "\n")
+            process.stdin.close()
+            deadline = time.monotonic() + TIMEOUT_SECONDS
+            while True:
+                try:
+                    process.wait(timeout=60)
+                    break
+                except subprocess.TimeoutExpired:
+                    if stop() or time.monotonic() > deadline:
+                        ended = "cancelled" if stop() else "timeout"
+                        run(
+                            "docker",
+                            "exec",
+                            work_order,
+                            "bash",
+                            "-c",
+                            "kill -TERM -1",
+                            check=False,
+                        )
+                        process.kill()
+                        process.wait()
+                        break
+    finally:
+        (STATE / "current-job").write_text("none")
+    return final_result(transcript), ended
+
+
+def final_result(transcript: Path) -> dict[str, Any]:
+    results: list[dict[str, Any]] = []
+    for line in transcript.read_text().splitlines():
+        with contextlib.suppress(json.JSONDecodeError):
+            event: Any = json.loads(line)
+            if (
+                isinstance(event, dict)
+                and cast(dict[str, Any], event).get("type") == "result"
+            ):
+                results.append(cast(dict[str, Any], event))
+    return results[-1] if results else {}
+
+
+def import_bundle(bundle: Path, branch: str, clean: Path) -> Path:
+    """Fetch BRANCH from the worker's bundle into a fresh host-only clone of origin."""
+    shutil.rmtree(clean, ignore_errors=True)
+    run("git", "clone", "--quiet", "--no-checkout", ORIGIN, clean)
+    run("git", "-C", clean, "bundle", "verify", "--quiet", bundle)
+    run(
+        "git",
+        "-C",
+        clean,
+        "fetch",
+        "--quiet",
+        bundle,
+        f"refs/heads/{branch}:refs/heads/{branch}",
+    )
+    return clean
+
+
+def export_branch(work_order: str, job_dir: Path, branch: str) -> Path | None:
+    """The worker's commits on BRANCH, in a host clone; None when it made none."""
+    run("docker", "stop", "--time", "5", work_order)
+    try:
+        made = run("docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL",
+                   "--volume", f"{work_order}-work:/work", IMAGE,
+                   "git", "-C", "/work/repo", "bundle", "create", "/work/out.bundle",
+                   f"refs/heads/{branch}", "^refs/remotes/origin/main", check=False)  # fmt: skip
+        if made.returncode:
+            return None
+        run("docker", "cp", f"{work_order}:/work/out.bundle", job_dir / "work.bundle")
+    finally:
+        run("docker", "start", work_order)
+    return import_bundle(job_dir / "work.bundle", branch, job_dir / "clean")
+
+
+def stop_sandbox(work_order: str) -> None:
+    cleanup(work_order)
+    run("docker", "volume", "rm", "--force", f"{work_order}-work", check=False)
+
+
+def env_file() -> dict[str, str]:
+    if not ENV_FILE.exists():
+        return {}
+    pairs = (
+        line.split("=", 1) for line in ENV_FILE.read_text().splitlines() if "=" in line
+    )
+    return {key.strip(): value.strip() for key, value in pairs}
+
+
+def archive(path: Path, key: str) -> bool:
+    bucket = env_file().get("FACTORY_TRACES_BUCKET")
+    if not bucket:
+        return False
+    copied = run("aws", "s3", "cp", "--quiet", "--profile", "factory", path,
+                 f"s3://{bucket}/factory-traces/{key}", check=False)  # fmt: skip
+    return copied.returncode == 0
 
 
 def preflight() -> None:

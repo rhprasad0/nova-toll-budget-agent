@@ -41,7 +41,7 @@ RUN update-ca-certificates
 
 RUN useradd --create-home --uid 1000 agent \
  && mkdir -p /work && chown agent:agent /work
-COPY factory/agent/run-verify.sh /usr/local/bin/
+COPY factory/agent/run-verify.sh factory/agent/prepare-work.sh /usr/local/bin/
 
 USER agent
 RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}"
