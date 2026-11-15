@@ -1495,10 +1495,16 @@ def test_setup_uv_v10_pins_version_and_checksum() -> None:
 
 def _assert_development_delivery_caller(source: str) -> None:
     workflow = cast(dict[str, object], yaml.safe_load(source))
-    assert workflow_trigger(workflow) == {"push": {"branches": ["main"]}}
+    assert workflow_trigger(workflow) == {
+        "schedule": [{"cron": "17 8 * * *"}],
+        "workflow_dispatch": None,
+    }
     assert workflow["permissions"] == {"contents": "read"}
-    # Admission must not hold a lock needed by its predecessor's queued rerun.
-    assert "concurrency" not in workflow
+    # Safe because admission no longer waits on an earlier run inside the lock.
+    assert workflow["concurrency"] == {
+        "group": "v2-development-delivery-${{ github.ref }}",
+        "cancel-in-progress": False,
+    }
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     assert set(jobs) == {
         "admission",
@@ -2970,7 +2976,6 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc() -> None
     _assert_development_delivery_caller(DEVELOPMENT_DELIVERY_WORKFLOW)
     _assert_development_delivery_privileged(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
     caller = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
-    assert workflow_trigger(caller) == {"push": {"branches": ["main"]}}
     caller_jobs = cast(dict[str, dict[str, object]], caller["jobs"])
     assert set(caller_jobs) == {
         "admission",
@@ -3014,8 +3019,9 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc() -> None
         "queue": "max",
     }
     for original, replacement in (
-        ("push:\n    branches:", "pull_request:\n    branches:"),
-        ("- main", "- release"),
+        ("  workflow_dispatch:\n", "  push:\n"),
+        ('cron: "17 8 * * *"', 'cron: "*/5 * * * *"'),
+        ("cancel-in-progress: false", "cancel-in-progress: true"),
         ("environment: development", "environment: production"),
         (
             "if: github.ref == 'refs/heads/main'",

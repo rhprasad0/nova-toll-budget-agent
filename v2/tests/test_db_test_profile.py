@@ -173,7 +173,7 @@ def test_workflow_profiles() -> None:
     build = "\n".join(job_lines)
     assert "postgis/postgis:17-3.5" in build
     assert 'run_db_tests.sh "$SCHEMA_BASE_REF" --profile full' in build
-    assert "SCHEMA_BASE_REF: ${{ github.event.before }}" in build
+    assert "SCHEMA_BASE_REF: ${{ needs.admission.outputs.predecessor }}" in build
     assert "ref: ${{ github.sha }}\n          fetch-depth: 0" in build
     assert build.index("Validate full disposable database contract") < build.index(
         "Build reviewed deployment packages"
