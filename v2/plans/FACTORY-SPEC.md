@@ -544,23 +544,28 @@ TRACEPARENT=<dispatcher span context>
 
 - **One trace per work order.** The dispatcher opens a `work_order` root span
   with a child span per round and passes its context as `TRACEPARENT`, so every
-  Claude turn nests under it.
+  resumed Claude round nests under it.
+- **A session's first round does not nest** in Claude Code 2.1.325: it emits no
+  `interaction` span, ignores `TRACEPARENT`, and its other spans become roots
+  of their own traces. Only `--resume` rounds join the trace, so the author's
+  and the reviewer's first rounds are split off. Every one of their spans still
+  carries `session.id`, so the dispatcher starts each session with
+  `--session-id <uuid>` that it chooses, records that ID on the round span, and
+  sets it as Phoenix's session, which groups the split spans with the work
+  order. Re-test after each Claude Code upgrade (see Spike results, 5).
 - **Content is on.** Prompts, tool inputs, and tool output are recorded, because
   evals need them. The repo is public and the sandbox holds no real secrets.
   Tool output arrives as `tool.output` span events. The model's own prompts and
   responses are not on any span, so evals read them from each round's
   `transcript.jsonl`. The dispatcher copies every transcript to
   `factory-traces/` before it deletes the container.
-- **Delete the cached settings before every round.** With both
+- **Delete the cached settings before every resumed round.** With both
   `~/.claude/remote-settings.json` and `policy-limits.json` left by an earlier
-  round, Claude Code 2.1.325 starts the turn before telemetry is ready: no
-  `interaction` span, `TRACEPARENT` ignored, and every other span a root of its
-  own trace. The dispatcher deletes `~/.claude/remote-settings.json*`,
-  `~/.claude/policy-limits.json*`, and `~/.claude.json` before each round.
-  Spike 5 traced 6 of 6 resumed rounds with the first two deleted and 0 of 3
-  without, but each of its rounds ran in a fresh container, so `~/.claude.json`
-  was always new; upstream reports say a warm `~/.claude.json` (cached feature
-  flags) also breaks tracing. Re-test in the long-lived container in Stage 3. This is upstream bug
+  round, Claude Code 2.1.325 starts the turn before telemetry is ready, with the
+  same symptoms as a first round. The dispatcher deletes
+  `~/.claude/remote-settings.json*` and `~/.claude/policy-limits.json*` before
+  each round. A warm `~/.claude.json` does no harm, so it stays (see Spike
+  results, 5). This is upstream bug
   [anthropics/claude-code#99607](https://github.com/anthropics/claude-code/issues/99607);
   re-test after each Claude Code upgrade and drop the step once it is fixed.
 - **`factory.version`** is the commit of the `factory/` directory. It is the key
@@ -778,8 +783,16 @@ Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
    tools as TOOL, nested under `TRACEPARENT`. The bridge is not needed: its
    repository has no releases, and its model-content path reads files the
    worker wrote.
-5. **`TRACEPARENT` with `--resume`: passed with a workaround.** Resumed rounds
-   join one trace only after the cached-settings deletion under Tracing.
+5. **`TRACEPARENT` with `--resume`: passed with a workaround; first rounds do
+   not nest.** Resumed rounds join one trace only after the cached-settings
+   deletion under Tracing. Re-tested on 2026-11-15 in one long-lived container
+   through the sandbox proxy with the bearer placeholder: resumed rounds traced
+   3 of 3 with the two cache files deleted and a warm `~/.claude.json`, 3 of 3
+   with all three deleted, and 0 of 2 with nothing deleted. A session's first
+   round traced 0 of 9: in a fresh container with or without the image's
+   build-time `~/.claude.json`, in the warm container with the caches deleted,
+   and with `--session-id` set. Its spans all carried that `session.id`, so
+   Tracing joins them by session instead.
 6. **Subscription headroom and speed: partly settled.** A worker on a real issue (#737,
    cut at its parent commit, Rust) finished in 341 s and 29 turns and touched
    the same five files as the merged fix; `cargo fmt --check`, `clippy -D

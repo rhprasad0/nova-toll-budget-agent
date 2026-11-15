@@ -95,8 +95,11 @@ experiments, so they do not go in the experiment journal.
 900 s; pytest's counts (2183 passed, 4 skipped) matched CI's.
 Step 4 is built on the `stage3/decisions` branch: `factory/host/inbox.py`
 (poller, runner, restart), `factory/host/dashboard.py`, and the units in
-`factory/systemd/`, with the runner refusing to start until Stage 6. Still
-open: the spike 5 re-test, and **Ryan** making the `factory` job required.
+`factory/systemd/`, with the runner refusing to start until Stage 6. The spike 5
+re-test ran on 2026-11-15 (see the spec's Spike results, 5): resumed rounds
+nest, a session's first round does not, and the runner joins those by
+`session.id`. `factory` became a required check on 2026-11-15. Still open:
+the next development delivery being green.
 
 1. Copy the needed pieces of `factory-scoreboard/sandbox/` into `factory/`:
    the dispatcher (`host/`), the worker image (`agent/`), the proxy, the
@@ -131,8 +134,7 @@ open: the spike 5 re-test, and **Ryan** making the `factory` job required.
    Terraform 1.15.8. Allow the hosts the setup downloads from on the proxy, as
    the spec's Egress proxy section lists; the spike's copy allowed only
    Anthropic and crates.io. Re-test spike 5's trace workaround in the
-   long-lived container, deleting `~/.claude.json` as well (see the spec's
-   Tracing section).
+   long-lived container (done 2026-11-15; see the spec's Tracing section).
 4. Split the dispatcher into poller and runner around the inbox and add the
    dashboard, as the spec's Inbox and Dashboard sections describe. Three
    systemd units replace `factory-scoreboard`'s one-shot poll pass with its
