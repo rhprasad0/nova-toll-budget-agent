@@ -26,11 +26,13 @@ the only way out.
 import argparse
 import contextlib
 import io
+import json
 import os
 import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 import uuid
 from pathlib import Path
 
@@ -50,6 +52,7 @@ NETWORK = "factory-internal"
 DOCKER_SOCKET = Path("/var/run/docker.sock")
 TIMEOUT_SECONDS = 30 * 60
 LABEL = "factory.work_order"
+PHOENIX_HEALTH = "http://127.0.0.1:6006/healthz"
 
 
 def run(
@@ -212,7 +215,24 @@ def preflight() -> None:
 
 
 def admission_preflight() -> str | None:
-    """The proxy preflight's failure, or None. Stage 5 adds Phoenix and Tailscale."""
+    """Why the factory may not admit work now, or None (FACTORY-SPEC, Admission).
+
+    With no trace store there is no run: Phoenix must answer, Tailscale (its route
+    to RDS) must be up, and the proxy must block and allow as it should.
+    """
+    try:
+        with urllib.request.urlopen(PHOENIX_HEALTH, timeout=10) as response:
+            if response.status != 200:
+                return f"Phoenix health check returned {response.status}"
+    except OSError as error:
+        return f"Phoenix is not answering at {PHOENIX_HEALTH}: {error}"
+    tailscale = run("tailscale", "status", "--json", check=False)
+    try:
+        state = json.loads(tailscale.stdout).get("BackendState")
+    except json.JSONDecodeError:
+        state = None
+    if state != "Running":
+        return f"Tailscale is not running (state {state})"
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             preflight()

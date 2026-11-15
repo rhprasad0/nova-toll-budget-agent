@@ -1,6 +1,8 @@
 # Long-running factory services. Sandbox and test-database containers are
-# started per work order by host/dispatcher.py, never by compose. The collector
-# and Phoenix join in Stage 5.
+# started per work order by host/dispatcher.py, never by compose. setup.sh starts
+# this file with --env-file ~/.config/factory/factory.env, which holds the
+# machine-specific values (Roles Anywhere ARNs, the RDS endpoint and its 4via6
+# address, the traces bucket); they stay off GitHub (FACTORY-SPEC, Public repository).
 name: factory
 
 networks:
@@ -9,6 +11,10 @@ networks:
     internal: true # no route out: the proxy is the only way off this network
   egress:
     name: factory-egress
+  trace:
+    name: factory-trace
+    # Development RDS is reachable only over Tailscale's IPv6 4via6 route.
+    enable_ipv6: true
 
 services:
   proxy:
@@ -21,11 +27,12 @@ services:
       - rawtcp=false
       - --mode
       - regular@8080
+      - --mode
+      - reverse:http://collector:4318@4318
       - -s
       - /addon/allowlist.py
     environment:
-      # From the environment of whoever starts the proxy (setup.sh today; the
-      # dispatcher reads it from SSM in Stage 4). Never written to a file.
+      # Read from SSM by setup.sh and passed in its environment; never written to a file.
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
     volumes:
       # Owned by uid 1000, the user the proxy image runs as (see proxy/Dockerfile).
@@ -34,4 +41,67 @@ services:
       - ${HOME}/.local/state/factory/flows:/state/flows
       - ${HOME}/.local/state/factory/current-job:/state/current-job:ro
     networks: [internal, egress]
+    restart: unless-stopped
+
+  # Owns the network namespace that Phoenix and the collector share, so they reach
+  # its credential endpoint on 127.0.0.1:9911 without the host network
+  # (FACTORY-SPEC, Spike results, 2). Not on the sandbox's network.
+  aws-credentials:
+    image: public.ecr.aws/rolesanywhere/credential-helper:1.8.6-2026.11.04.18.00@sha256:8f366a68499d06097d0ddb78f882298f17997eeb7171fc3f5e59ebc8c58ec46a
+    user: "1000:1000" # the certificate's key is mode 600, owned by the factory's user
+    command:
+      - serve
+      - --certificate=/certs/factory.pem
+      - --private-key=/certs/factory.key
+      - --trust-anchor-arn=${FACTORY_TRUST_ANCHOR_ARN:?}
+      - --profile-arn=${FACTORY_PROFILE_ARN:?}
+      - --role-arn=${FACTORY_ROLE_ARN:?}
+    volumes:
+      - ${HOME}/.config/factory/roles-anywhere:/certs:ro
+    networks:
+      egress:
+        aliases: [collector] # the proxy's OTLP listener forwards here
+      trace: {}
+    ports:
+      - 127.0.0.1:6006:6006 # Phoenix, for the workstation's SSH tunnel
+    extra_hosts:
+      # TLS and the IAM token use the endpoint's name; the route is its 4via6 address.
+      - "${FACTORY_RDS_HOST:?}=${FACTORY_RDS_ADDR:?}"
+    restart: unless-stopped
+
+  phoenix:
+    image: arizephoenix/phoenix:version-21.0.0
+    network_mode: service:aws-credentials
+    depends_on: [aws-credentials]
+    environment:
+      PHOENIX_SQL_DATABASE_URL: postgresql://phoenix_factory@${FACTORY_RDS_HOST:?}:5432/phoenix?sslmode=verify-full&sslrootcert=/rds/rds-ca.pem
+      PHOENIX_POSTGRES_USE_AWS_IAM_AUTH: "true"
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_EC2_METADATA_SERVICE_ENDPOINT: http://127.0.0.1:9911
+      # Phoenix 21 turns authentication on for a non-loopback listen address;
+      # it listens on the namespace's interfaces so the published port works.
+      PHOENIX_ENABLE_AUTH: "false"
+      PHOENIX_DISABLE_AGENT_ASSISTANT: "true"
+      PHOENIX_AGENTS_DISABLE_BASH: "true"
+      PHOENIX_AGENTS_DISABLE_WEB_ACCESS: "true"
+      PHOENIX_AGENTS_DISABLE_GITHUB: "true"
+      PHOENIX_ALLOWED_SANDBOX_PROVIDERS: NONE
+      PHOENIX_TELEMETRY_ENABLED: "false"
+      PHOENIX_ENABLE_MCP_SERVER: "false"
+      PHOENIX_DEFAULT_RETENTION_POLICY_DAYS: "30"
+    volumes:
+      - ${HOME}/.local/state/factory/rds-ca.pem:/rds/rds-ca.pem:ro
+    restart: unless-stopped
+
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.164.0@sha256:340c9ca6a36617084c6661bdc4f0fe92b7cda5a805d61673ec8db375fddc522b
+    network_mode: service:aws-credentials
+    depends_on: [aws-credentials]
+    command: ["--config=/etc/otelcol/config.yaml"]
+    environment:
+      AWS_REGION: us-east-1
+      AWS_EC2_METADATA_SERVICE_ENDPOINT: http://127.0.0.1:9911
+      FACTORY_TRACES_BUCKET: ${FACTORY_TRACES_BUCKET:?}
+    volumes:
+      - ./collector/config.yaml:/etc/otelcol/config.yaml:ro
     restart: unless-stopped

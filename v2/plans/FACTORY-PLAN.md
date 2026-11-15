@@ -257,6 +257,23 @@ denied.
 
 ## Stage 5: Trace stack
 
+**Status on 2026-11-15: done on the `stage5/trace-stack` branch, stacked on
+Stage 4's status PR.** `factory/compose.yaml` adds three services:
+`aws-credentials` runs AWS's credential-helper image in `serve` mode, and
+`phoenix` and `collector` share its network namespace. Their configuration is
+in `factory/collector/config.yaml`. The machine-specific values live in
+`~/.config/factory/factory.env` on the thin client (mode `600`), which
+`setup.sh` passes to Compose; `setup.sh` also reads the subscription token
+from SSM for the proxy. The spike's Phoenix container is stopped, not
+removed. The done-when passed on the thin client from a copy of the branch:
+- two sandboxed rounds, a first one on stdin and a resumed one, nested
+  under one trace in the `tollchat-factory` project, with token counts
+  mapped and no orphan traces;
+- their spans reached `factory-traces/` as hourly gzipped objects;
+- Phoenix migrated its schema on RDS through IAM;
+- the admission preflight failed with Phoenix stopped and passed when it
+  came back.
+
 1. One Compose file for the proxy, the collector, and Phoenix, with Phoenix on
    RDS through IAM authentication and reachable on `127.0.0.1` only. Pick the
    network shape from the spec's Spike results, 2, so Phoenix and the
@@ -266,6 +283,8 @@ denied.
    and the collector's token-count `transform`.
 2. Add the collector's S3 exporter to `factory-traces/`.
 3. Add the admission preflight: Phoenix health, proxy, and Tailscale.
+4. After the merge, **Ryan** updates the thin client's checkout of `main` and
+   runs `factory/setup.sh`, which replaces the branch copy's containers.
 
 **Done when:** a sandboxed `claude -p "hello"` appears in Phoenix and as an
 object under `factory-traces/`; a first and a resumed round, run the way the
