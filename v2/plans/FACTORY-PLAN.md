@@ -96,9 +96,9 @@ experiments, so they do not go in the experiment journal.
 Step 4 is built on the `stage3/decisions` branch: `factory/host/inbox.py`
 (poller, runner, restart), `factory/host/dashboard.py`, and the units in
 `factory/systemd/`, with the runner refusing to start until Stage 6. The spike 5
-re-test ran on 2026-11-15 (see the spec's Spike results, 5): resumed rounds
-nest; a session's first round did not, unlike in Stage 2, and the spec
-proposes joining those by `session.id`, awaiting Ryan. `factory` became a required check on 2026-11-15. Deferred: a
+re-test ran on 2026-11-15 (see the spec's Spike results, 5): every round
+nests with its prompt on stdin as stream-json and, for resumed rounds, the
+cached-settings deletion. `factory` became a required check on 2026-11-15. Deferred: a
 green development delivery, because the manual delivery of 145b860f failed
 during the 2026-11-15 AWS us-east-1 outage (`apply` stage, `gate_rejected`).
 Check the next delivery after AWS recovers; Stage 4 does not wait on it.
@@ -215,7 +215,8 @@ denied.
 3. Add the admission preflight: Phoenix health, proxy, and Tailscale.
 
 **Done when:** a sandboxed `claude -p "hello"` appears in Phoenix and as an
-object under `factory-traces/`, with Phoenix and the collector both using
+object under `factory-traces/`; a first and a resumed round, run the way the
+spec's Tracing section says, nest under one `TRACEPARENT`; with Phoenix and the collector both using
 credentials from `serve`, and stopping Phoenix makes the preflight fail.
 
 ## Stage 6: First work order
@@ -228,9 +229,9 @@ credentials from `serve`, and stopping Phoenix makes the preflight fail.
 2. Finish the runner: the three stations (author, reviewer, verify), the
    guard (secrets scan and protected paths), push and PR, the CI watch, the
    shared budget of three fix rounds, the cancel checks, the outcome comment
-   and label removal, and the sweep of `closed` events. If Ryan accepts the
-   spec's `session.id` proposal under Tracing, start each session with a chosen
-   `--session-id` and record it on the round span.
+   and label removal, and the sweep of `closed` events. Run every round with
+   its prompt on stdin as stream-json and record its `session.id` on the round
+   span (see the spec's Tracing section).
 3. Test the guard before trusting it. Each of these work orders must end with
    no branch pushed:
    - its diff touches a protected path;

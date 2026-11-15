@@ -544,17 +544,18 @@ TRACEPARENT=<dispatcher span context>
 
 - **One trace per work order.** The dispatcher opens a `work_order` root span
   with a child span per round and passes its context as `TRACEPARENT`, so every
-  resumed Claude round nests under it.
-- **A session's first round did not nest on 2026-11-15.** It emitted no
-  `interaction` span, ignored `TRACEPARENT`, and its other spans became roots
-  of their own traces; only `--resume` rounds joined. Stage 2 saw a first round
-  nest, and the re-test could not find what changed (see Spike results, 5), so
-  the author's and the reviewer's first rounds may be split off the work
-  order's trace. **Proposal, awaiting Ryan:** the dispatcher starts each
-  session with a `--session-id <uuid>` it chooses and records that ID on the
-  round span. Every span of the round carries it, and Phoenix groups spans
-  into sessions by it (checked on the re-test's spans), so a work order's
-  split traces stay findable from its round spans.
+  Claude round nests under it.
+- **Every round sends its prompt on stdin.** The dispatcher runs `claude -p
+  --input-format stream-json --output-format stream-json --verbose` and writes
+  the prompt as one stream-json user message, then reads the round's `result`
+  message from stdout. With the prompt as an argument, a session's first round
+  started before telemetry was ready on 2026-11-15: no `interaction` span,
+  `TRACEPARENT` ignored, and every other span a root of its own trace (see
+  Spike results, 5).
+- **`session.id` is the fallback key.** The dispatcher records the round's
+  session ID on its round span. Every Claude span carries it and Phoenix groups
+  spans into sessions by it, so a round that loses the race again after an
+  upgrade stays findable from the work order.
 - **Content is on.** Prompts, tool inputs, and tool output are recorded, because
   evals need them. The repo is public and the sandbox holds no real secrets.
   Tool output arrives as `tool.output` span events. The model's own prompts and
@@ -567,7 +568,8 @@ TRACEPARENT=<dispatcher span context>
   same symptoms as a first round. The dispatcher deletes
   `~/.claude/remote-settings.json*` and `~/.claude/policy-limits.json*` before
   each round. A warm `~/.claude.json` does no harm, so it stays (see Spike
-  results, 5). This is upstream bug
+  results, 5). Writing the prompt about 3 seconds late also works, but it
+  depends on timing, so the deletion is the rule. This is upstream bug
   [anthropics/claude-code#99607](https://github.com/anthropics/claude-code/issues/99607);
   re-test after each Claude Code upgrade and drop the step once it is fixed.
 - **`factory.version`** is the commit of the `factory/` directory. It is the key
@@ -785,9 +787,9 @@ Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
    tools as TOOL, nested under `TRACEPARENT`. The bridge is not needed: its
    repository has no releases, and its model-content path reads files the
    worker wrote.
-5. **`TRACEPARENT` with `--resume`: passed with a workaround; first rounds do
-   not nest.** Resumed rounds join one trace only after the cached-settings
-   deletion under Tracing. Re-tested on 2026-11-15 in one long-lived container
+5. **`TRACEPARENT` with `--resume`: passed with two workarounds.** Resumed
+   rounds join one trace only after the cached-settings deletion under Tracing,
+   and first rounds only with the prompt on stdin. Re-tested on 2026-11-15 in one long-lived container
    through the sandbox proxy with the bearer placeholder: resumed rounds traced
    3 of 3 with the two cache files deleted and a warm `~/.claude.json`, 3 of 3
    with all three deleted, and 0 of 2 with nothing deleted. A session's first
@@ -797,8 +799,14 @@ Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
    API-key placeholder Stage 2 used, with metrics and logs exporters on, with
    Stage 2's plain `claude -p` flags, and on Claude Code 2.1.322 (Stage 2's
    image pin) as well as 2.1.325. Untested differences: Stage 2's proxy addon
-   and its collector in front of the trace store. The first rounds' spans all
-   carried `session.id`; see the proposal under Tracing.
+   and its collector in front of the trace store. Sending the prompt on stdin
+   as stream-json fixed it: first rounds traced 10 of 10, with the prompt
+   written at once or 3 or 6 seconds late. Resumed rounds with the cache files
+   left in place traced 3 of 3 with the prompt 3 seconds late and 0 of 6 with
+   no delay. Upstream ([#99607](https://github.com/anthropics/claude-code/issues/99607))
+   traces both failures to one startup race: telemetry setup, which reads
+   `TRACEPARENT`, waits on the remote managed-settings fetch, and the turn can
+   start first.
 6. **Subscription headroom and speed: partly settled.** A worker on a real issue (#737,
    cut at its parent commit, Rust) finished in 341 s and 29 turns and touched
    the same five files as the merged fix; `cargo fmt --check`, `clippy -D
