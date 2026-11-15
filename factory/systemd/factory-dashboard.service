@@ -1,0 +1,12 @@
+# Read-only status page on 127.0.0.1:6007; it stays up when the runner is down.
+[Unit]
+Description=TollChat factory dashboard
+
+[Service]
+WorkingDirectory=%h/tollchat
+ExecStart=/usr/bin/python3 factory/host/dispatcher.py dashboard
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

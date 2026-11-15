@@ -1,6 +1,7 @@
 # TollChat Factory Plan
 
-Status: **plan, nothing built**. This is the build order for the design in
+Status: **in progress**. Stages 1 and 2 are done, and Stage 3's sandbox is
+merged (#766, #767). This is the build order for the design in
 [FACTORY-SPEC.md](FACTORY-SPEC.md). Like the spec, it grants no AWS, Terraform,
 database, or CI authority; each step that touches those says who does it.
 
@@ -10,23 +11,11 @@ rest can be done by a coding agent in a worktree.
 
 ## Decisions
 
-Ryan settled the spec's proposals on 2026-11-14; they are listed in the spec's
-Decisions section. Still open:
+Ryan settled the spec's proposals on 2026-11-14 and four more questions on
+2026-11-15; they are listed in the spec's Decisions section. Still open:
 
-- **Does a full work order fit the subscription?** One author round used
-  under 1% of the weekly limit (Stage 2). Log the utilization header per work
-  order from Stage 6 and decide on daily volume after the first five.
 - **Does replaying production traces into Phoenix fit the public privacy
   notice?** Check before building the production mode (Stage 8).
-- **Training evals on factory PRs** (see Not in this plan).
-- **Confirm the inbox and dashboard details** in the spec's Inbox and Dashboard
-  sections before Stage 3 step 4: SQLite on the thin client, admission at
-  dequeue, cancel by removing the label, one retry after the runner dies with
-  nothing pushed, and a read-only dashboard on `127.0.0.1:6007`.
-- **What the runner does on a 7-day subscription limit.** The spec's one-hour
-  pause suits a short window; a weekly limit would fail every queued work
-  order an hour apart. Decide once the per-work-order utilization readings
-  from Stage 6 show how close the factory runs to it.
 
 ## Stage 1: Reformat the thin client
 
@@ -99,11 +88,20 @@ experiments, so they do not go in the experiment journal.
 
 ## Stage 3: Bring the factory code into the repo
 
-**Status on 2026-11-14: in progress, as a stack of PRs.** `.github/scripts/verify.sh`
-passes inside the sandbox on the stack's branch, with the full database
-profile, in 890 s, and pytest's counts match CI's. Still open: the label
-trigger and the inbox (step 4, the next layer), the spike 5 re-test, and the
-`factory` job becoming required.
+**Status on 2026-11-15: done once step 4's PR merges, except one deferred check.** Steps 1 to 3, 5 and 6 are merged
+(#766, #767), and the development delivery after the merge was green.
+`.github/scripts/verify.sh` passed inside the sandbox on `main` (145b860f) on
+2026-11-15, with the full database profile and no database test skipped, in
+900 s; pytest's counts (2183 passed, 4 skipped) matched CI's.
+Step 4 is built on the `stage3/decisions` branch: `factory/host/inbox.py`
+(poller, runner, restart), `factory/host/dashboard.py`, and the units in
+`factory/systemd/`, with the runner refusing to start until Stage 6. The spike 5
+re-test ran on 2026-11-15 (see the spec's Spike results, 5): every round
+nests with its prompt on stdin as stream-json and, for resumed rounds, the
+cached-settings deletion. `factory` became a required check on 2026-11-15. Deferred: a
+green development delivery, because the manual delivery of 145b860f failed
+during the 2026-11-15 AWS us-east-1 outage (`apply` stage, `gate_rejected`).
+Check the next delivery after AWS recovers; Stage 4 does not wait on it.
 
 1. Copy the needed pieces of `factory-scoreboard/sandbox/` into `factory/`:
    the dispatcher (`host/`), the worker image (`agent/`), the proxy, the
@@ -138,8 +136,7 @@ trigger and the inbox (step 4, the next layer), the spike 5 re-test, and the
    Terraform 1.15.8. Allow the hosts the setup downloads from on the proxy, as
    the spec's Egress proxy section lists; the spike's copy allowed only
    Anthropic and crates.io. Re-test spike 5's trace workaround in the
-   long-lived container, deleting `~/.claude.json` as well (see the spec's
-   Tracing section).
+   long-lived container (done 2026-11-15; see the spec's Tracing section).
 4. Split the dispatcher into poller and runner around the inbox and add the
    dashboard, as the spec's Inbox and Dashboard sections describe. Three
    systemd units replace `factory-scoreboard`'s one-shot poll pass with its
@@ -173,8 +170,8 @@ trigger and the inbox (step 4, the next layer), the spike 5 re-test, and the
 
 **Done when:** `.github/scripts/verify.sh` passes on an unmodified `main` inside the
 sandbox, with none of the database tests skipped; the PR is merged, its
-`factory/` job passed, and the development delivery that follows the merge is
-green.
+`factory/` job passed, and the next development delivery (nightly or manual
+since #769) is green.
 
 ## Stage 4: AWS access
 
@@ -218,7 +215,8 @@ denied.
 3. Add the admission preflight: Phoenix health, proxy, and Tailscale.
 
 **Done when:** a sandboxed `claude -p "hello"` appears in Phoenix and as an
-object under `factory-traces/`, with Phoenix and the collector both using
+object under `factory-traces/`; a first and a resumed round, run the way the
+spec's Tracing section says, nest under one `TRACEPARENT`; with Phoenix and the collector both using
 credentials from `serve`, and stopping Phoenix makes the preflight fail.
 
 ## Stage 6: First work order
@@ -231,10 +229,9 @@ credentials from `serve`, and stopping Phoenix makes the preflight fail.
 2. Finish the runner: the three stations (author, reviewer, verify), the
    guard (secrets scan and protected paths), push and PR, the CI watch, the
    shared budget of three fix rounds, the cancel checks, the outcome comment
-   and label removal, and the sweep of `closed` events. Have the proxy log the
-   `anthropic-ratelimit-unified-7d-utilization` response header per work
-   order, as spike 6 did, and the runner store the reading in the inbox for
-   the dashboard.
+   and label removal, and the sweep of `closed` events. Run every round with
+   its prompt on stdin as stream-json and record its `session.id` on the round
+   span (see the spec's Tracing section).
 3. Test the guard before trusting it. Each of these work orders must end with
    no branch pushed:
    - its diff touches a protected path;
@@ -258,9 +255,10 @@ credentials from `serve`, and stopping Phoenix makes the preflight fail.
    dashboard changes nothing. Note how long a label takes to appear in the
    issue events feed.
 4. **Ryan:** label one small, real issue.
-5. Enable the three systemd units (poller timer, runner, dashboard) so the
-   factory survives a reboot. They run from a checkout of `main` that only
-   Ryan updates.
+5. Enable the three systemd units (poller timer, runner, dashboard) from
+   `factory/systemd/` as user units, and run `loginctl enable-linger ryan`
+   (off on 2026-11-15), or they stop at logout and never start at boot. They
+   run from a checkout of `main` that only Ryan updates.
 
 **Done when:** that issue becomes a PR that is ready for review, with one trace
 in Phoenix and the outcome comment on the issue, and the dashboard showed it
@@ -300,8 +298,8 @@ the thin client.
   separate test author, a rubric
   grader, and the other lanes.
 - Workstation Claude Code telemetry. Ryan dropped it.
-- Running training evals on factory PRs. Required CI does not include them
-  today, so the first version does not verify agent behaviour. Decide after
-  the first five work orders whether the dispatcher should run them.
+- Running training evals on factory PRs. Ryan decided against it on
+  2026-11-15. Required CI does not include them, so the factory does not
+  verify agent behaviour.
 - Hardening the thin client itself: disk encryption, Secure Boot, or a
   TPM-held key. The TPM would first need converting from 1.2 to 2.0.

@@ -1,10 +1,16 @@
-"""TollChat factory dispatcher. Stage 3: run the required checks in the sandbox.
+"""TollChat factory dispatcher: the sandbox, and the inbox's poller, runner and dashboard.
 
 Usage:
   dispatcher.py preflight
       prove the proxy blocks and allows as it should
   dispatcher.py verify [JOB] [--profile P] [--branch B]
       run .github/scripts/verify.sh on branch B (default main)
+  dispatcher.py poll
+      record new GitHub issue events in the inbox, then exit (the systemd timer)
+  dispatcher.py run
+      take events from the inbox one at a time (refuses to start until Stage 6)
+  dispatcher.py dashboard
+      serve the read-only dashboard on 127.0.0.1:6007
 
 Trust split (see v2/plans/FACTORY-SPEC.md): this host process holds the GitHub
 login and never runs git in a repository the sandbox could write to. Code goes in
@@ -18,6 +24,8 @@ the only way out.
 """
 
 import argparse
+import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -26,10 +34,15 @@ import time
 import uuid
 from pathlib import Path
 
+if not __package__:  # run as a script, python3 factory/host/dispatcher.py
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from factory.host import dashboard, inbox
+
 REPO_URL = "https://github.com/rhprasad0/nova-toll-budget-agent.git"
 FACTORY = Path(__file__).resolve().parent.parent
 CHECKOUT = FACTORY.parent  # the dispatcher's own checkout of main
 STATE = Path(os.environ.get("FACTORY_STATE", Path.home() / ".local/state/factory"))
+INBOX = STATE / "inbox.db"
 ORIGIN = STATE / "origin.git"  # host-only bare clone; the sandbox never touches it
 IMAGE = os.environ.get("FACTORY_IMAGE", "factory-agent:dev")
 POSTGIS = "postgis/postgis:17-3.5"
@@ -198,6 +211,16 @@ def preflight() -> None:
     print("proxy preflight passed")
 
 
+def admission_preflight() -> str | None:
+    """The proxy preflight's failure, or None. Stage 5 adds Phoenix and Tailscale."""
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            preflight()
+    except SystemExit as failure:
+        return str(failure)
+    return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -213,9 +236,18 @@ def main() -> None:
     )
     v.add_argument("--profile", help="DATABASE_PROFILE for verify.sh, e.g. full")
     v.add_argument("--branch", default="main", help="branch to verify (default main)")
+    sub.add_parser("poll")
+    sub.add_parser("run")
+    sub.add_parser("dashboard")
     args = parser.parse_args()
     if args.command == "preflight":
         preflight()
+    elif args.command == "poll":
+        print(f"poll: {inbox.poll(inbox.connect(INBOX), inbox.GhCli())} events read")
+    elif args.command == "run":
+        inbox.run_forever(INBOX, inbox.GhCli(), admission_preflight, cleanup)
+    elif args.command == "dashboard":
+        dashboard.server(INBOX).serve_forever()
     else:
         preflight()
         sys.exit(verify(args.job, args.profile, args.branch))

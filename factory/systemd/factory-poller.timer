@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the TollChat factory poller every 60 seconds
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

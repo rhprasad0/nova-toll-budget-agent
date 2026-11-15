@@ -1,0 +1,9 @@
+# Record new GitHub issue events in the inbox, then exit. Started by factory-poller.timer.
+[Unit]
+Description=TollChat factory poller
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/tollchat
+ExecStart=/usr/bin/python3 factory/host/dispatcher.py poll
+TimeoutStartSec=5min

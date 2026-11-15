@@ -1,6 +1,6 @@
 # TollChat Factory Spec
 
-Status: **unbuilt design**. This document grants no AWS, Terraform, database, or
+Status: **partly built**; see the plan for progress. This document grants no AWS, Terraform, database, or
 CI authority.
 
 A factory takes a labeled GitHub issue to a pull request that is ready for human
@@ -89,9 +89,16 @@ differs for TollChat:
   instructions override the worktree rule (see Sandbox).
 - After reading [Building always-on agents](https://claude.com/resources/articles/building-always-on-agents):
   work arrives through a durable event inbox, and a dashboard served locally
-  on the thin client shows the factory's state (see Inbox and Dashboard). The
-  details in those sections are proposals until Ryan confirms them; see the
-  plan's open decisions.
+  on the thin client shows the factory's state (see Inbox and Dashboard).
+
+**Added by Ryan on 2026-11-15:**
+
+- The subscription no longer has a 7-day window, so the factory does not track
+  weekly utilization.
+- A full work order is assumed to fit the subscription. Volume is not gated on
+  usage readings.
+- Training evals do not run on factory PRs.
+- The Inbox and Dashboard sections are confirmed as written.
 
 ## Architecture
 
@@ -329,13 +336,14 @@ database's 20 GB volume.
   the overlapping re-read records nothing twice, and a re-label after Ryan
   closes a PR is a new event.
 - **Rows.**
-  - An event: key, kind, issue number, actor, time, and a status (`pending`,
-    `running`, `done`, or `dropped`).
+  - An event: key, kind, issue number, actor, time, a status (`pending`,
+    `running`, `done`, or `dropped`), and whether it was queued again after a
+    runner died (see Restart).
   - A work order: the issue, its title as fetched at admission (for the
     dashboard only), the event that started it, start and end times, base
     commit, current station and round, trace ID, PR link, a cancel mark,
     outcome, whether the outcome comment and label removal were posted,
-    tokens, list-price cost, the subscription utilization reading, and, from
+    tokens, list-price cost, and, from
     the sweep, whether the PR merged and when it closed. Transcripts stay on
     disk and in `factory-traces/`; the row keeps the path.
   - One status row: the poll position, the last poll time, the runner's
@@ -403,8 +411,7 @@ complements Phoenix, which answers "what did a run do".
   - queue: pending events by issue number, oldest first (titles appear once a
     work order has fetched them);
   - history: recent work orders with outcome, rounds, tokens, list-price cost,
-    PR link, and whether it merged;
-  - the latest `anthropic-ratelimit-unified-7d-utilization` reading.
+    PR link, and whether it merged.
 - **Not shown:** trace content, transcripts, and proxy flow logs. Those stay in
   Phoenix, S3, and the state directory. Issue titles come from GitHub and are
   HTML-escaped.
@@ -537,23 +544,32 @@ TRACEPARENT=<dispatcher span context>
 
 - **One trace per work order.** The dispatcher opens a `work_order` root span
   with a child span per round and passes its context as `TRACEPARENT`, so every
-  Claude turn nests under it.
+  Claude round nests under it.
+- **Every round sends its prompt on stdin.** The dispatcher runs `claude -p
+  --input-format stream-json --output-format stream-json --verbose` and writes
+  the prompt as one stream-json user message, then reads the round's `result`
+  message from stdout. With the prompt as an argument, a session's first round
+  started before telemetry was ready on 2026-11-15: no `interaction` span,
+  `TRACEPARENT` ignored, and every other span a root of its own trace (see
+  Spike results, 5).
+- **`session.id` is the fallback key.** The dispatcher records the round's
+  session ID on its round span. Every Claude span carries it and Phoenix groups
+  spans into sessions by it, so a round that loses the race again after an
+  upgrade stays findable from the work order.
 - **Content is on.** Prompts, tool inputs, and tool output are recorded, because
   evals need them. The repo is public and the sandbox holds no real secrets.
   Tool output arrives as `tool.output` span events. The model's own prompts and
   responses are not on any span, so evals read them from each round's
   `transcript.jsonl`. The dispatcher copies every transcript to
   `factory-traces/` before it deletes the container.
-- **Delete the cached settings before every round.** With both
+- **Delete the cached settings before every resumed round.** With both
   `~/.claude/remote-settings.json` and `policy-limits.json` left by an earlier
-  round, Claude Code 2.1.325 starts the turn before telemetry is ready: no
-  `interaction` span, `TRACEPARENT` ignored, and every other span a root of its
-  own trace. The dispatcher deletes `~/.claude/remote-settings.json*`,
-  `~/.claude/policy-limits.json*`, and `~/.claude.json` before each round.
-  Spike 5 traced 6 of 6 resumed rounds with the first two deleted and 0 of 3
-  without, but each of its rounds ran in a fresh container, so `~/.claude.json`
-  was always new; upstream reports say a warm `~/.claude.json` (cached feature
-  flags) also breaks tracing. Re-test in the long-lived container in Stage 3. This is upstream bug
+  round, Claude Code 2.1.325 starts the turn before telemetry is ready, with the
+  same symptoms as a first round. The dispatcher deletes
+  `~/.claude/remote-settings.json*` and `~/.claude/policy-limits.json*` before
+  each round. A warm `~/.claude.json` does no harm, so it stays (see Spike
+  results, 5). Writing the prompt about 3 seconds late also works, but it
+  depends on timing, so the deletion is the rule. This is upstream bug
   [anthropics/claude-code#99607](https://github.com/anthropics/claude-code/issues/99607);
   re-test after each Claude Code upgrade and drop the step once it is fixed.
 - **`factory.version`** is the commit of the `factory/` directory. It is the key
@@ -771,8 +787,26 @@ Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
    tools as TOOL, nested under `TRACEPARENT`. The bridge is not needed: its
    repository has no releases, and its model-content path reads files the
    worker wrote.
-5. **`TRACEPARENT` with `--resume`: passed with a workaround.** Resumed rounds
-   join one trace only after the cached-settings deletion under Tracing.
+5. **`TRACEPARENT` with `--resume`: passed with two workarounds.** Resumed
+   rounds join one trace only after the cached-settings deletion under Tracing,
+   and first rounds only with the prompt on stdin. Re-tested on 2026-11-15 in one long-lived container
+   through the sandbox proxy with the bearer placeholder: resumed rounds traced
+   3 of 3 with the two cache files deleted and a warm `~/.claude.json`, 3 of 3
+   with all three deleted, and 0 of 2 with nothing deleted. A session's first
+   round traced 0 of 21, which Stage 2 did not see: in a fresh container with
+   or without the image's build-time `~/.claude.json`, with an empty home, in
+   the warm container with the caches deleted, with `--session-id`, with the
+   API-key placeholder Stage 2 used, with metrics and logs exporters on, with
+   Stage 2's plain `claude -p` flags, and on Claude Code 2.1.322 (Stage 2's
+   image pin) as well as 2.1.325. Untested differences: Stage 2's proxy addon
+   and its collector in front of the trace store. Sending the prompt on stdin
+   as stream-json fixed it: first rounds traced 10 of 10, with the prompt
+   written at once or 3 or 6 seconds late. Resumed rounds with the cache files
+   left in place traced 3 of 3 with the prompt 3 seconds late and 0 of 6 with
+   no delay. Upstream ([#99607](https://github.com/anthropics/claude-code/issues/99607))
+   traces both failures to one startup race: telemetry setup, which reads
+   `TRACEPARENT`, waits on the remote managed-settings fetch, and the turn can
+   start first.
 6. **Subscription headroom and speed: partly settled.** A worker on a real issue (#737,
    cut at its parent commit, Rust) finished in 341 s and 29 turns and touched
    the same five files as the merged fix; `cargo fmt --check`, `clippy -D
@@ -784,7 +818,8 @@ Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
    resolution and no shorter-window header appeared. A full work order (author,
    reviewer, up to three fix rounds) is unmeasured; the proxy can log the
    header per work order. That round ran no test suite, so a round with pytest
-   in the loop (275 s per run) is also unmeasured.
+   in the loop (275 s per run) is also unmeasured. Since 2026-11-15 the
+   subscription has no 7-day window, and a work order is assumed to fit.
    A verify round of CI's required credential-free checks took 13.9 minutes
    warm (pytest 275 s, Terraform `fmt-validate` 215 s, full-profile database
    tests 262 s), within the 30-minute limit but run one after another, where CI
