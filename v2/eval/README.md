@@ -1,10 +1,9 @@
 # TollChat evaluation
 
-**Locally authored suite:** 50 training and 10 shadow cases (5.2.21) are
-active, with 25 holdout cases (5.2.21) stored externally. Harness 2.5.19 has an
-approved aggregate calibration receipt, but it binds the dependency set from
-before the October 16, October 24 and November 15 upgrades and the evaluator sources from
-before the October 18 cleanup, so paid runs need a new combined calibration.
+**Locally authored suite:** 50 training and 10 shadow cases are active, with
+25 holdout cases stored externally. The corpus version is each split's
+`manifest.json`; the harness version is `VERSION` in `golden_run.py`. A paid run
+refuses a calibration receipt whose dependencies or evaluator sources changed.
 The retired 100-case development corpus 3.3.28 is recoverable from Git history;
 the [experiment journal](EXPERIMENT_JOURNAL.md) preserves its findings and limitations.
 The holdout was read for an October 10, 2026 diagnosis and repaired as 5.2.0
@@ -15,8 +14,8 @@ in a new external directory; it is no longer blind. See the
 
 The **50 training and 10 shadow cases** live under `eval/active/`, with **25 holdout
 cases on an external host path**. Use the [authoring guide](AUTHORING.md) and
-[coverage contract](contract.json). Harness
-2.5.19 searches the training split with **one trial per case and 16 workers**;
+[coverage contract](contract.json). The harness
+searches the training split with **one trial per case and 16 workers**;
 three trials require Ryan's explicit instruction. Shadow runs are local and
 manual; PR CI does not run them.
 TollChat's application model, prompt, SOP and tools remain unchanged on `gpt-6-luna`.
@@ -46,7 +45,7 @@ An exposed training score cannot qualify production. Production retains its
 ## External holdout
 
 Keep holdout inputs and detailed evidence outside the repository, for example
-`/home/ryan/Documents/tollchat-eval-holdout/dataset-20261010/holdout-5.2.21/`. The host operator explicitly
+`/home/ryan/Documents/tollchat-eval-holdout/dataset-20261010/holdout-<version>/`. The host operator explicitly
 selects the corpus with `--corpus`; ordinary training commands never discover it.
 With authorization, the coding agent can invoke the host runner and use only its
 aggregate feedback. See the

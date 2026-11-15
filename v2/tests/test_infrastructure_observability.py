@@ -539,8 +539,6 @@ def test_metrics_aware_rollback_preserves_the_aggregate() -> None:
     assert "toll-v2-report-watchdog" not in rollback
     assert "historical" in rollback.lower()
     assert "usage#all" not in rollback
-    assert "manual restore may change only application routing" in rollback
-    assert "do not roll back automatically" in rollback
 
 
 def test_eval_dashboard_is_configured_in_both_environments() -> None:

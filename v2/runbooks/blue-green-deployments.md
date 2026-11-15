@@ -119,10 +119,8 @@ Uploads use conditional writes and checksum/version verification.
 
 ## Development retry after promotion
 
-Admission allows 30 minutes for exact CI evidence and a separate two-hour bounded
-predecessor wait for ordering checks. It holds no workflow-wide lock: an older
-run or rerun must be able to finish while its successor waits. The apply queue
-serializes mutations,
+Admission waits for exact CI evidence. Workflow-level concurrency runs one
+delivery at a time ([RUNBOOK](../RUNBOOK.md)). The apply queue serializes mutations,
 and admission is rechecked inside that lock before credentials. The stale-rerun
 guard recognizes both historical and reusable-workflow job names.
 
@@ -384,9 +382,9 @@ evidence contract, even when the bytes match.
 
 ## CI and delivery timings
 
-Development admission waits up to 30 minutes for exact-commit CI evidence and
-its predecessor, polling every 10 seconds. Failed evidence still rejects
-immediately; the longer wait does not bypass any release check.
+Development admission waits for exact-commit CI evidence (`--timeout-seconds`
+in `v2-development-delivery.yml`). Failed evidence still rejects immediately;
+the wait does not bypass any release check.
 
 The covered Python suite prints its 30 slowest setup, call and teardown phases
 lasting at least one second. Terraform validation and the Python test job reuse

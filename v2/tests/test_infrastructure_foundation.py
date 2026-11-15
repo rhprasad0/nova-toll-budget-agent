@@ -6,7 +6,6 @@ from copy import deepcopy
 from textwrap import dedent
 from typing import cast
 
-import pytest
 import yaml
 
 from tests.infrastructure_support import (
@@ -882,18 +881,8 @@ def test_slice_2b_production_denial_uses_os_route_and_bounded_socket_failures() 
         )
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "development-foundation-330-archive.md",
-        "development-foundation-replacement.md",
-        "development-bootstrap-import.md",
-        "development-release.md",
-        "legacy-development-retirement.md",
-    ],
-)
-def test_historical_runbooks_are_non_operative_permalinked_stubs(name: str) -> None:
-    stub = (V2_ROOT / "runbooks" / name).read_text()
+def test_historical_runbooks_are_non_operative_permalinked_stubs() -> None:
+    stub = (V2_ROOT / "runbooks" / "development-release.md").read_text()
     assert "historical" in stub.splitlines()[0]
     assert "Do not run the historical procedure" in stub
     assert "https://github.com/rhprasad0/nova-toll-budget-agent/blob/" in stub

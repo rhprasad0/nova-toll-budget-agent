@@ -45,7 +45,7 @@ the 1 GiB Athena cutoff; filter by time or add partitions then.
    either way, so it is not evidence that the sync ran.
 3. Development: apply from the reviewed PR head **before merge**. The trusted PR
    plan then sees main's old rule as the trace-enable transition that
-   `infra/delivery_plan_validator.py` accepts, and post-merge delivery sees a
+   `infra/delivery_plan_validator.py` accepts, and the next delivery sees a
    no-op. After the apply, re-run the PR's `trusted-development-plan` check and
    merge only when it is green; otherwise apply main's rule back the same way.
    Merging first instead fails delivery with `phase_boundary` and fails every

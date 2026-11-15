@@ -1900,3 +1900,42 @@ fn miles(a: [f64; 2], b: [f64; 2]) -> f64 {
 fn round_tenth(value: f64) -> f64 {
     (value * 10.0).round() / 10.0
 }
+
+#[cfg(test)]
+mod doc_tests {
+    use super::*;
+
+    /// connect.md is served to clients, so its numbers must be the code's.
+    #[test]
+    fn connect_doc_states_the_code_values() {
+        let version = env!("CARGO_PKG_VERSION");
+        let cap = format!(
+            "{},{:03}",
+            DAILY_SALARY_LOOKUPS / 1000,
+            DAILY_SALARY_LOOKUPS % 1000
+        );
+        for (expected, fix) in [
+            (
+                format!("**Version:** {version} "),
+                "set **Version:** to Cargo.toml's version",
+            ),
+            (
+                format!("- **{version}, "),
+                "add a dated Changes entry for this version",
+            ),
+            (
+                format!("at most {cap} lookups"),
+                "state DAILY_SALARY_LOOKUPS",
+            ),
+            (
+                format!("at most {MAX_OPTIONS} options are returned"),
+                "state MAX_OPTIONS",
+            ),
+        ] {
+            assert!(
+                CONNECT_DOC.contains(&expected),
+                "src/connect.md: {fix} ({expected:?})"
+            );
+        }
+    }
+}

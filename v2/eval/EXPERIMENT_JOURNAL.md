@@ -29,6 +29,4 @@ material findings, figures, limitations, and decisions. Add new experiments to
 Append dated corrections without silently changing earlier results. Consolidate
 related entries in plain language; keep transcripts and granular run data private.
 
-See the [evaluation guide](README.md) for current usage. The
-[September 27 reliability report](CURRENT_TIME_RELIABILITY_2026-09-27.md)
-retains the requested detailed diagnostic and former-gate comparison.
+See the [evaluation guide](README.md) for current usage.

@@ -279,3 +279,23 @@ def test_checker_inputs_select_all_groups(
     repository.git("add", configuration)
     assert repository.run().returncode == 0
     assert {call[0] for call in repository.calls()} == set(CHECKERS)
+
+
+def test_hook_requires_a_worktree_once_the_checkout_has_them(
+    repository: Repository,
+) -> None:
+    assert repository.run().returncode == 0
+    linked = repository.root / ".worktrees" / "session"
+    repository.git("worktree", "add", "-q", str(linked))
+    result = repository.run()
+    assert result.returncode == 1
+    assert "Commit from a git worktree" in result.stderr
+    passed = subprocess.run(
+        ["bash", ".githooks/pre-commit"],
+        cwd=linked,
+        env=repository.env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert passed.returncode == 0, passed.stderr

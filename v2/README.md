@@ -45,9 +45,6 @@ Run `node tests/release_dashboard_browser.cjs` for the static page checks.
   [reviewed source-data builder](oracle/build_oracle_data.py)
 - [Shared route validation](agent_tools/validate_toll_route.py)
 - [Map corridor geometry and OpenStreetMap provenance](docs/commute-routes.md)
-- The unapplied [analytics retirement plan](plans/ANALYTICS-RETIREMENT-PLAN.md)
-  documents the source-retired usage and agent-route analytics scopes without
-  granting execution authority.
 
 ## Database bootstrap
 
@@ -56,26 +53,27 @@ Run `node tests/release_dashboard_browser.cjs` for the static page checks.
 - [Missing I-95/495 OD proxy guidance](eval/results/i95-missing-od-pricing.md) and
   [production proxy mapping and pricing views](db/analysis.sql)
 
-The independently deployable `pricing` application schema is at **1.4.0**. Its
-version is stored in `pricing.schema_version`; CI tests
-the bootstrap, privileges, analytics, cleanup guard, and monotonic SemVer policy
-on PostgreSQL 17.9.
+The independently deployable `pricing` application schema declares its version
+in the header of [db/schema.sql](db/schema.sql) and stores it in
+`pricing.schema_version`; CI tests the bootstrap, privileges, analytics, cleanup
+guard, and monotonic SemVer policy on the `postgis/postgis:17-3.5` image.
 
 The development-only bootstrap also creates the short-lived
 `schema_migrator_development` IAM login, the `pricing_owner_development` stable
 owner, and private `tollchat_migration.schema_history` metadata seeded with the
-1.4.0 pricing and 1.15.2 Oracle canonical baselines. It remains
+canonical baselines in [db/migration-baselines.json](db/migration-baselines.json). It remains
 canonical-schema-only: no released application migration is applied by the
 bootstrap, and this groundwork does not make hard-coded-owner migrations
 portable to development.
 
-The independently versioned `oracle` canonical schema is at **1.15.2**. It installs
+The independently versioned `oracle` canonical schema
+([db/oracle/schema.sql](db/oracle/schema.sql)) installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
 exposes route validation plus bounded prompt-point retrieval to `tollchat_agent`
 and internal pricing operations to `pricing_caller`.
 Migration 035 adds read-only catalog access for `pricing_reader_development`
-in the development database. The protected production boundary includes
-migration 035 and Oracle 1.15.2; production advances its version without catalog grants.
+in the development database; in production it advances the version without
+catalog grants.
 Regenerate and verify its checked-in SQL seed and frontend coverage snapshot with:
 
 ```sh
@@ -98,12 +96,10 @@ in dependency and version order. Never edit or skip a released migration. Do
 not point these direct commands at a deployed database: development migrations
 use the protected workflow described below. Production delivery is configured
 to use the [protected production migration component](RUNBOOK.md#protected-production-migration-component-issue-304-slice-4).
-The only separately authorized manual production migration remains the
-[Oracle migration 030 procedure](RUNBOOK.md#manual-oracle-migration-030).
 
 ## Verify the build
 
-Install Node.js 22.22.1 and uv, then run the setup script in each clone or
+Install Node.js (the version `.github/workflows/ci.yml` pins) and uv, then run the setup script in each clone or
 new worktree (Linux amd64/arm64). It installs the locked development tools and
 the pinned checkers into `~/.local/bin`, enables the Git hooks, and runs the
 static checks:
@@ -113,20 +109,20 @@ v2/scripts/setup.sh
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-`.github/scripts/verify.sh [loader|terraform|database|all]` then runs what the
-required CI jobs run; CI calls the same script. `database` needs two empty
+`.github/scripts/verify.sh JOB` (jobs in its header) then runs what the required
+CI jobs run; CI calls the same script. `database` needs two empty
 `postgis/postgis:17-3.5` containers (see the script).
 
-The installer verifies pinned release checksums for ShellCheck 0.11.0,
-actionlint 1.7.12 and Gitleaks 8.30.1. On other platforms install those same
-versions yourself. Python dependencies are locked in `uv.lock`; ESLint and
+The installer verifies pinned release checksums for ShellCheck, actionlint and
+Gitleaks. On other platforms install the versions `scripts/install_check_tools.sh`
+pins yourself. Python dependencies are locked in `uv.lock`; ESLint and
 TypeScript are development dependencies locked in `package-lock.json`. No
 JavaScript compilation is required.
 
 The tests also shell out to `jq`, `xxd`, `zip` and `unzip` (on Debian, the
 packages of the same names) and stop at startup if one is missing. GitHub's
 runners ship them; a bare container image does not. The full suite also needs
-Terraform 1.15.8: some of its tests fail without it and others skip. Tests
+Terraform (the version `ci.yml` pins): some of its tests fail without it and others skip. Tests
 that need Gitleaks, Docker or `psql` skip without them, so a skip locally can
 still be a failure in CI.
 
@@ -151,16 +147,9 @@ jobs, and behavioral checks run after the shared static gate.
 
 Frontend changes also run Playwright in CI: dashboard rendering, map geometry,
 chat scrolling in Chromium and Firefox, and three end-to-end UI journeys.
-Run them locally from `v2/`:
-
-```sh
-npx playwright install --with-deps chromium firefox
-node tests/eval_dashboard_browser.cjs
-node tests/cost_dashboard_browser.cjs
-node tests/public_chat_scroll_browser.cjs
-node tests/commute_map_browser.cjs
-node tests/frontend_e2e_browser.cjs
-```
+Run them locally from `v2/` after
+`npx playwright install --with-deps chromium firefox`, using the loop in the
+`frontend-browser` job of `.github/workflows/ci.yml`.
 
 CI also runs `node tests/deployed_chat_browser.cjs`, which makes **three real AI
 calls to development**: a current price, a follow-up, and a fresh conversation
@@ -276,8 +265,7 @@ Both paths accept no arbitrary target, role, or migration-path input and emit
 sanitized evidence. This is separate from disposable local/PR checks and does
 not authorize production schema changes. Production uses its own
 [protected migration component](RUNBOOK.md#protected-production-migration-component-issue-304-slice-4)
-for the registered migration set; manual production migration remains limited
-to the [Oracle migration 030 procedure](RUNBOOK.md#manual-oracle-migration-030).
+for the registered migration set; there is no manual production migration path.
 
 The public interface at `tollchat.ai` uses a private S3 origin for the v2 site
 and an IAM-authenticated streaming Lambda URL behind CloudFront and WAF. The

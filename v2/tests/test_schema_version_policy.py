@@ -1,8 +1,11 @@
 import pytest
 
 from scripts.check_schema_versions import (
+    REPO_ROOT,
     RegisteredSchema,
     owning_schemas,
+    validate_baselines_append_only,
+    validate_documented_version,
     validate_registry_continuity,
     validate_schema_update,
 )
@@ -84,3 +87,21 @@ def test_current_release_can_add_its_missing_upgrade_migration() -> None:
         [PRICING_MIGRATION],
         [PRICING_MIGRATION],
     )
+
+
+def test_migration_baselines_are_append_only() -> None:
+    validate_baselines_append_only('[{"v": 1}]', '[{"v": 1}, {"v": 2}]')
+    for current in ('[{"v": 2}]', "[]", '[{"v": 0}, {"v": 1}]'):
+        with pytest.raises(ValueError, match="append-only"):
+            validate_baselines_append_only('[{"v": 1}]', current)
+
+
+def test_owned_contract_document_states_the_canonical_version() -> None:
+    oracle = RegisteredSchema(
+        "oracle", "v2/db/oracle/schema.sql", ("v2/db/oracle/CONTRACT.md",)
+    )
+    text = (REPO_ROOT / "v2/db/oracle/CONTRACT.md").read_text()
+    current = text.split("oracle schema `", 1)[1].split("`", 1)[0]
+    validate_documented_version(oracle, current)
+    with pytest.raises(ValueError, match=r"update it to the canonical 99\.0\.0"):
+        validate_documented_version(oracle, "99.0.0")

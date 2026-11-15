@@ -58,7 +58,7 @@ step touches production.
 
 PRs use disposable PostGIS migration validation only; the checks are
 credential-free and never access or mutate deployed databases or schemas. The
-post-merge delivery path is separate from the explicit manual development
+nightly delivery path is separate from the explicit manual development
 migration workflow, which may be dispatched from `refs/heads/main` for the
 fixed development target and accepts no arbitrary target or migration-path
 inputs. See the [protected development migration workflow](#protected-development-migration-workflow-305-slice-3)
@@ -79,8 +79,7 @@ observation attempts one restoration after two consecutive probe failures.
 See the [blue-green delivery procedure](runbooks/blue-green-deployments.md).
 Configuration alone does not prove bootstrap or activation has completed.
 Production schema changes use the protected fixed-target migration component
-below. The one-time baseline adoption is complete, and the manual Oracle
-migration 030 procedure remains a separate, explicitly approved operation. Application release
+below. The one-time baseline adoption is complete. Application release
 artifacts alone do not authorize or execute schema changes.
 
 Admission compares the tip of `main` with the last successful delivery run
@@ -159,8 +158,7 @@ demonstration still requires separate human authorization.
 
 The fixed manual recovery workflow remains available for an explicitly approved
 post-merge bootstrap or migration rehearsal after the reviewed foundation plan
-and fresh development bootstrap gates (see the
-[historical replacement procedure](runbooks/development-foundation-replacement.md)).
+and fresh development bootstrap gates.
 Dispatch
    `.github/workflows/v2-development-migrations.yml` only from `refs/heads/main`;
 the job also requires GitHub actor ID `91573985` and
@@ -267,232 +265,6 @@ proves SQL shape, guards, atomicity, rollback, and idempotence only; it does
 not prove RDS authority. On a failed or uncertain commit, stop and collect new
 read-only evidence before any follow-up; do not reset, bootstrap, or migrate.
 
-## Manual Oracle migration 030
-
-Migration `v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql` is the
-only currently approved manual production schema change. Applying it requires
-separate, explicit operator authorization and a reviewed checkout containing
-that exact file. This procedure is not a PR or CI step: PRs remain offline and
-use only disposable PostgreSQL migration validation. Current development-account
-migrations follow the protected, fixed-target workflow documented below. The
-legacy `nova_toll_development` rehearsal step in this bounded, separately
-authorized migration-030 procedure remains a production-account rehearsal, not
-that workflow.
-
-Before starting, confirm all of the following in the operator's environment;
-these are runtime preconditions, not repository-verified facts:
-
-- The operator is authorized for this change and is using an authenticated
-  `nova-toll-prod` profile in AWS account `920534282028`, region `us-east-1`.
-- The reviewed checkout is the intended checkout, the terminal/session is
-  non-traced, and `aws`, `git`, `jq`, `psql`, `curl`, and `sha256sum` are
-  available.
-- The operator has private-network/Tailscale reachability to the private RDS
-  endpoint. Do not continue when any precondition is false.
-
-The block below is the one copy/paste procedure. It reads the current endpoint,
-port, and managed secret ARN from the one `nova-toll-db` instance using
-read-only RDS metadata. It validates the expected account, available/private
-target, managed `SecretString`, and username/password before any connection.
-Secret data is captured only in the non-traced process memory, never printed,
-logged, redirected to a file, persisted, placed in an argument, or recorded as
-evidence.
-The only credential delivery is the `PGUSER`/`PGPASSWORD` environment of each
-`psql` process. The temporary CA is removed by the exit trap.
-
-If `psql` reports a SQL error before `COMMIT`, the migration transaction rolls
-back. A connection loss during or after `COMMIT` makes the outcome unknown. The
-block stops and queries the exact target state before retrying an apply or
-starting recovery; do not retry blindly or treat an application/artifact
-rollback as a database downgrade.
-
-The source check must pass immediately before each apply: pricing `1.3.0`,
-Oracle `1.13.1`, exactly 995 total `oracle.toll_connection` rows, exactly 13
-`toll_handoff` rows, and no `i495_1829_to_dulles_toll_road` row. The postcheck
-must pass after each apply: pricing `1.3.0`, Oracle `1.14.0`, exactly 996 total
-connections, exactly 14 handoffs, and one target handoff with the complete
-IDs, `toll_handoff` type, null direction/source key, and curated source
-metadata. The development apply and postcheck complete before the production
-source check or apply; stop at the first failure. If this block is resumed,
-each environment accepts only its exact source state (apply and postcheck) or
-its exact target state (verify and skip); every other or corrupt state is
-rejected.
-
-```sh
-(
-set -euo pipefail
-set +x
-
-EXPECTED_ACCOUNT=920534282028
-DB_INSTANCE_IDENTIFIER=nova-toll-db
-MIGRATION_RELATIVE=v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql
-CA_URL=https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
-CA_SHA256=90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b
-CA_FILE=
-MIGRATION_SHA256=101ee53eb4e37f00e4bf711d9c97bf97b4c53981f5b0a6bd7a932cfea9ecee40
-RDS_METADATA=
-SECRET_ARN=
-SECRET_JSON=
-DB_HOST=
-DB_PORT=
-DB_USER=
-DB_PASSWORD=
-
-cleanup() {
-  unset DB_PASSWORD DB_USER SECRET_JSON SECRET_ARN RDS_METADATA PGPASSWORD
-  if [ -n "${CA_FILE:-}" ]; then
-    rm -f -- "$CA_FILE"
-  fi
-}
-trap cleanup EXIT
-trap 'exit 130' HUP INT TERM
-
-for command_name in aws git jq psql curl sha256sum; do
-  command -v "$command_name" >/dev/null
-done
-
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-MIGRATION="$REPO_ROOT/$MIGRATION_RELATIVE"
-test -f "$MIGRATION"
-test ! -L "$MIGRATION"
-printf '%s  %s\n' "$MIGRATION_SHA256" "$MIGRATION" | sha256sum --check --status
-test "$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 \
-  sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
-
-RDS_METADATA="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 \
-  rds describe-db-instances --db-instance-identifier nova-toll-db \
-  --query 'DBInstances' --output json)"
-printf '%s\n' "$RDS_METADATA" | jq -e --arg expected "$DB_INSTANCE_IDENTIFIER" '
-  type == "array" and length == 1 and
-  .[0].DBInstanceIdentifier == $expected and
-  .[0].DBInstanceStatus == "available" and
-  .[0].PubliclyAccessible == false and
-  (.[0].Endpoint.Address | type == "string" and
-    . != "None" and
-    test("^[A-Za-z0-9][A-Za-z0-9.-]*[.]rds[.]amazonaws[.]com$")) and
-  (.[0].Endpoint.Port | type == "number" and floor == . and . > 0 and . < 65536) and
-  (.[0].MasterUserSecret.SecretArn | type == "string" and
-    test("^arn:aws:secretsmanager:us-east-1:920534282028:secret:[^[:space:]]+$"))
-' >/dev/null
-DB_HOST="$(jq -er '.[0].Endpoint.Address' <<<"$RDS_METADATA")"
-DB_PORT="$(jq -er '.[0].Endpoint.Port | tostring' <<<"$RDS_METADATA")"
-SECRET_ARN="$(jq -er '.[0].MasterUserSecret.SecretArn' <<<"$RDS_METADATA")"
-unset RDS_METADATA
-
-CA_FILE="$(mktemp)"
-curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-  "$CA_URL" --output "$CA_FILE"
-if ! printf '%s  %s\n' "$CA_SHA256" "$CA_FILE" | sha256sum --check --status; then
-  printf '%s\n' 'RDS CA bundle digest mismatch; stop and review the approved CA source.' >&2
-  exit 1
-fi
-
-SECRET_JSON="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 \
-  secretsmanager get-secret-value --secret-id "$SECRET_ARN" \
-  --query SecretString --output text)"
-jq -e '
-  type == "object" and
-  (.username | type == "string" and length > 0 and test("^[^[:space:]]+$")) and
-  (.password | type == "string" and length > 0)
-' <<<"$SECRET_JSON" >/dev/null
-DB_USER="$(jq -er '.username' <<<"$SECRET_JSON")"
-DB_PASSWORD="$(jq -er '.password' <<<"$SECRET_JSON")"
-
-source_state() {
-  local database="$1"
-  PGHOST="$DB_HOST" PGPORT="$DB_PORT" PGUSER="$DB_USER" PGPASSWORD="$DB_PASSWORD" \
-    PGSSLMODE=verify-full PGSSLROOTCERT="$CA_FILE" PGDATABASE="$database" \
-    psql -X --set ON_ERROR_STOP=1 --tuples-only --no-align --quiet <<'SQL'
-SELECT
-  (SELECT version FROM pricing.schema_version WHERE singleton) || '|' ||
-  (SELECT version FROM oracle.schema_version WHERE singleton) || '|' ||
-  (SELECT count(*)::text FROM oracle.toll_connection) || '|' ||
-  (SELECT count(*)::text FROM oracle.toll_connection
-   WHERE connection_type = 'toll_handoff') || '|' ||
-  (SELECT count(*)::text FROM oracle.toll_connection
-   WHERE connection_id = 'i495_1829_to_dulles_toll_road');
-SQL
-}
-
-target_state() {
-  local database="$1"
-  PGHOST="$DB_HOST" PGPORT="$DB_PORT" PGUSER="$DB_USER" PGPASSWORD="$DB_PASSWORD" \
-    PGSSLMODE=verify-full PGSSLROOTCERT="$CA_FILE" PGDATABASE="$database" \
-    psql -X --set ON_ERROR_STOP=1 --tuples-only --no-align --quiet <<'SQL'
-SELECT
-  (SELECT version FROM pricing.schema_version WHERE singleton) || '|' ||
-  (SELECT version FROM oracle.schema_version WHERE singleton) || '|' ||
-  (SELECT count(*)::text FROM oracle.toll_connection) || '|' ||
-  (SELECT count(*)::text FROM oracle.toll_connection
-   WHERE connection_type = 'toll_handoff') || '|' ||
-  (SELECT count(*)::text FROM oracle.toll_connection
-   WHERE connection_id = 'i495_1829_to_dulles_toll_road') || '|' ||
-  (SELECT count(*)::text FROM oracle.toll_connection
-   WHERE connection_id = 'i495_1829_to_dulles_toll_road'
-     AND from_point_id = 'i495:1829ND'
-     AND to_point_id = 'dtr:1819:entry:WB'
-     AND connection_type = 'toll_handoff'
-     AND required_i95_direction IS NULL
-     AND source_route_key IS NULL
-     AND source_metadata = '{"basis":"v2/db/oracle/CONTRACT.md","curated":true}'::jsonb);
-SQL
-}
-
-require_target_state() {
-  local database="$1" actual
-  actual="$(target_state "$database")"
-  test "$actual" = '1.3.0|1.14.0|996|14|1|1'
-}
-
-apply_migration() {
-  local database="$1" actual
-  if PGHOST="$DB_HOST" PGPORT="$DB_PORT" PGUSER="$DB_USER" PGPASSWORD="$DB_PASSWORD" \
-      PGSSLMODE=verify-full PGSSLROOTCERT="$CA_FILE" PGDATABASE="$database" \
-      psql -X --set ON_ERROR_STOP=1 --quiet --file "$MIGRATION"; then
-    return 0
-  fi
-  printf '%s\n' 'Apply outcome is unknown; querying exact target state before retry or recovery.' >&2
-  if ! actual="$(target_state "$database")"; then
-    printf '%s\n' 'Unable to query target state; stop for separately authorized incident handling.' >&2
-    exit 1
-  fi
-  printf 'Observed post-failure state: %s\n' "$actual" >&2
-  exit 1
-}
-
-process_environment() {
-  local database="$1" source target
-  source="$(source_state "$database")"
-  if [ "$source" = '1.3.0|1.13.1|995|13|0' ]; then
-    apply_migration "$database"
-    require_target_state "$database"
-    printf '%s migration and postcondition passed\n' "$database"
-    return 0
-  fi
-
-  target="$(target_state "$database")"
-  if [ "$target" = '1.3.0|1.14.0|996|14|1|1' ]; then
-    printf '%s already has the exact target state; verifying and skipping\n' "$database"
-    return 0
-  fi
-  printf 'Incompatible migration state for %s; stop without applying.\n' "$database" >&2
-  exit 1
-}
-
-process_environment nova_toll_development
-process_environment nova_toll
-cleanup
-)
-```
-
-SQL errors before `COMMIT` roll back the migration transaction. A connection
-loss during or after `COMMIT` leaves the outcome unknown, so the exact target
-state must be queried before retrying or recovering. A committed migration
-cannot be downgraded or undone by application/artifact rollback; recovery
-requires separately authorized RDS backup/PITR incident handling. This
-procedure does not create backups, automatic rollback/downgrade, or evidence
-artifacts.
-
 ## Environment-tag inventory and release safety
 
 The active cost-allocation key is the lowercase `environment`. Its only values
@@ -528,57 +300,21 @@ development path has no Cloudflare data or resource instances.
 
 ## Build and review
 
-From `v2/`:
-
-```sh
-uv sync --locked
-uv run pytest
-npm ci --prefix lambdas/chat_proxy
-npm test --prefix lambdas/chat_proxy
-./scripts/build_loader_zip.sh
-./scripts/build_publisher_zip.sh
-./scripts/build_agentcore_zips.sh
-./scripts/build_fetcher_zip.sh
-(cd infra/build && sha256sum --check AGENTCORE_SHA256SUMS)
-```
-
-After changing a pinned file, refresh the release pins and review the diff:
+`.github/scripts/verify.sh loader` runs the tests and builds every package, as CI
+does. After changing a pinned file, refresh the release pins from `v2/` and
+review the diff:
 
 ```sh
 python3 scripts/update_release_manifest.py
 ```
 
-To refresh the package digests as well, build the zips and pass their
-`sha256sum` listing (`agentcore.zip`, `chat-proxy.zip`, `loader.zip`,
-`publisher.zip`, `timed-checks.zip`) as the argument.
+To refresh the package digests as well, pass a `sha256sum` listing of the zips
+in `infra/build/` that the manifest's `packages` names.
 
 For current blue-green releases, delivery creates the private, versioned recovery
 record used by the protected `v2-production-recovery.yml` workflow. Retain the
 original numeric `claim_id`, exact `record_version`, and reviewed
 `expected_state_sha256`. Follow the [blue-green recovery procedure](runbooks/blue-green-deployments.md).
-
-### Historical pre-bootstrap recovery capture
-
-The following capture instructions describe the former fixed-runtime path only.
-They are not a prerequisite or recovery procedure for blue-green releases and
-grant no new authority to mutate production.
-
-Before approving or deploying a production release under that historical path,
-set `RELEASE_EVIDENCE` to
-a unique per-release path. This immutable, non-overwriting recovery record
-contains only the prior versions of the fixed `tollchat-v2-chat-proxy` `live`
-alias and fixed `nova_toll_v2-W6989LEw44` `preview` endpoint; retain it with the
-release and never publish it with credentials, raw logs, private state, or
-manifest contents.
-
-Export `RELEASE_EVIDENCE` as a new file path in a directory you own that is
-not group- or world-writable and lies outside the checkout; the script never
-overwrites an existing record. Then, from the repository root and in the same
-shell:
-
-```sh
-bash v2/manual-releases/capture_production_recovery.sh
-```
 
 Historical `usage.json` is retained as a managed, data-bearing site object.
 This release stops new writes and does not purge that snapshot or its logs; a
@@ -602,12 +338,9 @@ Use only the procedure that owns the intended operation:
   resources, code deploys, and Muse connection (development only).
 - The [protected development migration workflow](#protected-development-migration-workflow-305-slice-3)
   is the post-merge development schema path.
-- The completed account-split procedures are historical stubs with permalinks:
-  [#330 foundation](runbooks/development-foundation-330-archive.md),
-  [#327/#333 foundation replacement](runbooks/development-foundation-replacement.md),
-  [#331 release bring-up](runbooks/development-release.md),
-  [#332 bootstrap/import](runbooks/development-bootstrap-import.md), and
-  [#333 legacy retirement](runbooks/legacy-development-retirement.md).
+- [#331 release bring-up](runbooks/development-release.md) is a historical stub.
+  The other completed account-split procedures (#327, #330, #332, #333) are in
+  Git history.
 
 Public report publication remains non-operative.
 An AWS-only identity cannot write Cloudflare DNS.
@@ -619,7 +352,9 @@ Before publishing a release, complete the
 Compare candidate/development schema evidence, the production wrapper's expected
 versions, and the reviewed production migration cap. Verify the installed
 production versions and each migration's role prerequisites. Development success
-alone is insufficient. The current cap is 035: pricing 1.4.0 and Oracle 1.15.2.
+alone is insufficient. The cap is `PRODUCTION_MAX_MIGRATION_NUMBER` in
+`scripts/run_development_migrations.py`; the versions it reaches are the ones
+`scripts/run_production_migrations_workflow.sh` expects.
 Migration 033 requires the separately provisioned production `eval_writer` role;
 034 updates 24 route labels and aliases without changing route connections.
 Migration 035 advances the Oracle version without changing production data or ACLs;
@@ -956,304 +691,6 @@ loss, dispatch `v2-production-recovery.yml` from `main` with the original
 Review and approve its protected `production` job. Follow the
 [blue-green recovery procedure](runbooks/blue-green-deployments.md).
 Recovery restores application routing, not databases or shared infrastructure.
-
-### Production canary failure: human stop and manual routing restore
-
-**Historical pre-bootstrap procedure only.** The remainder of this section
-records the former fixed-runtime recovery contract. Do not use it for blue-green
-releases; use the protected recovery workflow above. It grants no new production
-mutation authority.
-
-A production canary failure is a human stop: hold normal delivery, do not
-report success, and do not roll back automatically. A separately deliberate
-manual restore may change only application routing to the recorded previous
-versions of the fixed Lambda alias and AgentCore endpoint below. It is not a
-checked-in rollback executable. Do not rerun capture, modify a database,
-schema, shared polling/storage, Lambda concurrency, or production data. Any
-later Terraform reconciliation requires separate authorization and the normal
-protected saved-plan flow; it does not follow from this failed canary.
-
-Set `RELEASE_EVIDENCE` to the original failed release's recovery record. A
-precondition failure, identity mismatch, stale Lambda revision, unexpected
-response, or ambiguous result stops for a fresh read and escalation; do not
-blindly retry or treat it as success.
-
-```sh
-(
-  set -euo pipefail
-  set +x
-  umask 077
-  EXPECTED_ACCOUNT=920534282028
-  EXPECTED_REGION=us-east-1
-  LAMBDA_FUNCTION=tollchat-v2-chat-proxy
-  LAMBDA_ALIAS=live
-  AGENTCORE_RUNTIME=nova_toll_v2-W6989LEw44
-  AGENTCORE_ENDPOINT=preview
-  export AWS_IGNORE_CONFIGURED_ENDPOINT_URLS=true
-  RECOVERY_RECORD_MAX_BYTES=256
-  CURRENT_STAGE=record-path
-  FAILURE_REPORTED=0
-  AGENTCORE_UPDATE_AMBIGUOUS=0
-  AGENTCORE_UPDATE_STATUS=0
-  AGENTCORE_RETRY_USED=0
-  AGENTCORE_RESTORED=0
-  finish() {
-    local status=$?
-    trap - EXIT
-    if (( status != 0 && status != 130 && AGENTCORE_UPDATE_AMBIGUOUS == 1 )); then
-      status=$AGENTCORE_UPDATE_STATUS
-    fi
-    if (( status != 0 && FAILURE_REPORTED == 0 )); then
-      printf 'stage=%s status=fail exit=%s reason=unclassified\n' "$CURRENT_STAGE" "$status" >&2 || :
-      FAILURE_REPORTED=1
-    fi
-    exit "$status"
-  }
-  trap finish EXIT
-  trap 'exit 130' HUP INT TERM
-  CURRENT_STAGE=record-path
-  test -n "${RELEASE_EVIDENCE-}"
-  CURRENT_STAGE=record-snapshot
-  RECOVERY_VALUES="$(
-    set +e
-    python3 -I -S - "$RELEASE_EVIDENCE" "$RECOVERY_RECORD_MAX_BYTES" 2>/dev/null <<'PY' | jq -Rser '
-    select(test("^[1-9][0-9]* [1-9][0-9]*$"))
-    ' 2>/dev/null
-import os
-import re
-import stat
-import sys
-
-try:
-    path, raw_limit = sys.argv[1:]
-    limit = int(raw_limit)
-    if limit < 1 or not hasattr(os, "O_NOFOLLOW"):
-        raise ValueError
-    parent, basename = os.path.split(path)
-    if not basename:
-        raise ValueError
-    directory = os.open(
-        parent or ".", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-    )
-    try:
-        parent_info = os.fstat(directory)
-        if parent_info.st_uid != os.geteuid() or parent_info.st_mode & 0o022:
-            raise ValueError
-        fd = os.open(
-            basename,
-            os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
-            dir_fd=directory,
-        )
-        try:
-            info = os.fstat(fd)
-            named = os.stat(basename, dir_fd=directory, follow_symlinks=False)
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or stat.S_IMODE(info.st_mode) != 0o600
-                or info.st_uid != os.geteuid()
-                or info.st_size > limit
-                or named.st_dev != info.st_dev
-                or named.st_ino != info.st_ino
-                or named.st_uid != os.geteuid()
-                or not stat.S_ISREG(named.st_mode)
-                or stat.S_IMODE(named.st_mode) != 0o600
-            ):
-                raise ValueError
-            snapshot = os.read(fd, limit + 1)
-        finally:
-            os.close(fd)
-    finally:
-        os.close(directory)
-    if len(snapshot) > limit:
-        raise ValueError
-    lines = snapshot.splitlines(keepends=True)
-    if len(lines) != 2 or any(not line.endswith(b"\n") for line in lines):
-        raise ValueError
-    values = {}
-    for line in lines:
-        key, separator, value = line[:-1].partition(b"=")
-        if key not in {
-            b"lambda_live_function_version",
-            b"agentcore_endpoint_live_version",
-        } or separator != b"=" or key in values:
-            raise ValueError
-        value = value.decode("ascii")
-        if not re.fullmatch(r"[1-9][0-9]*", value):
-            raise ValueError
-        values[key] = value
-    if set(values) != {
-        b"lambda_live_function_version",
-        b"agentcore_endpoint_live_version",
-    }:
-        raise ValueError
-    sys.stdout.write(
-        f"{values[b'lambda_live_function_version']} "
-        f"{values[b'agentcore_endpoint_live_version']}"
-    )
-except (OSError, UnicodeDecodeError, ValueError):
-    raise SystemExit(1)
-PY
-    statuses=("${PIPESTATUS[@]}")
-    set -e
-    (( statuses[0] == 0 )) || exit "${statuses[0]}"
-    exit "${statuses[1]}"
-)"
-  CURRENT_STAGE=record-validate
-  IFS=' ' read -r LAMBDA_LIVE_FUNCTION_VERSION AGENTCORE_ENDPOINT_LIVE_VERSION <<<"$RECOVERY_VALUES"
-  test -n "$LAMBDA_LIVE_FUNCTION_VERSION"
-  test -n "$AGENTCORE_ENDPOINT_LIVE_VERSION"
-  unset RECOVERY_VALUES
-  CURRENT_STAGE=account-identity
-  set +e
-  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" \
-    sts get-caller-identity --query Account --output text 2>&1 | cmp -s - <(printf '%s\n' "$EXPECTED_ACCOUNT") 2>/dev/null
-  statuses=("${PIPESTATUS[@]}")
-  set -e
-  (( statuses[0] == 0 )) || exit "${statuses[0]}"
-  (( statuses[1] == 0 )) || exit "${statuses[1]}"
-
-  CURRENT_STAGE=lambda-validate
-  LAMBDA_ALIAS_REVISION="$(
-    set +e
-    AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias \
-      --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" --output json 2>&1 | jq -ser '
-    select(length == 1) | .[0] | select(.AliasArn == "arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live" and .Name == "live" and
-      (.RevisionId | type == "string" and length > 0 and length <= 256 and
-        (explode | all(. >= 32 and (. < 127 or . >= 160))))) | .RevisionId
-    ' 2>/dev/null
-    statuses=("${PIPESTATUS[@]}")
-    set -e
-    (( statuses[0] == 0 )) || exit "${statuses[0]}"
-    exit "${statuses[1]}"
-  )"
-  CURRENT_STAGE=lambda-update
-  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda update-alias \
-    --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" \
-    --function-version "$LAMBDA_LIVE_FUNCTION_VERSION" --revision-id "$LAMBDA_ALIAS_REVISION" >/dev/null 2>&1
-  CURRENT_STAGE=lambda-readback-validate
-  set +e
-  AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" lambda get-alias \
-    --function-name "$LAMBDA_FUNCTION" --name "$LAMBDA_ALIAS" --output json 2>&1 | jq -se --arg version "$LAMBDA_LIVE_FUNCTION_VERSION" '
-    select(length == 1) | .[0] | .AliasArn == "arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-chat-proxy:live" and .Name == "live" and .FunctionVersion == $version and
-    (if has("RoutingConfig") then
-      .RoutingConfig as $routing |
-      if ($routing | type) != "object" then false
-      elif ($routing | has("AdditionalVersionWeights")) then
-        ($routing.AdditionalVersionWeights | type == "object" and length == 0)
-      else true
-      end
-    else true
-    end)
-  ' >/dev/null 2>&1
-  statuses=("${PIPESTATUS[@]}")
-  set -e
-  (( statuses[0] == 0 )) || exit "${statuses[0]}"
-  (( statuses[1] == 0 )) || exit "${statuses[1]}"
-
-  CURRENT_STAGE=agentcore-token
-  AGENTCORE_RESTORE_TOKEN="$(
-    set +e
-    python3 -I -S -c 'import uuid; print(uuid.uuid4())' 2>/dev/null | jq -Rser '
-    select(test("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
-    ' 2>/dev/null
-    statuses=("${PIPESTATUS[@]}")
-    set -e
-    (( statuses[0] == 0 )) || exit "${statuses[0]}"
-    exit "${statuses[1]}"
-  )"
-  update_agentcore() {
-    AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" bedrock-agentcore-control update-agent-runtime-endpoint \
-      --agent-runtime-id "$AGENTCORE_RUNTIME" --endpoint-name "$AGENTCORE_ENDPOINT" \
-      --agent-runtime-version "$AGENTCORE_ENDPOINT_LIVE_VERSION" \
-      --client-token "$AGENTCORE_RESTORE_TOKEN" >/dev/null 2>&1
-  }
-  CURRENT_STAGE=agentcore-update
-  if update_agentcore; then :; else
-    AGENTCORE_UPDATE_STATUS=$?
-    AGENTCORE_UPDATE_AMBIGUOUS=1
-  fi
-  for ((attempt = 1; attempt <= 60; attempt++)); do
-    CURRENT_STAGE=agentcore-validate
-    AGENTCORE_READBACK="$(
-      set +e
-      AWS_PROFILE=nova-toll-prod aws --region "$EXPECTED_REGION" \
-        bedrock-agentcore-control get-agent-runtime-endpoint --agent-runtime-id "$AGENTCORE_RUNTIME" \
-        --endpoint-name "$AGENTCORE_ENDPOINT" --output json 2>&1 | jq -ser '
-      select(length == 1) | .[0] |
-      select(
-        .agentRuntimeArn == "arn:aws:bedrock-agentcore:us-east-1:920534282028:runtime/nova_toll_v2-W6989LEw44" and
-        .name == "preview" and
-        (.status | type == "string" and test("^(READY|CREATING|UPDATING|UPDATE_FAILED)$"))
-      ) |
-      .status as $status |
-      (if $status == "UPDATE_FAILED" then ""
-       else .liveVersion | select(type == "string" and test("^[1-9][0-9]*$"))
-       end) as $live |
-      (if has("targetVersion") then
-         .targetVersion | select(type == "string" and test("^[1-9][0-9]*$"))
-       else ""
-       end) as $target |
-      [$status, $live, $target] | @tsv
-      ' 2>/dev/null
-      statuses=("${PIPESTATUS[@]}")
-      set -e
-      (( statuses[0] == 0 )) || exit "${statuses[0]}"
-      exit "${statuses[1]}"
-    )"
-    AGENTCORE_STATUS=
-    AGENTCORE_LIVE_VERSION=
-    AGENTCORE_TARGET_VERSION=
-    IFS=$'\t' read -r AGENTCORE_STATUS AGENTCORE_LIVE_VERSION AGENTCORE_TARGET_VERSION <<<"$AGENTCORE_READBACK"
-    case "$AGENTCORE_STATUS" in
-      READY)
-        if test -z "$AGENTCORE_TARGET_VERSION"; then AGENTCORE_TARGET_VERSION=$AGENTCORE_LIVE_VERSION; fi
-        test "$AGENTCORE_TARGET_VERSION" = "$AGENTCORE_LIVE_VERSION"
-        if test "$AGENTCORE_LIVE_VERSION" = "$AGENTCORE_ENDPOINT_LIVE_VERSION"; then
-          AGENTCORE_RESTORED=1
-          break
-        fi
-        if (( AGENTCORE_UPDATE_AMBIGUOUS == 0 )); then exit 1; fi
-        if (( AGENTCORE_RETRY_USED == 1 )); then exit "$AGENTCORE_UPDATE_STATUS"; fi
-        AGENTCORE_RETRY_USED=1
-        CURRENT_STAGE=agentcore-retry
-        update_agentcore || :
-        ;;
-      CREATING|UPDATING)
-        test -n "$AGENTCORE_TARGET_VERSION"
-        test "$AGENTCORE_TARGET_VERSION" = "$AGENTCORE_ENDPOINT_LIVE_VERSION"
-        CURRENT_STAGE=agentcore-poll
-        if (( attempt == 60 )); then
-          if (( AGENTCORE_UPDATE_AMBIGUOUS == 1 )); then exit "$AGENTCORE_UPDATE_STATUS"; fi
-          exit 1
-        fi
-        sleep 5 >/dev/null 2>&1
-        ;;
-      UPDATE_FAILED) exit 1 ;;
-      *) exit 1 ;;
-    esac
-  done
-  if (( AGENTCORE_RESTORED == 0 && AGENTCORE_UPDATE_AMBIGUOUS == 1 )); then
-    exit "$AGENTCORE_UPDATE_STATUS"
-  fi
-  test "$AGENTCORE_RESTORED" -eq 1
-)
-```
-
-The restore token is generated for this restore and must be distinct from the
-forward update token. On an ambiguous AgentCore update return, retain that token
-and exact fixed request for the immediate read-back/poll; at most one identical
-same-token retry is allowed only when the endpoint remains `READY` on a
-different version. The immediate Lambda alias read-back and finite AgentCore
-`READY`/recorded-version read-back/poll are the complete post-restore production
-evidence. Do not run a Terraform-state-bound production checker after this
-deliberate prior-version routing restore.
-
-Rehearse recovery only in development, leaving production exactly unchanged.
-After the restore, a WAF/rate-limit response, including HTTP 429, is invalid
-public-check evidence: neither a pass nor an application failure. Wait until
-the currently configured WAF rate-based quiet/evaluation window has cleared,
-then run the unchanged development checker for full readiness, public, and
-two-session/reset verification.
 
 Deterministic builds restore the exact package bytes; bucket versioning retains
 the earlier runtime and proxy objects for 30 days. Historical usage aggregate,
