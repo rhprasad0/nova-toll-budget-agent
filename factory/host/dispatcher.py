@@ -165,7 +165,11 @@ def cleanup(work_order: str) -> None:
 
 
 def verify(
-    job: str, profile: str | None, branch: str = "main", source: Path | None = None
+    job: str,
+    profile: str | None,
+    branch: str = "main",
+    source: Path | None = None,
+    log_copy: Path | None = None,
 ) -> int:
     """Run verify.sh on BRANCH in a fresh sandbox; return its exit code."""
     work_order = (
@@ -203,6 +207,8 @@ def verify(
             f"{work_order}: exit {code} after {time.monotonic() - started:.0f} s",
             flush=True,
         )
+        if log_copy:
+            shutil.copy(job_dir / "verify.log", log_copy)
         return code
     finally:
         (STATE / "current-job").write_text("none")
@@ -473,7 +479,11 @@ def main() -> None:
     elif args.command == "poll":
         print(f"poll: {inbox.poll(inbox.connect(INBOX), inbox.GhCli())} events read")
     elif args.command == "run":
-        inbox.run_forever(INBOX, inbox.GhCli(), admission_preflight, cleanup)
+        from factory.host import workorder
+
+        inbox.run_forever(
+            INBOX, inbox.GhCli(), admission_preflight, cleanup, workorder.work
+        )
     elif args.command == "dashboard":
         dashboard.server(INBOX).serve_forever()
     else:

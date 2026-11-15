@@ -49,6 +49,7 @@ class FakeGitHub:
         self.open_pr_heads: set[str] = set()
         self.writes: list[tuple[str, str]] = []
         self.feed_pages_read = 0
+        self.pulls: dict[int, dict[str, Any]] = {}
         self.on_issue_read: list[
             Callable[[], None]
         ] = []  # runs while admit() reads GitHub
@@ -86,6 +87,8 @@ class FakeGitHub:
             return self.issues.get(int(m[1]))
         if m := re.fullmatch(r".*/branches/(.+)", url.path):
             return {"name": m[1]} if m[1] in self.branches else None
+        if m := re.fullmatch(r".*/pulls/(\d+)", url.path):
+            return self.pulls.get(int(m[1]))
         if url.path.endswith("/pulls"):
             return (
                 [{"number": 1}]
@@ -540,3 +543,33 @@ def test_a_cancelled_work_order_that_died_is_not_retried_and_keeps_the_label(
     assert row["outcome"] == "cancelled"
     assert statuses(db)[11] == "done"
     assert [m for m, _ in gh.writes] == ["POST"]
+
+
+def test_the_sweep_records_how_a_work_orders_pr_closed(
+    db: sqlite3.Connection, gh: FakeGitHub
+) -> None:
+    inbox.record(db, event(11, "labeled", 6), 6, "labeled")
+    db.execute(
+        "INSERT INTO work_orders (id, issue, event, started, pr, outcome) VALUES ('w', 6, 11, 'now', 42, 'pr_ready')"
+    )
+    inbox.record(db, event(20, "closed", 42, pr=True), 42, "closed")
+    gh.pulls = {42: {"merged": True, "closed_at": "2026-11-16T09:00:00Z"}}
+    inbox.sweep(db, gh)
+    stored = db.execute(
+        "SELECT merged, closed FROM work_orders WHERE id = 'w'"
+    ).fetchone()
+    assert tuple(stored) == (1, "2026-11-16T09:00:00Z")
+    assert statuses(db)[20] == "done"
+
+
+def test_an_inbox_from_before_stage_6_gains_the_new_columns(tmp_path: Path) -> None:
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(
+        inbox.SCHEMA.replace(",\n    started_comment INTEGER,\n    detail TEXT", "")
+    )
+    old.close()
+    columns = {
+        row[1] for row in inbox.connect(path).execute("PRAGMA table_info(work_orders)")
+    }
+    assert {"started_comment", "detail"} <= columns

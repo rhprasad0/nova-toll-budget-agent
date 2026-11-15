@@ -10,6 +10,7 @@ comment) is Stage 6, so until then the runner refuses to start without a `work`.
 
 import fcntl
 import json
+import re
 import sqlite3
 import subprocess
 import threading
@@ -23,6 +24,7 @@ from typing import Any, Protocol, TextIO
 REPO = "rhprasad0/nova-toll-budget-agent"
 OWNER = REPO.split("/")[0]
 LABEL = "factory"
+DETAIL_LIMIT = 50_000
 OVERLAP = timedelta(minutes=5)  # GitHub lists some events late; re-read this far back
 HEARTBEAT_SECONDS = 60
 IDLE_SECONDS = 30
@@ -57,7 +59,9 @@ CREATE TABLE IF NOT EXISTS work_orders (
     cost_usd REAL,
     merged INTEGER,
     closed TEXT,
-    transcripts TEXT
+    transcripts TEXT,
+    started_comment INTEGER,
+    detail TEXT
 );
 CREATE TABLE IF NOT EXISTS status (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -91,7 +95,11 @@ class GhCli:
             if "HTTP 404" in done.stderr:
                 return None
             raise RuntimeError(f"gh api {method} {path}: {done.stderr.strip()}")
-        return json.loads(done.stdout) if done.stdout.strip() else None
+        if not done.stdout.strip():
+            return None
+        if done.stdout.lstrip()[:1] in {"{", "["}:
+            return json.loads(done.stdout)
+        return done.stdout
 
 
 def now() -> str:
@@ -105,6 +113,10 @@ def connect(path: Path) -> sqlite3.Connection:
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA foreign_keys=ON")
     db.executescript(SCHEMA)
+    columns = {row[1] for row in db.execute("PRAGMA table_info(work_orders)")}
+    for column in ("started_comment INTEGER", "detail TEXT"):
+        if column.split()[0] not in columns:
+            db.execute(f"ALTER TABLE work_orders ADD COLUMN {column}")
     return db
 
 
@@ -277,18 +289,73 @@ def admit(gh: GitHub, event: sqlite3.Row) -> tuple[str, str, Json | None]:
     return Admission.ADMIT, "", issue
 
 
+def outcome_text(work_order: sqlite3.Row) -> str:
+    lines = [
+        f"Factory work order `{work_order['id']}` ended: **{work_order['outcome']}**."
+    ]
+    if work_order["detail"]:
+        detail = str(work_order["detail"])[:DETAIL_LIMIT]
+        runs = re.findall(r"`+", detail)
+        fence = "`" * max(3, max((len(run) for run in runs), default=0) + 1)
+        lines.append(f"{fence}text\n{detail}\n{fence}")
+    if work_order["pr"]:
+        lines.append(f"Pull request: #{work_order['pr']}")
+    lines.append(f"Fix rounds used: {work_order['round']} of 3")
+    if work_order["tokens"]:
+        cost = (
+            f", about ${work_order['cost_usd']:.2f} at list price"
+            if work_order["cost_usd"]
+            else ""
+        )
+        lines.append(f"Tokens: {work_order['tokens']:,}{cost}")
+    if work_order["trace_id"]:
+        lines.append(
+            f"Trace, through the SSH tunnel: http://localhost:6006/redirects/traces/{work_order['trace_id']}"
+        )
+    return "\n\n".join(lines)
+
+
 def post_outcome(db: sqlite3.Connection, gh: GitHub, work_order: sqlite3.Row) -> None:
-    """The outcome comment, and the label removal unless the work order was cancelled."""
     issue = work_order["issue"]
-    gh.api(f"repos/{REPO}/issues/{issue}/comments", "POST",
-           body=f"Factory work order `{work_order['id']}` ended: `{work_order['outcome']}`.")  # fmt: skip
-    if work_order["outcome"] != "cancelled":
-        gh.api(f"repos/{REPO}/issues/{issue}/labels/{LABEL}", "DELETE")
+    text = outcome_text(work_order)
+    try:
+        edited = None
+        if work_order["started_comment"]:
+            comment = work_order["started_comment"]
+            edited = gh.api(
+                f"repos/{REPO}/issues/comments/{comment}", "PATCH", body=text
+            )
+        if edited is None:
+            gh.api(f"repos/{REPO}/issues/{issue}/comments", "POST", body=text)
+        if work_order["outcome"] != "cancelled":
+            gh.api(f"repos/{REPO}/issues/{issue}/labels/{LABEL}", "DELETE")
+    except RuntimeError as error:
+        print(f"posting the outcome of {work_order['id']} failed: {error}", flush=True)
     with transaction(db):
         db.execute(
             "UPDATE work_orders SET outcome_posted = 1 WHERE id = ?",
             (work_order["id"],),
         )
+
+
+def sweep(db: sqlite3.Connection, gh: GitHub) -> None:
+    for event in db.execute(
+        "SELECT * FROM events WHERE kind = 'closed' AND status = 'pending'"
+    ).fetchall():
+        try:
+            pr: Json | None = gh.api(f"repos/{REPO}/pulls/{event['issue']}")
+        except RuntimeError:
+            continue
+        with transaction(db):
+            db.execute(
+                "UPDATE work_orders SET merged = ?, closed = ? WHERE pr = ?",
+                (
+                    int(bool(field(pr, "merged"))),
+                    field(pr, "closed_at") or event["at"],
+                    event["issue"],
+                ),
+            )
+            db.execute("UPDATE events SET status = 'done' WHERE id = ?", (event["id"],))
 
 
 def settle(db: sqlite3.Connection, gh: GitHub, cleanup: Callable[[str], None]) -> None:
@@ -346,11 +413,7 @@ def step(
     work: Callable[[sqlite3.Connection, GitHub, sqlite3.Row], str],
 ) -> bool:
     """Handle at most one event; return whether there was one."""
-    with transaction(db):
-        # shortcut: the sweep of closed PRs only marks them handled until Stage 6.
-        db.execute(
-            "UPDATE events SET status = 'done' WHERE kind = 'closed' AND status = 'pending'"
-        )
+    sweep(db, gh)
     paused = (status(db) or {"paused_until": None})["paused_until"]
     if paused and paused > now():
         return False
