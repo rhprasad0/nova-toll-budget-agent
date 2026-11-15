@@ -7,7 +7,7 @@ the weekly accounts keep those distinctions alongside the figures.
 
 | Week | Work | Recorded result |
 | --- | --- | --- |
-| [November 9-15](journal/2026-11-09.md) | soupsieve 4.0 upgrade (corpus 5.2.20) | Actor checks **85/85** valid, **$0.126806**; calibration still deferred |
+| [November 9-15](journal/2026-11-09.md) | soupsieve 4.0 upgrade (corpus 5.2.20); Pillow and ADOT security upgrade (5.2.21) | Actor checks **85/85** valid for each, **$0.126806** and **$0.126567**; calibration still deferred |
 | [October 19-25](journal/2026-10-19.md) | certifi and aiohttp upgrade (corpus 5.2.19) | Actor checks **85/85** valid, **$0.128638**; calibration still deferred |
 | [October 12-18](journal/2026-10-12.md) | Eastern display times (corpus 5.2.13); holdout guard removal; RDS CA pin; v1.2.0 holdout comparison; billing refresh timing; mcp and multidict upgrade (5.2.14); Haiku 5.5 judge evaluation; eval tooling retirement (5.2.18) | v1.2.0 holdout pass³ **78.4% vs 72.0%** against v1.1.2 (within run-to-run spread); re-judging the same conversations, Haiku cost **2.2×** Luna's judging without being more accurate, so **Luna was retained** |
 | [October 5-11](journal/2026-10-05.md) | Freeze all three suites and calibrate daily judges; climb training pass³ with SOP prose | Golden: **100% judge decisions, ≥95% actor validity**, earlier application **63/85 passes**, ceiling **$22.924064**; scheduled: **204/204 judgments**, **$0.0492** estimated; SOP climb: training pass³ **70.4% → 80.7%**, **$17.07** |
