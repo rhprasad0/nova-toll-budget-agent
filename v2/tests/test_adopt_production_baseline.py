@@ -7,6 +7,7 @@ import re
 import secrets
 import select
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -321,6 +322,12 @@ def _rds_metadata(**overrides: object) -> dict[str, object]:
     return metadata
 
 
+def _free_local_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
 def _local_docker_environment() -> dict[str, str]:
     candidates = (
         Path("/var/run/docker.sock"),
@@ -614,6 +621,16 @@ def test_disposable_postgis_adoption_and_rerun_guard(
     if not docker or not psql:
         pytest.skip("requires local Docker and psql")
     docker_environment = _local_docker_environment()
+    # The factory sandbox cannot reach the Docker host's loopback, so it names a
+    # network namespace it shares; the fixture listens there on a free port.
+    shared_network = os.environ.get("DISPOSABLE_DOCKER_NETWORK")
+    shared_port = _free_local_port() if shared_network else None
+    placement = (
+        ["--network", shared_network]
+        if shared_network
+        else ["--publish", "127.0.0.1::5432"]
+    )
+    server = ["-c", f"port={shared_port}"] if shared_port else []
     created = subprocess.run(
         [
             docker,
@@ -622,9 +639,9 @@ def test_disposable_postgis_adoption_and_rerun_guard(
             "--rm",
             "--env",
             "POSTGRES_HOST_AUTH_METHOD=trust",
-            "--publish",
-            "127.0.0.1::5432",
+            *placement,
             "postgis/postgis:17-3.5",
+            *server,
         ],
         capture_output=True,
         text=True,
@@ -665,17 +682,20 @@ def test_disposable_postgis_adoption_and_rerun_guard(
     )
     assert running.returncode == 0
     assert running.stdout.strip() == "true"
-    published = subprocess.run(
-        [docker, "port", container, "5432/tcp"],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=docker_environment,
-    )
-    assert published.returncode == 0
-    endpoint = published.stdout.strip().splitlines()[0].rsplit(":", 1)
-    assert len(endpoint) == 2
-    host, port = endpoint
+    if shared_port:
+        host, port = "127.0.0.1", str(shared_port)
+    else:
+        published = subprocess.run(
+            [docker, "port", container, "5432/tcp"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=docker_environment,
+        )
+        assert published.returncode == 0
+        endpoint = published.stdout.strip().splitlines()[0].rsplit(":", 1)
+        assert len(endpoint) == 2
+        host, port = endpoint
     assert host == "127.0.0.1"
 
     def run_psql(

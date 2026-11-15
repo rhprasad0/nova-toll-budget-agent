@@ -211,13 +211,18 @@ def test_system_prompt_matches_its_versioned_contract() -> None:
             for digest in contract["releases"].values()
         )
     prompt = build_system_prompt(_contract_points(), current_date=date(2026, 8, 21))
-    assert (
-        hashlib.sha256(prompt.encode()).hexdigest()
-        == (prompt_contract["releases"][prompt_contract["current"]])
+    bump = (
+        "the {} changed: bump {} in v2/agent/toll_agent.py, add that release "
+        "with digest {} to v2/agent/contract-manifest.json, make it current, "
+        "and update the version asserted in this test"
     )
-    assert (
-        _digest(_renderer_contract())
-        == (renderer_contract["releases"][renderer_contract["current"]])
+    digest = hashlib.sha256(prompt.encode()).hexdigest()
+    assert digest == prompt_contract["releases"][prompt_contract["current"]], (
+        bump.format("system prompt", "SYSTEM_PROMPT_VERSION", digest)
+    )
+    digest = _digest(_renderer_contract())
+    assert digest == renderer_contract["releases"][renderer_contract["current"]], (
+        bump.format("prompt renderer", "SYSTEM_PROMPT_RENDERER_VERSION", digest)
     )
 
 

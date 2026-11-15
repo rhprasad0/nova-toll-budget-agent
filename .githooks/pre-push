@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# CI's quick credential-free checks (a few seconds). Setup: v2/scripts/setup.sh. CI remains authoritative.
+set -euo pipefail
+exec "$(git rev-parse --show-toplevel)/.github/scripts/verify.sh" quick

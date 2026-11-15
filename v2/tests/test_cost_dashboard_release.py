@@ -128,7 +128,11 @@ def test_asset_pins_and_archive_contract() -> None:
             content = (
                 ROOT / "v2/agent" / ("" if name.endswith(".js") else "assets") / name
             ).read_bytes()
-        assert hashlib.sha256(content).hexdigest() == digest
+        actual = hashlib.sha256(content).hexdigest()
+        assert actual == digest, (
+            f"{name} changed: set its ASSET_SHA256 pin in "
+            f"v2/scripts/cost_dashboard_release.py to {actual}"
+        )
     builder = (ROOT / "v2/scripts/build_publisher_zip.sh").read_text()
     assert '"$V2_ROOT/lambdas/publisher/costs.py"' in builder
     assert not (ROOT / "v2/prototypes").exists()
@@ -455,7 +459,8 @@ def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str) -
         "aws_kms_key.site.arn": json.dumps(
             f"arn:aws:kms:us-east-1:{account}:key/{gate.SITE_KEYS[environment]}"
         ),
-        "${path.module}/../agent/": str(ROOT / "v2/agent") + "/",
+        # Relative, as in a real plan: the gate reads "prod" in a checkout path as a production target.
+        "${path.module}/../agent/": "agent/",
         "var.foundation.alerts_topic_arn": json.dumps(
             f"arn:aws:sns:us-east-1:{account}:nova-toll-alerts"
         ),
@@ -476,6 +481,7 @@ def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str) -
         "",
         source,
     )
+    (tmp_path / "agent").symlink_to(ROOT / "v2/agent", target_is_directory=True)
     (tmp_path / "costs.tf").write_text(source)
     (tmp_path / "main.tf").write_text(
         """terraform {

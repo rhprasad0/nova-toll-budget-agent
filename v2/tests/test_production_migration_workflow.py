@@ -13,9 +13,12 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.infrastructure_support import RDS_CA_SHA256
+
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/v2-production-migrations.yml"
-CA_SHA = "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
+# A stale pin in the production script fails these tests at its CA check.
+CA_SHA = RDS_CA_SHA256
 FAKE = r"""
 import json, os, pathlib, subprocess, sys
 from datetime import UTC, datetime, timedelta
@@ -703,12 +706,13 @@ def test_workflow_expressions_are_executable_and_private_stages_are_fixed() -> N
 def test_third_party_actions_follow_explicit_deploy_credential_clears() -> None:
     workflow: dict[str, Any] = yaml.safe_load(WORKFLOW.read_text())
     steps = workflow["jobs"]["migrate"]["steps"]
-    names = [step.get("name", step.get("uses", "")) for step in steps]
+    # Drop the pinned SHA: Dependabot moves it, and only the order matters here.
+    names = [step.get("name", step.get("uses", "").split("@")[0]) for step in steps]
     assert names.index("Clear deploy credentials before Tailscale") < names.index(
-        "tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd"
+        "tailscale/github-action"
     )
     assert names.index("Clear deploy credentials before evidence upload") < names.index(
-        "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"
+        "actions/upload-artifact"
     )
     clear = next(
         step

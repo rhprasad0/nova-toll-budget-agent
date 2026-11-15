@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
@@ -24,17 +25,24 @@ REPOSITORY = "rhprasad0/nova-toll-budget-agent"
 SHA = "a" * 40
 BEFORE = "b" * 40
 DESCENDANT = "c" * 40
+DELIVERY_PATH = ".github/workflows/v2-development-delivery.yml"
+ROOT = Path(__file__).parents[2]
 
 
 def _run(
-    sha: str, run_id: int, *, conclusion: str = "success", number: int = 1
+    sha: str,
+    run_id: int,
+    *,
+    conclusion: str = "success",
+    number: int = 1,
+    event: str = "push",
 ) -> dict[str, object]:
     return {
         "id": run_id,
         "run_number": number,
         "run_attempt": 1,
         "head_sha": sha,
-        "event": "push",
+        "event": event,
         "head_branch": "main",
         "status": "completed",
         "conclusion": conclusion,
@@ -64,34 +72,38 @@ class FakeAPI:
             "ci.yml": [_run(SHA, 101)],
             "gitleaks.yml": [_run(SHA, 102)],
             "trivy.yml": [_run(SHA, 103)],
-            "v2-development-delivery.yml": [_run(SHA, 900, number=9)],
         }
         self.jobs: dict[int, list[dict[str, object]]] = {
             101: [_job("v2-loader", 101, SHA), _job("v2-database", 101, SHA)],
             102: [_job("gitleaks", 102, SHA)],
             103: [_job("scan", 103, SHA)],
-            800: [_job("Deploy v2 to development", 800, BEFORE)],
             900: [_job("Admit exact main delivery", 900, SHA)],
         }
-        self.predecessor = _run(BEFORE, 800, conclusion="failure", number=8)
+        self.current = _run(SHA, 900, number=9, event="schedule")
+        self.current.update(status="in_progress", conclusion=None, path=DELIVERY_PATH)
+        # The last push-era delivery is the first nightly predecessor.
+        self.history = [_run(BEFORE, 800, number=8)]
         self.descendant: dict[str, object] | None = None
+        self.compare_status = "ahead"
 
     def get(self, path: str, params: Mapping[str, str] | None = None) -> dict[str, Any]:
         params = params or {}
+        if path == "/actions/runs/900":
+            return self.current
         if path.endswith("/runs"):
             workflow = path.rsplit("/", 2)[-2]
-            sha = params.get("head_sha")
-            if workflow == admission.DELIVERY_WORKFLOW and sha == BEFORE:
-                self.predecessor["path"] = (
-                    ".github/workflows/v2-development-delivery.yml"
-                )
-                return {"workflow_runs": [self.predecessor]}
-            if workflow == admission.DELIVERY_WORKFLOW and sha is None:
-                runs = list(self.runs[workflow])
-                if self.descendant is not None:
-                    runs.append(self.descendant)
+            if workflow == admission.DELIVERY_WORKFLOW:
+                assert "event" not in params
+                if params.get("status") == "success":
+                    runs = [
+                        run for run in self.history if run["conclusion"] == "success"
+                    ]
+                else:
+                    runs = [self.current, *self.history]
+                    if self.descendant is not None:
+                        runs.append(self.descendant)
                 for run in runs:
-                    run["path"] = ".github/workflows/v2-development-delivery.yml"
+                    run["path"] = DELIVERY_PATH
                 return {"workflow_runs": runs}
             values = self.runs.get(workflow, [])
             for run in values:
@@ -101,44 +113,45 @@ class FakeAPI:
             jobs = self.jobs.get(int(path.split("/")[3]), [])
             return {"jobs": jobs, "total_count": len(jobs)}
         if path.startswith("/compare/"):
-            return {"status": "ahead", "ahead_by": 1}
+            return {"status": self.compare_status, "ahead_by": 1}
         raise AssertionError(f"unexpected API path: {path}")
 
 
-def _admit(api: FakeAPI, *, paths: list[str] | None = None) -> bool:
+def _admit(api: FakeAPI, *, paths: list[str] | None = None, wait: bool = True) -> bool:
     return admission.admit(
         cast(Any, api),
         repository=REPOSITORY,
         sha=SHA,
-        before=BEFORE,
         paths=paths or ["v2/agent/dev_chat.html"],
+        current=api.current,
         timeout_seconds=0,
         poll_seconds=0,
+        wait=wait,
     )
 
 
-def test_exact_sha_evidence_and_terminal_predecessor_are_admitted() -> None:
+def test_exact_sha_evidence_is_admitted() -> None:
     assert _admit(FakeAPI()) is True
 
 
 @pytest.mark.parametrize(
-    ("field", "value"),
+    ("event_name", "ref", "accepted"),
     [
-        ("ref", "refs/heads/release"),
-        ("after", "d" * 40),
-        ("repository", {"full_name": "evil/fork"}),
+        ("schedule", "refs/heads/main", True),
+        ("workflow_dispatch", "refs/heads/main", True),
+        ("workflow_dispatch", "refs/heads/feature", False),
+        ("push", "refs/heads/main", False),
+        ("pull_request", "refs/pull/1/merge", False),
     ],
 )
-def test_wrong_push_identity_is_rejected(field: str, value: object) -> None:
-    event: dict[str, object] = {
-        "ref": "refs/heads/main",
-        "after": SHA,
-        "before": BEFORE,
-        "repository": {"full_name": REPOSITORY},
-    }
-    event[field] = value
-    with pytest.raises(admission.AdmissionError):
-        admission._validate_event(event, REPOSITORY, SHA, BEFORE)
+def test_only_scheduled_or_dispatched_main_runs_deliver(
+    event_name: str, ref: str, accepted: bool
+) -> None:
+    if accepted:
+        admission._validate_trigger(event_name, ref)
+    else:
+        with pytest.raises(admission.AdmissionError):
+            admission._validate_trigger(event_name, ref)
 
 
 def test_missing_or_duplicate_runs_fail_closed() -> None:
@@ -153,6 +166,13 @@ def test_missing_or_duplicate_runs_fail_closed() -> None:
         _admit(duplicate)
 
 
+def test_ci_evidence_must_come_from_the_push() -> None:
+    api = FakeAPI()
+    api.runs["ci.yml"] = [_run(SHA, 101, event="workflow_dispatch")]
+    with pytest.raises(admission.AdmissionError, match="identity"):
+        _admit(api)
+
+
 def test_skipped_or_stale_job_evidence_is_rejected() -> None:
     skipped = FakeAPI()
     skipped.jobs[101][0]["conclusion"] = "skipped"
@@ -163,36 +183,6 @@ def test_skipped_or_stale_job_evidence_is_rejected() -> None:
     stale.jobs[101][0]["run_attempt"] = 2
     with pytest.raises(admission.AdmissionError, match="stale"):
         _admit(stale)
-
-
-@pytest.mark.parametrize("conclusion", ["success", "failure", "cancelled"])
-def test_terminal_predecessor_conclusions_release_ordering(conclusion: str) -> None:
-    api = FakeAPI()
-    api.predecessor["conclusion"] = conclusion
-    assert _admit(api) is True
-
-
-def test_canceled_predecessor_without_started_jobs_releases_ordering() -> None:
-    api = FakeAPI()
-    api.predecessor["conclusion"] = "cancelled"
-    api.jobs[800] = []
-    assert _admit(api) is True
-
-
-def test_first_push_has_no_predecessor() -> None:
-    api = FakeAPI()
-    assert (
-        admission.admit(
-            cast(Any, api),
-            repository=REPOSITORY,
-            sha=SHA,
-            before=admission.ZERO_SHA,
-            paths=[],
-            timeout_seconds=0,
-            poll_seconds=0,
-        )
-        is True
-    )
 
 
 def test_terraform_evidence_is_required_only_for_matching_paths() -> None:
@@ -231,8 +221,8 @@ def test_later_ci_first_is_bounded_and_eventually_admitted() -> None:
             cast(Any, api),
             repository=REPOSITORY,
             sha=SHA,
-            before=BEFORE,
             paths=[],
+            current=api.current,
             timeout_seconds=1,
             poll_seconds=0,
             sleep=restore,
@@ -246,9 +236,12 @@ def test_later_ci_first_is_bounded_and_eventually_admitted() -> None:
     ["Deploy v2 to development", "Deploy v2 to development / Deploy v2 to development"],
 )
 @pytest.mark.parametrize("state", ["in_progress", "completed"])
-def test_newer_descendant_mutation_rejects_old_rerun(job_name: str, state: str) -> None:
+@pytest.mark.parametrize("event", ["push", "schedule", "workflow_dispatch"])
+def test_newer_descendant_mutation_rejects_old_rerun(
+    job_name: str, state: str, event: str
+) -> None:
     api = FakeAPI()
-    api.descendant = _run(DESCENDANT, 901, number=10)
+    api.descendant = _run(DESCENDANT, 901, number=10, event=event)
     api.jobs[901] = [_job(job_name, 901, DESCENDANT)]
     api.jobs[901][0]["status"] = state
     api.jobs[901][0]["started_at"] = "2026-09-07T00:10:00Z"
@@ -269,22 +262,74 @@ def test_older_started_descendant_attempt_rejects_latest_queued_rerun() -> None:
         _admit(api)
 
 
-def test_deploy_recheck_does_not_wait_for_predecessor_inside_apply_lock() -> None:
+def test_deploy_recheck_fails_instead_of_waiting_inside_apply_lock() -> None:
+    assert _admit(FakeAPI(), wait=False) is True
     api = FakeAPI()
-    api.runs[admission.DELIVERY_WORKFLOW] = []
-    assert (
-        admission.admit(
-            cast(Any, api),
-            repository=REPOSITORY,
-            sha=SHA,
-            before=BEFORE,
-            paths=[],
-            check_predecessor=False,
-            timeout_seconds=0,
-            poll_seconds=0,
-        )
-        is True
+    api.runs["ci.yml"][0].update(status="in_progress", conclusion=None)
+    with pytest.raises(admission.AdmissionError, match="recheck not ready"):
+        _admit(api, wait=False)
+
+
+def test_predecessor_lookup_retries_only_transient_api_errors() -> None:
+    api = FakeAPI()
+    failures = 2
+    original = api.get
+
+    def flaky(path: str, params: Mapping[str, str] | None = None) -> dict[str, Any]:
+        nonlocal failures
+        if failures:
+            failures -= 1
+            raise admission.RetryableAdmission("GitHub API request failed")
+        return original(path, params)
+
+    api.get = flaky
+    sleeps: list[float] = []
+    current, predecessor = admission.resolve_predecessor(
+        cast(Any, api),
+        REPOSITORY,
+        SHA,
+        900,
+        attempts=3,
+        poll_seconds=5,
+        sleep=sleeps.append,
     )
+    assert (current["id"], predecessor, sleeps) == (900, BEFORE, [5, 5])
+    failures = 1
+    with pytest.raises(admission.RetryableAdmission):
+        admission.resolve_predecessor(
+            cast(Any, api), REPOSITORY, SHA, 900, attempts=1, poll_seconds=0
+        )
+    api.compare_status = "diverged"
+    with pytest.raises(admission.AdmissionError, match="does not descend"):
+        admission.resolve_predecessor(
+            cast(Any, api),
+            REPOSITORY,
+            SHA,
+            900,
+            attempts=3,
+            poll_seconds=0,
+            sleep=sleeps.append,
+        )
+    assert len(sleeps) == 2  # A definite rejection is not retried.
+
+
+def test_last_delivered_is_the_newest_earlier_success() -> None:
+    api = FakeAPI()
+    api.history = [
+        _run(BEFORE, 800, number=8),
+        _run("d" * 40, 850, number=7, event="schedule"),
+        _run("e" * 40, 870, number=8, conclusion="failure", event="schedule"),
+        # Later or foreign runs never count.
+        _run("f" * 40, 950, number=11, event="workflow_dispatch"),
+        {**_run("1" * 40, 860, number=8), "head_branch": "feature"},
+        {**_run("2" * 40, 861, number=8), "event": "pull_request"},
+    ]
+    assert admission.last_delivered(cast(Any, api), REPOSITORY, api.current) == BEFORE
+    api.history[0]["run_number"] = 6
+    assert admission.last_delivered(cast(Any, api), REPOSITORY, api.current) == "d" * 40
+    api.history = []
+    with pytest.raises(admission.AdmissionError, match="missing delivery history"):
+        admission.last_delivered(cast(Any, api), REPOSITORY, api.current)
 
 
 def test_progress_events_are_fixed_and_mirrored_without_exception_text(
@@ -308,19 +353,20 @@ def test_workflow_keeps_retained_artifact_guard_and_pr_only_packages() -> None:
     ci = (root / ".github/workflows/ci.yml").read_text()
     assert "Reject retained exact release artifact" in delivery
     assert 'type == "object" and (.artifacts | type == "array")' in delivery
-    assert "github.event_name == 'pull_request'" in ci
+    assert '../.github/scripts/verify.sh loader "$BASE_REF"' in ci
     assert delivery.index("Reject retained exact release artifact") < delivery.index(
         "astral-sh/setup-uv@"
     )
-    steps = yaml.safe_load(ci)["jobs"]["v2-loader"]["steps"]
-    for command in (
-        "build_fetcher_zip.sh",
-        "build_loader_zip.sh",
-        "build_publisher_zip.sh",
-        "build_agentcore_zips.sh",
-    ):
-        build = next(step for step in steps if command in step.get("run", ""))
-        assert build["if"] == "github.event_name == 'pull_request'"
+    verify = (root / ".github/scripts/verify.sh").read_text()
+    assert 'event="${GITHUB_EVENT_NAME:-pull_request}"' in verify
+    assert (
+        '  if [[ "$event" == pull_request ]]; then\n'
+        "    step ./scripts/build_fetcher_zip.sh\n"
+        "    step ./scripts/build_loader_zip.sh\n"
+        "    step ./scripts/build_publisher_zip.sh\n"
+        "    step ./scripts/build_agentcore_zips.sh\n"
+        "  fi\n"
+    ) in verify
 
 
 def test_retained_artifact_guard_rejects_malformed_metadata() -> None:
@@ -340,7 +386,6 @@ def test_retained_artifact_guard_rejects_malformed_metadata() -> None:
 def test_workflow_waits_thirty_minutes_without_relaxing_evidence(
     monkeypatch: pytest.MonkeyPatch, ending: str
 ) -> None:
-    import re
 
     workflow = (
         Path(__file__).parents[2] / ".github/workflows/v2-development-delivery.yml"
@@ -364,8 +409,8 @@ def test_workflow_waits_thirty_minutes_without_relaxing_evidence(
             cast(Any, api),
             repository=REPOSITORY,
             sha=SHA,
-            before=BEFORE,
             paths=[],
+            current=api.current,
             timeout_seconds=int(match[1]),
             poll_seconds=10,
             sleep=advance,
@@ -380,45 +425,158 @@ def test_workflow_waits_thirty_minutes_without_relaxing_evidence(
     assert elapsed == (1800 if ending == "pending" else 1110)
 
 
-@pytest.mark.parametrize("complete", [True, False])
-@pytest.mark.parametrize("ci_retry", [True, False])
-def test_predecessor_has_a_separate_bounded_wait(
-    monkeypatch: pytest.MonkeyPatch, complete: bool, ci_retry: bool
+@pytest.mark.parametrize(
+    ("paths", "expected"),
+    [
+        (["v2/eval/journal/2026-11-09.md", "README.md"], True),
+        ([], False),  # No evidence of what changed: deliver.
+        (["README.md", "v2/agent/dev_chat.html"], False),
+        (["v2/agent-sops/nova-toll-pricing-assistant.sop.md"], False),  # Pinned.
+        (["v2/agent/notes.md.py"], False),
+        # --no-renames lists both sides of a rename, so the old code path shows.
+        (["v2/agent_tools/currency.py", "v2/agent_tools/currency.md"], False),
+    ],
+)
+def test_only_unpinned_markdown_skips_delivery(
+    paths: list[str], expected: bool
 ) -> None:
+    assert admission.docs_only(paths) is expected
+
+
+def test_unreadable_pin_list_delivers(tmp_path: Path) -> None:
+    assert admission.docs_only(["README.md"], tmp_path / "missing.json") is False
+    malformed = tmp_path / "manifest.json"
+    malformed.write_text("[]")
+    assert admission.docs_only(["README.md"], malformed) is False
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _workflow_parse(line: str) -> tuple[str, str] | None:
+    """Run the delivery workflow's own result parser on one admission line."""
+    workflow = yaml.safe_load((ROOT / DELIVERY_PATH).read_text())
+    source = next(
+        step["run"]
+        for step in workflow["jobs"]["admission"]["steps"]
+        if step.get("id") == "admit"
+    )
+    match = re.search(r"^ *(if \[\[ ! \"\$result\" =~ .*\]\]; then)$", source, re.M)
+    assert match
+    script = (
+        f'result="$1"\n{match[1]}\n  exit 1\nfi\n'
+        'printf "%s %s\\n" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"\n'
+    )
+    parsed = subprocess.run(
+        ["bash", "-c", script, "bash", line],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if parsed.returncode:
+        return None
+    predecessor, delivery = parsed.stdout.split()
+    return predecessor, delivery
+
+
+def test_main_resolves_predecessor_and_skips_only_when_nothing_deployable_changed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "test@example.invalid")
+    _git(repo, "config", "user.name", "test")
+
+    def commit(name: str) -> str:
+        (repo / name).parent.mkdir(parents=True, exist_ok=True)
+        (repo / name).write_text(name)
+        _git(repo, "add", name)
+        _git(repo, "commit", "-q", "-m", name)
+        return _git(repo, "rev-parse", "HEAD")
+
+    delivered = commit("v2/agent/app.py")
+    docs = commit("README.md")
+    code = commit("v2/agent/other.py")
+    monkeypatch.chdir(repo)
+    monkeypatch.setenv("GH_TOKEN", "token")
     api = FakeAPI()
-    api.predecessor.update(status="in_progress", conclusion=None)
-    elapsed = 0.0
-    monkeypatch.setattr(admission.time, "monotonic", lambda: elapsed)
-    original_get = api.get
 
-    def get(path: str, params: Mapping[str, str] | None = None) -> dict[str, Any]:
-        if ci_retry and elapsed == 1800 and "ci.yml" in path:
-            raise admission.RetryableAdmission("GitHub API temporarily unavailable")
-        return original_get(path, params)
+    def fake_api(*_: object) -> FakeAPI:
+        return api
 
-    monkeypatch.setattr(api, "get", get)
+    def admitted(*_: object, **__: object) -> bool:
+        return True
 
-    def advance(seconds: float) -> None:
-        nonlocal elapsed
-        elapsed += seconds
-        if complete and elapsed >= 4500:
-            api.predecessor.update(status="completed", conclusion="success")
+    monkeypatch.setattr(admission, "GitHubAPI", fake_api)
+    monkeypatch.setattr(admission, "admit", admitted)
 
-    def run() -> bool:
-        return admission.admit(
-            cast(Any, api),
-            repository=REPOSITORY,
-            sha=SHA,
-            before=BEFORE,
-            paths=[],
-            timeout_seconds=1800,
-            sleep=advance,
+    def run(candidate: str, event: str = "schedule") -> tuple[int, str]:
+        api.current["head_sha"] = candidate
+        api.history = [_run(delivered, 800, number=8)]
+        status = admission.main(
+            [
+                "--repository",
+                REPOSITORY,
+                "--sha",
+                candidate,
+                "--event-name",
+                event,
+                "--ref",
+                "refs/heads/main",
+                "--run-id",
+                "900",
+            ]
         )
+        return status, capsys.readouterr().out.strip()
 
-    if complete:
-        assert run()
-        assert elapsed == 4500
-    else:
-        with pytest.raises(admission.AdmissionError, match="timed out"):
-            run()
-        assert elapsed == 7200
+    for candidate, expected in (
+        (delivered, "not-required"),  # Quiet night: already delivered.
+        (docs, "not-required"),  # Only unpinned Markdown since.
+        (code, "required"),
+    ):
+        status, line = run(candidate, "workflow_dispatch")
+        assert status == 0
+        assert _workflow_parse(line) == (delivered, expected)
+
+    assert run(code, "push") == (1, "")
+    api.compare_status = "diverged"
+    assert run(code) == (1, "")
+    assert _workflow_parse("development admission accepted: sha=x") is None
+
+
+def test_delivery_runs_only_on_schedule_or_dispatch_one_at_a_time() -> None:
+    workflow = yaml.safe_load((ROOT / DELIVERY_PATH).read_text())
+    triggers = workflow[True]  # PyYAML reads the bare `on` key as True.
+    assert set(triggers) == {"schedule", "workflow_dispatch"}
+    assert workflow["concurrency"] == {
+        "group": "v2-development-delivery-${{ github.ref }}",
+        "cancel-in-progress": False,
+    }
+    jobs = workflow["jobs"]
+    assert jobs["admission"]["outputs"] == {
+        "deliver": "${{ steps.admit.outputs.deliver }}",
+        "predecessor": "${{ steps.admit.outputs.predecessor }}",
+    }
+    assert jobs["release-record"]["if"] == "needs.admission.outputs.deliver != 'false'"
+    # A failed admission leaves the output empty, so the result is still recorded.
+    assert (
+        jobs["release-result"]["if"]
+        == "always() && needs.admission.outputs.deliver != 'false'"
+    )
+    schema_base = next(
+        step["env"]["SCHEMA_BASE_REF"]
+        for step in jobs["build"]["steps"]
+        if "SCHEMA_BASE_REF" in step.get("env", {})
+    )
+    assert schema_base == "${{ needs.admission.outputs.predecessor }}"
+    for path in (
+        DELIVERY_PATH,
+        ".github/workflows/v2-development-delivery-privileged.yml",
+    ):
+        assert "github.event.before" not in (ROOT / path).read_text()

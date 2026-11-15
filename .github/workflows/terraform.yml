@@ -25,24 +25,4 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/terraform-provider-cache"
           echo "TF_PLUGIN_CACHE_DIR=$RUNNER_TEMP/terraform-provider-cache" >> "$GITHUB_ENV"
-      - run: terraform fmt -check -recursive
-        working-directory: infra
-      - run: terraform init -backend=false -input=false
-        working-directory: infra
-      - run: terraform validate
-        working-directory: infra
-      - run: terraform fmt -check -recursive
-        working-directory: v2/infra
-      - run: terraform init -backend=false -input=false
-        working-directory: v2/infra
-      - run: terraform validate
-        working-directory: v2/infra
-      - run: terraform fmt -check -recursive
-        working-directory: org-circuit-breaker
-      - run: terraform init -backend=false -input=false
-        working-directory: org-circuit-breaker
-      - run: terraform validate
-        working-directory: org-circuit-breaker
-      - run: python3 -m unittest infra.test_delivery_plan_validator
-      - run: python3 -m unittest infra.test_release_manifest
-      - run: python3 infra/test_delivery_identities.py
+      - run: .github/scripts/verify.sh terraform

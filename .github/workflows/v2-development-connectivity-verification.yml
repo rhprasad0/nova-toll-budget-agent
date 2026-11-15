@@ -39,10 +39,8 @@ jobs:
           set -euo pipefail
           set +x
           mkdir -p infra/build/ca
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-            https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-            -o infra/build/ca/rds-ca-bundle.pem
-          echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status
+          source scripts/build_loader_zip.sh
+          download_rds_ca_bundle infra/build/ca/rds-ca-bundle.pem
 
       - name: Validate verification phase
         env:
@@ -53,7 +51,7 @@ jobs:
             test "$VERIFICATION_PHASE" = pre-bootstrap || \
             test "$VERIFICATION_PHASE" = full
 
-      - uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
+      - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
         if: inputs.phase == 'pre-bootstrap' || inputs.phase == 'full' || inputs.phase == ''
         with:
           oauth-client-id: ${{ secrets.TS_DEVELOPMENT_OAUTH_CLIENT_ID }}

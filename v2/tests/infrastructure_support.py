@@ -16,10 +16,16 @@ SITE_TF = (V2_ROOT / "infra" / "site.tf").read_text()
 DEVELOPMENT_TFVARS = (V2_ROOT / "infra" / "development.tfvars").read_text()
 CI_WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 TERRAFORM_WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
+# ci.yml and terraform.yml run their checks through this script.
+VERIFY_SCRIPT = (REPO_ROOT / ".github" / "scripts" / "verify.sh").read_text()
 PRODUCTION_PLAN_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-production-plan.yml"
 ).read_text()
 TIMED_CHECKS_MODULE = (V2_ROOT / "timed_checks.py").read_text()
+# The one place to change on an AWS rotation; the copies below are checked against it.
+RDS_CA_SHA256 = re.findall(
+    r'ca_sha256="([0-9a-f]{64})"', (V2_ROOT / "scripts/build_loader_zip.sh").read_text()
+)[0]
 VERSIONS_TF = (V2_ROOT / "infra" / "versions.tf").read_text()
 FOUNDATION_ROOT = REPO_ROOT / "infra"
 FOUNDATION_TRIGGERS = (FOUNDATION_ROOT / "triggers.tf").read_text()
@@ -72,7 +78,6 @@ DEVELOPMENT_RELEASE = (RUNBOOKS / "development-release.md").read_text()
 
 
 DEPLOYMENT = "\n".join((RUNBOOK, DEVELOPMENT_RELEASE))
-AGENTS = (REPO_ROOT / "AGENTS.md").read_text()
 ACCOUNT_CONTRACT = json.loads(
     (REPO_ROOT / "infra" / "account-contract.json").read_text()
 )
