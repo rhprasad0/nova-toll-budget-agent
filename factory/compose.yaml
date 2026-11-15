@@ -46,6 +46,7 @@ services:
       trace: {}
     ports:
       - 127.0.0.1:6006:6006
+      - 127.0.0.1:4318:4318
     extra_hosts:
       - "${FACTORY_RDS_HOST:?}=${FACTORY_RDS_ADDR:?}"
     restart: unless-stopped

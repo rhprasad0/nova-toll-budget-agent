@@ -48,6 +48,6 @@ def test_compose_resolves_and_keeps_the_trace_stack_off_the_sandbox_network(
     owner = services["trace-netns"]
     assert "internal" not in owner["networks"]
     assert ENV["FACTORY_RDS_HOST"] in str(owner["extra_hosts"])
-    assert [p["host_ip"] for p in owner["ports"]] == ["127.0.0.1"]
+    assert {p["host_ip"] for p in owner["ports"]} == {"127.0.0.1"}
     for name in ("aws-credentials", "phoenix", "collector"):
         assert services[name]["network_mode"] == "service:trace-netns"
