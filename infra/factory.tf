@@ -16,8 +16,21 @@ resource "aws_rolesanywhere_trust_anchor" "factory" {
   source {
     source_type = "CERTIFICATE_BUNDLE"
     source_data {
-      # Public CA certificate; its key stays on Ryan's workstation.
-      x509_certificate_data = file("${path.module}/factory-ca.pem")
+      # Public CA certificate, inline so the release manifest's *.tf digests cover it.
+      # Its key stays on Ryan's workstation.
+      x509_certificate_data = <<-EOT
+        -----BEGIN CERTIFICATE-----
+        MIIBgjCCASmgAwIBAgIUJoyEx/P8vFa+v6nOhXK8MpZyPcYwCgYIKoZIzj0EAwIw
+        HjEcMBoGA1UEAwwTVG9sbENoYXQgZmFjdG9yeSBDQTAeFw0yNjExMTQyMDIwMzla
+        Fw0zMTExMTMyMDIwMzlaMB4xHDAaBgNVBAMME1RvbGxDaGF0IGZhY3RvcnkgQ0Ew
+        WTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT2IBtHqDAKqV9mWd5hFTR5sQGXx7aa
+        M0FhevuT5lLMoe4/WPuVsVDilo8+Tyeyu5jAA4MZrHLtVbM/WAogGcODo0UwQzAS
+        BgNVHRMBAf8ECDAGAQH/AgEAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHQ4EFgQUC/CS
+        A+GMIf3749qzAAbflncdk/UwCgYIKoZIzj0EAwIDRwAwRAIgaGIauLD6zv7Hg0VG
+        HS18BJyXztL98+sDW7LfVlrki/8CIBL1flgNmoG08dxEuzGlakZtbZDlB+g3jJQv
+        UKe4Zhrj
+        -----END CERTIFICATE-----
+      EOT
     }
   }
 }
