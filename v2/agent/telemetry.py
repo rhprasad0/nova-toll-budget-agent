@@ -384,18 +384,27 @@ def wrap_exporters(
     guardrail_version: str,
 ) -> int:
     """Version-specific wiring; validate the whole graph before changing it."""
+    from amazon.opentelemetry.distro.attribute_redacting_span_processor import (
+        AttributeRedactingSpanProcessor,
+    )
     from amazon.opentelemetry.distro.gen_ai_nested_client_span_processor import (
-        GenAiNestedClientSpanProcessor,
+        GenAINestedClientSpanProcessor,
     )
     from opentelemetry.processor.baggage import BaggageSpanProcessor
 
+    # These never export; ADOT's redactor only replaces values named by AWS_REDACT_SPAN_ATTRIBUTES.
+    passthrough = (
+        AttributeRedactingSpanProcessor,
+        GenAINestedClientSpanProcessor,
+        BaggageSpanProcessor,
+    )
     spans = provider._active_span_processor._span_processors  # pyright: ignore[reportPrivateUsage]
     logs = log_provider._multi_log_record_processor._log_record_processors  # pyright: ignore[reportPrivateUsage]
     targets: list[
         tuple[BatchSpanProcessor | BatchLogRecordProcessor, BatchProcessor[Telemetry]]
     ] = []
     for processor in (*spans, *logs):
-        if type(processor) in (GenAiNestedClientSpanProcessor, BaggageSpanProcessor):
+        if type(processor) in passthrough:
             continue
         if not isinstance(processor, (BatchSpanProcessor, BatchLogRecordProcessor)):
             raise RuntimeError("unsupported telemetry processor")
@@ -430,8 +439,8 @@ def initialize() -> None:
     protect_console()
     try:
         if (
-            version("aws-opentelemetry-distro") != "0.19.0"
-            or version("opentelemetry-sdk") != "1.44.0"
+            version("aws-opentelemetry-distro") != "0.22.0"
+            or version("opentelemetry-sdk") != "1.45.1"
         ):
             raise RuntimeError("unsupported telemetry version")
         guardrail_id = os.environ["TOLLCHAT_TELEMETRY_GUARDRAIL_ID"]
