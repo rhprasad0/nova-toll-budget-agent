@@ -14,3 +14,4 @@ test. Use prose only for judgment calls. Drop a rule once its mistake cannot hap
 | Run what CI runs. | `.github/scripts/verify.sh` is what CI calls; the pre-push hook runs its `quick` subset. |
 | Changes reach `main` by a PR that passes CI. | Branch protection. |
 | Keep shared-resource changes out of application releases. | `v2/scripts/infrastructure_plan.py` in `verify.sh` fails on planned-value changes; it cannot see IAM policy text. List hand-applied addresses in `v2/infra/administrator-applied.txt`. |
+| Test infrastructure by planned values, not Terraform text. | The `development_plan` fixture. A ratchet test fails on new `assert_assignment` or `terraform_block` matches; plain `in` text matches are not counted. |
