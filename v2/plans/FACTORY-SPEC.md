@@ -580,10 +580,13 @@ TRACEPARENT=<dispatcher span context>
 The OpenTelemetry Collector (contrib image), with one traces pipeline: an OTLP
 receiver and two exporters that fail independently.
 
-**Where it runs.** An `aws-credentials` service runs AWS's credential-helper
-image in `serve` mode, and the collector and Phoenix share its network
-namespace (`network_mode: service:aws-credentials`). Both get AWS credentials
-from `127.0.0.1:9911` without the host network. The namespace is on
+**Where it runs.** A `trace-netns` container that only sleeps owns a network
+namespace; an `aws-credentials` service running AWS's credential-helper image
+in `serve` mode, the collector, and Phoenix all join it
+(`network_mode: service:trace-netns`). The collector and Phoenix get AWS
+credentials from `127.0.0.1:9911` without the host network. The owner never
+restarts on its own, because members of a restarted owner keep an empty
+namespace; a member that restarts rejoins it. The namespace is on
 `factory-egress`, where the proxy's OTLP listener reaches the collector as
 `collector`, and on the IPv6-enabled `factory-trace` network, which routes to
 RDS over 4via6. It is not on `factory-internal`. Phoenix's port is published
@@ -612,7 +615,8 @@ thin client.
   alone only enforces `sslmode=require`. Phoenix signs the IAM token for the
   URL's host and connects to the same name, so the container's hosts entry
   maps the endpoint to its 4via6 address; `setup.sh` fetches the pinned RDS CA
-  bundle.
+  bundle. The admission preflight checks `/readyz`, which queries the
+  database, rather than `/healthz`, which does not.
 - **Exposure:** ports published on `127.0.0.1` only, with Phoenix authentication
   off. It is not on the sandbox's network. Phoenix 21 turns authentication on
   for any non-loopback listen address, which inside a container is always, so

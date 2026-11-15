@@ -9,12 +9,13 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
-  # Factory runs land in their own Phoenix project unless a span already names one.
+  # Everything through this pipeline comes from sandboxes, so it all lands in the
+  # factory project, whatever a span claims (replays post to Phoenix directly).
   resource/project:
     attributes:
       - key: openinference.project.name
         value: tollchat-factory
-        action: insert
+        action: upsert
   # Claude Code's token attributes as OpenInference's, so Phoenix counts tokens
   # (prompt = input + cache read + cache write).
   transform/openinference:

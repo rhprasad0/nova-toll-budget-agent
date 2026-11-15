@@ -258,9 +258,9 @@ denied.
 ## Stage 5: Trace stack
 
 **Status on 2026-11-15: done on the `stage5/trace-stack` branch, stacked on
-Stage 4's status PR.** `factory/compose.yaml` adds three services:
-`aws-credentials` runs AWS's credential-helper image in `serve` mode, and
-`phoenix` and `collector` share its network namespace. Their configuration is
+Stage 4's status PR.** `factory/compose.yaml` adds four services: `trace-netns` owns a network
+namespace, and `aws-credentials` (AWS's credential-helper image in `serve`
+mode), `phoenix` and `collector` share it. Their configuration is
 in `factory/collector/config.yaml`. The machine-specific values live in
 `~/.config/factory/factory.env` on the thin client (mode `600`), which
 `setup.sh` passes to Compose; `setup.sh` also reads the subscription token
@@ -269,10 +269,12 @@ removed. The done-when passed on the thin client from a copy of the branch:
 - two sandboxed rounds, a first one on stdin and a resumed one, nested
   under one trace in the `tollchat-factory` project, with token counts
   mapped and no orphan traces;
-- their spans reached `factory-traces/` as hourly gzipped objects;
+- their spans reached `factory-traces/` as gzipped objects, one per batch,
+  under hourly prefixes;
 - Phoenix migrated its schema on RDS through IAM;
-- the admission preflight failed with Phoenix stopped and passed when it
-  came back.
+- the admission preflight (Phoenix `/readyz`, Tailscale, and the proxy,
+  including that it holds a token) failed with Phoenix stopped and passed when
+  it came back, and kept passing after the helper restarted.
 
 1. One Compose file for the proxy, the collector, and Phoenix, with Phoenix on
    RDS through IAM authentication and reachable on `127.0.0.1` only. Pick the
