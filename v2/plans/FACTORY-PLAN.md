@@ -92,9 +92,11 @@ experiments, so they do not go in the experiment journal.
 (#766, #767), and the development delivery after the merge was green.
 `.github/scripts/verify.sh` passed inside the sandbox on the stack's branch,
 with the full database profile, in 890 s, and pytest's counts matched CI's.
-Still open: the label trigger and the inbox (step 4), the spike 5 re-test, a
-verify round on `main` since the merge, and **Ryan** making the `factory` job
-required.
+Step 4 is built on the `stage3/decisions` branch: `factory/host/inbox.py`
+(poller, runner, restart), `factory/host/dashboard.py`, and the units in
+`factory/systemd/`, with the runner refusing to start until Stage 6. Still
+open: the spike 5 re-test, a verify round on `main` since the merge, and
+**Ryan** making the `factory` job required.
 
 1. Copy the needed pieces of `factory-scoreboard/sandbox/` into `factory/`:
    the dispatcher (`host/`), the worker image (`agent/`), the proxy, the
@@ -246,9 +248,10 @@ credentials from `serve`, and stopping Phoenix makes the preflight fail.
    dashboard changes nothing. Note how long a label takes to appear in the
    issue events feed.
 4. **Ryan:** label one small, real issue.
-5. Enable the three systemd units (poller timer, runner, dashboard) so the
-   factory survives a reboot. They run from a checkout of `main` that only
-   Ryan updates.
+5. Enable the three systemd units (poller timer, runner, dashboard) from
+   `factory/systemd/` as user units, and run `loginctl enable-linger ryan`
+   (off on 2026-11-15), or they stop at logout and never start at boot. They
+   run from a checkout of `main` that only Ryan updates.
 
 **Done when:** that issue becomes a PR that is ready for review, with one trace
 in Phoenix and the outcome comment on the issue, and the dashboard showed it

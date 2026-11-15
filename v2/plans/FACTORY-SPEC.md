@@ -336,8 +336,9 @@ database's 20 GB volume.
   the overlapping re-read records nothing twice, and a re-label after Ryan
   closes a PR is a new event.
 - **Rows.**
-  - An event: key, kind, issue number, actor, time, and a status (`pending`,
-    `running`, `done`, or `dropped`).
+  - An event: key, kind, issue number, actor, time, a status (`pending`,
+    `running`, `done`, or `dropped`), and whether it was queued again after a
+    runner died (see Restart).
   - A work order: the issue, its title as fetched at admission (for the
     dashboard only), the event that started it, start and end times, base
     commit, current station and round, trace ID, PR link, a cancel mark,

@@ -1,0 +1,13 @@
+# Take events from the inbox one work order at a time. Only one runs: a second exits on its lock.
+[Unit]
+Description=TollChat factory runner
+After=docker.service
+
+[Service]
+WorkingDirectory=%h/tollchat
+ExecStart=/usr/bin/python3 factory/host/dispatcher.py run
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=default.target
