@@ -12,8 +12,11 @@ Two credentials are kept outside SSM, as plain files on the factory's thin clien
 (see [`v2/plans/FACTORY-SPEC.md`](v2/plans/FACTORY-SPEC.md)): the private key of its
 IAM Roles Anywhere certificate, which is what unlocks SSM, and a fine-grained GitHub
 token for this repository with no Workflows permission. The certificate works only
-for the development `tollchat-factory` role and expires within a year; revoke it by
-disabling the `tollchat-factory` trust anchor.
+for the development `tollchat-factory` role and expires within a year. The key of
+the CA that signs it stays on the owner's workstation; it can issue a new factory
+certificate, so it is more powerful than the certificate's own key. To revoke the certificate, set
+`enabled = false` on the trust anchor in `infra/factory.tf` and apply; credentials
+already issued last up to an hour.
 
 Shared production controls live in [`infra/`](infra/); application-specific
 controls live in [`v2/infra/`](v2/infra/). Both use encrypted remote Terraform

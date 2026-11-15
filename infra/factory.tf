@@ -50,33 +50,28 @@ resource "aws_iam_role" "factory" {
   max_session_duration = 3600
 }
 
-# The development measurement bucket's key, which v2/infra owns.
-data "aws_kms_alias" "factory_traces" {
-  count = local.factory_count
-  name  = "alias/tollchat-v2-agent-measurement-dev"
-}
-
 data "aws_iam_policy_document" "factory" {
   count = local.factory_count
   statement {
-    sid       = "ReadSubscriptionToken"
-    actions   = ["ssm:GetParameter"]
-    resources = [aws_ssm_parameter.factory_token[0].arn]
+    sid     = "ReadSubscriptionToken"
+    actions = ["ssm:GetParameter"]
+    # Not managed here: a Terraform-managed SecureString's value lands in state.
+    resources = ["arn:aws:ssm:${local.development_delivery_region}:${local.development_delivery_account_id}:parameter${local.factory_token_parameter}"]
   }
   statement {
     sid       = "ArchiveFactoryTraces"
-    actions   = ["s3:PutObject"]
+    actions   = ["s3:PutObject", "s3:AbortMultipartUpload"]
     resources = ["${local.development_delivery_measurement_bucket_arn}/factory-traces/*"]
   }
   statement {
     # Decrypt is for multipart uploads; without s3:GetObject it reads nothing.
     sid       = "EncryptFactoryTraces"
     actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
-    resources = [data.aws_kms_alias.factory_traces[0].target_key_arn]
+    resources = [local.development_delivery_measurement_key_arn]
     condition {
       test     = "StringEquals"
       variable = "kms:ViaService"
-      values   = ["s3.us-east-1.amazonaws.com"]
+      values   = ["s3.${local.development_delivery_region}.amazonaws.com"]
     }
     condition {
       # The bucket uses an S3 Bucket Key, so the context is the bucket ARN.
@@ -105,19 +100,6 @@ resource "aws_rolesanywhere_profile" "factory" {
   enabled          = true
   role_arns        = [aws_iam_role.factory[0].arn]
   duration_seconds = 3600
-}
-
-# Seeded with a placeholder like the parameters in ssm.tf; Ryan sets the value from
-# `claude setup-token` with `aws ssm put-parameter --overwrite`, outside Terraform.
-resource "aws_ssm_parameter" "factory_token" {
-  count = local.factory_count
-  name  = local.factory_token_parameter
-  type  = "SecureString"
-  value = "REPLACE_OUT_OF_BAND"
-
-  lifecycle {
-    ignore_changes = [value]
-  }
 }
 
 output "factory" {

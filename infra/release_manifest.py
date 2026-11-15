@@ -75,6 +75,7 @@ EXACT_INPUTS = {
     "infra/.terraform.lock.hcl",
     "infra/backend.development.hcl",
     "infra/delivery_plan_validator.py",
+    "infra/factory-ca.pem",
     "infra/lambda-stub/handler.py",
     "infra/release_manifest.py",
     "v2/agent-sops/nova-toll-pricing-assistant.sop.md",
