@@ -210,16 +210,20 @@ keeps them out of `factory/`.
    replaces the spike copy in `~/spikes/sandbox/.env` on the thin client.
 5. **Ryan (administrator):** on the development RDS instance, create the
    `phoenix` database and the `phoenix_factory` role with `rds_iam`.
-6. If the tailnet's access rules do not already let the thin client reach the
-   RDS endpoint, change them through the existing Tailscale ACL workflow.
-7. Install `aws_signing_helper` on the thin client.
+6. [x] If the tailnet's access rules do not already let the thin client reach the
+   RDS endpoint, change them through the existing Tailscale ACL workflow. Done
+   2026-11-15 with no ACL change: the rules already allowed it, and the thin
+   client needed only `tailscale set --accept-routes` (see the spec's Spike
+   results, 3).
+7. [x] Install `aws_signing_helper` on the thin client. Done 2026-11-15: 1.8.6,
+   checksum checked against the AWS download page, in `~/.local/bin`.
 
 Then run the two remaining spikes:
 
 | Spike | Pass |
 | --- | --- |
 | 2. Container credentials | A throwaway container running the AWS CLI gets the factory role from the helper's `serve` endpoint; the same request from the sandbox network fails. |
-| 3. Tailscale from a container | A container on the thin client opens a connection to the RDS endpoint. |
+| 3. Tailscale from a container | A container on the thin client opens a connection to the RDS endpoint. Passed 2026-11-15 on an IPv6-enabled network. |
 
 **Done when:** on the thin client, `aws sts get-caller-identity` returns the factory
 role, reading the token parameter works, and reading any other parameter is

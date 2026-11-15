@@ -781,7 +781,16 @@ Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
    `/api/claude_code/policy_limits`, `/v1/messages`). `claude setup-token`
    prints the token and writes nothing to disk.
 2. **AWS credentials for the Phoenix and collector containers:** open, Stage 4.
-3. **Tailscale from a container:** open, Stage 4.
+3. **Tailscale from a container: passed on 2026-11-15, over IPv6.** Development
+   RDS is reached through the development subnet router's 4via6 route (the
+   `nova-toll-rds-development` address in `infra/policy.hujson`), because
+   development and production share `172.31.0.0/16`. A container on an
+   IPv6-enabled Docker network, or on the host network, opened a connection to
+   it on port 5432; one on the default bridge, which has no IPv6, did not. The
+   thin client needed `tailscale set --accept-routes` (Ryan's choice over a
+   tagged device with a narrower grant), which also gives it a network path to
+   production's addresses; reaching anything there still needs credentials it
+   does not have. Stage 5 puts Phoenix on an IPv6-enabled network.
 4. **Span rendering: passed, with the collector mapping and Phoenix settings
    above.** Phoenix shows the interaction as AGENT, model calls as LLM, and
    tools as TOOL, nested under `TRACEPARENT`. The bridge is not needed: its
