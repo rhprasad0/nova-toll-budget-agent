@@ -175,7 +175,16 @@ since #769) is green.
 
 ## Stage 4: AWS access
 
-1. **Ryan:** on the workstation, create the CA and issue the thin client's
+**Status on 2026-11-15: in progress.** Step 1 is done (2026-11-14). Step 2 is
+`infra/factory.tf`, on the `stage4/aws-access` branch stacked on Stage 3's PR. A
+read-only development plan targeted at it adds 4 resources and changes nothing
+else. By Ryan's decision on 2026-11-15, the role is tested end to end by this
+stage's done-when and spikes, not by a plan test: root `infra/` has no
+credential-free plan harness. The certificate's common name and the public CA
+certificate are committed in `infra/`, also by his decision; the spec's rule
+keeps them out of `factory/`.
+
+1. [x] **Ryan:** on the workstation, create the CA and issue the thin client's
    certificate. Copy only the certificate and its private key to the thin
    client, owned by `ryan`, mode `600`. The CA key never leaves the
    workstation.
@@ -183,23 +192,40 @@ since #769) is green.
    and profile, and the factory role with its trust policy and the four
    permissions the spec lists. The same PR notes in `SECURITY.md` the two
    factory credentials kept outside SSM: the certificate's private key and
-   the GitHub token.
+   the GitHub token. Everything is counted to development only, and the
+   `factory` output lists what the thin client's helper needs. The token
+   parameter `/nova-toll/factory/claude-code-oauth-token` is not in Terraform:
+   the provider writes a managed SecureString's decrypted value into state on
+   every refresh, `ignore_changes` or not.
 3. **Ryan:** apply it by hand after the merge. CI only formats and validates
    `infra/`; no workflow applies it. No apply while the circuit breaker is
-   tripped.
-4. **Ryan:** store the subscription token in SSM as a SecureString.
+   tripped. After `terraform -chdir=infra init
+   -backend-config=backend.development.hcl`, a targeted development plan:
+   `terraform -chdir=infra plan -var environment=development
+   -var budget_notification_email=<the dev budget's recipient>
+   -var development_final_snapshot_identifier=<live value>
+   -target=aws_rolesanywhere_profile.factory -target=aws_iam_role_policy.factory
+   -out=factory.plan` should add 4 and change nothing; apply that saved plan.
+4. **Ryan:** create the token parameter, which Terraform does not manage:
+   `aws ssm put-parameter --name /nova-toll/factory/claude-code-oauth-token
+   --type SecureString --value "<output of claude setup-token>"`. It
+   replaces the spike copy in `~/spikes/sandbox/.env` on the thin client.
 5. **Ryan (administrator):** on the development RDS instance, create the
    `phoenix` database and the `phoenix_factory` role with `rds_iam`.
-6. If the tailnet's access rules do not already let the thin client reach the
-   RDS endpoint, change them through the existing Tailscale ACL workflow.
-7. Install `aws_signing_helper` on the thin client.
+6. [x] If the tailnet's access rules do not already let the thin client reach the
+   RDS endpoint, change them through the existing Tailscale ACL workflow. Done
+   2026-11-15 with no ACL change: the rules already allowed it, and the thin
+   client needed only `tailscale set --accept-routes` (see the spec's Spike
+   results, 3).
+7. [x] Install `aws_signing_helper` on the thin client. Done 2026-11-15: 1.8.6,
+   checksum checked against the AWS download page, in `~/.local/bin`.
 
 Then run the two remaining spikes:
 
 | Spike | Pass |
 | --- | --- |
 | 2. Container credentials | A throwaway container running the AWS CLI gets the factory role from the helper's `serve` endpoint; the same request from the sandbox network fails. |
-| 3. Tailscale from a container | A container on the thin client opens a connection to the RDS endpoint. |
+| 3. Tailscale from a container | A container on the thin client opens a connection to the RDS endpoint. Passed 2026-11-15 on an IPv6-enabled network. |
 
 **Done when:** on the thin client, `aws sts get-caller-identity` returns the factory
 role, reading the token parameter works, and reading any other parameter is
