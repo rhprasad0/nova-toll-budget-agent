@@ -58,7 +58,7 @@ step touches production.
 
 PRs use disposable PostGIS migration validation only; the checks are
 credential-free and never access or mutate deployed databases or schemas. The
-post-merge delivery path is separate from the explicit manual development
+nightly delivery path is separate from the explicit manual development
 migration workflow, which may be dispatched from `refs/heads/main` for the
 fixed development target and accepts no arbitrary target or migration-path
 inputs. See the [protected development migration workflow](#protected-development-migration-workflow-305-slice-3)
@@ -528,29 +528,16 @@ development path has no Cloudflare data or resource instances.
 
 ## Build and review
 
-From `v2/`:
-
-```sh
-uv sync --locked
-uv run pytest
-npm ci --prefix lambdas/chat_proxy
-npm test --prefix lambdas/chat_proxy
-./scripts/build_loader_zip.sh
-./scripts/build_publisher_zip.sh
-./scripts/build_agentcore_zips.sh
-./scripts/build_fetcher_zip.sh
-(cd infra/build && sha256sum --check AGENTCORE_SHA256SUMS)
-```
-
-After changing a pinned file, refresh the release pins and review the diff:
+`.github/scripts/verify.sh loader` runs the tests and builds every package, as CI
+does. After changing a pinned file, refresh the release pins from `v2/` and
+review the diff:
 
 ```sh
 python3 scripts/update_release_manifest.py
 ```
 
-To refresh the package digests as well, build the zips and pass their
-`sha256sum` listing (`agentcore.zip`, `chat-proxy.zip`, `loader.zip`,
-`publisher.zip`, `timed-checks.zip`) as the argument.
+To refresh the package digests as well, pass a `sha256sum` listing of the zips
+in `infra/build/` that the manifest's `packages` names.
 
 For current blue-green releases, delivery creates the private, versioned recovery
 record used by the protected `v2-production-recovery.yml` workflow. Retain the
@@ -619,7 +606,9 @@ Before publishing a release, complete the
 Compare candidate/development schema evidence, the production wrapper's expected
 versions, and the reviewed production migration cap. Verify the installed
 production versions and each migration's role prerequisites. Development success
-alone is insufficient. The current cap is 035: pricing 1.4.0 and Oracle 1.15.2.
+alone is insufficient. The cap is `PRODUCTION_MAX_MIGRATION_NUMBER` in
+`scripts/run_development_migrations.py`; the versions it reaches are the ones
+`scripts/run_production_migrations_workflow.sh` expects.
 Migration 033 requires the separately provisioned production `eval_writer` role;
 034 updates 24 route labels and aliases without changing route connections.
 Migration 035 advances the Oracle version without changing production data or ACLs;

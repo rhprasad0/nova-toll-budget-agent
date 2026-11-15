@@ -57,6 +57,7 @@ TIMED_TARGETS=(
   -target=aws_iam_role_policy.timed_checks_scheduler
   -target=aws_security_group.timed_checks
   -target=aws_vpc_security_group_ingress_rule.rds_from_timed_checks
+  -target=aws_vpc_security_group_ingress_rule.agentcore_from_timed_checks
   -target=aws_vpc_security_group_egress_rule.timed_checks_to_rds
   -target=aws_vpc_security_group_egress_rule.timed_checks_https
   -target=aws_cloudwatch_log_group.timed_checks

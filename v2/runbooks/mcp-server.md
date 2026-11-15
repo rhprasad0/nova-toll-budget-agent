@@ -90,9 +90,9 @@ Review every saved plan and apply that exact file.
 The trusted PR plan runs **main's** `v2/infra`, so it cannot see a PR's new MCP
 resources. Merge first, then apply from `main`:
 
-1. **Merge** the PR once its checks pass. Its development delivery then stops at
-   `phase_boundary` before applying anything, because the MCP resources do not
-   exist yet. Until step 7, every delivery and every trusted PR plan fails the
+1. **Merge** the PR once its checks pass. Development delivery (nightly or
+   dispatched) now stops at `phase_boundary` before applying anything, because
+   the MCP resources do not exist yet. Until step 7, every delivery and every trusted PR plan fails the
    same way, so **merge nothing else until then**.
 2. **Foundation:** apply `infra/` for development. This adds the read-only MCP
    policies to the plan and delivery roles, and the counter table to the
@@ -112,8 +112,8 @@ resources. Merge first, then apply from `main`:
    in computed fields: the security group's `egress` (now listing its RDS and HTTPS rules),
    the certificate's `renewal_eligibility` and `in_use_by`, and the stage's
    `deployment_id`. Apply it. A second `-refresh-only` plan must show no drift.
-7. **Release:** re-run the merge's failed delivery jobs (as the original actor),
-   then re-run any open PR's `trusted-development-plan`. Both must pass with the
+7. **Release:** dispatch a delivery with
+   `gh workflow run v2-development-delivery.yml --ref main`, then re-run any open PR's `trusted-development-plan`. Both must pass with the
    MCP resources as no-ops.
 8. **Go live:** add a DNS-only Cloudflare CNAME from `mcp` to the domain's
    regional target (`aws apigatewayv2 get-domain-name --domain-name mcp.tollchat.ai
@@ -142,9 +142,9 @@ renewals need the same sync for `aws_acm_certificate.mcp[0]`.
 
 ## Change MCP resources
 
-Follow the bootstrap order: merge the reviewed change, and its delivery stops at
-`phase_boundary`. Apply a plan targeting only the changed MCP addresses from
-`main`, run the step 6 sync, then re-run the failed delivery jobs. Merge nothing
+Follow the bootstrap order: merge the reviewed change; delivery stops at
+`phase_boundary` until the apply. Apply a plan targeting only the changed MCP
+addresses from `main`, run the step 6 sync, then dispatch a delivery. Merge nothing
 else in between.
 
 - **Removed resources** are no longer in `MCP_TARGETS`; add each removed address

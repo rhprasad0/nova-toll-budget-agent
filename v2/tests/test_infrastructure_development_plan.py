@@ -312,3 +312,21 @@ def test_text_matching_infrastructure_assertions_only_shrink() -> None:
         "Assert on the development_plan fixture's planned values instead of "
         "adding assert_assignment or terraform_block text matches."
     )
+
+
+def test_mcp_privacy_notice_states_the_planned_log_retention(
+    development_plan: Plan,
+) -> None:
+    from pathlib import Path
+
+    notice = (
+        Path(__file__).parents[1] / "lambdas/mcp_server/src/privacy.md"
+    ).read_text()
+    days = development_plan["aws_cloudwatch_log_group.mcp_server[0]"][
+        "retention_in_days"
+    ]
+    words = {1: "one", 3: "three", 5: "five", 7: "seven", 14: "fourteen", 30: "thirty"}
+    assert f"Logs are kept for {words.get(days, days)} days" in notice, (
+        "The MCP privacy notice is a promise to users: update its log retention in "
+        "v2/lambdas/mcp_server/src/privacy.md to the planned value and redeploy."
+    )

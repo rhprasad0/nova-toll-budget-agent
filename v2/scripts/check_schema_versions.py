@@ -13,6 +13,7 @@ from typing import Any, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_PATH = REPO_ROOT / "v2" / "db" / "application-schemas.json"
+BASELINES = "v2/db/migration-baselines.json"
 SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 UPGRADE_MIGRATION = re.compile(
     r"^v2/db/migrations/[0-9]{3}_upgrade_(?P<schema>[a-z][a-z0-9_]*)_"
@@ -251,6 +252,31 @@ def validate_schema_update(
         raise ValueError(f"{schema_name} upgrade migration does not target {current}")
 
 
+def validate_baselines_append_only(previous_text: str, current_text: str) -> None:
+    previous = json.loads(previous_text)
+    if json.loads(current_text)[: len(previous)] != previous:
+        raise ValueError(
+            f"{BASELINES} records are append-only: restore the records from the base "
+            "commit and add new ones at the end"
+        )
+
+
+def validate_documented_version(schema: RegisteredSchema, version: str) -> None:
+    """An owned Markdown contract must state the canonical version it describes."""
+    for path in schema.owned_paths:
+        if not path.endswith(".md") or any(char in path for char in "*?["):
+            continue
+        text = (REPO_ROOT / path).read_text(encoding="utf-8")
+        stated = re.findall(
+            rf"(?:{re.escape(schema.name)} schema|at version|row at) `([0-9.]+)`", text
+        )
+        if not stated or set(stated) != {version}:
+            raise ValueError(
+                f"{path} states {schema.name} version {sorted(set(stated))}; "
+                f"update it to the canonical {version}"
+            )
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(f"usage: {Path(sys.argv[0]).name} BASE_GIT_REF", file=sys.stderr)
@@ -273,6 +299,7 @@ def main() -> int:
                 f"{schema.name} does not own its canonical SQL path "
                 f"{schema.canonical_sql}"
             )
+        validate_documented_version(schema, current)
         current_versions[schema.name] = current
 
     base_ref = sys.argv[1]
@@ -295,6 +322,11 @@ def main() -> int:
         else ()
     )
     validate_registry_continuity(schemas, previous_schemas)
+    previous_baselines = git_text(base_ref, BASELINES)
+    if previous_baselines is not None:
+        validate_baselines_append_only(
+            previous_baselines, (REPO_ROOT / BASELINES).read_text(encoding="utf-8")
+        )
     production_sql = [
         path for path in changed if path.startswith("v2/db/") and path.endswith(".sql")
     ]

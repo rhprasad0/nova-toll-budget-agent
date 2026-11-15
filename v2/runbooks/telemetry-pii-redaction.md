@@ -21,8 +21,9 @@ readers can recover them. The added roles do not grant that permission. See
 
 `agent/telemetry.py` initializes before the application. It wraps sampled and
 unsampled span exporters and the AWS log batch exporter's two references, using
-the pinned ADOT 0.22.0 / OpenTelemetry SDK 1.45.1 processor layout. Upgrade those
-versions together with the wiring tests. Unknown layouts stop startup.
+the processor layout of the ADOT and OpenTelemetry SDK versions pinned in
+`v2/pyproject.toml` and checked at startup. Upgrade them together with the
+wiring tests. Unknown layouts stop startup.
 
 Attributes are scanned together as JSON, including dynamic keys. Bodies, span
 names, events, links, status descriptions, and instrumentation scope content

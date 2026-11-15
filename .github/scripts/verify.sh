@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # The credential-free checks behind the required CI jobs, runnable anywhere.
 #
-#   .github/scripts/verify.sh [loader|terraform|database|all|quick] [BASE_GIT_REF]
+#   .github/scripts/verify.sh [loader|terraform|database|factory|mcp|all|quick] [BASE_GIT_REF]
 #
 # ci.yml and terraform.yml call this, so a local or sandbox run checks what CI
 # checks. Setup (toolchains, the pinned checkers, PostGIS for `database`) is the
-# caller's: see "Verify the build" in v2/README.md. golden-artifact-smoke needs
-# an ARM64 host and stays in ci.yml only. `quick` is the pre-push hook's subset.
+# caller's: see "Verify the build" in v2/README.md. Only the ci.yml jobs listed in
+# test_ci_jobs_run_verify run elsewhere. `quick` is the pre-push hook's subset.
 #
 # It lives under .github/ because that path is closed to the factory, so a work
-# order cannot drop a check from this list. `database` needs the Docker CLI.
+# order cannot drop a check from this list. `database` and `mcp` need Docker.
 set -euo pipefail
 
 job="${1:-all}"
@@ -159,18 +159,34 @@ database() {
   step database_contracts
 }
 
+factory() {
+  step uv run --project v2 --locked pytest factory
+}
+
+# The crate's rust-toolchain.toml pins the toolchain rustup installs.
+mcp() (
+  cd v2/lambdas/mcp_server
+  step cargo fmt --check
+  step cargo clippy --locked --all-targets -- -D warnings
+  step ./e2e.sh
+)
+
 case "$job" in
   loader) loader ;;
   terraform) terraform_checks ;;
   database) database ;;
+  factory) factory ;;
+  mcp) mcp ;;
   quick) quick ;;
   all)
     loader
     terraform_checks
     database
+    factory
+    mcp
     ;;
   *)
-    echo "usage: $0 [loader|terraform|database|all|quick] [BASE_GIT_REF]" >&2
+    echo "usage: $0 [loader|terraform|database|factory|mcp|all|quick] [BASE_GIT_REF]" >&2
     exit 2
     ;;
 esac

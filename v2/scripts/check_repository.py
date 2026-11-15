@@ -84,6 +84,28 @@ def selected_groups(staged: set[str]) -> set[str]:
     return {selected for path in staged if (selected := group(path)) is not None}
 
 
+def require_worktree() -> None:
+    """CLAUDE.md: sessions commit from their own worktree, never the shared checkout."""
+    git = [
+        "git",
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-dir",
+        "--git-common-dir",
+    ]
+    git_dir, common_dir = subprocess.check_output(git, cwd=ROOT, text=True).splitlines()
+    if git_dir != common_dir:
+        return
+    listing = subprocess.check_output(
+        ["git", "worktree", "list", "--porcelain"], cwd=ROOT
+    )
+    if b"\nworktree " in listing:  # a second entry: this checkout has linked worktrees
+        raise ValueError(
+            "Commit from a git worktree, not the main checkout other sessions share: "
+            "git worktree add .worktrees/NAME -b NAME origin/main"
+        )
+
+
 def require_tool(path: str, setup: str) -> str:
     resolved = ROOT / path if "/" in path else shutil.which(path)
     if resolved is None or not os.access(resolved, os.X_OK):
@@ -227,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
         untracked = git_paths("ls-files", "--others", "--exclude-standard")
         selected: set[str] = set(GROUPS)
         if args.staged:
+            require_worktree()
             # Without rename detection Git reports both old and new paths, including
             # moves across language groups, without parsing a status/path protocol.
             staged = git_paths("diff", "--cached", "--name-only", "--no-renames")

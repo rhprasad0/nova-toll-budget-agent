@@ -3131,3 +3131,25 @@ def test_runbooks_never_direct_plan_apply_target_or_workspaces() -> None:
     assert "terraform apply" not in guarded
     assert "terraform -target" not in DEPLOYMENT
     assert "terraform workspace" not in DEPLOYMENT
+
+
+def test_ci_jobs_run_verify() -> None:
+    """CLAUDE.md: run what CI runs. A check added inline in ci.yml is one no one runs locally."""
+    elsewhere = {
+        "golden-artifact-smoke": "needs an ARM64 host",
+        "frontend-browser": "needs Playwright browsers and the deployed development AI",
+        "trusted-development-plan": "needs AWS credentials",
+        "development-plan": "reports trusted-development-plan",
+    }
+    jobs = yaml.safe_load(CI_WORKFLOW)["jobs"]
+    inline = sorted(
+        name
+        for name, job in jobs.items()
+        if name not in elsewhere
+        and not any("verify.sh" in step.get("run", "") for step in job.get("steps", []))
+    )
+    assert not inline, (
+        f"Move the checks in ci.yml jobs {inline} into a .github/scripts/verify.sh "
+        "job and call it from ci.yml, so a local run checks what CI checks."
+    )
+    assert sorted(elsewhere) == sorted(set(elsewhere) & set(jobs)), "Drop retired jobs."

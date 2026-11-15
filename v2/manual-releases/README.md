@@ -45,8 +45,9 @@ Confirm all of the following before creating the release:
   SELECT to_regrole('eval_writer') IS NOT NULL AS evaluation_writer_exists;
   ```
 
-For this release, production advances through **035**, targeting pricing **1.4.0**
-and Oracle **1.15.2**. Migration 034 updates 24 route labels and aliases while
+Production advances through `PRODUCTION_MAX_MIGRATION_NUMBER` in
+`v2/scripts/run_development_migrations.py`, to the versions
+`v2/scripts/run_production_migrations_workflow.sh` expects. Migration 034 updates 24 route labels and aliases while
 preserving route connections and all other point fields. Migration 035 advances the
 production version without changing data or permissions;
 its catalog-reader grants apply only in development. Migration 033 adds
