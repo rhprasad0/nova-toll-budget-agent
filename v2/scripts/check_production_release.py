@@ -26,6 +26,8 @@ from scripts.check_development_release import _canary_contract
 REPOSITORY = "rhprasad0/nova-toll-budget-agent"
 LISTENER_WORKFLOW = ".github/workflows/v2-production-release.yml"
 DEVELOPMENT_WORKFLOW = ".github/workflows/v2-development-delivery.yml"
+# Push runs are the history before nightly delivery; recovery still reads them.
+DEVELOPMENT_EVENTS = ("push", "schedule", "workflow_dispatch")
 PRODUCTION_ENVIRONMENT = "production-release"
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_BUNDLE_BYTES = 512 * 1024 * 1024
@@ -147,12 +149,15 @@ def _run(run_id: int) -> dict[str, Any]:
     return _mapping(api("GET", f"actions/runs/{run_id}"))
 
 
-def _workflow(run: dict[str, Any], path: str, event: str, attempt: int | None) -> None:
+def _workflow(
+    run: dict[str, Any], path: str, event: str | tuple[str, ...], attempt: int | None
+) -> None:
     repository = _mapping(run.get("repository"))
+    events = (event,) if isinstance(event, str) else event
     if (
         repository.get("full_name") != REPOSITORY
         or run.get("path", "").split("@", 1)[0] != path
-        or run.get("event") != event
+        or run.get("event") not in events
         or run.get("status") != "completed"
         or run.get("conclusion") != "success"
         or (attempt is not None and _positive(run.get("run_attempt")) != attempt)
@@ -293,27 +298,32 @@ def _development(
     response = _mapping(
         api(
             "GET",
-            f"actions/runs?event=push&branch=main&head_sha={candidate}&per_page=100",
+            f"actions/workflows/{DEVELOPMENT_WORKFLOW.rsplit('/', 1)[1]}/runs"
+            f"?branch=main&head_sha={candidate}&per_page=100",
         )
     )
     values = response.get("workflow_runs")
-    if not isinstance(values, list):
+    if not isinstance(values, list) or len(cast(list[object], values)) >= 100:
         raise AdmissionError("malformed")
     runs = [_mapping(value) for value in cast(list[object], values)]
     matches = [
         run
         for run in runs
         if run.get("path", "").split("@", 1)[0] == DEVELOPMENT_WORKFLOW
+        and run.get("event") in DEVELOPMENT_EVENTS
+        and run.get("conclusion") == "success"
     ]
-    if len(matches) != 1:
+    if not matches:
         raise AdmissionError("ambiguous")
-    run = matches[0]
-    _workflow(run, DEVELOPMENT_WORKFLOW, "push", None)
+    # Admission skips a SHA once it has been delivered, so later successful runs
+    # of the same SHA are no-ops; only the earliest can carry release evidence.
+    run = min(matches, key=lambda value: _positive(value.get("run_number")))
+    _workflow(run, DEVELOPMENT_WORKFLOW, DEVELOPMENT_EVENTS, None)
     if run.get("head_branch") != "main" or _sha(run.get("head_sha")) != candidate:
         raise AdmissionError("provenance")
     run_id, attempt = _positive(run.get("id")), _positive(run.get("run_attempt"))
     current = _run(run_id)
-    _workflow(current, DEVELOPMENT_WORKFLOW, "push", attempt)
+    _workflow(current, DEVELOPMENT_WORKFLOW, DEVELOPMENT_EVENTS, attempt)
     if (
         current.get("head_branch") != "main"
         or _sha(current.get("head_sha")) != candidate
