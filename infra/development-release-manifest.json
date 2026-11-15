@@ -24,6 +24,7 @@
     "infra/data.tf": "e8e443e33a9d908f405eec54fa6bee2075fa8c228e293d734d1b0a5fc0428bc1",
     "infra/delivery_plan_validator.py": "04ecc40efd6fe7aefd70b49993e2007794dfddcf514b920be78085dbe135ee7c",
     "infra/development-tracing.tf": "489b1cb626e528a6fb0dc68d8d2dbf8e3beb24d40a7b3d7fa92631f00e920c97",
+    "infra/factory.tf": "19b1cff462c106109c13532b662da75c1469842e6bc7666f5ed444e21057525d",
     "infra/golden_eval.tf": "881e8a8871aa70d7d9168453bd5151529e3597c29015f9cadfae4dfacdea1aeb",
     "infra/iam.tf": "969e7b53b4c457f58f840d665737d72df3d3fafdb7adf6c2d41b862d9eb373e0",
     "infra/kms.tf": "be9512e49926805d56b6c521793c08880929948b820f943f0a2c5a0f9e589168",

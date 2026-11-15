@@ -175,7 +175,16 @@ since #769) is green.
 
 ## Stage 4: AWS access
 
-1. **Ryan:** on the workstation, create the CA and issue the thin client's
+**Status on 2026-11-15: in progress.** Step 1 is done (2026-11-14). Step 2 is
+`infra/factory.tf`, on the `stage4/aws-access` branch stacked on Stage 3's PR. A
+read-only development plan targeted at it adds 5 resources and changes nothing
+else. By Ryan's decision on 2026-11-15, the role is tested end to end by this
+stage's done-when and spikes, not by a plan test: root `infra/` has no
+credential-free plan harness. The certificate's common name and the public CA
+certificate are committed in `infra/`, also by his decision; the spec's rule
+keeps them out of `factory/`.
+
+1. [x] **Ryan:** on the workstation, create the CA and issue the thin client's
    certificate. Copy only the certificate and its private key to the thin
    client, owned by `ryan`, mode `600`. The CA key never leaves the
    workstation.
@@ -183,11 +192,22 @@ since #769) is green.
    and profile, and the factory role with its trust policy and the four
    permissions the spec lists. The same PR notes in `SECURITY.md` the two
    factory credentials kept outside SSM: the certificate's private key and
-   the GitHub token.
+   the GitHub token. Everything is counted to development only; the
+   placeholder token parameter `/nova-toll/factory/claude-code-oauth-token`
+   follows `infra/ssm.tf`, and the `factory` output lists what the thin
+   client's helper needs.
 3. **Ryan:** apply it by hand after the merge. CI only formats and validates
    `infra/`; no workflow applies it. No apply while the circuit breaker is
-   tripped.
-4. **Ryan:** store the subscription token in SSM as a SecureString.
+   tripped. A targeted development plan:
+   `terraform -chdir=infra plan -var environment=development
+   -var development_final_snapshot_identifier=<live value>
+   -target=aws_rolesanywhere_profile.factory -target=aws_iam_role_policy.factory
+   -target=aws_ssm_parameter.factory_token -out=factory.plan` should add 5 and
+   change nothing; apply that saved plan.
+4. **Ryan:** store the subscription token in that parameter:
+   `aws ssm put-parameter --name /nova-toll/factory/claude-code-oauth-token
+   --type SecureString --overwrite --value "$(claude setup-token output)"`. It
+   replaces the spike copy in `~/spikes/sandbox/.env` on the thin client.
 5. **Ryan (administrator):** on the development RDS instance, create the
    `phoenix` database and the `phoenix_factory` role with `rds_iam`.
 6. If the tailnet's access rules do not already let the thin client reach the
