@@ -103,24 +103,32 @@ The only separately authorized manual production migration remains the
 
 ## Verify the build
 
-Install Node.js 22.22.1 and uv, then set up the locked development tools from
-the repository root (Linux amd64/arm64):
+Install Node.js 22.22.1 and uv, then run the setup script in each clone or
+new worktree (Linux amd64/arm64). It installs the locked development tools and
+the pinned checkers into `~/.local/bin`, enables the Git hooks, and runs the
+static checks:
 
 ```sh
-uv sync --locked --project v2
-npm ci --ignore-scripts --prefix v2
-npm ci --ignore-scripts --prefix v2/lambdas/chat_proxy
-v2/scripts/install_check_tools.sh
+v2/scripts/setup.sh
 export PATH="$HOME/.local/bin:$PATH"
-git config core.hooksPath .githooks
-python3 v2/scripts/check_repository.py
 ```
+
+`.github/scripts/verify.sh [loader|terraform|database|all]` then runs what the
+required CI jobs run; CI calls the same script. `database` needs two empty
+`postgis/postgis:17-3.5` containers (see the script).
 
 The installer verifies pinned release checksums for ShellCheck 0.11.0,
 actionlint 1.7.12 and Gitleaks 8.30.1. On other platforms install those same
 versions yourself. Python dependencies are locked in `uv.lock`; ESLint and
 TypeScript are development dependencies locked in `package-lock.json`. No
 JavaScript compilation is required.
+
+The tests also shell out to `jq`, `xxd`, `zip` and `unzip` (on Debian, the
+packages of the same names) and stop at startup if one is missing. GitHub's
+runners ship them; a bare container image does not. The full suite also needs
+Terraform 1.15.8: some of its tests fail without it and others skip. Tests
+that need Gitleaks, Docker or `psql` skip without them, so a skip locally can
+still be a failure in CI.
 
 Fresh clones need this setup: Git does not automatically enable repository hooks.
 **CI is the authoritative gate** because local hooks can be bypassed. The hook
@@ -129,6 +137,9 @@ Checker/configuration changes select every group; additions, renames and deletio
 count. It rejects index/working-copy differences in checked inputs, including
 partially staged files. Resolve or stage those changes before committing; the hook
 never stashes, rewrites, restages, installs packages, or runs behavioral tests.
+A pre-push hook runs `.github/scripts/verify.sh quick`: CI's contract-version,
+corpus, and oracle checks against the merge base with `origin/main`. It does
+not run pytest or the database contracts.
 
 The full runner checks authored Python, JavaScript, shell and workflows, including
 tests. It uses explicit configurations and resolves paths independently of the

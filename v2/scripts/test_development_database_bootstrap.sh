@@ -194,15 +194,30 @@ PY
 done
 
 if [[ -n "${POSTGRES_CONTAINER_ID:-}" ]]; then
+  # The factory sandbox cannot reach the Docker host's loopback, so it names a
+  # network namespace it shares; the fixture listens there on a free port.
+  if [[ -n "${DISPOSABLE_DOCKER_NETWORK:-}" ]]; then
+    server_port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+    placement=(--network "$DISPOSABLE_DOCKER_NETWORK")
+    server=(-c "port=$server_port")
+  else
+    server_port=5432
+    placement=(-p 127.0.0.1::5432)
+    server=()
+  fi
   mismatch_container="$(docker run -d --rm -e POSTGRES_HOST_AUTH_METHOD=trust \
-    -p 127.0.0.1::5432 postgis/postgis:17-3.5)"
+    "${placement[@]}" postgis/postgis:17-3.5 "${server[@]}")"
   for _attempt in {1..30}; do
-    if docker exec "$mismatch_container" pg_isready --username postgres >/dev/null; then
+    if docker exec "$mismatch_container" pg_isready --username postgres --port "$server_port" >/dev/null; then
       break
     fi
     sleep 1
   done
-  mismatch_port="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "$mismatch_container")"
+  if [[ -n "${DISPOSABLE_DOCKER_NETWORK:-}" ]]; then
+    mismatch_port="$server_port"
+  else
+    mismatch_port="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "$mismatch_container")"
+  fi
   interceptors="$(mktemp -d)"
   real_psql="$(command -v psql)"
   trap 'rm -rf -- "$interceptors"; cleanup' EXIT

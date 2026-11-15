@@ -1,0 +1,5 @@
+# Test settings only. The factory's host code uses the standard library; CI runs
+# these tests with v2's environment: uv run --project v2 --locked pytest factory
+[tool.pytest.ini_options]
+pythonpath = [".."]
+testpaths = ["host"]

@@ -65,7 +65,7 @@ def group(path: str) -> str | None:
         return "python"
     if path.endswith((".js", ".mjs", ".cjs", ".ts", ".mts", ".cts")):
         return "javascript"
-    if path.endswith(".sh") or path == ".githooks/pre-commit":
+    if path.endswith(".sh") or path.startswith(".githooks/"):
         return "shell"
     if path.startswith(".github/workflows/") and path.endswith((".yml", ".yaml")):
         return "workflows"

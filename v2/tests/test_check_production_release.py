@@ -543,10 +543,12 @@ def test_admission_accepts_a_current_full_development_rerun(
         ("address_redacted", False),
     ],
 )
+@pytest.mark.parametrize("event", ["push", "schedule", "workflow_dispatch"])
 def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     canary_change: tuple[str, object] | None,
+    event: str,
 ) -> None:
     candidate = "a" * 40
     evidence = {
@@ -610,20 +612,28 @@ def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
         destination.write_bytes(archive.read_bytes())
 
     def api(_method: str, path: str, _payload: object = None) -> object:
-        if path.startswith("actions/runs?event="):
+        if path.startswith(
+            "actions/workflows/v2-development-delivery.yml/runs?branch=main&head_sha="
+        ):
+            delivered = {
+                "id": 12,
+                "run_number": 5,
+                "repository": {"full_name": release.REPOSITORY},
+                "path": release.DEVELOPMENT_WORKFLOW + "@main",
+                "event": event,
+                "status": "completed",
+                "conclusion": "success",
+                "head_branch": "main",
+                "head_sha": candidate,
+                "run_attempt": 2,
+            }
             return {
                 "workflow_runs": [
-                    {
-                        "id": 12,
-                        "repository": {"full_name": release.REPOSITORY},
-                        "path": release.DEVELOPMENT_WORKFLOW + "@main",
-                        "event": "push",
-                        "status": "completed",
-                        "conclusion": "success",
-                        "head_branch": "main",
-                        "head_sha": candidate,
-                        "run_attempt": 2,
-                    }
+                    # A later quiet-night no-op of the same SHA has no evidence.
+                    {**delivered, "id": 20, "run_number": 9, "event": "schedule"},
+                    delivered,
+                    {**delivered, "id": 11, "run_number": 4, "conclusion": "failure"},
+                    {**delivered, "id": 3, "run_number": 1, "path": "ci.yml"},
                 ]
             }
         if path == "actions/runs/12":
@@ -631,7 +641,7 @@ def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
                 "id": 12,
                 "repository": {"full_name": release.REPOSITORY},
                 "path": release.DEVELOPMENT_WORKFLOW + "@main",
-                "event": "push",
+                "event": event,
                 "status": "completed",
                 "conclusion": "success",
                 "head_branch": "main",

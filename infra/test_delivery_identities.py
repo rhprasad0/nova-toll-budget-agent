@@ -31,6 +31,8 @@ ROOT = Path(__file__).resolve().parents[1]
 IAM = (ROOT / "infra" / "iam.tf").read_text()
 S3 = (ROOT / "infra" / "s3.tf").read_text()
 WORKFLOW = (ROOT / ".github" / "workflows" / "terraform.yml").read_text()
+# terraform.yml runs its checks through this script.
+VERIFY = (ROOT / ".github" / "scripts" / "verify.sh").read_text()
 PRODUCTION_PLAN = (
     ROOT / ".github" / "workflows" / "v2-production-plan.yml"
 ).read_text()
@@ -1424,8 +1426,9 @@ def main() -> None:
     require('variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"', S3)
     require("aws_kms_key.tfstate.arn", S3)
 
-    require("python3 infra/test_delivery_identities.py", WORKFLOW)
-    require("terraform init -backend=false -input=false", WORKFLOW)
+    require(".github/scripts/verify.sh terraform", WORKFLOW)
+    require("python3 infra/test_delivery_identities.py", VERIFY)
+    require("init -backend=false -input=false", VERIFY)
 
     _check_production_planner()
     test_production_release_planner_can_verify_encrypted_immutable_retries()

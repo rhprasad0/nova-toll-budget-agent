@@ -1,12 +1,18 @@
 name: v2-development-delivery
 
 on:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron: "17 8 * * *" # 03:17 EST / 04:17 EDT, off the hour to avoid queue delays.
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+# One delivery at a time; a newer pending run replaces an older pending one.
+# The ref keeps a rejected branch dispatch from replacing a pending main run.
+concurrency:
+  group: v2-development-delivery-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   admission:
@@ -15,6 +21,10 @@ jobs:
     permissions:
       contents: read
       actions: read
+    outputs:
+      # 'false' when main has nothing but unpinned Markdown since the last delivery.
+      deliver: ${{ steps.admit.outputs.deliver }}
+      predecessor: ${{ steps.admit.outputs.predecessor }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -22,10 +32,10 @@ jobs:
           persist-credentials: false
 
       - name: Check exact CI evidence and predecessor
+        id: admit
         env:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_SHA: ${{ github.sha }}
-          PREDECESSOR_SHA: ${{ github.event.before }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -42,18 +52,9 @@ jobs:
           }
           trap admission_fallback EXIT
           _run_private_stage_emit 'stage=admission status=start elapsed=0 exit=0 reason=unclassified'
-          changed_paths="$RUNNER_TEMP/development-changed-paths"
-          if [[ "$PREDECESSOR_SHA" == "0000000000000000000000000000000000000000" ]]; then
-            git ls-tree -r --name-only "$CANDIDATE_SHA" >"$changed_paths"
-          else
-            git diff --name-only "$PREDECESSOR_SHA" "$CANDIDATE_SHA" >"$changed_paths"
-          fi
           if python3 v2/scripts/check_development_admission.py \
               --repository "$REPOSITORY" \
               --sha "$CANDIDATE_SHA" \
-              --before "$PREDECESSOR_SHA" \
-              --event-file "$GITHUB_EVENT_PATH" \
-              --paths-file "$changed_paths" \
               --run-id "$GITHUB_RUN_ID" \
               --timeout-seconds 1800 \
               --poll-seconds 10 \
@@ -75,11 +76,22 @@ jobs:
             _run_private_stage_emit 'stage=admission status=fail elapsed=0 exit=125 reason=diagnostic_unavailable'
             exit 125
           fi
+          result="$(cat "$RUNNER_TEMP/development-admission.result")"
+          if [[ ! "$result" =~ ^development\ admission\ accepted:\ sha=[0-9a-f]{40}\ predecessor=([0-9a-f]{40})\ terraform=[a-z-]+\ delivery=(required|not-required)$ ]]; then
+            PRIVATE_STAGE_REPORTED=1
+            _run_private_stage_emit 'stage=admission status=fail elapsed=0 exit=1 reason=malformed_evidence'
+            exit 1
+          fi
+          echo "predecessor=${BASH_REMATCH[1]}" >>"$GITHUB_OUTPUT"
+          if [[ "${BASH_REMATCH[2]}" == not-required ]]; then
+            echo 'deliver=false' >>"$GITHUB_OUTPUT"
+          fi
           trap - EXIT
 
   release-record:
     name: Record exact development release
     needs: admission
+    if: needs.admission.outputs.deliver != 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -196,7 +208,7 @@ jobs:
           PGHOST: localhost
           PGPORT: 5432
           PGUSER: postgres
-          SCHEMA_BASE_REF: ${{ github.event.before }}
+          SCHEMA_BASE_REF: ${{ needs.admission.outputs.predecessor }}
           POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
         run: v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF" --profile full
 
@@ -347,7 +359,7 @@ jobs:
   release-result:
     name: Record end-to-end development result
     needs: [admission, release-record, build, deploy]
-    if: always()
+    if: always() && needs.admission.outputs.deliver != 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read

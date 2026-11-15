@@ -94,6 +94,25 @@ def retained_version_guard(
     return source
 
 
+WEDNESDAY_PICKER = b"""::date - 7,
+            (transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1,
+            interval '1 day'
+        ) AS days(day)
+        WHERE extract(isodow FROM day) = 3
+"""
+
+
+def retained_holiday_guard(source: bytes) -> bytes:
+    """Let a retained ballpark contract skip a holiday Wednesday, as the candidate does."""
+    # shortcut: only needed while the retained baseline predates the holiday-aware
+    # picker in oracle_ballpark_contract.sql; delete once the baseline includes it.
+    return source.replace(
+        WEDNESDAY_PICKER,
+        WEDNESDAY_PICKER.replace(b"date - 7", b"date - 14")
+        + b"          AND oracle.i66_tolling_active('EB', day::date + time '08:00')\n",
+    )
+
+
 def run_contracts(retained: Path, profile: str) -> None:
     if profile not in {"fast", "full"}:
         raise ValueError("database profile must be fast or full")
@@ -129,6 +148,11 @@ def run_contracts(retained: Path, profile: str) -> None:
                 path = Path(temporary) / f"{name}_contract.sql"
                 path.write_bytes(content)
                 adapted[name] = path
+        ballpark = baseline.get("oracle_ballpark")
+        if ballpark is not None and ballpark != current["oracle_ballpark"]:
+            path = Path(temporary) / "oracle_ballpark_contract.sql"
+            path.write_bytes(retained_holiday_guard(ballpark))
+            adapted["oracle_ballpark"] = path
         for identity, directory in (("retained", retained), ("candidate", CURRENT)):
             if selected not in {"all", identity}:
                 continue
