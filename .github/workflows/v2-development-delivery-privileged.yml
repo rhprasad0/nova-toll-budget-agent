@@ -204,7 +204,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_SHA: ${{ github.sha }}
-          PREDECESSOR_SHA: ${{ github.event.before }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -221,18 +220,9 @@ jobs:
           }
           trap admission_recheck_fallback EXIT
           _run_private_stage_emit 'stage=admission-recheck status=start elapsed=0 exit=0 reason=unclassified'
-          changed_paths="$RUNNER_TEMP/development-changed-paths"
-          if [[ "$PREDECESSOR_SHA" == "0000000000000000000000000000000000000000" ]]; then
-            git ls-tree -r --name-only "$CANDIDATE_SHA" >"$changed_paths"
-          else
-            git diff --name-only "$PREDECESSOR_SHA" "$CANDIDATE_SHA" >"$changed_paths"
-          fi
           if python3 v2/scripts/check_development_admission.py \
               --repository "$REPOSITORY" \
               --sha "$CANDIDATE_SHA" \
-              --before "$PREDECESSOR_SHA" \
-              --event-file "$GITHUB_EVENT_PATH" \
-              --paths-file "$changed_paths" \
               --run-id "$GITHUB_RUN_ID" \
               --recheck \
               --timeout-seconds 60 \
@@ -513,10 +503,8 @@ jobs:
           fetch_rds_ca() {
           set -euo pipefail
           mkdir -p v2/infra/build/ca
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-            https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-            -o v2/infra/build/ca/rds-ca-bundle.pem
-          echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  v2/infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status
+          source v2/scripts/build_loader_zip.sh
+          download_rds_ca_bundle v2/infra/build/ca/rds-ca-bundle.pem
           chmod 600 v2/infra/build/ca/rds-ca-bundle.pem
           }
           run_private_stage "rds-ca" "$RUNNER_TEMP/development-rds-ca.log" "$RUNNER_TEMP/development-rds-ca.log" \

@@ -9,6 +9,9 @@ STAGE="$BUILD/timed-checks"
 EPOCH="2020-01-01 00:00:00Z"
 export TZ=UTC
 export UV_MANAGED_PYTHON=1 UV_PYTHON_INSTALL_DIR=/tmp/nova-toll-cpython
+# An active virtualenv changes which interpreter uv resolves, and that path lands
+# in installed scripts' shebangs, so the zip digest would depend on the caller.
+unset VIRTUAL_ENV
 
 uv python install 3.13 >/dev/null
 PYTHON_BIN="$(uv python find 3.13)"

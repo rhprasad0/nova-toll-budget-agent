@@ -51,8 +51,13 @@ def test_mixed_loader_publisher_timed_and_cost_contracts(
     for name, digest in REVIEW["schemas"].items():
         previous = retained("v2/db/" + name, baseline)
         current = (ROOT / "v2/db" / name).read_bytes()
-        assert previous == current
-        assert hashlib.sha256(current).hexdigest() == digest
+        review = (
+            f"v2/db/{name} differs from reviewed baseline {baseline}. Extending "
+            "v2/scripts/shared-package-compatibility.json needs a human review "
+            "(v2/runbooks/blue-green-deployments.md); do not edit it to pass"
+        )
+        assert previous == current, review
+        assert hashlib.sha256(current).hexdigest() == digest, review
     for environment in shared_packages.ACCOUNTS:
         monkeypatch.setenv("TOLLCHAT_ENVIRONMENT", environment)
         for loader, publisher, timed in itertools.product(*modules.values()):

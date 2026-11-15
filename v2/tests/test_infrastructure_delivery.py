@@ -26,6 +26,7 @@ from tests.infrastructure_support import (
     RUNBOOK,
     TERRAFORM_WORKFLOW,
     V2_ROOT,
+    VERIFY_SCRIPT,
     VERSIONS_TF,
     must_reject,
     workflow_run_source,
@@ -42,24 +43,18 @@ def test_ci_installs_proxy_dependencies_once_before_testing() -> None:
         "v2/package-lock.json",
         "v2/lambdas/chat_proxy/package-lock.json",
     ]
-    install = next(
-        step
-        for step in steps
-        if step.get("run") == "npm ci --prefix lambdas/chat_proxy"
+    assert [step["run"] for step in steps if "verify.sh" in step.get("run", "")] == [
+        '../.github/scripts/verify.sh loader "$BASE_REF"'
+    ]
+    loader = VERIFY_SCRIPT.split("\nloader() (\n", 1)[1].split("\n)\n", 1)[0]
+    install = (
+        '  if [[ "$event" != pull_request ]]; then\n'
+        "    step npm ci --prefix lambdas/chat_proxy\n  fi\n"
     )
-    build = next(
-        step for step in steps if step.get("run") == "./scripts/build_agentcore_zips.sh"
-    )
-    test = next(
-        step
-        for step in steps
-        if step.get("run") == "npm test --prefix lambdas/chat_proxy"
-    )
-    assert install["if"] == "github.event_name != 'pull_request'"
-    assert build["if"] == "github.event_name == 'pull_request'"
-    assert "if" not in test
-    assert steps.index(install) < steps.index(test)
-    assert steps.index(build) < steps.index(test)
+    build = "    step ./scripts/build_agentcore_zips.sh\n  fi\n"
+    test = "\n  step npm test --prefix lambdas/chat_proxy\n"
+    assert loader.index(install) < loader.index(test)
+    assert loader.index(build) < loader.index(test)
     assert (
         'npm ci --omit=dev --prefix "$V2_ROOT/lambdas/chat_proxy"'
         in (V2_ROOT / "scripts/build_agentcore_zips.sh").read_text()
@@ -94,8 +89,9 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
         'key          = "nova-toll/v2/terraform.tfstate"'
     ) >= 0
     assert "postgis/postgis" in CI_WORKFLOW
-    assert "python3 v2/scripts/check_schema_versions.py" in CI_WORKFLOW
-    assert "v2/scripts/run_db_tests.sh" in CI_WORKFLOW
+    assert '.github/scripts/verify.sh database "$SCHEMA_BASE_REF"' in CI_WORKFLOW
+    assert "step python3 v2/scripts/check_schema_versions.py" in VERIFY_SCRIPT
+    assert "v2/scripts/run_db_tests.sh" in VERIFY_SCRIPT
     ci_jobs = cast(dict[str, dict[str, object]], yaml.safe_load(CI_WORKFLOW)["jobs"])
     database_setup_uv = [
         step
@@ -1499,10 +1495,16 @@ def test_setup_uv_v10_pins_version_and_checksum() -> None:
 
 def _assert_development_delivery_caller(source: str) -> None:
     workflow = cast(dict[str, object], yaml.safe_load(source))
-    assert workflow_trigger(workflow) == {"push": {"branches": ["main"]}}
+    assert workflow_trigger(workflow) == {
+        "schedule": [{"cron": "17 8 * * *"}],
+        "workflow_dispatch": None,
+    }
     assert workflow["permissions"] == {"contents": "read"}
-    # Admission must not hold a lock needed by its predecessor's queued rerun.
-    assert "concurrency" not in workflow
+    # Safe because admission no longer waits on an earlier run inside the lock.
+    assert workflow["concurrency"] == {
+        "group": "v2-development-delivery-${{ github.ref }}",
+        "cancel-in-progress": False,
+    }
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     assert set(jobs) == {
         "admission",
@@ -1978,14 +1980,20 @@ def _assert_required_event_callers(source: str) -> None:
         "github.event.pull_request.base.sha || "
         "github.event.merge_group.base_sha || github.event.before"
     )
-    for variable in (
-        "TOOL_CONTRACT_BASE_REF",
-        "AGENT_CONTRACT_BASE_REF",
-        "SCHEMA_BASE_REF",
-        "BASE_REF",
-    ):
-        assert f"{variable}: ${{{{ {base_expression} }}}}" in source
-    assert source.count(base_expression) == 4
+    assert f"SCHEMA_BASE_REF: ${{{{ {base_expression} }}}}" in source
+    loader = [
+        step
+        for step in cast(list[dict[str, object]], ci_jobs["v2-loader"]["steps"])
+        if "verify.sh" in str(step.get("run", ""))
+    ]
+    assert [(step["run"], step["env"]) for step in loader] == [
+        (
+            '../.github/scripts/verify.sh loader "$BASE_REF"',
+            {"BASE_REF": f"${{{{ {base_expression} }}}}"},
+        )
+    ]
+    # v2-loader, frontend-browser and v2-database.
+    assert source.count(base_expression) == 3
 
     caller = ci_jobs["trusted-development-plan"]
     assert (
@@ -2968,7 +2976,6 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc() -> None
     _assert_development_delivery_caller(DEVELOPMENT_DELIVERY_WORKFLOW)
     _assert_development_delivery_privileged(DEVELOPMENT_DELIVERY_PRIVILEGED_WORKFLOW)
     caller = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
-    assert workflow_trigger(caller) == {"push": {"branches": ["main"]}}
     caller_jobs = cast(dict[str, dict[str, object]], caller["jobs"])
     assert set(caller_jobs) == {
         "admission",
@@ -3012,8 +3019,9 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc() -> None
         "queue": "max",
     }
     for original, replacement in (
-        ("push:\n    branches:", "pull_request:\n    branches:"),
-        ("- main", "- release"),
+        ("  workflow_dispatch:\n", "  push:\n"),
+        ('cron: "17 8 * * *"', 'cron: "*/5 * * * *"'),
+        ("cancel-in-progress: false", "cancel-in-progress: true"),
         ("environment: development", "environment: production"),
         (
             "if: github.ref == 'refs/heads/main'",

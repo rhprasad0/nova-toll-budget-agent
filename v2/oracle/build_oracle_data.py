@@ -1385,6 +1385,7 @@ def main() -> int:
             raise SystemExit(
                 "generated oracle data is stale: "
                 + ", ".join(str(path) for path in stale)
+                + ". Run from v2: uv run python oracle/build_oracle_data.py"
             )
         print("oracle data is current: " + ", ".join(str(path) for path, _ in outputs))
         return 0

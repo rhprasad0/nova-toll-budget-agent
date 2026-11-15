@@ -39,10 +39,8 @@ jobs:
           set -euo pipefail
           set +x
           mkdir -p infra/build/ca
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-            https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-            -o infra/build/ca/rds-ca-bundle.pem
-          echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status
+          source scripts/build_loader_zip.sh
+          download_rds_ca_bundle infra/build/ca/rds-ca-bundle.pem
 
       - name: Validate verification phase
         env:

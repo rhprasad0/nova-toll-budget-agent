@@ -43,13 +43,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Reject em dashes in front-end copy
-        run: >-
-          ! git grep -n '—' --
-          'agent/*.html' 'agent/*.mjs' 'agent/*.js' 'agent/*.json' 'agent/*.txt'
-          ':(exclude)agent/assets/LICENSE.txt'
-          ':(exclude)agent/assets/markdown-it.esm.min.mjs'
-          ':(exclude)agent/assets/maplibre-gl-6.0.0/**'
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: "3.13"
@@ -61,7 +54,6 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/terraform-provider-cache"
           echo "TF_PLUGIN_CACHE_DIR=$RUNNER_TEMP/terraform-provider-cache" >> "$GITHUB_ENV"
-      - run: uv sync --locked
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22.22.1"
@@ -69,43 +61,15 @@ jobs:
           cache-dependency-path: |
             v2/package-lock.json
             v2/lambdas/chat_proxy/package-lock.json
-      - run: npm ci --ignore-scripts
-      - run: npm ci --ignore-scripts --prefix lambdas/chat_proxy
       - name: Install pinned shell, workflow and secret checkers
         run: |
           ./scripts/install_check_tools.sh "$RUNNER_TEMP/repository-check-tools"
           echo "$RUNNER_TEMP/repository-check-tools" >> "$GITHUB_PATH"
-      - name: Check all authored code
-        run: python3 scripts/check_repository.py
-      - name: Validate local corpus readiness and release isolation
-        run: |
-          uv run python -m eval.golden --allow-uninitialized
-      - run: uv run python scripts/check_tool_contract_versions.py "$TOOL_CONTRACT_BASE_REF"
+      # Every check lives in the script so a local or sandbox run matches CI.
+      - name: Run the credential-free checks
+        run: ../.github/scripts/verify.sh loader "$BASE_REF"
         env:
-          TOOL_CONTRACT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-      - run: uv run python -m scripts.check_agent_contract_versions "$AGENT_CONTRACT_BASE_REF"
-        env:
-          AGENT_CONTRACT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-      # Provider schemas let the cost-dashboard mock-plan tests run instead of skip.
-      - run: terraform -chdir=infra init -backend=false -input=false
-      - run: uv run coverage run -m pytest --durations=30 --durations-min=1
-      - run: uv run coverage report
-      - run: node --test tests/*.mjs
-      - if: github.event_name != 'pull_request'
-        run: npm ci --prefix lambdas/chat_proxy
-      - run: uv run python oracle/build_oracle_data.py --check
-      # Main delivery owns the immutable release bundle; PRs retain package checks.
-      - if: github.event_name == 'pull_request'
-        run: ./scripts/build_fetcher_zip.sh
-      - if: github.event_name == 'pull_request'
-        run: ./scripts/build_loader_zip.sh
-      - if: github.event_name == 'pull_request'
-        run: ./scripts/build_publisher_zip.sh
-      - if: github.event_name == 'pull_request'
-        run: ./scripts/build_agentcore_zips.sh
-      - run: npm test --prefix lambdas/chat_proxy
-      - if: github.event_name == 'pull_request'
-        run: ./scripts/build_timed_checks_zip.sh
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
 
   frontend-browser:
     runs-on: ubuntu-latest
@@ -203,39 +167,24 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: "3.13"
-      - run: python3 v2/scripts/check_schema_versions.py "$SCHEMA_BASE_REF"
-      - name: Select database test profile
-        id: database-profile
-        env:
-          PROFILE_EVENT: ${{ github.event_name }}
-          PROFILE_REF: ${{ github.ref }}
-          PROFILE_HEAD: ${{ github.sha }}
-        run: |
-          profile="$(python3 v2/scripts/select_db_test_profile.py \
-            --event "$PROFILE_EVENT" --ref "$PROFILE_REF" \
-            --base "$SCHEMA_BASE_REF" --head "$PROFILE_HEAD")"
-          printf 'profile=%s\n' "$profile" >>"$GITHUB_OUTPUT"
-      - name: Validate disposable database contracts
-        run: |
-          if [[ "$DATABASE_PROFILE" == full ]]; then
-            PGPORT=5433 POSTGRES_CONTAINER_ID="$RETAINED_POSTGRES_CONTAINER_ID" \
-              DB_CONTRACT_IDENTITY=retained \
-              v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF" --profile "$DATABASE_PROFILE" \
-              >"$RUNNER_TEMP/retained-database.log" 2>&1 &
-            retained_pid=$!
-            status=0
-            DB_CONTRACT_IDENTITY=candidate \
-              v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF" --profile "$DATABASE_PROFILE" || status=$?
-            wait "$retained_pid" || status=$?
-            cat "$RUNNER_TEMP/retained-database.log"
-            exit "$status"
-          fi
-          v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF" --profile "$DATABASE_PROFILE"
+      - name: Validate schema versions and disposable database contracts
+        run: .github/scripts/verify.sh database "$SCHEMA_BASE_REF"
         env:
           POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
           RETAINED_POSTGRES_CONTAINER_ID: ${{ job.services.postgres_retained.id }}
-          DATABASE_PROFILE: ${{ steps.database-profile.outputs.profile }}
-          DB_CONTRACT_IDENTITY: all
+
+  factory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.13"
+      - name: Factory dispatcher checks
+        run: uv run --project v2 --locked pytest factory
 
   mcp-server:
     runs-on: ubuntu-latest

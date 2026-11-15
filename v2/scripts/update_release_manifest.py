@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Rewrite the file digests in infra/development-release-manifest.json.
 
-    python3 v2/scripts/update_release_manifest.py [DEPLOYMENT_SHA256SUMS]
+    python3 v2/scripts/update_release_manifest.py [--check] [DEPLOYMENT_SHA256SUMS]
 
 The file list comes from the same selection the release verifier uses, so
 `git add` new files first. Pass a `sha256sum` listing of the built zips to
 refresh the package digests too. Mutations and permissions are never touched.
+With --check nothing is written and a stale manifest exits 1.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from infra import release_manifest  # noqa: E402
 MANIFEST = "infra/development-release-manifest.json"
 
 
-def update(root: Path, checksums: Path | None = None) -> bool:
+def update(root: Path, checksums: Path | None = None, write: bool = True) -> bool:
     """Rewrite the manifest under `root`; return whether it changed."""
     path = root / MANIFEST
     before = path.read_text(encoding="utf-8")
@@ -42,14 +43,20 @@ def update(root: Path, checksums: Path | None = None) -> bool:
             raise SystemExit("checksum listing does not match the manifest's packages")
         manifest["packages"] = {name: listed[name] for name in manifest["packages"]}
     after = json.dumps(manifest, indent=2) + "\n"
-    path.write_text(after, encoding="utf-8")
+    if write:
+        path.write_text(after, encoding="utf-8")
     return after != before
 
 
 def main(argv: list[str]) -> int:
+    check = argv[:1] == ["--check"]
+    argv = argv[check:]
     if len(argv) > 1:
         raise SystemExit(__doc__)
-    changed = update(ROOT, Path(argv[0]) if argv else None)
+    changed = update(ROOT, Path(argv[0]) if argv else None, write=not check)
+    if check and changed:
+        print(f"{MANIFEST} is stale: rerun this command without --check")
+        return 1
     print(f"{MANIFEST}: {'updated' if changed else 'already current'}")
     return 0
 

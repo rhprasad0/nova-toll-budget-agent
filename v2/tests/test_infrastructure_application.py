@@ -13,6 +13,7 @@ from tests.infrastructure_support import (
     APPLICATION_VARIABLES,
     DEPLOYMENT,
     MAIN_TF,
+    RDS_CA_SHA256,
     REPO_ROOT,
     TIMED_CHECKS_TF,
     V2_ROOT,
@@ -616,6 +617,29 @@ def test_ca_helper_can_be_sourced_without_build_side_effects(tmp_path: Path) -> 
     assert not list(tmp_path.iterdir())
 
 
+def test_every_rds_ca_pin_matches_the_shared_download_function() -> None:
+    """Production re-checks the bundle with its own copies; they must not drift."""
+    stale: list[str] = []
+    for path in (
+        ".github/workflows/v2-production-migrations.yml",
+        "v2/scripts/run_production_migrations_workflow.sh",
+        "v2/scripts/adopt_production_baseline.py",
+        "v2/RUNBOOK.md",
+    ):
+        pins = [
+            pin
+            for line in (REPO_ROOT / path).read_text().splitlines()
+            if "CA_SHA256" in line or 'rds-ca-bundle.pem" | sha256sum' in line
+            for pin in re.findall(r"[0-9a-f]{64}", line)
+        ]
+        if pins != [RDS_CA_SHA256]:
+            stale.append(path)
+    assert not stale, (
+        f"Set the RDS CA pin to {RDS_CA_SHA256}, from v2/scripts/build_loader_zip.sh, "
+        f"in {stale}; then run v2/scripts/update_release_manifest.py"
+    )
+
+
 @pytest.mark.parametrize("curl_status, expected_status", [(23, 23), (0, 1)])
 def test_ca_helper_rejects_download_and_checksum_failures(
     tmp_path: Path, curl_status: int, expected_status: int
@@ -666,10 +690,7 @@ def test_ca_helper_rejects_download_and_checksum_failures(
     ]
     assert checksum_log.exists() is (curl_status == 0)
     if curl_status == 0:
-        assert checksum_log.read_text() == (
-            "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
-            f"  {destination}\n"
-        )
+        assert checksum_log.read_text() == f"{RDS_CA_SHA256}  {destination}\n"
     assert ("RDS CA bundle digest mismatch" in result.stderr) is (curl_status == 0)
 
 
