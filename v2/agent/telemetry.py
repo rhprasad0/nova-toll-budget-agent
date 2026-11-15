@@ -455,6 +455,8 @@ def initialize() -> None:
         os.environ["OTEL_METRICS_EXPORTER"] = "none"
         os.environ["OTEL_AWS_APPLICATION_SIGNALS_ENABLED"] = "false"
         os.environ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "false"
+        # ADOT's debugger has its own log exporter that the redaction wrapper never sees.
+        os.environ["OTEL_AWS_DYNAMIC_INSTRUMENTATION_ENABLED"] = "false"
         os.environ["OTEL_AWS_EXPERIMENTAL_CODE_ATTRIBUTES"] = "false"
         os.environ["OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED"] = "true"
         from opentelemetry.instrumentation.auto_instrumentation import (

@@ -295,6 +295,7 @@ with patch.object(telemetry.boto3, "client", return_value=client), patch.object(
     batches += [p._batch_processor for p in providers[1]._multi_log_record_processor._log_record_processors]
     assert batches and all(isinstance(p._exporter, telemetry.RedactingExporter) for p in batches)
     assert telemetry.os.environ["OTEL_METRICS_EXPORTER"] == "none"
+    assert telemetry.os.environ["OTEL_AWS_DYNAMIC_INSTRUMENTATION_ENABLED"] == "false"
     parent = trace.NonRecordingSpan(trace.SpanContext(
         trace_id=1, span_id=2, is_remote=True, trace_flags=trace.TraceFlags(0)
     ))
@@ -320,6 +321,7 @@ print("protected startup passed")
             "UNIFIED_TRACES_DESTINATION_ENABLED": "true",
             "TOLLCHAT_TELEMETRY_GUARDRAIL_ID": "test",
             "TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION": "1",
+            "OTEL_AWS_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         }
     )
     result = subprocess.run(
