@@ -52,7 +52,6 @@ NETWORK = "factory-internal"
 DOCKER_SOCKET = Path("/var/run/docker.sock")
 TIMEOUT_SECONDS = 30 * 60
 LABEL = "factory.work_order"
-# /readyz queries the database, so it proves credentials, route, TLS and RDS.
 PHOENIX_READY = "http://127.0.0.1:6006/readyz"
 
 
@@ -204,7 +203,6 @@ def preflight() -> None:
     probe = (
         "code() { curl -s --head -o /dev/null -w '%{http_code}' -m 10 \"$1\"; }; "
         'echo "$(code https://example.com) $(code https://pypi.org/simple/)"; '
-        # Without a token the addon answers Anthropic requests itself with this body.
         "curl -s -m 10 https://api.anthropic.com/ | grep -q 'blocked by factory proxy' "
         "&& echo no-token || echo token"
     )
@@ -220,11 +218,6 @@ def preflight() -> None:
 
 
 def admission_preflight() -> str | None:
-    """Why the factory may not admit work now, or None (FACTORY-SPEC, Admission).
-
-    With no trace store there is no run: Phoenix must answer, Tailscale (its route
-    to RDS) must be up, and the proxy must block and allow as it should.
-    """
     try:
         with urllib.request.urlopen(PHOENIX_READY, timeout=10) as response:
             if response.status != 200:

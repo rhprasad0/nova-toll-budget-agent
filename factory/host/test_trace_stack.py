@@ -1,8 +1,3 @@
-"""The trace stack's configuration, checked by the real tools: the pinned collector
-image validates its config, and Compose resolves the file with an env file shaped
-like the thin client's. Needs Docker; CI's factory job has it.
-"""
-
 import json
 import re
 import subprocess

@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Idempotent setup on the factory machine: state directory, proxy CA, RDS CA,
-# images, and the long-running services. Run from the dispatcher's checkout of
-# main. Needs the `factory` AWS profile and ~/.config/factory/factory.env, which
-# holds the machine-specific values compose.yaml names (FACTORY-PLAN, Stage 5).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -19,8 +15,6 @@ test -f "$state/certs/mitmproxy-ca-cert.pem"
 env_file="$HOME/.config/factory/factory.env"
 test -f "$env_file" || { echo "missing $env_file (see compose.yaml)" >&2; exit 1; }
 
-# The RDS CA bundle Phoenix verifies the database with, pinned as in the loader
-# package. Fetched once: a rotated upstream bundle must not block a re-run.
 if [[ ! -f "$state/rds-ca.pem" ]]; then
   curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
     https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o "$state/rds-ca.pem.new"
@@ -32,7 +26,6 @@ fi
 docker pull -q postgis/postgis:17-3.5 >/dev/null
 docker build -q -t factory-agent:dev -f agent/Dockerfile \
   --build-context "certs=$state/certs" .. >/dev/null
-# The proxy's subscription token comes from SSM and lives only in this environment.
 CLAUDE_CODE_OAUTH_TOKEN="$(AWS_PROFILE=factory aws ssm get-parameter \
   --name /nova-toll/factory/claude-code-oauth-token --with-decryption \
   --query Parameter.Value --output text)"

@@ -286,7 +286,10 @@ removed. The done-when passed on the thin client from a copy of the branch:
 2. Add the collector's S3 exporter to `factory-traces/`.
 3. Add the admission preflight: Phoenix health, proxy, and Tailscale.
 4. After the merge, **Ryan** updates the thin client's checkout of `main` and
-   runs `factory/setup.sh`, which replaces the branch copy's containers.
+   runs `factory/setup.sh`, which replaces the branch copy's containers. Every
+   later `docker compose` command there needs the env file (set
+   `COMPOSE_ENV_FILES=~/.config/factory/factory.env`), and the proxy restarts only
+   through `setup.sh`, which supplies its token.
 
 **Done when:** a sandboxed `claude -p "hello"` appears in Phoenix and as an
 object under `factory-traces/`; a first and a resumed round, run the way the

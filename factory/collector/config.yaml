@@ -1,7 +1,3 @@
-# The factory's trace pipeline (FACTORY-SPEC, Collector): Claude Code spans arrive
-# through the proxy's OTLP listener and go to Phoenix and to S3, which fail
-# independently. Runs in aws-credentials' network namespace (compose.yaml), so
-# Phoenix is on 127.0.0.1 and AWS credentials come from 127.0.0.1:9911.
 receivers:
   otlp:
     protocols:
@@ -9,15 +5,11 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
-  # Everything through this pipeline comes from sandboxes, so it all lands in the
-  # factory project, whatever a span claims (replays post to Phoenix directly).
   resource/project:
     attributes:
       - key: openinference.project.name
         value: tollchat-factory
         action: upsert
-  # Claude Code's token attributes as OpenInference's, so Phoenix counts tokens
-  # (prompt = input + cache read + cache write).
   transform/openinference:
     error_mode: ignore
     trace_statements:
@@ -35,7 +27,6 @@ processors:
 exporters:
   otlp_http/phoenix:
     endpoint: http://127.0.0.1:6006
-  # The development measurement bucket keeps factory-traces/ indefinitely.
   awss3:
     s3uploader:
       region: us-east-1
