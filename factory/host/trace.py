@@ -1,3 +1,4 @@
+import http.client
 import json
 import os
 import time
@@ -67,5 +68,5 @@ def send(
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
             return 200 <= response.status < 300
-    except OSError:
+    except (OSError, http.client.HTTPException, ValueError):
         return False

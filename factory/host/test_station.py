@@ -52,6 +52,11 @@ def test_a_round_span_is_posted_as_otlp_json_under_its_parent(
         span,
         root,
     )
+    assert (posted["kind"], posted["startTimeUnixNano"], posted["endTimeUnixNano"]) == (
+        1,
+        "1",
+        "2",
+    )
     assert {a["key"]: a["value"] for a in posted["attributes"]} == {
         "session.id": {"stringValue": "s"},
         "factory.round": {"intValue": "1"},
@@ -94,13 +99,13 @@ def test_the_workers_bundle_lands_in_a_fresh_host_clone(
         "-m",
         "fix",
     )
-    git("-C", worker, "config", "core.hooksPath", "/nonexistent")
+    git("-C", worker, "branch", "--force", "main", "factory/issue-7")
     bundle = tmp_path / "work.bundle"
     git("-C", worker, "bundle", "create", "--quiet", bundle, "refs/heads/factory/issue-7",
-        "^refs/remotes/origin/main")  # fmt: skip
+        "refs/heads/main", "^refs/remotes/origin/main")  # fmt: skip
     clean = dispatcher.import_bundle(bundle, "factory/issue-7", tmp_path / "clean")
     assert git("-C", clean, "log", "--format=%s", "main..factory/issue-7") == "fix"
-    assert "hooksPath" not in (clean / ".git/config").read_text()
+    assert git("-C", clean, "log", "--format=%s", "main") == "base"
 
 
 def test_the_final_result_is_the_last_result_event(tmp_path: Path) -> None:

@@ -155,17 +155,19 @@ def wait_ready(container: str, port: int) -> None:
 def cleanup(work_order: str) -> None:
     # shortcut: containers the tests start through the socket carry no label and rely on
     # --rm; a killed run can leave one behind, so sweep by hand if `docker ps` shows strays.
-    ids = run(
-        "docker", "ps", "--all", "--quiet", "--filter", f"label={LABEL}={work_order}"
-    ).stdout.split()
+    label = f"label={LABEL}={work_order}"
+    ids = run("docker", "ps", "--all", "--quiet", "--filter", label).stdout.split()
     if ids:
         run("docker", "rm", "--force", "--volumes", *ids, check=False)
+    volumes = run("docker", "volume", "ls", "--quiet", "--filter", label).stdout.split()
+    if volumes:
+        run("docker", "volume", "rm", "--force", *volumes, check=False)
 
 
 def verify(
     job: str, profile: str | None, branch: str = "main", source: Path | None = None
 ) -> int:
-    """Run verify.sh on BRANCH of SOURCE (default: GitHub) in a fresh sandbox; return its exit code."""
+    """Run verify.sh on BRANCH in a fresh sandbox; return its exit code."""
     work_order = (
         f"factory-verify-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
     )
@@ -230,11 +232,10 @@ def worker_env(work_order: str) -> list[str]:
     return [arg for key, value in env.items() for arg in ("--env", f"{key}={value}")]
 
 
-def start_sandbox(work_order: str, branch: str) -> Path:
-    """Start the work order's databases and long-lived sandbox, with main cloned on BRANCH."""
+def start_sandbox(work_order: str, branch: str) -> tuple[Path, str]:
     job_dir = STATE / "jobs" / work_order
     (job_dir / "in").mkdir(parents=True)
-    refresh_origin()
+    base = refresh_origin()
     run(
         "git",
         "-C",
@@ -261,13 +262,16 @@ def start_sandbox(work_order: str, branch: str) -> Path:
             "--volume", f"{work_order}-work:/work", *worker_env(work_order),
             IMAGE, "sleep", "infinity")  # fmt: skip
         run("docker", "cp", job_dir / "in", f"{work_order}:/work/in")
+        (STATE / "current-job").write_text(work_order)
         with (job_dir / "setup.log").open("w") as log:
             subprocess.run(["docker", "exec", work_order, "prepare-work.sh", branch], stdout=log,
                            stderr=subprocess.STDOUT, timeout=SETUP_TIMEOUT_SECONDS, check=True)  # fmt: skip
     except BaseException:
-        stop_sandbox(work_order)
+        cleanup(work_order)
         raise
-    return job_dir
+    finally:
+        (STATE / "current-job").write_text("none")
+    return job_dir, base
 
 
 def run_round(
@@ -278,7 +282,6 @@ def run_round(
     resume: str | None = None,
     stop: Callable[[], bool] = lambda: False,
 ) -> tuple[dict[str, Any], str]:
-    """One claude -p round in the sandbox; return its result event and how it ended."""
     if resume:
         run("docker", "exec", work_order, "sh", "-c", CACHED_SETTINGS)
     command = [
@@ -295,9 +298,12 @@ def run_round(
     ended = "done"
     (STATE / "current-job").write_text(work_order)
     try:
-        with transcript.open("w") as out:
+        with (
+            transcript.open("w") as out,
+            transcript.with_suffix(".err").open("w") as err,
+        ):
             process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=out,
-                                       stderr=subprocess.DEVNULL, text=True)  # fmt: skip
+                                       stderr=err, text=True)  # fmt: skip
             assert process.stdin is not None
             process.stdin.write(json.dumps(message) + "\n")
             process.stdin.close()
@@ -315,12 +321,14 @@ def run_round(
                             work_order,
                             "bash",
                             "-c",
-                            "kill -TERM -1",
+                            "kill -TERM -1; sleep 5; kill -KILL -1",
                             check=False,
                         )
                         process.kill()
                         process.wait()
                         break
+            if ended == "done" and process.returncode:
+                ended = "failed"
     finally:
         (STATE / "current-job").write_text("none")
     return final_result(transcript), ended
@@ -340,7 +348,6 @@ def final_result(transcript: Path) -> dict[str, Any]:
 
 
 def import_bundle(bundle: Path, branch: str, clean: Path) -> Path:
-    """Fetch BRANCH from the worker's bundle into a fresh host-only clone of origin."""
     shutil.rmtree(clean, ignore_errors=True)
     run("git", "clone", "--quiet", "--no-checkout", ORIGIN, clean)
     run("git", "-C", clean, "bundle", "verify", "--quiet", bundle)
@@ -356,25 +363,25 @@ def import_bundle(bundle: Path, branch: str, clean: Path) -> Path:
     return clean
 
 
-def export_branch(work_order: str, job_dir: Path, branch: str) -> Path | None:
-    """The worker's commits on BRANCH, in a host clone; None when it made none."""
+def export_branch(
+    work_order: str, job_dir: Path, branch: str, base: str
+) -> Path | None:
     run("docker", "stop", "--time", "5", work_order)
     try:
         made = run("docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL",
                    "--volume", f"{work_order}-work:/work", IMAGE,
                    "git", "-C", "/work/repo", "bundle", "create", "/work/out.bundle",
-                   f"refs/heads/{branch}", "^refs/remotes/origin/main", check=False)  # fmt: skip
+                   f"refs/heads/{branch}", f"^{base}", check=False)  # fmt: skip
         if made.returncode:
-            return None
+            if "empty bundle" in made.stderr:
+                return None
+            raise RuntimeError(
+                f"exporting {branch} failed: {made.stderr.strip()[-500:]}"
+            )
         run("docker", "cp", f"{work_order}:/work/out.bundle", job_dir / "work.bundle")
     finally:
         run("docker", "start", work_order)
     return import_bundle(job_dir / "work.bundle", branch, job_dir / "clean")
-
-
-def stop_sandbox(work_order: str) -> None:
-    cleanup(work_order)
-    run("docker", "volume", "rm", "--force", f"{work_order}-work", check=False)
 
 
 def env_file() -> dict[str, str]:
@@ -383,15 +390,18 @@ def env_file() -> dict[str, str]:
     pairs = (
         line.split("=", 1) for line in ENV_FILE.read_text().splitlines() if "=" in line
     )
-    return {key.strip(): value.strip() for key, value in pairs}
+    return {key.strip(): value.strip().strip("'\"") for key, value in pairs}
 
 
 def archive(path: Path, key: str) -> bool:
     bucket = env_file().get("FACTORY_TRACES_BUCKET")
     if not bucket:
         return False
-    copied = run("aws", "s3", "cp", "--quiet", "--profile", "factory", path,
-                 f"s3://{bucket}/factory-traces/{key}", check=False)  # fmt: skip
+    try:
+        copied = run("aws", "s3", "cp", "--quiet", "--profile", "factory", path,
+                     f"s3://{bucket}/factory-traces/{key}", check=False)  # fmt: skip
+    except OSError:
+        return False
     return copied.returncode == 0
 
 
