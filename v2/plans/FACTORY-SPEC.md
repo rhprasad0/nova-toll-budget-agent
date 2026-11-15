@@ -545,14 +545,16 @@ TRACEPARENT=<dispatcher span context>
 - **One trace per work order.** The dispatcher opens a `work_order` root span
   with a child span per round and passes its context as `TRACEPARENT`, so every
   resumed Claude round nests under it.
-- **A session's first round does not nest** in Claude Code 2.1.325: it emits no
-  `interaction` span, ignores `TRACEPARENT`, and its other spans become roots
-  of their own traces. Only `--resume` rounds join the trace, so the author's
-  and the reviewer's first rounds are split off. Every one of their spans still
-  carries `session.id`, so the dispatcher starts each session with
-  `--session-id <uuid>` that it chooses, records that ID on the round span, and
-  sets it as Phoenix's session, which groups the split spans with the work
-  order. Re-test after each Claude Code upgrade (see Spike results, 5).
+- **A session's first round did not nest on 2026-11-15.** It emitted no
+  `interaction` span, ignored `TRACEPARENT`, and its other spans became roots
+  of their own traces; only `--resume` rounds joined. Stage 2 saw a first round
+  nest, and the re-test could not find what changed (see Spike results, 5), so
+  the author's and the reviewer's first rounds may be split off the work
+  order's trace. **Proposal, awaiting Ryan:** the dispatcher starts each
+  session with a `--session-id <uuid>` it chooses and records that ID on the
+  round span. Every span of the round carries it, and Phoenix groups spans
+  into sessions by it (checked on the re-test's spans), so a work order's
+  split traces stay findable from its round spans.
 - **Content is on.** Prompts, tool inputs, and tool output are recorded, because
   evals need them. The repo is public and the sandbox holds no real secrets.
   Tool output arrives as `tool.output` span events. The model's own prompts and
@@ -789,10 +791,14 @@ Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
    through the sandbox proxy with the bearer placeholder: resumed rounds traced
    3 of 3 with the two cache files deleted and a warm `~/.claude.json`, 3 of 3
    with all three deleted, and 0 of 2 with nothing deleted. A session's first
-   round traced 0 of 9: in a fresh container with or without the image's
-   build-time `~/.claude.json`, in the warm container with the caches deleted,
-   and with `--session-id` set. Its spans all carried that `session.id`, so
-   Tracing joins them by session instead.
+   round traced 0 of 21, which Stage 2 did not see: in a fresh container with
+   or without the image's build-time `~/.claude.json`, with an empty home, in
+   the warm container with the caches deleted, with `--session-id`, with the
+   API-key placeholder Stage 2 used, with metrics and logs exporters on, with
+   Stage 2's plain `claude -p` flags, and on Claude Code 2.1.322 (Stage 2's
+   image pin) as well as 2.1.325. Untested differences: Stage 2's proxy addon
+   and its collector in front of the trace store. The first rounds' spans all
+   carried `session.id`; see the proposal under Tracing.
 6. **Subscription headroom and speed: partly settled.** A worker on a real issue (#737,
    cut at its parent commit, Rust) finished in 341 s and 29 turns and touched
    the same five files as the merged fix; `cargo fmt --check`, `clippy -D

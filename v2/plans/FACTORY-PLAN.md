@@ -97,8 +97,8 @@ Step 4 is built on the `stage3/decisions` branch: `factory/host/inbox.py`
 (poller, runner, restart), `factory/host/dashboard.py`, and the units in
 `factory/systemd/`, with the runner refusing to start until Stage 6. The spike 5
 re-test ran on 2026-11-15 (see the spec's Spike results, 5): resumed rounds
-nest, a session's first round does not, and the runner joins those by
-`session.id`. `factory` became a required check on 2026-11-15. Still open:
+nest; a session's first round did not, unlike in Stage 2, and the spec
+proposes joining those by `session.id`, awaiting Ryan. `factory` became a required check on 2026-11-15. Still open:
 the next development delivery being green.
 
 1. Copy the needed pieces of `factory-scoreboard/sandbox/` into `factory/`:
@@ -226,7 +226,9 @@ credentials from `serve`, and stopping Phoenix makes the preflight fail.
 2. Finish the runner: the three stations (author, reviewer, verify), the
    guard (secrets scan and protected paths), push and PR, the CI watch, the
    shared budget of three fix rounds, the cancel checks, the outcome comment
-   and label removal, and the sweep of `closed` events.
+   and label removal, and the sweep of `closed` events. If Ryan accepts the
+   spec's `session.id` proposal under Tracing, start each session with a chosen
+   `--session-id` and record it on the round span.
 3. Test the guard before trusting it. Each of these work orders must end with
    no branch pushed:
    - its diff touches a protected path;
