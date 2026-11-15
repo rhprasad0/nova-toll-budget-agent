@@ -7,8 +7,9 @@ resource "aws_db_instance" "main" {
   db_name  = var.environment == "development" ? "nova_toll_development" : "nova_toll"
   username = "nova_toll_admin"
 
-  allocated_storage     = 20
-  max_allocated_storage = 40
+  allocated_storage = 20
+  # 0 turns storage autoscaling off, so the volume cannot grow the bill on its own.
+  max_allocated_storage = 0
   storage_type          = "gp3"
   storage_encrypted     = true
 
