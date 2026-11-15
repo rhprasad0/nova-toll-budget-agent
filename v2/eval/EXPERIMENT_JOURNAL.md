@@ -30,3 +30,4 @@ Append dated corrections without silently changing earlier results. Consolidate
 related entries in plain language; keep transcripts and granular run data private.
 
 See the [evaluation guide](README.md) for current usage.
+- 2026-11-15: factory end-to-end test entry, safe to remove.
