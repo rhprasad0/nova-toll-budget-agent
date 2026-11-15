@@ -119,8 +119,8 @@ development application.
    until then the page correctly shows no results. Inspect its environment,
    occurrence timestamp, three verdicts, conversation, and tool evidence.
 
-The production migration boundary includes 035, targeting pricing 1.4.0 and
-Oracle 1.15.2. Before publishing a production release, complete the
+The production migration boundary is `PRODUCTION_MAX_MIGRATION_NUMBER` in
+`v2/scripts/run_development_migrations.py`. Before publishing a production release, complete the
 [release schema preflight](../manual-releases/README.md#2-check-schemas-before-publishing)
 and the fixed writer prerequisite below. Complete the production runtime activation
 below before treating the dashboard as ready. Development data is never copied there.
