@@ -29,7 +29,7 @@ except ModuleNotFoundError:
 
 # Review the environment expression again before updating this source pin.
 AGENTCORE_SOURCE_SHA256 = (
-    "1b5d8ed19b6fa827521174a7e3a21d444b4425773a98e927a0ff5f2ae9d93bfa"
+    "be8f55ccf3549905260b991a4c1cd7ed1af25f32ac9c937c9e1e85bcdd95d1cd"
 )
 
 SLOTS = ("blue", "green")
