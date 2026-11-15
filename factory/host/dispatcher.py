@@ -26,11 +26,13 @@ the only way out.
 import argparse
 import contextlib
 import io
+import json
 import os
 import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 import uuid
 from pathlib import Path
 
@@ -50,6 +52,7 @@ NETWORK = "factory-internal"
 DOCKER_SOCKET = Path("/var/run/docker.sock")
 TIMEOUT_SECONDS = 30 * 60
 LABEL = "factory.work_order"
+PHOENIX_READY = "http://127.0.0.1:6006/readyz"
 
 
 def run(
@@ -199,20 +202,35 @@ def preflight() -> None:
     """
     probe = (
         "code() { curl -s --head -o /dev/null -w '%{http_code}' -m 10 \"$1\"; }; "
-        'echo "$(code https://example.com) $(code https://pypi.org/simple/)"'
+        'echo "$(code https://example.com) $(code https://pypi.org/simple/)"; '
+        "curl -s -m 10 https://api.anthropic.com/ | grep -q 'blocked by factory proxy' "
+        "&& echo no-token || echo token"
     )
     out = run("docker", "run", "--rm", "--network", NETWORK, "--cap-drop", "ALL",
               IMAGE, "bash", "-c", probe, check=False).stdout.split()  # fmt: skip
-    blocked, allowed = [*out, "?", "?"][:2]
-    if blocked not in {"000", "403"} or allowed != "200":
+    blocked, allowed, token = [*out, "?", "?", "?"][:3]
+    if blocked not in {"000", "403"} or allowed != "200" or token != "token":
         raise SystemExit(
-            f"proxy preflight failed (example.com -> {blocked}, pypi.org -> {allowed})"
+            f"proxy preflight failed (example.com -> {blocked}, pypi.org -> {allowed}, "
+            f"Anthropic -> {token})"
         )
     print("proxy preflight passed")
 
 
 def admission_preflight() -> str | None:
-    """The proxy preflight's failure, or None. Stage 5 adds Phoenix and Tailscale."""
+    try:
+        with urllib.request.urlopen(PHOENIX_READY, timeout=10) as response:
+            if response.status != 200:
+                return f"Phoenix is not ready: {response.status}"
+    except OSError as error:
+        return f"Phoenix is not ready at {PHOENIX_READY}: {error}"
+    try:
+        tailscale = run("tailscale", "status", "--json", check=False, timeout=10)
+        state = json.loads(tailscale.stdout).get("BackendState")
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as error:
+        return f"Tailscale status failed: {error}"
+    if state != "Running":
+        return f"Tailscale is not running (state {state})"
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             preflight()

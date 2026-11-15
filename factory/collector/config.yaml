@@ -1,0 +1,44 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  resource/project:
+    attributes:
+      - key: openinference.project.name
+        value: tollchat-factory
+        action: upsert
+  transform/openinference:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        conditions:
+          - span.attributes["span.type"] == "llm_request"
+        statements:
+          - set(span.attributes["llm.token_count.completion"], span.attributes["output_tokens"])
+          - set(span.attributes["llm.token_count.prompt_details.cache_read"], span.attributes["cache_read_tokens"])
+          - set(span.attributes["llm.token_count.prompt_details.cache_write"], span.attributes["cache_creation_tokens"])
+          - set(span.attributes["llm.token_count.prompt"], span.attributes["input_tokens"] + span.attributes["cache_read_tokens"] + span.attributes["cache_creation_tokens"])
+          - set(span.attributes["llm.token_count.total"], span.attributes["llm.token_count.prompt"] + span.attributes["output_tokens"])
+  batch: {}
+
+exporters:
+  otlp_http/phoenix:
+    endpoint: http://127.0.0.1:6006
+  awss3:
+    s3uploader:
+      region: us-east-1
+      s3_bucket: ${env:FACTORY_TRACES_BUCKET}
+      s3_prefix: factory-traces
+      s3_partition_format: year=%Y/month=%m/day=%d/hour=%H
+      compression: gzip
+    marshaler: otlp_json
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resource/project, transform/openinference, batch]
+      exporters: [otlp_http/phoenix, awss3]

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Idempotent setup on the factory machine: state directory, proxy CA, images,
-# and the proxy. Run from the dispatcher's checkout of main.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -14,8 +12,24 @@ if [[ ! -f "$state/certs/mitmproxy-ca-cert.pem" ]]; then
 fi
 test -f "$state/certs/mitmproxy-ca-cert.pem"
 
+env_file="$HOME/.config/factory/factory.env"
+test -f "$env_file" || { echo "missing $env_file (see compose.yaml)" >&2; exit 1; }
+
+if [[ ! -f "$state/rds-ca.pem" ]]; then
+  curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+    https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o "$state/rds-ca.pem.new"
+  echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  $state/rds-ca.pem.new" |
+    sha256sum --check || { echo "RDS CA bundle changed upstream; see v2/RUNBOOK.md" >&2; exit 1; }
+  mv "$state/rds-ca.pem.new" "$state/rds-ca.pem"
+fi
+
 docker pull -q postgis/postgis:17-3.5 >/dev/null
 docker build -q -t factory-agent:dev -f agent/Dockerfile \
   --build-context "certs=$state/certs" .. >/dev/null
-docker compose up -d --build proxy
-echo "ok: factory images built, proxy up"
+CLAUDE_CODE_OAUTH_TOKEN="$(AWS_PROFILE=factory aws ssm get-parameter \
+  --name /nova-toll/factory/claude-code-oauth-token --with-decryption \
+  --query Parameter.Value --output text)"
+export CLAUDE_CODE_OAUTH_TOKEN
+docker compose --env-file "$env_file" up -d --build
+unset CLAUDE_CODE_OAUTH_TOKEN
+echo "ok: factory images built, proxy and trace stack up"

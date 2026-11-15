@@ -580,6 +580,20 @@ TRACEPARENT=<dispatcher span context>
 The OpenTelemetry Collector (contrib image), with one traces pipeline: an OTLP
 receiver and two exporters that fail independently.
 
+**Where it runs.** A `trace-netns` container that only sleeps owns a network
+namespace; an `aws-credentials` service running AWS's credential-helper image
+in `serve` mode, the collector, and Phoenix all join it
+(`network_mode: service:trace-netns`). The collector and Phoenix get AWS
+credentials from `127.0.0.1:9911` without the host network. The owner never
+restarts on its own, because members of a restarted owner keep an empty
+namespace; a member that restarts rejoins it. The namespace is on
+`factory-egress`, where the proxy's OTLP listener reaches the collector as
+`collector`, and on the IPv6-enabled `factory-trace` network, which routes to
+RDS over 4via6. It is not on `factory-internal`. Phoenix's port is published
+on `127.0.0.1` from that namespace. The ARNs, the RDS endpoint and its 4via6
+address, and the bucket name come from `~/.config/factory/factory.env` on the
+thin client.
+
 - `otlphttp` to Phoenix, after a `transform` processor that maps Claude
   Code's token attributes (`input_tokens`, `output_tokens`,
   `cache_read_tokens`, `cache_creation_tokens`) into OpenInference's
@@ -595,9 +609,14 @@ receiver and two exporters that fail independently.
 - **Image:** `arizephoenix/phoenix:version-21.0.0`. RDS IAM authentication
   needs 12.9.0 or later, and the settings below were checked against 21.0.0;
   re-check them before any upgrade.
-- **Database:** `PHOENIX_POSTGRES_HOST`, `PHOENIX_POSTGRES_DB=phoenix`,
-  `PHOENIX_POSTGRES_USER=phoenix_factory`,
-  `PHOENIX_POSTGRES_USE_AWS_IAM_AUTH=true`. No password exists.
+- **Database:** `PHOENIX_SQL_DATABASE_URL=postgresql://phoenix_factory@<endpoint>:5432/phoenix?sslmode=verify-full&sslrootcert=<RDS CA>`
+  with `PHOENIX_POSTGRES_USE_AWS_IAM_AUTH=true`. No password exists. The
+  `PHOENIX_POSTGRES_*` variables cannot carry the TLS settings, and IAM auth
+  alone only enforces `sslmode=require`. Phoenix signs the IAM token for the
+  URL's host and connects to the same name, so the container's hosts entry
+  maps the endpoint to its 4via6 address; `setup.sh` fetches the pinned RDS CA
+  bundle. The admission preflight checks `/readyz`, which queries the
+  database, rather than `/healthz`, which does not.
 - **Exposure:** ports published on `127.0.0.1` only, with Phoenix authentication
   off. It is not on the sandbox's network. Phoenix 21 turns authentication on
   for any non-loopback listen address, which inside a container is always, so
@@ -788,7 +807,7 @@ Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
    pointing there, got the factory role; the same container on
    `factory-internal` or the default bridge found no credentials. So Phoenix
    and the collector must share a network namespace with a `serve` process.
-   Stage 5 picks one of two shapes. On the host network, port publishing does
+   Stage 5 chose the second of these two shapes (see Collector). On the host network, port publishing does
    not apply, so Phoenix needs `PHOENIX_HOST=127.0.0.1` to stay off the LAN and
    tailnet, and the collector must listen where the proxy on
    `factory-egress` can reach it. Or AWS's helper image
