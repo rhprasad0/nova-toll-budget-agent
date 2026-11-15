@@ -6,4 +6,4 @@ Description=TollChat factory poller
 Type=oneshot
 WorkingDirectory=%h/tollchat
 ExecStart=/usr/bin/python3 factory/host/dispatcher.py poll
-TimeoutStartSec=50
+TimeoutStartSec=5min

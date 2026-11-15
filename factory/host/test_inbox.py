@@ -9,6 +9,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -48,6 +49,10 @@ class FakeGitHub:
         self.open_pr_heads: set[str] = set()
         self.writes: list[tuple[str, str]] = []
         self.feed_pages_read = 0
+        self.on_issue_read: list[
+            Callable[[], None]
+        ] = []  # runs while admit() reads GitHub
+        self.down = False  # every read fails, as during a GitHub outage
 
     def issue(self, number: int, *, user: str = OWNER, labeled: bool = True) -> None:
         labels = [{"name": "factory"}] if labeled else []
@@ -64,6 +69,8 @@ class FakeGitHub:
             ):
                 self.issues[int(m[1])]["labels"] = []
             return {}
+        if self.down:
+            raise RuntimeError("gh api: HTTP 502")
         if url.path.endswith("/issues/events"):
             self.feed_pages_read += 1
             page, size = int(query["page"]), int(query["per_page"])
@@ -74,6 +81,8 @@ class FakeGitHub:
             return [i for i in self.issues.values()
                     if i["state"] == "open" and {"name": "factory"} in i["labels"]]  # fmt: skip
         if m := re.fullmatch(r".*/issues/(\d+)", url.path):
+            for hook in self.on_issue_read:
+                hook()
             return self.issues.get(int(m[1]))
         if m := re.fullmatch(r".*/branches/(.+)", url.path):
             return {"name": m[1]} if m[1] in self.branches else None
@@ -376,3 +385,158 @@ def test_restart_settles_what_a_dead_runner_left(
     db.execute("UPDATE events SET status = 'running' WHERE id = 13")
     inbox.settle(db, gh, cleaned.append)
     assert statuses(db)[13] == "pending"
+
+
+def queue(db: sqlite3.Connection, gh: FakeGitHub, *labeled: tuple[int, int]) -> None:
+    """Poll in `factory` labels as (event id, issue) pairs, after an ordinary first poll."""
+    start_polling(db, gh)
+    gh.feed = [event(key, "labeled", issue, minutes=i + 1)
+               for i, (key, issue) in enumerate(labeled)][::-1] + gh.feed  # fmt: skip
+    inbox.poll(db, gh)
+
+
+def another_author(gh: FakeGitHub) -> None:
+    gh.issue(6, user="stranger")
+
+
+def branch_exists(gh: FakeGitHub) -> None:
+    gh.issue(6)
+    gh.branches.add("factory/issue-6")
+
+
+def open_pr_exists(gh: FakeGitHub) -> None:
+    gh.issue(6)
+    gh.open_pr_heads.add("factory/issue-6")
+
+
+@pytest.mark.parametrize("setup", [another_author, branch_exists, open_pr_exists])
+def test_admission_refuses_with_a_comment_and_removes_the_label(
+    db: sqlite3.Connection, gh: FakeGitHub, setup: Callable[[FakeGitHub], None]
+) -> None:
+    setup(gh)
+    queue(db, gh, (11, 6))
+    inbox.step(db, gh, passed, never)
+    assert [m for m, _ in gh.writes] == ["POST", "DELETE"]
+    assert statuses(db)[11] == "done"
+
+
+def test_a_label_another_account_added_is_refused(
+    db: sqlite3.Connection, gh: FakeGitHub
+) -> None:
+    gh.issue(6)
+    start_polling(db, gh)
+    gh.feed = [event(11, "labeled", 6, minutes=1, actor="stranger"), *gh.feed]
+    inbox.poll(db, gh)
+    inbox.step(db, gh, passed, never)
+    assert [m for m, _ in gh.writes] == ["POST", "DELETE"]
+
+
+def test_a_closed_issue_is_dropped_silently(
+    db: sqlite3.Connection, gh: FakeGitHub
+) -> None:
+    gh.issue(6)
+    gh.issues[6]["state"] = "closed"
+    queue(db, gh, (11, 6))
+    inbox.step(db, gh, passed, never)
+    assert statuses(db)[11] == "dropped"
+    assert gh.writes == []
+
+
+def test_a_rate_limit_pause_admits_nothing(
+    db: sqlite3.Connection, gh: FakeGitHub
+) -> None:
+    gh.issue(6)
+    queue(db, gh, (11, 6))
+    with inbox.transaction(db):
+        inbox.set_status(db, paused_until="9999-01-01T00:00:00+00:00")
+    assert not inbox.step(db, gh, passed, never)
+    assert statuses(db)[11] == "pending"
+
+
+def test_the_oldest_event_runs_first_whatever_order_it_was_recorded_in(
+    db: sqlite3.Connection, gh: FakeGitHub
+) -> None:
+    gh.issue(6)
+    gh.issue(7)
+    inbox.record(db, event(12, "labeled", 7), 7, "labeled")
+    inbox.record(db, event(11, "labeled", 6), 6, "labeled")
+    ran: list[int] = []
+
+    def work(db: sqlite3.Connection, _gh: inbox.GitHub, w: sqlite3.Row) -> str:
+        ran.append(w["issue"])
+        return "pr_ready"
+
+    inbox.step(db, gh, passed, work)
+    assert ran == [6]
+
+
+def test_a_late_listed_event_within_the_overlap_is_read_from_the_next_page(
+    db: sqlite3.Connection, gh: FakeGitHub
+) -> None:
+    start_polling(db, gh)  # position is T0 - 60 min
+    old = event(
+        500, "assigned", 1, minutes=-62
+    )  # older than the position, inside the overlap
+    page_one = [
+        event(1000 - i, "assigned", 1, minutes=-1 - i * 0.01) for i in range(99)
+    ]
+    gh.feed = [*page_one, old, event(400, "labeled", 6, minutes=-63)]
+    inbox.poll(db, gh)
+    assert statuses(db) == {400: "pending"}
+
+
+def test_an_empty_first_feed_still_ends_the_cold_start(
+    db: sqlite3.Connection, gh: FakeGitHub
+) -> None:
+    inbox.poll(db, gh)
+    gh.issue(4)
+    gh.issue_events = {4: [event(10, "labeled", 4)]}
+    inbox.poll(db, gh)  # an ordinary poll: the label arrived after the cold start
+    assert statuses(db) == {}
+
+
+def test_a_cancel_while_admit_reads_github_stops_the_work_order(
+    db: sqlite3.Connection, gh: FakeGitHub
+) -> None:
+    gh.issue(6)
+    queue(db, gh, (11, 6))
+    gh.feed = [event(12, "unlabeled", 6, minutes=5), *gh.feed]
+
+    def poller() -> None:  # runs while admit() reads the issue
+        inbox.poll(db, gh)
+
+    gh.on_issue_read.append(poller)
+    assert inbox.step(db, gh, passed, never)
+    assert statuses(db)[11] == "dropped"
+    assert db.execute("SELECT count(*) FROM work_orders").fetchone()[0] == 0
+
+
+def test_a_retried_event_that_fails_admission_is_queued_again_on_restart(
+    db: sqlite3.Connection, gh: FakeGitHub
+) -> None:
+    gh.issue(6)
+    queue(db, gh, (11, 6))
+    died(db, gh, 6)
+    inbox.settle(db, gh, lambda _: None)  # retried once: back to pending
+    gh.down = True
+    with pytest.raises(RuntimeError):
+        inbox.step(db, gh, passed, never)  # the runner exits mid-admission
+    gh.down = False
+    inbox.settle(db, gh, lambda _: None)
+    assert statuses(db)[11] == "pending"
+
+
+def test_a_cancelled_work_order_that_died_is_not_retried_and_keeps_the_label(
+    db: sqlite3.Connection, gh: FakeGitHub
+) -> None:
+    gh.issue(6)
+    queue(db, gh, (11, 6))
+    work_order = died(db, gh, 6)
+    db.execute("UPDATE work_orders SET cancelled = 1 WHERE id = ?", (work_order,))
+    inbox.settle(db, gh, lambda _: None)
+    row = db.execute(
+        "SELECT outcome FROM work_orders WHERE id = ?", (work_order,)
+    ).fetchone()
+    assert row["outcome"] == "cancelled"
+    assert statuses(db)[11] == "done"
+    assert [m for m, _ in gh.writes] == ["POST"]

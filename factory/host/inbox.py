@@ -203,6 +203,7 @@ def cold_start(db: sqlite3.Connection, gh: GitHub) -> None:
     ):
         if field(issue, "pull_request"):
             continue
+        # shortcut: reads an issue's first 100 events only; page if an issue ever has more.
         events = items(gh, f"repos/{REPO}/issues/{issue['number']}/events?per_page=100")
         labeled = [
             e for e in events
@@ -242,7 +243,7 @@ def poll(db: sqlite3.Connection, gh: GitHub) -> int:
         kind = classify(event, number, prs) if number else None
         if number and kind:
             record(db, event, number, kind)
-    newest = max((e["created_at"] for e in seen), default=position)
+    newest = max((e["created_at"] for e in seen), default=position or now())
     with transaction(db):
         set_status(db, poll_position=newest, last_poll=now())
     return len(seen)
@@ -295,7 +296,7 @@ def settle(db: sqlite3.Connection, gh: GitHub, cleanup: Callable[[str], None]) -
     with transaction(db):
         db.execute(
             "UPDATE events SET status = 'pending' WHERE status = 'running'"
-            " AND id NOT IN (SELECT event FROM work_orders)"
+            " AND id NOT IN (SELECT event FROM work_orders WHERE outcome IS NULL)"
         )
     for work_order in db.execute(
         "SELECT * FROM work_orders WHERE outcome IS NULL"
@@ -327,6 +328,17 @@ def settle(db: sqlite3.Connection, gh: GitHub, cleanup: Callable[[str], None]) -
         post_outcome(db, gh, work_order)
 
 
+def superseded(db: sqlite3.Connection, event: sqlite3.Row) -> bool:
+    """Whether the label came off after this event; call inside a transaction."""
+    return (
+        db.execute(
+            "SELECT 1 FROM events WHERE kind = 'unlabeled' AND issue = ? AND id > ?",
+            (event["issue"], event["id"]),
+        ).fetchone()
+        is not None
+    )
+
+
 def step(
     db: sqlite3.Connection,
     gh: GitHub,
@@ -353,14 +365,34 @@ def step(
     if problem:
         return False  # admit nothing; the event keeps its place
     with transaction(db):
-        db.execute("UPDATE events SET status = 'running' WHERE id = ?", (event["id"],))
+        claimed = db.execute(
+            "UPDATE events SET status = 'running' WHERE id = ? AND status = 'pending'",
+            (event["id"],),
+        ).rowcount
+    if not claimed:  # the poller dropped it during the preflight
+        return True
     verdict, reason, issue = admit(gh, event)
-    if verdict == Admission.DROP:
-        with transaction(db):
+    work_order_id = f"factory-issue-{event['issue']}-{uuid.uuid4().hex[:6]}"
+    with transaction(db):
+        # Checked with the insert, so an unlabel the poller records during admit()
+        # either drops the event here or finds the work order to cancel.
+        if verdict == Admission.DROP or superseded(db, event):
             db.execute(
                 "UPDATE events SET status = 'dropped' WHERE id = ?", (event["id"],)
             )
-        return True
+            return True
+        if verdict == Admission.ADMIT:
+            db.execute(
+                "INSERT INTO work_orders (id, issue, title, event, started)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (
+                    work_order_id,
+                    event["issue"],
+                    field(issue, "title"),
+                    event["id"],
+                    now(),
+                ),
+            )
     if verdict == Admission.REFUSE:
         gh.api(f"repos/{REPO}/issues/{event['issue']}/comments", "POST",
                body=f"The factory did not start: {reason}.")  # fmt: skip
@@ -368,18 +400,6 @@ def step(
         with transaction(db):
             db.execute("UPDATE events SET status = 'done' WHERE id = ?", (event["id"],))
         return True
-    work_order_id = f"factory-issue-{event['issue']}-{uuid.uuid4().hex[:6]}"
-    with transaction(db):
-        db.execute(
-            "INSERT INTO work_orders (id, issue, title, event, started) VALUES (?, ?, ?, ?, ?)",
-            (
-                work_order_id,
-                event["issue"],
-                (issue or {}).get("title"),
-                event["id"],
-                now(),
-            ),
-        )
     work_order = db.execute(
         "SELECT * FROM work_orders WHERE id = ?", (work_order_id,)
     ).fetchone()
@@ -423,8 +443,11 @@ def heartbeat(path: Path, stop: threading.Event) -> None:
     """Update the heartbeat every minute, idle or busy, from its own connection."""
     db = connect(path)
     while True:
-        with transaction(db):
-            set_status(db, heartbeat=now())
+        try:
+            with transaction(db):
+                set_status(db, heartbeat=now())
+        except sqlite3.Error as error:  # a stale heartbeat on the dashboard says enough
+            print(f"heartbeat: {error}", flush=True)
         if stop.wait(HEARTBEAT_SECONDS):
             return
 

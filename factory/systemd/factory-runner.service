@@ -1,7 +1,6 @@
 # Take events from the inbox one work order at a time. Only one runs: a second exits on its lock.
 [Unit]
 Description=TollChat factory runner
-After=docker.service
 
 [Service]
 WorkingDirectory=%h/tollchat

@@ -88,7 +88,7 @@ experiments, so they do not go in the experiment journal.
 
 ## Stage 3: Bring the factory code into the repo
 
-**Status on 2026-11-15: done, except one deferred check.** Steps 1 to 3, 5 and 6 are merged
+**Status on 2026-11-15: done once step 4's PR merges, except one deferred check.** Steps 1 to 3, 5 and 6 are merged
 (#766, #767), and the development delivery after the merge was green.
 `.github/scripts/verify.sh` passed inside the sandbox on `main` (145b860f) on
 2026-11-15, with the full database profile and no database test skipped, in
