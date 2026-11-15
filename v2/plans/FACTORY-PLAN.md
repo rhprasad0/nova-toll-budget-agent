@@ -90,13 +90,13 @@ experiments, so they do not go in the experiment journal.
 
 **Status on 2026-11-15: in progress.** Steps 1 to 3, 5 and 6 are merged
 (#766, #767), and the development delivery after the merge was green.
-`.github/scripts/verify.sh` passed inside the sandbox on the stack's branch,
-with the full database profile, in 890 s, and pytest's counts matched CI's.
+`.github/scripts/verify.sh` passed inside the sandbox on `main` (145b860f) on
+2026-11-15, with the full database profile and no database test skipped, in
+900 s; pytest's counts (2183 passed, 4 skipped) matched CI's.
 Step 4 is built on the `stage3/decisions` branch: `factory/host/inbox.py`
 (poller, runner, restart), `factory/host/dashboard.py`, and the units in
 `factory/systemd/`, with the runner refusing to start until Stage 6. Still
-open: the spike 5 re-test, a verify round on `main` since the merge, and
-**Ryan** making the `factory` job required.
+open: the spike 5 re-test, and **Ryan** making the `factory` job required.
 
 1. Copy the needed pieces of `factory-scoreboard/sandbox/` into `factory/`:
    the dispatcher (`host/`), the worker image (`agent/`), the proxy, the
