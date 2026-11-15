@@ -28,14 +28,19 @@ def test_markdown_files_only_shrink() -> None:
         "Do not add Markdown files. Write a deterministic check whose error names "
         "the fix (CLAUDE.md), or delete a stale document to make room."
     )
+    assert len(documents) == 42, (
+        f"A Markdown file was removed: lower this limit to {len(documents)}."
+    )
 
 
 def anchors(text: str) -> set[str]:
     """GitHub heading anchors, including -1, -2 suffixes for repeats."""
     seen: dict[str, int] = {}
     result: set[str] = set()
-    for heading in re.findall(r"^#{1,6} +(.+?) *#* *$", strip_code(text), re.MULTILINE):
-        plain = re.sub(r"[`*_]|\[([^\]]*)\]\([^)]*\)", r"\1", heading).lower()
+    for heading in re.findall(
+        r"^#{1,6} +(.+?) *#* *$", strip_fences(text), re.MULTILINE
+    ):
+        plain = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", heading).lower()
         slug = re.sub(r"[^\w\- ]", "", plain).replace(" ", "-")
         count = seen.get(slug, 0)
         seen[slug] = count + 1
@@ -43,9 +48,12 @@ def anchors(text: str) -> set[str]:
     return result
 
 
+def strip_fences(text: str) -> str:
+    return re.sub(r"^(```|~~~).*?^\1", "", text, flags=re.MULTILINE | re.DOTALL)
+
+
 def strip_code(text: str) -> str:
-    text = re.sub(r"^(```|~~~).*?^\1", "", text, flags=re.MULTILINE | re.DOTALL)
-    return re.sub(r"`[^`\n]*`", "", text)
+    return re.sub(r"`[^`\n]*`", "", strip_fences(text))
 
 
 def test_relative_links_and_anchors_resolve() -> None:
@@ -125,3 +133,15 @@ def test_skill_names_an_existing_workflow_step() -> None:
     assert name in steps, (
         f"Update the step name in the query-dev-postgres skill: {name!r}"
     )
+
+
+def test_anchors_follow_github_slugs() -> None:
+    headings = (
+        "## The `pricing` schema\n## run_db_tests.sh\n## A *b* [c](d.md)\n## A b c\n"
+    )
+    assert anchors(headings) == {
+        "the-pricing-schema",
+        "run_db_testssh",
+        "a-b-c",
+        "a-b-c-1",
+    }

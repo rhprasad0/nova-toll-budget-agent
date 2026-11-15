@@ -10,6 +10,8 @@
 #
 # It lives under .github/ because that path is closed to the factory, so a work
 # order cannot drop a check from this list. `database` and `mcp` need Docker.
+# `all` leaves out `factory` and `mcp`: the factory runs `all` in a sandbox that
+# cannot reach the ports mcp's e2e.sh publishes on the host.
 set -euo pipefail
 
 job="${1:-all}"
@@ -182,8 +184,6 @@ case "$job" in
     loader
     terraform_checks
     database
-    factory
-    mcp
     ;;
   *)
     echo "usage: $0 [loader|terraform|database|factory|mcp|all|quick] [BASE_GIT_REF]" >&2
