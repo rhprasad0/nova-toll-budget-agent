@@ -1,6 +1,7 @@
 # TollChat Factory Plan
 
-Status: **plan, nothing built**. This is the build order for the design in
+Status: **in progress**. Stages 1 and 2 are done, and Stage 3's sandbox is
+merged (#766, #767). This is the build order for the design in
 [FACTORY-SPEC.md](FACTORY-SPEC.md). Like the spec, it grants no AWS, Terraform,
 database, or CI authority; each step that touches those says who does it.
 
@@ -10,23 +11,15 @@ rest can be done by a coding agent in a worktree.
 
 ## Decisions
 
-Ryan settled the spec's proposals on 2026-11-14; they are listed in the spec's
-Decisions section. Still open:
+Ryan settled the spec's proposals on 2026-11-14 and three more questions on
+2026-11-15; they are listed in the spec's Decisions section. Still open:
 
-- **Does a full work order fit the subscription?** One author round used
-  under 1% of the weekly limit (Stage 2). Log the utilization header per work
-  order from Stage 6 and decide on daily volume after the first five.
 - **Does replaying production traces into Phoenix fit the public privacy
   notice?** Check before building the production mode (Stage 8).
-- **Training evals on factory PRs** (see Not in this plan).
 - **Confirm the inbox and dashboard details** in the spec's Inbox and Dashboard
   sections before Stage 3 step 4: SQLite on the thin client, admission at
   dequeue, cancel by removing the label, one retry after the runner dies with
   nothing pushed, and a read-only dashboard on `127.0.0.1:6007`.
-- **What the runner does on a 7-day subscription limit.** The spec's one-hour
-  pause suits a short window; a weekly limit would fail every queued work
-  order an hour apart. Decide once the per-work-order utilization readings
-  from Stage 6 show how close the factory runs to it.
 
 ## Stage 1: Reformat the thin client
 
@@ -99,11 +92,13 @@ experiments, so they do not go in the experiment journal.
 
 ## Stage 3: Bring the factory code into the repo
 
-**Status on 2026-11-14: in progress, as a stack of PRs.** `.github/scripts/verify.sh`
-passes inside the sandbox on the stack's branch, with the full database
-profile, in 890 s, and pytest's counts match CI's. Still open: the label
-trigger and the inbox (step 4, the next layer), the spike 5 re-test, and the
-`factory` job becoming required.
+**Status on 2026-11-15: in progress.** Steps 1 to 3, 5 and 6 are merged
+(#766, #767), and the development delivery after the merge was green.
+`.github/scripts/verify.sh` passed inside the sandbox on the stack's branch,
+with the full database profile, in 890 s, and pytest's counts matched CI's.
+Still open: the label trigger and the inbox (step 4), the spike 5 re-test, a
+verify round on `main` since the merge, and **Ryan** making the `factory` job
+required.
 
 1. Copy the needed pieces of `factory-scoreboard/sandbox/` into `factory/`:
    the dispatcher (`host/`), the worker image (`agent/`), the proxy, the
@@ -231,10 +226,7 @@ credentials from `serve`, and stopping Phoenix makes the preflight fail.
 2. Finish the runner: the three stations (author, reviewer, verify), the
    guard (secrets scan and protected paths), push and PR, the CI watch, the
    shared budget of three fix rounds, the cancel checks, the outcome comment
-   and label removal, and the sweep of `closed` events. Have the proxy log the
-   `anthropic-ratelimit-unified-7d-utilization` response header per work
-   order, as spike 6 did, and the runner store the reading in the inbox for
-   the dashboard.
+   and label removal, and the sweep of `closed` events.
 3. Test the guard before trusting it. Each of these work orders must end with
    no branch pushed:
    - its diff touches a protected path;
@@ -300,8 +292,8 @@ the thin client.
   separate test author, a rubric
   grader, and the other lanes.
 - Workstation Claude Code telemetry. Ryan dropped it.
-- Running training evals on factory PRs. Required CI does not include them
-  today, so the first version does not verify agent behaviour. Decide after
-  the first five work orders whether the dispatcher should run them.
+- Running training evals on factory PRs. Ryan decided against it on
+  2026-11-15. Required CI does not include them, so the factory does not
+  verify agent behaviour.
 - Hardening the thin client itself: disk encryption, Secure Boot, or a
   TPM-held key. The TPM would first need converting from 1.2 to 2.0.

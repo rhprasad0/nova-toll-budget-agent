@@ -1,6 +1,6 @@
 # TollChat Factory Spec
 
-Status: **unbuilt design**. This document grants no AWS, Terraform, database, or
+Status: **partly built**; see the plan for progress. This document grants no AWS, Terraform, database, or
 CI authority.
 
 A factory takes a labeled GitHub issue to a pull request that is ready for human
@@ -92,6 +92,14 @@ differs for TollChat:
   on the thin client shows the factory's state (see Inbox and Dashboard). The
   details in those sections are proposals until Ryan confirms them; see the
   plan's open decisions.
+
+**Added by Ryan on 2026-11-15:**
+
+- The subscription no longer has a 7-day window, so the factory does not track
+  weekly utilization.
+- A full work order is assumed to fit the subscription. Volume is not gated on
+  usage readings.
+- Training evals do not run on factory PRs.
 
 ## Architecture
 
@@ -335,7 +343,7 @@ database's 20 GB volume.
     dashboard only), the event that started it, start and end times, base
     commit, current station and round, trace ID, PR link, a cancel mark,
     outcome, whether the outcome comment and label removal were posted,
-    tokens, list-price cost, the subscription utilization reading, and, from
+    tokens, list-price cost, and, from
     the sweep, whether the PR merged and when it closed. Transcripts stay on
     disk and in `factory-traces/`; the row keeps the path.
   - One status row: the poll position, the last poll time, the runner's
@@ -403,8 +411,7 @@ complements Phoenix, which answers "what did a run do".
   - queue: pending events by issue number, oldest first (titles appear once a
     work order has fetched them);
   - history: recent work orders with outcome, rounds, tokens, list-price cost,
-    PR link, and whether it merged;
-  - the latest `anthropic-ratelimit-unified-7d-utilization` reading.
+    PR link, and whether it merged.
 - **Not shown:** trace content, transcripts, and proxy flow logs. Those stay in
   Phoenix, S3, and the state directory. Issue titles come from GitHub and are
   HTML-escaped.
@@ -784,7 +791,8 @@ Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
    resolution and no shorter-window header appeared. A full work order (author,
    reviewer, up to three fix rounds) is unmeasured; the proxy can log the
    header per work order. That round ran no test suite, so a round with pytest
-   in the loop (275 s per run) is also unmeasured.
+   in the loop (275 s per run) is also unmeasured. Since 2026-11-15 the
+   subscription has no 7-day window, and a work order is assumed to fit.
    A verify round of CI's required credential-free checks took 13.9 minutes
    warm (pytest 275 s, Terraform `fmt-validate` 215 s, full-profile database
    tests 262 s), within the 30-minute limit but run one after another, where CI
