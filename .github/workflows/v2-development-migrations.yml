@@ -36,7 +36,7 @@ jobs:
           download_rds_ca_bundle infra/build/ca/rds-ca-bundle.pem
           chmod 600 infra/build/ca/rds-ca-bundle.pem
 
-      - uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
+      - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
         with:
           oauth-client-id: ${{ secrets.TS_DEVELOPMENT_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_DEVELOPMENT_OAUTH_SECRET }}
