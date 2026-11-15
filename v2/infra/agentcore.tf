@@ -742,7 +742,7 @@ resource "aws_cloudwatch_metric_alarm" "tollchat_sessions" {
   evaluation_periods  = 3
   datapoints_to_alarm = 2
   statistic           = "Maximum"
-  threshold           = 10
+  threshold           = 20
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = local.alarm_actions
