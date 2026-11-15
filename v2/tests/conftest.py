@@ -24,6 +24,16 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         )
 
 
+@pytest.fixture(scope="session")
+def development_plan() -> dict[str, dict[str, Any]]:
+    """What v2/infra plans for development, by address, with mocked providers."""
+    from scripts import infrastructure_plan
+
+    if not shutil.which("terraform") or not infrastructure_plan.PROVIDERS.is_dir():
+        pytest.skip("Run terraform -chdir=v2/infra init -backend=false")
+    return infrastructure_plan.planned(infrastructure_plan.ROOT)
+
+
 @pytest.fixture
 def golden_test_data(monkeypatch: pytest.MonkeyPatch) -> None:
     from eval import golden
