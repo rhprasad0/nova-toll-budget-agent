@@ -98,10 +98,3 @@ After the observation window, cancellation, or runner loss, follow the
 Dispatch `v2-production-recovery.yml` from `main` with the original numeric
 `claim_id`, exact private recovery `record_version`, and reviewed
 `expected_state_sha256`; approve its protected `production` environment.
-Do not substitute the old fixed-alias restore or rerun the legacy capture.
-
-## Historical pre-bootstrap routing capture
-
-The fixed-runtime capture script cannot represent blue-green routing and grants no
-authority to restore current production. Its historical procedure is in the
-[runbook](../RUNBOOK.md#historical-pre-bootstrap-recovery-capture).

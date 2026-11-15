@@ -96,8 +96,6 @@ in dependency and version order. Never edit or skip a released migration. Do
 not point these direct commands at a deployed database: development migrations
 use the protected workflow described below. Production delivery is configured
 to use the [protected production migration component](RUNBOOK.md#protected-production-migration-component-issue-304-slice-4).
-The only separately authorized manual production migration remains the
-[Oracle migration 030 procedure](RUNBOOK.md#manual-oracle-migration-030).
 
 ## Verify the build
 
@@ -267,8 +265,7 @@ Both paths accept no arbitrary target, role, or migration-path input and emit
 sanitized evidence. This is separate from disposable local/PR checks and does
 not authorize production schema changes. Production uses its own
 [protected migration component](RUNBOOK.md#protected-production-migration-component-issue-304-slice-4)
-for the registered migration set; manual production migration remains limited
-to the [Oracle migration 030 procedure](RUNBOOK.md#manual-oracle-migration-030).
+for the registered migration set; there is no manual production migration path.
 
 The public interface at `tollchat.ai` uses a private S3 origin for the v2 site
 and an IAM-authenticated streaming Lambda URL behind CloudFront and WAF. The

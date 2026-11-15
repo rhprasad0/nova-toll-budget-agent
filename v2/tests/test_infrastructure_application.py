@@ -624,7 +624,6 @@ def test_every_rds_ca_pin_matches_the_shared_download_function() -> None:
         ".github/workflows/v2-production-migrations.yml",
         "v2/scripts/run_production_migrations_workflow.sh",
         "v2/scripts/adopt_production_baseline.py",
-        "v2/RUNBOOK.md",
     ):
         pins = [
             pin
