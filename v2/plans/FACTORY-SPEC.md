@@ -206,7 +206,8 @@ span in the trace. Each later fix round gets a span too.
    loads the repo's `CLAUDE.md`. It runs once per work order, before the first push. Commits from
    later fix rounds are verified and guarded but not reviewed again.
 3. **Verify.** The dispatcher, not a model, runs `.github/scripts/verify.sh`
-   in the sandbox. That script is the body of the required `v2-loader`,
+   in a fresh sandbox of its own, on the branch as fetched into the host
+   clone, so nothing the worker left running in its sandbox can touch it. That script is the body of the required `v2-loader`,
    `fmt-validate` and `v2-database` CI jobs, so verify and CI cannot drift.
    The dispatcher copies it in from its own checkout of `main` each time, and
    the guard already closes `.github/` to the worker, so a work order cannot
@@ -251,8 +252,8 @@ is mounted into the sandbox.
     compared without case. Claude Code loads those names from subdirectories
     too, so a new one would instruct every later agent, and Ryan's worktrees run
     `.githooks/` on commit;
-- the branch may contain no merge commits, which hide changes from the scan
-  below;
+- the branch may contain no merge commits, which hide changes from the
+  secrets scan;
 - in `v2/eval/EXPERIMENT_JOURNAL.md` and `v2/eval/journal/`, the diff may add
   lines but not delete or rewrite existing ones. The journal's history is
   permanent.
@@ -764,7 +765,7 @@ span in Phoenix:
 
 | Annotation | Written | Meaning |
 | --- | --- | --- |
-| `outcome` | At the end of the run | `pr_ready`, `needs_clarification`, `guard_blocked`, `verify_failed`, `ci_exhausted`, `cancelled`, or `crashed`. |
+| `outcome` | At the end of the run | `pr_ready`, `needs_clarification`, `no_change` (no commit left to push), `guard_blocked`, `verify_failed`, `ci_exhausted`, `cancelled`, or `crashed`. |
 | `reviewer_changed` | At the end of the run | Whether the reviewer committed anything, and how many lines. |
 | `ci_first_pass` | At the end of the run | Required checks passed with no feedback round. |
 | `ci_rounds` | At the end of the run | Fix rounds used (0 to 3), counting verify and CI failures. |

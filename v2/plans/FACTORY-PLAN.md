@@ -298,7 +298,17 @@ credentials from `serve`, and stopping Phoenix makes the preflight fail.
 
 ## Stage 6: First work order
 
-1. **Ryan:** create the `factory` label. Sign `gh` in on the thin client with a
+**Status on 2026-11-15: in progress, as a stack of three PRs.** Step 1 is done:
+the `factory` label exists, the thin client's fine-grained token reads what the
+runner needs, and GitHub refused its pushes that edit a workflow or `main`.
+`loginctl enable-linger ryan` is on. Step 2 is built: `factory/host/dispatcher.py`
+runs rounds in a long-lived sandbox and hands work back as a bundle (one real
+Opus round passed on the thin client with a nested trace), `factory/host/guard.py`
+is the guard, and `factory/host/workorder.py` runs a work order from the started
+comment to the outcome, with `dispatcher.py run` now passing it to the runner.
+Left: steps 3 to 5 on the thin client.
+
+1. [x] **Ryan:** create the `factory` label. Sign `gh` in on the thin client with a
    fine-grained token limited to this repository. It needs to write contents,
    pull requests, and issues, and to read check results and failed job logs.
    Confirm the exact permission names when creating it, and grant nothing
