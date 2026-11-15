@@ -1,0 +1,37 @@
+# Long-running factory services. Sandbox and test-database containers are
+# started per work order by host/dispatcher.py, never by compose. The collector
+# and Phoenix join in Stage 5.
+name: factory
+
+networks:
+  internal:
+    name: factory-internal
+    internal: true # no route out: the proxy is the only way off this network
+  egress:
+    name: factory-egress
+
+services:
+  proxy:
+    build: ./proxy
+    image: factory-proxy:dev
+    # host/test_proxy.py runs this exact command.
+    command:
+      - mitmdump
+      - --set
+      - rawtcp=false
+      - --mode
+      - regular@8080
+      - -s
+      - /addon/allowlist.py
+    environment:
+      # From the environment of whoever starts the proxy (setup.sh today; the
+      # dispatcher reads it from SSM in Stage 4). Never written to a file.
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+    volumes:
+      # Owned by uid 1000, the user the proxy image runs as (see proxy/Dockerfile).
+      - ${HOME}/.local/state/factory/certs:/home/mitmproxy/.mitmproxy
+      # Only the flow log and the job tag: never the host-only git clone.
+      - ${HOME}/.local/state/factory/flows:/state/flows
+      - ${HOME}/.local/state/factory/current-job:/state/current-job:ro
+    networks: [internal, egress]
+    restart: unless-stopped
