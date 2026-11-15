@@ -88,7 +88,7 @@ experiments, so they do not go in the experiment journal.
 
 ## Stage 3: Bring the factory code into the repo
 
-**Status on 2026-11-15: in progress.** Steps 1 to 3, 5 and 6 are merged
+**Status on 2026-11-15: done, except one deferred check.** Steps 1 to 3, 5 and 6 are merged
 (#766, #767), and the development delivery after the merge was green.
 `.github/scripts/verify.sh` passed inside the sandbox on `main` (145b860f) on
 2026-11-15, with the full database profile and no database test skipped, in
@@ -98,8 +98,10 @@ Step 4 is built on the `stage3/decisions` branch: `factory/host/inbox.py`
 `factory/systemd/`, with the runner refusing to start until Stage 6. The spike 5
 re-test ran on 2026-11-15 (see the spec's Spike results, 5): resumed rounds
 nest; a session's first round did not, unlike in Stage 2, and the spec
-proposes joining those by `session.id`, awaiting Ryan. `factory` became a required check on 2026-11-15. Still open:
-the next development delivery being green.
+proposes joining those by `session.id`, awaiting Ryan. `factory` became a required check on 2026-11-15. Deferred: a
+green development delivery, because the manual delivery of 145b860f failed
+during the 2026-11-15 AWS us-east-1 outage (`apply` stage, `gate_rejected`).
+Check the next delivery after AWS recovers; Stage 4 does not wait on it.
 
 1. Copy the needed pieces of `factory-scoreboard/sandbox/` into `factory/`:
    the dispatcher (`host/`), the worker image (`agent/`), the proxy, the
