@@ -175,10 +175,16 @@ since #769) is green.
 
 ## Stage 4: AWS access
 
-**Status on 2026-11-15: in progress.** Step 1 is done (2026-11-14). Step 2 is
-`infra/factory.tf`, on the `stage4/aws-access` branch stacked on Stage 3's PR. A
-read-only development plan targeted at it adds 4 resources and changes nothing
-else. By Ryan's decision on 2026-11-15, the role is tested end to end by this
+**Status on 2026-11-15: complete.** All seven steps and both spikes are done.
+Step 2 merged as `infra/factory.tf` (#773), and step 3 applied it on 2026-11-15,
+at Ryan's request, from a saved plan gated to the 4 factory creates; a re-plan
+shows no changes. On the thin client, profile `factory` in `~/.aws/config` runs
+`aws_signing_helper` as its `credential_process`. With it,
+`aws sts get-caller-identity` returns the factory role and the token parameter
+reads; reading `/nova-toll/i95-token`, the parameter tried as a sample of the
+others, and listing buckets are denied. The role's IAM login to `phoenix` works
+from a host-network container on the thin client with `sslmode=verify-full`.
+By Ryan's decision on 2026-11-15, the role is tested end to end by this
 stage's done-when and spikes, not by a plan test: root `infra/` has no
 credential-free plan harness. The certificate's common name and the public CA
 certificate are committed in `infra/`, also by his decision; the spec's rule
@@ -188,7 +194,7 @@ keeps them out of `factory/`.
    certificate. Copy only the certificate and its private key to the thin
    client, owned by `ryan`, mode `600`. The CA key never leaves the
    workstation.
-2. Terraform in `infra/`, through a normal PR: the Roles Anywhere trust anchor
+2. [x] Terraform in `infra/`, through a normal PR: the Roles Anywhere trust anchor
    and profile, and the factory role with its trust policy and the four
    permissions the spec lists. The same PR notes in `SECURITY.md` the two
    factory credentials kept outside SSM: the certificate's private key and
@@ -197,7 +203,7 @@ keeps them out of `factory/`.
    parameter `/nova-toll/factory/claude-code-oauth-token` is not in Terraform:
    the provider writes a managed SecureString's decrypted value into state on
    every refresh, `ignore_changes` or not.
-3. **Ryan:** apply it by hand after the merge. CI only formats and validates
+3. [x] **Ryan:** apply it by hand after the merge. CI only formats and validates
    `infra/`; no workflow applies it. No apply while the circuit breaker is
    tripped. After `terraform -chdir=infra init
    -backend-config=backend.development.hcl`, a targeted development plan:
@@ -206,12 +212,30 @@ keeps them out of `factory/`.
    -var development_final_snapshot_identifier=<live value>
    -target=aws_rolesanywhere_profile.factory -target=aws_iam_role_policy.factory
    -out=factory.plan` should add 4 and change nothing; apply that saved plan.
-4. **Ryan:** create the token parameter, which Terraform does not manage:
+4. [x] **Ryan:** create the token parameter, which Terraform does not manage:
    `aws ssm put-parameter --name /nova-toll/factory/claude-code-oauth-token
    --type SecureString --value "<output of claude setup-token>"`. It
    replaces the spike copy in `~/spikes/sandbox/.env` on the thin client.
-5. **Ryan (administrator):** on the development RDS instance, create the
-   `phoenix` database and the `phoenix_factory` role with `rds_iam`.
+5. [x] **Ryan (administrator):** on the development RDS instance, create the
+   `phoenix` database and the `phoenix_factory` role with `rds_iam`. Done
+   2026-11-15 at Ryan's request, as the master user `nova_toll_admin`, with
+   the RDS-managed master secret resolved by `asm-exec`. A role that belongs
+   to `rds_iam`, even indirectly, can log in only through IAM, so the master
+   must never be a member of a role that holds it. PostgreSQL 16 and later
+   give a `CREATEROLE` creator only ADMIN on the new role, and `CREATE DATABASE
+   ... OWNER` needs `SET ROLE` on the owner, hence the temporary grant. In this
+   order:
+   - `CREATE ROLE phoenix_factory LOGIN;`
+   - `GRANT phoenix_factory TO nova_toll_admin;`
+   - `CREATE DATABASE phoenix OWNER phoenix_factory;`
+   - `REVOKE phoenix_factory FROM nova_toll_admin;`
+   - `GRANT rds_iam TO phoenix_factory;`
+   - `REVOKE ALL ON DATABASE phoenix FROM PUBLIC;`
+
+   On 2026-11-15 `rds_iam` was granted first, which locked the master's
+   password out for a few minutes until the grant to the master was revoked
+   through an IAM login as the master, using the development administrator's
+   credentials.
 6. [x] If the tailnet's access rules do not already let the thin client reach the
    RDS endpoint, change them through the existing Tailscale ACL workflow. Done
    2026-11-15 with no ACL change: the rules already allowed it, and the thin
@@ -224,7 +248,7 @@ Then run the two remaining spikes:
 
 | Spike | Pass |
 | --- | --- |
-| 2. Container credentials | A throwaway container running the AWS CLI gets the factory role from the helper's `serve` endpoint; the same request from the sandbox network fails. |
+| 2. Container credentials | A throwaway container running the AWS CLI gets the factory role from the helper's `serve` endpoint; the same request from the sandbox network fails. Passed 2026-11-15: only a host-network container reaches it. |
 | 3. Tailscale from a container | A container on the thin client opens a connection to the RDS endpoint. Passed 2026-11-15 on an IPv6-enabled network. |
 
 **Done when:** on the thin client, `aws sts get-caller-identity` returns the factory
@@ -234,7 +258,10 @@ denied.
 ## Stage 5: Trace stack
 
 1. One Compose file for the proxy, the collector, and Phoenix, with Phoenix on
-   RDS through IAM authentication and published on `127.0.0.1` only. Use the
+   RDS through IAM authentication and reachable on `127.0.0.1` only. Pick the
+   network shape from the spec's Spike results, 2, so Phoenix and the
+   collector get credentials from `serve` and the proxy still reaches the
+   collector. Use the
    spec's Phoenix settings (version pin, authentication and assistant off)
    and the collector's token-count `transform`.
 2. Add the collector's S3 exporter to `factory-traces/`.

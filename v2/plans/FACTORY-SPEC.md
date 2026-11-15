@@ -689,8 +689,9 @@ one-hour credentials for the factory role.
   through that trust anchor.
 - **Helper.** AWS's `aws_signing_helper` (1.4.0 or later) turns the certificate
   into credentials. The dispatcher uses it as a `credential_process`; its
-  `serve` mode offers the same credentials to containers on a local endpoint
-  shaped like the EC2 metadata service.
+  `serve` mode offers the same credentials on a local endpoint shaped like the
+  EC2 metadata service. It listens on `127.0.0.1` only, so a container reaches
+  it only from the same network namespace (see Spike results, 2).
 - **Revocation.** Disable the trust anchor, or issue a new certificate under a
   new common name and update the trust policy.
 
@@ -780,7 +781,24 @@ Stage 2 ran on the thin client on 2026-11-14 with Claude Code 2.1.325.
    `api.anthropic.com` (`/api/claude_code/settings`,
    `/api/claude_code/policy_limits`, `/v1/messages`). `claude setup-token`
    prints the token and writes nothing to disk.
-2. **AWS credentials for the Phoenix and collector containers:** open, Stage 4.
+2. **AWS credentials for the Phoenix and collector containers: passed on
+   2026-11-15, from the host's network namespace.** `aws_signing_helper serve` (1.8.6) has no
+   address option and listens on the host's loopback, port 9911. An AWS CLI
+   container on the host network, with `AWS_EC2_METADATA_SERVICE_ENDPOINT`
+   pointing there, got the factory role; the same container on
+   `factory-internal` or the default bridge found no credentials. So Phoenix
+   and the collector must share a network namespace with a `serve` process.
+   Stage 5 picks one of two shapes. On the host network, port publishing does
+   not apply, so Phoenix needs `PHOENIX_HOST=127.0.0.1` to stay off the LAN and
+   tailnet, and the collector must listen where the proxy on
+   `factory-egress` can reach it. Or AWS's helper image
+   (`public.ecr.aws/rolesanywhere/credential-helper`) runs `serve` in its own
+   container, Phoenix and the collector join it with
+   `network_mode: service:<helper>`, and that shared namespace sits on an
+   IPv6-enabled bridge (see 3) with Phoenix's port published on `127.0.0.1`.
+   Either way, a sandbox can start a host-network container through the
+   Docker socket and reach the endpoint; the socket is a convention, not a
+   boundary (see Sandbox).
 3. **Tailscale from a container: passed on 2026-11-15, over IPv6.** Development
    RDS is reached through the development subnet router's 4via6 route (the
    `nova-toll-rds-development` address in `infra/policy.hujson`), because
