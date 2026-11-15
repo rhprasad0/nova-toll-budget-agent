@@ -227,3 +227,14 @@ def test_a_commit_message_that_closes_an_issue_blocks_the_push(
     write(repo, "v2/app.py", "print('hello')\n")
     git(repo, "commit", "--quiet", "-am", f"Change the app\n\n{message}")
     assert checked(repo) == ["a commit message would close an issue"]
+
+
+def test_a_release_digest_update_passes_the_configs_path_allowlist(repo: Path) -> None:
+    digest = "9f2c4b7e1a6d3f8c0b5e2a9d4c7f1b3e6a8d0c2f5b9e4a7d1c3f6b8e0a2d5c9f"
+
+    def refresh(r: Path) -> None:
+        manifest = {"deployment_inputs": {"v2/agent/public-api-gate.js": digest},
+                    "packages": {}, "mutations": ["x"]}  # fmt: skip
+        write(r, guard.MANIFEST, json.dumps(manifest, indent=2))
+
+    assert commit(repo, refresh) == []
