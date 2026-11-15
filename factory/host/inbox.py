@@ -217,9 +217,9 @@ def cold_start(db: sqlite3.Connection, gh: GitHub) -> None:
 def poll(db: sqlite3.Connection, gh: GitHub) -> int:
     """Record new events; return how many were seen. Each call finishes in seconds."""
     current = status(db)
-    if current is None:
-        cold_start(db, gh)
     position: str | None = current["poll_position"] if current else None
+    if position is None:  # never polled: the runner's heartbeat may have made the row
+        cold_start(db, gh)
     stop = datetime.fromisoformat(position) - OVERLAP if position else None
     query = "SELECT pr FROM work_orders WHERE pr IS NOT NULL"
     prs: set[int] = {row[0] for row in db.execute(query)}

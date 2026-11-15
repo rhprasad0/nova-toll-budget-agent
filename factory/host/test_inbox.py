@@ -182,6 +182,18 @@ def test_cold_start_rebuilds_the_queue_from_labeled_open_issues(
     assert gh.feed_pages_read == 1
 
 
+def test_cold_start_runs_even_after_the_runner_wrote_its_heartbeat(
+    db: sqlite3.Connection, gh: FakeGitHub
+) -> None:
+    with inbox.transaction(db):
+        inbox.set_status(db, heartbeat=inbox.now())
+    gh.issue(4)
+    gh.issue_events = {4: [event(10, "labeled", 4)]}
+    gh.feed = [event(30, "assigned", 1)]
+    inbox.poll(db, gh)
+    assert statuses(db) == {10: "pending"}
+
+
 def test_two_labeled_events_run_oldest_first(
     db: sqlite3.Connection, gh: FakeGitHub
 ) -> None:

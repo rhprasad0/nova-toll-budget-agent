@@ -166,8 +166,8 @@ open: the spike 5 re-test, a verify round on `main` since the merge, and
 
 **Done when:** `.github/scripts/verify.sh` passes on an unmodified `main` inside the
 sandbox, with none of the database tests skipped; the PR is merged, its
-`factory/` job passed, and the development delivery that follows the merge is
-green.
+`factory/` job passed, and the next development delivery (nightly or manual
+since #769) is green.
 
 ## Stage 4: AWS access
 
