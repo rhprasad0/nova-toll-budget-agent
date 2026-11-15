@@ -183,6 +183,10 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.13"
+      - name: Install pinned secret checker for the guard tests
+        run: |
+          v2/scripts/install_check_tools.sh "$RUNNER_TEMP/repository-check-tools"
+          echo "$RUNNER_TEMP/repository-check-tools" >> "$GITHUB_PATH"
       - name: Factory dispatcher checks
         run: .github/scripts/verify.sh factory
 

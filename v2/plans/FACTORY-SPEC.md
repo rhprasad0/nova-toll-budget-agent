@@ -237,14 +237,22 @@ is mounted into the sandbox.
 **Guard.** Before any push, the dispatcher checks the fetched commits:
 
 - a secrets scan (gitleaks, with the host's own config) must be clean, because
-  the repo is public and a pushed branch is already a leak;
+  the repo is public and a pushed branch is already a leak. It scans the
+  branch's history and the changed files as they end up, including the text
+  inside binary files, and ignores the worker's inline allows and ignore file.
+  It runs on a host clone without a checkout, so a committed `.gitattributes`
+  or `.gitleaksignore` changes nothing;
 - the diff must not touch a protected path:
   - **anything that can raise the AWS bill:** `infra/`, `v2/infra/`,
-    `org-circuit-breaker/`, and any `*.tf` or `*.tfvars` file elsewhere;
-  - **the rules for agents:** `.github/`, `.claude/`, `SECURITY.md`, and any
-    file named `AGENTS.md` or `CLAUDE.md` in any directory. Claude Code loads
-    those names from subdirectories too, so a new one would instruct every
-    later agent;
+    `org-circuit-breaker/`, and any `*.tf`, `*.tf.json` or `*.tfvars` file elsewhere;
+  - **the rules for agents:** `.github/`, `.githooks/`, `.mcp.json`,
+    `SECURITY.md` and `docs/SECURITY.md`, any `.claude/` directory, and any
+    file named `AGENTS.md`, `CLAUDE.md` or `CLAUDE.local.md` in any directory,
+    compared without case. Claude Code loads those names from subdirectories
+    too, so a new one would instruct every later agent, and Ryan's worktrees run
+    `.githooks/` on commit;
+- the branch may contain no merge commits, which hide changes from the scan
+  below;
 - in `v2/eval/EXPERIMENT_JOURNAL.md` and `v2/eval/journal/`, the diff may add
   lines but not delete or rewrite existing ones. The journal's history is
   permanent.
