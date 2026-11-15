@@ -89,9 +89,7 @@ differs for TollChat:
   instructions override the worktree rule (see Sandbox).
 - After reading [Building always-on agents](https://claude.com/resources/articles/building-always-on-agents):
   work arrives through a durable event inbox, and a dashboard served locally
-  on the thin client shows the factory's state (see Inbox and Dashboard). The
-  details in those sections are proposals until Ryan confirms them; see the
-  plan's open decisions.
+  on the thin client shows the factory's state (see Inbox and Dashboard).
 
 **Added by Ryan on 2026-11-15:**
 
@@ -100,6 +98,7 @@ differs for TollChat:
 - A full work order is assumed to fit the subscription. Volume is not gated on
   usage readings.
 - Training evals do not run on factory PRs.
+- The Inbox and Dashboard sections are confirmed as written.
 
 ## Architecture
 

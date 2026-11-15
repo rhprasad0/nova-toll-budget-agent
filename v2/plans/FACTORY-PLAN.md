@@ -11,15 +11,11 @@ rest can be done by a coding agent in a worktree.
 
 ## Decisions
 
-Ryan settled the spec's proposals on 2026-11-14 and three more questions on
+Ryan settled the spec's proposals on 2026-11-14 and four more questions on
 2026-11-15; they are listed in the spec's Decisions section. Still open:
 
 - **Does replaying production traces into Phoenix fit the public privacy
   notice?** Check before building the production mode (Stage 8).
-- **Confirm the inbox and dashboard details** in the spec's Inbox and Dashboard
-  sections before Stage 3 step 4: SQLite on the thin client, admission at
-  dequeue, cancel by removing the label, one retry after the runner dies with
-  nothing pushed, and a read-only dashboard on `127.0.0.1:6007`.
 
 ## Stage 1: Reformat the thin client
 
