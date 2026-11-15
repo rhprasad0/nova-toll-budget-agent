@@ -216,3 +216,14 @@ def test_a_secrets_scan_that_fails_blocks_the_push(repo: Path, tmp_path: Path) -
     assert guard.secrets(repo, "main", "factory/issue-1", missing, ["v2/app.py"]) == [
         "the secrets scan did not cover the branch's 1 commits"
     ]
+
+
+@pytest.mark.parametrize(
+    "message", ["Fixes #12", "closes: owner/repo#3", "Resolved #4 too"]
+)
+def test_a_commit_message_that_closes_an_issue_blocks_the_push(
+    repo: Path, message: str
+) -> None:
+    write(repo, "v2/app.py", "print('hello')\n")
+    git(repo, "commit", "--quiet", "-am", f"Change the app\n\n{message}")
+    assert checked(repo) == ["a commit message would close an issue"]

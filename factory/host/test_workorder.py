@@ -27,7 +27,8 @@ def check_run(conclusion: str, job: int = 900) -> dict[str, Any]:
 
 
 class FakeGitHub:
-    def __init__(self) -> None:
+    def __init__(self, github: Path) -> None:
+        self.github = github
         self.writes: list[tuple[str, str, dict[str, str]]] = []
         self.ci: list[list[dict[str, Any]]] = []
         self.comments = 100
@@ -43,9 +44,16 @@ class FakeGitHub:
         if path.endswith("/pulls") and method == "POST":
             return {"number": 42}
         if path == "graphql":
-            nodes = self.ci.pop(0) if self.ci else [check_run("SUCCESS")]
+            nodes = (
+                self.ci.pop(0)
+                if len(self.ci) > 1
+                else (self.ci or [[check_run("SUCCESS")]])[0]
+            )
+            oid = git(self.github, "rev-parse", BRANCH).strip()
+            if nodes and nodes[0].get("stale"):
+                oid, nodes = "0" * 40, nodes[1:]
             return {"data": {"repository": {"pullRequest": {"commits": {"nodes": [
-                {"commit": {"statusCheckRollup": {"contexts": {"nodes": nodes}}}}]}}}}}  # fmt: skip
+                {"commit": {"oid": oid, "statusCheckRollup": {"contexts": {"nodes": nodes}}}}]}}}}}  # fmt: skip
         if re.fullmatch(r".*/actions/jobs/\d+/logs", path):
             return "FAILED tests/test_route.py::test_route - AssertionError\n"
         return {}
@@ -141,6 +149,7 @@ def setup(
     monkeypatch.setattr(dispatcher, "STATE", tmp_path / "state")
     monkeypatch.setattr(workorder, "REMOTE", str(github))
     monkeypatch.setattr(workorder, "CI_POLL_SECONDS", 0)
+    monkeypatch.setattr(workorder, "CI_TIMEOUT_SECONDS", 5)
     monkeypatch.setattr(trace, "ENDPOINT", "http://127.0.0.1:9/v1/traces")
 
     def archived(path: Path, key: str) -> bool:
@@ -164,7 +173,7 @@ def setup(
             "INSERT INTO work_orders (id, issue, event, started) VALUES ('wo', ?, 1, 'now')",
             (ISSUE,),
         )
-        return db, FakeGitHub(), sandbox
+        return db, FakeGitHub(github), sandbox
 
     return make
 
@@ -234,7 +243,11 @@ def test_a_ci_failure_sends_the_logs_back_and_the_fix_is_pushed(
 ) -> None:
     db, gh, sandbox = setup([commits("v2/route.py", "ROUTE = 'new'\n"), says("ok"),
                              commits("v2/route.py", "ROUTE = 'fixed'\n")])  # fmt: skip
-    gh.ci = [[check_run("FAILURE")], [check_run("SUCCESS")]]
+    gh.ci = [
+        [{"stale": True}, check_run("FAILURE", 1)],
+        [check_run("FAILURE")],
+        [check_run("SUCCESS")],
+    ]
     assert workorder.work(db, gh, row(db)) == "pr_ready"
     assert "FAILED tests/test_route.py" in sandbox.prompts[2][0]
     assert pushed(tmp_path).splitlines() == ["Change v2/route.py", "Change v2/route.py"]
@@ -288,3 +301,71 @@ def test_the_outcome_replaces_the_started_comment(setup: Make) -> None:
         {},
     ) in gh.writes
     assert json.loads(json.dumps(dict(row(db))))["outcome_posted"] == 1
+
+
+def test_a_cancel_during_verify_pushes_nothing(
+    setup: Make, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db, gh, sandbox = setup([commits("v2/route.py", "1\n"), says("ok")])
+    original = sandbox.verify
+
+    def cancelling_verify(job: str, profile: str | None, branch: str = "main",
+                          source: Path | None = None, log_copy: Path | None = None) -> int:  # fmt: skip
+        db.execute("UPDATE work_orders SET cancelled = 1 WHERE id = 'wo'")
+        return original(job, profile, branch, source, log_copy)
+
+    monkeypatch.setattr(dispatcher, "verify", cancelling_verify)
+    assert workorder.work(db, gh, row(db)) == "cancelled"
+    assert not git(tmp_path / "github.git", "branch", "--list", BRANCH).strip()
+
+
+def test_verify_failing_after_the_pr_opened_is_ci_exhausted(setup: Make) -> None:
+    db, gh, _ = setup([commits("v2/route.py", "1\n"), says("ok"), commits("v2/a.py", "1\n"),
+                       commits("v2/b.py", "1\n"), commits("v2/c.py", "1\n")],
+                      verify=[0, 1, 1, 1])  # fmt: skip
+    gh.ci = [[check_run("FAILURE")]]
+    assert workorder.work(db, gh, row(db)) == "ci_exhausted"
+    assert row(db)["pr"] == 42
+
+
+def test_an_unfinished_optional_check_holds_the_pass(setup: Make) -> None:
+    db, gh, _ = setup([commits("v2/route.py", "1\n"), says("ok")])
+    running = {"__typename": "CheckRun", "name": "trusted-development-plan", "status": "IN_PROGRESS",
+               "isRequired": False}  # fmt: skip
+    gh.ci = [[check_run("SUCCESS"), running]]
+    assert workorder.work(db, gh, row(db)) == "ci_exhausted"
+    assert "timed out" in row(db)["detail"]
+
+
+def test_worker_text_cannot_mention_or_close_anything(setup: Make) -> None:
+    db, gh, _ = setup([commits("v2/route.py", "1\n", "Fixes #12 and rhprasad0/x#3, cc @a <!-- hide -->" + "x" * 70_000),
+                       says("ok")])  # fmt: skip
+    assert workorder.work(db, gh, row(db)) == "pr_ready"
+    body = gh.posted("/pulls")[0]["body"]
+    assert (
+        "#12" not in body
+        and "x#3" not in body
+        and "@a" not in body
+        and "<!--" not in body
+    )
+    assert (
+        "(truncated)" in body
+        and len(body) < 65_536
+        and body.endswith("Factory work order `wo`.")
+    )
+    assert f"Closes #{ISSUE}" in body
+
+
+def test_a_failed_outcome_post_never_stops_the_runner(setup: Make) -> None:
+    db, gh, _ = setup([says("NEEDS CLARIFICATION\n" + "`" * 5 + " which way? @b")])
+    outcome = workorder.work(db, gh, row(db))
+    db.execute("UPDATE work_orders SET outcome = ? WHERE id = 'wo'", (outcome,))
+
+    def refusing(path: str, method: str = "GET", **fields: str) -> Any:  # noqa: ANN401
+        raise RuntimeError("HTTP 422")
+
+    gh.api = refusing
+    inbox.post_outcome(db, gh, row(db))
+    assert row(db)["outcome_posted"] == 1
+    text = inbox.outcome_text(row(db))
+    assert "``````text\n````` which way? @b\n``````\n" in text

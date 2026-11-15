@@ -1,6 +1,5 @@
 import sqlite3
 import time
-from pathlib import Path
 from typing import Any
 
 from factory.host import dispatcher, guard, inbox, trace
@@ -11,6 +10,7 @@ CI_POLL_SECONDS: float = 60
 CI_TIMEOUT_SECONDS = 90 * 60
 DIFF_LIMIT = 60_000
 LOG_LIMIT = 30_000
+TEXT_LIMIT = 60_000
 REMOTE = dispatcher.REPO_URL
 PASSED = {"SUCCESS", "NEUTRAL", "SKIPPED"}
 FIX_PROMPT = (
@@ -21,7 +21,7 @@ FIX_PROMPT = (
 )
 CHECKS_QUERY = """
 query {{ repository(owner: "{owner}", name: "{name}") {{ pullRequest(number: {pr}) {{
-  commits(last: 1) {{ nodes {{ commit {{ statusCheckRollup {{ contexts(first: 100) {{ nodes {{
+  commits(last: 1) {{ nodes {{ commit {{ oid statusCheckRollup {{ contexts(first: 100) {{ nodes {{
     __typename
     ... on CheckRun {{ name status conclusion databaseId isRequired(pullRequestNumber: {pr}) }}
     ... on StatusContext {{ context state isRequired(pullRequestNumber: {pr}) }}
@@ -34,7 +34,8 @@ class Stopped(Exception):
 
 
 def quiet(text: str) -> str:
-    return text.replace("@", "@​")
+    text = text.replace("@", "@​").replace("#", "#​").replace("<!--", "&lt;!--")
+    return text if len(text) <= TEXT_LIMIT else text[:TEXT_LIMIT] + "\n\n(truncated)"
 
 
 def asked(result: dict[str, Any]) -> str | None:
@@ -49,10 +50,12 @@ def prompt(name: str, **values: str | int) -> str:
 
 
 def tail(text: str, limit: int) -> str:
-    return text if len(text) <= limit else text[-limit:]
+    if len(text) <= limit:
+        return text
+    return f"(the first {len(text) - limit} characters are cut)\n" + text[-limit:]
 
 
-def required_checks(gh: inbox.GitHub, pr: int) -> list[dict[str, Any]]:
+def rollup(gh: inbox.GitHub, pr: int) -> tuple[str, list[dict[str, Any]]]:
     owner, name = inbox.REPO.split("/")
     data = gh.api(
         "graphql", "POST", query=CHECKS_QUERY.format(owner=owner, name=name, pr=pr)
@@ -63,23 +66,32 @@ def required_checks(gh: inbox.GitHub, pr: int) -> list[dict[str, Any]]:
     contexts: list[dict[str, Any]] = (
         inbox.field(last, "commit", "statusCheckRollup", "contexts", "nodes") or []
     )
-    return [node for node in contexts if node.get("isRequired")]
+    return str(inbox.field(last, "commit", "oid") or ""), contexts
 
 
-def ci_state(checks: list[dict[str, Any]]) -> str:
-    if not checks:
+def finished(check: dict[str, Any]) -> bool:
+    if check.get("__typename") == "CheckRun":
+        return check.get("status") == "COMPLETED"
+    return check.get("state") not in {"PENDING", "EXPECTED"}
+
+
+def result(check: dict[str, Any]) -> str:
+    return str(
+        check.get("conclusion")
+        if check.get("__typename") == "CheckRun"
+        else check.get("state")
+    )
+
+
+def ci_state(oid: str, contexts: list[dict[str, Any]], pushed: str) -> str:
+    if oid != pushed:
         return "pending"
-    states: list[str] = []
-    for check in checks:
-        if check.get("__typename") == "CheckRun":
-            if check.get("status") != "COMPLETED":
-                return "pending"
-            states.append(str(check.get("conclusion")))
-        elif check.get("state") in {"PENDING", "EXPECTED"}:
-            return "pending"
-        else:
-            states.append(str(check.get("state")))
-    return "pass" if all(state in PASSED for state in states) else "fail"
+    required = [check for check in contexts if check.get("isRequired")]
+    if any(finished(check) and result(check) not in PASSED for check in required):
+        return "fail"
+    if not required or not all(finished(check) for check in contexts):
+        return "pending"
+    return "pass"
 
 
 class WorkOrder:
@@ -97,9 +109,9 @@ class WorkOrder:
         self.session = ""
         self.fixes = 0
         self.pr: int | None = None
+        self.pushed = ""
         self.tokens = 0
         self.cost = 0.0
-        self.transcripts: list[Path] = []
 
     def update(self, **fields: str | int | float | None) -> None:
         with inbox.transaction(self.db):
@@ -122,7 +134,6 @@ class WorkOrder:
         self.update(station=station)
         span, start = trace.new_id(8), trace.now_ns()
         transcript = self.job_dir / f"{station}.jsonl"
-        self.transcripts.append(transcript)
         result, ended = dispatcher.run_round(self.id, transcript, text,
                                              trace.traceparent(self.trace_id, span), resume,
                                              self.stopped)  # fmt: skip
@@ -159,13 +170,15 @@ class WorkOrder:
         self.session = str(author.get("session_id") or "")
         questions = asked(author)
         if questions is not None:
-            self.update(detail=quiet(questions))
+            self.update(detail=questions)
             return "needs_clarification"
         clean = dispatcher.export_branch(self.id, self.job_dir, self.branch, self.base)
         if clean is None:
             self.update(detail="The author made no commit.")
             return "no_change"
         diff = guard.git(clean, "diff", f"main...{self.branch}")
+        if not self.session:
+            raise RuntimeError("the author round reported no session to resume")
         self.round("reviewer", prompt("reviewer-prompt.txt", issue=self.issue, branch=self.branch,
                                       title=title, body=body, diff=tail(diff, DIFF_LIMIT)))  # fmt: skip
         return self.deliver(title, str(author.get("result") or ""))
@@ -187,7 +200,13 @@ class WorkOrder:
             self.check()
             self.update(station="verify")
             log = self.job_dir / f"verify-{self.fixes}.log"
-            if dispatcher.verify("all", None, self.branch, source=clean, log_copy=log):
+            span, start = trace.new_id(8), trace.now_ns()
+            code = dispatcher.verify(
+                "all", None, self.branch, source=clean, log_copy=log
+            )
+            trace.send(self.trace_id, span, self.root, "verify", start, trace.now_ns(), {
+                "factory.station": "verify", "factory.work_order": self.id, "factory.exit": code})  # fmt: skip
+            if code:
                 if self.fixes == ROUNDS:
                     self.update(detail="Verify still failed after 3 fix rounds.")
                     return "ci_exhausted" if self.pr else "verify_failed"
@@ -200,8 +219,11 @@ class WorkOrder:
                 self.update(detail="Nothing was pushed: " + "; ".join(problems))
                 return "guard_blocked"
             self.check()
-            dispatcher.run("git", "-C", clean, "push", "--quiet", REMOTE,
-                           f"+refs/heads/{self.branch}:refs/heads/{self.branch}")  # fmt: skip
+            head = guard.git(clean, "rev-parse", self.branch).strip()
+            dispatcher.run("git", "-C", clean, "push", "--quiet",
+                           f"--force-with-lease=refs/heads/{self.branch}:{self.pushed}", REMOTE,
+                           f"refs/heads/{self.branch}:refs/heads/{self.branch}")  # fmt: skip
+            self.pushed = head
             if self.pr is None:
                 self.check()
                 created = self.gh.api(f"repos/{inbox.REPO}/pulls", "POST", title=title,
@@ -210,7 +232,7 @@ class WorkOrder:
                                            f"Factory work order `{self.id}`.")  # fmt: skip
                 self.pr = int(inbox.field(created, "number"))
                 self.update(pr=self.pr)
-            state, output = self.watch(self.pr)
+            state, output = self.watch(self.pr, head)
             if state == "pass":
                 return "pr_ready"
             if self.fixes == ROUNDS or state == "timeout":
@@ -220,21 +242,24 @@ class WorkOrder:
                 return "ci_exhausted"
             self.fix("CI", output)
 
-    def watch(self, pr: int) -> tuple[str, str]:
+    def watch(self, pr: int, pushed: str) -> tuple[str, str]:
         self.update(station="ci")
         deadline = time.monotonic() + CI_TIMEOUT_SECONDS
+        passes = 0
         while True:
             self.check()
-            checks = required_checks(self.gh, pr)
-            state = ci_state(checks)
-            if state == "pass":
+            oid, contexts = rollup(self.gh, pr)
+            state = ci_state(oid, contexts, pushed)
+            passes = passes + 1 if state == "pass" else 0
+            if passes == 2:
                 return state, ""
             if state == "fail":
-                failed = [c for c in checks if c.get("__typename") == "CheckRun"
-                          and str(c.get("conclusion")) not in PASSED and c.get("databaseId")]  # fmt: skip
-                logs = [f"== {c.get('name')}\n" + tail(str(
-                    self.gh.api(f"repos/{inbox.REPO}/actions/jobs/{c['databaseId']}/logs") or ""),
-                    LOG_LIMIT // max(len(failed), 1)) for c in failed]  # fmt: skip
+                failed = [c for c in contexts if c.get("isRequired") and c.get("databaseId")
+                          and finished(c) and result(c) not in PASSED]  # fmt: skip
+                share = LOG_LIMIT // max(len(failed), 1)
+                logs = [f"== {c.get('name')}\n" + tail(str(self.gh.api(
+                    f"repos/{inbox.REPO}/actions/jobs/{c['databaseId']}/logs") or ""), share)
+                    for c in failed]  # fmt: skip
                 return state, "\n\n".join(
                     logs
                 ) or "A required status check failed without logs."
@@ -243,15 +268,17 @@ class WorkOrder:
             time.sleep(CI_POLL_SECONDS)
 
     def finish(self, outcome: str) -> None:
-        for transcript in self.transcripts:
-            if transcript.exists():
-                dispatcher.archive(
-                    transcript, f"transcripts/{self.id}/{transcript.name}"
-                )
-        trace.send(self.trace_id, self.root, None, "work_order", self.started_ns, trace.now_ns(), {
-            "factory.work_order": self.id, "factory.issue": self.issue, "factory.outcome": outcome,
-            "factory.fix_rounds": self.fixes, "factory.tokens": self.tokens})  # fmt: skip
-        dispatcher.cleanup(self.id)
+        try:
+            if self.job_dir.exists():
+                for path in sorted(self.job_dir.iterdir()):
+                    if path.suffix in {".jsonl", ".err", ".log"}:
+                        dispatcher.archive(path, f"transcripts/{self.id}/{path.name}")
+            trace.send(self.trace_id, self.root, None, "work_order", self.started_ns,
+                       trace.now_ns(), {"factory.work_order": self.id, "factory.issue": self.issue,
+                                        "factory.outcome": outcome, "factory.fix_rounds": self.fixes,
+                                        "factory.tokens": self.tokens})  # fmt: skip
+        finally:
+            dispatcher.cleanup(self.id)
 
 
 def work(db: sqlite3.Connection, gh: inbox.GitHub, row: sqlite3.Row) -> str:

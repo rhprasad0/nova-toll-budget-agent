@@ -20,6 +20,9 @@ JOURNAL_FILE = "v2/eval/EXPERIMENT_JOURNAL.md"
 JOURNAL_DIR = "v2/eval/journal/"
 MANIFEST = "infra/development-release-manifest.json"
 MANIFEST_OPEN = {"deployment_inputs", "packages"}
+CLOSING = re.compile(
+    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b[:\s]+[\w.-]*/?[\w.-]*#\d+", re.I
+)
 
 Findings = list[dict[str, Any]]
 
@@ -156,6 +159,8 @@ def check(repo: Path, head: str, config: Path, base: str = "main") -> list[str]:
     problems = [f"changes protected path {path}" for path in paths if protected(path)]
     if merges:
         problems.append("contains merge commits")
+    if CLOSING.search(git(repo, "log", "--format=%B", f"{base}..{head}")):
+        problems.append("a commit message would close an issue")
     problems += [
         f"deletes or rewrites a line of {path}"
         for path in paths
