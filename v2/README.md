@@ -45,9 +45,6 @@ Run `node tests/release_dashboard_browser.cjs` for the static page checks.
   [reviewed source-data builder](oracle/build_oracle_data.py)
 - [Shared route validation](agent_tools/validate_toll_route.py)
 - [Map corridor geometry and OpenStreetMap provenance](docs/commute-routes.md)
-- The unapplied [analytics retirement plan](plans/ANALYTICS-RETIREMENT-PLAN.md)
-  documents the source-retired usage and agent-route analytics scopes without
-  granting execution authority.
 
 ## Database bootstrap
 

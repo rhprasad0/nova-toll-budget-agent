@@ -159,8 +159,7 @@ demonstration still requires separate human authorization.
 
 The fixed manual recovery workflow remains available for an explicitly approved
 post-merge bootstrap or migration rehearsal after the reviewed foundation plan
-and fresh development bootstrap gates (see the
-[historical replacement procedure](runbooks/development-foundation-replacement.md)).
+and fresh development bootstrap gates.
 Dispatch
    `.github/workflows/v2-development-migrations.yml` only from `refs/heads/main`;
 the job also requires GitHub actor ID `91573985` and
@@ -589,12 +588,9 @@ Use only the procedure that owns the intended operation:
   resources, code deploys, and Muse connection (development only).
 - The [protected development migration workflow](#protected-development-migration-workflow-305-slice-3)
   is the post-merge development schema path.
-- The completed account-split procedures are historical stubs with permalinks:
-  [#330 foundation](runbooks/development-foundation-330-archive.md),
-  [#327/#333 foundation replacement](runbooks/development-foundation-replacement.md),
-  [#331 release bring-up](runbooks/development-release.md),
-  [#332 bootstrap/import](runbooks/development-bootstrap-import.md), and
-  [#333 legacy retirement](runbooks/legacy-development-retirement.md).
+- [#331 release bring-up](runbooks/development-release.md) is a historical stub.
+  The other completed account-split procedures (#327, #330, #332, #333) are in
+  Git history.
 
 Public report publication remains non-operative.
 An AWS-only identity cannot write Cloudflare DNS.

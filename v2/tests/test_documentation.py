@@ -24,11 +24,11 @@ def tracked_markdown() -> list[str]:
 def test_markdown_files_only_shrink() -> None:
     """New rules belong in checks; journal pages are the one growing record."""
     documents = [path for path in tracked_markdown() if not path.startswith(JOURNAL)]
-    assert len(documents) <= 42, (
+    assert len(documents) <= 35, (
         "Do not add Markdown files. Write a deterministic check whose error names "
         "the fix (CLAUDE.md), or delete a stale document to make room."
     )
-    assert len(documents) == 42, (
+    assert len(documents) == 35, (
         f"A Markdown file was removed: lower this limit to {len(documents)}."
     )
 
