@@ -93,14 +93,14 @@ def manifest_closed_part(repo: Path, ref: str) -> dict[str, Any]:
 
 
 def gitleaks(
-    args: list[str], config: Path, scratch: Path
+    args: list[str], config: Path, scratch: Path, cwd: Path | None = None
 ) -> tuple[subprocess.CompletedProcess[str], Findings]:
     report = scratch / "gitleaks.json"
     done = subprocess.run(
         ["gitleaks", *args, "--no-banner", "--no-color", "--redact", "--config", str(config),
          "--gitleaks-ignore-path", str(scratch), "--ignore-gitleaks-allow",
          "--report-format", "json", "--report-path", str(report), "--exit-code", "0"],
-        capture_output=True, text=True, check=False,
+        capture_output=True, text=True, check=False, cwd=cwd,
     )  # fmt: skip
     findings: Findings = []
     if report.exists():
@@ -140,7 +140,7 @@ def secrets(
         export(repo, head, paths, tree)
         current: Findings = []
         if tree.exists():
-            done, current = gitleaks(["dir", str(tree)], config, root)
+            done, current = gitleaks(["dir", "."], config, root, cwd=tree)
             if done.returncode or " ERR " in done.stderr:
                 return ["the secrets scan of the branch's files failed"]
     rules = sorted({str(finding["RuleID"]) for finding in history + current})
