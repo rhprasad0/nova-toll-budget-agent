@@ -1,3 +1,2 @@
 # v2/infra addresses an administrator applies by hand, one per line.
 # v2/scripts/infrastructure_plan.py lets a change to these through.
-aws_cloudwatch_metric_alarm.tollchat_sessions
