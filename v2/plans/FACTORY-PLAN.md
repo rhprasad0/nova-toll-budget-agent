@@ -343,6 +343,18 @@ database: full-content spans now land on the 20 GB volume it shares with the
 development database, which must not autoscale. Lower the retention if one
 session's size says 30 days will not fit.
 
+**Measure, from then on:** for each work order, how many of its feedback rounds
+were spent on a failure the cloud sandbox could not have caught (the `database`
+job, the Docker `factory` tests, or a package digest) and whether the run ended
+`flawed` with those rounds used up. `dispatch.py` must name the failing jobs of
+each round in its outcome comment, so the count can be read off the issues. If such
+rounds decide the outcome of two of the first ten work orders, move to a
+self-hosted sandbox with Docker, such as
+[Lambda MicroVMs](https://docs.aws.amazon.com/lambda/latest/dg/microvms-integrations-claude-managed-agents.html).
+That move gives up the `github_repository` mount and the vault's environment
+variable credentials, so it puts a push token inside the sandbox, and it needs
+the circuit breaker to stop running MicroVMs, not only the launcher.
+
 ## Stage 5: Development agent traces
 
 This is an application release, not factory work, and it comes last. The same
