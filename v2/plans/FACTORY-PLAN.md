@@ -1,392 +1,353 @@
 # TollChat Factory Plan
 
-Status: **in progress**. Stages 1 and 2 are done, and Stage 3's sandbox is
-merged (#766, #767). This is the build order for the design in
-[FACTORY-SPEC.md](FACTORY-SPEC.md). Like the spec, it grants no AWS, Terraform,
-database, or CI authority; each step that touches those says who does it.
+Status: **rewritten on 2026-11-16.** The factory moves from the local runner on
+the thin client to Claude Managed Agents, following the
+[Phoenix factory](https://github.com/Arize-ai/phoenix/tree/main/factory) as
+closely as a one-lane version can. Phoenix moves off the thin client into AWS,
+and both the factory and the TollChat agent send their traces to it. Nothing
+below is built yet.
 
-Each stage ends with a check. Do not start a stage until the one before it
-passes. Steps marked **Ryan** need a human at a keyboard or a decision; the
-rest can be done by a coding agent in a worktree.
+This plan grants no AWS, Terraform, database, or CI authority; each step that
+touches those says who does it. Steps marked **Ryan** need a human at a keyboard
+or a decision. Each stage ends with a check; do not start a stage until the one
+before it passes.
+
+## Why
+
+The local runner's first real work order (#799) ended `needs_clarification`
+three times. Its sandbox could not reach GitHub, so it could not read the PR the
+issue pointed at, and each re-label started from the issue body alone, so it
+never saw Ryan's answers in the comments. In Phoenix's design the session mounts
+the repository and reads the issue and its comments itself through the GitHub
+MCP server, which removes both causes.
+
+## The parked local runner
+
+[FACTORY-SPEC.md](FACTORY-SPEC.md) describes it, and `factory/host/`,
+`factory/proxy/`, `factory/agent/`, `factory/collector/` and `factory/systemd/`
+are its code. Stages 1 to 5 of the old plan were finished and Stage 6 was built
+(#766, #767, #772, #773, #779, #781 to #783, #796). It stays in the repo, unused,
+until Ryan decides to return to it or delete it. Stage numbers in that code's
+comments refer to the plan as it stood before 2026-11-16.
+
+State on 2026-11-16: the poller timer is stopped and disabled on the thin
+client. The runner, the dashboard, and the trace stack (Phoenix, collector,
+proxy, credential helper) still run there. Stage 3 stops Phoenix and the
+collector; Stage 4 stops the rest.
+
+## What is kept from Phoenix and what is dropped
+
+| Phoenix | Here |
+| --- | --- |
+| Agents, environment and vault defined as files, synced with `ant apply`; `claude-lock.json` on a `factory-state` branch | Kept |
+| `factory-dispatch.yml` running `dispatch.py start`, then `watch` | Kept, trimmed |
+| Session mounts the repo; the kickoff message carries only the issue number; the agent reads the issue with `issue_read` | Kept |
+| Session pushes `factory/issue-N` and opens a draft PR itself | Kept |
+| Outcome rubric graded by `user.define_outcome`, up to 3 revisions | Kept, one rubric. `watch` treats an ungraded session as `flawed`, so the loop depends on it |
+| Required CI failures sent back to the session, up to 3 rounds; PR marked ready once CI passes | Kept |
+| Run outcomes `success`, `flawed`, `blocked`, `manual`, with cost, in one issue comment | Kept |
+| `factory-guard.yml` as a required check | Kept, with this repo's protected paths |
+| Per-session spend cap | Kept |
+| `bootstrap.sh` run first in each session | Kept, for this repo's toolchains |
+| Opus coordinators | Sonnet 5.5 |
+| Three lanes chosen by triage labels | One lane, no lane labels |
+| Subagents: reproducer, analyst, area and security reviewers | Dropped. One agent |
+| GitHub App with minted installation tokens | Kept |
+| Claude Code Review findings sent back | Dropped. This repo has no review workflow |
+| Triage, candidates, review and finish lanes, previews, log scans, CLA check, Grafana and Datadog vaults | Dropped |
 
 ## Decisions
 
-Ryan settled the spec's proposals on 2026-11-14 and four more questions on
-2026-11-15; they are listed in the spec's Decisions section. Still open:
+**Settled with Ryan on 2026-11-16:**
 
-- **Does replaying production traces into Phoenix fit the public privacy
-  notice?** Check before building the production mode (Stage 8).
+- API-billed spend is acceptable. Managed Agents bills tokens at API rates plus
+  $0.08 per running session-hour, on the Claude Console rather than the
+  subscription's limits. The subscription's monthly API credits are spent
+  first; when they run out and no credit was bought, requests stop. This
+  replaces the 2026-11-15 decision that a work order fits the subscription.
+- The worker model is Sonnet.
+- Steering follows Phoenix: there is no persistent session across labels.
+  Re-adding the `factory` label starts a new session, and that session reads the
+  whole issue thread, so a comment answers a question the last run asked.
+- Phoenix is hosted in AWS and is reachable from the internet with
+  authentication on.
+- The development TollChat agent drops ADOT and the telemetry guardrail and
+  exports to Phoenix only. Production stays as it is. The product is now the
+  factory.
+- `factory/agents/` and `factory/rubrics/` are exempt from the no-new-Markdown
+  rule.
+- The GitHub credential is a GitHub App, as in Phoenix, so the factory has its
+  own login. Admission and the guard match on that login to tell the factory
+  from Ryan.
+- The factory runs in a new Claude Console organization linked to Ryan's
+  subscription, in a workspace of its own. The key in SSM belongs to an old
+  account and is not used.
+- GitHub Actions holds no Anthropic key. It authenticates with
+  [Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/wif-providers/github-actions):
+  each run trades its GitHub identity token for a short-lived Anthropic token.
+  One federation rule admits only this repository's runs on `main`, bound to a
+  service account in the factory's workspace, so a pull request's run can never
+  reach the vault. Phoenix uses a stored key; this is stricter.
+- Phoenix in AWS is one EC2 instance behind CloudFront (Stage 3).
+- The spend cap is $10 per session at list price.
+- CI is the gate. The agent runs what the sandbox can, and failing required
+  checks come back to it as feedback rounds.
 
-## Stage 1: Reformat the thin client
+**These reverse rules in the spec. Each is deliberate:**
 
-**Status on 2026-11-14: done. Steps 1 to 5 are complete; step 6 is deferred.**
+- The sandbox now holds a token that can push. In the local runner it held no
+  GitHub credential, and work left only as a bundle that a host-side guard
+  checked before any push. The boundary is now what the token may do, the guard
+  check on the PR, and Ryan's merge.
+- The agent now reads issue comments, which anyone can write on a public
+  repository. The spec used the title and body only. The agent's prompt treats
+  the thread as evidence, never as instructions, and only Ryan's label starts a
+  run: the App's login is never accepted as a requester.
+- A pushed branch is public before any secrets scan runs. The sandbox holds no
+  real secret (the vault swaps a placeholder for the token at the network edge),
+  so the scan moves into the guard check as a second line.
+- `factory/` becomes a protected path, as in Phoenix: its files define the
+  agent, its tools and its rubric. The spec let the factory work on itself.
+- Web search and web fetch are on, as in Phoenix, limited to the environment's
+  allowed hosts. The spec turned them off because they bring untrusted text into
+  the session; that session now also holds a push token.
+- There is no cancel. Removing the label does not stop a session; the spend cap
+  and the watch timeout bound it.
 
-The machine is an HP EliteDesk 800 G2 mini: a four-core Core i5-6500T from
-2015, 16 GB of memory, and a 224 GB SSD with 86 GB free on the root volume and
-120 GB unallocated. It runs Ubuntu Server 26.04.1 LTS. Memory and disk are enough. Stage 2 found
-the processor fast enough so far: a verify round took 13.9 minutes, measured
-outside the sandbox.
+**Still open:**
 
-**It is a home lab box, by Ryan's decision.** It has no disk encryption, Secure
-Boot is off, and its TPM is version 1.2, which the signing helper cannot use.
-The factory's secrets on it (the certificate's private key and the GitHub
-token) are therefore plain files. The controls that matter are the ones in
-GitHub and AWS: what the token and the role are allowed to do.
+- **CloudFront billing mode.** Flat-rate plans are chosen per distribution and
+  include private VPC origins only from the $200 Business plan up. This
+  distribution must be pay-as-you-go; confirm that a pay-as-you-go distribution
+  can use a VPC origin at no extra charge before building.
+- **The local runner's fate.** Keep it parked or delete it, with its Roles
+  Anywhere role and the `factory-traces/` export.
 
-1. [x] Install Ubuntu Server LTS, wiping the disk. No desktop.
-2. [x] One user, `ryan`, runs everything. The workstation's SSH key is
-   authorized. Automatic security updates are on and the system is up to date.
-3. [x] Docker Engine and the Compose plugin from Docker's repository; `ryan`
-   is in the `docker` group.
-4. [x] **Ryan:** install Tailscale, join the tailnet as `factory`, and disable
-   key expiry for the device.
-5. [x] Install `gh`, `gitleaks` (8.30.1, the version CI uses), `uv`, and
-   Claude Code.
-6. Deferred: **Ryan:** set the BIOS to power back on after an outage. Until
-   then, a power cut stops the factory until someone presses the power button.
+## Stage 1: Sandbox spike
 
-**Do not copy onto it:** the evaluation holdout, `~/.aws` from the workstation,
-or any production profile.
+One throwaway session, started by hand with `ant` or the Console, in a `limited`
+cloud environment. It runs before Stage 2, so it holds no token that can push:
+the repository is public and mounts without one. CI is the gate either way; the
+spike decides what `bootstrap.sh` sets up and what the agent is told it can run.
 
-**Reaching Phoenix and the dashboard.** The thin client has no screen, and
-Phoenix and the dashboard listen only on its loopback. Browse them from the
-workstation through an SSH tunnel over Tailscale:
-`ssh -L 6006:127.0.0.1:6006 -L 6007:127.0.0.1:6007 <user>@<thin client>`, then
-open `http://localhost:6006` (Phoenix) or `http://localhost:6007` (dashboard).
-Phoenix links in issue comments work only while that tunnel is open.
+The cloud sandbox is a package list on x86 Ubuntu with 8 GB of memory and 10 GB
+of disk. Its
+[reference](https://platform.claude.com/docs/en/managed-agents/cloud-sandboxes-reference)
+lists PostgreSQL 16, not the `postgis/postgis:17-3.5` image the `database` and
+`mcp` checks use, and Docker as "limited availability".
 
-**Done when:** from the workstation, `ssh <user>@<thin client>` works over Tailscale,
-and `docker run hello-world` succeeds without `sudo`.
+1. **Ryan:** create the Console organization and link it to the subscription
+   for its monthly API credits. The link cannot be changed without support, so
+   link the organization the factory will stay in. Create the factory's
+   workspace, and sign in with `ant auth login` for the spike.
+2. The session runs the setup under "Verify the build" in `v2/README.md`, then
+   each check in `.github/scripts/verify.sh` by name, and reports:
+   - whether `docker info` works, and whether `postgis/postgis:17-3.5` pulls and
+     starts, with the image registry's hosts allowed so a blocked pull is not
+     mistaken for missing Docker;
+   - if not, whether PostGIS installs from apt into the shipped PostgreSQL;
+   - disk used after setup, against the 10 GB limit, and peak memory;
+   - which checks pass, which cannot run, and how long the run took;
+   - which hosts setup needed beyond the package registries.
 
-## Stage 2: Run the spikes that need no AWS
+**Done when:** the report is recorded here, with the list of checks the agent
+runs itself and the list it leaves to CI.
 
-**Status on 2026-11-14: done.** Spikes 1, 4, and 5 passed (5 with a
-workaround); spike 6 is partly settled. Results, workarounds, and the spec
-changes they forced are in the spec's Spike results section. A verify round
-took 13.9 minutes outside the sandbox shape, and one Opus author round used
-under 1% of the weekly subscription limit. Stage 3 must show verify passing
-inside the sandbox.
+## Stage 2: GitHub boundary
 
-Run these on the thin client with a copy of `factory-scoreboard/sandbox/`, so
-they also prove the machine. Mint a subscription token with
-`claude setup-token` and export it for the session only. Check where that
-command stores anything on a headless machine before relying on it.
+The token and the guard are the boundary now, so they are tested before any
+session holds the token.
 
-| Spike | Question | Pass |
+1. **Ryan:** create the GitHub App and install it on this repository only, with
+   Contents, Issues and Pull requests read and write and nothing else: no
+   Workflows, Actions or Administration. Do not add it to any bypass list.
+2. Test an installation token against real GitHub: a push that edits a workflow
+   file, changes `main`, or moves a release tag is rejected.
+3. Add `factory-guard.yml`. It runs on every PR the App's login opened and
+   on every `factory/` branch, because the agent picks its branch name and a
+   skipped required check counts as passing. It takes
+   its logic from `main`, never from the PR's checkout: either inline, as
+   Phoenix does, or `factory/host/guard.py` checked out from the base ref. It
+   keeps that guard's rules: the protected paths (now including `factory/`),
+   the append-only journal, the partly open release manifest, no merge commits,
+   and the secrets scan.
+4. **Ryan:** make the guard a required check.
+5. Note in `SECURITY.md` the factory credentials that live outside SSM: the
+   App's private key as a repository secret, the installation token in the
+   vault, and later the Phoenix API keys.
+
+**Done when:** a test PR opened as the App from a branch not
+named `factory/` that touches a protected path fails the guard, one that only
+appends to the journal passes, and the three pushes in step 2 were refused.
+
+## Stage 3: Phoenix in AWS
+
+**Shape: one small EC2 instance in a private subnet, behind CloudFront.**
+
+```mermaid
+flowchart LR
+  anthropic["Claude Platform<br/>OTLP export"] --> cf
+  agent["Development TollChat agent"] --> cf
+  ryan["Ryan's browser"] --> cf
+  cf["CloudFront<br/>HTTPS 443, *.cloudfront.net"] -->|"VPC origin, HTTP 6006"| ec2
+  subgraph vpc["Development VPC, private subnet"]
+    ec2["EC2 t4g.small<br/>Phoenix in Docker, auth on"]
+    rds[("RDS<br/>database phoenix")]
+  end
+  ec2 -->|"IAM auth, TLS"| rds
+  ec2 -->|"image pull, 443"| nat["Existing router NAT"]
+```
+
+- **CloudFront** gives the public HTTPS hostname on port 443 that Anthropic's
+  exporter requires, with no certificate, DNS record or public IP of our own.
+  Its [VPC origins](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)
+  reach an EC2 instance in a private subnet directly. Caching is off and every
+  method, header and cookie is forwarded. VPC origins do not carry gRPC, so
+  everything uses OTLP over HTTP.
+- **The instance** sits in the existing `tollchat_private` subnets with no
+  public address. Its security group admits only CloudFront's origin-facing
+  prefix list on 6006. It pulls the pinned Phoenix image through the existing
+  router NAT, which allows outbound 443 only. The container uses the host's
+  network, so it gets the instance role from the metadata service without a
+  raised hop limit, and it restarts on boot, because the breaker stops and
+  later starts the instance.
+- **The database** is the existing `phoenix` database. The instance profile
+  gets `rds-db:connect` as `phoenix_factory`, and the RDS security group
+  admits the instance on 5432. No Tailscale, 4via6 route or Roles Anywhere is
+  involved.
+- **Authentication** is on. `PHOENIX_SECRET` is an SSM SecureString that Ryan
+  creates by hand, as with the subscription token, so it never enters
+  Terraform state; the instance reads it at boot. The first admin password
+  comes the same way, through `PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD`, so the
+  public endpoint never answers to `admin`.
+- **Settings carried over** from the spec: the version pin, the assistant,
+  sandbox providers, MCP server and usage telemetry off, and the 30-day
+  retention on the shared 20 GB volume. Phoenix 21.0.0 already converts the
+  GenAI spans Anthropic sends (15.10.0 or later does).
+- **The circuit breaker already covers it.** Its handler stops every running
+  EC2 instance and disables every enabled CloudFront distribution in the
+  account, with no tag needed.
+- **The S3 copy ends.** The thin client's collector wrote factory traces to
+  `factory-traces/`. Nothing replaces it, so Phoenix's 30 days is all that is
+  kept.
+
+Measured and priced on 2026-11-16: Phoenix on the thin client uses about 470 MB
+of memory, so 2 GB is enough. A `t4g.small` is $0.0168 an hour, about $12 a
+month, plus a few GB of disk; CloudFront at this volume stays inside its
+pay-as-you-go free tier.
+
+| Alternative | About a month | Why not |
 | --- | --- | --- |
-| 1. Token injection | Can the proxy replace a placeholder with the subscription token as a bearer header? | A sandboxed `claude -p "hello"` answers while the container holds only the placeholder. |
-| 5. `TRACEPARENT` with `--resume` | Do resumed turns join the same trace? | Two rounds in one container show one trace ID in the existing Grafana stack. |
-| 4. Span rendering | Does Phoenix show `claude_code.*` spans usefully? | Point the collector at a throwaway Phoenix with its default local database and read one trace. If it is unreadable, add Arize's collector bridge. |
-| 6. Subscription headroom and speed | How much of the plan does one run use, and is the machine fast enough? | Record the tokens for one realistic issue against a scratch repository, and time one build and test round of this repo in the worker image against the 30-minute limit. |
+| Fargate behind a load balancer (Phoenix's own guide, and ECS Express Mode) | $40: $14 task, $16 load balancer, $7 for its two public addresses | Three times the cost, and the breaker does not stop ECS tasks |
+| Fargate with a Cloudflare Tunnel sidecar | $18 | Adds a tunnel token, the Cloudflare provider in root `infra/`, and Cloudflare's bot rules between Anthropic and Phoenix. Not covered by the breaker |
+| App Runner | | Closed to new customers since 2026-04-30 |
 
-**If spike 1 fails, stop.** The spec's credential design depends on it, and the
-spec needs a revision before anything else is built.
+1. Check the open CloudFront billing question. Then Terraform in root `infra/`,
+   through a normal PR, counted to development only: the instance, its profile
+   and security group, the RDS ingress rule, the VPC origin and the
+   distribution. It is foundation, not a blue-green slot, so it does not belong
+   in `v2/infra`. Test it by planned values.
+2. **Ryan:** create the `PHOENIX_SECRET` and admin password parameters. On the
+   thin client, stop
+   Phoenix and the collector, so two Phoenix processes never migrate the same
+   database. Then apply the Terraform by hand. No apply while the circuit
+   breaker is tripped.
+3. **Ryan:** sign in as `admin@localhost` with that password, and create two
+   system API keys: one for Anthropic's exporter and one for the development
+   agent.
+4. **Ryan:** add the Phoenix destination in the Claude Console, with the
+   CloudFront hostname, content mode Full and the factory's workspace selected,
+   and press Test.
 
-**Done when:** all four have a result, and the matching items in the spec's
-Spike results section are closed with it. These are setup checks, not
-experiments, so they do not go in the experiment journal.
+**Done when:** the Console's test span appears in the AWS Phoenix, a request
+without a key is refused, a request straight to the instance from outside
+CloudFront is refused, and the traces the thin client wrote are still there.
 
-## Stage 3: Bring the factory code into the repo
+## Stage 4: The factory on Managed Agents
 
-**Status on 2026-11-15: done once step 4's PR merges, except one deferred check.** Steps 1 to 3, 5 and 6 are merged
-(#766, #767), and the development delivery after the merge was green.
-`.github/scripts/verify.sh` passed inside the sandbox on `main` (145b860f) on
-2026-11-15, with the full database profile and no database test skipped, in
-900 s; pytest's counts (2183 passed, 4 skipped) matched CI's.
-Step 4 is built on the `stage3/decisions` branch: `factory/host/inbox.py`
-(poller, runner, restart), `factory/host/dashboard.py`, and the units in
-`factory/systemd/`, with the runner refusing to start until Stage 6. The spike 5
-re-test ran on 2026-11-15 (see the spec's Spike results, 5): every round
-nests with its prompt on stdin as stream-json and, for resumed rounds, the
-cached-settings deletion. `factory` became a required check on 2026-11-15. Deferred: a
-green development delivery, because the manual delivery of 145b860f failed
-during the 2026-11-15 AWS us-east-1 outage (`apply` stage, `gate_rejected`).
-Check the next delivery after AWS recovers; Stage 4 does not wait on it.
+1. In `factory/`: one agent file under `agents/` (Sonnet 5.5, the GitHub MCP
+   tools Phoenix's coordinators use, and the worker instructions from the spec
+   that still hold), one environment, one GitHub vault, one rubric under
+   `rubrics/`, a `bootstrap.sh` shaped by Stage 1, `dispatch.py` cut down from
+   Phoenix's to one lane, and Phoenix's `github_app.py`, which mints the
+   installation tokens and keeps the vault and the session supplied.
+2. Admission keeps this repo's rule, which is stricter than Phoenix's write
+   access: the repository owner wrote the issue and added the label, the issue
+   is open, and no open PR or `factory/issue-N` branch exists.
+3. Add `factory-sync.yml` (`ant apply` on merge, lock on `factory-state`) and
+   `factory-dispatch.yml` (start, then watch). Both are workflow files, so
+   Ryan's own PR adds them. Both run on `main`, which is all the federation
+   rule admits, so Phoenix's plan job on pull requests is dropped. A watch
+   lasts hours and GitHub's identity token five minutes, so `dispatch.py`
+   gives the SDK a token provider that fetches a fresh one. Check first that
+   `ant` accepts a federated token; if not, the sync step applies through the
+   SDK.
+4. Extend the Markdown check's exemption to `factory/agents/` and
+   `factory/rubrics/`.
+5. Test `dispatch.py` with GitHub's and Anthropic's responses faked, since both
+   are credentialed: admission refusals, the three feedback rounds, each run
+   outcome, and the watch timeout.
+6. **Ryan:** in the Console, register GitHub's issuer, create the service
+   account in the factory's workspace, and add the federation rule. Add the
+   App's private key and the repository variables, and run the sync workflow
+   once from `main`.
+7. **Ryan:** stop and disable the runner, the dashboard, and the rest of the
+   trace stack on the thin client. Its Roles Anywhere role stays until the local
+   runner's fate is decided.
+8. **Ryan:** re-add the `factory` label to #799.
 
-1. Copy the needed pieces of `factory-scoreboard/sandbox/` into `factory/`:
-   the dispatcher (`host/`), the worker image (`agent/`), the proxy, the
-   collector config, and the Compose file. Leave out the oracle, the host
-   graders, Grafana, Tetragon, and the systemd units, which step 4 replaces.
-2. Apply the spec's differences that need no AWS: bearer-token injection, the
-   `factory` label trigger, and the TollChat toolchains in the worker image.
-   The worker's clone runs the setup block under "Verify the build" in
-   `v2/README.md` (`uv sync`, both `npm ci` runs, and
-   `git config core.hooksPath .githooks`; the checkers are baked into the
-   image), so the pre-commit hook catches
-   lint and type errors before a commit rather than in CI. The hook installs
-   nothing and fails without that setup. Set `core.hooksPath` only in the
-   sandbox clone, never in the dispatcher's host clone.
-3. Add the two throwaway PostGIS containers and the Playwright browser to the
-   sandbox. Verify is `.github/scripts/verify.sh`, the script the required CI
-   jobs already run; the dispatcher copies it from its checkout of `main`.
-   Spike 6 found three gaps, now settled:
-   - The database tests need Docker. `v2/scripts/run_db_tests.sh` uses
-     `docker exec` on the Postgres container, and
-     `test_adopt_production_baseline.py` starts and stops its own database per
-     test. Mount the Docker socket and add the Docker CLI to the image, as the
-     spec's Sandbox section records. Confirm in the first verify round that
-     the two test files that skip without Docker now run.
-   - The golden artifact smoke needs ARM. It stays CI-only; `verify.sh` does
-     not run it.
-   - The eight failing tests in `test_production_plan_workflow.py` and
-     `test_production_migration_workflow.py` needed `xxd`, which the image
-     lacked. The image needs `jq`, `xxd`, `zip` and `unzip`; the test suite
-     now stops at startup and names any that are missing.
-   Build the image with `postgresql-client` (for `psql`), Node 22.22.1, and
-   Terraform 1.15.8. Allow the hosts the setup downloads from on the proxy, as
-   the spec's Egress proxy section lists; the spike's copy allowed only
-   Anthropic and crates.io. Re-test spike 5's trace workaround in the
-   long-lived container (done 2026-11-15; see the spec's Tracing section).
-4. Split the dispatcher into poller and runner around the inbox and add the
-   dashboard, as the spec's Inbox and Dashboard sections describe. Three
-   systemd units replace `factory-scoreboard`'s one-shot poll pass with its
-   45-minute timeout: a timer that runs the poller every 60 seconds and
-   finishes in seconds, a long-running runner service, and the dashboard
-   service. The stations, push, and outcome steps are Stage 6 work, so stub
-   them here. Test the inbox with GitHub's responses faked (it is a
-   credentialed service):
-   - the overlapping re-read records nothing twice;
-   - a cold start rebuilds the queue from labeled open issues;
-   - two `labeled` events run oldest first;
-   - an `unlabeled` event drops a queued one but not a newer re-label, and
-     marks a running work order cancelled only if it is newer than the event
-     that started it;
-   - a stale event whose label is gone is dropped silently;
-   - a second runner exits on the lock;
-   - on restart, an orphaned `running` event returns to `pending`, and a
-     work order that died with no branch on GitHub is queued again once,
-     while one with a branch ends `crashed`.
+**Done when:** #799 becomes a PR that is ready for review, with the session's
+turns, model requests and tool calls in the AWS Phoenix, and the outcome comment
+on the issue showing the rubric result and cost. Then measure the `phoenix`
+database: full-content spans now land on the 20 GB volume it shares with the
+development database, which must not autoscale. Lower the retention if one
+session's size says 30 days will not fit.
 
-   Test the dashboard against a seeded inbox: it renders every section,
-   escapes an issue title containing HTML, and refuses `POST`.
-5. Keep the copied tests passing, add one for the new trigger, and add a CI
-   job that runs the `factory/` tests. Today's `ci.yml` jobs all run under
-   `v2/`, so nothing would run them otherwise. **Ryan** then makes that job a
-   required check, since the dispatcher waits only on required checks.
-6. Before opening the PR, check how development delivery and the release
-   manifest treat a new top-level directory. PR CI has missed delivery
-   rejections before.
-7. Ship as a normal PR. Nothing runs yet.
+## Stage 5: Development agent traces
 
-**Done when:** `.github/scripts/verify.sh` passes on an unmodified `main` inside the
-sandbox, with none of the database tests skipped; the PR is merged, its
-`factory/` job passed, and the next development delivery (nightly or manual
-since #769) is green.
+This is an application release, not factory work, and it comes last. The same
+package is delivered to development and then released to production, so the
+code keeps both paths and the environment chooses one.
 
-## Stage 4: AWS access
+1. Find everything the change touches before writing it: how the runtime's
+   environment reaches `v2/agent/telemetry.py`, where the agent reads its
+   Phoenix API key, the `agentcore.tf` hash pin in `blue_green.py`, and what
+   reads development's `agentcore-traces/`. `v2/scripts/check_development_release.py`
+   and `v2/scripts/release_blue_green.py` name it, so a development delivery
+   may depend on it.
+2. Choose the export route. `telemetry.py` refuses to start unless ADOT is
+   0.22.0 and `opentelemetry-sdk` is 1.45.1, and production ships the same
+   lockfile, so nothing may move those pins. The lockfile already has the
+   OTLP HTTP exporter, and Phoenix converts Strands' own GenAI spans on
+   arrival, so a plain exporter may need no new dependency and no corpus
+   refreeze. Add the OpenInference Strands processor only if the plain route
+   reads badly in Phoenix and the pins hold.
+3. In development, `telemetry.py` skips ADOT and the Guardrail redaction and
+   exports to Phoenix over OTLP, with AgentCore's own exporter off. In
+   production it does what it does today. A test proves production's exporter
+   graph is unchanged.
+4. The change reaches at least `v2/tests/test_telemetry_redaction.py`,
+   `v2/tests/test_infrastructure_observability.py`, `v2/infra/agentcore.tf`,
+   and `infra/delivery_plan_validator.py` with its test, and it needs the
+   release manifest's digests. Development delivery rejects `v2/infra` changes
+   outside a slot, so development's guardrail and trace resources
+   (`v2/infra/trace_redaction.tf`, `v2/infra/telemetry-log-policy.tf`,
+   `infra/development-tracing.tf`) stay in place, unused. Removing them is a
+   separate change that an administrator applies.
+5. Development stops writing `agentcore-traces/` and its CloudWatch trace
+   logs. `v2/agent/privacy.txt` and `v2/lambdas/mcp_server/src/privacy.md` say
+   both environments redact and archive traces; correct their statements about
+   development in the same release. Production's statements stay true.
 
-**Status on 2026-11-15: complete.** All seven steps and both spikes are done.
-Step 2 merged as `infra/factory.tf` (#773), and step 3 applied it on 2026-11-15,
-at Ryan's request, from a saved plan gated to the 4 factory creates; a re-plan
-shows no changes. On the thin client, profile `factory` in `~/.aws/config` runs
-`aws_signing_helper` as its `credential_process`. With it,
-`aws sts get-caller-identity` returns the factory role and the token parameter
-reads; reading `/nova-toll/i95-token`, the parameter tried as a sample of the
-others, and listing buckets are denied. The role's IAM login to `phoenix` works
-from a host-network container on the thin client with `sslmode=verify-full`.
-By Ryan's decision on 2026-11-15, the role is tested end to end by this
-stage's done-when and spikes, not by a plan test: root `infra/` has no
-credential-free plan harness. The certificate's common name and the public CA
-certificate are committed in `infra/`, also by his decision; the spec's rule
-keeps them out of `factory/`.
-
-1. [x] **Ryan:** on the workstation, create the CA and issue the thin client's
-   certificate. Copy only the certificate and its private key to the thin
-   client, owned by `ryan`, mode `600`. The CA key never leaves the
-   workstation.
-2. [x] Terraform in `infra/`, through a normal PR: the Roles Anywhere trust anchor
-   and profile, and the factory role with its trust policy and the four
-   permissions the spec lists. The same PR notes in `SECURITY.md` the two
-   factory credentials kept outside SSM: the certificate's private key and
-   the GitHub token. Everything is counted to development only, and the
-   `factory` output lists what the thin client's helper needs. The token
-   parameter `/nova-toll/factory/claude-code-oauth-token` is not in Terraform:
-   the provider writes a managed SecureString's decrypted value into state on
-   every refresh, `ignore_changes` or not.
-3. [x] **Ryan:** apply it by hand after the merge. CI only formats and validates
-   `infra/`; no workflow applies it. No apply while the circuit breaker is
-   tripped. After `terraform -chdir=infra init
-   -backend-config=backend.development.hcl`, a targeted development plan:
-   `terraform -chdir=infra plan -var environment=development
-   -var budget_notification_email=<the dev budget's recipient>
-   -var development_final_snapshot_identifier=<live value>
-   -target=aws_rolesanywhere_profile.factory -target=aws_iam_role_policy.factory
-   -out=factory.plan` should add 4 and change nothing; apply that saved plan.
-4. [x] **Ryan:** create the token parameter, which Terraform does not manage:
-   `aws ssm put-parameter --name /nova-toll/factory/claude-code-oauth-token
-   --type SecureString --value "<output of claude setup-token>"`. It
-   replaces the spike copy in `~/spikes/sandbox/.env` on the thin client.
-5. [x] **Ryan (administrator):** on the development RDS instance, create the
-   `phoenix` database and the `phoenix_factory` role with `rds_iam`. Done
-   2026-11-15 at Ryan's request, as the master user `nova_toll_admin`, with
-   the RDS-managed master secret resolved by `asm-exec`. A role that belongs
-   to `rds_iam`, even indirectly, can log in only through IAM, so the master
-   must never be a member of a role that holds it. PostgreSQL 16 and later
-   give a `CREATEROLE` creator only ADMIN on the new role, and `CREATE DATABASE
-   ... OWNER` needs `SET ROLE` on the owner, hence the temporary grant. In this
-   order:
-   - `CREATE ROLE phoenix_factory LOGIN;`
-   - `GRANT phoenix_factory TO nova_toll_admin;`
-   - `CREATE DATABASE phoenix OWNER phoenix_factory;`
-   - `REVOKE phoenix_factory FROM nova_toll_admin;`
-   - `GRANT rds_iam TO phoenix_factory;`
-   - `REVOKE ALL ON DATABASE phoenix FROM PUBLIC;`
-
-   On 2026-11-15 `rds_iam` was granted first, which locked the master's
-   password out for a few minutes until the grant to the master was revoked
-   through an IAM login as the master, using the development administrator's
-   credentials.
-6. [x] If the tailnet's access rules do not already let the thin client reach the
-   RDS endpoint, change them through the existing Tailscale ACL workflow. Done
-   2026-11-15 with no ACL change: the rules already allowed it, and the thin
-   client needed only `tailscale set --accept-routes` (see the spec's Spike
-   results, 3).
-7. [x] Install `aws_signing_helper` on the thin client. Done 2026-11-15: 1.8.6,
-   checksum checked against the AWS download page, in `~/.local/bin`.
-
-Then run the two remaining spikes:
-
-| Spike | Pass |
-| --- | --- |
-| 2. Container credentials | A throwaway container running the AWS CLI gets the factory role from the helper's `serve` endpoint; the same request from the sandbox network fails. Passed 2026-11-15: only a host-network container reaches it. |
-| 3. Tailscale from a container | A container on the thin client opens a connection to the RDS endpoint. Passed 2026-11-15 on an IPv6-enabled network. |
-
-**Done when:** on the thin client, `aws sts get-caller-identity` returns the factory
-role, reading the token parameter works, and reading any other parameter is
-denied.
-
-## Stage 5: Trace stack
-
-**Status on 2026-11-15: done on the `stage5/trace-stack` branch, stacked on
-Stage 4's status PR.** `factory/compose.yaml` adds four services: `trace-netns` owns a network
-namespace, and `aws-credentials` (AWS's credential-helper image in `serve`
-mode), `phoenix` and `collector` share it. Their configuration is
-in `factory/collector/config.yaml`. The machine-specific values live in
-`~/.config/factory/factory.env` on the thin client (mode `600`), which
-`setup.sh` passes to Compose; `setup.sh` also reads the subscription token
-from SSM for the proxy. The spike's Phoenix container is stopped, not
-removed. The done-when passed on the thin client from a copy of the branch:
-- two sandboxed rounds, a first one on stdin and a resumed one, nested
-  under one trace in the `tollchat-factory` project, with token counts
-  mapped and no orphan traces;
-- their spans reached `factory-traces/` as gzipped objects, one per batch,
-  under hourly prefixes;
-- Phoenix migrated its schema on RDS through IAM;
-- the admission preflight (Phoenix `/readyz`, Tailscale, and the proxy,
-  including that it holds a token) failed with Phoenix stopped and passed when
-  it came back, and kept passing after the helper restarted.
-
-1. One Compose file for the proxy, the collector, and Phoenix, with Phoenix on
-   RDS through IAM authentication and reachable on `127.0.0.1` only. Pick the
-   network shape from the spec's Spike results, 2, so Phoenix and the
-   collector get credentials from `serve` and the proxy still reaches the
-   collector. Use the
-   spec's Phoenix settings (version pin, authentication and assistant off)
-   and the collector's token-count `transform`.
-2. Add the collector's S3 exporter to `factory-traces/`.
-3. Add the admission preflight: Phoenix health, proxy, and Tailscale.
-4. After the merge, **Ryan** updates the thin client's checkout of `main` and
-   runs `factory/setup.sh`, which replaces the branch copy's containers. Every
-   later `docker compose` command there needs the env file (set
-   `COMPOSE_ENV_FILES=~/.config/factory/factory.env`), and the proxy restarts only
-   through `setup.sh`, which supplies its token.
-
-**Done when:** a sandboxed `claude -p "hello"` appears in Phoenix and as an
-object under `factory-traces/`; a first and a resumed round, run the way the
-spec's Tracing section says, nest under one `TRACEPARENT`; with Phoenix and the collector both using
-credentials from `serve`, and stopping Phoenix makes the preflight fail.
-
-## Stage 6: First work order
-
-**Status on 2026-11-15: in progress, as a stack of three PRs.** Step 1 is done:
-the `factory` label exists, the thin client's fine-grained token reads what the
-runner needs, and GitHub refused its pushes that edit a workflow or `main`.
-`loginctl enable-linger ryan` is on. Step 2 is built: `factory/host/dispatcher.py`
-runs rounds in a long-lived sandbox and hands work back as a bundle (one real
-Opus round passed on the thin client with a nested trace), `factory/host/guard.py`
-is the guard, and `factory/host/workorder.py` runs a work order from the started
-comment to the outcome, with `dispatcher.py run` now passing it to the runner.
-Left: steps 3 to 5 on the thin client.
-
-1. [x] **Ryan:** create the `factory` label. Sign `gh` in on the thin client with a
-   fine-grained token limited to this repository. It needs to write contents,
-   pull requests, and issues, and to read check results and failed job logs.
-   Confirm the exact permission names when creating it, and grant nothing
-   more. In particular, **no Workflows permission**.
-2. Finish the runner: the three stations (author, reviewer, verify), the
-   guard (secrets scan and protected paths), push and PR, the CI watch, the
-   shared budget of three fix rounds, the cancel checks, the outcome comment
-   and label removal, and the sweep of `closed` events. Run every round with
-   its prompt on stdin as stream-json and record its `session.id` on the round
-   span (see the spec's Tracing section).
-3. Test the guard before trusting it. Each of these work orders must end with
-   no branch pushed:
-   - its diff touches a protected path;
-   - it contains a planted fake secret;
-   - it deletes a line from the experiment journal;
-   - it adds a `CLAUDE.md` or `AGENTS.md` in any directory;
-   - its verify step fails, including when the worker has edited
-     `.github/scripts/verify.sh` to make it pass.
-
-   One that only appends to the journal must pass. Then test the outer
-   checks: an issue written by another account is refused, and direct pushes
-   with the factory token that edit a workflow file, change `main`, or move a
-   release tag are all rejected by GitHub.
-
-   Then test the inbox against real GitHub: two issues labeled a minute apart
-   run one after the other; removing the label mid-round stops the container
-   and pushes nothing more, and the label stays off; removing and re-adding
-   it mid-run cancels the run and then starts a new one; killing the runner
-   after its first push and restarting it pushes nothing more and ends
-   `crashed`; and stopping the
-   dashboard changes nothing. Note how long a label takes to appear in the
-   issue events feed.
-4. **Ryan:** label one small, real issue.
-5. Enable the three systemd units (poller timer, runner, dashboard) from
-   `factory/systemd/` as user units, and run `loginctl enable-linger ryan`
-   (off on 2026-11-15), or they stop at logout and never start at boot. They
-   run from a checkout of `main` that only Ryan updates.
-
-**Done when:** that issue becomes a PR that is ready for review, with one trace
-in Phoenix and the outcome comment on the issue, and the dashboard showed it
-move through its stations while it ran.
-
-## Stage 7: Scoring plumbing
-
-No experiments yet; this stage only makes sure the data exists.
-
-1. Write the outcome annotations onto the `work_order` span, and the sweep's
-   `merged` and `human_commits` (the sweep itself is built in Stage 6).
-2. Measure the Phoenix database's size and raise the 30-day retention if there
-   is room.
-
-**Done when:** merge rate, first-pass CI rate, and list-price cost per merged
-PR can be read from Phoenix for the first five work orders.
-
-## Stage 8: Agent trace replay
-
-Run replays **from the workstation**, through the SSH tunnel from Stage 1. The
-workstation already has the profiles that read `agentcore-traces/`; the factory
-role does not, and should not gain them. This keeps the production profile off
-the thin client.
-
-1. Write the replay script for development traces.
-2. Check the production mode against the public privacy notice, then add it
-   behind its explicit flag.
-
-**Done when:** one hour of development agent traces is browsable in the
-`tollchat-agent-dev` project.
+**Done when:** a development chat appears as one trace in the
+`tollchat-agent-dev` project, and a production chat still arrives redacted in
+`agentcore-traces/`.
 
 ## Not in this plan
 
-- The spec's deferred items: factory experiments, lanes for PR review
-  feedback and clarification replies, dashboard controls, the article's
-  timers and outbox, parallel work orders, AWS alarm events in the inbox, a
-  separate test author, a rubric
-  grader, and the other lanes.
-- Workstation Claude Code telemetry. Ryan dropped it.
-- Running training evals on factory PRs. Ryan decided against it on
-  2026-11-15. Required CI does not include them, so the factory does not
-  verify agent behaviour.
-- Hardening the thin client itself: disk encryption, Secure Boot, or a
-  TPM-held key. The TPM would first need converting from 1.2 to 2.0.
+- Everything dropped in the table above, until a run shows the need.
+- Outcome annotations and the merge sweep (the old Stage 7), and replaying past
+  agent traces from S3 (the old Stage 8).
+- Factory experiments, and a lane that sends Ryan's PR review comments back to
+  a session.
+- Running training evals on factory PRs. Ryan decided against it on 2026-11-15.

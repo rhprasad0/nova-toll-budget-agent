@@ -1,7 +1,9 @@
 # TollChat Factory Spec
 
-Status: **partly built**; see the plan for progress. This document grants no AWS, Terraform, database, or
-CI authority.
+Status: **parked on 2026-11-16.** This describes the local runner on the thin
+client, which is built but no longer the plan; [FACTORY-PLAN.md](FACTORY-PLAN.md)
+replaces it with Claude Managed Agents and lists the rules here that it
+reverses. This document grants no AWS, Terraform, database, or CI authority.
 
 A factory takes a labeled GitHub issue to a pull request that is ready for human
 review. This one is a one-lane, single-machine simplification of the
