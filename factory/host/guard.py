@@ -99,7 +99,7 @@ def gitleaks(
 ) -> tuple[subprocess.CompletedProcess[str], Findings]:
     report = scratch / "gitleaks.json"
     done = subprocess.run(
-        ["gitleaks", *args, "--no-banner", "--no-color", "--redact", "--config", str(config),
+        ["gitleaks", *args, "--no-banner", "--no-color", "--redact", "--config", str(config.resolve()),
          "--gitleaks-ignore-path", str(scratch), "--ignore-gitleaks-allow",
          "--report-format", "json", "--report-path", str(report), "--exit-code", "0"],
         capture_output=True, text=True, check=False, cwd=cwd,

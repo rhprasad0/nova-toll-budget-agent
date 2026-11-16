@@ -358,10 +358,13 @@ never exchanged a token. Not yet shown: that `ant` accepts the federated token,
 and that the GitHub MCP server's tool names match the agent file. Both show on
 the first sync and the first run.
 
-The App's write token may push any branch but `main`, so without a ruleset a
-session could rewrite or delete `claude-lock.json` on `factory-state`.
-`dispatch.py` refuses malformed IDs, and step 6 closes the branch to everyone
-but GitHub Actions.
+The App's write token may push any branch but `main`. A ruleset on
+`factory-state` blocks deletion and force pushes, but a session could still push
+a commit that rewrites `claude-lock.json`: GitHub Actions cannot be a ruleset
+bypass actor, so updates stay open for the sync to save the lock. `dispatch.py`
+refuses malformed IDs, the lock names only resources in the factory's
+workspace, and the next sync rewrites it from `main`. A deploy key as the bypass
+actor would close this.
 
 1. [x] In `factory/`: `agents/worker.md` (Sonnet 5.5 at high effort, four GitHub
    MCP tools, and the worker rules from the spec that still hold),
@@ -400,9 +403,8 @@ but GitHub Actions.
    `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`,
    `ANTHROPIC_SERVICE_ACCOUNT_ID` and `ANTHROPIC_WORKSPACE_ID`. The merge's own
    `factory-sync` run fails until these exist, so run it again from `main` and
-   check that it created `factory-state`, then add a
-   ruleset on `factory-state` that blocks updates and deletion, with GitHub
-   Actions as its only bypass actor.
+   check that it created `factory-state`, then add a ruleset on it that blocks
+   deletion and force pushes.
 7. **Ryan:** stop and disable the runner, the dashboard, and the rest of the
    trace stack on the thin client. Its Roles Anywhere role stays until the local
    runner's fate is decided.
