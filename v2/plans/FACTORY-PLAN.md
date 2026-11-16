@@ -116,10 +116,6 @@ collector; Stage 4 stops the rest.
 
 **Still open:**
 
-- **CloudFront billing mode.** Flat-rate plans are chosen per distribution and
-  include private VPC origins only from the $200 Business plan up. This
-  distribution must be pay-as-you-go; confirm that a pay-as-you-go distribution
-  can use a VPC origin at no extra charge before building.
 - **The local runner's fate.** Keep it parked or delete it, with its Roles
   Anywhere role and the `factory-traces/` export.
 
@@ -309,7 +305,10 @@ pay-as-you-go free tier.
 | Fargate with a Cloudflare Tunnel sidecar | $18 | Adds a tunnel token, the Cloudflare provider in root `infra/`, and Cloudflare's bot rules between Anthropic and Phoenix. Not covered by the breaker |
 | App Runner | | Closed to new customers since 2026-04-30 |
 
-1. Check the open CloudFront billing question. Then Terraform in root `infra/`,
+1. The distribution stays pay-as-you-go. Flat-rate plans include private VPC
+   origins only from the $200 Business plan up, but on pay-as-you-go
+   [VPC origins cost nothing extra](https://aws.amazon.com/about-aws/whats-new/2024/11/amazon-cloudfront-vpc-origins/).
+   Terraform in root `infra/`,
    through a normal PR, counted to development only: the instance, its profile
    and security group, the RDS ingress rule, the VPC origin and the
    distribution. It is foundation, not a blue-green slot, so it does not belong
