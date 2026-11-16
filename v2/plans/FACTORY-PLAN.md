@@ -125,6 +125,46 @@ collector; Stage 4 stops the rest.
 
 ## Stage 1: Sandbox spike
 
+**Status on 2026-11-16: done.** Session `sesn_01Gwe7ryj7WjQHMniYZuADa3` (Sonnet
+5.5, 17 minutes, $0.46 at list price) ran on `main` in the throwaway
+`factory-spike` environment and agent.
+
+- **Docker does not work.** The client is installed but no daemon runs:
+  `docker info` fails on the missing `/var/run/docker.sock`.
+- **PostGIS from apt works but does not help.** After `apt-get update`,
+  `postgresql-16-postgis-3` installs in 17 s and gives PostGIS 3.4.2 on
+  PostgreSQL 16.15. `v2/scripts/run_db_tests.sh` needs `docker inspect` and
+  `docker exec` on a `postgis/postgis:17-3.5` container, so `database` cannot
+  run.
+- **Three setup gaps, all fixable in `bootstrap.sh` or the package list:**
+  - The default `python3` and `python` are 3.11, and pyright takes its language
+    version from them, so `setup.sh`, `loader` and `terraform` fail on 3.12
+    syntax. Putting the shipped `/usr/bin/python3.13` first on `PATH` fixes it.
+  - `xxd` and Terraform are missing. Node is 22.22.0 where CI pins 22.22.1.
+    All install in seconds.
+  - The mounted clone is shallow (50 commits), so one contract test cannot
+    read an old commit. Fetch full history.
+- **Resources:** peak memory 1.3 GB; disk use rose about 5 GB with every job
+  and extra install, under the documented 10 GB. No host setup needed was
+  blocked; `astral.sh` and the Docker registry were unreachable or unused.
+
+| Job | With the fixes | Without |
+| --- | --- | --- |
+| `terraform` | Pass, 107 s | Fails at the 3.12 syntax |
+| `loader` | Up to pytest passes; pytest 2187 passed, 2 failed in 217 s; later steps not reached | Fails at pyright |
+| `factory` | 93 of 106 pass; the 13 others build Docker images | Same |
+| `database` | Cannot run | Cannot run |
+
+The two `loader` failures are the shallow clone (`git show` of an old commit)
+and the timed-checks zip digest, which differed from the pin. The digest is
+unexplained; the build downloaded its own CPython through uv, so a toolchain
+different from CI's is the leading suspect.
+
+**The agent runs itself:** `setup.sh`, `terraform`, `loader` through pytest,
+and the non-Docker `factory` tests. **CI alone runs:** `database`, the Docker
+`factory` tests, and the package builds and digests until the digest
+difference is explained. Stage 4's `bootstrap.sh` carries the three fixes.
+
 One throwaway session, started by hand with `ant` or the Console, in a `limited`
 cloud environment. It runs before Stage 2, so it holds no token that can push:
 the repository is public and mounts without one. CI is the gate either way; the
