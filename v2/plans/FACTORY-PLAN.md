@@ -221,9 +221,11 @@ protection lists a bypass actor.
    Pull requests write lets a session merge its own PR once every required
    check, the guard included, passes. Phoenix relies on a maintainer's approval
    here. Ryan decided on 2026-11-16 not to require one. What remains is the
-   agent's instructions, which forbid merging, and its GitHub MCP tools, which
-   leave out `merge_pull_request`; `gh` in the sandbox could still call the
-   merge API.
+   agent's instructions, which forbid merging; its GitHub MCP tools, which
+   leave out `merge_pull_request`; and the `gh` credential in the sandbox, a
+   second installation token with read permissions only. The write token
+   reaches only the MCP server and the repository mount, neither of which can
+   merge.
 4. [x] Built on 2026-11-16, not yet run on GitHub: `factory-guard.yml` checks
    out the PR's base commit, fetches the PR into a clone without a checkout,
    and runs `factory/host/guard.py` from the base, which now also protects
@@ -258,7 +260,8 @@ applied to development from this branch by a targeted plan of its 12
 resources, and a re-plan was clean. Phoenix answers at the distribution's
 address in `terraform output phoenix`: `/healthz` returns 200, `/v1/projects`
 without a key 401, and plain HTTP 403. The instance has no public address, so
-only CloudFront reaches it. The Console's OTLP export reaches Phoenix.
+only CloudFront reaches it. The Console's OTLP export reaches Phoenix, and the
+traces the thin client wrote are there.
 
 **Shape: one small EC2 instance in a private subnet, behind CloudFront.**
 
@@ -354,9 +357,10 @@ never exchanged a token. Not yet shown: that `ant` accepts the federated token,
 and that the GitHub MCP server's tool names match the agent file. Both show on
 the first sync and the first run.
 
-One limit is accepted, as in Phoenix: the App's token may push any branch but
-`main`, so a session could rewrite `claude-lock.json` on `factory-state`. The
-lock names only resources in the factory's workspace.
+The App's write token may push any branch but `main`, so without a ruleset a
+session could rewrite or delete `claude-lock.json` on `factory-state`.
+`dispatch.py` refuses malformed IDs, and step 6 closes the branch to everyone
+but GitHub Actions.
 
 1. [x] In `factory/`: `agents/worker.md` (Sonnet 5.5 at high effort, four GitHub
    MCP tools, and the worker rules from the spec that still hold),
@@ -390,8 +394,11 @@ lock names only resources in the factory's workspace.
    `https://api.anthropic.com`, and claims `ref` `refs/heads/main` and
    `repository_owner` `rhprasad0`. Add the repository variables
    `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`,
-   `ANTHROPIC_SERVICE_ACCOUNT_ID` and `ANTHROPIC_WORKSPACE_ID`. The merge runs
-   `factory-sync` once; check that it created `factory-state`.
+   `ANTHROPIC_SERVICE_ACCOUNT_ID` and `ANTHROPIC_WORKSPACE_ID`. The merge's own
+   `factory-sync` run fails until these exist, so run it again from `main` and
+   check that it created `factory-state`, then add a
+   ruleset on `factory-state` that blocks updates and deletion, with GitHub
+   Actions as its only bypass actor.
 7. **Ryan:** stop and disable the runner, the dashboard, and the rest of the
    trace stack on the thin client. Its Roles Anywhere role stays until the local
    runner's fate is decided.

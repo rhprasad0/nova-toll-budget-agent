@@ -47,7 +47,8 @@ PASSING = [check("v2-loader", "pass"), check("factory-guard", "pass")]
 
 
 def failing(*names: str) -> list[dict[str, str]]:
-    return [check(name, "fail") for name in names] + [check("factory-guard", "pass")]
+    passing = [c for c in PASSING if c["name"] not in names]
+    return [check(name, "fail") for name in names] + passing
 
 
 def passing(seen: tuple[Any, Any]) -> tuple[Any, Any, bool]:
@@ -81,8 +82,10 @@ class FakeClient:
         self.on_send = on_send
         self.created: list[dict[str, Any]] = []
         self.sent: list[str] = []
+        self.interrupted = False
         self.mount_updates: list[tuple[str, str, str]] = []
         self.credentials: list[Any] = []
+        self.created_values: dict[str, str] = {}
         self.credential_updates: list[tuple[str, dict[str, Any]]] = []
         self.beta = ns(
             sessions=ns(
@@ -116,6 +119,9 @@ class FakeClient:
         return [] if idle is None else [idle]
 
     def send(self, session_id: str, events: list[dict[str, Any]]) -> None:
+        if events[0]["type"] == "user.interrupt":
+            self.interrupted = True
+            return
         self.sent.append(events[0]["content"][0]["text"])
         self.phases.pop(0)
         if self.on_send:
@@ -132,10 +138,14 @@ class FakeClient:
     def list_credentials(self, vault_id: str) -> list[Any]:
         return self.credentials
 
+    def create_credential_value(self, auth: dict[str, Any]) -> str:
+        return auth.get("token") or auth["secret_value"]
+
     def create_credential(
         self, vault_id: str, *, display_name: str, auth: dict[str, Any]
     ) -> None:
         name = auth.get("mcp_server_url") or auth.get("secret_name")
+        self.created_values[str(name)] = self.create_credential_value(auth)
         self.credentials.append(
             ns(
                 id=f"cred_{name}",
@@ -171,6 +181,7 @@ class FakeGitHub:
         self.deleted: list[int] = []
         self.unlabeled: list[int] = []
         self.ready: list[int] = []
+        self.polls = 0
 
     def issue(self, number: int) -> dict[str, Any]:
         return self.issue_data
@@ -186,7 +197,11 @@ class FakeGitHub:
         return self.pr
 
     def required_checks(self, pr: int) -> list[dict[str, str]]:
+        self.polls += 1
         return self.checks.pop(0) if len(self.checks) > 1 else self.checks[0]
+
+    def required_contexts(self) -> set[str]:
+        return {"v2-loader", "factory-guard"}
 
     def failed_job_logs(self, checks: list[dict[str, str]]) -> list[tuple[str, str]]:
         return [
@@ -259,7 +274,12 @@ def start(github: FakeGitHub, client: FakeClient, requester: str = OWNER) -> str
     )
 
 
-def watch(client: FakeClient, github: FakeGitHub, minutes: int = 270) -> str:
+def watch(
+    client: FakeClient,
+    github: FakeGitHub,
+    minutes: int = 270,
+    status_comment_id: int | None = 55,
+) -> str:
     dispatch.run_watch(
         client=client,
         github=github,
@@ -267,11 +287,12 @@ def watch(client: FakeClient, github: FakeGitHub, minutes: int = 270) -> str:
         lock=LOCK,
         session_id="sesn_1",
         issue=799,
-        status_comment_id=55,
+        status_comment_id=status_comment_id,
         minutes=minutes,
         clock=FakeClock(),  # type: ignore[arg-type]
     )
-    assert github.deleted == [55] and github.unlabeled == [799]
+    assert github.deleted == ([] if status_comment_id is None else [55])
+    assert github.unlabeled == [799]
     (number, report, token) = github.comments[-1]
     assert number == 799 and token == "ghs_app"
     return report
@@ -425,9 +446,7 @@ def test_watch_times_out_as_blocked() -> None:
         FakeGitHub(),
         minutes=5,
     )
-    assert (
-        "still running after 5 minutes" in report and "Outcome: **blocked**" in report
-    )
+    assert "interrupted session" in report and "Outcome: **blocked**" in report
 
 
 def test_watch_reports_even_when_watching_fails() -> None:
@@ -475,29 +494,22 @@ def test_tokens_are_minted_once_per_hour_and_reach_vault_and_mount(
     )
     tokens.follow("sesn_1")
     assert tokens.refresh() == "ghs_2"
-    assert calls[1] == (
-        "POST",
-        "/app/installations/42/access_tokens",
-        {
-            "repositories": ["nova-toll-budget-agent"],
-            "permissions": {
-                "contents": "write",
-                "issues": "write",
-                "pull_requests": "write",
-            },
-        },
-    )
-    assert {c.id for c in client.credentials} == {f"cred_{MCP_URL}", "cred_GH_TOKEN"}
+    assert [call[2]["permissions"] for call in calls[1:]] == [
+        {"contents": "write", "issues": "write", "pull_requests": "write"},
+        {"contents": "read", "issues": "read", "pull_requests": "read"},
+    ]
+    assert calls[1][2]["repositories"] == ["nova-toll-budget-agent"]
+    assert client.created_values == {MCP_URL: "ghs_2", "GH_TOKEN": "ghs_3"}
     assert client.mount_updates == [("sesn_1", "res_1", "ghs_2")]
     now[0] += timedelta(minutes=39)
-    assert tokens.refresh() == "ghs_2" and len(calls) == 2
+    assert tokens.refresh() == "ghs_2" and len(calls) == 3
     now[0] += timedelta(minutes=2)
-    assert tokens.refresh() == "ghs_4"
+    assert tokens.refresh() == "ghs_5"
     assert [
         auth["secret_value" if "secret_value" in auth else "token"]
         for _, auth in client.credential_updates
-    ] == ["ghs_4", "ghs_4"]
-    assert client.mount_updates[-1] == ("sesn_1", "res_1", "ghs_4")
+    ] == ["ghs_5", "ghs_6"]
+    assert client.mount_updates[-1] == ("sesn_1", "res_1", "ghs_5")
 
 
 def test_a_gone_session_stops_receiving_tokens(private_key: str) -> None:
@@ -547,3 +559,53 @@ def test_bootstrap_installs_the_toolchain_ci_pins() -> None:
     assert re.findall(r"^terraform_version=(\S+)$", bootstrap, re.MULTILINE) == sorted(
         terraform
     )
+
+
+def test_watch_waits_until_every_required_check_reports() -> None:
+    github = FakeGitHub(pr=pr(), checks=[[check("v2-loader", "pass")], PASSING])
+    report = watch(FakeClient([phase("idle_1")]), github)
+    assert "Outcome: **success**" in report and github.polls == 2
+
+
+def test_a_feedback_round_that_stops_early_is_blocked() -> None:
+    github = FakeGitHub(pr=pr(), checks=[failing("v2-loader")])
+    client = FakeClient([phase("idle_1"), phase("idle_2", stop="retries_exhausted")])
+    report = watch(client, github)
+    assert (
+        "Outcome: **blocked**" in report
+        and "stop reason: `retries_exhausted`" in report
+    )
+
+
+def test_a_timed_out_session_is_interrupted() -> None:
+    client = FakeClient([phase(None, rubric=None, status="running")])
+    watch(client, FakeGitHub(), minutes=5)
+    assert client.interrupted
+
+
+def test_watch_without_a_status_comment_still_reports() -> None:
+    github = FakeGitHub(pr=pr())
+    report = watch(FakeClient([phase("idle_1")]), github, status_comment_id=None)
+    assert "Outcome: **success**" in report
+
+
+def test_start_records_the_session_before_commenting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    outputs = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(outputs))
+
+    class Failing(FakeGitHub):
+        def comment(self, number: int, body: str, token: str | None) -> int:
+            raise RuntimeError("GitHub is down")
+
+    with pytest.raises(RuntimeError):
+        start(Failing(), FakeClient())
+    assert outputs.read_text() == "started=true\nsession_id=sesn_1\n"
+
+
+@pytest.mark.parametrize("bad", ["../agents", "agent_1\nstarted=true", 7])
+def test_a_malformed_lock_id_stops_the_run(bad: object) -> None:
+    lock = {"resources": {dispatch.AGENT_KEY: {"id": bad}}}
+    with pytest.raises(SystemExit, match="malformed"):
+        dispatch.lock_id(lock, dispatch.AGENT_KEY)

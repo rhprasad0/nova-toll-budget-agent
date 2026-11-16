@@ -8,6 +8,7 @@ config:
     allow_mcp_servers: true
     allowed_hosts:
       - github.com
+      - api.github.com
       - objects.githubusercontent.com
       - release-assets.githubusercontent.com
       - releases.hashicorp.com

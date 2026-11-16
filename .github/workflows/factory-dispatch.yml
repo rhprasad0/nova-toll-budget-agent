@@ -51,14 +51,17 @@ jobs:
           REQUESTED_BY: ${{ github.event.sender.login }}
         run: uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" start --requested-by "$REQUESTED_BY"
       - name: Watch session
-        if: steps.start.outputs.started == 'true'
+        if: ${{ !cancelled() && steps.start.outputs.session_id != '' }}
         env:
           FACTORY_APP_PRIVATE_KEY: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
           SESSION_ID: ${{ steps.start.outputs.session_id }}
           STATUS_COMMENT_ID: ${{ steps.start.outputs.status_comment_id }}
-        run: uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" watch --session-id "$SESSION_ID" --status-comment-id "$STATUS_COMMENT_ID"
+        run: |
+          comment=()
+          if [ -n "$STATUS_COMMENT_ID" ]; then comment=(--status-comment-id "$STATUS_COMMENT_ID"); fi
+          uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" watch --session-id "$SESSION_ID" "${comment[@]}"
       - name: Report a failed start
-        if: failure() && steps.start.outcome != 'success'
+        if: failure() && steps.start.outputs.session_id == ''
         run: |
           gh issue comment "$ISSUE_NUMBER" --body "The factory failed before it could start; see the [workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
           gh issue edit "$ISSUE_NUMBER" --remove-label factory

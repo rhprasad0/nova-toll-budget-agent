@@ -38,6 +38,7 @@ API = "https://api.github.com"
 MCP_URL = "https://api.githubcopilot.com/mcp/"
 GH_TOKEN = "GH_TOKEN"
 PERMISSIONS = {"contents": "write", "issues": "write", "pull_requests": "write"}
+READ_PERMISSIONS = {"contents": "read", "issues": "read", "pull_requests": "read"}
 MARGIN = timedelta(minutes=20)
 ATTEMPTS = 3
 
@@ -104,8 +105,8 @@ class InstallationTokens:
     def refresh(self) -> str:
         if self.token is not None and self.now() < self.expires_at - MARGIN:
             return self.token
-        token, expires_at = self.mint()
-        self.write_vault(token)
+        token, reader, expires_at = self.mint()
+        self.write_vault(token, reader)
         for session_id, resource_id in list(self.mounts.items()):
             try:
                 self.client.beta.sessions.resources.update(
@@ -121,7 +122,7 @@ class InstallationTokens:
         self.token, self.expires_at = token, expires_at
         return token
 
-    def mint(self) -> tuple[str, datetime]:
+    def mint(self) -> tuple[str, str, datetime]:
         issued = int(self.now().timestamp())
         assertion = jwt.encode(
             {"iat": issued - 60, "exp": issued + 540, "iss": self.app_client_id},
@@ -129,17 +130,24 @@ class InstallationTokens:
             algorithm="RS256",
         )
         installation = self.github("GET", f"/repos/{self.repo}/installation", assertion)
-        access = self.github(
-            "POST",
-            f"/app/installations/{installation['id']}/access_tokens",
-            assertion,
-            {"repositories": [self.repo.split("/")[1]], "permissions": PERMISSIONS},
+        minted: list[GitHubJson] = []
+        for permissions in (PERMISSIONS, READ_PERMISSIONS):
+            access = self.github(
+                "POST",
+                f"/app/installations/{installation['id']}/access_tokens",
+                assertion,
+                {"repositories": [self.repo.split("/")[1]], "permissions": permissions},
+            )
+            print(f"::add-mask::{access['token']}", flush=True)
+            minted.append(access)
+        writer, reader = minted
+        expires_at = min(
+            datetime.fromisoformat(access["expires_at"].replace("Z", "+00:00"))
+            for access in minted
         )
-        print(f"::add-mask::{access['token']}", flush=True)
-        expires_at = datetime.fromisoformat(access["expires_at"].replace("Z", "+00:00"))
-        return access["token"], expires_at
+        return writer["token"], reader["token"], expires_at
 
-    def write_vault(self, token: str) -> None:
+    def write_vault(self, token: str, reader: str) -> None:
         credentials = self.client.beta.vaults.credentials
         mcp_id = gh_id = None
         for credential in credentials.list(self.vault_id):
@@ -173,7 +181,7 @@ class InstallationTokens:
                 auth={
                     "type": "environment_variable",
                     "secret_name": GH_TOKEN,
-                    "secret_value": token,
+                    "secret_value": reader,
                     "networking": {
                         "type": "limited",
                         "allowed_hosts": ["api.github.com"],
@@ -185,7 +193,7 @@ class InstallationTokens:
             credentials.update(
                 gh_id,
                 vault_id=self.vault_id,
-                auth={"type": "environment_variable", "secret_value": token},
+                auth={"type": "environment_variable", "secret_value": reader},
             )
 
 
@@ -204,6 +212,7 @@ LOG_LINES = 120
 JOB_LOGS = 6
 GRADED = {"satisfied", "max_iterations_reached", "failed", "interrupted"}
 JOB_LINK = re.compile(r"/actions/runs/(\d+)/job/\d+")
+RESOURCE_ID = re.compile(r"[a-z]+_[A-Za-z0-9]+")
 OUTCOME = (
     "A draft pull request that resolves issue #{issue}, or, if the issue needs a "
     "decision only its owner can make, one comment on the issue that asks for it."
@@ -220,6 +229,7 @@ class GitHub(Protocol):
     def branch_exists(self, branch: str, /) -> bool: ...
     def factory_pull_request(self, issue: int, /) -> dict[str, Any] | None: ...
     def required_checks(self, pr: int, /) -> list[dict[str, Any]]: ...
+    def required_contexts(self) -> set[str]: ...
     def failed_job_logs(
         self, checks: list[dict[str, Any]], /
     ) -> list[tuple[str, str]]: ...
@@ -301,6 +311,15 @@ class GhCli:
         )
         return json.loads(result.stdout) if result.stdout.strip() else []
 
+    def required_contexts(self) -> set[str]:
+        contexts = self.gh(
+            "api",
+            f"repos/{self.repo}/branches/main",
+            "--jq",
+            ".protection.required_status_checks.contexts[]",
+        )
+        return set(contexts.split())
+
     def failed_job_logs(self, checks: list[dict[str, Any]]) -> list[tuple[str, str]]:
         runs = sorted({m[1] for c in checks if (m := JOB_LINK.search(c["link"]))})
         logs: list[tuple[str, str]] = []
@@ -313,7 +332,7 @@ class GhCli:
                     "--json",
                     "jobs",
                     "-q",
-                    '[.jobs[] | select(.conclusion == "failure") | {databaseId, name}]',
+                    '[.jobs[] | select(.conclusion == "failure" or .conclusion == "cancelled") | {databaseId, name}]',
                 )
             )
             for job in jobs:
@@ -385,16 +404,19 @@ def admission_problem(
 
 def lock_id(lock: dict[str, Any], key: str) -> str:
     try:
-        return lock["resources"][key]["id"]
+        resource_id = lock["resources"][key]["id"]
     except KeyError:
         raise SystemExit(
             f"{key} is missing from {LOCK.name}; run Factory Sync first"
         ) from None
+    if not isinstance(resource_id, str) or not RESOURCE_ID.fullmatch(resource_id):
+        raise SystemExit(f"{key} has a malformed ID in {LOCK.name}")
+    return resource_id
 
 
 def session_link(session_id: str, lock: dict[str, Any]) -> str:
     workspace = lock.get("origin", {}).get("workspace_id")
-    if not workspace:
+    if not isinstance(workspace, str) or not RESOURCE_ID.fullmatch(workspace):
         return f"`{session_id}`"
     return f"[`{session_id}`](https://platform.claude.com/workspaces/{workspace}/sessions/{session_id})"
 
@@ -497,12 +519,18 @@ def wait_for_idle(
 def wait_for_checks(
     *, github: GitHub, pr: int, deadline: float, clock: Clock
 ) -> list[dict[str, Any]] | None:
+    required = github.required_contexts()
     while clock.monotonic() < deadline:
         clock.sleep(POLL_SECONDS)
         checks = github.required_checks(pr)
-        if checks and all(check["bucket"] != "pending" for check in checks):
+        reported = {check["name"] for check in checks}
+        if required <= reported and all(c["bucket"] != "pending" for c in checks):
             return [check for check in checks if check["bucket"] in ("fail", "cancel")]
     return None
+
+
+def interrupt(client: Sdk, session_id: str) -> None:
+    client.beta.sessions.events.send(session_id, events=[{"type": "user.interrupt"}])
 
 
 def feedback(
@@ -547,7 +575,8 @@ def watch(
         clock=clock,
     )
     if session is None:
-        return f"The factory's session {link} was still running after {minutes} minutes.\n\nOutcome: **blocked**"
+        interrupt(client, session_id)
+        return f"The factory interrupted session {link} after {minutes} minutes.\n\nOutcome: **blocked**"
     outcome = latest_outcome(session)
     rubric = outcome.result if outcome else "not graded"
     stop = idle.stop_reason.type if idle else "terminated"
@@ -614,10 +643,17 @@ def watch(
                 clock=clock,
             )
             if session is None:
-                status = f"left {pr['url']}; a feedback round did not finish in time"
+                interrupt(client, session_id)
+                status = f"left {pr['url']}; a feedback round ran out of time, so the session was interrupted"
                 break
             if idle is None:
                 status = f"left {pr['url']}; the session ended during a feedback round"
+                break
+            if idle.stop_reason.type != "end_turn":
+                stop = idle.stop_reason.type
+                status = (
+                    f"left {pr['url']}; a feedback round stopped before it finished"
+                )
                 break
             pr = github.factory_pull_request(issue)
             if pr is None:
@@ -737,14 +773,13 @@ def run_start(
         author_email=github.noreply_email(factory_login),
         budget_cents=budget_cents,
     )
+    write_outputs(started="true", session_id=session_id)
     comment_id = github.comment(
         issue_number,
         f"The factory started session {session_link(session_id, lock)} and reports back here when it ends.",
         tokens.refresh(),
     )
-    write_outputs(
-        started="true", session_id=session_id, status_comment_id=str(comment_id)
-    )
+    write_outputs(status_comment_id=str(comment_id))
     return session_id
 
 
@@ -756,7 +791,7 @@ def run_watch(
     lock: dict[str, Any],
     session_id: str,
     issue: int,
-    status_comment_id: int,
+    status_comment_id: int | None,
     minutes: int,
     clock: Clock,
 ) -> None:
@@ -782,7 +817,8 @@ def run_watch(
                 f"::warning::Reporting with GITHUB_TOKEN; the App token failed: {error}"
             )
         github.comment(issue, report, token)
-        github.delete_comment(status_comment_id, token)
+        if status_comment_id is not None:
+            github.delete_comment(status_comment_id, token)
         github.remove_label(issue, token)
 
 
@@ -796,14 +832,24 @@ def main(argv: list[str] | None = None) -> None:
     start.add_argument("--budget-cents", type=int, default=1000)
     follow = commands.add_parser("watch")
     follow.add_argument("--session-id", required=True)
-    follow.add_argument("--status-comment-id", type=int, required=True)
+    follow.add_argument("--status-comment-id", type=int)
     follow.add_argument("--minutes", type=int, default=270)
     args = parser.parse_args(argv)
 
-    lock = json.loads(LOCK.read_text())
-    client = anthropic_client()
     github = GhCli(args.repo)
-    tokens = installation_tokens(client, args.repo, lock)
+    try:
+        lock = json.loads(LOCK.read_text())
+        client = anthropic_client()
+        tokens = installation_tokens(client, args.repo, lock)
+    except Exception:
+        if args.command == "watch":
+            github.comment(
+                args.issue,
+                "The factory could not follow its session; see the workflow run.",
+                None,
+            )
+            github.remove_label(args.issue, None)
+        raise
     if args.command == "start":
         factory_login = os.environ["FACTORY_GITHUB_LOGIN"]
         run_start(
