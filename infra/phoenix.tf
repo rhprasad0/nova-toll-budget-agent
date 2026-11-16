@@ -128,6 +128,10 @@ resource "aws_instance" "phoenix" {
   iam_instance_profile        = aws_iam_instance_profile.phoenix[0].name
   associate_public_ip_address = false
 
+  credit_specification {
+    cpu_credits = "standard"
+  }
+
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"

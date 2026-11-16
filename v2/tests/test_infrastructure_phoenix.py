@@ -54,6 +54,7 @@ def test_phoenix_instance_is_private_and_requires_imdsv2(
     assert instance["instance_type"] == "t4g.small"
     assert instance["associate_public_ip_address"] is False
     assert instance["iam_instance_profile"] == "tollchat-phoenix"
+    assert instance["credit_specification"] == [{"cpu_credits": "standard"}]
     (metadata,) = instance["metadata_options"]
     assert metadata["http_tokens"] == "required"
     assert metadata["http_put_response_hop_limit"] == 1
