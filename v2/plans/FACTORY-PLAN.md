@@ -318,8 +318,9 @@ pay-as-you-go free tier.
    and security group, the RDS ingress rule, the VPC origin and the
    distribution. It is foundation, not a blue-green slot, so it does not belong
    in `v2/infra`. Test it by planned values.
-2. **Ryan:** create the `PHOENIX_SECRET` and admin password parameters. On the
-   thin client, stop
+2. The `PHOENIX_SECRET` and admin password parameters were created on
+   2026-11-16 as random SecureStrings under `alias/aws/ssm`, at Ryan's request.
+   **Ryan:** on the thin client, stop
    Phoenix and the collector, so two Phoenix processes never migrate the same
    database. Then apply the Terraform by hand. No apply while the circuit
    breaker is tripped.
