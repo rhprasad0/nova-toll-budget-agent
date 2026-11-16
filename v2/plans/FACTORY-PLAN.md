@@ -379,10 +379,11 @@ but GitHub Actions.
    Ryan's own PR adds them. Both run on `main`, which is all the federation
    rule admits, so Phoenix's plan job on pull requests is dropped. A watch
    lasts hours and GitHub's identity token five minutes, so `dispatch.py`
-   gives the SDK a token provider that fetches a fresh one. Anthropic accepts
-   each identity token once (it carries a `jti`), and `ant apply` exchanges more
-   than once, so the sync step exchanges one identity token itself and hands
-   `ant` the access token.
+   gives the SDK a token provider that fetches a fresh one. The sync step
+   writes one identity token to the file `ant` reads; Anthropic accepts each
+   identity token once, and `ant apply` exchanges once and reuses the result.
+   The first sync on 2026-11-16 created the agent, environment and vault and
+   saved the lock on `factory-state`.
 4. [x] Extend the Markdown check's exemption to `factory/agents/` and
    `factory/rubrics/`.
 5. [x] Test `dispatch.py` with GitHub's and Anthropic's responses faked, since both
