@@ -198,12 +198,32 @@ runs itself and the list it leaves to CI.
 The token and the guard are the boundary now, so they are tested before any
 session holds the token.
 
-1. **Ryan:** create the GitHub App and install it on this repository only, with
-   Contents, Issues and Pull requests read and write and nothing else: no
+**Status on 2026-11-16: steps 1 and 2 done; step 3 waits on a decision.** The
+App is `tollchat-factory` (login `tollchat-factory[bot]`), installed on this
+repository only with Contents, Issues and Pull requests write and Metadata read,
+and no webhook. Its private key is the secret `FACTORY_APP_PRIVATE_KEY` in a
+`factory` environment that only `main` may deploy from, so a pull request's run
+can never read it; Phoenix uses a plain repository secret. The variables are
+`FACTORY_APP_CLIENT_ID` and `FACTORY_GITHUB_LOGIN`. No ruleset or branch
+protection lists a bypass actor.
+
+1. [x] **Ryan:** create the GitHub App and install it on this repository only,
+   with Contents, Issues and Pull requests read and write and nothing else: no
    Workflows, Actions or Administration. Do not add it to any bypass list.
-2. Test an installation token against real GitHub: a push that edits a workflow
-   file, changes `main`, or moves a release tag is rejected.
-3. Add `factory-guard.yml`. It runs on every PR the App's login opened and
+2. [x] Test an installation token against real GitHub. On 2026-11-16 an
+   installation token was refused a new branch that edits
+   `.github/workflows/ci.yml` (no `workflows` permission), a direct push to
+   `main` (`GH006`: pull request and 7 required checks), and moving `v1.1.2`
+   (`GH013`: protected tag). A plain new branch was accepted, then deleted.
+3. **Ryan:** require an approving review before the App can merge. `main`
+   requires a pull request and the seven checks but zero approvals, so the
+   App's Contents and Pull requests write would let a session merge its own
+   PR once CI passes. Phoenix relies on a maintainer's approval here. A PR's
+   author cannot approve it, so one required approval stops the App; Ryan, who
+   writes his own PRs, then needs a bypass, such as a ruleset that requires one
+   approval on `main` with the repository admin role as its only bypass actor.
+   Then test that the App's merge of a passing PR is refused.
+4. Add `factory-guard.yml`. It runs on every PR the App's login opened and
    on every `factory/` branch, because the agent picks its branch name and a
    skipped required check counts as passing. It takes
    its logic from `main`, never from the PR's checkout: either inline, as
@@ -211,14 +231,15 @@ session holds the token.
    keeps that guard's rules: the protected paths (now including `factory/`),
    the append-only journal, the partly open release manifest, no merge commits,
    and the secrets scan.
-4. **Ryan:** make the guard a required check.
-5. Note in `SECURITY.md` the factory credentials that live outside SSM: the
-   App's private key as a repository secret, the installation token in the
+5. **Ryan:** make the guard a required check.
+6. Note in `SECURITY.md` the factory credentials that live outside SSM: the
+   App's private key as an environment secret, the installation token in the
    vault, and later the Phoenix API keys.
 
 **Done when:** a test PR opened as the App from a branch not
 named `factory/` that touches a protected path fails the guard, one that only
-appends to the journal passes, and the three pushes in step 2 were refused.
+appends to the journal passes, the three pushes in step 2 were refused, and the
+App cannot merge a PR.
 
 ## Stage 3: Phoenix in AWS
 
