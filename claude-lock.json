@@ -3,5 +3,28 @@
   "origin": {
     "base_url": "https://api.anthropic.com"
   },
-  "resources": {}
+  "resources": {
+    "./agents/worker.md": {
+      "kind": "agent",
+      "id": "agent_01Y8aT4NryjgTqtipBqBssyY",
+      "version": "1",
+      "hash": "3cf3778ceea982d2e3729f121be8c3c2",
+      "remote_hash": "e2a21c5ff9a08e51bd9b7d2f941d6de8",
+      "stamp": "1"
+    },
+    "./environments/tollchat.yaml": {
+      "kind": "environment",
+      "id": "env_01Dx3GHf76EfPsxdAwGuLsxa",
+      "hash": "76b5d14d5717dd901a6deb7bac190e5a",
+      "remote_hash": "a18a3f68821e1e867d049c3d967b9ee9",
+      "stamp": "2026-11-16T21:10:45.215718Z"
+    },
+    "./vaults/github.yaml": {
+      "kind": "vault",
+      "id": "vlt_011Ch7Hzd1ETjAF2Z5WqowC6",
+      "hash": "fa38a8645a0ea1c6e81bab3f10096457",
+      "remote_hash": "fa38a8645a0ea1c6e81bab3f10096457",
+      "stamp": "2026-11-16T21:10:45.397203Z"
+    }
+  }
 }
