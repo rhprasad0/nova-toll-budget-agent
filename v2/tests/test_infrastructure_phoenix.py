@@ -89,8 +89,8 @@ def test_phoenix_reads_secrets_from_ssm_and_checks_the_rds_bundle(
     assert script.startswith("set -euo pipefail\n")
     assert "set -x" not in script
     pinned = re.search(
-        r'"([0-9a-f]{64})  \$state/rds-ca\.pem\.new"',
-        (REPO_ROOT / "factory/setup.sh").read_text(),
+        r'local ca_sha256="([0-9a-f]{64})"',
+        (REPO_ROOT / "v2/scripts/build_loader_zip.sh").read_text(),
     )
     assert pinned
     assert f"'{pinned[1]}  /etc/phoenix/rds-ca.pem.new' | sha256sum --check\n" in script
