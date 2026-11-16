@@ -61,7 +61,7 @@ def commit(repo: Path, change: Callable[[Path], None]) -> list[str]:
      ".claude/settings.json", "SECURITY.md", "org-circuit-breaker/handler.py",
      "v2/CLAUDE.md", "docs/deep/AGENTS.md", "CLAUDE.local.md", "v2/claude.md",
      "v2/.claude/settings.json", ".githooks/pre-commit", ".mcp.json", "docs/SECURITY.md",
-     "v2/stack.tf.json"],
+     "v2/stack.tf.json", "factory/host/guard.py"],
 )  # fmt: skip
 def test_a_protected_path_blocks_the_push(repo: Path, path: str) -> None:
     assert commit(repo, lambda r: write(r, path, "x\n")) == [
@@ -207,6 +207,41 @@ def test_the_manifest_may_change_only_digests_and_packages(repo: Path) -> None:
 
 def test_an_ordinary_change_passes(repo: Path) -> None:
     assert commit(repo, lambda r: write(r, "v2/app.py", "print('hello')\n")) == []
+
+
+def run_cli(repo: Path) -> subprocess.CompletedProcess[str]:
+    clean = repo.parent / f"{repo.name}-cli"
+    subprocess.run(["git", "init", "--quiet", str(clean)], check=True)
+    subprocess.run(["git", "-C", str(clean), "fetch", "--quiet", str(repo),
+                    "main:refs/heads/main", "factory/issue-1:refs/heads/candidate"],
+                   check=True)  # fmt: skip
+    return subprocess.run(
+        ["python3", str(Path(guard.__file__)), str(clean), "refs/heads/candidate",
+         str(CONFIG), "main"],
+        capture_output=True, text=True, check=False,
+    )  # fmt: skip
+
+
+def test_the_command_line_fails_a_protected_change_with_an_annotation(
+    repo: Path,
+) -> None:
+    write(repo, ".github/workflows/ci.yml", "x\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "--quiet", "-m", "work")
+    done = run_cli(repo)
+    assert done.returncode == 1
+    assert done.stdout == (
+        "::error::Factory PRs may not do this: "
+        "changes protected path .github/workflows/ci.yml\n"
+    )
+
+
+def test_the_command_line_passes_an_ordinary_change(repo: Path) -> None:
+    write(repo, "v2/app.py", "print('hello')\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "--quiet", "-m", "work")
+    done = run_cli(repo)
+    assert (done.returncode, done.stdout) == (0, "")
 
 
 def test_a_secrets_scan_that_fails_blocks_the_push(repo: Path, tmp_path: Path) -> None:

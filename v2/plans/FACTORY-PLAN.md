@@ -223,7 +223,14 @@ protection lists a bypass actor.
    agent's instructions, which forbid merging, and its GitHub MCP tools, which
    leave out `merge_pull_request`; `gh` in the sandbox could still call the
    merge API.
-4. Add `factory-guard.yml`. It runs on every PR the App's login opened and
+4. [x] Built on 2026-11-16, not yet run on GitHub: `factory-guard.yml` checks
+   out the PR's base commit, fetches the PR into a clone without a checkout,
+   and runs `factory/host/guard.py` from the base, which now also protects
+   `factory/` and has a command line. One limit remains: a push the App makes
+   to a branch Ryan opened runs the guard, but Ryan's next push to that branch
+   skips it, and a skipped required check counts as passing.
+
+   Add `factory-guard.yml`. It runs on every PR the App's login opened and
    on every `factory/` branch, because the agent picks its branch name and a
    skipped required check counts as passing. It takes
    its logic from `main`, never from the PR's checkout: either inline, as
