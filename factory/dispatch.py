@@ -483,8 +483,10 @@ def wait_for_idle(
             )
             if idle is not None and idle.id != after:
                 outcome = latest_outcome(session)
-                grading = idle.stop_reason.type == "end_turn" and (
-                    outcome is None or outcome.result not in GRADED
+                grading = (
+                    idle.stop_reason.type == "end_turn"
+                    and outcome is not None
+                    and outcome.result not in GRADED
                 )
                 if not grading:
                     return session, idle

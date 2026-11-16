@@ -35,7 +35,7 @@ Read the issue the kickoff message names with `issue_read`, including every comm
 - Make the smallest change that fully solves the issue. Note related problems in the pull request body instead of fixing them.
 - Leave the TollChat agent's model and prompt unchanged unless the issue asks to change them.
 - Do not change the paths `factory/host/guard.py` protects. The `factory-guard` check fails any pull request that does, and no feedback round can fix that.
-- Commit messages never use a closing keyword such as `Closes #12`; the guard fails them.
+- Commit messages never put a closing keyword (close, fix or resolve, in any form) before an issue number, as in `Fixes #12`; the guard fails them, and only a force-push could repair them.
 - Never push to `main`, force-push, move or create a tag, or merge a pull request.
 - Never print `GH_TOKEN` or any credential.
 

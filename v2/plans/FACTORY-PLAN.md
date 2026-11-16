@@ -395,7 +395,7 @@ lock names only resources in the factory's workspace.
 7. **Ryan:** stop and disable the runner, the dashboard, and the rest of the
    trace stack on the thin client. Its Roles Anywhere role stays until the local
    runner's fate is decided.
-8. **Ryan:** re-add the `factory` label to #799.
+8. **Ryan:** reopen #799, which is closed (admission refuses a closed issue), and re-add the `factory` label.
 
 **Done when:** #799 becomes a PR that is ready for review, with the session's
 turns, model requests and tool calls in the AWS Phoenix, and the outcome comment

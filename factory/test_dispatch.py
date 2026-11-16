@@ -336,7 +336,7 @@ def test_watch_waits_for_grading_then_marks_the_passing_pr_ready() -> None:
     client = FakeClient(
         [
             passing(phase(None, rubric=None, status="running")),
-            passing(phase("idle_1", rubric="running")),
+            passing(phase("idle_1", rubric="evaluating")),
             phase("idle_1"),
         ]
     )
@@ -409,6 +409,7 @@ def test_watch_calls_a_round_without_a_push_flawed() -> None:
             "stopped before it finished",
         ),
         (phase(None, status="terminated"), pr(), "blocked", "stopped and left"),
+        (phase("idle_1", rubric=None), pr(), "flawed", "rubric: `not graded`"),
     ],
 )
 def test_watch_reports_each_outcome(
