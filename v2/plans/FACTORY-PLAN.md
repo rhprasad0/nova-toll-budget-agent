@@ -4,8 +4,8 @@ Status: **rewritten on 2026-11-16.** The factory moves from the local runner on
 the thin client to Claude Managed Agents, following the
 [Phoenix factory](https://github.com/Arize-ai/phoenix/tree/main/factory) as
 closely as a one-lane version can. Phoenix moves off the thin client into AWS,
-and both the factory and the TollChat agent send their traces to it. Nothing
-below is built yet.
+and both the factory and the TollChat agent send their traces to it. Stages 1
+to 3 are done; each stage records its own status.
 
 This plan grants no AWS, Terraform, database, or CI authority; each step that
 touches those says who does it. Steps marked **Ryan** need a human at a keyboard
@@ -31,9 +31,8 @@ until Ryan decides to return to it or delete it. Stage numbers in that code's
 comments refer to the plan as it stood before 2026-11-16.
 
 State on 2026-11-16: the poller timer is stopped and disabled on the thin
-client. The runner, the dashboard, and the trace stack (Phoenix, collector,
-proxy, credential helper) still run there. Stage 3 stops Phoenix and the
-collector; Stage 4 stops the rest.
+client, and Phoenix and the collector are stopped. The runner, the dashboard,
+the proxy and the credential helper still run there; Stage 4 stops them.
 
 ## What is kept from Phoenix and what is dropped
 
@@ -245,10 +244,15 @@ appends to the journal passes, and the three pushes in step 2 were refused.
 
 ## Stage 3: Phoenix in AWS
 
-**Status on 2026-11-16: step 1 written, not applied.** `infra/phoenix.tf`, tested
-by `v2/tests/test_infrastructure_phoenix.py`, reads the parameters
+**Status on 2026-11-16: done.** `infra/phoenix.tf`, tested by
+`v2/tests/test_infrastructure_phoenix.py`, reads the parameters
 `/nova-toll/factory/phoenix-secret` (at least 32 characters with a digit and a
-lowercase letter) and `/nova-toll/factory/phoenix-admin-password`.
+lowercase letter) and `/nova-toll/factory/phoenix-admin-password`. It was
+applied to development from this branch by a targeted plan of its 12
+resources, and a re-plan was clean. Phoenix answers at the distribution's
+address in `terraform output phoenix`: `/healthz` returns 200, `/v1/projects`
+without a key 401, and plain HTTP 403. The instance has no public address, so
+only CloudFront reaches it. The Console's OTLP export reaches Phoenix.
 
 **Shape: one small EC2 instance in a private subnet, behind CloudFront.**
 
@@ -320,14 +324,13 @@ pay-as-you-go free tier.
    in `v2/infra`. Test it by planned values.
 2. The `PHOENIX_SECRET` and admin password parameters were created on
    2026-11-16 as random SecureStrings under `alias/aws/ssm`, at Ryan's request.
-   **Ryan:** on the thin client, stop
-   Phoenix and the collector, so two Phoenix processes never migrate the same
-   database. Then apply the Terraform by hand. No apply while the circuit
-   breaker is tripped.
-3. **Ryan:** sign in as `admin@localhost` with that password, and create two
+   Phoenix and the collector on the thin client were stopped first, so two
+   Phoenix processes never migrate the same database, and the Terraform was
+   applied with the circuit breaker clear.
+3. [x] **Ryan:** sign in as `admin@localhost` with that password, and create two
    system API keys: one for Anthropic's exporter and one for the development
    agent.
-4. **Ryan:** add the Phoenix destination in the Claude Console, with the
+4. [x] **Ryan:** add the Phoenix destination in the Claude Console, with the
    CloudFront hostname, content mode Full and the factory's workspace selected,
    and press Test.
 
