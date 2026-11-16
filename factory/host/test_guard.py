@@ -248,7 +248,7 @@ def test_a_secrets_scan_that_fails_blocks_the_push(repo: Path, tmp_path: Path) -
     write(repo, "v2/app.py", "print('hello')\n")
     git(repo, "commit", "--quiet", "-am", "work")
     missing = tmp_path / "missing.toml"
-    assert guard.secrets(repo, "main", "factory/issue-1", missing, ["v2/app.py"]) == [
+    assert guard.leak_scan(repo, "main", "factory/issue-1", missing, ["v2/app.py"]) == [
         "the secrets scan did not cover the branch's 1 commits"
     ]
 
