@@ -1,0 +1,90 @@
+name: factory-sync
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - factory/agents/**
+      - factory/environments/**
+      - factory/vaults/**
+  workflow_dispatch:
+
+concurrency:
+  group: factory-sync
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: factory
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      ANT_VERSION: 2.9.0
+      ANT_SHA256: 69158f6a17e92e8e559e0061bea2530ac5b60976fb6d697673136d110ebe351f
+      LOCK_BRANCH: factory-state
+      ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+      ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+      ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+      ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+    defaults:
+      run:
+        working-directory: factory
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install ant
+        run: |
+          archive="$RUNNER_TEMP/ant.tar.gz"
+          curl -fsSL --proto '=https' -o "$archive" \
+            "https://github.com/anthropics/anthropic-cli/releases/download/v${ANT_VERSION}/ant_${ANT_VERSION}_linux_amd64.tar.gz"
+          echo "$ANT_SHA256  $archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/bin" ant
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Read the lock from the state branch
+        id: lock
+        run: |
+          status=0
+          git ls-remote --exit-code --heads origin "$LOCK_BRANCH" >/dev/null || status=$?
+          if [ "$status" -eq 2 ]; then
+            echo "No $LOCK_BRANCH branch: this apply creates every resource."
+            exit 0
+          fi
+          [ "$status" -eq 0 ] || exit "$status"
+          git fetch --quiet --depth=1 origin "$LOCK_BRANCH:refs/remotes/origin/$LOCK_BRANCH"
+          git show "refs/remotes/origin/$LOCK_BRANCH:claude-lock.json" >claude-lock.json
+      - name: Apply
+        run: |
+          export ANTHROPIC_IDENTITY_TOKEN_FILE="$RUNNER_TEMP/anthropic-identity"
+          curl -fsS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" |
+            jq -r .value >"$ANTHROPIC_IDENTITY_TOKEN_FILE"
+          ant apply --yes .
+      - name: Save the lock on the state branch
+        if: always() && steps.lock.outcome == 'success'
+        env:
+          PUSH_TOKEN: ${{ github.token }}
+        run: |
+          [ -s claude-lock.json ] || exit 0
+          parent=$(git rev-parse --verify --quiet "refs/remotes/origin/$LOCK_BRANCH" || true)
+          if [ -n "$parent" ] && git show "$parent:claude-lock.json" | cmp -s - claude-lock.json; then
+            exit 0
+          fi
+          blob=$(git hash-object -w claude-lock.json)
+          tree=$(printf '100644 blob %s\tclaude-lock.json\n' "$blob" | git mktree)
+          commit=$(git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit-tree "$tree" ${parent:+-p "$parent"} -m "Record factory resources applied from $GITHUB_SHA")
+          git push --quiet "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$commit:refs/heads/$LOCK_BRANCH" || {
+            echo "::error::The lock was not saved on $LOCK_BRANCH; save this file there before the next apply."
+            cat claude-lock.json
+            exit 1
+          }

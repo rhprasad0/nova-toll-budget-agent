@@ -84,9 +84,15 @@ the proxy and the credential helper still run there; Stage 4 stops them.
 - GitHub Actions holds no Anthropic key. It authenticates with
   [Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/wif-providers/github-actions):
   each run trades its GitHub identity token for a short-lived Anthropic token.
-  One federation rule admits only this repository's runs on `main`, bound to a
-  service account in the factory's workspace, so a pull request's run can never
-  reach the vault. Phoenix uses a stored key; this is stricter.
+  Both factory workflows run in the `factory` environment, which only `main` may
+  deploy from, so their tokens' subject is
+  `repo:rhprasad0/nova-toll-budget-agent:environment:factory`. One federation
+  rule admits only that subject with `ref` `refs/heads/main`, bound to a service
+  account in the factory's workspace, so a pull request's run can never reach the
+  vault. Phoenix uses a stored key; this is stricter.
+- The factory's code is written for this repository, following Phoenix's design.
+  Nothing is copied: Phoenix is under the Elastic License 2.0 and this
+  repository is Apache-2.0 (Ryan, 2026-11-16).
 - Phoenix in AWS is one EC2 instance behind CloudFront (Stage 3).
 - The spend cap is $10 per session at list price.
 - CI is the gate. The agent runs what the sandbox can, and failing required
@@ -340,32 +346,52 @@ CloudFront is refused, and the traces the thin client wrote are still there.
 
 ## Stage 4: The factory on Managed Agents
 
-1. In `factory/`: one agent file under `agents/` (Sonnet 5.5, the GitHub MCP
-   tools Phoenix's coordinators use, and the worker instructions from the spec
-   that still hold), one environment, one GitHub vault, one rubric under
-   `rubrics/`, a `bootstrap.sh` shaped by Stage 1, `dispatch.py` cut down from
-   Phoenix's to one lane, and Phoenix's `github_app.py`, which mints the
-   installation tokens and keeps the vault and the session supplied.
-2. Admission keeps this repo's rule, which is stricter than Phoenix's write
+**Status on 2026-11-16: steps 1 to 5 built, not yet run.** `ant apply
+--dry-run` plans the agent, environment and vault, and leaves the parked runner's
+files alone. `dispatch.py` is tested against faked GitHub
+and Anthropic clients; the federated client is built with the pinned SDK but has
+never exchanged a token. Not yet shown: that `ant` accepts the federated token,
+and that the GitHub MCP server's tool names match the agent file. Both show on
+the first sync and the first run.
+
+One limit is accepted, as in Phoenix: the App's token may push any branch but
+`main`, so a session could rewrite `claude-lock.json` on `factory-state`. The
+lock names only resources in the factory's workspace.
+
+1. [x] In `factory/`: `agents/worker.md` (Sonnet 5.5 at high effort, four GitHub
+   MCP tools, and the worker rules from the spec that still hold),
+   `environments/tollchat.yaml`, `vaults/github.yaml`, `rubrics/work-order.md`,
+   `bootstrap.sh` with Stage 1's three fixes, and `dispatch.py` for one lane.
+   `dispatch.py` also mints the installation tokens and keeps the vault and the
+   session's repository mount supplied, so it runs as one uv script, locked by
+   `dispatch.py.lock`. It loads the SDK only to build the client, so its tests
+   run in v2's environment.
+2. [x] Admission keeps this repo's rule, which is stricter than Phoenix's write
    access: the repository owner wrote the issue and added the label, the issue
    is open, and no open PR or `factory/issue-N` branch exists.
-3. Add `factory-sync.yml` (`ant apply` on merge, lock on `factory-state`) and
+3. [x] Add `factory-sync.yml` (`ant apply` on merge, lock on `factory-state`) and
    `factory-dispatch.yml` (start, then watch). Both are workflow files, so
    Ryan's own PR adds them. Both run on `main`, which is all the federation
    rule admits, so Phoenix's plan job on pull requests is dropped. A watch
    lasts hours and GitHub's identity token five minutes, so `dispatch.py`
-   gives the SDK a token provider that fetches a fresh one. Check first that
-   `ant` accepts a federated token; if not, the sync step applies through the
-   SDK.
-4. Extend the Markdown check's exemption to `factory/agents/` and
+   gives the SDK a token provider that fetches a fresh one. The sync step
+   writes one identity token to the file `ant` reads, since an apply takes
+   seconds. If `ant` refuses it, apply through the SDK instead.
+4. [x] Extend the Markdown check's exemption to `factory/agents/` and
    `factory/rubrics/`.
-5. Test `dispatch.py` with GitHub's and Anthropic's responses faked, since both
+5. [x] Test `dispatch.py` with GitHub's and Anthropic's responses faked, since both
    are credentialed: admission refusals, the three feedback rounds, each run
    outcome, and the watch timeout.
-6. **Ryan:** in the Console, register GitHub's issuer, create the service
-   account in the factory's workspace, and add the federation rule. Add the
-   App's private key and the repository variables, and run the sync workflow
-   once from `main`.
+6. **Ryan:** on the Console's Workload identity page, register the issuer
+   `https://token.actions.githubusercontent.com` in discovery mode, create a
+   service account, and add a rule in the factory's workspace with scope
+   `workspace:developer`: subject prefix
+   `repo:rhprasad0/nova-toll-budget-agent:environment:factory`, audience
+   `https://api.anthropic.com`, and claims `ref` `refs/heads/main` and
+   `repository_owner` `rhprasad0`. Add the repository variables
+   `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`,
+   `ANTHROPIC_SERVICE_ACCOUNT_ID` and `ANTHROPIC_WORKSPACE_ID`. The merge runs
+   `factory-sync` once; check that it created `factory-state`.
 7. **Ryan:** stop and disable the runner, the dashboard, and the rest of the
    trace stack on the thin client. Its Roles Anywhere role stays until the local
    runner's fate is decided.
