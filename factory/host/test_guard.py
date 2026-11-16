@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import tempfile
 from collections.abc import Callable
@@ -211,14 +212,17 @@ def test_an_ordinary_change_passes(repo: Path) -> None:
 
 def run_cli(repo: Path) -> subprocess.CompletedProcess[str]:
     clean = repo.parent / f"{repo.name}-cli"
+    trusted = repo.parent / "trusted"
+    trusted.mkdir(exist_ok=True)
+    shutil.copy(CONFIG, trusted / ".gitleaks.toml")
     subprocess.run(["git", "init", "--quiet", str(clean)], check=True)
     subprocess.run(["git", "-C", str(clean), "fetch", "--quiet", str(repo),
                     "main:refs/heads/main", "factory/issue-1:refs/heads/candidate"],
                    check=True)  # fmt: skip
     return subprocess.run(
-        ["python3", str(Path(guard.__file__)), str(clean), "refs/heads/candidate",
-         str(CONFIG), "main"],
-        capture_output=True, text=True, check=False,
+        ["python3", str(Path(guard.__file__)), clean.name, "refs/heads/candidate",
+         "trusted/.gitleaks.toml", "main"],
+        capture_output=True, text=True, check=False, cwd=repo.parent,
     )  # fmt: skip
 
 
