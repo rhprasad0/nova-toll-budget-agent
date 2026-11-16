@@ -1,0 +1,42 @@
+name: factory-guard
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  factory-guard:
+    if: >-
+      startsWith(github.head_ref, 'factory/') ||
+      (vars.FACTORY_GITHUB_LOGIN != '' &&
+       (github.event.pull_request.user.login == vars.FACTORY_GITHUB_LOGIN ||
+        github.event.sender.login == vars.FACTORY_GITHUB_LOGIN))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Install pinned secret checker
+        run: |
+          trusted/v2/scripts/install_check_tools.sh "$RUNNER_TEMP/repository-check-tools"
+          echo "$RUNNER_TEMP/repository-check-tools" >> "$GITHUB_PATH"
+      - name: Fetch the pull request into a clone without a checkout
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          git init --quiet candidate
+          git -C candidate fetch --quiet "https://github.com/$REPOSITORY.git" \
+            "$BASE_SHA:refs/heads/main" "refs/pull/$PR_NUMBER/head:refs/heads/candidate"
+      - name: Guard the pull request with main's rules
+        run: python3 trusted/factory/host/guard.py candidate refs/heads/candidate trusted/.gitleaks.toml main

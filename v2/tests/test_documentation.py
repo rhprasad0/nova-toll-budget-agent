@@ -12,6 +12,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 JOURNAL = "v2/eval/journal/"
+FACTORY_DEFINITIONS = ("factory/agents/", "factory/rubrics/")
 
 
 def tracked_markdown() -> list[str]:
@@ -22,8 +23,12 @@ def tracked_markdown() -> list[str]:
 
 
 def test_markdown_files_only_shrink() -> None:
-    """New rules belong in checks; journal pages are the one growing record."""
-    documents = [path for path in tracked_markdown() if not path.startswith(JOURNAL)]
+    """New rules belong in checks; journal pages and factory definitions may grow."""
+    documents = [
+        path
+        for path in tracked_markdown()
+        if not path.startswith((JOURNAL, *FACTORY_DEFINITIONS))
+    ]
     assert len(documents) <= 35, (
         "Do not add Markdown files. Write a deterministic check whose error names "
         "the fix (CLAUDE.md), or delete a stale document to make room."

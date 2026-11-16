@@ -1,0 +1,19 @@
+name: tollchat-factory
+description: Cloud sandbox for TollChat work orders from rhprasad0/nova-toll-budget-agent.
+config:
+  type: cloud
+  networking:
+    type: limited
+    allow_package_managers: true
+    allow_mcp_servers: true
+    allowed_hosts:
+      - github.com
+      - api.github.com
+      - objects.githubusercontent.com
+      - release-assets.githubusercontent.com
+      - releases.hashicorp.com
+      - registry.terraform.io
+      - truststore.pki.rds.amazonaws.com
+  packages:
+    type: packages
+    apt: [gh, xxd]

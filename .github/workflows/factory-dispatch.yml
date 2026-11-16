@@ -1,0 +1,67 @@
+name: factory-dispatch
+permissions:
+  contents: read
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  dispatch:
+    if: github.event.label.name == 'factory'
+    concurrency:
+      group: factory-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    environment: factory
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+      pull-requests: read
+      checks: read
+      statuses: read
+      actions: read
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+      ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+      ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+      ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+      FACTORY_APP_CLIENT_ID: ${{ vars.FACTORY_APP_CLIENT_ID }}
+      FACTORY_GITHUB_LOGIN: ${{ vars.FACTORY_GITHUB_LOGIN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+      - name: Read the lock from the state branch
+        run: |
+          git fetch --quiet --depth=1 origin factory-state
+          git show FETCH_HEAD:claude-lock.json >factory/claude-lock.json
+      - name: Start session
+        id: start
+        env:
+          FACTORY_APP_PRIVATE_KEY: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
+          REQUESTED_BY: ${{ github.event.sender.login }}
+        run: uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" start --requested-by "$REQUESTED_BY"
+      - name: Watch session
+        if: ${{ !cancelled() && steps.start.outputs.session_id != '' }}
+        env:
+          FACTORY_APP_PRIVATE_KEY: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
+          SESSION_ID: ${{ steps.start.outputs.session_id }}
+          STATUS_COMMENT_ID: ${{ steps.start.outputs.status_comment_id }}
+        run: |
+          comment=()
+          if [ -n "$STATUS_COMMENT_ID" ]; then comment=(--status-comment-id "$STATUS_COMMENT_ID"); fi
+          uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" watch --session-id "$SESSION_ID" "${comment[@]}"
+      - name: Report a failed start
+        if: failure() && steps.start.outputs.session_id == ''
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body "The factory failed before it could start; see the [workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+          gh issue edit "$ISSUE_NUMBER" --remove-label factory

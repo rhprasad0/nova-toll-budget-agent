@@ -1,6 +1,7 @@
 import json
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, cast
@@ -11,6 +12,7 @@ PROTECTED_PREFIXES = (
     "org-circuit-breaker/",
     ".github/",
     ".githooks/",
+    "factory/",
 )
 PROTECTED_FILES = {"security.md", "docs/security.md", ".mcp.json"}
 PROTECTED_NAMES = {"agents.md", "claude.md", "claude.local.md"}
@@ -123,7 +125,7 @@ def export(repo: Path, head: str, paths: list[str], tree: Path) -> None:
             target.write_bytes(data)
 
 
-def secrets(
+def leak_scan(
     repo: Path, base: str, head: str, config: Path, paths: list[str]
 ) -> list[str]:
     commits = int(git(repo, "rev-list", "--count", f"{base}..{head}"))
@@ -169,4 +171,16 @@ def check(repo: Path, head: str, config: Path, base: str = "main") -> list[str]:
     closed = manifest_closed_part
     if MANIFEST in paths and closed(repo, base) != closed(repo, head):
         problems.append(f"changes {MANIFEST} outside deployment_inputs and packages")
-    return problems + secrets(repo, base, head, config, paths)
+    return problems + leak_scan(repo, base, head, config, paths)
+
+
+def main(argv: list[str]) -> int:
+    repo, head, config, base = argv
+    problems = check(Path(repo), head, Path(config), base=base)
+    for problem in problems:
+        print(f"::error::Factory PRs may not do this: {problem}")
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
