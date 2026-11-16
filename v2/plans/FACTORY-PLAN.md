@@ -198,7 +198,7 @@ runs itself and the list it leaves to CI.
 The token and the guard are the boundary now, so they are tested before any
 session holds the token.
 
-**Status on 2026-11-16: steps 1 and 2 done; step 3 waits on a decision.** The
+**Status on 2026-11-16: steps 1 to 3 done.** The
 App is `tollchat-factory` (login `tollchat-factory[bot]`), installed on this
 repository only with Contents, Issues and Pull requests write and Metadata read,
 and no webhook. Its private key is the secret `FACTORY_APP_PRIVATE_KEY` in a
@@ -215,14 +215,14 @@ protection lists a bypass actor.
    `.github/workflows/ci.yml` (no `workflows` permission), a direct push to
    `main` (`GH006`: pull request and 7 required checks), and moving `v1.1.2`
    (`GH013`: protected tag). A plain new branch was accepted, then deleted.
-3. **Ryan:** require an approving review before the App can merge. `main`
-   requires a pull request and the seven checks but zero approvals, so the
-   App's Contents and Pull requests write would let a session merge its own
-   PR once CI passes. Phoenix relies on a maintainer's approval here. A PR's
-   author cannot approve it, so one required approval stops the App; Ryan, who
-   writes his own PRs, then needs a bypass, such as a ruleset that requires one
-   approval on `main` with the repository admin role as its only bypass actor.
-   Then test that the App's merge of a passing PR is refused.
+3. [x] **Ryan:** decide whether the App may merge. `main` requires a pull
+   request and the seven checks but zero approvals, so the App's Contents and
+   Pull requests write lets a session merge its own PR once every required
+   check, the guard included, passes. Phoenix relies on a maintainer's approval
+   here. Ryan decided on 2026-11-16 not to require one. What remains is the
+   agent's instructions, which forbid merging, and its GitHub MCP tools, which
+   leave out `merge_pull_request`; `gh` in the sandbox could still call the
+   merge API.
 4. Add `factory-guard.yml`. It runs on every PR the App's login opened and
    on every `factory/` branch, because the agent picks its branch name and a
    skipped required check counts as passing. It takes
@@ -238,8 +238,7 @@ protection lists a bypass actor.
 
 **Done when:** a test PR opened as the App from a branch not
 named `factory/` that touches a protected path fails the guard, one that only
-appends to the journal passes, the three pushes in step 2 were refused, and the
-App cannot merge a PR.
+appends to the journal passes, and the three pushes in step 2 were refused.
 
 ## Stage 3: Phoenix in AWS
 
