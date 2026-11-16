@@ -86,7 +86,8 @@ the proxy and the credential helper still run there; Stage 4 stops them.
   each run trades its GitHub identity token for a short-lived Anthropic token.
   Both factory workflows run in the `factory` environment, which only `main` may
   deploy from, so their tokens' subject is
-  `repo:rhprasad0/nova-toll-budget-agent:environment:factory`. One federation
+  `repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:factory`:
+  GitHub puts the owner's and repository's numeric IDs in it. One federation
   rule admits only that subject with `ref` `refs/heads/main`, bound to a service
   account in the factory's workspace, so a pull request's run can never reach the
   vault. Phoenix uses a stored key; this is stricter.
@@ -241,7 +242,7 @@ protection lists a bypass actor.
    keeps that guard's rules: the protected paths (now including `factory/`),
    the append-only journal, the partly open release manifest, no merge commits,
    and the secrets scan.
-5. **Ryan:** make the guard a required check.
+5. [x] **Ryan:** make the guard a required check (done 2026-11-16).
 6. [x] Note in `SECURITY.md` the factory credentials that live outside SSM: the
    App's private key as an environment secret, the installation token in the
    vault, and later the Phoenix API keys.
@@ -378,9 +379,10 @@ but GitHub Actions.
    Ryan's own PR adds them. Both run on `main`, which is all the federation
    rule admits, so Phoenix's plan job on pull requests is dropped. A watch
    lasts hours and GitHub's identity token five minutes, so `dispatch.py`
-   gives the SDK a token provider that fetches a fresh one. The sync step
-   writes one identity token to the file `ant` reads, since an apply takes
-   seconds. If `ant` refuses it, apply through the SDK instead.
+   gives the SDK a token provider that fetches a fresh one. Anthropic accepts
+   each identity token once (it carries a `jti`), and `ant apply` exchanges more
+   than once, so the sync step exchanges one identity token itself and hands
+   `ant` the access token.
 4. [x] Extend the Markdown check's exemption to `factory/agents/` and
    `factory/rubrics/`.
 5. [x] Test `dispatch.py` with GitHub's and Anthropic's responses faked, since both
@@ -389,8 +391,9 @@ but GitHub Actions.
 6. **Ryan:** on the Console's Workload identity page, register the issuer
    `https://token.actions.githubusercontent.com` in discovery mode, create a
    service account, and add a rule in the factory's workspace with scope
-   `workspace:developer`: subject prefix
-   `repo:rhprasad0/nova-toll-budget-agent:environment:factory`, audience
+   `workspace:developer`: subject
+   `repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:factory`
+   (an exact match, with no trailing `*`), audience
    `https://api.anthropic.com`, and claims `ref` `refs/heads/main` and
    `repository_owner` `rhprasad0`. Add the repository variables
    `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`,
