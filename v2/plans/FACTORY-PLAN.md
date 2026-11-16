@@ -239,7 +239,7 @@ protection lists a bypass actor.
    the append-only journal, the partly open release manifest, no merge commits,
    and the secrets scan.
 5. **Ryan:** make the guard a required check.
-6. Note in `SECURITY.md` the factory credentials that live outside SSM: the
+6. [x] Note in `SECURITY.md` the factory credentials that live outside SSM: the
    App's private key as an environment secret, the installation token in the
    vault, and later the Phoenix API keys.
 

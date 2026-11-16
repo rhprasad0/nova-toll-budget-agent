@@ -18,6 +18,16 @@ certificate, so it is more powerful than the certificate's own key. To revoke th
 `enabled = false` on the trust anchor in `infra/factory.tf` and apply; credentials
 already issued last up to an hour.
 
+The Managed Agents factory (see [`v2/plans/FACTORY-PLAN.md`](v2/plans/FACTORY-PLAN.md))
+keeps two more credentials outside SSM. The private key of the `tollchat-factory`
+GitHub App is a secret of the `factory` GitHub environment, which only `main` may
+deploy from; the App may write contents, issues and pull requests in this
+repository only, and has no Workflows permission. The installation tokens minted
+from it last an hour and are held in a Claude Managed Agents vault, which swaps a
+placeholder for the token at the sandbox's network edge. GitHub Actions holds no
+Anthropic key: it exchanges its own identity token for a short-lived one. To revoke
+the App, delete its private key in the App's settings, or uninstall it.
+
 Shared production controls live in [`infra/`](infra/); application-specific
 controls live in [`v2/infra/`](v2/infra/). Both use encrypted remote Terraform
 state and least-privilege IAM policies. Report suspected credential exposure or
