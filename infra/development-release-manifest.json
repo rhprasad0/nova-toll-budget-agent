@@ -34,6 +34,7 @@
     "infra/network.tf": "9563ed49f827cea47a2b13855a640cfcb9b9d7db2c31ca3c90010b4af516a081",
     "infra/observability.tf": "e44cca1e76ae2d1bd4f58da7455388713369ffa8f1f49c5db4fb65c8291798ea",
     "infra/outputs.tf": "252052ed70c9b1e03232a2b4d3ccbf12d65712209a5f262401fec2b13aa965f6",
+    "infra/phoenix.tf": "5a3741935132f53b8c592a6b11049c4184b8901bb51a0cf57915175f0fca67f6",
     "infra/providers.tf": "698c60284f5f3621a8fdd47ae29684254d54bb1b57db4fbe5aa42f453a8b57e5",
     "infra/rds.tf": "59ff33513cbc7104b14c342d6138d18a7536d76d0b854676af0bf6c532a132c3",
     "infra/release_manifest.py": "fe3349fd1ac9d9122b03158a10fd4d140afccef604d7d61dee958fb6425a884e",

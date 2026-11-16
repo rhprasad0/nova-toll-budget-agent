@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import subprocess
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,72 @@ def development_plan() -> dict[str, dict[str, Any]]:
     if not shutil.which("terraform") or not infrastructure_plan.PROVIDERS.is_dir():
         pytest.skip("Run terraform -chdir=v2/infra init -backend=false")
     return infrastructure_plan.planned(infrastructure_plan.ROOT)
+
+
+FOUNDATION_DEVELOPMENT_TEST = """
+mock_provider "aws" {
+  mock_data "aws_iam_policy_document" {
+    defaults = { json = "{\\"Version\\":\\"2012-10-17\\",\\"Statement\\":[]}" }
+  }
+  mock_data "aws_caller_identity" {
+    defaults = { account_id = "903859731897" }
+  }
+  mock_resource "aws_db_instance" {
+    override_during = plan
+    defaults = { address = "db.example", resource_id = "db-RESOURCE" }
+  }
+}
+variables {
+  environment               = "development"
+  budget_notification_email = "budget@example.com"
+  fetcher_package_path      = "tests/fetcher.zip"
+}
+run "development" {
+  command = plan
+}
+"""
+
+
+@pytest.fixture(scope="session")
+def foundation_development_plan(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> dict[str, dict[str, Any]]:
+    """What root infra/ plans for development, by address, with mocked providers."""
+    from scripts import infrastructure_plan
+
+    if not shutil.which("terraform") or not infrastructure_plan.PROVIDERS.is_dir():
+        pytest.skip("Run terraform -chdir=v2/infra init -backend=false")
+    module = tmp_path_factory.mktemp("foundation") / "infra"
+    shutil.copytree(
+        infrastructure_plan.ROOT / "infra",
+        module,
+        ignore=shutil.ignore_patterns(".terraform", "build", "__pycache__"),
+    )
+    (module / "tests").mkdir()
+    (module / "tests/fetcher.zip").write_bytes(b"placeholder")
+    (module / "tests/development.tftest.hcl").write_text(FOUNDATION_DEVELOPMENT_TEST)
+    shutil.copy(infrastructure_plan.ROOT / "v2/infra/.terraform.lock.hcl", module)
+    (module / ".terraform").mkdir()
+    (module / ".terraform/providers").symlink_to(
+        infrastructure_plan.PROVIDERS, target_is_directory=True
+    )
+    result = subprocess.run(
+        ["terraform", f"-chdir={module}", "test", "-json", "-verbose"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    events = [
+        json.loads(line) for line in result.stdout.splitlines() if line[:1] == "{"
+    ]
+    plans = [event["test_plan"] for event in events if event["type"] == "test_plan"]
+    assert result.returncode == 0 and len(plans) == 1, [
+        event["diagnostic"] for event in events if "diagnostic" in event
+    ] or result.stderr
+    return {
+        item["address"]: item["change"]["after"]
+        for item in plans[0]["resource_changes"]
+    }
 
 
 @pytest.fixture

@@ -245,6 +245,11 @@ appends to the journal passes, and the three pushes in step 2 were refused.
 
 ## Stage 3: Phoenix in AWS
 
+**Status on 2026-11-16: step 1 written, not applied.** `infra/phoenix.tf`, tested
+by `v2/tests/test_infrastructure_phoenix.py`, reads the parameters
+`/nova-toll/factory/phoenix-secret` (at least 32 characters with a digit and a
+lowercase letter) and `/nova-toll/factory/phoenix-admin-password`.
+
 **Shape: one small EC2 instance in a private subnet, behind CloudFront.**
 
 ```mermaid
