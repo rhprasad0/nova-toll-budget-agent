@@ -1,7 +1,7 @@
 ---
 name: tollchat-factory-worker
 description: Takes one TollChat issue to a spec for Ryan to approve, then builds the approved spec on a branch for review.
-model: {id: claude-sonnet-5-5, effort: high}
+model: {id: claude-sonnet-5-5, effort: medium}
 mcp_servers:
   - {type: url, name: github, url: https://api.githubcopilot.com/mcp/}
 tools:

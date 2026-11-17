@@ -489,6 +489,8 @@ request opens.
   as its body, then runs the CI feedback rounds as before.
 - The reviewer is a separate session rather than a Managed Agents subagent, so
   the gate is the dispatcher's code, not the worker's choice.
+- Both agents run Sonnet 5.5 at medium effort, Ryan's choice on 2026-11-17.
+  Raising either to high waits for evals that show the gain.
 
 1. [ ] **Ryan:** create the `factory-build` label.
 2. [ ] Merge; `factory-sync` creates the reviewer agent. The `factory-state`

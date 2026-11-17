@@ -1,7 +1,7 @@
 ---
 name: tollchat-factory-reviewer
 description: Checks one factory branch against its issue, its approved spec and CLAUDE.md, and reports a verdict without changing anything.
-model: {id: claude-sonnet-5-5, effort: high}
+model: {id: claude-sonnet-5-5, effort: medium}
 tools:
   - type: agent_toolset_20260401
     default_config: {permission_policy: {type: always_allow}}
