@@ -15,10 +15,10 @@
     "./agents/worker.md": {
       "kind": "agent",
       "id": "agent_01Y8aT4NryjgTqtipBqBssyY",
-      "version": "2",
-      "hash": "f32a9d1aa16026ba16e458e429e4ad37",
-      "remote_hash": "2e8d24c96e71ab3c61322933f2070ff1",
-      "stamp": "2"
+      "version": "3",
+      "hash": "08f9e7be38e49493f522ad35f58b0bcb",
+      "remote_hash": "4ed3a8dedac6d129d1aac9d99b2aa0d3",
+      "stamp": "3"
     },
     "./environments/tollchat.yaml": {
       "kind": "environment",
