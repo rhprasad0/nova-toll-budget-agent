@@ -21,11 +21,10 @@ CONTRACTS = (
     "oracle_i66_pricing",
     "oracle_i95_pricing",
     "oracle_ballpark",
-    "oracle_report",
     "oracle_security",
     "oracle_fast",
 )
-WRAPPED = {"oracle_prompt_points", "oracle_report", "oracle_security"}
+WRAPPED = {"oracle_prompt_points", "oracle_security"}
 
 
 def run_diagnostic(
@@ -73,25 +72,26 @@ def run_diagnostic(
             )
 
 
-def retained_version_guard(
-    source: bytes, candidate: bytes, *, report_labels: bool = False
-) -> bytes:
+def retained_version_guard(source: bytes, candidate: bytes) -> bytes:
     """Only a retained metadata assertion follows the new canonical version."""
     pattern = rb"\(SELECT version FROM oracle\.schema_version WHERE singleton\) <> '[0-9]+\.[0-9]+\.[0-9]+'"
     old, new = re.findall(pattern, source), re.findall(pattern, candidate)
     if len(old) != 1 or len(new) != 1:
         raise ValueError("expected exactly one retained/candidate Oracle version guard")
-    source = source.replace(old[0], new[0], 1)
-    if report_labels:
-        # Only the approved report endpoint's two metadata expectations change.
-        # Retain every route, pricing, availability and security assertion.
-        for field in (b"label", b"display_name"):
-            guard = rb"report.destination->>'" + field + rb"'\s*<>\s*'[^']+'"
-            old, new = re.findall(guard, source), re.findall(guard, candidate)
-            if len(old) != 1 or len(new) != 1:
-                raise ValueError("expected exactly one destination metadata guard")
-            source = source.replace(old[0], new[0], 1)
-    return source
+    return source.replace(old[0], new[0], 1)
+
+
+RETIRED_REPORT_SPAN = (
+    b"-- Explicit expected records",
+    b"-- Compare complete wrapper records",
+)
+
+
+def retained_report_removal(source: bytes) -> bytes:
+    start, end = RETIRED_REPORT_SPAN
+    if source.count(start) != 1 or source.count(end) != 1:
+        raise ValueError("expected exactly one retired report span")
+    return source[: source.index(start)] + source[source.index(end) :]
 
 
 WEDNESDAY_PICKER = b"""::date - 7,
@@ -128,7 +128,7 @@ def run_contracts(retained: Path, profile: str) -> None:
             str(CURRENT.parent / "private/ci-profiling/contracts"),
         )
     )
-    names = [name for name in CONTRACTS if profile == "full" or name != "oracle_report"]
+    names = list(CONTRACTS)
     # Validate every input before executing any contract. The new small fixture
     # has no historical version before its introduction.
     current = {name: (CURRENT / f"{name}_contract.sql").read_bytes() for name in names}
@@ -139,15 +139,20 @@ def run_contracts(retained: Path, profile: str) -> None:
     }
     with TemporaryDirectory(prefix="tollchat-retained-contracts-") as temporary:
         adapted: dict[str, Path] = {}
-        for name in {"oracle_restore", "oracle_report"} & baseline.keys():
-            if baseline[name] != current[name]:
-                # Never change archived bytes or the installed schema version.
-                content = retained_version_guard(
-                    baseline[name], current[name], report_labels=name == "oracle_report"
+        if baseline["oracle_restore"] != current["oracle_restore"]:
+            # Never change archived bytes or the installed schema version.
+            path = Path(temporary) / "oracle_restore_contract.sql"
+            path.write_bytes(
+                retained_version_guard(
+                    baseline["oracle_restore"], current["oracle_restore"]
                 )
-                path = Path(temporary) / f"{name}_contract.sql"
-                path.write_bytes(content)
-                adapted[name] = path
+            )
+            adapted["oracle_restore"] = path
+        fast = baseline.get("oracle_fast")
+        if fast is not None and fast != current["oracle_fast"]:
+            path = Path(temporary) / "oracle_fast_contract.sql"
+            path.write_bytes(retained_report_removal(fast))
+            adapted["oracle_fast"] = path
         ballpark = baseline.get("oracle_ballpark")
         if ballpark is not None and ballpark != current["oracle_ballpark"]:
             path = Path(temporary) / "oracle_ballpark_contract.sql"

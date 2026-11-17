@@ -54,7 +54,7 @@ END $$;
 DO $$
 BEGIN
     IF (SELECT count(*) FROM oracle.schema_version) <> 1
-       OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.15.2' THEN
+       OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.16.0' THEN
         RAISE EXCEPTION 'oracle schema version is invalid';
     END IF;
     IF current_database() <> 'nova_toll_development'
