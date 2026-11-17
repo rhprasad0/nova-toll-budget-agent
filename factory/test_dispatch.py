@@ -106,6 +106,7 @@ class FakeClient:
         }
         self.on_send = on_send
         self.messages = {"sesn_1": PR_BODY, "sesn_review": verdict}
+        self.drafts: dict[str, list[str]] = {}
         self.created: list[dict[str, Any]] = []
         self.sent: list[tuple[str, str]] = []
         self.interrupted: list[str] = []
@@ -143,8 +144,11 @@ class FakeClient:
 
     def events(self, session_id: str, **kwargs: Sdk) -> list[Any]:
         if kwargs["types"] == ["agent.message"]:
-            text = self.messages[session_id]
-            return [ns(content=[ns(type="text", text=text)])]
+            texts = [*self.drafts.get(session_id, []), self.messages[session_id]]
+            events = [ns(content=[ns(type="text", text=text)]) for text in texts]
+            if kwargs["order"] == "desc":
+                events.reverse()
+            return events[: kwargs["limit"]]
         assert kwargs["types"] == ["session.status_idle"]
         idle = self.current[session_id][1]
         return [] if idle is None else [idle]
@@ -484,8 +488,10 @@ def test_plan_posts_its_final_spec_as_the_one_reply_a_build_accepts() -> None:
     tokens = FakeTokens()
     client = FakeClient([phase("idle_1")])
     client.messages["sesn_1"] = SPEC_TEXT
+    client.drafts["sesn_1"] = ["## Factory spec\n\nAn earlier draft."]
     github = FakeGitHub()
     report = watch(client, github, stage="plan", tokens=tokens, spec_id=None)
+    assert "earlier draft" not in report
     assert "Outcome: **spec**" in report and report.endswith(SPEC_TEXT)
     assert "`factory-build`" in report and "cost: $4.12" in report
     assert tokens.followed == [("sesn_1", True)]
@@ -517,6 +523,15 @@ def test_plan_without_a_passing_spec_posts_no_spec(
     report = watch(client, FakeGitHub(), stage="plan", spec_id=None)
     assert f"Outcome: **{result}**" in report
     assert dispatch.SPEC_OUTCOME not in report
+    posted = {
+        "id": 12,
+        "body": report,
+        "user": {"login": dispatch.REPORTER},
+        "created_at": "2026-11-17T11:30:00Z",
+    }
+    assert dispatch.approved_spec([posted], LABELED_AT) is None
+    if result == "flawed":
+        assert "Last draft" in report and message[:40] in report
 
 
 def test_an_approved_build_opens_the_pr_and_marks_it_ready_after_ci() -> None:
@@ -924,3 +939,11 @@ def test_a_spec_that_cannot_be_built_is_explained_in_the_one_reply() -> None:
     assert "Outcome: **manual**" in report
     assert report.endswith("The loader has no rows to drop.")
     assert len(github.posted) == 1 and client.created == []
+
+
+def test_a_failed_build_without_a_branch_still_shows_its_last_message() -> None:
+    client = FakeClient([phase("idle_1", rubric="max_iterations_reached")])
+    client.messages["sesn_1"] = "The spec deletes code CI still runs."
+    report = watch(client, FakeGitHub())
+    assert "Outcome: **flawed**" in report
+    assert "The spec deletes code CI still runs." in report

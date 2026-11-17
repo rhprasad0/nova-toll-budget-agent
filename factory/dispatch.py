@@ -5,7 +5,8 @@
 """Take one labeled issue through the factory.
 
 A run has two phases, chosen by the label. `factory` plans: the session mounts
-the repository read-only and posts a spec on the issue. `factory-build` builds
+the repository read-only and ends with a spec, which the dispatcher posts on the
+issue once it passes its rubric. `factory-build` builds
 the spec Ryan approved: the worker pushes a branch, a reviewer session with its
 own context checks it once, the dispatcher opens the pull request, sends failing
 required checks back to the worker, and marks the pull request ready once they
@@ -505,6 +506,23 @@ def approved_spec(
     return found[-1] if found else None
 
 
+def clip(text: str) -> str:
+    return text if len(text) <= BODY_LIMIT else text[:BODY_LIMIT] + "\n\n(truncated)"
+
+
+def draft(summary: str, text: str) -> list[str]:
+    if not text:
+        return []
+    return [
+        "",
+        f"<details><summary>{summary}</summary>",
+        "",
+        clip(text),
+        "",
+        "</details>",
+    ]
+
+
 def pull_request_body(issue: int, body: str) -> str:
     own = [
         line
@@ -512,8 +530,7 @@ def pull_request_body(issue: int, body: str) -> str:
         if not (CLOSING.fullmatch(line.strip()) and line.strip().endswith(f"#{issue}"))
     ]
     kept = CLOSING.sub(lambda match: match[0].replace("#", "# "), "\n".join(own))
-    text = f"Closes #{issue}\n\n{kept.strip()}"
-    return text if len(text) <= BODY_LIMIT else text[:BODY_LIMIT] + "\n\n(truncated)"
+    return clip(f"Closes #{issue}\n\n{kept.strip()}")
 
 
 def verdict_of(text: str) -> str | None:
@@ -678,7 +695,7 @@ def final_message(client: Sdk, session_id: str) -> str:
     for event in client.beta.sessions.events.list(
         session_id, types=["agent.message"], order="desc", limit=1
     ):
-        return "".join(b.text for b in event.content if b.type == "text").strip()
+        return "\n".join(b.text for b in event.content if b.type == "text").strip()
     return ""
 
 
@@ -818,8 +835,10 @@ def watch_plan(run: Run, minutes: int) -> str:
         result, status = "blocked", "stopped before it finished a spec"
     elif rubric != "satisfied" or not spec.startswith(SPEC_HEADING):
         result, status = "flawed", "finished without a spec that passed its rubric"
+        extra += draft("Last draft", spec)
     elif len(spec) > BODY_LIMIT:
         result, status = "flawed", "wrote a spec too long to post"
+        extra += draft("Last draft", spec)
     else:
         result = "spec"
         status = (
@@ -912,6 +931,10 @@ def watch_build(
             else f"stopped and left branch `{branch}`",
         )
     if rubric != "satisfied":
+        if head is None:
+            extra += draft(
+                "Its last message", final_message(run.client, run.session_id)
+            )
         return done(
             "flawed",
             "finished without a branch"
@@ -919,7 +942,7 @@ def watch_build(
             else f"left branch `{branch}` for a human",
         )
     if head is None:
-        extra += ["", final_message(run.client, run.session_id)[:BODY_LIMIT]]
+        extra += ["", clip(final_message(run.client, run.session_id))]
         return done("manual", "explained below why it did not build the spec")
 
     spec = (

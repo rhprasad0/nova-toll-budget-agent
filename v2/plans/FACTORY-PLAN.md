@@ -484,7 +484,7 @@ request opens.
 - `factory-build` starts the build phase. Admission takes the spec in the
   dispatcher's own last plan report (posted as `github-actions[bot]`, before
   the label was added), and refuses an issue without one. The kickoff
-  and the reviewer get that exact comment, and the worker pushes the
+  and the reviewer get the spec from that comment, and the worker pushes the
   branch without opening a pull request, graded by
   `factory/rubrics/work-order.md`.
 - `dispatch.py` then starts `factory/agents/reviewer.md` in its own session on
