@@ -48,8 +48,8 @@ Lambda ARN/version, runtime ARN/version/endpoint, and runtime-emitted release ID
 | Recover | Fresh gated Terraform plan restores retained public/private routing; verify both streamed answers and retained assets | Report recovery separately; deployment remains failed |
 | Complete | Record active/previous identities and keep the previous slot | After observation, cancellation or runner loss, use manual recovery |
 
-Preparation admits verified code-only updates to the fixed loader,
-timed-checks and cost Lambdas, plus the existing reviewed billing changes and
+Preparation admits verified code-only updates to the fixed loader
+and cost Lambdas, plus the existing reviewed billing changes and
 the pinned annotation-only CloudFront transition in either environment.
 Other active-slot, primary-routing, IAM, network, scheduled-job and shared
 configuration changes require a separate infrastructure review.
@@ -75,7 +75,7 @@ An already-completed preparation retains these verified packages without needing
 to repeat that transition from the original baseline. Extending it requires
 review and focused compatibility tests; do not replace the baseline merely to
 silence a gate. Credential-free CI exercises old/new loader events,
-timed-check contracts, the independently scheduled costs handler, and the retained
+the independently scheduled costs handler, and the retained
 database contracts against the disposable upgraded schema.
 
 The trusted PR plan, initial preparation and saved-plan revalidation share the
@@ -88,9 +88,6 @@ preparation or a future partial-application retry.
 On any partial preparation, create a **fresh plan against current state** and
 reuse the verified immutable release objects. Never reapply the stale plan,
 delete the release identity, or overwrite an immutable object to force rebuilding.
-The timed-check Lambda must reference its validated S3 producer. A retained
-object version is accepted only with matching bucket, key, package hash and exact
-Terraform reference; an unknown version requires the changing validated producer.
 Authority-bearing no-ops undergo the same identity and hash checks.
 
 After preparation and again before cutover, bounded Lambda configuration reads
@@ -291,8 +288,7 @@ production origin only (for example, a scoped Playwright route); the reviewed
 CloudFront policy selects staging for matching requests. Keep the header and
 cookies out of screenshots, logs and saved evidence. Verify the candidate identity,
 chat/session/reset behavior and assets, then inspect ordinary public/private blue
-traffic separately. `/eval-dashboard` uses the shared production publisher; it is
-not isolated by slot and there is no additional public API.
+traffic separately.
 
 After approval, fresh candidate/state checks and a new routing-only plan still gate
 cutover; honor any additional protected-environment approval GitHub requests. Observe
@@ -375,7 +371,7 @@ candidate checks pace chat and reset requests below the existing WAF limit
 (35 seconds apart in development; 17 in production). Allow several minutes for
 validation; pacing occurs outside the individual canary deadline.
 
-Shared loader, cost publisher and timed-check packages use paths relative to the
+Shared loader and cost publisher packages use paths relative to the
 Terraform module (`build/*.zip`) in both planning and delivery. Bootstrap must
 use these same paths: absolute workstation or runner paths violate the package
 evidence contract, even when the bytes match.
@@ -409,7 +405,7 @@ contract, trusted builds, canary pacing and five observation probes retain their
 existing behavior. Use hosted measurements before splitting jobs, parallelizing
 tests, consolidating builds or adding caches shared across runs.
 
-The [experiment journal](../eval/journal/2026-09-21.md#september-21-local-iam-test-timings)
+The [experiment journal](../journal/pages/2026-09-21.md#september-21-local-iam-test-timings)
 preserves the September 21 local provider-cache comparison and its limitations.
 
 ## Rehearsal and evidence
@@ -424,7 +420,7 @@ compatibility evidence for both retained applications. A new shared-package
 transition requires updating the reviewed record and its focused tests together.
 **These tests do not prove a live deployment.**
 
-The [experiment journal](../eval/journal/2026-09-14.md#september-16-simulated-controller-outcomes)
+The [experiment journal](../journal/pages/2026-09-14.md#september-16-simulated-controller-outcomes)
 summarizes the historical mocked controller outcomes separately from live evidence.
 
 After bootstrap review, rehearse through protected exact-release delivery:

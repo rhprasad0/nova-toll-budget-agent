@@ -15,7 +15,7 @@
   <div class="wrap">
     <header class="nav">
       <a class="brand" href="/" aria-label="TollChat home"><span class="mark" aria-hidden="true">T</span><span class="brand-name">tollchat<span style="color:var(--blue)">.</span></span><span class="nav-caption">An applied AI project</span></a>
-      <nav class="nav-links" aria-label="Project pages"><a href="/">Chat</a><a href="/cost-dashboard">Cost</a><a href="/eval-dashboard">Evaluation results</a><a href="/release-dashboard" aria-current="page">Release</a></nav>
+      <nav class="nav-links" aria-label="Project pages"><a href="/">Chat</a><a href="/cost-dashboard">Cost</a><a href="/release-dashboard" aria-current="page">Release</a></nav>
     </header>
     <main id="main">
       <nav class="release-history" aria-label="Release history"><span>RELEASE HISTORY · 2 candidates</span><a href="#prompt-2-3-17">v1.2.0 · Prompt 2.3.17 / tool 1.6.0 ↓</a><a href="#prompt-2-3-15">Prompt 2.3.15 / renderer 1.0.2 ↓</a></nav>
@@ -95,7 +95,7 @@
             <p><strong>The production agent:</strong> v1.1.2’s prompt and tools ran on the harness commit that introduced 2.5.19. Its prompt, agent and tool code match v1.1.2 byte for byte, except a version label that reads 2.3.16. Earlier holdout runs of the same agent, on October 10 under harness 2.5.18, scored 76%, 60% and 48%.</p>
             <p><strong>Provenance:</strong> the candidate was measured at commit <a href="https://github.com/rhprasad0/nova-toll-budget-agent/commit/532f9fed6618d20315a85a4c3c939dec3db27937">532f9fed</a>. Between the measured commit and v1.2.0, only the RDS trust-bundle pin and this scorecard changed; no prompt, tool or agent code. The measurement cost $4.77 across all model roles.</p>
           </details>
-          <div class="source-links"><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/eval/journal/2026-10-12.md#october-15-compare-the-v120-candidate-with-the-production-agent-on-holdout">Experiment journal ↗</a><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/eval/GOLDEN_RUNNER.md#external-holdout-checkpoints">Holdout procedure ↗</a><a href="#prompt-2-3-15">Previous scorecard ↓</a></div>
+          <div class="source-links"><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/journal/pages/2026-10-12.md#october-15-compare-the-v120-candidate-with-the-production-agent-on-holdout">Experiment journal ↗</a><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/2181e7e2fffbc3576f0093c86fa0da796deddc18/v2/eval/GOLDEN_RUNNER.md#external-holdout-checkpoints">Holdout procedure ↗</a><a href="#prompt-2-3-15">Previous scorecard ↓</a></div>
         </section>
       </article>
 
@@ -239,7 +239,7 @@
             <p><strong>Limits:</strong> these are exposed development cases under frozen tool replay, after candidate search on the same set. They do not estimate unseen-production accuracy, execute live pricing, or establish production qualification. Recorded grades are preserved, including known grading limitations. The selected search run is subject to selection bias and is not pooled with final verification.</p>
             <p><strong>Provenance:</strong> final verification evaluated commit <a href="https://github.com/rhprasad0/nova-toll-budget-agent/commit/46476e870de6c3e092521da0af68596d7c2cb9bb">46476e87</a>. It recorded prompt metadata 2.3.14 with the candidate SOP; publication advanced only that version literal to 2.3.15. All 100 rendered prompt hashes, tool schemas, model settings, and measurement inputs matched. The normal development workflow still defaults to one repetition. No holdout was evaluated for this entry.</p>
           </details>
-          <div class="source-links"><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/eval/EXPERIMENT_JOURNAL.md#2026-09-27--final-verification-of-the-catalog-candidate">Experiment journal ↗</a><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/d804bf0b5d0fb13eb0b09ed298e154729be5ee29/v2/eval/CURRENT_TIME_RELIABILITY_2026-09-27.md">Baseline reliability report ↗</a><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/scripts/release_statistics.py">Reproduce the aggregate calculation ↗</a></div>
+          <div class="source-links"><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/journal/EXPERIMENT_JOURNAL.md#2026-09-27--final-verification-of-the-catalog-candidate">Experiment journal ↗</a><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/d804bf0b5d0fb13eb0b09ed298e154729be5ee29/v2/eval/CURRENT_TIME_RELIABILITY_2026-09-27.md">Baseline reliability report ↗</a><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/2181e7e2fffbc3576f0093c86fa0da796deddc18/v2/scripts/release_statistics.py">Reproduce the aggregate calculation ↗</a></div>
         </section>
       </article>
     </main>

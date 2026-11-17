@@ -1,117 +1,12 @@
 import re
 
 from tests.infrastructure_support import (
-    APPLICATION_VARIABLES,
-    DEVELOPMENT_PLAN_WORKFLOW,
-    DEVELOPMENT_TFVARS,
     FOUNDATION_AGENTCORE,
     FOUNDATION_TRIGGERS,
     MAIN_TF,
-    PRODUCTION_PLAN_WORKFLOW,
-    TIMED_CHECKS_TF,
-    V2_ROOT,
     assert_assignment,
     terraform_block,
 )
-
-
-def test_timed_lambda_scheduler_and_failure_contract() -> None:
-    lambda_block = terraform_block(
-        TIMED_CHECKS_TF, 'resource "aws_lambda_function" "timed_checks"'
-    )
-
-    assert TIMED_CHECKS_TF.count("alarm_actions       = local.alarm_actions") == 2
-    # Production-only branches: the development plan cannot see them.
-    assert (
-        "local.is_production || var.enable_development_timed_check_alerts"
-        in TIMED_CHECKS_TF
-    )
-
-    lambda_trust = terraform_block(
-        TIMED_CHECKS_TF,
-        'data "aws_iam_policy_document" "timed_checks_lambda_assume"',
-    )
-    scheduler_trust = terraform_block(
-        TIMED_CHECKS_TF,
-        'data "aws_iam_policy_document" "timed_checks_scheduler_assume"',
-    )
-    assert 'identifiers = ["lambda.amazonaws.com"]' in lambda_trust
-    assert 'identifiers = ["scheduler.amazonaws.com"]' in scheduler_trust
-    assert 'variable = "aws:SourceAccount"' in scheduler_trust
-    assert 'variable = "aws:SourceArn"' in scheduler_trust
-
-    lambda_policy = terraform_block(
-        TIMED_CHECKS_TF,
-        'resource "aws_iam_role_policy" "timed_checks_lambda"',
-    )
-    assert 'Action   = ["rds:DescribeDBInstances"]' in lambda_policy
-    assert "/${local.eval_db_user}" in lambda_policy
-    legacy_policy = lambda_policy.split("], local.is_production ? [{", 1)[1]
-    assert 'Sid    = "ConnectRdsIam"' in legacy_policy
-    assert "/${local.database_roles.agent}" in legacy_policy
-    assert "/${local.database_roles.pricing_caller}" in legacy_policy
-    assert "}] : [])" in legacy_policy
-    assert (
-        "local.is_production ? {\n"
-        "      DB_USER         = local.database_roles.agent\n"
-        "      PRICING_DB_USER = local.database_roles.pricing_caller\n"
-        "      } : {}" in lambda_block
-    )
-    for action in (
-        "cloudfront:GetDistribution",
-        "lambda:GetFunctionUrlConfig",
-        "lambda:GetAlias",
-        "lambda:GetFunctionConfiguration",
-        "bedrock-agentcore:GetAgentRuntimeEndpoint",
-        "bedrock-agentcore:InvokeAgentRuntime",
-    ):
-        assert action in lambda_policy
-    assert (
-        '"aws:SourceVpce" = var.foundation.agentcore_vpc_endpoint_id' in lambda_policy
-    )
-    assert "Resource = [aws_cloudfront_distribution.site.arn]" in lambda_policy
-    assert "values(local.agentcore_policy_resources)" in lambda_policy
-    assert (
-        'resource "aws_vpc_security_group_ingress_rule" "agentcore_from_timed_checks"'
-        in TIMED_CHECKS_TF
-    )
-    assert "EVAL_SITE_DISTRIBUTION_ID" in lambda_block
-    assert "AGENTCORE_VPCE_URL" in lambda_block
-    assert 'Action   = ["ssm:GetParameter"]' in lambda_policy
-    assert 'Action   = ["sqs:SendMessage"]' in lambda_policy
-    assert 'Action   = ["sns:Publish"]' in lambda_policy
-    assert "Resource = [var.foundation.alerts_topic_arn]" in lambda_policy
-    assert 'Action   = ["kms:Decrypt", "kms:GenerateDataKey*"]' in lambda_policy
-    assert "Resource = [data.aws_kms_alias.alerts.target_key_arn]" in lambda_policy
-    assert 'Resource = ["*"]' not in lambda_policy
-    assert (
-        'var.environment == "development" || !var.enable_development_timed_check_alerts'
-        in APPLICATION_VARIABLES
-    )
-    assert "enable_development_timed_check_alerts = true" in DEVELOPMENT_TFVARS.replace(
-        "      ", " "
-    )
-
-
-def test_timed_package_is_threaded_through_all_plan_paths() -> None:
-    assert (
-        "-var timed_checks_package_path=build/timed-checks.zip"
-        in DEVELOPMENT_PLAN_WORKFLOW
-    )
-    assert (
-        '("timed_checks", "timed-checks")'
-        in (V2_ROOT / "scripts/release_blue_green.py").read_text()
-    )
-    assert '--bundle-root "$overlay"' in PRODUCTION_PLAN_WORKFLOW
-    assert (
-        'blue_green.py prepare --environment production --plan "$plan_json" --saved-plan "$plan"'
-        in PRODUCTION_PLAN_WORKFLOW
-    )
-    assert (
-        '--package-evidence "$RUNNER_TEMP/blue-green/package-evidence.json"'
-        in PRODUCTION_PLAN_WORKFLOW
-    )
-    assert "-target" not in PRODUCTION_PLAN_WORKFLOW
 
 
 def test_eventbridge_has_both_failure_paths_and_bounded_retries() -> None:

@@ -22,7 +22,7 @@ def _render(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def test_catalog_records_fields_and_order_are_preserved() -> None:
-    points = json.loads((_V2 / "eval/active/training/prompt-points.json").read_text())
+    points = json.loads((_V2 / "tests/fixtures/prompt-points.json").read_text())
     original = deepcopy(points)
     rendered = _render(points)
     assert points == original
@@ -54,7 +54,7 @@ def test_catalog_records_fields_and_order_are_preserved() -> None:
 def test_relations_equal_every_canonical_pair(
     network: str, source: str, pair_count: int
 ) -> None:
-    catalog = json.loads((_V2 / "eval/active/training/prompt-points.json").read_text())
+    catalog = json.loads((_V2 / "tests/fixtures/prompt-points.json").read_text())
     graph = json.loads((_V2 / f"oracle/sources/{source}.json").read_text())
     expected = {
         (

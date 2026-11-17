@@ -279,7 +279,6 @@ jobs:
             v2/infra/build/publisher.zip
             v2/infra/build/agentcore.zip
             v2/infra/build/chat-proxy.zip
-            v2/infra/build/timed-checks.zip
           if-no-files-found: error
 
       - name: Upload immutable release bundle

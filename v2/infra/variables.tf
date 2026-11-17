@@ -10,23 +10,6 @@ variable "publisher_package_path" {
   default     = ""
 }
 
-variable "timed_checks_package_path" {
-  description = "Reviewed v2 timed-checks Lambda zip; required for deployment."
-  type        = string
-  default     = ""
-}
-
-variable "enable_development_timed_check_alerts" {
-  description = "Enable descriptive timed-check evaluation alerts in development."
-  type        = bool
-  default     = false
-
-  validation {
-    condition     = var.environment == "development" || !var.enable_development_timed_check_alerts
-    error_message = "enable_development_timed_check_alerts is only valid for development."
-  }
-}
-
 variable "foundation" {
   description = "Reviewed, non-secret inputs emitted by the account-local foundation root."
   type = object({

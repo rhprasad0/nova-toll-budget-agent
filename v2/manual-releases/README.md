@@ -51,7 +51,7 @@ Production advances through `PRODUCTION_MAX_MIGRATION_NUMBER` in
 preserving route connections and all other point fields. Migration 035 advances the
 production version without changing data or permissions;
 its catalog-reader grants apply only in development. Migration 033 adds
-`pricing.evaluation_runs` and its writer permissions. Complete and verify the [fixed production writer prerequisite](../runbooks/eval-dashboard.md#fixed-production-role-prerequisite)
+`pricing.evaluation_runs` and its writer permissions. Complete and verify the [fixed production writer prerequisite](#fixed-production-role-prerequisite)
 before publishing. A missing writer causes the migration transaction to roll back.
 Do not run migration 033 manually or use the administrator to bypass the protected
 migration workflow.
@@ -98,3 +98,34 @@ After the observation window, cancellation, or runner loss, follow the
 Dispatch `v2-production-recovery.yml` from `main` with the original numeric
 `claim_id`, exact private recovery `record_version`, and reviewed
 `expected_state_sha256`; approve its protected `production` environment.
+
+## Fixed production role prerequisite
+
+This is a separate, human-reviewed administrator bootstrap before publishing the
+release. Verify AWS account `920534282028`, the fixed `nova-toll-db` instance,
+`nova_toll` database, and the existing TLS-verified administrator connection.
+Do not run development bootstrap SQL here or give CREATEROLE to the migrator.
+
+Run the checked-in [fixed role bootstrap](bootstrap_production_eval_writer.sql)
+from the repository root using that administrator connection. Set `PGHOST` to
+the verified production endpoint, `PGPORT=5432`, and `PGSSLROOTCERT` to the pinned
+RDS CA bundle. Obtain the administrator credential through the existing managed
+secret path; keep it in process memory and never put it in a command or file.
+
+```bash
+PGDATABASE=nova_toll PGUSER=nova_toll_admin PGSSLMODE=verify-full \
+  psql -X --set ON_ERROR_STOP=1 --file v2/manual-releases/bootstrap_production_eval_writer.sql
+```
+
+The SQL checks the database name/comment and both administrator identities before
+creating the fixed role, then checks its attributes and membership before commit.
+It runs as one transaction and refuses an existing role. A failed command must
+stop release preparation; verify read-only state before any retry.
+
+If the role already exists, stop and inspect its attributes and memberships;
+do not silently reuse or replace an unknown role. Verify LOGIN, NOINHERIT,
+NOSUPERUSER, NOCREATEDB, NOCREATEROLE, NOREPLICATION, NOBYPASSRLS, the production
+comment, `rds_iam` membership only, and CONNECT on `nova_toll`. This bootstrap
+creates no application tables and runs no schema migration. Migration 033 grants
+only schema usage and SELECT/INSERT/UPDATE on `pricing.evaluation_runs` through
+the protected release workflow.

@@ -428,7 +428,7 @@ def test_workflow_waits_thirty_minutes_without_relaxing_evidence(
 @pytest.mark.parametrize(
     ("paths", "expected"),
     [
-        (["v2/eval/journal/2026-11-09.md", "README.md"], True),
+        (["v2/journal/pages/2026-11-09.md", "README.md"], True),
         ([], False),  # No evidence of what changed: deliver.
         (["README.md", "v2/agent/dev_chat.html"], False),
         (["v2/agent-sops/nova-toll-pricing-assistant.sop.md"], False),  # Pinned.

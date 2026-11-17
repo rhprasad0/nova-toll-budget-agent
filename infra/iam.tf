@@ -108,7 +108,7 @@ resource "aws_iam_role_policy" "replay" {
   policy = data.aws_iam_policy_document.replay.json
 }
 
-# --- GitHub Actions OIDC foundation retained for v2 timed checks -----------
+# --- GitHub Actions OIDC foundation -------------------------------------
 
 resource "aws_iam_openid_connect_provider" "github" {
   url             = "https://token.actions.githubusercontent.com"
@@ -126,8 +126,6 @@ locals {
   development_delivery_role_names = [
     "toll-v2-pricing-loader-dev",
     "nova-toll-v2-timed-checks-dev",
-    "nova-toll-v2-timed-checks-lambda-dev",
-    "nova-toll-v2-timed-checks-scheduler-dev",
     "nova-toll-v2-agentcore-runtime-dev",
     "nova-toll-v2-chat-proxy-dev",
     "tollchat-v2-agent-usage-rollup-dev",
@@ -140,7 +138,6 @@ locals {
     for function_name in [
       "toll-v2-pricing-loader-dev",
       "tollchat-v2-chat-proxy-dev",
-      "nova-toll-v2-timed-checks-dev",
     ] : "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:${function_name}"
   ]
   development_delivery_lambda_resources = flatten([
@@ -156,8 +153,6 @@ locals {
     for queue_name in [
       "toll-v2-pricing-loader-invoke-failure-dev",
       "toll-v2-pricing-loader-delivery-failure-dev",
-      "nova-toll-v2-timed-checks-invoke-failure-dev",
-      "nova-toll-v2-timed-checks-delivery-failure-dev",
     ] : "arn:aws:sqs:${local.development_delivery_region}:${local.development_delivery_account_id}:${queue_name}"
   ]
   development_delivery_event_rule_arns = [
@@ -171,7 +166,6 @@ locals {
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/toll-v2-pricing-loader-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/tollchat-v2-usage-publisher-dev",
-    "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/nova-toll-v2-timed-checks-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
   ]
@@ -187,9 +181,6 @@ locals {
       "tollchat-v2-chat-proxy-errors-dev",
       "tollchat-v2-chat-proxy-failures-dev",
       "tollchat-v2-chat-proxy-latency-dev",
-      "nova-toll-v2-timed-checks-errors-dev",
-      "nova-toll-v2-timed-checks-invoke-failure-queue-dev",
-      "nova-toll-v2-timed-checks-delivery-failure-queue-dev",
     ] : "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:${alarm_name}"
   ]
   development_delivery_legacy_rollup_alarm_arns = [
@@ -235,38 +226,6 @@ locals {
   development_delivery_site_bucket_arn        = "arn:aws:s3:::tollchat-site-${local.development_delivery_account_id}-dev"
   development_delivery_measurement_bucket_arn = "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${local.development_delivery_account_id}-dev"
   development_delivery_artifact_bucket_arn    = "arn:aws:s3:::nova-toll-agentcore-${local.development_delivery_account_id}"
-  development_delivery_timed_schedule_arns = [
-    for schedule_name in [
-      "nova-toll-v2-greenway-eb-fri-0723-dev",
-      "nova-toll-v2-greenway-eb-mon-0723-dev",
-      "nova-toll-v2-greenway-eb-thu-0723-dev",
-      "nova-toll-v2-greenway-eb-tue-0723-dev",
-      "nova-toll-v2-greenway-eb-wed-0723-dev",
-      "nova-toll-v2-greenway-wb-fri-1723-dev",
-      "nova-toll-v2-greenway-wb-mon-1723-dev",
-      "nova-toll-v2-greenway-wb-thu-1723-dev",
-      "nova-toll-v2-greenway-wb-tue-1723-dev",
-      "nova-toll-v2-greenway-wb-wed-1723-dev",
-      "nova-toll-v2-i95-northbound-fri-0617-dev",
-      "nova-toll-v2-i95-northbound-mon-0617-dev",
-      "nova-toll-v2-i95-northbound-sat-1817-dev",
-      "nova-toll-v2-i95-northbound-thu-0617-dev",
-      "nova-toll-v2-i95-northbound-tue-0617-dev",
-      "nova-toll-v2-i95-northbound-wed-0617-dev",
-      "nova-toll-v2-i95-reversal-fri-0147-dev",
-      "nova-toll-v2-i95-reversal-mon-1117-dev",
-      "nova-toll-v2-i95-reversal-sat-1517-dev",
-      "nova-toll-v2-i95-reversal-thu-0147-dev",
-      "nova-toll-v2-i95-reversal-tue-0147-dev",
-      "nova-toll-v2-i95-reversal-wed-0147-dev",
-      "nova-toll-v2-i95-southbound-fri-1417-dev",
-      "nova-toll-v2-i95-southbound-mon-1417-dev",
-      "nova-toll-v2-i95-southbound-sat-1017-dev",
-      "nova-toll-v2-i95-southbound-thu-1417-dev",
-      "nova-toll-v2-i95-southbound-tue-1417-dev",
-      "nova-toll-v2-i95-southbound-wed-1417-dev",
-    ] : "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/default/${schedule_name}"
-  ]
 }
 
 data "aws_iam_policy_document" "development_delivery_assume" {
@@ -854,28 +813,6 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
-    sid     = "ManageApplicationSchedules"
-    actions = ["scheduler:GetSchedule", "scheduler:ListTagsForResource", "scheduler:TagResource", "scheduler:UntagResource", "scheduler:UpdateSchedule"]
-    resources = concat(
-      [
-        "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default",
-      ],
-      local.development_delivery_timed_schedule_arns,
-    )
-  }
-
-  statement {
-    sid       = "PassTimedChecksSchedulerRole"
-    actions   = ["iam:PassRole"]
-    resources = ["arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-timed-checks-scheduler-dev"]
-    condition {
-      test     = "StringEquals"
-      variable = "iam:PassedToService"
-      values   = ["scheduler.amazonaws.com"]
-    }
-  }
-
-  statement {
     sid = "ReadRetiredUsagePublisherIam"
     actions = [
       "iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:ListRoleTags",
@@ -1006,12 +943,6 @@ data "aws_iam_policy_document" "development_delivery" {
     actions   = ["acm:DescribeCertificate", "acm:ListTagsForCertificate"]
     resources = ["arn:aws:acm:us-east-1:903859731897:certificate/0c2c3578-fee5-41b3-9985-ea7465c16a20"]
   }
-
-  statement {
-    sid       = "ReadAlertsKeyForTimedChecks"
-    actions   = ["kms:DescribeKey"]
-    resources = [aws_kms_key.alerts.arn]
-  }
 }
 
 resource "aws_iam_role" "development_delivery" {
@@ -1054,11 +985,11 @@ locals {
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 46, 56)
+      Statement = slice(local.development_delivery_policy_statements, 46, 54)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 56, 65)
+      Statement = slice(local.development_delivery_policy_statements, 54, 62)
     })
   }
 }
@@ -1397,17 +1328,6 @@ data "aws_iam_policy_document" "development_plan" {
   }
 
   statement {
-    sid     = "ReadApplicationSchedules"
-    actions = ["scheduler:GetSchedule", "scheduler:ListTagsForResource"]
-    resources = concat(
-      [
-        "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default",
-      ],
-      local.development_delivery_timed_schedule_arns,
-    )
-  }
-
-  statement {
     sid = "ReadRetiredUsagePublisherIam"
     actions = [
       "iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole", "iam:ListRolePolicies", "iam:ListRoleTags",
@@ -1506,12 +1426,6 @@ data "aws_iam_policy_document" "development_plan" {
     sid       = "ReadDevelopmentCertificate"
     actions   = ["acm:DescribeCertificate", "acm:ListTagsForCertificate"]
     resources = ["arn:aws:acm:${local.development_delivery_region}:${local.development_delivery_account_id}:certificate/0c2c3578-fee5-41b3-9985-ea7465c16a20"]
-  }
-
-  statement {
-    sid       = "ReadAlertsKeyForTimedChecks"
-    actions   = ["kms:DescribeKey"]
-    resources = [aws_kms_key.alerts.arn]
   }
 }
 
@@ -1711,7 +1625,6 @@ locals {
     if !contains(
       setunion(local.development_delivery_trace_statement_sids, toset([
         "PassExistingAgentCoreRuntimeRole",
-        "ReadAlertsKeyForTimedChecks",
       ])),
       statement.Sid,
     )
@@ -1722,13 +1635,6 @@ locals {
     Effect   = "Allow"
     Action   = ["kms:DescribeKey"]
     Resource = ["arn:aws:kms:us-east-1:920534282028:key/52601535-3171-4f21-af72-125daaf1347d"]
-  }
-
-  production_delivery_alerts_key_statement = {
-    Sid      = "ReadProductionAlertsKeyForTimedChecks"
-    Effect   = "Allow"
-    Action   = ["kms:DescribeKey"]
-    Resource = [aws_kms_key.alerts.arn]
   }
 
   production_delivery_read_prefixes = ["Get", "List", "Describe", "GET"]
@@ -1972,19 +1878,15 @@ locals {
     })
     data = jsonencode({
       Version   = "2012-10-17"
-      Statement = concat(slice(local.production_delivery_application_policy_statements, 17, 24), [local.production_delivery_dynamodb_default_key_statement, local.production_delivery_alerts_key_statement])
+      Statement = concat(slice(local.production_delivery_application_policy_statements, 17, 24), [local.production_delivery_dynamodb_default_key_statement])
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
       Statement = concat(slice(local.production_delivery_application_policy_statements, 24, 29), [local.production_delivery_agentcore_default_statement, local.production_delivery_agentcore_pass_role_statement])
     })
-    schedules = jsonencode({
-      Version   = "2012-10-17"
-      Statement = slice(local.production_delivery_application_policy_statements, 29, 31)
-    })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.production_delivery_application_policy_statements, 31, length(local.production_delivery_application_policy_statements))
+      Statement = slice(local.production_delivery_application_policy_statements, 29, length(local.production_delivery_application_policy_statements))
     })
   }
 
@@ -2014,7 +1916,7 @@ locals {
     })
     data = jsonencode({
       Version   = "2012-10-17"
-      Statement = concat(slice(local.production_delivery_discovery_statements, 17, 24), [local.production_delivery_dynamodb_default_key_statement, local.production_delivery_alerts_key_statement])
+      Statement = concat(slice(local.production_delivery_discovery_statements, 17, 24), [local.production_delivery_dynamodb_default_key_statement])
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
@@ -2057,11 +1959,11 @@ locals {
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_plan_policy_statements, 32, 39)
+      Statement = slice(local.development_plan_policy_statements, 32, 38)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_plan_policy_statements, 39, 47)
+      Statement = slice(local.development_plan_policy_statements, 38, 45)
     })
   } : {}
 }

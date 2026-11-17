@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import filecmp
 import hashlib
 import importlib.util
 import json
-import os
 import shutil
 import stat
 import subprocess
@@ -36,11 +34,6 @@ else:
 
 COMMIT = "a" * 40
 Entry = tuple[str, bytes, int | None]
-
-
-def _file_sha256(path: Path) -> str:
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 @pytest.fixture
@@ -103,150 +96,6 @@ def _bundle(fixture_root: Path, tmp_path: Path) -> tuple[Path, Path]:
     archive = tmp_path / "release.zip"
     _archive(release, archive)
     return archive, release
-
-
-def test_timed_checks_zip_is_flat_deterministic_and_importable(tmp_path: Path) -> None:
-    builder = Path(__file__).parents[1] / "scripts/build_timed_checks_zip.sh"
-    package = Path(__file__).parents[1] / "infra/build/timed-checks.zip"
-    requirements = builder.parent / "timed-checks-requirements.in"
-    lock = builder.parent / "timed-checks-requirements.txt"
-    builder_source = builder.read_text(encoding="utf-8")
-    requirements_source = requirements.read_text(encoding="utf-8")
-
-    assert "--require-hashes" in builder_source
-    assert "--python-platform x86_64-manylinux_2_28" in builder_source
-    assert "--python-version 3.13" in builder_source
-    assert "--only-binary :all:" in builder_source
-    assert "strands-agents-evals==1.1.0" in requirements_source
-    assert (
-        'name = "strands-agents-evals"' in (builder.parents[1] / "uv.lock").read_text()
-    )
-    lock_lines = lock.read_text(encoding="utf-8").splitlines()
-    assert all(
-        line.startswith(" ") or line.rstrip().endswith("\\")
-        for line in lock_lines
-        if line.strip()
-    )
-    assert any(line.lstrip().startswith("--hash=sha256:") for line in lock_lines)
-
-    source_paths = {
-        "handler.py",
-        "timed_checks.py",
-        "eval/run_evaluation.py",
-        "eval/simulated.py",
-        "eval/live_runtime.py",
-        "eval/dashboard.py",
-        "eval/test-cases.jsonl",
-        "agent/__init__.py",
-        "agent/toll_agent.py",
-        "agent-sops/nova-toll-pricing-assistant.sop.md",
-        *{
-            f"agent_tools/{path.name}"
-            for path in (builder.parents[1] / "agent_tools").glob("*.py")
-        },
-    }
-    digests: list[str] = []
-    inventories: list[list[str]] = []
-    first_copy = tmp_path / "timed-checks-first.zip"
-    for iteration in range(2):
-        result = subprocess.run(
-            ["bash", str(builder)],
-            cwd=builder.parents[1],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, result.stderr
-        assert (
-            package.is_file()
-            and not package.is_symlink()
-            and package.stat().st_size > 0
-        )
-        if iteration == 0:
-            shutil.copyfile(package, first_copy)
-        else:
-            assert filecmp.cmp(package, first_copy, shallow=False)
-        digests.append(_file_sha256(package))
-
-        with zipfile.ZipFile(package) as archive:
-            infos = archive.infolist()
-            names = [info.filename for info in infos]
-            inventories.append(names)
-            assert names == sorted(names)
-            assert set(source_paths).issubset(names)
-            for name in names:
-                if name.startswith(("agent/", "agent_tools/", "eval/", "agent-sops/")):
-                    assert name in source_paths
-            assert sum(info.file_size for info in infos) <= 262_144_000
-            for info in infos:
-                mode = info.external_attr >> 16
-                assert not info.is_dir()
-                assert stat.S_ISREG(mode)
-                assert stat.S_IMODE(mode) in {0o644, 0o755}
-                assert info.date_time == (2020, 1, 1, 0, 0, 0)
-                assert not any(
-                    part == ".env" or part.startswith(".env.") or part.endswith(".pyc")
-                    for part in info.filename.split("/")
-                )
-        assert not any(name.endswith("/") for name in names)
-
-    assert digests[0] == digests[1]
-    assert inventories[0] == inventories[1]
-    # pytest runs inside a virtualenv; the build must not depend on that.
-    pinned = json.loads(
-        (builder.parents[2] / "infra/development-release-manifest.json").read_text()
-    )["packages"]["timed-checks.zip"]
-    assert digests[0] == pinned, (
-        "timed-checks.zip changed: build the zips and pass their sha256sum "
-        "listing to v2/scripts/update_release_manifest.py (see v2/RUNBOOK.md)"
-    )
-
-    stage = tmp_path / "timed-checks-stage"
-    with zipfile.ZipFile(package) as archive:
-        archive.extractall(stage)
-    smoke = r"""
-import os
-import sys
-from pathlib import Path
-
-sys.path.insert(0, sys.argv[1])
-import boto3
-
-calls = []
-boto3.client = lambda *args, **kwargs: calls.append((args, kwargs))
-import agent.toll_agent
-import eval.run_evaluation
-import eval.simulated
-import handler
-import timed_checks
-
-assert callable(handler.handler)
-assert calls == []
-assert Path(eval.run_evaluation.__file__).with_name("test-cases.jsonl").is_file()
-assert (
-    Path(agent.toll_agent.__file__).resolve().parents[1]
-    / "agent-sops"
-    / "nova-toll-pricing-assistant.sop.md"
-).is_file()
-assert not any(
-    name.startswith(("AWS_", "ACTIONS_", "GITHUB_", "OPENAI_", "CLOUDFLARE_"))
-    for name in os.environ
-)
-"""
-    isolated_env = {
-        "PATH": os.environ["PATH"],
-        "PYTHONDONTWRITEBYTECODE": "1",
-        "PYTHONNOUSERSITE": "1",
-        "TZ": "UTC",
-    }
-    result = subprocess.run(
-        [sys.executable, "-I", "-c", smoke, str(stage)],
-        env=isolated_env,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stderr
 
 
 def _patch_checkout_sources(

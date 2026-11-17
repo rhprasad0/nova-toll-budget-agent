@@ -37,7 +37,7 @@ const { chromium } = require("playwright");
   try {
     const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 1000 } });
     const page = await context.newPage();
-    for (const source of ["/", "/faq.html", "/cost-dashboard", "/eval-dashboard"]) {
+    for (const source of ["/", "/faq.html", "/cost-dashboard"]) {
       await page.goto(origin + source);
       await page.setViewportSize({ width: 320, height: 740 });
       assert.equal(await page.locator(".nav-links").evaluate(node => node.scrollWidth <= node.clientWidth), true, `navigation overflows on ${source}`);

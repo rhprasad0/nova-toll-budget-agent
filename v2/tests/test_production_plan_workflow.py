@@ -115,7 +115,7 @@ if name == "python3":
         work = pathlib.Path(value("--work-dir")); work.mkdir()
         (work / "prepare.tfplan").write_bytes(b"PRIVATE_PLAN")
         (work / "previous.json").write_text(os.environ["PREVIOUS"])
-        (work / "package-evidence.json").write_text(json.dumps({"environment":"production","account":"920534282028","release":"a"*40,"packages":{name:{"path":"build/"+name,"sha256":"0"*64} for name in ("loader.zip","publisher.zip","timed-checks.zip")}}))
+        (work / "package-evidence.json").write_text(json.dumps({"environment":"production","account":"920534282028","release":"a"*40,"packages":{name:{"path":"build/"+name,"sha256":"0"*64} for name in ("loader.zip","publisher.zip")}}))
         sys.exit(0)
     os.execv(sys.executable, [sys.executable, *args])
 if name == "jq":

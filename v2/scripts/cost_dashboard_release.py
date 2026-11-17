@@ -33,7 +33,6 @@ RESOURCES = {
     'aws_s3_object.cost_assets["costs.mjs"]',
     'aws_s3_object.cost_assets["costs-benchmark.json"]',
     'aws_s3_object.cost_assets["evals.css"]',
-    "aws_s3_object.evals",
     "aws_cloudfront_function.public_report_routes",
     "aws_cloudwatch_metric_alarm.costs_errors",
     *(
@@ -53,11 +52,9 @@ ASSET_SHA256: dict[str, str] = {
     "costs.css": "8578e3aa2939740c6010793662aa75ea99cac633e59853804e8d15e094bb0ce2",
     "costs.mjs": "38964764c0202b1b4a35750359acd9db3ddb13020102ade803dbda383b38d153",
     "evals.css": "a769365269ebde99103a56e6ce64a619f1a728c137aeeeca93ea04023db85688",
-    "public-report-routes.js": "7d05de16a43e9fde954b87b38b62e35acfff6076666907e2bc94d45079eefc9f",
-    "development/costs.html": "8c785f3cd1e365640ed00343acba2f9ce1c2db5166063ad4a1003f8e474c172b",
-    "development/evals.html": "0d291fc57e710721696002feec0285c0e9adcae3c3427a328d32215d516dc6cf",
-    "production/costs.html": "ad1f2d5f7e24cb383d1b98baf716173b6c7c7bdcc2bf5241b5e6cfe7b5d3da6b",
-    "production/evals.html": "9786ac45d0f48086ffcfa79889d9959da63bf1262d278fa47cda0ed234d2ac57",
+    "public-report-routes.js": "179b0800976e8a700855a73898567e884f73a64fa138a03fb14f87b250f6dedc",
+    "development/costs.html": "252c2ff814efc255b6307bade5b02be162e3e57a39886f412d71e463d9981a7e",
+    "production/costs.html": "ab91227c4044f0f02c3bce7037d0a0f772fd4a5458dad1c4fd523c8f7128ae31",
 }
 
 
@@ -220,7 +217,7 @@ def routes(
         row["target_origin_id"] = "documents"
         row["function_association"] = target["function_association"]
     require(retained == proposed)
-    models = [row for row in old if row["path_pattern"] == "/eval-dashboard*"]
+    models = [row for row in old if row["path_pattern"] == "/usage.json"]
     require(len(models) == 1)
     expected = {path: dict(models[0], path_pattern=path) for path in COST_ROUTES}
     require(
@@ -705,8 +702,6 @@ def validate(
         asset = (
             "costs.html"
             if address.endswith("cost_dashboard")
-            else "evals.html"
-            if address.endswith(".evals")
             else address.split('"')[1]
         )
         expected = {

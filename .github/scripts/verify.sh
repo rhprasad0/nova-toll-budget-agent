@@ -56,26 +56,17 @@ no_em_dashes() {
     }
 }
 
-corpus() {
-  uv run --locked python -m eval.golden --allow-uninitialized || {
-    echo 'If corpus inputs or protected sources changed, freeze each split, from v2:' >&2
-    echo '  uv run python -m eval.corpus freeze --corpus eval/active/SPLIT --split SPLIT --version NEWER' >&2
-    return 1
-  }
-}
-
 # The trusted development plan rejects a stale package digest, but it needs AWS;
 # this catches it here, straight after the builds.
 package_digests() {
   local sums
   sums="$(mktemp)"
-  (cd infra/build && sha256sum agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip) >"$sums"
+  (cd infra/build && sha256sum agentcore.zip chat-proxy.zip loader.zip publisher.zip) >"$sums"
   python3 scripts/update_release_manifest.py --check "$sums"
 }
 
 # The few-second checks: the pre-push hook runs these alone, and loader runs them too.
 quick_checks() {
-  step corpus
   step uv run --locked python scripts/check_tool_contract_versions.py "$base"
   step uv run --locked python -m scripts.check_agent_contract_versions "$base"
   step uv run --locked python oracle/build_oracle_data.py --check
@@ -114,7 +105,6 @@ loader() (
   fi
   step npm test --prefix lambdas/chat_proxy
   if [[ "$event" == pull_request ]]; then
-    step ./scripts/build_timed_checks_zip.sh
     step package_digests
   fi
 )

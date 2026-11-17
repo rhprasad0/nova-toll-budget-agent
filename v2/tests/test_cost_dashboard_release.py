@@ -220,7 +220,7 @@ def test_billing_policy_limits(environment: str) -> None:
 
 def test_routes_only_add_the_four_billing_behaviors() -> None:
     model = {
-        "path_pattern": "/eval-dashboard*",
+        "path_pattern": "/usage.json",
         "target_origin_id": "site",
         "allowed_methods": ["GET", "HEAD"],
     }
@@ -250,7 +250,7 @@ def test_eval_assets_only_move_with_cache_protection(distribution: str) -> None:
         "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-report-routes-dev"
     )
     model: dict[str, Any] = {
-        "path_pattern": "/eval-dashboard*",
+        "path_pattern": "/usage.json",
         "target_origin_id": "site",
         "function_association": [
             {"event_type": "viewer-request", "function_arn": function}
@@ -260,7 +260,7 @@ def test_eval_assets_only_move_with_cache_protection(distribution: str) -> None:
     before: dict[str, Any] = {
         "ordered_cache_behavior": [
             model,
-            dict(deepcopy(model), path_pattern="/evals.json"),
+            dict(deepcopy(model), path_pattern="/robots.txt"),
             dict(deepcopy(model), path_pattern="/assets/evals*"),
             *(
                 dict(deepcopy(model), path_pattern=path)
@@ -399,7 +399,7 @@ def test_billing_routes_keep_the_active_chat_release() -> None:
             },
         ],
         "ordered_cache_behavior": [
-            {"path_pattern": "/eval-dashboard*", "target_origin_id": "site"}
+            {"path_pattern": "/usage.json", "target_origin_id": "site"}
         ],
     }
     after = deepcopy(before)

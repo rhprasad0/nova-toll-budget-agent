@@ -20,7 +20,6 @@ from tests.infrastructure_support import (
     MAIN_TF,
     MEASUREMENT_INFRA,
     SLICE_2A_POLICY,
-    TIMED_CHECKS_TF,
     V2_ROOT,
     hcl_attribute,
     hcl_named_blocks,
@@ -59,13 +58,9 @@ def rendered_development_delivery_policies() -> tuple[
             "development_agentcore_trace_firehose",
         )
     )
-    policy_data = (
-        policy_data.replace(
-            "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
-        )
-        .replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
-        .replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
-    )
+    policy_data = policy_data.replace(
+        "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
+    ).replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
     telemetry_locals = (
         top_level_terraform_block(
             (FOUNDATION_ROOT / "telemetry.tf").read_text(), "locals", 0
@@ -100,7 +95,6 @@ def rendered_development_delivery_policies() -> tuple[
         locals {{
           test_tfstate_bucket_arn = "arn:aws:s3:::nova-toll-tfstate-903859731897"
           test_tfstate_kms_key_arn = "arn:aws:kms:us-east-1:903859731897:key/00000000-0000-0000-0000-000000000000"
-          test_alerts_kms_key_arn = "arn:aws:kms:us-east-1:903859731897:key/11111111-1111-1111-1111-111111111111"
         }}
 
         {first_locals}
@@ -245,13 +239,9 @@ def _terraform_rendered_development_plan_policies() -> tuple[
         if "development_plan_policy_documents"
         in top_level_terraform_block(FOUNDATION_IAM, "locals", occurrence)
     )
-    policy_data = (
-        policy_data.replace(
-            "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
-        )
-        .replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
-        .replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
-    )
+    policy_data = policy_data.replace(
+        "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
+    ).replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
     telemetry_locals = (
         top_level_terraform_block(
             (FOUNDATION_ROOT / "telemetry.tf").read_text(), "locals", 0
@@ -286,7 +276,6 @@ def _terraform_rendered_development_plan_policies() -> tuple[
         locals {{
           test_tfstate_bucket_arn = "arn:aws:s3:::nova-toll-tfstate-903859731897"
           test_tfstate_kms_key_arn = "arn:aws:kms:us-east-1:903859731897:key/00000000-0000-0000-0000-000000000000"
-          test_alerts_kms_key_arn = "arn:aws:kms:us-east-1:903859731897:key/11111111-1111-1111-1111-111111111111"
         }}
 
         {first_locals}
@@ -548,17 +537,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     ]
     assert by_sid["DecryptDevelopmentState"]["actions"] == ["kms:Decrypt"]
     assert by_sid["WriteDevelopmentStateDataKeys"]["actions"] == ["kms:GenerateDataKey"]
-    assert by_sid["PassTimedChecksSchedulerRole"]["actions"] == ["iam:PassRole"]
-    assert by_sid["PassTimedChecksSchedulerRole"]["resources"] == [
-        "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-timed-checks-scheduler-dev"
-    ]
-    assert by_sid["PassTimedChecksSchedulerRole"]["conditions"] == [
-        {
-            "test": "StringEquals",
-            "variable": "iam:PassedToService",
-            "values": ["scheduler.amazonaws.com"],
-        }
-    ]
     for sid in ("DecryptDevelopmentState", "WriteDevelopmentStateDataKeys"):
         assert by_sid[sid]["resources"] == ["aws_kms_key.tfstate.arn"]
         conditions = cast(list[dict[str, object]], by_sid[sid]["conditions"])
@@ -621,7 +599,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "iam:ListRoleTags",
         ],
         "PassExistingAgentCoreRuntimeRole": ["iam:PassRole"],
-        "PassTimedChecksSchedulerRole": ["iam:PassRole"],
         "PassAgentCoreTraceLogsRole": ["iam:PassRole"],
         "PassAgentCoreTraceFirehoseRole": ["iam:PassRole"],
         "ManageAgentCoreTraceRuntimePolicy": ["iam:PutRolePolicy"],
@@ -800,7 +777,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "/aws/lambda/toll-v2-pricing-loader-dev",
             "/aws/lambda/tollchat-v2-chat-proxy-dev",
             "/aws/lambda/tollchat-v2-usage-publisher-dev",
-            "/aws/lambda/nova-toll-v2-timed-checks-dev",
             "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
             "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
         )
@@ -866,12 +842,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     assert "ManageNewApplicationKmsKeys" not in by_sid
     assert by_sid["ReadApplicationKmsAliases"]["actions"] == ["kms:ListAliases"]
     assert by_sid["ReadApplicationKmsAliases"]["resources"] == ["*"]
-    assert by_sid["ReadAlertsKeyForTimedChecks"] == {
-        "sid": "ReadAlertsKeyForTimedChecks",
-        "actions": ["kms:DescribeKey"],
-        "resources": ["aws_kms_key.alerts.arn"],
-        "conditions": [],
-    }
     assert by_sid["ReadRetainedMeasurementKey"]["actions"] == [
         "kms:Decrypt",
         "kms:DescribeKey",
@@ -1067,14 +1037,12 @@ def _assert_application_roles_are_bootstrap_owned() -> None:
         "agent_measurement.tf": (
             V2_ROOT / "infra" / "agent_measurement.tf"
         ).read_text(),
-        "timed_checks.tf": TIMED_CHECKS_TF,
     }
     role_names = {
         "main.tf": ("loader", "timed_checks"),
         "agentcore.tf": ("tollchat_runtime", "tollchat_proxy"),
         "site.tf": (),
         "agent_measurement.tf": (),
-        "timed_checks.tf": ("timed_checks_lambda", "timed_checks_scheduler"),
     }
     for filename, names in role_names.items():
         for name in names:
@@ -1291,7 +1259,6 @@ DEVELOPMENT_PLAN_SIDS = [
     "ReadRetainedApplicationAthenaNamedQueries",
     "ReadRetainedApplicationAthenaWorkGroup",
     "ListApplicationAthenaWorkGroups",
-    "ReadApplicationSchedules",
     "ReadRetiredUsagePublisherIam",
     "ReadRetiredUsagePublisherLambda",
     "ReadRetiredUsagePublisherEvents",
@@ -1305,7 +1272,6 @@ DEVELOPMENT_PLAN_SIDS = [
     "ReadManagedCloudFrontPolicy",
     "ReadApplicationWaf",
     "ReadDevelopmentCertificate",
-    "ReadAlertsKeyForTimedChecks",
 ]
 
 
@@ -1618,13 +1584,6 @@ DEVELOPMENT_PLAN_REFRESH_TUPLES = {
         ("*",),
         _REGIONAL_PLAN_CONDITIONS,
     ),
-    "ReadApplicationSchedules": (
-        ("scheduler:GetSchedule", "scheduler:ListTagsForResource"),
-        (
-            'concat([ "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default", ], local.development_delivery_timed_schedule_arns)',
-        ),
-        _NO_PLAN_CONDITIONS,
-    ),
     "ReadRetiredUsagePublisherIam": (
         _IAM_READ_ACTIONS,
         ("local.development_delivery_usage_publisher_role_arn",),
@@ -1729,11 +1688,6 @@ DEVELOPMENT_PLAN_REFRESH_TUPLES = {
         ),
         _NO_PLAN_CONDITIONS,
     ),
-    "ReadAlertsKeyForTimedChecks": (
-        ("kms:DescribeKey",),
-        ("aws_kms_key.alerts.arn",),
-        _NO_PLAN_CONDITIONS,
-    ),
 }
 
 
@@ -1793,7 +1747,7 @@ def _assert_development_plan_policy(source: str) -> None:
     )
     statements = parsed_policy_document(source, "development_plan")
     assert [statement["sid"] for statement in statements] == DEVELOPMENT_PLAN_SIDS
-    assert len(statements) == 47
+    assert len(statements) == 45
     by_sid = policy_by_sid(statements)
     parsed_tuples = parsed_policy_tuple_map(source, "development_plan")
     assert set(parsed_tuples) == set(DEVELOPMENT_PLAN_SIDS)
@@ -1980,19 +1934,7 @@ def test_development_plan_policy_set_is_deterministic_and_bounded() -> None:
         "edge",
         "telemetry",
     }
-    assert len(aggregate) == 47
-    assert [
-        statement
-        for statement in aggregate
-        if statement["Sid"] == "ReadAlertsKeyForTimedChecks"
-    ] == [
-        {
-            "Action": "kms:DescribeKey",
-            "Effect": "Allow",
-            "Resource": "arn:aws:kms:us-east-1:903859731897:key/11111111-1111-1111-1111-111111111111",
-            "Sid": "ReadAlertsKeyForTimedChecks",
-        }
-    ]
+    assert len(aggregate) == 45
     rendered_statements: list[dict[str, object]] = []
     for key in (
         "state",
@@ -2783,7 +2725,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded(
     ],
 ) -> None:
     statements = parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 65
+    assert len(statements) == 62
     expected_groups = {
         "state": (
             0,
@@ -2869,10 +2811,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded(
         ),
         "runtime": (
             46,
-            56,
+            54,
             [
-                "ManageApplicationSchedules",
-                "PassTimedChecksSchedulerRole",
                 "ReadRetiredUsagePublisherIam",
                 "ReadRetiredUsagePublisherLambda",
                 "ReadRetiredUsagePublisherEvents",
@@ -2884,8 +2824,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded(
             ],
         ),
         "edge": (
-            56,
-            65,
+            54,
+            62,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -2895,33 +2835,19 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded(
                 "ReadManagedCloudFrontPolicy",
                 "ManageApplicationWaf",
                 "ReadDevelopmentCertificate",
-                "ReadAlertsKeyForTimedChecks",
             ],
         ),
     }
     rendered_documents, rendered_aggregate, _ = rendered_development_delivery_policies
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups) | {"telemetry"}
-    assert len(rendered_aggregate) == len(statements) == 65
+    assert len(rendered_aggregate) == len(statements) == 62
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
         "StringEquals": {"aws:RequestedRegion": "us-east-1"}
     }
-    assert rendered_by_sid["ReadAlertsKeyForTimedChecks"] == {
-        "Action": "kms:DescribeKey",
-        "Effect": "Allow",
-        "Resource": "arn:aws:kms:us-east-1:903859731897:key/11111111-1111-1111-1111-111111111111",
-        "Sid": "ReadAlertsKeyForTimedChecks",
-    }
     assert rendered_by_sid["PassExistingAgentCoreRuntimeRole"]["Condition"] == {
         "StringEquals": {"iam:PassedToService": "bedrock-agentcore.amazonaws.com"}
-    }
-    assert rendered_by_sid["PassTimedChecksSchedulerRole"]["Action"] == "iam:PassRole"
-    assert rendered_by_sid["PassTimedChecksSchedulerRole"]["Resource"] == (
-        "arn:aws:iam::903859731897:role/nova-toll-v2-timed-checks-scheduler-dev"
-    )
-    assert rendered_by_sid["PassTimedChecksSchedulerRole"]["Condition"] == {
-        "StringEquals": {"iam:PassedToService": "scheduler.amazonaws.com"}
     }
     temporary_sids = {
         "RetireUsagePublisherIam",

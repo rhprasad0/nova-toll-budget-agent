@@ -9,7 +9,6 @@ import pytest
 V2_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = V2_ROOT.parent
 MAIN_TF = (V2_ROOT / "infra" / "main.tf").read_text()
-TIMED_CHECKS_TF = (V2_ROOT / "infra" / "timed_checks.tf").read_text()
 ENVIRONMENT_TF = (V2_ROOT / "infra" / "environment.tf").read_text()
 SITE_TF = (V2_ROOT / "infra" / "site.tf").read_text()
 DEVELOPMENT_TFVARS = (V2_ROOT / "infra" / "development.tfvars").read_text()
@@ -20,7 +19,6 @@ VERIFY_SCRIPT = (REPO_ROOT / ".github" / "scripts" / "verify.sh").read_text()
 PRODUCTION_PLAN_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-production-plan.yml"
 ).read_text()
-TIMED_CHECKS_MODULE = (V2_ROOT / "timed_checks.py").read_text()
 # The one place to change on an AWS rotation; the copies below are checked against it.
 RDS_CA_SHA256 = re.findall(
     r'ca_sha256="([0-9a-f]{64})"', (V2_ROOT / "scripts/build_loader_zip.sh").read_text()

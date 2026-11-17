@@ -11,7 +11,6 @@ from tests.infrastructure_support import (
     MAIN_TF,
     RDS_CA_SHA256,
     REPO_ROOT,
-    TIMED_CHECKS_TF,
     V2_ROOT,
     hcl_named_blocks,
     hcl_scalar,
@@ -352,7 +351,6 @@ def test_reviewed_zip_builders_use_store_mode() -> None:
         "build_loader_zip.sh": r'zip -qX0 "\$BUILD/loader\.zip" -@',
         "build_publisher_zip.sh": r'zip -qX0 "\$BUILD/publisher\.zip" -@',
         "build_agentcore_zips.sh": r'zip -qX0 "\$out" -@',
-        "build_timed_checks_zip.sh": r'zip -qX0 "\$BUILD/timed-checks\.zip" -@',
     }
     for script_name, archive_call in expected_calls.items():
         script = (V2_ROOT / "scripts" / script_name).read_text()
@@ -468,23 +466,6 @@ def test_ca_helper_rejects_download_and_checksum_failures(
     assert ("RDS CA bundle digest mismatch" in result.stderr) is (curl_status == 0)
 
 
-def test_timed_builder_import_smoke_is_secret_isolated() -> None:
-    script = (V2_ROOT / "scripts" / "build_timed_checks_zip.sh").read_text()
-    assert "env -i" in script
-    assert "PYTHONNOUSERSITE=1" in script
-    assert 'PYTHONPATH="$STAGE"' in script
-    assert (
-        'name.startswith(("AWS_", "ACTIONS_", "GITHUB_", "OPENAI_", "CLOUDFLARE_"))'
-        in script
-    )
-    assert "uv run --python 3.13 --no-project python" in script
-    assert 'source "$V2_ROOT/scripts/build_loader_zip.sh"' in script
-    assert 'download_rds_ca_bundle "$STAGE/rds-ca-bundle.pem"' in script
-    assert (
-        'DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"' in TIMED_CHECKS_TF
-    )
-
-
 def test_public_openai_egress_has_a_narrow_expiring_trivy_exception() -> None:
     ignores = (REPO_ROOT / ".trivyignore.yaml").read_text()
     exception = """  - id: AVD-AWS-0104
@@ -492,13 +473,6 @@ def test_public_openai_egress_has_a_narrow_expiring_trivy_exception() -> None:
     statement: The runtime must reach the public OpenAI API over HTTPS.
     expired_at: 2027-02-13"""
     assert exception in ignores
-    assert (
-        """  - id: AVD-AWS-0104
-    paths: [v2/infra/timed_checks.tf]
-    statement: Timed evaluations must reach the public OpenAI API over HTTPS.
-    expired_at: 2027-02-13"""
-        in ignores
-    )
     assert (
         """  - id: AVD-AWS-0104
     paths: [infra/agentcore.tf]"""

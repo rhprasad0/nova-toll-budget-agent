@@ -254,9 +254,7 @@ test("public report routes rewrite dashboards and pass other paths through", asy
   vm.runInNewContext(`${source}\nthis.rewrite = handler;`, context);
 
   for (const [uri, expected] of [
-    ["/eval-dashboard", "/evals.html"],
-    ["/eval-dashboard/", "/evals.html"],
-    ["/eval-dashboard-other", "/eval-dashboard-other"],
+    ["/eval-dashboard", "/eval-dashboard"],
     ["/release-dashboard", "/assets/releases.html"],
     ["/release-dashboard/", "/assets/releases.html"],
     ["/release-dashboard-other", "/release-dashboard-other"],

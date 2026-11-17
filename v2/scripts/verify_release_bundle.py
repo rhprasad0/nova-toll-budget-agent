@@ -25,7 +25,6 @@ FIXED_PATHS = (
     "v2/infra/build/publisher.zip",
     "v2/infra/build/agentcore.zip",
     "v2/infra/build/chat-proxy.zip",
-    "v2/infra/build/timed-checks.zip",
     "v2/agent/dev_chat.html",
     "v2/agent/costs.html",
     "v2/agent/public_chat.mjs",
@@ -107,8 +106,6 @@ def expected_payload_paths(
 ) -> tuple[str, ...]:
     """Return the exact Terraform and migration inputs allowed in the bundle."""
     paths: set[str] = set(FIXED_PATHS)
-    if (root / "v2/agent/evals.html").is_file():
-        paths.add("v2/agent/evals.html")
     assets = root / "v2/agent/assets"
     if assets.is_symlink() or not assets.is_dir():
         raise BundleError("agent assets directory is unavailable")

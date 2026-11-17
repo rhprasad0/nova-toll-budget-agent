@@ -37,10 +37,7 @@ EXPECTED_IDENTITY = MappingProxyType(
 )
 EXPECTED_PROVIDER_NAME = "registry.terraform.io/hashicorp/aws"
 
-LEGACY_PACKAGES = ("agentcore.zip", "chat-proxy.zip", "loader.zip", "publisher.zip")
-TIMED_PACKAGES = (*LEGACY_PACKAGES, "timed-checks.zip")
-PACKAGES = LEGACY_PACKAGES
-TIMED_CHECKS_MARKER = "v2/scripts/build_timed_checks_zip.sh"
+PACKAGES = ("agentcore.zip", "chat-proxy.zip", "loader.zip", "publisher.zip")
 PRODUCTION_CONTROL_MARKER = "v2/scripts/run_production_migrations.py"
 PRODUCTION_CONTROL_INPUTS = frozenset(
     {
@@ -51,10 +48,6 @@ PRODUCTION_CONTROL_INPUTS = frozenset(
         "v2/scripts/run_production_migrations_workflow.sh",
     }
 )
-
-
-def packages_for_inputs(inputs: Mapping[str, Any]) -> tuple[str, ...]:
-    return TIMED_PACKAGES if TIMED_CHECKS_MARKER in inputs else LEGACY_PACKAGES
 
 
 @dataclass(frozen=True)
@@ -107,45 +100,13 @@ LAMBDA = tuple(
     for name in (
         "toll-v2-pricing-loader-dev",
         "tollchat-v2-chat-proxy-dev",
-        "nova-toll-v2-timed-checks-dev",
     )
 )
 LAMBDA_FUNCTION_NAMES = MappingProxyType(
     {
         "loader": "toll-v2-pricing-loader-dev",
         "tollchat_proxy": "tollchat-v2-chat-proxy-dev",
-        "timed_checks": "nova-toll-v2-timed-checks-dev",
     }
-)
-TIMED_SCHEDULE_KEYS = (
-    "greenway-eb-fri-0723",
-    "greenway-eb-mon-0723",
-    "greenway-eb-thu-0723",
-    "greenway-eb-tue-0723",
-    "greenway-eb-wed-0723",
-    "greenway-wb-fri-1723",
-    "greenway-wb-mon-1723",
-    "greenway-wb-thu-1723",
-    "greenway-wb-tue-1723",
-    "greenway-wb-wed-1723",
-    "i95-northbound-fri-0617",
-    "i95-northbound-mon-0617",
-    "i95-northbound-sat-1817",
-    "i95-northbound-thu-0617",
-    "i95-northbound-tue-0617",
-    "i95-northbound-wed-0617",
-    "i95-reversal-fri-0147",
-    "i95-reversal-mon-1117",
-    "i95-reversal-sat-1517",
-    "i95-reversal-thu-0147",
-    "i95-reversal-tue-0147",
-    "i95-reversal-wed-0147",
-    "i95-southbound-fri-1417",
-    "i95-southbound-mon-1417",
-    "i95-southbound-sat-1017",
-    "i95-southbound-thu-1417",
-    "i95-southbound-tue-1417",
-    "i95-southbound-wed-1417",
 )
 LOG_GROUPS = tuple(
     f"arn:aws:logs:{REGION}:{ACCOUNT}:log-group:{name}"
@@ -370,22 +331,13 @@ def _trace_firehose_value() -> dict[str, Any]:
 
 def _build_contract() -> dict[str, Mutation]:
     result: dict[str, Mutation] = {}
-    for name, resource in zip(
-        ("loader", "tollchat_proxy", "timed_checks"), LAMBDA, strict=False
-    ):
+    for name, resource in zip(("loader", "tollchat_proxy"), LAMBDA, strict=False):
         if name == "tollchat_proxy":
             delivery_identity = (
                 ("function_name", LAMBDA_FUNCTION_NAMES[name]),
                 ("filename", None),
                 ("s3_bucket", ARTIFACT_BUCKET_NAME),
                 ("s3_key", "lambda/v2/chat-proxy-dev.zip"),
-            )
-        elif name == "timed_checks":
-            delivery_identity = (
-                ("function_name", LAMBDA_FUNCTION_NAMES[name]),
-                ("filename", None),
-                ("s3_bucket", ARTIFACT_BUCKET_NAME),
-                ("s3_key", "lambda/v2/timed-checks-dev.zip"),
             )
         else:
             delivery_identity = (
@@ -413,21 +365,17 @@ def _build_contract() -> dict[str, Mutation]:
         "lambda-alias",
         _permission("lambda:UpdateAlias", *LAMBDA, *(f"{arn}:*" for arn in LAMBDA)),
     )
-    for name in ("agentcore", "tollchat_proxy", "timed_checks"):
+    for name in ("agentcore", "tollchat_proxy"):
         key = {
             "agentcore": "runtime/v2/agentcore-dev.zip",
             "tollchat_proxy": "lambda/v2/chat-proxy-dev.zip",
-            "timed_checks": "lambda/v2/timed-checks-dev.zip",
         }[name]
         result[f"aws_s3_object.{name}"] = _mutation(
             ("source", "source_hash"),
             ("create", "update"),
             "artifact-upload",
             _permission(
-                "s3:PutObject",
-                f"arn:aws:s3:::{ARTIFACT_BUCKET_NAME}/{key}"
-                if name == "timed_checks"
-                else ARTIFACT_OBJECTS[0 if name == "agentcore" else 1],
+                "s3:PutObject", ARTIFACT_OBJECTS[0 if name == "agentcore" else 1]
             ),
             create_identity=(("bucket", ARTIFACT_BUCKET_NAME), ("key", key)),
         )
@@ -435,7 +383,6 @@ def _build_contract() -> dict[str, Mutation]:
         "index": "index.html",
         "chat": "chat.mjs",
         "usage": "usage.json",
-        "evals": "evals.html",
         "faq": "faq.html",
         "privacy": "privacy.txt",
         "terms": "terms.txt",
@@ -451,8 +398,6 @@ def _build_contract() -> dict[str, Mutation]:
         )
     for key in (
         "LICENSE.txt",
-        "evals.css",
-        "evals.mjs",
         "chat-markdown.mjs",
         "commute-estimates.json",
         "commute-map.mjs",
@@ -554,26 +499,6 @@ def _build_contract() -> dict[str, Mutation]:
             f"arn:aws:dynamodb:{REGION}:{ACCOUNT}:table/tollchat-v2-anonymous-sessions-dev",
         ),
     )
-    for key in TIMED_SCHEDULE_KEYS:
-        result[f'aws_scheduler_schedule.timed_checks["{key}"]'] = _mutation(
-            (
-                "schedule_expression",
-                "schedule_expression_timezone",
-                "flexible_time_window",
-                "target",
-            ),
-            ("update",),
-            "schedule-update",
-            _permission(
-                "scheduler:UpdateSchedule",
-                f"arn:aws:scheduler:{REGION}:{ACCOUNT}:schedule/default/nova-toll-v2-{key}-dev",
-            ),
-            _permission(
-                "iam:PassRole",
-                f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-timed-checks-scheduler-dev",
-                conditions={"iam:PassedToService": "scheduler.amazonaws.com"},
-            ),
-        )
     result["aws_bedrock_guardrail_version.tollchat"] = _mutation(
         ("description", "guardrail_arn"),
         ("create",),
@@ -942,17 +867,6 @@ def _build_contract() -> dict[str, Mutation]:
 
 
 CONTRACT = MappingProxyType(_build_contract())
-TIMED_ADDRESSES = frozenset(
-    {
-        "aws_s3_object.timed_checks",
-        "aws_lambda_function.timed_checks",
-        *(
-            f'aws_scheduler_schedule.timed_checks["{key}"]'
-            for key in TIMED_SCHEDULE_KEYS
-        ),
-    }
-)
-
 _PLAN_KEYS = frozenset(
     {
         "format_version",
@@ -1116,12 +1030,6 @@ _DERIVED_UNKNOWN_EDGES = MappingProxyType(
             "aws_s3_object.tollchat_proxy.version_id",
             "aws_s3_object.tollchat_proxy",
         ),
-        ("aws_lambda_function.timed_checks", "s3_object_version"): (
-            ("s3_object_version",),
-            ("s3_object_version",),
-            "aws_s3_object.timed_checks.version_id",
-            "aws_s3_object.timed_checks",
-        ),
     }
 )
 
@@ -1155,203 +1063,6 @@ def _reject(
 
 def _is_string(value: object) -> TypeGuard[str]:
     return isinstance(value, str) and bool(value)
-
-
-def _timed_schedule_expected(address: str) -> dict[str, Any]:
-    key = address.removeprefix('aws_scheduler_schedule.timed_checks["').removesuffix(
-        '"]'
-    )
-    if key not in TIMED_SCHEDULE_KEYS:
-        _reject("unsupported_address", address=address)
-    prefix, day, clock = key.rsplit("-", 2)
-    weekdays = {
-        "mon": ("1", "MON"),
-        "tue": ("2", "TUE"),
-        "wed": ("3", "WED"),
-        "thu": ("4", "THU"),
-        "fri": ("5", "FRI"),
-        "sat": ("6", "SAT"),
-    }
-    windows = {
-        "greenway-eb": "greenway_eb_peak",
-        "greenway-wb": "greenway_wb_peak",
-        "i95-northbound": "i95_northbound",
-        "i95-reversal": "i95_reversal",
-        "i95-southbound": "i95_southbound",
-    }
-    weekday, aws_weekday = weekdays[day]
-    hour, minute = str(int(clock[:2])), str(int(clock[2:]))
-    schedule = f"{minute} {hour} * * {weekday}"
-    return {
-        "name": f"nova-toll-v2-{key}-dev",
-        "state": "ENABLED",
-        "schedule_expression": f"cron({minute} {hour} ? * {aws_weekday} *)",
-        "schedule_expression_timezone": "America/New_York",
-        "window_id": windows[prefix],
-        "schedule": schedule,
-    }
-
-
-def timed_schedule_plan_value(address: str) -> dict[str, Any]:
-    expected = _timed_schedule_expected(address)
-    return {
-        "name": expected["name"],
-        "state": expected["state"],
-        "schedule_expression": expected["schedule_expression"],
-        "schedule_expression_timezone": expected["schedule_expression_timezone"],
-        "flexible_time_window": [{"mode": "OFF"}],
-        "target": [
-            {
-                "arn": f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:nova-toll-v2-timed-checks-dev",
-                "role_arn": f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-timed-checks-scheduler-dev",
-                "input": json.dumps(
-                    {
-                        "window_id": expected["window_id"],
-                        "schedule": expected["schedule"],
-                    },
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ),
-                "retry_policy": [
-                    {"maximum_event_age_in_seconds": 600, "maximum_retry_attempts": 0}
-                ],
-                "dead_letter_config": [
-                    {
-                        "arn": f"arn:aws:sqs:{REGION}:{ACCOUNT}:nova-toll-v2-timed-checks-delivery-failure-dev"
-                    }
-                ],
-            }
-        ],
-    }
-
-
-def _validate_timed_schedule(
-    after: dict[str, JSON], address: str, action: str, operation_class: str
-) -> None:
-    after = copy.deepcopy(after)
-    expected = _timed_schedule_expected(address)
-    for field in (
-        "name",
-        "state",
-        "schedule_expression",
-        "schedule_expression_timezone",
-    ):
-        if after.get(field) != expected[field]:
-            _reject(
-                "invalid_schedule_value",
-                address=address,
-                action=action,
-                operation_class=operation_class,
-            )
-    windows = after.get("flexible_time_window")
-    if (
-        not isinstance(windows, list)
-        or len(windows) != 1
-        or not isinstance(windows[0], dict)
-        or windows[0].get("mode") != "OFF"
-    ):
-        _reject(
-            "invalid_schedule_value",
-            address=address,
-            action=action,
-            operation_class=operation_class,
-        )
-    if "maximum_window_in_minutes" in windows[0]:
-        if windows[0]["maximum_window_in_minutes"] is not None:
-            _reject(
-                "invalid_schedule_value",
-                address=address,
-                action=action,
-                operation_class=operation_class,
-            )
-        del windows[0]["maximum_window_in_minutes"]
-    if set(windows[0]) != {"mode"}:
-        _reject(
-            "invalid_schedule_value",
-            address=address,
-            action=action,
-            operation_class=operation_class,
-        )
-    targets = after.get("target")
-    if (
-        not isinstance(targets, list)
-        or len(targets) != 1
-        or not isinstance(targets[0], dict)
-    ):
-        _reject(
-            "invalid_schedule_value",
-            address=address,
-            action=action,
-            operation_class=operation_class,
-        )
-    target = targets[0]
-    required = {
-        "arn": f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:nova-toll-v2-timed-checks-dev",
-        "role_arn": f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-timed-checks-scheduler-dev",
-    }
-    if any(target.get(field) != value for field, value in required.items()):
-        _reject(
-            "invalid_schedule_value",
-            address=address,
-            action=action,
-            operation_class=operation_class,
-        )
-    for field in (
-        "ecs_parameters",
-        "eventbridge_parameters",
-        "kinesis_parameters",
-        "sagemaker_pipeline_parameters",
-        "sqs_parameters",
-    ):
-        if field in target:
-            if type(target[field]) is not list or target[field]:
-                _reject(
-                    "invalid_schedule_value",
-                    address=address,
-                    action=action,
-                    operation_class=operation_class,
-                )
-            del target[field]
-    target_fields = {"arn", "role_arn", "input", "retry_policy", "dead_letter_config"}
-    if set(target) != target_fields:
-        _reject(
-            "invalid_schedule_value",
-            address=address,
-            action=action,
-            operation_class=operation_class,
-        )
-    try:
-        payload = json.loads(cast(str, target.get("input", "")))
-    except (TypeError, json.JSONDecodeError):
-        _reject(
-            "invalid_schedule_value",
-            address=address,
-            action=action,
-            operation_class=operation_class,
-        )
-    if payload != {
-        "window_id": expected["window_id"],
-        "schedule": expected["schedule"],
-    }:
-        _reject(
-            "invalid_schedule_value",
-            address=address,
-            action=action,
-            operation_class=operation_class,
-        )
-    if target.get("retry_policy") != [
-        {"maximum_event_age_in_seconds": 600, "maximum_retry_attempts": 0}
-    ] or target.get("dead_letter_config") != [
-        {
-            "arn": f"arn:aws:sqs:{REGION}:{ACCOUNT}:nova-toll-v2-timed-checks-delivery-failure-dev"
-        }
-    ]:
-        _reject(
-            "invalid_schedule_value",
-            address=address,
-            action=action,
-            operation_class=operation_class,
-        )
 
 
 def _flatten(value: JSON, prefix: str = "") -> dict[str, Any]:
@@ -2013,39 +1724,6 @@ def _has_configuration_reference(
     )
 
 
-def _omitted_dashboard_acl(
-    plan: Mapping[str, JSON], address: str, action: str, path: str
-) -> bool:
-    # AWS 6.60 computes ACL metadata on creation even when no ACL is configured.
-    if (
-        action != "create"
-        or path != "acl"
-        or address
-        not in {
-            "aws_s3_object.evals",
-            'aws_s3_object.site_assets["evals.css"]',
-            'aws_s3_object.site_assets["evals.mjs"]',
-        }
-    ):
-        return False
-    configuration = plan.get("configuration")
-    root = configuration.get("root_module") if isinstance(configuration, dict) else None
-    resources = root.get("resources") if isinstance(root, dict) else None
-    if not isinstance(resources, list):
-        return False
-    matching = [
-        resource
-        for resource in resources
-        if isinstance(resource, dict)
-        and resource.get("address") in {address, address.split("[", 1)[0]}
-    ]
-    return (
-        len(matching) == 1
-        and isinstance(matching[0].get("expressions"), dict)
-        and "acl" not in cast(dict[str, JSON], matching[0]["expressions"])
-    )
-
-
 def _validate_derived_unknowns(
     plan: Mapping[str, JSON],
     pending: list[tuple[str, str, str | None, tuple[str, ...]]],
@@ -2064,8 +1742,6 @@ def _validate_derived_unknowns(
             if path in TRACE_READ_ONLY_FIELDS.get(address, ()):
                 continue
             if spec is None or not _metadata_authorized(path, spec):
-                continue
-            if _omitted_dashboard_acl(plan, address, action, path):
                 continue
             edge = next(
                 (
@@ -2673,10 +2349,6 @@ def _parse_plan(
                 action=action,
                 operation_class=spec.operation_class,
             )
-        if address.startswith('aws_scheduler_schedule.timed_checks["'):
-            _validate_timed_schedule(
-                cast(dict[str, JSON], after), address, action, spec.operation_class
-            )
         if not changed or any(
             not _path_allowed(field, spec.fields) for field in changed
         ):
@@ -2819,7 +2491,6 @@ def _parse_manifest(
     inputs, packages = manifest.get("deployment_inputs"), manifest.get("packages")
     if not isinstance(inputs, dict) or not isinstance(packages, dict):
         _reject("malformed_input")
-    expected_packages = packages_for_inputs(inputs)
     if (
         not inputs
         or list(inputs) != sorted(inputs)
@@ -2829,7 +2500,7 @@ def _parse_manifest(
             or not re.fullmatch(r"[0-9a-f]{64}", digest)
             for path, digest in inputs.items()
         )
-        or list(packages) != list(expected_packages)
+        or list(packages) != list(PACKAGES)
         or any(
             not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
             for digest in packages.values()
@@ -2852,8 +2523,6 @@ def _parse_manifest(
             and isinstance(record.get("changed_fields"), list)
         ):
             _reject("malformed_input")
-        if address in TIMED_ADDRESSES and TIMED_CHECKS_MARKER not in inputs:
-            _reject("timed_contract_requires_marker", address=address)
         if address in mutations:
             _reject("duplicate_manifest_mutation", address=address)
         if any(
@@ -2867,8 +2536,6 @@ def _parse_manifest(
         address = record.get("address") if isinstance(raw_record, dict) else None
         if not _is_string(address):
             _reject("malformed_input")
-        if address in TIMED_ADDRESSES and TIMED_CHECKS_MARKER not in inputs:
-            _reject("timed_contract_requires_marker", address=address)
         _validate_permission(
             record, CONTRACT.get(address, Mutation((), (), "", ())), address
         )

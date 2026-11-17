@@ -16,27 +16,19 @@ from typing import NoReturn, cast
 try:
     from .delivery_plan_validator import (
         JSON,
-        LEGACY_PACKAGES,
+        PACKAGES,
         PRODUCTION_CONTROL_INPUTS,
         PRODUCTION_CONTROL_MARKER,
-        TIMED_CHECKS_MARKER,
-        TIMED_PACKAGES,
-        packages_for_inputs,
         validate_plan,
     )
 except ImportError:  # Direct script execution.
     from delivery_plan_validator import (
         JSON,
-        LEGACY_PACKAGES,
+        PACKAGES,
         PRODUCTION_CONTROL_INPUTS,
         PRODUCTION_CONTROL_MARKER,
-        TIMED_CHECKS_MARKER,
-        TIMED_PACKAGES,
-        packages_for_inputs,
         validate_plan,
     )
-
-__all__ = ("TIMED_PACKAGES",)
 
 
 MANIFEST_KEYS = {
@@ -54,19 +46,6 @@ PROVIDER_IDENTITY = {
     "lockfile": "v2/infra/.terraform.lock.hcl",
     "lock_identity": "V2-AWS60",
 }
-PACKAGES = LEGACY_PACKAGES
-TIMED_INPUTS = frozenset(
-    {
-        "v2/eval/run_evaluation.py",
-        "v2/eval/test-cases.jsonl",
-        "v2/infra/timed_checks.tf",
-        "v2/lambdas/timed_checks/handler.py",
-        TIMED_CHECKS_MARKER,
-        "v2/scripts/timed-checks-requirements.in",
-        "v2/scripts/timed-checks-requirements.txt",
-        "v2/timed_checks.py",
-    }
-)
 EXACT_INPUTS = {
     ".github/workflows/v2-development-delivery.yml",
     ".github/workflows/v2-development-delivery-privileged.yml",
@@ -100,19 +79,12 @@ EXACT_INPUTS = {
     "v2/lambdas/loader/handler.py",
     "v2/lambdas/loader/parse_csv.py",
     "v2/lambdas/loader/parse_xml.py",
-    "v2/lambdas/timed_checks/handler.py",
     "v2/pyproject.toml",
     "v2/scripts/build_agentcore_zips.sh",
     "v2/scripts/build_loader_zip.sh",
     "v2/scripts/build_publisher_zip.sh",
-    "v2/scripts/build_timed_checks_zip.sh",
     "v2/scripts/loader-requirements.in",
     "v2/scripts/loader-requirements.txt",
-    "v2/scripts/timed-checks-requirements.in",
-    "v2/scripts/timed-checks-requirements.txt",
-    "v2/timed_checks.py",
-    "v2/eval/run_evaluation.py",
-    "v2/eval/test-cases.jsonl",
     "v2/uv.lock",
 }
 INPUT_PREFIXES = ("v2/agent/assets/", "v2/agent_tools/")
@@ -239,15 +211,8 @@ def _valid_relative(path: str) -> bool:
 def selected(
     path: str,
     bundle_enabled: bool = False,
-    timed_enabled: bool = False,
     production_controls_enabled: bool = False,
 ) -> bool:
-    if path in {"v2/eval/dashboard.py"}:
-        return timed_enabled
-    if path == "v2/agent/evals.html":
-        return True
-    if path in TIMED_INPUTS:
-        return timed_enabled
     selected = (
         path in EXACT_INPUTS
         or path == "v2/agent/telemetry.py"
@@ -265,7 +230,7 @@ def selected(
     )
 
 
-def tracked_inputs(repo_root: Path, timed_enabled: bool = False) -> list[str]:
+def tracked_inputs(repo_root: Path) -> list[str]:
     try:
         output = subprocess.run(
             ["git", "-C", os.fspath(repo_root), "ls-files", "-z"],
@@ -276,8 +241,6 @@ def tracked_inputs(repo_root: Path, timed_enabled: bool = False) -> list[str]:
     except (OSError, UnicodeError, subprocess.CalledProcessError):
         _reject("inventory_unavailable")
     tracked_set = set(tracked)
-    if timed_enabled and not tracked_set >= TIMED_INPUTS:
-        _reject("inventory_incomplete")
     bundle_enabled = BUNDLE_MARKER in tracked
     production_controls_enabled = PRODUCTION_CONTROL_MARKER in tracked
     if bundle_enabled and not BUNDLE_FIXED_INPUTS.issubset(tracked):
@@ -287,7 +250,7 @@ def tracked_inputs(repo_root: Path, timed_enabled: bool = False) -> list[str]:
     paths = sorted(
         path
         for path in tracked
-        if selected(path, bundle_enabled, timed_enabled, production_controls_enabled)
+        if selected(path, bundle_enabled, production_controls_enabled)
         or (COST_MARKER in tracked_set and path in COST_INPUTS)
     )
     if not paths or set(EXACT_INPUTS) - set(paths):
@@ -313,16 +276,7 @@ def _validate_manifest(value: JSON) -> tuple[dict[str, str], dict[str, str]]:
         not _valid_relative(path) for path in inputs
     ):
         _reject("inventory_invalid")
-    timed_enabled = TIMED_CHECKS_MARKER in inputs
-    timed_inputs = set(inputs) & TIMED_INPUTS
-    if timed_enabled and not set(inputs) >= TIMED_INPUTS:
-        _reject("inventory_incomplete")
-    if not timed_enabled and timed_inputs:
-        _reject("inventory_invalid")
-    expected_packages = packages_for_inputs(inputs)
-    if set(packages) != set(expected_packages) or list(packages) != list(
-        expected_packages
-    ):
+    if list(packages) != list(PACKAGES):
         _reject("package_inventory_invalid")
     if any(
         not isinstance(digest, str) or not HEX64.fullmatch(digest)
@@ -352,12 +306,7 @@ def _validate_manifest(value: JSON) -> tuple[dict[str, str], dict[str, str]]:
 
 
 def verify_inputs(repo_root: Path, expected: dict[str, str]) -> None:
-    timed_enabled = TIMED_CHECKS_MARKER in expected
-    if timed_enabled and not set(expected) >= TIMED_INPUTS:
-        _reject("inventory_incomplete")
-    if not timed_enabled and set(expected) & TIMED_INPUTS:
-        _reject("inventory_invalid")
-    actual_paths = tracked_inputs(repo_root, timed_enabled)
+    actual_paths = tracked_inputs(repo_root)
     if actual_paths != list(expected):
         _reject("inventory_mismatch")
     for relative, digest in expected.items():

@@ -21,7 +21,7 @@ roles cannot read the key. Production consumes only development's AWS feed and
 collects OpenAI directly once. Do not enable Cost Explorer.
 
 Keep both schedules off the hour: OpenAI's costs endpoint has returned HTTP 429
-to on-the-hour refreshes. See the [experiment journal](../eval/journal/2026-10-12.md)
+to on-the-hour refreshes. See the [experiment journal](../journal/pages/2026-10-12.md)
 for the evidence.
 
 The requested interval is the union of month-to-date and the last 30 completed
@@ -131,7 +131,7 @@ recorded standard rates and per-call long-context adjustments. The sample includ
 its actual cache usage; it does not model a production traffic mix. Infrastructure
 and tool execution are excluded, and these estimates are never added to billing.
 
-See the [experiment journal](../eval/EXPERIMENT_JOURNAL.md) for measured results
+See the [experiment journal](../journal/EXPERIMENT_JOURNAL.md) for measured results
 and limitations. Public-chat attribution and issue #542 probe integration,
 latency navigation, forecasting, and analytics remain follow-up work.
 

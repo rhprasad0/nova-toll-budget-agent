@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys
 from collections.abc import AsyncGenerator, AsyncIterator
-from typing import Any, cast
+from typing import cast
 
 import pytest
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
@@ -23,10 +23,8 @@ from agent.agentcore_entrypoint import (
     CANARY_MARKER,
     CANARY_PROMPT,
     DISCLAIMER,
-    EVALUATION_MARKER,
     TollChatRuntime,
     _canary_event,  # pyright: ignore[reportPrivateUsage]
-    _evaluation_event,  # pyright: ignore[reportPrivateUsage]
 )
 from agent.dev_chat import DevChat
 from agent.telemetry import protect_console
@@ -649,84 +647,3 @@ def test_runtime_blocks_guardrail_content_and_returns_safe_failures(
         "runtime_log_content_omitted" if console_protected else "RuntimeError"
     ) in caplog.text
     assert "secret provider detail" not in caplog.text
-
-
-def test_private_evaluation_records_actual_model_and_only_current_turn_tools(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("TOLLCHAT_RELEASE_ID", "test-release")
-    agent = FakeAgent()
-    runtime = TollChatRuntime(lambda: agent, FakeGuardrail())
-
-    async def run() -> None:
-        for prompt in ("First turn", "Correction"):
-            events = [
-                event
-                async for event in runtime.stream(
-                    {"prompt": prompt, "evaluation_marker": EVALUATION_MARKER},
-                    session_id="test-session",
-                )
-            ]
-            evidence = events[-2]
-            assert evidence["type"] == "evaluation"
-            assert evidence["session_id"] == "test-session"
-            assert evidence["application"] == {
-                "model": "actual-deployed-model",
-                "reasoning_effort": "low",
-                "max_output_tokens": 2048,
-            }
-            assert evidence["release_id"] == "test-release"
-            assert len(cast(list[object], evidence["calls"])) == 1
-            assert "private-key" not in str(events)
-            assert events[-1]["type"] == "answer"
-
-    asyncio.run(run())
-    assert agent.prompts == ["First turn", "Correction"]
-    assert all(
-        event["type"] != "evaluation"
-        for event in collect(runtime, {"prompt": "Normal chat"})
-    )
-
-
-@pytest.mark.parametrize(
-    "failure",
-    [
-        "missing_result",
-        "orphan_result",
-        "duplicate_result",
-        "failed_result",
-        "missing_json",
-    ],
-)
-def test_evaluation_rejects_uncorrelated_or_failed_tool_evidence(failure: str) -> None:
-    use: dict[str, Any] = {
-        "toolUse": {"toolUseId": "1", "name": "get_current_toll_price", "input": {}}
-    }
-    result: dict[str, Any] = {
-        "toolResult": {
-            "toolUseId": "1",
-            "status": "success",
-            "content": [{"json": {"total_usd": "4.25"}}],
-        }
-    }
-    messages: list[object] = [{"content": [use]}, {"content": [result]}]
-    if failure == "missing_result":
-        messages.pop()
-    elif failure == "orphan_result":
-        messages.pop(0)
-    elif failure == "duplicate_result":
-        messages.append(messages[-1])
-    elif failure == "failed_result":
-        result["toolResult"]["status"] = "error"
-    else:
-        result["toolResult"]["content"] = [{"text": "no tool JSON"}]
-    with pytest.raises(ValueError):
-        _evaluation_event(messages, {}, "session")
-
-
-def test_private_evaluation_still_obeys_guardrails() -> None:
-    events = collect(
-        TollChatRuntime(FakeAgent, FakeGuardrail("Blocked")),
-        {"prompt": "Blocked", "evaluation_marker": EVALUATION_MARKER},
-    )
-    assert events == [{"type": "answer", "text": BLOCKED_MESSAGE, "blocked": True}]

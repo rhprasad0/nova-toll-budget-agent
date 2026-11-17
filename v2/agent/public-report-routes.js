@@ -10,9 +10,6 @@ function handler(event) {
   if (request.uri === "/release-dashboard" || request.uri === "/release-dashboard/") {
     request.uri = "/assets/releases.html";
   }
-  if (request.uri === "/eval-dashboard" || request.uri === "/eval-dashboard/") {
-    request.uri = "/evals.html";
-  }
   if (request.uri === "/cost-dashboard" || request.uri === "/cost-dashboard/") {
     request.uri = "/costs.html";
   }

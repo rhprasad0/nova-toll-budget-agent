@@ -530,20 +530,8 @@ def _assert_development_plan_workflow(source: str) -> None:
     assert 'test "$INPUT_SHA" = "$EVENT_SHA"' in source
     assert "candidate_sha" in build_source
     assert "persist-credentials: false" in source
-    assert "id: package-mode" in source
-    assert 'test ! -L "$MANIFEST"' in build_source
-    assert "isinstance(value, dict)" in build_source
-    assert 'isinstance(value.get("deployment_inputs"), dict)' in build_source
-    assert (
-        '"v2/scripts/build_timed_checks_zip.sh" in value["deployment_inputs"]'
-        in build_source
-    )
     assert (
         "PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip)"
-        in build_source
-    )
-    assert (
-        "PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip)"
         in build_source
     )
     for package in (
@@ -551,7 +539,6 @@ def _assert_development_plan_workflow(source: str) -> None:
         "publisher.zip",
         "agentcore.zip",
         "chat-proxy.zip",
-        "timed-checks.zip",
     ):
         assert package in build_source
     assert "DEPLOYMENT_SHA256SUMS" in build_source
@@ -560,8 +547,6 @@ def _assert_development_plan_workflow(source: str) -> None:
         "awk '{print $2}' DEPLOYMENT_SHA256SUMS | LC_ALL=C sort | tr '\\n' ' '"
         in build_source
     )
-    assert 'if [[ "$PACKAGE_MODE" = timed ]]; then' in build_source
-    assert "./scripts/build_timed_checks_zip.sh" in build_source
     assert 'PACKAGE_STAGE="$RUNNER_TEMP/v2-development-packages"' in build_source
     assert 'mkdir -m 700 -- "$PACKAGE_STAGE"' in build_source
     assert 'cp -P -- "$source" "$PACKAGE_STAGE/$package"' in build_source
@@ -636,26 +621,14 @@ def _assert_development_plan_workflow(source: str) -> None:
     assert '"$GITHUB_WORKSPACE/trusted/v2/agent/public-report-routes.js"' in plan_source
     assert "--repo-root" not in plan_source
     assert 'test ! -L "$MANIFEST"' in plan_source
-    assert "isinstance(value, dict)" in plan_source
-    assert 'isinstance(value.get("deployment_inputs"), dict)' in plan_source
-    assert (
-        '"v2/scripts/build_timed_checks_zip.sh" in value["deployment_inputs"]'
-        in plan_source
-    )
     assert (
         "PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip)"
         in plan_source
     )
     assert (
-        "PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip)"
-        in plan_source
-    )
-    assert "PACKAGE_COUNT=4" in plan_source
-    assert "PACKAGE_COUNT=5" in plan_source
-    assert (
         "find \"$STAGING\" -mindepth 1 -maxdepth 1 -name '*.zip' -printf" in plan_source
     )
-    assert 'test "$(wc -l <"$CHECKSUMS")" -eq "$PACKAGE_COUNT"' in plan_source
+    assert 'test "$(wc -l <"$CHECKSUMS")" -eq 4' in plan_source
     assert 'sha256sum --check "$(basename "$CHECKSUMS")"' in plan_source
     assert source.index(
         "Verify candidate release binding without credentials"
@@ -670,7 +643,6 @@ def _assert_development_plan_workflow(source: str) -> None:
         "aws-actions/configure-aws-credentials@", plan_start
     )
     for boundary in (
-        'PACKAGE_MODE="$(python3 - "$MANIFEST"',
         "find \"$STAGING\" -mindepth 1 -maxdepth 1 -name '*.zip'",
         'sha256sum --check "$(basename "$CHECKSUMS")"',
         "python3 trusted/infra/release_manifest.py",
@@ -694,7 +666,6 @@ def _assert_development_plan_workflow(source: str) -> None:
     for package_variable in (
         "loader_package_path",
         "publisher_package_path",
-        "timed_checks_package_path",
     ):
         assert f"-var {package_variable}" in plan_source
     assert (
@@ -703,7 +674,6 @@ def _assert_development_plan_workflow(source: str) -> None:
     for variable, package in (
         ("loader", "loader"),
         ("publisher", "publisher"),
-        ("timed_checks", "timed-checks"),
     ):
         assert f"-var {variable}_package_path=build/{package}.zip" in plan_source
     assert "development-release-manifest.json" in plan_source
@@ -957,7 +927,6 @@ def test_development_delivery_staging_snippet_accepts_only_verified_package_byte
             "publisher.zip",
             "agentcore.zip",
             "chat-proxy.zip",
-            "timed-checks.zip",
         )
         for package in packages:
             (package_dir / package).write_bytes(package.encode())
@@ -1919,24 +1888,6 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc() -> None
     )
 
 
-def test_retired_holdout_storage_keeps_data_protections() -> None:
-    storage = (REPO_ROOT / "infra/golden_eval.tf").read_text()
-    assert 'resource "aws_iam_role"' not in storage
-    assert 'resource "aws_iam_role_policy"' not in storage
-    for protection in (
-        "prevent_destroy = true",
-        "force_destroy = false",
-        'status = "Enabled"',
-        'sse_algorithm = "AES256"',
-        "block_public_acls       = true",
-        "block_public_policy     = true",
-        "ignore_public_acls      = true",
-        "restrict_public_buckets = true",
-        '"aws:SecureTransport" = "false"',
-    ):
-        assert protection in storage
-
-
 def test_runbooks_never_direct_plan_apply_target_or_workspaces() -> None:
     guarded = RUNBOOK.split("### Guarded production release", maxsplit=1)[1].split(
         "## Public report launch", maxsplit=1
@@ -1950,7 +1901,6 @@ def test_runbooks_never_direct_plan_apply_target_or_workspaces() -> None:
 def test_ci_jobs_run_verify() -> None:
     """CLAUDE.md: run what CI runs. A check added inline in ci.yml is one no one runs locally."""
     elsewhere = {
-        "golden-artifact-smoke": "needs an ARM64 host",
         "frontend-browser": "needs Playwright browsers and the deployed development AI",
         "trusted-development-plan": "needs AWS credentials",
         "development-plan": "reports trusted-development-plan",

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -44,7 +43,6 @@ _DISCLAIMER_SUFFIX = re.compile(r"(?:^|\n[ \t]*\n)" + re.escape(DISCLAIMER) + r"
 BLOCKED_MESSAGE = "I can only help with Northern Virginia toll road estimates."
 _FAILURE_MODE = "runtime_exception_v2"
 CANARY_MARKER = "greenway-canary-v1"
-EVALUATION_MARKER = "scheduled-evaluation-v1"
 CANARY_PROMPT = "What is the current toll from the Leesburg Bypass entrance to Route 28 for a two-axle vehicle with E-ZPass?"
 _CREDENTIAL = re.compile(
     r"(?i)(?:authorization\s*[:=]|password\s*[:=]|api[_-]?key\s*[:=]|"
@@ -181,63 +179,6 @@ def _canary_event(messages: Sequence[object]) -> dict[str, object]:
     }
 
 
-def _evaluation_event(
-    messages: Sequence[object], model_config: Mapping[str, Any], session_id: str
-) -> dict[str, object]:
-    """Correlate this turn's completed tools for the private eval caller only."""
-    calls: dict[str, dict[str, Any]] = {}
-    results: dict[str, dict[str, Any]] = {}
-    for message in messages:
-        if not isinstance(message, dict):
-            continue
-        for block in cast(dict[str, Any], message).get("content", []):
-            if "toolUse" in block:
-                call = block["toolUse"]
-                tool_id = call["toolUseId"]
-                if tool_id in calls:
-                    raise ValueError("Duplicate evaluation tool call")
-                calls[tool_id] = call
-            if "toolResult" in block:
-                result = block["toolResult"]
-                tool_id = result["toolUseId"]
-                if tool_id in results:
-                    raise ValueError("Duplicate evaluation tool result")
-                results[tool_id] = result
-    if calls.keys() != results.keys():
-        raise ValueError("Uncorrelated evaluation tool evidence")
-    tools: list[dict[str, Any]] = []
-    for tool_id, call in calls.items():
-        result = results[tool_id]
-        content = result.get("content", [])
-        if result.get("status") != "success" or len(content) != 1:
-            raise ValueError("Evaluation tool failed or returned no evidence")
-        payload = content[0].get("json")
-        if payload is None and isinstance(content[0].get("text"), str):
-            payload = json.loads(content[0]["text"])
-        if not isinstance(payload, dict):
-            raise ValueError("Evaluation tool failed or returned no evidence")
-        tools.append(
-            {
-                "tool_use_id": tool_id,
-                "name": call["name"],
-                "input": call["input"],
-                "tool_result": payload,
-            }
-        )
-    return {
-        "type": "evaluation",
-        "schema_version": 1,
-        "session_id": session_id,
-        "release_id": os.environ["TOLLCHAT_RELEASE_ID"],
-        "application": {
-            "model": model_config["model_id"],
-            "reasoning_effort": model_config["params"]["reasoning"]["effort"],
-            "max_output_tokens": model_config["params"]["max_output_tokens"],
-        },
-        "calls": tools,
-    }
-
-
 class TollChatRuntime:
     def __init__(
         self,
@@ -308,7 +249,6 @@ class TollChatRuntime:
                 request.get("canary_marker") == CANARY_MARKER
                 and prompt == CANARY_PROMPT
             )
-            evaluation = request.get("evaluation_marker") == EVALUATION_MARKER
             text = ""
             published = 0
             events = self._agent.stream_async(prompt, limits=_INVOCATION_LIMITS)
@@ -344,7 +284,7 @@ class TollChatRuntime:
                         boundary = _text_boundary(text, published)
                     if finished:
                         text, published = "", 0
-                    if (canary or evaluation) and "message" in event:
+                    if canary and "message" in event:
                         canary_messages.append(event["message"])
                     for activity in activity_updates(event.get("message"), activities):
                         yield {"type": "tool", **activity}
@@ -365,12 +305,6 @@ class TollChatRuntime:
                 answer = f"{answer.rstrip()}\n\n{DISCLAIMER}"
             if canary:
                 yield _canary_event(canary_messages)
-            if evaluation:
-                yield _evaluation_event(
-                    canary_messages,
-                    cast(Any, self._agent).model.get_config(),
-                    session_id,
-                )
             yield {"type": "answer", "text": answer, "blocked": False}
         except Exception as error:  # Provider boundary returns one safe error contract.
             trace.get_current_span().set_status(StatusCode.ERROR, "agent_unavailable")
