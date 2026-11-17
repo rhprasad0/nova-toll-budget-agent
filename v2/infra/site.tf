@@ -139,7 +139,7 @@ resource "aws_cloudfront_function" "public_chat_routes" {
 resource "aws_cloudfront_function" "public_report_routes" {
   name    = "tollchat-v2-public-report-routes${local.suffix}"
   runtime = "cloudfront-js-2.0"
-  comment = "Resolve TollChat dashboard paths"
+  comment = "Resolve canonical TollChat report directories"
   publish = true
   code    = file("${path.module}/../agent/public-report-routes.js")
 }

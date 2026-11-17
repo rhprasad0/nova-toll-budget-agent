@@ -151,7 +151,7 @@
     "v2/infra/providers.tf": "b5fc8bb0f92ed4990625aebbe95811d683f36d48a9f18ad3520238d79b95e4aa",
     "v2/infra/release-bootstrap.tf": "65fbaa8f39b2a6d365ff41e58ac8505e8d463a0b41b81021d9c79822e9c17f55",
     "v2/infra/releases.tf": "81588ec85c0c1e0018040660537930a5cd9d48b78ac4ba64d9b51caceb932ff4",
-    "v2/infra/site.tf": "56a98e739f66e5aa36325199c447950ec1d46f14a145c57a95deee4c7d83247b",
+    "v2/infra/site.tf": "f9bfe3fc5c25a141576934e6882c28c47431efebe6cc67d60a7a1980be5a4e80",
     "v2/infra/telemetry-log-policy.tf": "641ab81e8c947e3c04196e856addee12bdd06a06c1e9a9f14cdb8b5f8830c03a",
     "v2/infra/timed_checks.tf": "63d14d1c2f51e6983ce55956feb7430db6004c8b10ca3e5719c6830adf3aca40",
     "v2/infra/trace_redaction.tf": "70bd43bf038c175f47ff2ff9a125c911d0452b12ced42081fdd93808dbf60569",
