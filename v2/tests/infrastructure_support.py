@@ -10,7 +10,6 @@ V2_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = V2_ROOT.parent
 MAIN_TF = (V2_ROOT / "infra" / "main.tf").read_text()
 TIMED_CHECKS_TF = (V2_ROOT / "infra" / "timed_checks.tf").read_text()
-PUBLISHER_HANDLER = (V2_ROOT / "lambdas" / "publisher" / "handler.py").read_text()
 ENVIRONMENT_TF = (V2_ROOT / "infra" / "environment.tf").read_text()
 SITE_TF = (V2_ROOT / "infra" / "site.tf").read_text()
 DEVELOPMENT_TFVARS = (V2_ROOT / "infra" / "development.tfvars").read_text()

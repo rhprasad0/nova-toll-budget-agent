@@ -8,13 +8,11 @@ locals {
     pricing_caller = "pricing_caller"
     agent          = "tollchat_agent"
     loader         = "pricing_loader_writer"
-    publisher      = "report_publisher"
     reader         = "pricing_reader"
     } : {
     pricing_caller = "pricing_caller_development"
     agent          = "tollchat_agent_development"
     loader         = "pricing_loader_writer_development"
-    publisher      = "report_publisher_development"
     reader         = "pricing_reader_development"
   }
   domains                           = local.is_production ? ["tollchat.ai", "www.tollchat.ai"] : ["dev.tollchat.ai"]

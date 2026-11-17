@@ -27,12 +27,7 @@ New public usage counting and daily publication have stopped. TollChat retains t
 
 New session records contain only the one-way hash of a random browser credential, a random runtime ID, creation and activity timestamps, a one-hour expiration timestamp, and a temporary request lease. TollChat stops accepting the record after one hour, and DynamoDB then deletes it asynchronously. The record does not contain chat text, trip details, salary figures, IP addresses, or advertising identifiers.
 
-Public route reports and historical measurement state
-
-TollChat publishes route reports under `/tolls/` as public HTML pages and JSON
-siblings. The report objects contain toll results and publication metadata, not
-chat prompts, responses, account identifiers, cookies, authorization values,
-query strings, or referrer URLs.
+Historical measurement state
 
 For security and abuse prevention, AWS WAF still temporarily processes request
 time, method, host, route path, user-agent, and WAF action. Existing sampled

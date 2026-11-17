@@ -1,9 +1,5 @@
-import json
-import os
 import re
 import subprocess
-import tempfile
-from collections.abc import Mapping
 from pathlib import Path
 from textwrap import dedent
 
@@ -185,16 +181,9 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm() -> None:
     assert "merge(each.value.proxy_environment" in proxy
     assert 'PUBLIC_ORIGINS = "https://${local.domains[0]}"' not in proxy
     loader = main.split('resource "aws_lambda_function" "loader"', maxsplit=1)[1].split(
-        'resource "aws_lambda_function" "publisher"', maxsplit=1
-    )[0]
-    publisher = main.split('resource "aws_lambda_function" "publisher"', maxsplit=1)[
-        1
-    ].split(
-        'resource "aws_lambda_function_event_invoke_config" "publisher"', maxsplit=1
+        "\nresource ", maxsplit=1
     )[0]
     assert "reserved_concurrent_executions = 5" in loader
-    assert "reserved_concurrent_executions = 1" in publisher
-    assert "PUBLIC_BASE_URL      = local.public_site_url" in publisher
     assert "Content-Type: application/json" in DEPLOYMENT
     assert "Sec-Fetch-Site: same-origin" in DEPLOYMENT
     assert (
@@ -284,7 +273,7 @@ def test_development_site_has_no_cloudflare_reads_or_writes() -> None:
     assert "development path has no Cloudflare data or resource instances" in DEPLOYMENT
 
 
-def test_public_report_surface_is_canonical_crawlable_and_isolated() -> None:
+def test_public_routing_and_robots_are_isolated() -> None:
     site = (V2_ROOT / "infra" / "site.tf").read_text()
     robots = (V2_ROOT / "agent" / "robots.txt").read_text()
 
@@ -310,221 +299,7 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated() -> None:
     )
     assert 'content_type  = "text/plain; charset=utf-8"' in robots_object
     assert 'cache_control = "no-cache"' in robots_object
-    for user_agent in (
-        "OAI-SearchBot",
-        "ChatGPT-User",
-        "Claude-SearchBot",
-        "Claude-User",
-        "Googlebot",
-        "Google-Extended",
-        "Google-Agent",
-        "PerplexityBot",
-        "Perplexity-User",
-        "bingbot",
-        "Amzn-SearchBot",
-        "Amzn-User",
-        "Applebot",
-        "DuckAssistBot",
-    ):
-        assert f"User-agent: {user_agent}\nAllow: /tolls/" in robots
-    assert "Sitemap: https://tollchat.ai/sitemap.xml" in robots
-    for training_agent in ("GPTBot", "ClaudeBot", "Amazonbot", "Applebot-Extended"):
-        assert training_agent not in robots
-    assert "cloudfront wait distribution-deployed" in DEPLOYMENT
-    assert "aws_lambda_function.publisher" in DEPLOYMENT
-    assert 'test "$(wc -l <"$REPORT_URLS")" -eq 262' in DEPLOYMENT
-    assert "len(set(urls)) == 264" in DEPLOYMENT
-    assert "for facility in i95-i495 i66; do" in DEPLOYMENT
-    assert "ChatGPT-User Googlebot Claude-SearchBot Claude-User" in DEPLOYMENT
-    assert (
-        "Disabling publication does not withdraw existing report objects" in DEPLOYMENT
-    )
-
-
-def test_public_report_launch_is_selected_environment_and_correlated() -> None:
-    launch = DEPLOYMENT.split("## Public report launch", 1)[1].split(
-        "## Smoke test", 1
-    )[0]
-    assert "production only" in launch.lower()
-    assert re.search(
-        r"never run it while the development\s+backend is selected", launch
-    )
-    assert re.search(
-        r"Development public report publication\s+remains deferred",
-        launch,
-    )
-    for required in (
-        "terraform output -json public_site",
-        ".url | select",
-        '"$SITE_URL/sitemap.xml"',
-        'REPORT_URL="$SITE_URL/tolls/',
-        "aws_cloudwatch_log_group.publisher",
-        "REPORT_SMOKE_ID=",
-        "REPORT_STARTED_MS=",
-        "--invocation-type Event",
-        ".StatusCode == 202",
-        "logs filter-log-events",
-        '--start-time "$REPORT_STARTED_MS"',
-        "V2_REPORT_SMOKE_OK $REPORT_SMOKE_ID",
-        "(published|unchanged)",
-        'schema_version == "3.0.0"',
-        "facility == $facility",
-        "route_count == $routes",
-        "report_manifest_is_valid i66 16",
-        'test("^[a-f0-9]{64}$")',
-        "trap 'rm -f --",
-    ):
-        assert required in launch
-
-    shells = re.findall(r"```sh\n(.*?)\n```", launch, re.DOTALL)
-    assert len(shells) == 2
-    for shell in shells:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as script:
-            script.write(shell)
-            script.flush()
-            assert (
-                subprocess.run(["bash", "-n", script.name], check=False).returncode == 0
-            )
-        for required in (
-            'ROOT="$(git rev-parse --show-toplevel)"',
-            'cd "$ROOT/v2/infra"',
-            'get-caller-identity --query Account --output text)" = "920534282028"',
-            "terraform init -reconfigure -input=false -backend-config=backend.production.hcl",
-            'test "$PUBLISHER_FUNCTION" = "toll-v2-report-publisher"',
-            'test "$PUBLISHER_LOG_GROUP" = "/aws/lambda/toll-v2-report-publisher"',
-            'test "$SITE_BUCKET" = "tollchat-site-920534282028"',
-            'test -n "$SITE_DISTRIBUTION"',
-            '[[ "$SITE_DISTRIBUTION" =~ ^[A-Z0-9]+$ ]]',
-            'test "$SITE_URL" = "https://tollchat.ai"',
-        ):
-            assert required in shell
-        assert not re.search(r'SITE_DISTRIBUTION="E[A-Z0-9]+"', shell)
-        selection = shell.index('test "$(AWS_PROFILE=nova-toll-prod aws sts')
-        initialization = shell.index(
-            "terraform init -reconfigure -input=false -backend-config=backend.production.hcl"
-        )
-        state_reads = [
-            shell.index("terraform state show"),
-            shell.index("terraform output -json public_site"),
-        ]
-        assert selection < initialization < min(state_reads)
-        validation = max(
-            shell.index('test "$PUBLISHER_FUNCTION"'),
-            shell.index('test "$PUBLISHER_LOG_GROUP"'),
-            shell.index('test "$SITE_BUCKET"'),
-            shell.index('test -n "$SITE_DISTRIBUTION"'),
-            shell.index('[[ "$SITE_DISTRIBUTION"'),
-            shell.index('test "$SITE_URL"'),
-        )
-        report_operations = [
-            shell.find("cloudfront wait"),
-            shell.find("lambda invoke"),
-            shell.find("logs filter-log-events"),
-            shell.find("s3api get-object"),
-            shell.find("curl --fail"),
-        ]
-        report_operations = [
-            position for position in report_operations if position >= 0
-        ]
-        assert report_operations and validation < min(report_operations)
-
-    shell = shells[0]
-
-    def shell_function(name: str) -> str:
-        match = re.search(rf"(?ms)^{name}\(\) \{{.*?^\}}", shell)
-        if match is None:
-            raise AssertionError(f"missing {name}")
-        return match.group(0)
-
-    smoke_check = shell_function("report_smoke_succeeded")
-    manifest_check = shell_function("report_manifest_is_valid")
-    smoke_id = "123e4567-e89b-12d3-a456-426614174000"
-    generation_id = "2026-08-25T16:05:00Z"
-    result_sha256 = "a" * 64
-
-    def smoke_passes(records: str) -> bool:
-        return (
-            subprocess.run(
-                [
-                    "bash",
-                    "-c",
-                    f'set -euo pipefail; {smoke_check}; report_smoke_succeeded "$REPORT_RESULT"',
-                ],
-                check=False,
-                env={
-                    **os.environ,
-                    "REPORT_SMOKE_ID": smoke_id,
-                    "REPORT_STARTED_MS": "1000",
-                    "REPORT_RESULT": records,
-                },
-            ).returncode
-            == 0
-        )
-
-    assert smoke_passes(
-        f"1000\tV2_REPORT_SMOKE_OK {smoke_id} published {generation_id} {result_sha256}"
-    )
-    assert smoke_passes(
-        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} unchanged {generation_id} {result_sha256}"
-    )
-    assert smoke_passes(
-        f"1001\t2026-08-25T16:05:01Z INFO V2_REPORT_SMOKE_OK {smoke_id} published {generation_id} {result_sha256}"
-    )
-    assert not smoke_passes(
-        f"999\tV2_REPORT_SMOKE_OK {smoke_id} published {generation_id} {result_sha256}"
-    )
-    assert not smoke_passes(
-        "1001\tV2_REPORT_SMOKE_OK 123e4567-e89b-12d3-a456-426614174001 "
-        f"published {generation_id} {result_sha256}"
-    )
-    assert not smoke_passes(
-        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} superseded {generation_id} {result_sha256}"
-    )
-    assert not smoke_passes(
-        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} error {generation_id} {result_sha256}"
-    )
-    assert not smoke_passes(f"1001\tV2_REPORT_SMOKE_OK {smoke_id} published ")
-    assert not smoke_passes(
-        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} published malformed {result_sha256}"
-    )
-    assert not smoke_passes(
-        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} published 2026-99-25T16:05:00Z {result_sha256}"
-    )
-    assert not smoke_passes(
-        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} published {generation_id} {'A' * 64}"
-    )
-    assert not smoke_passes(
-        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} published {generation_id} {'a' * 63}"
-    )
-    assert not smoke_passes("1001\tV2_REPORT_GENERATION_OK i95_i495")
-
-    def manifest_passes(manifest: Mapping[str, object]) -> bool:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as fixture:
-            json.dump(manifest, fixture)
-            fixture.flush()
-            return (
-                subprocess.run(
-                    [
-                        "bash",
-                        "-c",
-                        f'set -euo pipefail; {manifest_check}; report_manifest_is_valid i95_i495 246 "$REPORT_MANIFEST"',
-                    ],
-                    check=False,
-                    env={**os.environ, "REPORT_MANIFEST": fixture.name},
-                ).returncode
-                == 0
-            )
-
-    manifest: dict[str, object] = {
-        "schema_version": "3.0.0",
-        "facility": "i95_i495",
-        "route_count": 246,
-        "week_end": "2026-08-01T00:00:00Z",
-        "result_sha256": "a" * 64,
-    }
-    assert manifest_passes(manifest)
-    assert not manifest_passes({**manifest, "week_end": ""})
-    assert not manifest_passes({**manifest, "result_sha256": "A" * 64})
+    assert robots == "User-agent: *\nAllow: /\n"
 
 
 def test_public_site_publishes_the_v2_ui_and_legal_assets() -> None:

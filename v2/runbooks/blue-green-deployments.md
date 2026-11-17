@@ -48,7 +48,7 @@ Lambda ARN/version, runtime ARN/version/endpoint, and runtime-emitted release ID
 | Recover | Fresh gated Terraform plan restores retained public/private routing; verify both streamed answers and retained assets | Report recovery separately; deployment remains failed |
 | Complete | Record active/previous identities and keep the previous slot | After observation, cancellation or runner loss, use manual recovery |
 
-Preparation admits verified code-only updates to the fixed loader, publisher,
+Preparation admits verified code-only updates to the fixed loader,
 timed-checks and cost Lambdas, plus the existing reviewed billing changes and
 the pinned annotation-only CloudFront transition in either environment.
 Other active-slot, primary-routing, IAM, network, scheduled-job and shared
@@ -74,7 +74,7 @@ before migrations and repeats the check before applying the saved plan.
 An already-completed preparation retains these verified packages without needing
 to repeat that transition from the original baseline. Extending it requires
 review and focused compatibility tests; do not replace the baseline merely to
-silence a gate. Credential-free CI exercises old/new loader events, publishers,
+silence a gate. Credential-free CI exercises old/new loader events,
 timed-check contracts, the independently scheduled costs handler, and the retained
 database contracts against the disposable upgraded schema.
 
@@ -375,7 +375,7 @@ candidate checks pace chat and reset requests below the existing WAF limit
 (35 seconds apart in development; 17 in production). Allow several minutes for
 validation; pacing occurs outside the individual canary deadline.
 
-Shared loader, publisher and timed-check packages use paths relative to the
+Shared loader, cost publisher and timed-check packages use paths relative to the
 Terraform module (`build/*.zip`) in both planning and delivery. Bootstrap must
 use these same paths: absolute workstation or runner paths violate the package
 evidence contract, even when the bytes match.

@@ -53,7 +53,7 @@ ASSET_SHA256: dict[str, str] = {
     "costs.css": "8578e3aa2939740c6010793662aa75ea99cac633e59853804e8d15e094bb0ce2",
     "costs.mjs": "38964764c0202b1b4a35750359acd9db3ddb13020102ade803dbda383b38d153",
     "evals.css": "a769365269ebde99103a56e6ce64a619f1a728c137aeeeca93ea04023db85688",
-    "public-report-routes.js": "ffbcffad663e80878c7d213aaaf533bbe05dcbe438beef1a771b6603d8ae9d44",
+    "public-report-routes.js": "7d05de16a43e9fde954b87b38b62e35acfff6076666907e2bc94d45079eefc9f",
     "development/costs.html": "8c785f3cd1e365640ed00343acba2f9ce1c2db5166063ad4a1003f8e474c172b",
     "development/evals.html": "0d291fc57e710721696002feec0285c0e9adcae3c3427a328d32215d516dc6cf",
     "production/costs.html": "ad1f2d5f7e24cb383d1b98baf716173b6c7c7bdcc2bf5241b5e6cfe7b5d3da6b",

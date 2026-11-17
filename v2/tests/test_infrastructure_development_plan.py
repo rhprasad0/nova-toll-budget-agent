@@ -93,7 +93,7 @@ def test_job_network_rules_are_exactly_the_reviewed_ones(
         )
         for address, value in development_plan.items()
         if address.startswith("aws_vpc_security_group_")
-        and any(job in address for job in ("timed_checks", "loader", "publisher"))
+        and any(job in address for job in ("timed_checks", "loader"))
     }
     assert not [
         address
@@ -111,9 +111,6 @@ def test_job_network_rules_are_exactly_the_reviewed_ones(
         "loader_to_rds": (*postgres, "sg-rds"),
         "loader_to_s3": (*https, "pl-s3"),
         "rds_from_loader": (*postgres, "sg-rds"),
-        "publisher_to_rds": (*postgres, "sg-rds"),
-        "publisher_to_s3": (*https, "pl-s3"),
-        "rds_from_publisher": (*postgres, "sg-rds"),
     }
 
 
@@ -128,8 +125,6 @@ def test_every_failure_queue_is_encrypted_and_kept_for_fourteen_days(
     assert {address.split(".")[1] for address in queues} >= {
         "invoke_failure",
         "delivery_failure",
-        "publisher_invoke_failure",
-        "publisher_delivery_failure",
         "timed_checks_invoke_failure",
         "timed_checks_delivery_failure",
     }
@@ -157,54 +152,6 @@ def test_raw_objects_reach_the_loader_with_bounded_retries(
     assert invoke["maximum_event_age_in_seconds"] == 21600
 
 
-def test_report_publisher_runs_weekly_as_one_bounded_function(
-    development_plan: Plan,
-) -> None:
-    schedule = development_plan["aws_scheduler_schedule.publisher"]
-    (target,) = schedule["target"]
-    assert schedule["schedule_expression"] == "cron(0 1 ? * MON *)"
-    assert schedule["schedule_expression_timezone"] == "America/New_York"
-    assert schedule["flexible_time_window"][0]["mode"] == "OFF"
-    assert json.loads(target["input"]) == {"trigger": "watchdog"}
-    assert retries(target) == (2, 3600)
-    freshness = development_plan[
-        "aws_cloudwatch_metric_alarm.report_generation_freshness"
-    ]
-    assert freshness["datapoints_to_alarm"] == 7
-    # The event-driven triggers were replaced by this one schedule.
-    assert not [
-        address
-        for address in development_plan
-        if any(
-            retired in address
-            for retired in (
-                "committed_i95_loads",
-                "report_watchdog",
-                "publisher_load_event",
-                "publisher_watchdog",
-                "publisher_failed_invocations",
-            )
-        )
-    ]
-    function = development_plan["aws_lambda_function.publisher"]
-    assert function["function_name"] == "toll-v2-report-publisher-dev"
-    assert (function["timeout"], function["memory_size"]) == (900, 2048)
-    assert function["reserved_concurrent_executions"] == 1
-    assert function["environment"][0]["variables"] == {
-        "DB_HOST": "db.example",
-        "DB_NAME": "nova_toll_development",
-        "DB_PORT": "5432",
-        "DB_USER": "report_publisher_development",
-        "DB_READER_USER": "pricing_reader_development",
-        "PUBLIC_BASE_URL": "https://dev.tollchat.ai",
-        "REPORT_PUBLICATION_ENABLED": "true",
-        "TOLLCHAT_ENVIRONMENT": "development",
-    }
-    invoke = development_plan["aws_lambda_function_event_invoke_config.publisher"]
-    assert invoke["maximum_retry_attempts"] == 2
-    assert invoke["maximum_event_age_in_seconds"] == 21600
-
-
 @pytest.mark.parametrize(
     ("address", "signal", "missing", "dimensions"),
     [
@@ -213,12 +160,6 @@ def test_report_publisher_runs_weekly_as_one_bounded_function(
             ERRORS,
             "notBreaching",
             {"FunctionName": "toll-v2-pricing-loader-dev"},
-        ),
-        (
-            "publisher_errors",
-            ERRORS,
-            "notBreaching",
-            {"FunctionName": "toll-v2-report-publisher-dev"},
         ),
         (
             "timed_checks_errors",
@@ -239,18 +180,6 @@ def test_report_publisher_runs_weekly_as_one_bounded_function(
             {"QueueName": "toll-v2-pricing-loader-delivery-failure-dev"},
         ),
         (
-            'publisher_failure_queues["invoke"]',
-            QUEUED,
-            "notBreaching",
-            {"QueueName": "toll-v2-report-publisher-invoke-failure-dev"},
-        ),
-        (
-            'publisher_failure_queues["delivery"]',
-            QUEUED,
-            "notBreaching",
-            {"QueueName": "toll-v2-report-publisher-delivery-failure-dev"},
-        ),
-        (
             'freshness["i95"]',
             ("NovaToll", "V2LoadSuccess", "Sum", 600, 3, "LessThanThreshold"),
             "breaching",
@@ -261,19 +190,6 @@ def test_report_publisher_runs_weekly_as_one_bounded_function(
             ("NovaToll", "V2LoadSuccess", "Sum", 600, 3, "LessThanThreshold"),
             "breaching",
             {"Environment": "development", "feed": "i66"},
-        ),
-        (
-            "report_generation_freshness",
-            (
-                "NovaToll",
-                "V2ReportGenerationSuccess",
-                "Sum",
-                86400,
-                7,
-                "LessThanThreshold",
-            ),
-            "breaching",
-            {"Environment": "development", "facility_scope": "both"},
         ),
     ],
 )

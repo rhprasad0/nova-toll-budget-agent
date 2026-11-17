@@ -94,7 +94,7 @@ def package_plan(
         done = (
             phase != "prepare"
             or partial == "complete"
-            or (partial == "lambda" and component == "publisher")
+            or (partial == "lambda" and component == "costs")
         )
         if done:
             before = deepcopy(values)
@@ -321,7 +321,6 @@ def test_readbacks_include_earlier_success_and_do_not_invoke_handlers(
     monkeypatch.setattr(release_blue_green.time, "sleep", sleeps.append)
     assert release_blue_green.shared_readiness(expected, wait=False) == {
         "loader": "unknown",
-        "publisher": "verified",
         "timed_checks": "failed",
         "costs": "verified",
     }

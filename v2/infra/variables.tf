@@ -5,7 +5,7 @@ variable "loader_package_path" {
 }
 
 variable "publisher_package_path" {
-  description = "Reviewed v2 report publisher zip. Empty uses a validation-only placeholder."
+  description = "Reviewed v2 cost publisher zip. Empty uses a validation-only placeholder."
   type        = string
   default     = ""
 }

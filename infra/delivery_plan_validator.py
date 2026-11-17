@@ -106,7 +106,6 @@ LAMBDA = tuple(
     f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{name}"
     for name in (
         "toll-v2-pricing-loader-dev",
-        "toll-v2-report-publisher-dev",
         "tollchat-v2-chat-proxy-dev",
         "nova-toll-v2-timed-checks-dev",
     )
@@ -114,7 +113,6 @@ LAMBDA = tuple(
 LAMBDA_FUNCTION_NAMES = MappingProxyType(
     {
         "loader": "toll-v2-pricing-loader-dev",
-        "publisher": "toll-v2-report-publisher-dev",
         "tollchat_proxy": "tollchat-v2-chat-proxy-dev",
         "timed_checks": "nova-toll-v2-timed-checks-dev",
     }
@@ -153,7 +151,6 @@ LOG_GROUPS = tuple(
     f"arn:aws:logs:{REGION}:{ACCOUNT}:log-group:{name}"
     for name in (
         "/aws/lambda/toll-v2-pricing-loader-dev",
-        "/aws/lambda/toll-v2-report-publisher-dev",
         "/aws/lambda/tollchat-v2-chat-proxy-dev",
         "/aws/lambda/toll-v2-usage-publisher-dev",
         "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
@@ -166,16 +163,7 @@ ARTIFACT_OBJECTS = (
     "arn:aws:s3:::nova-toll-agentcore-903859731897/lambda/v2/*",
 )
 SITE_BUCKET = f"arn:aws:s3:::{SITE_BUCKET_NAME}"
-PUBLISHER_ROLE_NAME = "toll-v2-report-publisher-dev"
-PUBLISHER_ROLE_ARN = f"arn:aws:iam::{ACCOUNT}:role/{PUBLISHER_ROLE_NAME}"
-REPORT_FRESHNESS_ALARM_NAME = "toll-v2-report-generation-freshness-dev"
-REPORT_FRESHNESS_ALARM_ARN = (
-    f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{REPORT_FRESHNESS_ALARM_NAME}"
-)
-PUBLISHER_SITE_KEY_ARN = (
-    "arn:aws:kms:us-east-1:903859731897:key/3bc78b60-9cbe-4abd-9744-8772c78d8379"
-)
-TRACE_LOG_GROUPS = LOG_GROUPS[4:]
+TRACE_LOG_GROUPS = LOG_GROUPS[3:]
 TRACE_FIREHOSE = f"arn:aws:firehose:{REGION}:{ACCOUNT}:deliverystream/nova-toll-v2-agentcore-traces-dev"
 TRACE_LOGS_ROLE = f"arn:aws:iam::{ACCOUNT}:role/nova-toll-v2-agentcore-traces-logs-dev"
 TRACE_FIREHOSE_ROLE = (
@@ -383,7 +371,7 @@ def _trace_firehose_value() -> dict[str, Any]:
 def _build_contract() -> dict[str, Mutation]:
     result: dict[str, Mutation] = {}
     for name, resource in zip(
-        ("loader", "publisher", "tollchat_proxy", "timed_checks"), LAMBDA, strict=False
+        ("loader", "tollchat_proxy", "timed_checks"), LAMBDA, strict=False
     ):
         if name == "tollchat_proxy":
             delivery_identity = (
@@ -502,15 +490,15 @@ def _build_contract() -> dict[str, Mutation]:
             f"arn:aws:events:{REGION}:{ACCOUNT}:rule/toll-v2-pricing-raw-objects-dev",
         ),
     )
-    log_names = ("loader", "publisher", "tollchat_proxy", "usage_publisher")
-    for name, resource in zip(log_names, LOG_GROUPS[:4], strict=False):
+    log_names = ("loader", "tollchat_proxy", "usage_publisher")
+    for name, resource in zip(log_names, LOG_GROUPS[:3], strict=False):
         result[f"aws_cloudwatch_log_group.{name}"] = _mutation(
             ("retention_in_days",),
             ("update",),
             "log-retention",
             _permission("logs:PutRetentionPolicy", resource),
         )
-    for key, resource in (("DEFAULT", LOG_GROUPS[4]), ("preview", LOG_GROUPS[5])):
+    for key, resource in (("DEFAULT", LOG_GROUPS[3]), ("preview", LOG_GROUPS[4])):
         result[f'aws_cloudwatch_log_group.agentcore_runtime["{key}"]'] = _mutation(
             ("retention_in_days",),
             ("update",),
@@ -523,9 +511,6 @@ def _build_contract() -> dict[str, Mutation]:
         'aws_cloudwatch_metric_alarm.freshness["i66"]': "toll-v2-pricing-freshness-i66-dev",
         'aws_cloudwatch_metric_alarm.failure_queues["invoke"]': "toll-v2-pricing-loader-invoke-failure-queue-dev",
         'aws_cloudwatch_metric_alarm.failure_queues["delivery"]': "toll-v2-pricing-loader-delivery-failure-queue-dev",
-        "aws_cloudwatch_metric_alarm.publisher_errors": "toll-v2-report-publisher-errors-dev",
-        'aws_cloudwatch_metric_alarm.publisher_failure_queues["invoke"]': "toll-v2-report-publisher-invoke-failure-queue-dev",
-        'aws_cloudwatch_metric_alarm.publisher_failure_queues["delivery"]': "toll-v2-report-publisher-delivery-failure-queue-dev",
         "aws_cloudwatch_metric_alarm.tollchat_proxy_errors": "tollchat-v2-chat-proxy-errors-dev",
         "aws_cloudwatch_metric_alarm.tollchat_proxy_failures": "tollchat-v2-chat-proxy-failures-dev",
         "aws_cloudwatch_metric_alarm.tollchat_proxy_latency": "tollchat-v2-chat-proxy-latency-dev",
@@ -545,18 +530,6 @@ def _build_contract() -> dict[str, Mutation]:
                 f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:{name}",
             ),
         )
-    result["aws_iam_role_policy.publisher"] = _mutation(
-        ("policy",),
-        ("update",),
-        "publisher-inline-policy",
-        _permission("iam:PutRolePolicy", PUBLISHER_ROLE_ARN),
-        create_identity=(("name", PUBLISHER_ROLE_NAME), ("role", PUBLISHER_ROLE_NAME)),
-        provider_change_identity=(
-            ("account_id", ACCOUNT),
-            ("name", PUBLISHER_ROLE_NAME),
-            ("role", PUBLISHER_ROLE_NAME),
-        ),
-    )
     result["aws_iam_role_policy.tollchat_runtime"] = _mutation(
         ("policy",),
         ("update",),
@@ -572,18 +545,6 @@ def _build_contract() -> dict[str, Mutation]:
             ("role", TRACE_RUNTIME_ROLE_NAME),
         ),
     )
-    result["aws_cloudwatch_metric_alarm.report_generation_freshness"] = _mutation(
-        ("alarm_description", "dimensions"),
-        ("update",),
-        "report-freshness-alarm",
-        _permission("cloudwatch:PutMetricAlarm", REPORT_FRESHNESS_ALARM_ARN),
-        create_identity=(("alarm_name", REPORT_FRESHNESS_ALARM_NAME),),
-        provider_change_identity=(
-            ("account_id", ACCOUNT),
-            ("alarm_name", REPORT_FRESHNESS_ALARM_NAME),
-            ("region", REGION),
-        ),
-    )
     result["aws_dynamodb_table.tollchat_sessions"] = _mutation(
         ("ttl.enabled",),
         ("update",),
@@ -591,20 +552,6 @@ def _build_contract() -> dict[str, Mutation]:
         _permission(
             "dynamodb:UpdateTimeToLive",
             f"arn:aws:dynamodb:{REGION}:{ACCOUNT}:table/tollchat-v2-anonymous-sessions-dev",
-        ),
-    )
-    result["aws_scheduler_schedule.publisher"] = _mutation(
-        (
-            "schedule_expression",
-            "schedule_expression_timezone",
-            "flexible_time_window",
-            "target",
-        ),
-        ("update",),
-        "schedule-update",
-        _permission(
-            "scheduler:UpdateSchedule",
-            f"arn:aws:scheduler:{REGION}:{ACCOUNT}:schedule/*/toll-v2-report-publisher-dev",
         ),
     )
     for key in TIMED_SCHEDULE_KEYS:
@@ -1548,7 +1495,7 @@ def _validate_s3_identity(
         )
 
 
-def _publisher_policy(
+def _inline_policy(
     value: JSON, address: str, action: str, operation_class: str
 ) -> dict[str, dict[str, Any]]:
     try:
@@ -1635,7 +1582,7 @@ def _publisher_policy(
     return by_sid
 
 
-def _publisher_statement(
+def _policy_statement(
     sid: str,
     action_name: str,
     resources: tuple[str, ...],
@@ -1654,125 +1601,16 @@ def _publisher_statement(
     return statement
 
 
-def _validate_publisher_policy(
-    before: JSON, after: JSON, address: str, action: str, operation_class: str
-) -> None:
-    if not isinstance(before, dict) or not isinstance(after, dict):
-        _reject(
-            "unsupported_field_delta",
-            address=address,
-            action=action,
-            operation_class=operation_class,
-        )
-    old, new = (
-        _publisher_policy(value.get("policy"), address, action, operation_class)
-        for value in (before, after)
-    )
-    bucket = f"arn:aws:s3:::{SITE_BUCKET_NAME}"
-    expected_old = {
-        "ReadPublicationManifest": _publisher_statement(
-            "ReadPublicationManifest",
-            "s3:GetObject",
-            (f"{bucket}/tolls/i95-i495/manifest.json",),
-        ),
-        "FindPublicationManifest": _publisher_statement(
-            "FindPublicationManifest",
-            "s3:ListBucket",
-            (bucket,),
-            condition=("s3:prefix", ("tolls/i95-i495/manifest.json",)),
-        ),
-        "WritePublicReports": _publisher_statement(
-            "WritePublicReports",
-            "s3:PutObject",
-            (f"{bucket}/tolls/i95-i495/*", f"{bucket}/sitemap.xml"),
-        ),
-    }
-    expected_new = {
-        "ListPublicReports": _publisher_statement(
-            "ListPublicReports",
-            "s3:ListBucket",
-            (bucket,),
-            condition=("s3:prefix", ("tolls/i95-i495/", "tolls/i66/")),
-        ),
-        "WritePublicReports": _publisher_statement(
-            "WritePublicReports",
-            "s3:PutObject",
-            (
-                f"{bucket}/tolls/i95-i495/*",
-                f"{bucket}/tolls/i66/*",
-                f"{bucket}/sitemap.xml",
-            ),
-        ),
-        "DeleteStalePublicReports": _publisher_statement(
-            "DeleteStalePublicReports",
-            "s3:DeleteObject",
-            (f"{bucket}/tolls/i95-i495/*", f"{bucket}/tolls/i66/*"),
-        ),
-    }
-    retained_sids = {"ConnectRdsIam", "SendInvokeFailure", "UseSiteKey"}
-    if set(old) != retained_sids | set(expected_old) or set(new) != retained_sids | set(
-        expected_new
-    ):
-        _reject(
-            "unsupported_field_delta",
-            address=address,
-            action=action,
-            operation_class=operation_class,
-        )
-    old_s3 = {sid: old.pop(sid, None) for sid in expected_old}
-    new_s3 = {sid: new.pop(sid, None) for sid in expected_new}
-    expected_retained = {
-        "SendInvokeFailure": _publisher_statement(
-            "SendInvokeFailure",
-            "sqs:SendMessage",
-            (
-                f"arn:aws:sqs:{REGION}:{ACCOUNT}:toll-v2-report-publisher-invoke-failure-dev",
-            ),
-        ),
-    }
-    rds = old.get("ConnectRdsIam")
-    site_key = old.get("UseSiteKey")
-    if (
-        old_s3 != expected_old
-        or new_s3 != expected_new
-        or old != new
-        or old.get("SendInvokeFailure") != expected_retained["SendInvokeFailure"]
-        or not isinstance(rds, dict)
-        or set(rds) != {"Sid", "Effect", "Action", "Resource"}
-        or rds.get("Effect") != "Allow"
-        or rds.get("Action") != ["rds-db:connect"]
-        or rds.get("Resource")
-        != sorted(
-            [
-                f"arn:aws:rds-db:{REGION}:{ACCOUNT}:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/report_publisher_development",
-                f"arn:aws:rds-db:{REGION}:{ACCOUNT}:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/pricing_reader_development",
-            ]
-        )
-        or not isinstance(site_key, dict)
-        or set(site_key) != {"Sid", "Effect", "Action", "Resource"}
-        or site_key.get("Effect") != "Allow"
-        or site_key.get("Action")
-        != ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
-        or site_key.get("Resource") != [PUBLISHER_SITE_KEY_ARN]
-    ):
-        _reject(
-            "unsupported_field_delta",
-            address=address,
-            action=action,
-            operation_class=operation_class,
-        )
-
-
 def _validate_trace_runtime_policy(
     before: JSON, after: JSON, address: str, action: str, operation_class: str
 ) -> None:
     if not isinstance(before, dict) or not isinstance(after, dict):
         _trace_reject(address, action, operation_class)
     old, new = (
-        _publisher_policy(value.get("policy"), address, action, operation_class)
+        _inline_policy(value.get("policy"), address, action, operation_class)
         for value in (before, after)
     )
-    statement = _publisher_statement(
+    statement = _policy_statement(
         "EnableUnifiedRuntimeTraceDelivery",
         "logs:PutResourcePolicy",
         (
@@ -1801,37 +1639,6 @@ def _validate_trace_runtime_policy(
         or (telemetry_added and added == removed == statement)
     ):
         _trace_reject(address, action, operation_class)
-
-
-def _validate_report_freshness_alarm(
-    before: JSON, after: JSON, address: str, action: str, operation_class: str
-) -> None:
-    expected_before = {
-        "alarm_description": "No complete I-95/I-495 report generation in the trailing seven-day sliding window.",
-        "dimensions": {"facility": "i95_i495", "Environment": "development"},
-    }
-    expected_after = {
-        "alarm_description": "No complete I-95/I-495 and I-66 report generation in the trailing seven-day sliding window.",
-        "dimensions": {"facility_scope": "both", "Environment": "development"},
-    }
-    if (
-        not isinstance(before, dict)
-        or not isinstance(after, dict)
-        or any(
-            value.get(field) != expected
-            for value, expected_values in (
-                (before, expected_before),
-                (after, expected_after),
-            )
-            for field, expected in expected_values.items()
-        )
-    ):
-        _reject(
-            "unsupported_field_delta",
-            address=address,
-            action=action,
-            operation_class=operation_class,
-        )
 
 
 def _validate_agentcore_trace_value(
@@ -2819,28 +2626,6 @@ def _parse_plan(
             _reject("malformed_input", address=address, action=action)
         if action == "delete" and (before is None or after is not None):
             _reject("malformed_input", address=address, action=action)
-        if spec.operation_class in {
-            "publisher-inline-policy",
-            "report-freshness-alarm",
-        }:
-            if metadata_paths.get("after_unknown", ()):
-                _reject(
-                    "unknown_authorization_value",
-                    address=address,
-                    action=action,
-                    operation_class=spec.operation_class,
-                )
-            if any(
-                _metadata_authorized(path, spec)
-                for key in ("before_sensitive", "after_sensitive")
-                for path in metadata_paths.get(key, ())
-            ):
-                _reject(
-                    "sensitive_authorization_value",
-                    address=address,
-                    action=action,
-                    operation_class=spec.operation_class,
-                )
         _validate_s3_identity(
             before,
             after,
@@ -2903,10 +2688,10 @@ def _parse_plan(
             )
         if spec.operation_class == "lambda-code":
             changed_set = set(changed)
-            if changed_set == {"source_code_hash"} and address in {
-                "aws_lambda_function.loader",
-                "aws_lambda_function.publisher",
-            }:
+            if (
+                changed_set == {"source_code_hash"}
+                and address == "aws_lambda_function.loader"
+            ):
                 pass
             elif changed_set != {"filename", "source_code_hash"} and not (
                 "source_code_hash" in changed_set
@@ -2950,16 +2735,8 @@ def _parse_plan(
                 )
         if spec.operation_class.startswith("telemetry-"):
             _validate_telemetry_value(after, address, action, spec.operation_class)
-        if spec.operation_class == "publisher-inline-policy":
-            _validate_publisher_policy(
-                before, after, address, action, spec.operation_class
-            )
         if spec.operation_class == "agentcore-trace-runtime-policy":
             _validate_trace_runtime_policy(
-                before, after, address, action, spec.operation_class
-            )
-        if spec.operation_class == "report-freshness-alarm":
-            _validate_report_freshness_alarm(
                 before, after, address, action, spec.operation_class
             )
         if spec.operation_class.startswith("agentcore-trace-") or (
@@ -3239,10 +3016,10 @@ def _validate_manifest_entry(
         )
     if spec.operation_class == "lambda-code":
         field_set = set(fields)
-        if field_set == {"source_code_hash"} and address in {
-            "aws_lambda_function.loader",
-            "aws_lambda_function.publisher",
-        }:
+        if (
+            field_set == {"source_code_hash"}
+            and address == "aws_lambda_function.loader"
+        ):
             pass
         elif field_set not in (
             {"filename", "source_code_hash"},

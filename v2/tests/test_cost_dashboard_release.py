@@ -149,10 +149,6 @@ def test_asset_pins_and_archive_contract() -> None:
                 bundle.read("costs.py")
                 == (ROOT / "v2/lambdas/publisher/costs.py").read_bytes()
             )
-            assert (
-                bundle.read("handler.py")
-                == (ROOT / "v2/lambdas/publisher/handler.py").read_bytes()
-            )
             assert not any(
                 name.endswith(("costs.json", ".env")) for name in bundle.namelist()
             )
@@ -970,7 +966,7 @@ def test_provider_report_routes_keep_known_defaults(tmp_path: Path) -> None:
             ]
         }
         # Without explicit configuration, real read-back defaults differ from
-        # null/unknown values when new list entries shift robots and sitemap.
+        # null/unknown values when new list entries shift robots.
         gate.routes(before, after)
         for field, value in {
             **{

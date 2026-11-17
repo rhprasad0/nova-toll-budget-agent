@@ -242,21 +242,6 @@ def _resource_change(
     }
     if index_text:
         record["index"] = json.loads("[" + index_text[:-1] + "]")[0]
-    identities = {
-        "aws_iam_role_policy.publisher": {
-            "account_id": "903859731897",
-            "name": "toll-v2-report-publisher-dev",
-            "role": "toll-v2-report-publisher-dev",
-        },
-        "aws_cloudwatch_metric_alarm.report_generation_freshness": {
-            "account_id": "903859731897",
-            "alarm_name": "toll-v2-report-generation-freshness-dev",
-            "region": "us-east-1",
-        },
-    }
-    if address in identities:
-        record["change"]["before_identity"] = dict[str, JSON](identities[address])
-        record["change"]["after_identity"] = dict[str, JSON](identities[address])
     spec = CONTRACT.get(address)
     if spec is not None and spec.provider_change_identity:
         expected = dict(spec.provider_change_identity)
@@ -326,119 +311,75 @@ def lambda_manifest(
     }
 
 
-PUBLISHER_ADDRESS = "aws_iam_role_policy.publisher"
-PUBLISHER_ROLE = "toll-v2-report-publisher-dev"
-ALARM_ADDRESS = "aws_cloudwatch_metric_alarm.report_generation_freshness"
-ALARM_NAME = "toll-v2-report-generation-freshness-dev"
-SITE_BUCKET = "arn:aws:s3:::tollchat-site-903859731897-dev"
-SITE_KEY = "arn:aws:kms:us-east-1:903859731897:key/3bc78b60-9cbe-4abd-9744-8772c78d8379"
+LEGACY_REPORT_ROUTES_CODE = r"""// Retired entrance/exit reports with verified area-report replacements.
+/** @type {Record<string, string>} */
+var legacyReportRedirects = {
+  "woodburn-gallows-road-merrifield-northbound/tysons-route-7-leesburg-pike-northbound": "northbound/woodburn-to-tysons/",
+  "lorton-gordon-boulevard-route-123-northbound-i95-211no/idylwood-lee-highway-route-29-northbound": "northbound/lorton-to-idylwood/",
+  "tysons-jones-branch-drive-route-123-southbound/stafford-courthouse-road-route-630-southbound": "southbound/tysons-to-stafford/",
+  "tysons-westpark-drive-tysons-corner-southbound-i495-185so/stafford-courthouse-road-route-630-southbound": "southbound/tysons-to-stafford/",
+  "tysons-route-7-leesburg-pike-southbound/woodburn-gallows-road-merrifield-southbound": "southbound/tysons-to-woodburn/",
+  "washington-washington-d-c-district-of-columbia-southbound/fredericksburg-i-95-near-route-17-route-17-southbound-exit-southbound": "southbound/washington-to-fredericksburg/",
+  "fredericksburg-i-95-near-route-17-route-17-northbound-entrance-northbound/tysons-jones-branch-drive-route-123-northbound": "northbound/fredericksburg-to-tysons/",
+  "tysons-dulles-toll-road-dulles-access-road-southbound-i495-182so/lorton-route-1-richmond-highway-southbound-i95-210sd": "southbound/tysons-to-lorton/",
+  "tysons-jones-branch-drive-route-123-southbound/arlington-washington-d-c-washington-northbound": "southbound/tysons-to-arlington/",
+};
 
-PUBLISHER_AND_ALARM_FIXTURE = rb"""[{"address":"aws_cloudwatch_metric_alarm.report_generation_freshness","change":{"actions":["update"],"after":{"actions_enabled":true,"alarm_actions":[],"alarm_description":"No complete I-95/I-495 and I-66 report generation in the trailing seven-day sliding window.","alarm_name":"toll-v2-report-generation-freshness-dev","arn":"arn:aws:cloudwatch:us-east-1:903859731897:alarm:toll-v2-report-generation-freshness-dev","comparison_operator":"LessThanThreshold","datapoints_to_alarm":7,"dimensions":{"Environment":"development","facility_scope":"both"},"evaluate_low_sample_count_percentiles":null,"evaluation_criteria":[],"evaluation_interval":null,"evaluation_periods":7,"extended_statistic":null,"id":"toll-v2-report-generation-freshness-dev","insufficient_data_actions":[],"metric_name":"V2ReportGenerationSuccess","metric_query":[],"namespace":"NovaToll","ok_actions":[],"period":86400,"region":"us-east-1","statistic":"Sum","tags":{},"tags_all":{},"threshold":1,"threshold_metric_id":null,"treat_missing_data":"breaching","unit":null},"after_identity":{"account_id":"903859731897","alarm_name":"toll-v2-report-generation-freshness-dev","region":"us-east-1"},"after_sensitive":{"alarm_actions":[],"dimensions":{},"evaluation_criteria":[],"insufficient_data_actions":[],"metric_query":[],"ok_actions":[],"tags":{},"tags_all":{}},"after_unknown":{},"before":{"actions_enabled":true,"alarm_actions":[],"alarm_description":"No complete I-95/I-495 report generation in the trailing seven-day sliding window.","alarm_name":"toll-v2-report-generation-freshness-dev","arn":"arn:aws:cloudwatch:us-east-1:903859731897:alarm:toll-v2-report-generation-freshness-dev","comparison_operator":"LessThanThreshold","datapoints_to_alarm":7,"dimensions":{"Environment":"development","facility":"i95_i495"},"evaluate_low_sample_count_percentiles":null,"evaluation_criteria":[],"evaluation_interval":null,"evaluation_periods":7,"extended_statistic":null,"id":"toll-v2-report-generation-freshness-dev","insufficient_data_actions":[],"metric_name":"V2ReportGenerationSuccess","metric_query":[],"namespace":"NovaToll","ok_actions":[],"period":86400,"region":"us-east-1","statistic":"Sum","tags":{},"tags_all":{},"threshold":1,"threshold_metric_id":null,"treat_missing_data":"breaching","unit":null},"before_identity":{"account_id":"903859731897","alarm_name":"toll-v2-report-generation-freshness-dev","region":"us-east-1"},"before_sensitive":{"alarm_actions":[],"dimensions":{},"evaluation_criteria":[],"insufficient_data_actions":[],"metric_query":[],"ok_actions":[],"tags":{},"tags_all":{}}},"mode":"managed","name":"report_generation_freshness","provider_name":"registry.terraform.io/hashicorp/aws","type":"aws_cloudwatch_metric_alarm"},{"address":"aws_iam_role_policy.publisher","change":{"actions":["update"],"after":{"id":"toll-v2-report-publisher-dev:toll-v2-report-publisher-dev","name":"toll-v2-report-publisher-dev","name_prefix":null,"policy":"{\"Version\":\"2012-10-17\",\"Statement\":[{\"Action\":[\"rds-db:connect\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:rds-db:us-east-1:903859731897:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/report_publisher_development\",\"arn:aws:rds-db:us-east-1:903859731897:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/pricing_reader_development\"],\"Sid\":\"ConnectRdsIam\"},{\"Action\":[\"sqs:SendMessage\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:sqs:us-east-1:903859731897:toll-v2-report-publisher-invoke-failure-dev\"],\"Sid\":\"SendInvokeFailure\"},{\"Action\":[\"s3:ListBucket\"],\"Condition\":{\"StringEquals\":{\"s3:prefix\":[\"tolls/i95-i495/\",\"tolls/i66/\"]}},\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::tollchat-site-903859731897-dev\"],\"Sid\":\"ListPublicReports\"},{\"Action\":[\"s3:PutObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::tollchat-site-903859731897-dev/tolls/i95-i495/*\",\"arn:aws:s3:::tollchat-site-903859731897-dev/tolls/i66/*\",\"arn:aws:s3:::tollchat-site-903859731897-dev/sitemap.xml\"],\"Sid\":\"WritePublicReports\"},{\"Action\":[\"s3:DeleteObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::tollchat-site-903859731897-dev/tolls/i95-i495/*\",\"arn:aws:s3:::tollchat-site-903859731897-dev/tolls/i66/*\"],\"Sid\":\"DeleteStalePublicReports\"},{\"Action\":[\"kms:Decrypt\",\"kms:Encrypt\",\"kms:GenerateDataKey\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:kms:us-east-1:903859731897:key/3bc78b60-9cbe-4abd-9744-8772c78d8379\"],\"Sid\":\"UseSiteKey\"}]}","role":"toll-v2-report-publisher-dev"},"after_identity":{"account_id":"903859731897","name":"toll-v2-report-publisher-dev","role":"toll-v2-report-publisher-dev"},"after_sensitive":{},"after_unknown":{},"before":{"id":"toll-v2-report-publisher-dev:toll-v2-report-publisher-dev","name":"toll-v2-report-publisher-dev","name_prefix":null,"policy":"{\"Statement\":[{\"Action\":[\"rds-db:connect\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:rds-db:us-east-1:903859731897:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/report_publisher_development\",\"arn:aws:rds-db:us-east-1:903859731897:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/pricing_reader_development\"],\"Sid\":\"ConnectRdsIam\"},{\"Action\":[\"sqs:SendMessage\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:sqs:us-east-1:903859731897:toll-v2-report-publisher-invoke-failure-dev\"],\"Sid\":\"SendInvokeFailure\"},{\"Action\":[\"s3:GetObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::tollchat-site-903859731897-dev/tolls/i95-i495/manifest.json\"],\"Sid\":\"ReadPublicationManifest\"},{\"Action\":[\"s3:ListBucket\"],\"Condition\":{\"StringEquals\":{\"s3:prefix\":[\"tolls/i95-i495/manifest.json\"]}},\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::tollchat-site-903859731897-dev\"],\"Sid\":\"FindPublicationManifest\"},{\"Action\":[\"s3:PutObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::tollchat-site-903859731897-dev/tolls/i95-i495/*\",\"arn:aws:s3:::tollchat-site-903859731897-dev/sitemap.xml\"],\"Sid\":\"WritePublicReports\"},{\"Action\":[\"kms:Decrypt\",\"kms:Encrypt\",\"kms:GenerateDataKey\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:kms:us-east-1:903859731897:key/3bc78b60-9cbe-4abd-9744-8772c78d8379\"],\"Sid\":\"UseSiteKey\"}],\"Version\":\"2012-10-17\"}","role":"toll-v2-report-publisher-dev"},"before_identity":{"account_id":"903859731897","name":"toll-v2-report-publisher-dev","role":"toll-v2-report-publisher-dev"},"before_sensitive":{}},"mode":"managed","name":"publisher","provider_name":"registry.terraform.io/hashicorp/aws","type":"aws_iam_role_policy"}]"""
-PUBLISHER_AND_ALARM_FIXTURE_SHA256 = (
-    "232a4db5363fad4849dc5d1b971bab46d4975ac728eea9b23272f489058e437d"
-)
-PUBLISHER_AND_ALARM_FINGERPRINT = (
-    "867ea09423d65e7a96bd01341033f5054c0917401ab577c452c6671f7a990554"
-)
-PUBLISHER_AND_ALARM_TUPLE = (
-    (ALARM_ADDRESS, "update", "report-freshness-alarm"),
-    (PUBLISHER_ADDRESS, "update", "publisher-inline-policy"),
-)
+/** @param {string} location */
+function permanentRedirect(location) {
+  return {
+    statusCode: 301,
+    statusDescription: "Moved Permanently",
+    headers: {
+      location: { value: location },
+      "cache-control": { value: "public, max-age=300" },
+    },
+  };
+}
 
-
-def _publisher_policy(*, i66: bool = False) -> str:
-    statements: list[dict[str, JSON]] = [
-        {
-            "Sid": "ConnectRdsIam",
-            "Effect": "Allow",
-            "Action": ["rds-db:connect"],
-            "Resource": [
-                "arn:aws:rds-db:us-east-1:903859731897:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/report_publisher_development",
-                "arn:aws:rds-db:us-east-1:903859731897:dbuser:db-GWX7FSL6UX6TNIVYIBHCP54IZU/pricing_reader_development",
-            ],
-        },
-        {
-            "Sid": "SendInvokeFailure",
-            "Effect": "Allow",
-            "Action": ["sqs:SendMessage"],
-            "Resource": [
-                "arn:aws:sqs:us-east-1:903859731897:toll-v2-report-publisher-invoke-failure-dev"
-            ],
-        },
-        {
-            "Sid": "WritePublicReports",
-            "Effect": "Allow",
-            "Action": ["s3:PutObject"],
-            "Resource": [
-                f"{SITE_BUCKET}/tolls/i95-i495/*",
-                *([f"{SITE_BUCKET}/tolls/i66/*"] if i66 else []),
-                f"{SITE_BUCKET}/sitemap.xml",
-            ],
-        },
-        {
-            "Sid": "UseSiteKey",
-            "Effect": "Allow",
-            "Action": ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"],
-            "Resource": [SITE_KEY],
-        },
-    ]
-    if i66:
-        statements.extend(
-            [
-                {
-                    "Sid": "ListPublicReports",
-                    "Effect": "Allow",
-                    "Action": ["s3:ListBucket"],
-                    "Resource": [SITE_BUCKET],
-                    "Condition": {
-                        "StringEquals": {"s3:prefix": ["tolls/i95-i495/", "tolls/i66/"]}
-                    },
-                },
-                {
-                    "Sid": "DeleteStalePublicReports",
-                    "Effect": "Allow",
-                    "Action": ["s3:DeleteObject"],
-                    "Resource": [
-                        f"{SITE_BUCKET}/tolls/i95-i495/*",
-                        f"{SITE_BUCKET}/tolls/i66/*",
-                    ],
-                },
-            ]
-        )
-    else:
-        statements.extend(
-            [
-                {
-                    "Sid": "ReadPublicationManifest",
-                    "Effect": "Allow",
-                    "Action": ["s3:GetObject"],
-                    "Resource": [f"{SITE_BUCKET}/tolls/i95-i495/manifest.json"],
-                },
-                {
-                    "Sid": "FindPublicationManifest",
-                    "Effect": "Allow",
-                    "Action": ["s3:ListBucket"],
-                    "Resource": [SITE_BUCKET],
-                    "Condition": {
-                        "StringEquals": {"s3:prefix": ["tolls/i95-i495/manifest.json"]}
-                    },
-                },
-            ]
-        )
-    return json.dumps({"Version": "2012-10-17", "Statement": statements})
-
-
-def publisher_and_alarm_plan() -> Plan:
-    return _plan(json.loads(PUBLISHER_AND_ALARM_FIXTURE))
-
-
-def publisher_and_alarm_manifest() -> Manifest:
-    return _mutation_manifest(
-        (
-            (PUBLISHER_ADDRESS, "update", ("policy",)),
-            (ALARM_ADDRESS, "update", ("alarm_description", "dimensions")),
-        )
-    )
+/** @param {{ request: { method: string, uri: string, headers?: Record<string, {value: string}> } }} event */
+function handler(event) {
+  var request = event.request;
+  if (request.uri === "/tolls" || request.uri === "/tolls/") {
+    return permanentRedirect("https://tollchat.ai/#toll-reports");
+  }
+  var legacy = request.uri.match(/^\/tolls\/i95-i495\/([^/]+)\/([^/]+)(?:\/(index\.html|report\.json))?\/?$/);
+  var endpointSlug = /-(northbound|southbound)(?:-i(?:95|495)-[a-z0-9]+)?$/;
+  if (legacy && endpointSlug.test(legacy[1]) && endpointSlug.test(legacy[2])) {
+    var target = legacyReportRedirects[legacy[1] + "/" + legacy[2]];
+    if (target) {
+      return permanentRedirect("https://tollchat.ai/tolls/i95-i495/" + target + (legacy[3] === "report.json" ? "report.json" : ""));
+    }
+    // The detailed-report namespace is retired; absent S3 keys otherwise look forbidden.
+    return {
+      statusCode: 410,
+      statusDescription: "Gone",
+      headers: {
+        "cache-control": { value: "public, max-age=300" },
+        "content-type": { value: "text/plain; charset=utf-8" },
+        "x-content-type-options": { value: "nosniff" },
+      },
+      body: {
+        encoding: "text",
+        data: "This detailed entrance/exit report has been retired. Current area reports are at https://tollchat.ai/tolls/i95-i495/.",
+      },
+    };
+  }
+  if (request.uri === "/release-dashboard" || request.uri === "/release-dashboard/") {
+    request.uri = "/assets/releases.html";
+  }
+  if (request.uri === "/eval-dashboard" || request.uri === "/eval-dashboard/") {
+    request.uri = "/evals.html";
+  }
+  if (request.uri === "/cost-dashboard" || request.uri === "/cost-dashboard/") {
+    request.uri = "/costs.html";
+  }
+  if (request.uri.startsWith("/tolls/") && !request.uri.includes(".")) {
+    request.uri += request.uri.endsWith("/") ? "index.html" : "/index.html";
+  }
+  return request;
+}
+"""
 
 
 def _set_path(target: dict[str, JSON], path: str, value: JSON) -> None:
@@ -825,7 +766,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         )
 
     def test_accepts_hash_only_local_lambda_updates(self) -> None:
-        for address in ("aws_lambda_function.loader", "aws_lambda_function.publisher"):
+        for address in ("aws_lambda_function.loader",):
             with self.subTest(address=address):
                 plan = _plan([_mutation_change(address, ("source_code_hash",))])
                 manifest = _mutation_manifest(
@@ -837,7 +778,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 self.assertEqual(cast(list[str], result["addresses"]), [address])
 
     def test_hash_only_local_lambda_boundaries_are_independent(self) -> None:
-        for address in ("aws_lambda_function.loader", "aws_lambda_function.publisher"):
+        for address in ("aws_lambda_function.loader",):
             with self.subTest(address=address, boundary="runtime"):
                 plan = _plan([_mutation_change(address, ("source_code_hash",))])
                 manifest = _mutation_manifest(
@@ -964,7 +905,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         self.assertNotIn("sentinel", cli.stdout + cli.stderr)
 
     def test_hash_only_local_lambda_updates_retain_existing_gates(self) -> None:
-        for address in ("aws_lambda_function.loader", "aws_lambda_function.publisher"):
+        for address in ("aws_lambda_function.loader",):
             with self.subTest(address=address, gate="action"):
                 plan = _plan(
                     [_mutation_change(address, ("source_code_hash",), action="delete")]
@@ -1169,676 +1110,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "manifest_mutation_mismatch",
         )
 
-    def test_later_publisher_release_can_use_hash_only_manifest_declaration(
-        self,
-    ) -> None:
-        manifest = json.loads(
-            (
-                Path(__file__).resolve().parent / "development-release-manifest.json"
-            ).read_text(encoding="utf-8")
-        )
-        later_manifest = copy.deepcopy(manifest)
-        publisher = next(
-            record
-            for record in later_manifest["mutations"]
-            if record["address"] == "aws_lambda_function.publisher"
-        )
-        publisher["changed_fields"] = ["source_code_hash"]
-        loader = next(
-            record
-            for record in later_manifest["mutations"]
-            if record["address"] == "aws_lambda_function.loader"
-        )
-        self.assertEqual(loader["changed_fields"], ["source_code_hash"])
-        publisher_plan = _plan(
-            [_mutation_change("aws_lambda_function.publisher", ("source_code_hash",))]
-        )
-        publisher_plan["resource_changes"][0]["change"]["after"]["source_code_hash"] = (
-            base64.b64encode(
-                bytes.fromhex(later_manifest["packages"]["publisher.zip"])
-            ).decode()
-        )
-        result = validate_plan(publisher_plan, later_manifest)
-        self.assertEqual(result["status"], "accepted")
-        self.assertEqual(
-            cast(list[str], result["addresses"]), ["aws_lambda_function.publisher"]
-        )
-
-    def test_accepts_only_reviewed_publisher_and_report_freshness_updates(self) -> None:
-        self.assertEqual(
-            hashlib.sha256(PUBLISHER_AND_ALARM_FIXTURE).hexdigest(),
-            PUBLISHER_AND_ALARM_FIXTURE_SHA256,
-        )
-        plan, manifest = publisher_and_alarm_plan(), publisher_and_alarm_manifest()
-        self.assertEqual(
-            plan["resource_changes"], json.loads(PUBLISHER_AND_ALARM_FIXTURE)
-        )
-        result = validate_plan(plan, manifest)
-        self.assertEqual(result["status"], "accepted")
-        self.assertEqual(
-            cast(list[str], result["addresses"]), [ALARM_ADDRESS, PUBLISHER_ADDRESS]
-        )
-        self.assertEqual(cast(list[str], result["actions"]), ["update", "update"])
-        self.assertEqual(
-            cast(list[str], result["operation_classes"]),
-            ["report-freshness-alarm", "publisher-inline-policy"],
-        )
-        self.assertEqual(result["fingerprint"], PUBLISHER_AND_ALARM_FINGERPRINT)
-        self.assertEqual(
-            tuple(
-                zip(
-                    cast(list[str], result["addresses"]),
-                    cast(list[str], result["actions"]),
-                    cast(list[str], result["operation_classes"]),
-                    strict=False,
-                )
-            ),
-            PUBLISHER_AND_ALARM_TUPLE,
-        )
-        expected = {
-            PUBLISHER_ADDRESS: (
-                "aws_iam_role_policy",
-                "publisher",
-                {"name", "role", "id", "name_prefix", "policy"},
-            ),
-            ALARM_ADDRESS: (
-                "aws_cloudwatch_metric_alarm",
-                "report_generation_freshness",
-                {
-                    "actions_enabled",
-                    "alarm_actions",
-                    "alarm_description",
-                    "alarm_name",
-                    "arn",
-                    "comparison_operator",
-                    "datapoints_to_alarm",
-                    "dimensions",
-                    "evaluate_low_sample_count_percentiles",
-                    "evaluation_criteria",
-                    "evaluation_interval",
-                    "evaluation_periods",
-                    "extended_statistic",
-                    "id",
-                    "insufficient_data_actions",
-                    "metric_name",
-                    "metric_query",
-                    "namespace",
-                    "ok_actions",
-                    "period",
-                    "region",
-                    "statistic",
-                    "tags",
-                    "tags_all",
-                    "threshold",
-                    "threshold_metric_id",
-                    "treat_missing_data",
-                    "unit",
-                },
-            ),
-        }
-        for resource in plan["resource_changes"]:
-            resource_type, name, fields = expected[resource["address"]]
-            self.assertEqual(
-                set(resource),
-                {"address", "mode", "type", "name", "provider_name", "change"},
-            )
-            self.assertEqual(
-                (
-                    resource["mode"],
-                    resource["type"],
-                    resource["name"],
-                    resource["provider_name"],
-                ),
-                ("managed", resource_type, name, EXPECTED_PROVIDER_NAME),
-            )
-            change = resource["change"]
-            self.assertEqual(change["actions"], ["update"])
-            self.assertEqual(
-                set(change),
-                {
-                    "actions",
-                    "before",
-                    "after",
-                    "after_unknown",
-                    "before_sensitive",
-                    "after_sensitive",
-                    "before_identity",
-                    "after_identity",
-                },
-            )
-            self.assertEqual(set(change["before"]), fields)
-            self.assertEqual(set(change["after"]), fields)
-            self.assertEqual(change["before_identity"], change["after_identity"])
-        publisher = next(
-            item
-            for item in plan["resource_changes"]
-            if item["address"] == PUBLISHER_ADDRESS
-        )["change"]
-
-        def policy_by_sid(value: JSON) -> dict[str, dict[str, JSON]]:
-            policy: dict[str, list[dict[str, JSON]]] = json.loads(cast(str, value))
-            return {
-                cast(str, statement["Sid"]): statement
-                for statement in policy["Statement"]
-            }
-
-        self.assertEqual(
-            policy_by_sid(publisher["before"]["policy"]),
-            policy_by_sid(_publisher_policy()),
-        )
-        self.assertEqual(
-            policy_by_sid(publisher["after"]["policy"]),
-            policy_by_sid(_publisher_policy(i66=True)),
-        )
-        alarm = next(
-            item
-            for item in plan["resource_changes"]
-            if item["address"] == ALARM_ADDRESS
-        )["change"]
-        self.assertEqual(
-            alarm["before"]["dimensions"],
-            {"Environment": "development", "facility": "i95_i495"},
-        )
-        self.assertEqual(
-            alarm["after"]["dimensions"],
-            {"Environment": "development", "facility_scope": "both"},
-        )
-
-    def test_target_provider_identity_and_envelopes_are_exact(self) -> None:
-        plan, manifest = publisher_and_alarm_plan(), publisher_and_alarm_manifest()
-        expected_identities = {
-            PUBLISHER_ADDRESS: {
-                "account_id": "903859731897",
-                "name": PUBLISHER_ROLE,
-                "role": PUBLISHER_ROLE,
-            },
-            ALARM_ADDRESS: {
-                "account_id": "903859731897",
-                "alarm_name": ALARM_NAME,
-                "region": "us-east-1",
-            },
-        }
-        for resource in plan["resource_changes"]:
-            for side in ("before_identity", "after_identity"):
-                self.assertEqual(
-                    resource["change"][side], expected_identities[resource["address"]]
-                )
-                for field in tuple(cast(dict[str, JSON], resource["change"][side])):
-                    rejected = copy.deepcopy(plan)
-                    target = next(
-                        item
-                        for item in rejected["resource_changes"]
-                        if item["address"] == resource["address"]
-                    )
-                    cast(dict[str, JSON], target["change"][side])[field] = "wrong"
-                    self.assertNotEqual(
-                        validate_plan(rejected, manifest)["status"], "accepted"
-                    )
-                rejected = copy.deepcopy(plan)
-                target = next(
-                    item
-                    for item in rejected["resource_changes"]
-                    if item["address"] == resource["address"]
-                )
-                target["change"].pop(side)
-                self.assertNotEqual(
-                    validate_plan(rejected, manifest)["status"], "accepted"
-                )
-            for container in (resource, resource["change"]):
-                rejected = copy.deepcopy(plan)
-                target = next(
-                    item
-                    for item in rejected["resource_changes"]
-                    if item["address"] == resource["address"]
-                )
-                (
-                    cast(
-                        dict[str, object],
-                        target if container is resource else target["change"],
-                    )
-                )["unexpected"] = None
-                self.assertNotEqual(
-                    validate_plan(rejected, manifest)["status"], "accepted"
-                )
-
-            for side in ("before_identity", "after_identity"):
-                for value in cast(
-                    tuple[JSON, ...],
-                    (
-                        None,
-                        "identity",
-                        [],
-                        {**expected_identities[resource["address"]], "extra": "value"},
-                    ),
-                ):
-                    rejected = copy.deepcopy(plan)
-                    target = next(
-                        item
-                        for item in rejected["resource_changes"]
-                        if item["address"] == resource["address"]
-                    )
-                    cast(dict[str, object], target["change"])[side] = value
-                    self.assertNotEqual(
-                        validate_plan(rejected, manifest)["status"], "accepted"
-                    )
-                for field in expected_identities[resource["address"]]:
-                    for value in cast(tuple[JSON, ...], (None, 1)):
-                        rejected = copy.deepcopy(plan)
-                        target = next(
-                            item
-                            for item in rejected["resource_changes"]
-                            if item["address"] == resource["address"]
-                        )
-                        cast(dict[str, JSON], target["change"][side])[field] = value
-                        self.assertNotEqual(
-                            validate_plan(rejected, manifest)["status"], "accepted"
-                        )
-                    rejected = copy.deepcopy(plan)
-                    target = next(
-                        item
-                        for item in rejected["resource_changes"]
-                        if item["address"] == resource["address"]
-                    )
-                    cast(dict[str, JSON], target["change"][side]).pop(field)
-                    self.assertNotEqual(
-                        validate_plan(rejected, manifest)["status"], "accepted"
-                    )
-
-            for container_name, keys in (
-                ("resource", tuple(resource)),
-                ("change", tuple(resource["change"])),
-            ):
-                for key in keys:
-                    rejected = copy.deepcopy(plan)
-                    target = next(
-                        item
-                        for item in rejected["resource_changes"]
-                        if item["address"] == resource["address"]
-                    )
-                    (target if container_name == "resource" else target["change"]).pop(
-                        key
-                    )
-                    self.assertEqual(
-                        validate_plan(rejected, manifest)["reason_code"],
-                        "malformed_input",
-                    )
-
-        for address, field, value, reason in (
-            (PUBLISHER_ADDRESS, "name", "other", "invalid_resource_identity"),
-            (PUBLISHER_ADDRESS, "role", "other", "invalid_resource_identity"),
-            (ALARM_ADDRESS, "alarm_name", "other", "invalid_resource_identity"),
-        ):
-            rejected = copy.deepcopy(plan)
-            for resource in rejected["resource_changes"]:
-                if resource["address"] == address:
-                    resource["change"]["before"][field] = value
-                    resource["change"]["after"][field] = value
-            self.assertEqual(validate_plan(rejected, manifest)["reason_code"], reason)
-
-        for label, address, side, field in (
-            ("publisher equal-but-wrong", PUBLISHER_ADDRESS, "both", "name"),
-            ("alarm equal-but-wrong", ALARM_ADDRESS, "both", "alarm_name"),
-            ("publisher before name", PUBLISHER_ADDRESS, "before_identity", "name"),
-            ("publisher after name", PUBLISHER_ADDRESS, "after_identity", "name"),
-            ("publisher before role", PUBLISHER_ADDRESS, "before_identity", "role"),
-            ("publisher after role", PUBLISHER_ADDRESS, "after_identity", "role"),
-            ("alarm before name", ALARM_ADDRESS, "before_identity", "alarm_name"),
-            ("alarm after name", ALARM_ADDRESS, "after_identity", "alarm_name"),
-        ):
-            rejected = copy.deepcopy(plan)
-            change = next(
-                item
-                for item in rejected["resource_changes"]
-                if item["address"] == address
-            )["change"]
-            for identity_side in (
-                ("before_identity", "after_identity") if side == "both" else (side,)
-            ):
-                change[identity_side][field] = "equal-but-wrong"
-            self.assertNotEqual(
-                validate_plan(rejected, manifest)["status"], "accepted", label
-            )
-
-        for address, action in (
-            (PUBLISHER_ADDRESS, "create"),
-            (ALARM_ADDRESS, "delete"),
-        ):
-            rejected = copy.deepcopy(plan)
-            next(
-                item
-                for item in rejected["resource_changes"]
-                if item["address"] == address
-            )["change"]["actions"] = [action]
-            self.assertNotEqual(validate_plan(rejected, manifest)["status"], "accepted")
-
-        rejected = copy.deepcopy(plan)
-        publisher = next(
-            item
-            for item in rejected["resource_changes"]
-            if item["address"] == PUBLISHER_ADDRESS
-        )
-        publisher["change"]["after"]["policy"] = "{not json"
-        self.assertEqual(
-            validate_plan(rejected, manifest)["reason_code"], "unsupported_field_delta"
-        )
-        rejected = copy.deepcopy(plan)
-        publisher = next(
-            item
-            for item in rejected["resource_changes"]
-            if item["address"] == PUBLISHER_ADDRESS
-        )
-        publisher["change"]["after"]["policy"] = _publisher_policy()
-        self.assertEqual(
-            validate_plan(rejected, manifest)["reason_code"], "unsupported_field_delta"
-        )
-        rejected = copy.deepcopy(plan)
-        alarm = next(
-            item
-            for item in rejected["resource_changes"]
-            if item["address"] == ALARM_ADDRESS
-        )
-        cast(dict[str, JSON], alarm["change"]["after"]["dimensions"])["unexpected"] = (
-            "value"
-        )
-        self.assertEqual(
-            validate_plan(rejected, manifest)["reason_code"], "unsupported_field_delta"
-        )
-
-        for address, field in (
-            (PUBLISHER_ADDRESS, "policy"),
-            (ALARM_ADDRESS, "alarm_name"),
-        ):
-            rejected = copy.deepcopy(plan)
-            resource = next(
-                item
-                for item in rejected["resource_changes"]
-                if item["address"] == address
-            )
-            resource["change"]["after_unknown"] = {field: True}
-            self.assertEqual(
-                validate_plan(rejected, manifest)["reason_code"],
-                "unknown_authorization_value",
-            )
-            resource["change"]["after_unknown"] = {}
-            resource["change"]["after_sensitive"] = {field: True}
-            self.assertEqual(
-                validate_plan(rejected, manifest)["reason_code"],
-                "sensitive_authorization_value",
-            )
-
-        for field in ("actions_enabled", "alarm_actions", "metric_name", "threshold"):
-            rejected = copy.deepcopy(plan)
-            alarm = next(
-                item
-                for item in rejected["resource_changes"]
-                if item["address"] == ALARM_ADDRESS
-            )
-            alarm["change"]["after"][field] = None
-            alarm["change"]["after_unknown"] = {field: True}
-            self.assertEqual(
-                validate_plan(rejected, manifest)["reason_code"],
-                "unknown_authorization_value",
-            )
-
-        for resource in manifest["permissions"]:
-            rejected_manifest = copy.deepcopy(manifest)
-            next(
-                item
-                for item in rejected_manifest["permissions"]
-                if item["address"] == resource["address"]
-            )["resource"] = "*"
-            self.assertEqual(
-                validate_plan(plan, rejected_manifest)["reason_code"],
-                "invalid_permission",
-            )
-
-        def reject_policy_change(sid: str, field: str, value: object) -> None:
-            rejected = copy.deepcopy(plan)
-            publisher = next(
-                item
-                for item in rejected["resource_changes"]
-                if item["address"] == PUBLISHER_ADDRESS
-            )
-            policy = json.loads(cast(str, publisher["change"]["after"]["policy"]))
-            next(
-                statement
-                for statement in policy["Statement"]
-                if statement["Sid"] == sid
-            )[field] = value
-            publisher["change"]["after"]["policy"] = json.dumps(policy)
-            self.assertEqual(
-                validate_plan(rejected, manifest)["reason_code"],
-                "unsupported_field_delta",
-            )
-
-        for sid, field, value in (
-            ("ListPublicReports", "Action", ["s3:GetObject"]),
-            ("ListPublicReports", "Resource", [f"{SITE_BUCKET}/*"]),
-            (
-                "ListPublicReports",
-                "Condition",
-                {"StringEquals": {"s3:prefix": ["tolls/*"]}},
-            ),
-            ("WritePublicReports", "Action", ["s3:DeleteObject"]),
-            (
-                "WritePublicReports",
-                "Resource",
-                [f"{SITE_BUCKET}/tolls/i95-i495/*", f"{SITE_BUCKET}/tolls/other/*"],
-            ),
-            ("DeleteStalePublicReports", "Action", ["s3:PutObject"]),
-            (
-                "DeleteStalePublicReports",
-                "Resource",
-                [f"{SITE_BUCKET}/tolls/i95-i495/*", f"{SITE_BUCKET}/*"],
-            ),
-            (
-                "ConnectRdsIam",
-                "Resource",
-                [
-                    "arn:aws:rds-db:us-east-1:903859731897:dbuser:db-OTHER/pricing_reader_development"
-                ],
-            ),
-            (
-                "SendInvokeFailure",
-                "Resource",
-                ["arn:aws:sqs:us-east-1:903859731897:unrelated"],
-            ),
-            ("UseSiteKey", "Action", ["kms:Decrypt"]),
-            (
-                "UseSiteKey",
-                "Resource",
-                [
-                    "arn:aws:kms:us-east-1:903859731897:key/00000000-0000-0000-0000-000000000000"
-                ],
-            ),
-            (
-                "UseSiteKey",
-                "Resource",
-                ["arn:aws:kms:us-east-1:903859731897:key/not-a-uuid"],
-            ),
-        ):
-            reject_policy_change(sid, field, value)
-
-        for side in ("before", "after"):
-            rejected = copy.deepcopy(plan)
-            publisher = next(
-                item
-                for item in rejected["resource_changes"]
-                if item["address"] == PUBLISHER_ADDRESS
-            )
-            policy = json.loads(cast(str, publisher["change"][side]["policy"]))
-            next(
-                statement
-                for statement in policy["Statement"]
-                if statement["Sid"] == "UseSiteKey"
-            )["Resource"] = []
-            publisher["change"][side]["policy"] = json.dumps(policy)
-            self.assertEqual(
-                validate_plan(rejected, manifest)["reason_code"],
-                "unsupported_field_delta",
-            )
-
-        rejected = copy.deepcopy(plan)
-        for resource in rejected["resource_changes"]:
-            if resource["address"] == PUBLISHER_ADDRESS:
-                for side in ("before", "after"):
-                    policy = json.loads(cast(str, resource["change"][side]["policy"]))
-                    policy["Statement"].append(
-                        {
-                            "Sid": "UnreviewedPrivilege",
-                            "Effect": "Allow",
-                            "Action": ["iam:*"],
-                            "Resource": ["*"],
-                        }
-                    )
-                    resource["change"][side]["policy"] = json.dumps(policy)
-        self.assertEqual(
-            validate_plan(rejected, manifest)["reason_code"], "unsupported_field_delta"
-        )
-
-        for field, value in (
-            ("alarm_description", "other"),
-            ("dimensions", {"facility_scope": "other", "Environment": "development"}),
-            ("dimensions", {"facility_scope": "both"}),
-            (
-                "dimensions",
-                {
-                    "facility_scope": "both",
-                    "Environment": "development",
-                    "extra": "value",
-                },
-            ),
-            ("metric_name", "other"),
-        ):
-            rejected = copy.deepcopy(plan)
-            alarm = next(
-                item
-                for item in rejected["resource_changes"]
-                if item["address"] == ALARM_ADDRESS
-            )
-            alarm["change"]["after"][field] = cast(JSON, value)
-            self.assertEqual(
-                validate_plan(rejected, manifest)["reason_code"],
-                "unsupported_field_delta",
-            )
-
-        for address, field in (
-            (PUBLISHER_ADDRESS, "name"),
-            (PUBLISHER_ADDRESS, "role"),
-            (ALARM_ADDRESS, "alarm_name"),
-        ):
-            for side in ("before", "after"):
-                rejected = copy.deepcopy(plan)
-                resource = next(
-                    item
-                    for item in rejected["resource_changes"]
-                    if item["address"] == address
-                )
-                resource["change"][side][field] = "independently-wrong"
-                self.assertEqual(
-                    validate_plan(rejected, manifest)["reason_code"],
-                    "invalid_resource_identity",
-                )
-
-        for address, fields in (
-            (PUBLISHER_ADDRESS, ("policy", "name", "role")),
-            (ALARM_ADDRESS, ("alarm_name", "alarm_description", "dimensions")),
-        ):
-            for field in fields:
-                rejected = copy.deepcopy(plan)
-                resource = next(
-                    item
-                    for item in rejected["resource_changes"]
-                    if item["address"] == address
-                )
-                resource["change"]["after"][field] = None
-                resource["change"]["after_unknown"] = {field: True}
-                self.assertEqual(
-                    validate_plan(rejected, manifest)["reason_code"],
-                    "unknown_authorization_value",
-                )
-                resource["change"]["after_unknown"] = {}
-                for sensitive_side in ("before_sensitive", "after_sensitive"):
-                    resource["change"][sensitive_side] = {field: True}
-                    self.assertEqual(
-                        validate_plan(rejected, manifest)["reason_code"],
-                        "sensitive_authorization_value",
-                    )
-                    resource["change"][sensitive_side] = {}
-
-        for address in (PUBLISHER_ADDRESS, ALARM_ADDRESS):
-            rejected = copy.deepcopy(plan)
-            cast(
-                dict[str, object],
-                next(
-                    item
-                    for item in rejected["resource_changes"]
-                    if item["address"] == address
-                )["change"],
-            )["replace_paths"] = [["policy"]]
-            self.assertEqual(
-                validate_plan(rejected, manifest)["reason_code"], "malformed_input"
-            )
-        for mutation in ("mutations", "permissions"):
-            rejected_manifest = copy.deepcopy(manifest)
-            cast(list[object], rejected_manifest[mutation]).append(
-                copy.deepcopy(rejected_manifest[mutation][0])
-            )
-            self.assertNotEqual(
-                validate_plan(plan, rejected_manifest)["status"], "accepted"
-            )
-            for index in range(len(rejected_manifest[mutation]) - 1):
-                for key in tuple(rejected_manifest[mutation][index]):
-                    candidate = copy.deepcopy(manifest)
-                    candidate[mutation][index].pop(key)
-                    self.assertNotEqual(
-                        validate_plan(plan, candidate)["status"], "accepted"
-                    )
-
-    def test_publisher_policy_rejections_are_sanitized_in_api_and_cli(self) -> None:
-        plan, manifest = publisher_and_alarm_plan(), publisher_and_alarm_manifest()
-        sentinel = "publisher-policy-sentinel-do-not-leak"
-        publisher = next(
-            item
-            for item in plan["resource_changes"]
-            if item["address"] == PUBLISHER_ADDRESS
-        )
-        publisher["change"]["after"]["policy"] = _publisher_policy(i66=True).replace(
-            "sitemap.xml", sentinel
-        )
-        result = validate_plan(plan, manifest)
-        self.assertEqual(result["reason_code"], "unsupported_field_delta")
-        self.assertNotIn(sentinel, json.dumps(result))
-        self.assertFalse({"before", "after", "policy"} & set(result))
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            plan_path, manifest_path, identity_path = (
-                root / name for name in ("plan.json", "manifest.json", "identity.json")
-            )
-            plan_path.write_text(json.dumps(plan), encoding="utf-8")
-            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-            identity_path.write_text(
-                json.dumps(dict(EXPECTED_IDENTITY)), encoding="utf-8"
-            )
-            cli = subprocess.run(
-                [
-                    "python3",
-                    "infra/delivery_plan_validator.py",
-                    str(plan_path),
-                    str(manifest_path),
-                    "--identity",
-                    str(identity_path),
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertNotEqual(cli.returncode, 0)
-            self.assertNotIn(sentinel, cli.stdout + cli.stderr)
-            self.assertEqual(
-                json.loads(cli.stdout)["reason_code"], "unsupported_field_delta"
-            )
-
     def test_manifest_package_order_follows_reviewed_timed_marker(self) -> None:
         legacy = lambda_manifest()
         self.assertEqual(validate_plan(lambda_plan(), legacy)["status"], "accepted")
@@ -1900,7 +1171,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
     def test_lambda_updates_require_exact_development_function_identity(self) -> None:
         fields_by_address = {
             "aws_lambda_function.loader": ("filename", "source_code_hash"),
-            "aws_lambda_function.publisher": ("filename", "source_code_hash"),
             "aws_lambda_function.tollchat_proxy": (
                 "s3_object_version",
                 "source_code_hash",
@@ -1927,14 +1197,14 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
     def test_accepts_pinned_metadata_and_keeps_drift_out_of_result(self) -> None:
         drift = [
             _resource_change(
-                "aws_iam_role.publisher", "update", {"name": "old"}, {"name": "new"}
+                "aws_iam_role.loader", "update", {"name": "old"}, {"name": "new"}
             )
         ]
         plan = lambda_plan()
         cast(dict[str, object], plan).update(
             resource_drift=drift,
             relevant_attributes=[
-                {"resource": "aws_iam_role.publisher", "attribute": ["name"]}
+                {"resource": "aws_iam_role.loader", "attribute": ["name"]}
             ],
         )
         result = validate_plan(plan, lambda_manifest())
@@ -2015,8 +1285,8 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             {"domain_name": "dev.tollchat.ai"},
             {"domain_name": "dev.tollchat.ai"},
         )
-        read = _resource_change("aws_iam_role.publisher", "read", None, None)
-        read["address"] = "data.aws_iam_role.publisher"
+        read = _resource_change("aws_iam_role.loader", "read", None, None)
+        read["address"] = "data.aws_iam_role.loader"
         read["mode"] = "data"
         for applyable in (False, True):
             with self.subTest(applyable=applyable):
@@ -2061,7 +1331,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 )
 
         valid_drift = _resource_change(
-            "aws_iam_role.publisher", "update", {"name": "old"}, {"name": "new"}
+            "aws_iam_role.loader", "update", {"name": "old"}, {"name": "new"}
         )
         for mutation in (
             {"unknown": True},
@@ -2490,8 +1760,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 fields = ("s3_object_version", "source_code_hash")
             elif spec.operation_class == "lambda-code":
                 fields = ("filename", "source_code_hash")
-            elif address == ALARM_ADDRESS:
-                fields = spec.fields
             elif address in {
                 "aws_s3_object.index",
                 "aws_s3_object.faq",
@@ -2525,22 +1793,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             if spec.operation_class.startswith("telemetry-"):
                 after = _telemetry_value(address)
                 fields = tuple(sorted(after))
-            if address in {PUBLISHER_ADDRESS, ALARM_ADDRESS}:
-                plan = _plan(
-                    [
-                        copy.deepcopy(
-                            next(
-                                record
-                                for record in publisher_and_alarm_plan()[
-                                    "resource_changes"
-                                ]
-                                if record["address"] == address
-                            )
-                        )
-                    ]
-                )
-            else:
-                plan = _plan([_resource_change(address, action, before, after)])
+            plan = _plan([_resource_change(address, action, before, after)])
             manifest: Manifest = {
                 **manifest_header(timed=timed),
                 "mutations": [
@@ -2656,6 +1909,9 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             validate_plan(tampered, manifest)["reason_code"],
             "unsupported_field_delta",
         )
+        malformed = copy.deepcopy(plan)
+        malformed["resource_changes"][0]["change"]["after"]["policy"] = "{not json"
+        self.assertEqual(validate_plan(malformed, manifest)["status"], "rejected")
 
     def test_agentcore_trace_initial_and_recovery_fixtures_are_finite(self) -> None:
         subscriptions: dict[str, JSON] = {
@@ -3453,7 +2709,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         )
         expected_mutations: dict[str, tuple[str, tuple[str, ...]]] = {
             "aws_lambda_function.loader": ("lambda-code", ("source_code_hash",)),
-            "aws_lambda_function.publisher": ("lambda-code", ("source_code_hash",)),
             "aws_s3_object.agentcore": ("artifact-upload", ("source_hash",)),
             "aws_s3_object.tollchat_proxy": ("artifact-upload", ("source_hash",)),
             'aws_s3_object.site_assets["coverage-locations.json"]': (
@@ -3477,11 +2732,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             "aws_bedrockagentcore_agent_runtime_endpoint.tollchat": (
                 "agentcore-endpoint",
                 ("agent_runtime_version",),
-            ),
-            "aws_iam_role_policy.publisher": ("publisher-inline-policy", ("policy",)),
-            "aws_cloudwatch_metric_alarm.report_generation_freshness": (
-                "report-freshness-alarm",
-                ("alarm_description", "dimensions"),
             ),
         }
         committed_updates = tuple(expected_mutations)
@@ -3709,14 +2959,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         assert actual_permissions == expected_permissions
 
         def update(address: str) -> Resource:
-            if address in {PUBLISHER_ADDRESS, ALARM_ADDRESS}:
-                return copy.deepcopy(
-                    next(
-                        record
-                        for record in publisher_and_alarm_plan()["resource_changes"]
-                        if record["address"] == address
-                    )
-                )
             fields = expected_mutations[address][1]
             if address in shared_packages.RESOURCES:
                 row = _mutation_change(address, fields)
@@ -4256,27 +3498,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
     ) -> None:
         root = Path(__file__).resolve().parents[1]
         code = (root / "v2/agent/public-report-routes.js").read_text()
-        # Reconstruct the fixed legacy bytes, before the response handler existed.
-        legacy = code.replace(
-            ", response?: { statusCode: number, headers: Record<string, {value: string}> }",
-            "",
-        ).replace(
-            "  if (event.response) {\n"
-            '    if (request.uri.startsWith("/assets/evals")) {\n'
-            '      event.response.headers["cache-control"] = { value: "no-store" };\n'
-            "    }\n    return event.response;\n  }\n",
-            "",
-        )
-        legacy = legacy.replace(
-            '"/#toll-reports"', '"https://tollchat.ai/#toll-reports"'
-        )
-        legacy = legacy.replace(
-            '"/tolls/i95-i495/"', '"https://tollchat.ai/tolls/i95-i495/"'
-        )
-        legacy = legacy.replace(
-            "Current area reports are at /tolls/i95-i495/.",
-            "Current area reports are at https://tollchat.ai/tolls/i95-i495/.",
-        )
+        legacy = LEGACY_REPORT_ROUTES_CODE
         address = "aws_cloudfront_function.public_report_routes"
         after: dict[str, JSON] = {
             "name": "tollchat-v2-public-report-routes-dev",
@@ -4366,20 +3588,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                     {"aliases": {"items": ["dev.tollchat.ai"]}},
                     {"aliases": {"items": ["dev.tollchat.ai"]}},
                 ),
-                _resource_change(
-                    "aws_lambda_function.publisher",
-                    "no-op",
-                    {
-                        "environment": {
-                            "variables": {"PUBLIC_BASE_URL": "https://dev.tollchat.ai"}
-                        }
-                    },
-                    {
-                        "environment": {
-                            "variables": {"PUBLIC_BASE_URL": "https://dev.tollchat.ai"}
-                        }
-                    },
-                ),
             ],
             configuration={
                 "root_module": {
@@ -4392,14 +3600,12 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 }
             },
         )
-        publisher_noop = _mutation_change(
-            "aws_lambda_function.publisher", ("source_code_hash",)
+        loader_noop = _mutation_change(
+            "aws_lambda_function.loader", ("source_code_hash",)
         )
-        publisher_noop["change"]["before"] = copy.deepcopy(
-            publisher_noop["change"]["after"]
-        )
-        publisher_noop["change"]["actions"] = ["no-op"]
-        plan["resource_changes"][-1] = publisher_noop
+        loader_noop["change"]["before"] = copy.deepcopy(loader_noop["change"]["after"])
+        loader_noop["change"]["actions"] = ["no-op"]
+        plan["resource_changes"].append(loader_noop)
         result = validate_plan(plan, lambda_manifest())
         self.assertEqual(result["status"], "accepted")
         self.assertEqual(result["reason_code"], "ok")
@@ -4955,7 +4161,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         )
         self.assert_reason("provider_identity_mismatch", plan=plan)
         plan = lambda_plan()
-        plan["resource_changes"][0]["name"] = "publisher"
+        plan["resource_changes"][0]["name"] = "other"
         self.assert_reason("malformed_input", plan=plan)
 
     def test_rejects_data_mode_mutation_and_unknown_manifest_declarations(self) -> None:

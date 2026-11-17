@@ -6,7 +6,6 @@ import itertools
 import json
 import subprocess
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -35,12 +34,12 @@ def load(path: Path, name: str) -> ModuleType:
 @pytest.mark.parametrize(
     "baseline", [REVIEW["baseline"], REVIEW["development_baseline"]]
 )
-def test_mixed_loader_publisher_timed_and_cost_contracts(
+def test_mixed_loader_timed_and_cost_contracts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, baseline: str
 ) -> None:
     monkeypatch.setattr(sys, "path", [str(ROOT / "v2/lambdas/loader"), *sys.path])
     modules: dict[str, list[Any]] = {}
-    for name in ("loader", "publisher", "timed_checks"):
+    for name in ("loader", "timed_checks"):
         path = f"v2/lambdas/{name}/handler.py"
         old = tmp_path / (name + ".py")
         old.write_bytes(retained(path, baseline))
@@ -60,24 +59,9 @@ def test_mixed_loader_publisher_timed_and_cost_contracts(
         assert hashlib.sha256(current).hexdigest() == digest, review
     for environment in shared_packages.ACCOUNTS:
         monkeypatch.setenv("TOLLCHAT_ENVIRONMENT", environment)
-        for loader, publisher, timed in itertools.product(*modules.values()):
-            detail = loader._i95_success_detail(
-                watermark="2026-09-19T12:00:00Z",
-                s3_key="raw/feed=i95/date=2026-09-19/1200Z.csv",
-                row_count=1,
-            )
-            event = {
-                "source": "tollchat.pricing-loader",
-                "detail-type": "I95 Pricing Load Committed",
-                "detail": detail,
-            }
-            assert publisher._expected_watermark(event) == datetime(
-                2026, 9, 19, 12, tzinfo=UTC
-            )
+        for loader, timed in itertools.product(*modules.values()):
             assert loader.UPSERT_I95_SQL == modules["loader"][0].UPSERT_I95_SQL
             assert loader.UPSERT_I66_SQL == modules["loader"][0].UPSERT_I66_SQL
-            assert publisher.REPORT_SQL == modules["publisher"][0].REPORT_SQL
-            assert publisher.PUBLICATION_FORMAT_VERSION == "3.0.0"
             for schedule, window in timed.SCHEDULE_WINDOW_PAIRS:
                 assert timed._validate_event(
                     {"window_id": window, "schedule": schedule}
