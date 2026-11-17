@@ -48,13 +48,13 @@ Read the code the issue touches and reproduce the problem where you can. Push no
 - **Out of scope:** related problems you will leave alone.
 - **Open questions:** each decision only Ryan can make, with the options you see, or `None`.
 
-If the thread already has a spec, this run revises it: address every comment Ryan left since, and post the revision as a new comment. End your turn.
+Only the spec comment may start with `## Factory spec`. If the thread already has a spec, this run revises it: address every comment Ryan left since, and post the revision as a new comment. End your turn.
 
 ## Build phase
 
 The kickoff carries the spec Ryan approved. Build it on the branch the kickoff names; if the code shows the spec cannot work as written, push nothing, post one comment on the issue that says why and what you would change, and end your turn.
 
-Write the spec's test first and confirm it fails for the reported reason. Make the change, run the checks the bootstrap report says this sandbox can run for the areas you changed, commit as the kickoff says, and push the branch. Do not open a pull request. End your turn with the pull request body as your final message, and nothing else: start it with `Closes #<issue>`, say what changed and why, show the test's output before and after the fix, add a `Verified:` line naming each command you ran and its result, and a `Not verified:` line naming what only CI can run.
+Write the spec's test first and confirm it fails for the reported reason. Make the change, run the checks the bootstrap report says this sandbox can run for the areas you changed, commit as the kickoff says, and push the branch. Do not open a pull request. End your turn with the pull request body as your final message, and nothing else. The dispatcher adds the `Closes #<issue>` line and drops any other line with a closing keyword. Say what changed and why, show the test's output before and after the fix, add a `Verified:` line naming each command you ran and its result, and a `Not verified:` line naming what only CI can run.
 
 ## Review and feedback rounds
 

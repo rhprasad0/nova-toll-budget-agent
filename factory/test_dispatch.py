@@ -28,9 +28,20 @@ LOCK = {
 }
 SPEC: dict[str, Any] = {
     "id": 9,
-    "url": f"https://github.com/{REPO}/issues/799#issuecomment-9",
+    "html_url": f"https://github.com/{REPO}/issues/799#issuecomment-9",
     "body": "## Factory spec\n\nFix the loader.",
+    "user": {"login": BOT},
+    "created_at": "2026-11-17T10:00:00Z",
 }
+REPORT: dict[str, Any] = {
+    "id": 10,
+    "html_url": f"https://github.com/{REPO}/issues/799#issuecomment-10",
+    "body": f"The factory's session posted a spec: {SPEC['html_url']}.\n\n"
+    f"{dispatch.SPEC_OUTCOME} · rubric: `satisfied`",
+    "user": {"login": dispatch.REPORTER},
+    "created_at": "2026-11-17T11:00:00Z",
+}
+LABELED_AT = "2026-11-17T12:00:00Z"
 HEAD = "a" * 40
 PR_BODY = "Closes #799\n\nVerified: pytest"
 
@@ -198,15 +209,15 @@ class FakeGitHub:
         checks: list[list[dict[str, str]]] | None = None,
         open_prs: list[str] | None = None,
         branch: str | None = None,
-        spec: dict[str, Any] | None = SPEC,
+        comments: list[dict[str, Any]] | None = None,
     ) -> None:
         self.issue_data = issue_data or issue()
         self.pr = pr
         self.checks = list(checks or [PASSING])
         self.open_prs = open_prs or []
         self.branch = branch
-        self.spec = spec
-        self.comments: list[tuple[int, str, str | None]] = []
+        self.thread = [SPEC, REPORT] if comments is None else comments
+        self.posted: list[tuple[int, str, str | None]] = []
         self.deleted: list[int] = []
         self.unlabeled: list[tuple[int, str]] = []
         self.ready: list[int] = []
@@ -223,9 +234,8 @@ class FakeGitHub:
         assert branch == "factory/issue-799"
         return self.branch
 
-    def latest_spec(self, number: int, author: str) -> dict[str, Any] | None:
-        assert author == BOT
-        return self.spec
+    def comments(self, number: int) -> list[dict[str, Any]]:
+        return self.thread
 
     def factory_pull_request(self, number: int) -> dict[str, Any] | None:
         return self.pr
@@ -253,8 +263,8 @@ class FakeGitHub:
         ]
 
     def comment(self, number: int, body: str, token: str | None) -> int:
-        self.comments.append((number, body, token))
-        return 100 + len(self.comments)
+        self.posted.append((number, body, token))
+        return 100 + len(self.posted)
 
     def delete_comment(self, comment_id: int, token: str | None) -> None:
         self.deleted.append(comment_id)
@@ -329,6 +339,7 @@ def start(
         requester=requester,
         factory_login=BOT,
         budget_cents=1000,
+        labeled_at=LABELED_AT,
     )
 
 
@@ -339,6 +350,7 @@ def watch(
     status_comment_id: int | None = 55,
     stage: str = "build",
     tokens: FakeTokens | None = None,
+    spec_id: int | None = 9,
 ) -> str:
     dispatch.run_watch(
         client=client,
@@ -353,12 +365,13 @@ def watch(
         minutes=minutes,
         factory_login=BOT,
         review_budget_cents=300,
+        spec_id=spec_id,
         clock=FakeClock(),  # type: ignore[arg-type]
     )
     assert github.deleted == ([] if status_comment_id is None else [55])
     assert github.unlabeled == [(799, dispatch.LABELS[stage])]
-    (number, report, token) = github.comments[-1]
-    assert number == 799 and token == "ghs_app"
+    (number, report, token) = github.posted[-1]
+    assert number == 799 and token == (None if stage == "plan" else "ghs_app")
     return report
 
 
@@ -386,7 +399,28 @@ def watch(
             "plan",
             "branch `factory/issue-799` already exists",
         ),
-        (OWNER, FakeGitHub(spec=None), "build", "no factory spec to build"),
+        (OWNER, FakeGitHub(comments=[]), "build", "no factory spec reported"),
+        (OWNER, FakeGitHub(comments=[SPEC]), "build", "no factory spec reported"),
+        (
+            OWNER,
+            FakeGitHub(
+                comments=[SPEC, {**REPORT, "created_at": "2026-11-17T13:00:00Z"}]
+            ),
+            "build",
+            "no factory spec reported",
+        ),
+        (
+            OWNER,
+            FakeGitHub(comments=[{**SPEC, "user": {"login": "someone"}}, REPORT]),
+            "build",
+            "no factory spec reported",
+        ),
+        (
+            OWNER,
+            FakeGitHub(comments=[SPEC, {**REPORT, "user": {"login": BOT}}]),
+            "build",
+            "no factory spec reported",
+        ),
     ],
 )
 def test_start_refuses_and_unlabels_without_a_session(
@@ -395,14 +429,14 @@ def test_start_refuses_and_unlabels_without_a_session(
     client = FakeClient()
     assert start(github, client, requester, stage) is None
     assert client.created == []
-    (_, body, token) = github.comments[0]
+    (_, body, token) = github.posted[0]
     assert body.startswith("The factory skipped this issue: ") and reason in body
     assert token == "ghs_app"
     assert github.unlabeled == [(799, dispatch.LABELS[stage])]
 
 
 def test_plan_needs_no_spec_and_mounts_the_repository_read_only() -> None:
-    client, github = FakeClient(), FakeGitHub(spec=None)
+    client, github = FakeClient(), FakeGitHub(comments=[])
     assert start(github, client, stage="plan") == "sesn_1"
     (created,) = client.created
     (mount,) = created["resources"]
@@ -439,31 +473,40 @@ def test_build_starts_a_capped_session_with_the_approved_spec() -> None:
     assert outcome["rubric"]["content"] == dispatch.RUBRICS["build"].read_text()
     assert "no pull request opened" in outcome["description"]
     assert outcome["max_iterations"] == 3
-    assert github.unlabeled == [] and "sesn_1" in github.comments[0][1]
+    assert github.unlabeled == [] and "sesn_1" in github.posted[0][1]
 
 
 def test_plan_reports_the_spec_and_how_to_approve_it() -> None:
     tokens = FakeTokens()
     report = watch(
-        FakeClient([phase("idle_1")]), FakeGitHub(), stage="plan", tokens=tokens
+        FakeClient([phase("idle_1")]),
+        FakeGitHub(),
+        stage="plan",
+        tokens=tokens,
+        spec_id=None,
     )
-    assert "Outcome: **spec**" in report and SPEC["url"] in report
+    assert "Outcome: **spec**" in report and SPEC["html_url"] in report
     assert "`factory-build`" in report and "cost: $4.12" in report
     assert tokens.followed == [("sesn_1", True)]
 
 
 @pytest.mark.parametrize(
-    ("session_phase", "spec", "result"),
+    ("session_phase", "comments", "previous", "result"),
     [
-        (phase("idle_1"), None, "flawed"),
-        (phase("idle_1", rubric="max_iterations_reached"), SPEC, "flawed"),
-        (phase("idle_1", stop="retries_exhausted"), SPEC, "blocked"),
+        (phase("idle_1"), [], None, "flawed"),
+        (phase("idle_1"), [SPEC, REPORT], 9, "flawed"),
+        (phase("idle_1", rubric="max_iterations_reached"), [SPEC], None, "flawed"),
+        (phase("idle_1", stop="retries_exhausted"), [SPEC], None, "blocked"),
     ],
 )
-def test_plan_without_a_passing_spec_is_not_a_spec(
-    session_phase: Sdk, spec: dict[str, Any] | None, result: str
+def test_plan_without_a_new_passing_spec_is_not_a_spec(
+    session_phase: Sdk,
+    comments: list[dict[str, Any]],
+    previous: int | None,
+    result: str,
 ) -> None:
-    report = watch(FakeClient([session_phase]), FakeGitHub(spec=spec), stage="plan")
+    github = FakeGitHub(comments=comments)
+    report = watch(FakeClient([session_phase]), github, stage="plan", spec_id=previous)
     assert f"Outcome: **{result}**" in report
 
 
@@ -510,14 +553,69 @@ def test_review_findings_go_to_the_worker_once_and_into_the_pr() -> None:
     assert body.startswith(PR_BODY) and findings in body
 
 
-def test_no_push_for_the_review_findings_is_flawed_and_opens_no_pr() -> None:
+def test_a_worker_that_rebuts_every_finding_still_gets_its_pr() -> None:
     github = built()
     client = FakeClient(
         [phase("idle_1"), phase("idle_2")], verdict="CHANGES REQUESTED\n1. x"
     )
     report = watch(client, github)
-    assert "Outcome: **flawed**" in report and "pushed nothing" in report
-    assert github.opened == []
+    assert "Outcome: **success**" in report and "pushed nothing" in report
+    ((_, body),) = github.opened
+    assert "1. x" in body
+
+
+@pytest.mark.parametrize("verdict", ["", "**APPROVE**", "Looks good"])
+def test_a_review_without_a_verdict_blocks_and_spares_the_worker(verdict: str) -> None:
+    client = FakeClient([phase("idle_1")], verdict=verdict)
+    github = built()
+    report = watch(client, github)
+    assert "Outcome: **blocked**" in report and "gave no verdict" in report
+    assert client.sent == [] and github.opened == []
+
+
+def test_the_reviewer_gets_the_approved_spec_even_after_a_newer_one() -> None:
+    newer = {**SPEC, "id": 11, "body": "## Factory spec\n\nDelete the loader."}
+    github = FakeGitHub(branch=HEAD, comments=[SPEC, REPORT, newer])
+    client = FakeClient([phase("idle_1")])
+    watch(client, github)
+    text = client.created[0]["initial_events"][0]["content"][0]["text"]
+    assert "Fix the loader." in text and "Delete the loader." not in text
+
+
+def test_a_deleted_approved_spec_blocks_before_review() -> None:
+    github = FakeGitHub(branch=HEAD, comments=[REPORT])
+    client = FakeClient([phase("idle_1")])
+    report = watch(client, github)
+    assert "Outcome: **blocked**" in report and "approved spec is gone" in report
+    assert client.created == []
+
+
+def test_the_dispatcher_owns_the_closing_line_and_the_body_length() -> None:
+    body = dispatch.pull_request_body(
+        799, "Closes #799\nFixes #12 too\nresolves other/repo#3\nWhat changed"
+    )
+    assert body == "Closes #799\n\nWhat changed"
+    long = dispatch.pull_request_body(799, "x" * 70000)
+    assert len(long) < 60100 and long.endswith("(truncated)")
+
+
+def test_gh_cli_ignores_fork_pull_requests_and_flattens_comment_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    replies = {
+        "pr": '[{"number": 5, "isCrossRepository": true}, '
+        '{"number": 6, "isCrossRepository": false}]',
+        "api": '[[{"id": 1}], [{"id": 2}]]',
+    }
+
+    def gh(self: dispatch.GhCli, *args: str, **kwargs: str | None) -> str:
+        return replies[args[0]]
+
+    monkeypatch.setattr(dispatch.GhCli, "gh", gh)
+    cli = dispatch.GhCli(REPO)
+    pull = cli.factory_pull_request(799)
+    assert pull is not None and pull["number"] == 6
+    assert [c["id"] for c in cli.comments(799)] == [1, 2]
 
 
 def test_a_review_that_times_out_is_interrupted_and_blocks() -> None:
@@ -618,7 +716,7 @@ def test_watch_reports_even_when_watching_fails() -> None:
     github.open_draft_pr = None  # type: ignore[assignment]
     with pytest.raises(TypeError):
         watch(FakeClient([phase("idle_1")]), github)
-    assert "lost track of session" in github.comments[-1][1]
+    assert "lost track of session" in github.posted[-1][1]
 
 
 @pytest.fixture(scope="module")
@@ -773,7 +871,7 @@ def test_start_records_the_session_before_commenting(
 
     with pytest.raises(RuntimeError):
         start(Failing(), FakeClient())
-    assert outputs.read_text() == "started=true\nsession_id=sesn_1\n"
+    assert outputs.read_text() == "started=true\nsession_id=sesn_1\nspec_id=9\n"
 
 
 @pytest.mark.parametrize("bad", ["../agents", "agent_1\nstarted=true", 7])

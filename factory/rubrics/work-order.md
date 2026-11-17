@@ -11,7 +11,7 @@ Grade the build session from its transcript and what it left on GitHub. The kick
 5. The diff follows `CLAUDE.md` and is limited to the spec: no unrelated refactors, formatting churn, new code comments, or new Markdown files.
 6. No path that `factory/host/guard.py` protects is changed, no commit message uses a closing keyword, and there are no merge commits.
 7. The checks the bootstrap report lists as runnable here ran for the touched areas and passed in the transcript.
-8. The final message is only the pull request body: it starts with `Closes #<issue>`, its `Verified:` line matches the commands the transcript shows, and its `Not verified:` line names what only CI runs.
+8. The final message is only the pull request body, with no closing keywords: its `Verified:` line matches the commands the transcript shows, and its `Not verified:` line names what only CI runs.
 9. The TollChat agent's model and prompt are unchanged unless the issue asked for it.
 
 ## B: spec cannot be built

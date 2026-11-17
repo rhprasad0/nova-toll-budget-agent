@@ -51,17 +51,20 @@ jobs:
         env:
           FACTORY_APP_PRIVATE_KEY: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
           REQUESTED_BY: ${{ github.event.sender.login }}
-        run: uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" --phase "$PHASE" start --requested-by "$REQUESTED_BY"
+          LABELED_AT: ${{ github.event.issue.updated_at }}
+        run: uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" --phase "$PHASE" start --requested-by "$REQUESTED_BY" --labeled-at "$LABELED_AT"
       - name: Watch session
         if: ${{ !cancelled() && steps.start.outputs.session_id != '' }}
         env:
           FACTORY_APP_PRIVATE_KEY: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
           SESSION_ID: ${{ steps.start.outputs.session_id }}
           STATUS_COMMENT_ID: ${{ steps.start.outputs.status_comment_id }}
+          SPEC_ID: ${{ steps.start.outputs.spec_id }}
         run: |
-          comment=()
-          if [ -n "$STATUS_COMMENT_ID" ]; then comment=(--status-comment-id "$STATUS_COMMENT_ID"); fi
-          uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" --phase "$PHASE" watch --session-id "$SESSION_ID" "${comment[@]}"
+          options=()
+          if [ -n "$STATUS_COMMENT_ID" ]; then options+=(--status-comment-id "$STATUS_COMMENT_ID"); fi
+          if [ -n "$SPEC_ID" ]; then options+=(--spec-id "$SPEC_ID"); fi
+          uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" --phase "$PHASE" watch --session-id "$SESSION_ID" "${options[@]}"
       - name: Report a failed start
         if: failure() && steps.start.outputs.session_id == ''
         run: |

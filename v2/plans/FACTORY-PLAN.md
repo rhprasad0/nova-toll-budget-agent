@@ -41,7 +41,7 @@ the proxy and the credential helper still run there; Stage 4 stops them.
 | Agents, environment and vault defined as files, synced with `ant apply`; `claude-lock.json` on a `factory-state` branch | Kept |
 | `factory-dispatch.yml` running `dispatch.py start`, then `watch` | Kept, trimmed |
 | Session mounts the repo; the kickoff message carries only the issue number; the agent reads the issue with `issue_read` | Kept |
-| Session pushes `factory/issue-N` and opens a draft PR itself | Kept |
+| Session pushes `factory/issue-N` and opens a draft PR itself | Session pushes; the dispatcher opens the draft PR after review (Stage 6) |
 | Outcome rubric graded by `user.define_outcome`, up to 3 revisions | Kept, one rubric. `watch` treats an ungraded session as `flawed`, so the loop depends on it |
 | Required CI failures sent back to the session, up to 3 rounds; PR marked ready once CI passes | Kept |
 | Run outcomes `success`, `flawed`, `blocked`, `manual`, with cost, in one issue comment | Kept |
@@ -478,8 +478,10 @@ request opens.
 - `factory` starts the plan phase: the worker mounts the repository read-only
   and posts one `## Factory spec` comment, graded by `factory/rubrics/spec.md`.
   To revise, Ryan comments and adds `factory` again.
-- `factory-build` starts the build phase. Admission refuses an issue without a
-  factory spec. The kickoff carries the latest spec, and the worker pushes the
+- `factory-build` starts the build phase. Admission takes the spec the
+  dispatcher's own last plan report (posted as `github-actions[bot]`, before
+  the label was added) links to, and refuses an issue without one. The kickoff
+  and the reviewer get that exact comment, and the worker pushes the
   branch without opening a pull request, graded by
   `factory/rubrics/work-order.md`.
 - `dispatch.py` then starts `factory/agents/reviewer.md` in its own session on
