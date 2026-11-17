@@ -15,7 +15,6 @@ tools:
     default_config: {enabled: false}
     configs:
       - {name: issue_read, enabled: true, permission_policy: {type: always_allow}}
-      - {name: add_issue_comment, enabled: true, permission_policy: {type: always_allow}}
       - {name: update_pull_request, enabled: true, permission_policy: {type: always_allow}}
 ---
 
@@ -35,11 +34,12 @@ Read the issue the kickoff message names with `issue_read`, including every comm
 - Do not change the paths `factory/host/guard.py` protects. The `factory-guard` check fails any pull request that does, and no feedback round can fix that.
 - Commit messages never put a closing keyword (close, fix or resolve, in any form) before an issue number, as in `Fixes #12`; the guard fails them, and only a force-push could repair them.
 - Never push to `main`, force-push, move or create a tag, open or merge a pull request.
+- You do not comment on the issue. The dispatcher posts your spec, or your reason for not building one, as your only reply to Ryan.
 - Never print `GH_TOKEN` or any credential.
 
 ## Plan phase
 
-Read the code the issue touches and reproduce the problem where you can. Push nothing: the mount is read-only. Post one comment on the issue with `add_issue_comment` whose first line is exactly `## Factory spec`, followed by these sections:
+Read the code the issue touches and reproduce the problem where you can. Push nothing: the mount is read-only. End your turn with the spec as your final message, and nothing else. Its first line is exactly `## Factory spec`, followed by these sections:
 
 - **Problem:** what is wrong or wanted, and its root cause, with file and line references.
 - **Approach:** the change you will make, held to `CLAUDE.md`.
@@ -48,11 +48,11 @@ Read the code the issue touches and reproduce the problem where you can. Push no
 - **Out of scope:** related problems you will leave alone.
 - **Open questions:** each decision only Ryan can make, with the options you see, or `None`.
 
-Only the spec comment may start with `## Factory spec`. If the thread already has a spec, this run revises it: address every comment Ryan left since, and post the revision as a new comment. End your turn.
+If the thread already has a spec, this run revises it: address every comment Ryan left since. When the grader asks for changes, revise the spec and end your turn with the whole revised spec again; the dispatcher posts only the last one, after it passes.
 
 ## Build phase
 
-The kickoff carries the spec Ryan approved. Build it on the branch the kickoff names; if the code shows the spec cannot work as written, push nothing, post one comment on the issue that says why and what you would change, and end your turn.
+The kickoff carries the spec Ryan approved. Build it on the branch the kickoff names; if the code shows the spec cannot work as written, push nothing and end your turn with a final message that says why and what you would change.
 
 Write the spec's test first and confirm it fails for the reported reason. Make the change, run the checks the bootstrap report says this sandbox can run for the areas you changed, commit as the kickoff says, and push the branch. Do not open a pull request. End your turn with the pull request body as your final message, and nothing else. The dispatcher adds the `Closes #<issue>` line and drops any other line with a closing keyword. Say what changed and why, show the test's output before and after the fix, add a `Verified:` line naming each command you ran and its result, and a `Not verified:` line naming what only CI can run.
 

@@ -5,7 +5,8 @@
 """Take one labeled issue through the factory.
 
 A run has two phases, chosen by the label. `factory` plans: the session mounts
-the repository read-only and posts a spec on the issue. `factory-build` builds
+the repository read-only and ends with a spec, which the dispatcher posts on the
+issue once it passes its rubric. `factory-build` builds
 the spec Ryan approved: the worker pushes a branch, a reviewer session with its
 own context checks it once, the dispatcher opens the pull request, sends failing
 required checks back to the worker, and marks the pull request ready once they
@@ -220,7 +221,6 @@ LABELS = {"plan": "factory", "build": "factory-build"}
 SPEC_HEADING = "## Factory spec"
 SPEC_OUTCOME = "Outcome: **spec**"
 REPORTER = "github-actions[bot]"
-SPEC_LINK = re.compile(r"#issuecomment-(\d+)")
 CLOSING = re.compile(
     r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b[:\s]+[\w.-]*/?[\w.-]*#\d+",
     re.IGNORECASE,
@@ -239,14 +239,14 @@ JOB_LINK = re.compile(r"/actions/runs/(\d+)/job/\d+")
 RESOURCE_ID = re.compile(r"[a-z]+_[A-Za-z0-9]+")
 OUTCOMES = {
     "plan": (
-        "One comment on issue #{issue} that starts with `## Factory spec` and "
-        "proposes how to resolve it, with nothing pushed."
+        "A final message that starts with `## Factory spec` and proposes how to "
+        "resolve issue #{issue}, with nothing pushed and no comment posted."
     ),
     "build": (
         "Branch {branch} pushed with commits that implement the approved spec for "
         "issue #{issue}, no pull request opened, and a final message that is the "
-        "pull request body; or, if the spec cannot be built, one comment on the "
-        "issue that says why, with nothing pushed."
+        "pull request body; or, if the spec cannot be built, nothing pushed and a "
+        "final message that says why."
     ),
 }
 
@@ -482,33 +482,45 @@ def admission_problem(
     return None
 
 
-def specs(comments: list[dict[str, Any]], author: str) -> list[dict[str, Any]]:
-    return [
-        c
-        for c in comments
-        if c["user"]["login"] == author and c["body"].startswith(SPEC_HEADING)
-    ]
+def spec_of(comment: dict[str, Any]) -> dict[str, Any] | None:
+    lines = comment["body"].splitlines()
+    if comment["user"]["login"] != REPORTER or len(lines) < 5:
+        return None
+    body = "\n".join(lines[4:])
+    if not lines[2].startswith(SPEC_OUTCOME) or not body.startswith(SPEC_HEADING):
+        return None
+    return {"id": comment["id"], "body": body}
 
 
-def spec_by_id(
-    comments: list[dict[str, Any]], author: str, spec_id: int
-) -> dict[str, Any] | None:
-    return next((c for c in specs(comments, author) if c["id"] == spec_id), None)
+def spec_by_id(comments: list[dict[str, Any]], spec_id: int) -> dict[str, Any] | None:
+    found = (spec_of(c) for c in comments if c["id"] == spec_id)
+    return next((spec for spec in found if spec), None)
 
 
 def approved_spec(
-    comments: list[dict[str, Any]], author: str, labeled_at: str
+    comments: list[dict[str, Any]], labeled_at: str
 ) -> dict[str, Any] | None:
-    reports = [
-        lines
-        for c in comments
-        if c["user"]["login"] == REPORTER
-        and c["created_at"] < labeled_at
-        and len(lines := c["body"].splitlines()) > 2
-        and lines[2].startswith(SPEC_OUTCOME)
+    found = [
+        spec for c in comments if c["created_at"] < labeled_at and (spec := spec_of(c))
     ]
-    link = SPEC_LINK.search(reports[-1][0]) if reports else None
-    return spec_by_id(comments, author, int(link[1])) if link else None
+    return found[-1] if found else None
+
+
+def clip(text: str) -> str:
+    return text if len(text) <= BODY_LIMIT else text[:BODY_LIMIT] + "\n\n(truncated)"
+
+
+def draft(summary: str, text: str) -> list[str]:
+    if not text:
+        return []
+    return [
+        "",
+        f"<details><summary>{summary}</summary>",
+        "",
+        clip(text),
+        "",
+        "</details>",
+    ]
 
 
 def pull_request_body(issue: int, body: str) -> str:
@@ -518,8 +530,7 @@ def pull_request_body(issue: int, body: str) -> str:
         if not (CLOSING.fullmatch(line.strip()) and line.strip().endswith(f"#{issue}"))
     ]
     kept = CLOSING.sub(lambda match: match[0].replace("#", "# "), "\n".join(own))
-    text = f"Closes #{issue}\n\n{kept.strip()}"
-    return text if len(text) <= BODY_LIMIT else text[:BODY_LIMIT] + "\n\n(truncated)"
+    return clip(f"Closes #{issue}\n\n{kept.strip()}")
 
 
 def verdict_of(text: str) -> str | None:
@@ -603,8 +614,8 @@ def start_session(
     if phase == "plan":
         kickoff = (
             f"Plan issue #{issue} in {repo}. Read it and every comment with "
-            "issue_read, then finish the plan phase: post one spec comment and push "
-            "nothing."
+            "issue_read, then finish the plan phase: end your turn with the spec as "
+            "your final message. Post no comment and push nothing."
         )
     else:
         kickoff = (
@@ -684,7 +695,7 @@ def final_message(client: Sdk, session_id: str) -> str:
     for event in client.beta.sessions.events.list(
         session_id, types=["agent.message"], order="desc", limit=1
     ):
-        return "".join(b.text for b in event.content if b.type == "text").strip()
+        return "\n".join(b.text for b in event.content if b.type == "text").strip()
     return ""
 
 
@@ -810,9 +821,7 @@ def grader_details(outcome: Sdk, rubric: str) -> list[str]:
     ]
 
 
-def watch_plan(
-    run: Run, minutes: int, factory_login: str, previous_spec: int | None
-) -> str:
+def watch_plan(run: Run, minutes: int) -> str:
     session, idle = run.wait(run.session_id, None)
     if session is None:
         interrupt(run.client, run.session_id)
@@ -820,27 +829,24 @@ def watch_plan(
     outcome = latest_outcome(session)
     rubric = outcome.result if outcome else "not graded"
     stop = idle.stop_reason.type if idle else "terminated"
-    posted = specs(run.github.comments(run.issue), factory_login)
-    spec = posted[-1] if posted and posted[-1]["id"] != previous_spec else None
+    spec = final_message(run.client, run.session_id)
+    extra = grader_details(outcome, rubric)
     if stop != "end_turn":
         result, status = "blocked", "stopped before it finished a spec"
-    elif rubric != "satisfied" or spec is None:
-        result, status = "flawed", "finished without a new spec that passed its rubric"
+    elif rubric != "satisfied" or not spec.startswith(SPEC_HEADING):
+        result, status = "flawed", "finished without a spec that passed its rubric"
+        extra += draft("Last draft", spec)
+    elif len(spec) > BODY_LIMIT:
+        result, status = "flawed", "wrote a spec too long to post"
+        extra += draft("Last draft", spec)
     else:
         result = "spec"
         status = (
-            f"posted a spec: {spec['html_url']}. Add `{LABELS['build']}` to build it, or "
-            f"comment and add `{LABELS['plan']}` again to revise it"
+            f"wrote the spec below. Add `{LABELS['build']}` to build it, or comment "
+            f"and add `{LABELS['plan']}` again to revise it"
         )
-    return report(
-        run,
-        status,
-        result,
-        rubric,
-        stop,
-        [run.session_id],
-        grader_details(outcome, rubric),
-    )
+        extra = ["", spec]
+    return report(run, status, result, rubric, stop, [run.session_id], extra)
 
 
 def ci_rounds(
@@ -899,7 +905,6 @@ def ci_rounds(
 def watch_build(
     run: Run,
     minutes: int,
-    factory_login: str,
     review_budget_cents: int,
     spec_id: int | None,
 ) -> str:
@@ -926,6 +931,10 @@ def watch_build(
             else f"stopped and left branch `{branch}`",
         )
     if rubric != "satisfied":
+        if head is None:
+            extra += draft(
+                "Its last message", final_message(run.client, run.session_id)
+            )
         return done(
             "flawed",
             "finished without a branch"
@@ -933,14 +942,11 @@ def watch_build(
             else f"left branch `{branch}` for a human",
         )
     if head is None:
-        return done(
-            "manual", "explained in the comment above why it did not build the spec"
-        )
+        extra += ["", clip(final_message(run.client, run.session_id))]
+        return done("manual", "explained below why it did not build the spec")
 
     spec = (
-        None
-        if spec_id is None
-        else spec_by_id(run.github.comments(run.issue), factory_login, spec_id)
+        None if spec_id is None else spec_by_id(run.github.comments(run.issue), spec_id)
     )
     if spec is None:
         return done("blocked", f"left branch `{branch}`; its approved spec is gone")
@@ -1080,12 +1086,11 @@ def run_start(
     labeled_at: str,
 ) -> str | None:
     issue = github.issue(issue_number)
-    comments = github.comments(issue_number)
-    if phase == "plan":
-        posted = specs(comments, factory_login)
-        spec = posted[-1] if posted else None
-    else:
-        spec = approved_spec(comments, factory_login, labeled_at)
+    spec = (
+        None
+        if phase == "plan"
+        else approved_spec(github.comments(issue_number), labeled_at)
+    )
     problem = admission_problem(
         phase=phase,
         issue=issue,
@@ -1140,7 +1145,6 @@ def run_watch(
     issue: int,
     status_comment_id: int | None,
     minutes: int,
-    factory_login: str,
     review_budget_cents: int,
     spec_id: int | None,
     clock: Clock,
@@ -1160,11 +1164,9 @@ def run_watch(
             clock=clock,
         )
         if phase == "plan":
-            report = watch_plan(run, minutes, factory_login, spec_id)
+            report = watch_plan(run, minutes)
         else:
-            report = watch_build(
-                run, minutes, factory_login, review_budget_cents, spec_id
-            )
+            report = watch_build(run, minutes, review_budget_cents, spec_id)
     finally:
         token: str | None = None
         try:
@@ -1211,7 +1213,6 @@ def main(argv: list[str] | None = None) -> None:
             )
             github.remove_label(args.issue, LABELS[args.phase], None)
         raise
-    factory_login = os.environ["FACTORY_GITHUB_LOGIN"]
     if args.command == "start":
         run_start(
             client=client,
@@ -1222,7 +1223,7 @@ def main(argv: list[str] | None = None) -> None:
             repo=args.repo,
             issue_number=args.issue,
             requester=args.requested_by,
-            factory_login=factory_login,
+            factory_login=os.environ["FACTORY_GITHUB_LOGIN"],
             budget_cents=args.budget_cents,
             labeled_at=args.labeled_at,
         )
@@ -1238,7 +1239,6 @@ def main(argv: list[str] | None = None) -> None:
             issue=args.issue,
             status_comment_id=args.status_comment_id,
             minutes=args.minutes,
-            factory_login=factory_login,
             review_budget_cents=args.review_budget_cents,
             spec_id=args.spec_id,
             clock=Clock(),
