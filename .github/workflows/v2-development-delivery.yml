@@ -1,8 +1,9 @@
 name: v2-development-delivery
 
 on:
-  schedule:
-    - cron: "17 8 * * *" # 03:17 EST / 04:17 EDT, off the hour to avoid queue delays.
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:

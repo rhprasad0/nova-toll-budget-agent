@@ -19,9 +19,8 @@ from typing import Any, cast
 
 SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 DELIVERY_WORKFLOW = "v2-development-delivery.yml"
-# Push runs stay valid history: the last push delivery is the first predecessor.
 DELIVERY_EVENTS = ("push", "schedule", "workflow_dispatch")
-TRIGGER_EVENTS = ("schedule", "workflow_dispatch")
+TRIGGER_EVENTS = ("push", "workflow_dispatch")
 REQUIRED_WORKFLOWS: dict[str, tuple[str, ...]] = {
     "ci.yml": ("v2-loader", "v2-database"),
     "gitleaks.yml": ("gitleaks",),
@@ -424,7 +423,7 @@ def reject_stale_rerun(
 
 def _validate_trigger(event_name: str, ref: str) -> None:
     if event_name not in TRIGGER_EVENTS:
-        raise AdmissionError("delivery trigger is not schedule or dispatch")
+        raise AdmissionError("delivery trigger is not push or dispatch")
     if ref != "refs/heads/main":
         raise AdmissionError("delivery ref is not main")
 

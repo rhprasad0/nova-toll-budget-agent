@@ -90,7 +90,7 @@ Review every saved plan and apply that exact file.
 The trusted PR plan runs **main's** `v2/infra`, so it cannot see a PR's new MCP
 resources. Merge first, then apply from `main`:
 
-1. **Merge** the PR once its checks pass. Development delivery (nightly or
+1. **Merge** the PR once its checks pass. Development delivery (on push or
    dispatched) now stops at `phase_boundary` before applying anything, because
    the MCP resources do not exist yet. Until step 7, every delivery and every trusted PR plan fails the
    same way, so **merge nothing else until then**.
