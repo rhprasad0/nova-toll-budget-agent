@@ -10,6 +10,7 @@ test. Use prose only for judgment calls. Drop a rule once its mistake cannot hap
 | --- | --- |
 | Work in a git worktree. | The pre-commit hook rejects commits from the main checkout once it has linked worktrees. |
 | Fix root causes, not symptoms. | Nothing; judgment. |
+| Prefer end-to-end tests to unit tests; fake only paid or credentialed external services. | The factory's work-order rubric and reviewer check it; otherwise judgment. |
 | Set up each new worktree before committing. | `v2/scripts/setup.sh`; the pre-commit hook fails on a missing tool. |
 | Run what CI runs. | `.github/scripts/verify.sh` is what CI calls; `test_ci_jobs_run_verify` fails on a `ci.yml` job that bypasses it. The pre-push hook runs its `quick` subset. |
 | Changes reach `main` by a PR that passes CI. | Branch protection. |

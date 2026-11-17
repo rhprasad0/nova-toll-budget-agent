@@ -50,7 +50,7 @@ the proxy and the credential helper still run there; Stage 4 stops them.
 | `bootstrap.sh` run first in each session | Kept, for this repo's toolchains |
 | Opus coordinators | Sonnet 5.5 |
 | Three lanes chosen by triage labels | One lane, no lane labels |
-| Subagents: reproducer, analyst, area and security reviewers | Dropped. One agent |
+| Subagents: reproducer, analyst, area and security reviewers | One worker agent, plus one reviewer in its own session (Stage 6) |
 | GitHub App with minted installation tokens | Kept |
 | Claude Code Review findings sent back | Dropped. This repo has no review workflow |
 | Triage, candidates, review and finish lanes, previews, log scans, CLA check, Grafana and Datadog vaults | Dropped |
@@ -468,6 +468,36 @@ code keeps both paths and the environment chooses one.
 **Done when:** a development chat appears as one trace in the
 `tollchat-agent-dev` project, and a production chat still arrives redacted in
 `agentcore-traces/`.
+
+## Stage 6: Spec approval and review
+
+**Status on 2026-11-17: built, not yet run.** Ryan asked for a plan step he
+approves before anything is built, and an independent check before the pull
+request opens.
+
+- `factory` starts the plan phase: the worker mounts the repository read-only
+  and posts one `## Factory spec` comment, graded by `factory/rubrics/spec.md`.
+  To revise, Ryan comments and adds `factory` again.
+- `factory-build` starts the build phase. Admission refuses an issue without a
+  factory spec. The kickoff carries the latest spec, and the worker pushes the
+  branch without opening a pull request, graded by
+  `factory/rubrics/work-order.md`.
+- `dispatch.py` then starts `factory/agents/reviewer.md` in its own session on
+  a read-only mount of the branch. It reviews once. Its findings go back to the
+  worker once, with no second review, and into the pull request body.
+- The dispatcher opens the draft pull request with the worker's final message
+  as its body, then runs the CI feedback rounds as before.
+- The reviewer is a separate session rather than a Managed Agents subagent, so
+  the gate is the dispatcher's code, not the worker's choice.
+
+1. [ ] **Ryan:** create the `factory-build` label.
+2. [ ] Merge; `factory-sync` creates the reviewer agent. The `factory-state`
+   lock has `./agents/reviewer.md`.
+3. [ ] Run one issue through both phases.
+
+**Done when:** an issue gets a spec, and after `factory-build` it becomes a pull
+request that is ready for review, with the reviewer's session and verdict in
+the report.
 
 ## Not in this plan
 

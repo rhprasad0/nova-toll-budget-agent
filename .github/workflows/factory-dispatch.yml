@@ -8,7 +8,7 @@ on:
 
 jobs:
   dispatch:
-    if: github.event.label.name == 'factory'
+    if: github.event.label.name == 'factory' || github.event.label.name == 'factory-build'
     concurrency:
       group: factory-${{ github.event.issue.number }}
       cancel-in-progress: false
@@ -27,6 +27,8 @@ jobs:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
       ISSUE_NUMBER: ${{ github.event.issue.number }}
+      LABEL: ${{ github.event.label.name }}
+      PHASE: ${{ github.event.label.name == 'factory-build' && 'build' || 'plan' }}
       ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
       ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
       ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
@@ -49,7 +51,7 @@ jobs:
         env:
           FACTORY_APP_PRIVATE_KEY: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
           REQUESTED_BY: ${{ github.event.sender.login }}
-        run: uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" start --requested-by "$REQUESTED_BY"
+        run: uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" --phase "$PHASE" start --requested-by "$REQUESTED_BY"
       - name: Watch session
         if: ${{ !cancelled() && steps.start.outputs.session_id != '' }}
         env:
@@ -59,9 +61,9 @@ jobs:
         run: |
           comment=()
           if [ -n "$STATUS_COMMENT_ID" ]; then comment=(--status-comment-id "$STATUS_COMMENT_ID"); fi
-          uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" watch --session-id "$SESSION_ID" "${comment[@]}"
+          uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" --phase "$PHASE" watch --session-id "$SESSION_ID" "${comment[@]}"
       - name: Report a failed start
         if: failure() && steps.start.outputs.session_id == ''
         run: |
           gh issue comment "$ISSUE_NUMBER" --body "The factory failed before it could start; see the [workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
-          gh issue edit "$ISSUE_NUMBER" --remove-label factory
+          gh issue edit "$ISSUE_NUMBER" --remove-label "$LABEL"
