@@ -16,5 +16,5 @@ Grade the build session from its transcript and what it left on GitHub. The kick
 
 ## B: spec cannot be built
 
-1. No branch was pushed and no pull request was opened.
-2. One comment on the issue says why the approved spec cannot work as written, with evidence from the code, and what the session would change.
+1. No branch was pushed, no pull request was opened, and no comment was posted on the issue.
+2. The final message says why the approved spec cannot work as written, with evidence from the code, and what the session would change.

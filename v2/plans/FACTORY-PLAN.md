@@ -476,11 +476,14 @@ approves before anything is built, and an independent check before the pull
 request opens.
 
 - `factory` starts the plan phase: the worker mounts the repository read-only
-  and posts one `## Factory spec` comment, graded by `factory/rubrics/spec.md`.
+  and ends with the spec as its final message, graded by
+  `factory/rubrics/spec.md`. The dispatcher posts it as one comment, with the
+  report, so grader revisions never reach the issue. The worker has no comment
+  tool.
   To revise, Ryan comments and adds `factory` again.
-- `factory-build` starts the build phase. Admission takes the spec the
+- `factory-build` starts the build phase. Admission takes the spec in the
   dispatcher's own last plan report (posted as `github-actions[bot]`, before
-  the label was added) links to, and refuses an issue without one. The kickoff
+  the label was added), and refuses an issue without one. The kickoff
   and the reviewer get that exact comment, and the worker pushes the
   branch without opening a pull request, graded by
   `factory/rubrics/work-order.md`.
