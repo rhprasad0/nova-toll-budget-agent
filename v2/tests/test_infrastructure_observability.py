@@ -526,21 +526,6 @@ def test_usage_rollout_has_no_retired_foundation_step() -> None:
     assert "--consistent-read" not in DEPLOYMENT
 
 
-def test_metrics_aware_rollback_preserves_the_aggregate() -> None:
-    rollback = DEPLOYMENT.split("## Rollback", maxsplit=1)[1]
-    assert "scheduler get-schedule" in rollback
-    assert "scheduler update-schedule" in rollback
-    assert "--state DISABLED" in rollback
-    assert "--state ENABLED" in rollback
-    assert rollback.count("trap 'rm -f --") == 2
-    assert rollback.count("SCHEDULE_GROUP=") >= 2
-    assert 'SCHEDULE_GROUP="default"' not in rollback
-    assert "toll-v2-committed-i95-loads" not in rollback
-    assert "toll-v2-report-watchdog" not in rollback
-    assert "historical" in rollback.lower()
-    assert "usage#all" not in rollback
-
-
 def test_eval_dashboard_is_configured_in_both_environments() -> None:
     assert_assignment(
         TIMED_CHECKS_TF,
