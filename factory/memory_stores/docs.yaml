@@ -1,0 +1,2 @@
+name: tollchat-docs-notes
+description: The nightly docs agent's notes between runs. Holds the main commit it last reviewed and the doc statements it already judged correct, so later runs check only what changed since.

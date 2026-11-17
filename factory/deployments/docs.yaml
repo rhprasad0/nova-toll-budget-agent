@@ -1,0 +1,23 @@
+name: tollchat-nightly-docs
+agent: ../agents/docs.md
+environment_id: ../environments/tollchat.yaml
+vault_ids: [../vaults/docs-github.yaml]
+resources:
+  - type: github_repository
+    url: https://github.com/rhprasad0/nova-toll-budget-agent
+    checkout: {type: branch, name: main}
+    mount_path: /workspace/nova-toll-budget-agent
+  - path: ../memory_stores/docs.yaml
+    access: read_write
+budget:
+  type: limit
+  max_list_cost: {amount: "150", currency: USD}
+schedule:
+  type: cron
+  expression: "0 4 * * *"
+  timezone: America/New_York
+initial_events:
+  - type: user.message
+    content:
+      - type: text
+        text: Run tonight's docs check on main.
