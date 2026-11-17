@@ -70,9 +70,19 @@ account fail with `incomplete_or_drift` until its `v2/infra` state is synced. Th
 `infra/` root can drift too, but delivery only reads its outputs.
 
 For each tripped account, use a clean checkout of `main` with that account's
-administrator credentials and set `W` and `VARS` as in
-[Plan variables](../v2/runbooks/mcp-server.md#plan-variables). For production,
-use `backend.production.hcl` and `production.tfvars` instead. Then:
+administrator credentials and set `W` and `VARS` with the trusted plan's inputs:
+
+```sh
+W="$(mktemp -d)"
+terraform -chdir=infra init -input=false -lockfile=readonly -backend-config=backend.development.hcl
+terraform -chdir=infra output -json foundation | jq '{foundation: .}' >"$W/foundation.tfvars.json"
+terraform -chdir=v2/infra init -input=false -lockfile=readonly -backend-config=backend.development.hcl
+terraform -chdir=v2/infra output -json release_state >"$W/release-state.json"
+python3 v2/scripts/blue_green.py inputs --previous "$W/release-state.json" >"$W/release-slots.tfvars.json"
+VARS=(-var-file=development.tfvars -var-file="$W/foundation.tfvars.json" -var-file="$W/release-slots.tfvars.json")
+```
+
+For production, use `backend.production.hcl` and `production.tfvars` instead. Then:
 
 ```sh
 terraform -chdir=v2/infra plan -refresh-only -input=false "${VARS[@]}" -out="$W/refresh.tfplan"

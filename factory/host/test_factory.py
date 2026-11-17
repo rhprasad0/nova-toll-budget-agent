@@ -23,9 +23,6 @@ def test_image_toolchains_match_ci() -> None:
     ci = (ROOT / ".github/workflows/ci.yml").read_text()
     assert f'node-version: "{arg("NODE_VERSION")}"' in ci
     assert f'terraform_version: "{arg("TERRAFORM_VERSION")}"' in ci
-    toolchain = (ROOT / "v2/lambdas/mcp_server/rust-toolchain.toml").read_text()
-    channel = re.search(r'^channel = "(.+)"$', toolchain, re.M)
-    assert channel and f"FROM rust:{channel.group(1)}-" in DOCKERFILE
     package = json.loads((ROOT / "v2/package.json").read_text())
     assert package["devDependencies"]["playwright"] == arg("PLAYWRIGHT_VERSION")
 

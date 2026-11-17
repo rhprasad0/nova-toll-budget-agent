@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The credential-free checks behind the required CI jobs, runnable anywhere.
 #
-#   .github/scripts/verify.sh [loader|terraform|database|factory|mcp|all|quick] [BASE_GIT_REF]
+#   .github/scripts/verify.sh [loader|terraform|database|factory|all|quick] [BASE_GIT_REF]
 #
 # ci.yml and terraform.yml call this, so a local or sandbox run checks what CI
 # checks. Setup (toolchains, the pinned checkers, PostGIS for `database`) is the
@@ -9,9 +9,8 @@
 # test_ci_jobs_run_verify run elsewhere. `quick` is the pre-push hook's subset.
 #
 # It lives under .github/ because that path is closed to the factory, so a work
-# order cannot drop a check from this list. `database` and `mcp` need Docker.
-# `all` leaves out `factory` and `mcp`: the factory runs `all` in a sandbox that
-# cannot reach the ports mcp's e2e.sh publishes on the host.
+# order cannot drop a check from this list. `database` needs Docker.
+# `all` leaves out `factory`.
 set -euo pipefail
 
 job="${1:-all}"
@@ -165,20 +164,11 @@ factory() {
   step uv run --project v2 --locked pytest factory
 }
 
-# The crate's rust-toolchain.toml pins the toolchain rustup installs.
-mcp() (
-  cd v2/lambdas/mcp_server
-  step cargo fmt --check
-  step cargo clippy --locked --all-targets -- -D warnings
-  step ./e2e.sh
-)
-
 case "$job" in
   loader) loader ;;
   terraform) terraform_checks ;;
   database) database ;;
   factory) factory ;;
-  mcp) mcp ;;
   quick) quick ;;
   all)
     loader
@@ -186,7 +176,7 @@ case "$job" in
     database
     ;;
   *)
-    echo "usage: $0 [loader|terraform|database|factory|mcp|all|quick] [BASE_GIT_REF]" >&2
+    echo "usage: $0 [loader|terraform|database|factory|all|quick] [BASE_GIT_REF]" >&2
     exit 2
     ;;
 esac

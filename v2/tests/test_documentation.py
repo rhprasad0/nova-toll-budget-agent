@@ -29,11 +29,11 @@ def test_markdown_files_only_shrink() -> None:
         for path in tracked_markdown()
         if not path.startswith((JOURNAL, *FACTORY_DEFINITIONS))
     ]
-    assert len(documents) <= 35, (
+    assert len(documents) <= 31, (
         "Do not add Markdown files. Write a deterministic check whose error names "
         "the fix (CLAUDE.md), or delete a stale document to make room."
     )
-    assert len(documents) == 35, (
+    assert len(documents) == 31, (
         f"A Markdown file was removed: lower this limit to {len(documents)}."
     )
 
@@ -98,7 +98,6 @@ def test_journal_pages_are_mondays_linked_from_the_index() -> None:
     ("runbook", "terraform"),
     [
         ("v2/runbooks/timed-checks-scheduler.md", "v2/infra/timed_checks.tf"),
-        ("v2/runbooks/mcp-server.md", "v2/infra/mcp.tf"),
     ],
 )
 def test_runbook_targets_name_every_resource(runbook: str, terraform: str) -> None:
