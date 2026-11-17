@@ -461,9 +461,8 @@ code keeps both paths and the environment chooses one.
    `infra/development-tracing.tf`) stay in place, unused. Removing them is a
    separate change that an administrator applies.
 5. Development stops writing `agentcore-traces/` and its CloudWatch trace
-   logs. `v2/agent/privacy.txt` and `v2/lambdas/mcp_server/src/privacy.md` say
-   both environments redact and archive traces; correct their statements about
-   development in the same release. Production's statements stay true.
+   logs. `v2/agent/privacy.txt` says both environments redact and archive
+   traces; correct its statements about development in the same release. Production's statements stay true.
 
 **Done when:** a development chat appears as one trace in the
 `tollchat-agent-dev` project, and a production chat still arrives redacted in
