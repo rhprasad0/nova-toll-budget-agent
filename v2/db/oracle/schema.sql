@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.15.2
+-- oracle schema version: 1.16.0
 
 \set ON_ERROR_STOP on
 
@@ -59,13 +59,6 @@ END $$;
 
 DO $$
 BEGIN
-    CREATE ROLE report_publisher LOGIN;
-EXCEPTION
-    WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$
-BEGIN
     IF EXISTS (
         SELECT 1 FROM pg_catalog.pg_roles
         WHERE rolname = 'oracle_owner'
@@ -76,7 +69,7 @@ BEGIN
     END IF;
     IF EXISTS (
         SELECT 1 FROM pg_catalog.pg_roles
-        WHERE rolname IN ('tollchat_agent', 'pricing_caller', 'report_publisher')
+        WHERE rolname IN ('tollchat_agent', 'pricing_caller')
           AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
                OR rolreplication OR rolbypassrls)
     ) THEN
@@ -89,9 +82,7 @@ BEGIN
           ON member_role.oid = membership.member
         JOIN pg_catalog.pg_roles AS granted_role
           ON granted_role.oid = membership.roleid
-        WHERE member_role.rolname IN (
-            'tollchat_agent', 'pricing_caller', 'report_publisher'
-        )
+        WHERE member_role.rolname IN ('tollchat_agent', 'pricing_caller')
           AND granted_role.rolname <> 'rds_iam'
     ) THEN
         RAISE EXCEPTION 'existing runtime role has an unexpected role membership';
@@ -102,8 +93,7 @@ BEGIN
              LATERAL aclexplode(database.datacl) AS privilege
         WHERE database.datname = current_database()
           AND privilege.grantee IN (
-              to_regrole('tollchat_agent'), to_regrole('pricing_caller'),
-              to_regrole('report_publisher')
+              to_regrole('tollchat_agent'), to_regrole('pricing_caller')
           )
           AND privilege.privilege_type IN ('CREATE', 'TEMPORARY')
     ) OR EXISTS (
@@ -111,31 +101,28 @@ BEGIN
         FROM pg_catalog.pg_namespace AS namespace,
              LATERAL aclexplode(namespace.nspacl) AS privilege
         WHERE privilege.grantee IN (
-            to_regrole('tollchat_agent'), to_regrole('pricing_caller'),
-            to_regrole('report_publisher')
+            to_regrole('tollchat_agent'), to_regrole('pricing_caller')
         )
     ) OR EXISTS (
         SELECT 1
         FROM pg_catalog.pg_class AS relation,
              LATERAL aclexplode(relation.relacl) AS privilege
         WHERE privilege.grantee IN (
-            to_regrole('tollchat_agent'), to_regrole('pricing_caller'),
-            to_regrole('report_publisher')
+            to_regrole('tollchat_agent'), to_regrole('pricing_caller')
         )
     ) OR EXISTS (
         SELECT 1
         FROM pg_catalog.pg_attribute AS attribute,
              LATERAL aclexplode(attribute.attacl) AS privilege
         WHERE privilege.grantee IN (
-            to_regrole('tollchat_agent'), to_regrole('pricing_caller'),
-            to_regrole('report_publisher')
+            to_regrole('tollchat_agent'), to_regrole('pricing_caller')
         )
     ) THEN
         RAISE EXCEPTION 'existing runtime role has unexpected direct privileges';
     END IF;
 END $$;
 
-GRANT rds_iam TO tollchat_agent, pricing_caller, report_publisher;
+GRANT rds_iam TO tollchat_agent, pricing_caller;
 
 CREATE SCHEMA oracle;
 REVOKE ALL ON SCHEMA oracle FROM PUBLIC;
@@ -163,7 +150,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.15.2');
+INSERT INTO oracle.schema_version (version) VALUES ('1.16.0');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,
@@ -2464,306 +2451,6 @@ BEGIN
 END
 $function$;
 
-CREATE FUNCTION oracle.get_i95_i495_report_inputs() RETURNS TABLE (
-    snapshot_evaluated_at timestamptz,
-    origin jsonb,
-    destination jsonb,
-    structural_facility_legs jsonb,
-    status text,
-    reason jsonb,
-    point_ids text[],
-    connection_ids text[],
-    connection_types text[],
-    general_purpose_gaps jsonb,
-    i95_evidence jsonb,
-    facility_legs jsonb,
-    route_step_id text,
-    comparison_kind text,
-    comparison_offset integer,
-    bin_start_at timestamptz,
-    bin_end_at timestamptz,
-    interval_end_at timestamptz,
-    observed_at timestamptz,
-    price_usd numeric,
-    available boolean,
-    availability_reason text,
-    source_kind text,
-    pricing_method text,
-    od_pair_id integer,
-    proxy_od_pair_id integer,
-    source_status text
-)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = pg_catalog, pg_temp
-AS $function$
-WITH report_points AS MATERIALIZED (
-    SELECT
-        route_point.point_id,
-        route_point.point_type,
-        jsonb_build_object(
-            'point_id', route_point.point_id,
-            'label', route_point.label,
-            'place_name', route_point.place_name,
-            'region', route_point.region,
-            'country_code', route_point.country_code,
-            'aliases', to_jsonb(route_point.aliases),
-            'nearby_landmarks', coalesce(
-                route_point.source_metadata
-                    #> '{report_context,nearby_landmarks}',
-                '[]'::jsonb
-            ),
-            'direction', CASE route_point.direction
-                WHEN 'NB' THEN 'northbound'
-                WHEN 'SB' THEN 'southbound'
-            END,
-            'role', route_point.point_type,
-            'display_name', format(
-                '%s, %s — %s (%s %s)',
-                route_point.place_name,
-                route_point.region,
-                route_point.label,
-                CASE route_point.direction
-                    WHEN 'NB' THEN 'northbound'
-                    WHEN 'SB' THEN 'southbound'
-                END,
-                route_point.point_type
-            ),
-            'location', oracle.ST_AsGeoJSON(
-                route_point.location, 15, 0
-            )::jsonb
-        ) AS endpoint
-    FROM oracle.toll_route_point AS route_point
-    WHERE route_point.network_id IN ('i95', 'i495')
-), structural_routes AS MATERIALIZED (
-    SELECT
-        origin.point_id AS origin_point_id,
-        destination.point_id AS destination_point_id,
-        origin.endpoint AS origin,
-        destination.endpoint AS destination,
-        structural.status,
-        structural.point_ids,
-        structural.connection_ids,
-        oracle.route_pricing_legs(
-            structural.point_ids, structural.connection_ids
-        ) AS facility_legs
-    FROM report_points AS origin
-    CROSS JOIN report_points AS destination
-    CROSS JOIN LATERAL oracle.resolve_toll_route_internal(
-        origin.point_id, destination.point_id, false
-    ) AS structural
-    WHERE origin.point_type = 'entry'
-      AND destination.point_type = 'exit'
-), eligible_routes AS MATERIALIZED (
-    SELECT *
-    FROM structural_routes
-    WHERE status = 'valid'
-      AND EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements(facility_legs) AS leg(value)
-          WHERE leg.value->>'facility' = 'i95_i495'
-      )
-      AND NOT EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements(facility_legs) AS leg(value)
-          WHERE leg.value->>'facility' <> 'i95_i495'
-      )
-), current_routes AS MATERIALIZED (
-    SELECT
-        eligible.origin_point_id,
-        eligible.destination_point_id,
-        eligible.origin,
-        eligible.destination,
-        eligible.facility_legs AS structural_facility_legs,
-        current_route.*
-    FROM eligible_routes AS eligible
-    CROSS JOIN LATERAL oracle.validate_pricing_route(
-        eligible.origin_point_id, eligible.destination_point_id
-    ) AS current_route
-)
-SELECT
-    statement_timestamp(),
-    current_route.origin,
-    current_route.destination,
-    current_route.structural_facility_legs,
-    current_route.status,
-    current_route.reason,
-    current_route.point_ids,
-    current_route.connection_ids,
-    current_route.connection_types,
-    current_route.general_purpose_gaps,
-    current_route.i95_evidence,
-    current_route.facility_legs,
-    leg.value->>'route_step_id',
-    comparison.comparison_kind,
-    comparison.comparison_offset,
-    comparison.bin_start_at,
-    comparison.bin_end_at,
-    comparison.interval_end_at,
-    comparison.observed_at,
-    comparison.price_usd,
-    comparison.available,
-    comparison.availability_reason,
-    comparison.source_kind,
-    comparison.pricing_method,
-    comparison.od_pair_id,
-    comparison.proxy_od_pair_id,
-    comparison.source_status
-FROM current_routes AS current_route
-LEFT JOIN LATERAL jsonb_array_elements(
-    current_route.facility_legs
-) AS leg(value) ON current_route.status = 'valid'
-LEFT JOIN LATERAL oracle.get_i95_i495_pricing_comparisons(
-    (leg.value->'pricing_key'->>'od_pair_id')::integer
-) AS comparison ON leg.value IS NOT NULL
-ORDER BY
-    current_route.origin->>'point_id',
-    current_route.destination->>'point_id',
-    (substring(leg.value->>'route_step_id' FROM '[0-9]+'))::integer,
-    CASE comparison.comparison_kind
-        WHEN 'current' THEN 0
-        WHEN 'prior_cycle' THEN 1
-        ELSE 2
-    END,
-    comparison.comparison_offset
-$function$;
-
-CREATE FUNCTION oracle.get_agent_report_routes() RETURNS TABLE (
-    facility text,
-    path_id text,
-    path_order integer,
-    pricing_legs jsonb,
-    origin_area text,
-    destination_area text,
-    direction text
-)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = pg_catalog, pg_temp
-AS $function$
-WITH report_points AS MATERIALIZED (
-    SELECT
-        logical.facility,
-        point.point_id,
-        point.point_type,
-        point.direction,
-        point.place_name
-    FROM (VALUES
-        ('i66'::text, ARRAY['i66']::text[]),
-        ('i95_i495'::text, ARRAY['i95', 'i495']::text[])
-    ) AS logical(facility, networks)
-    JOIN oracle.toll_route_point AS point
-      ON point.network_id = ANY(logical.networks)
-), candidates AS MATERIALIZED (
-    SELECT
-        origin.facility,
-        origin.point_id AS origin_point_id,
-        destination.point_id AS destination_point_id,
-        origin.place_name AS origin_area,
-        destination.place_name AS destination_area,
-        CASE origin.direction
-            WHEN 'NB' THEN 'northbound'
-            WHEN 'SB' THEN 'southbound'
-            WHEN 'EB' THEN 'eastbound'
-            WHEN 'WB' THEN 'westbound'
-        END AS direction,
-        resolved.point_ids,
-        resolved.connection_ids,
-        oracle.route_pricing_legs(
-            resolved.point_ids, resolved.connection_ids
-        ) AS full_pricing_legs
-    FROM report_points AS origin
-    JOIN report_points AS destination
-      ON destination.facility = origin.facility
-     AND destination.point_type = 'exit'
-    CROSS JOIN LATERAL oracle.resolve_toll_route_internal(
-        origin.point_id, destination.point_id, false
-    ) AS resolved
-    WHERE origin.point_type = 'entry'
-      AND resolved.status = 'valid'
-), pure_candidates AS MATERIALIZED (
-    SELECT
-        candidate.*,
-        legs.pricing_legs,
-        legs.signature
-    FROM candidates AS candidate
-    CROSS JOIN LATERAL (
-        SELECT
-            jsonb_agg(
-                jsonb_build_object(
-                    'route_step_id', leg.value->'route_step_id',
-                    'facility', leg.value->'facility',
-                    'pricing_key', leg.value->'pricing_key'
-                ) ORDER BY leg.ord
-            ) AS pricing_legs,
-            jsonb_agg(
-                CASE candidate.facility
-                    WHEN 'i66' THEN jsonb_build_object(
-                        'facility', candidate.facility,
-                        'direction', candidate.direction,
-                        'start_zone_id',
-                            leg.value->'pricing_key'->'start_zone_id',
-                        'end_zone_id',
-                            leg.value->'pricing_key'->'end_zone_id',
-                        'charge_index',
-                            leg.value->'pricing_key'->'charge_index'
-                    )
-                    WHEN 'i95_i495' THEN jsonb_build_object(
-                        'facility', candidate.facility,
-                        'direction', candidate.direction,
-                        'od_pair_id', leg.value->'pricing_key'->'od_pair_id',
-                        'charge_index',
-                            leg.value->'pricing_key'->'charge_index'
-                    )
-                END ORDER BY leg.ord
-            ) AS signature
-        FROM jsonb_array_elements(candidate.full_pricing_legs)
-             WITH ORDINALITY AS leg(value, ord)
-    ) AS legs
-    WHERE jsonb_array_length(candidate.full_pricing_legs) > 0
-      AND NOT EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements(candidate.full_pricing_legs) AS leg(value)
-          WHERE leg.value->>'facility' <> candidate.facility
-      )
-), representatives AS MATERIALIZED (
-    SELECT DISTINCT ON (pure.facility, pure.signature)
-        pure.facility,
-        pure.signature,
-        pure.pricing_legs,
-        pure.origin_area,
-        pure.destination_area,
-        pure.direction
-    FROM pure_candidates AS pure
-    ORDER BY
-        pure.facility,
-        pure.signature,
-        pure.origin_point_id,
-        pure.destination_point_id,
-        pure.point_ids::text,
-        pure.connection_ids::text
-), ordered AS (
-    SELECT
-        representative.*,
-        row_number() OVER (
-            ORDER BY representative.facility, representative.signature
-        )::integer AS path_order
-    FROM representatives AS representative
-)
-SELECT
-    ordered.facility,
-    ordered.facility || '-' || md5(ordered.signature::text),
-    ordered.path_order,
-    ordered.pricing_legs,
-    ordered.origin_area,
-    ordered.destination_area,
-    ordered.direction
-FROM ordered
-ORDER BY ordered.path_order
-$function$;
-
 REVOKE ALL ON ALL TABLES IN SCHEMA oracle FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA oracle FROM PUBLIC;
 REVOKE ALL ON TYPE oracle.geometry, oracle.geography FROM PUBLIC;
@@ -2782,7 +2469,7 @@ GRANT SELECT ON pricing.current_i95_direction,
     pricing.i95_i495_pricing_comparisons,
     pricing.i66_ballpark_samples,
     pricing.i95_i495_ballpark_samples TO oracle_owner;
-GRANT USAGE ON SCHEMA oracle TO tollchat_agent, pricing_caller, report_publisher;
+GRANT USAGE ON SCHEMA oracle TO tollchat_agent, pricing_caller;
 GRANT EXECUTE ON FUNCTION oracle.get_toll_route_prompt_points()
 TO tollchat_agent;
 GRANT EXECUTE ON FUNCTION oracle.validate_toll_route(text, text)
@@ -2808,8 +2495,6 @@ GRANT EXECUTE ON FUNCTION oracle.get_i95_i495_ballpark_samples(
 GRANT EXECUTE ON FUNCTION oracle.get_annual_ballpark_summary(
     jsonb, time, time, date[], jsonb, integer, timestamptz
 ) TO pricing_caller;
-GRANT EXECUTE ON FUNCTION oracle.get_i95_i495_report_inputs()
-TO report_publisher;
 
 -- The evaluation factory's fixed development reader can inspect catalog evidence.
 DO $catalog_reader$
@@ -2858,11 +2543,6 @@ ALTER FUNCTION oracle.get_i95_i495_ballpark_samples(
 ALTER FUNCTION oracle.get_annual_ballpark_summary(
     jsonb, time, time, date[], jsonb, integer, timestamptz
 ) OWNER TO oracle_owner;
-ALTER FUNCTION oracle.get_i95_i495_report_inputs() OWNER TO oracle_owner;
-ALTER FUNCTION oracle.get_agent_report_routes() OWNER TO oracle_owner;
 ALTER SCHEMA oracle OWNER TO oracle_owner;
-SET LOCAL ROLE oracle_owner;
-GRANT EXECUTE ON FUNCTION oracle.get_agent_report_routes()
-TO report_publisher;
 
 COMMIT;

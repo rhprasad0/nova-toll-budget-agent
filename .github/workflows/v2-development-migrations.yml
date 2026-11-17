@@ -49,8 +49,8 @@ jobs:
 
       - name: Run fixed-target migrations and emit sanitized evidence
         env:
-          EXPECTED_PRICING_VERSION: "1.4.0"
-          EXPECTED_ORACLE_VERSION: "1.15.2"
+          EXPECTED_PRICING_VERSION: "1.5.0"
+          EXPECTED_ORACLE_VERSION: "1.16.0"
         run: bash scripts/run_development_migrations_workflow.sh
 
       - name: Upload sanitized migration evidence

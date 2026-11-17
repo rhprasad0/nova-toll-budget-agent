@@ -86,7 +86,7 @@ cleanup_databases() {
     dropdb --if-exists "$database"
   done
   psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-    "DROP ROLE IF EXISTS pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, eval_writer_development, pricing_owner_development, schema_migrator_development, loader_writer"
+    "DROP ROLE IF EXISTS pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, pricing_owner_development, schema_migrator_development, loader_writer"
 }
 
 cleanup() {
@@ -211,7 +211,7 @@ psql --dbname "$development_db" --variable fresh_development=1 \
 if psql --dbname postgres --tuples-only --no-align --command \
   "SELECT count(*) FROM pg_database WHERE datname = '$production_db'" | grep -qx 0 &&
   psql --dbname postgres --tuples-only --no-align --command \
-  "SELECT count(*) FROM pg_roles WHERE rolname IN ('pricing_loader_writer', 'pricing_reader', 'oracle_owner', 'tollchat_agent', 'pricing_caller', 'report_publisher')" | grep -qx 0; then
+  "SELECT count(*) FROM pg_roles WHERE rolname IN ('pricing_loader_writer', 'pricing_reader', 'oracle_owner', 'tollchat_agent', 'pricing_caller')" | grep -qx 0; then
   :
 else
   echo "fresh bootstrap touched production state" >&2
@@ -219,13 +219,12 @@ else
 fi
 dropdb "$development_db"
 psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-  'DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, eval_writer_development, pricing_owner_development, schema_migrator_development'
+  'DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, pricing_owner_development, schema_migrator_development'
 
 createdb --template template0 "$production_db"
 psql --dbname "$production_db" --file v2/db/schema.sql
 psql --dbname "$production_db" --file v2/db/roles.sql
 psql --dbname "$production_db" --file v2/db/oracle/schema.sql
-psql --dbname "$production_db" --file v2/tests/evaluation_history_contract.sql
 url_target="$(python3 - <<'PY'
 import os
 from urllib.parse import quote
@@ -255,7 +254,7 @@ END $$;
 SQL
 dropdb "$development_db"
 psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-  "DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, eval_writer_development, pricing_owner_development, schema_migrator_development"
+  "DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, pricing_owner_development, schema_migrator_development"
 if NOVA_TOLL_ADMIN_URL='postgresql://must-not-be-used@127.0.0.1:1/postgres' \
   v2/scripts/test_development_database_bootstrap.sh; then
   echo "disposable bootstrap test accepted NOVA_TOLL_ADMIN_URL" >&2
@@ -271,8 +270,8 @@ directory = Path(sys.argv[1]) / "catalog-grants"
 (directory / "tests").mkdir(parents=True)
 (directory / "db/migrations").mkdir(parents=True)
 render(Path("v2/tests/oracle_catalog_reader_contract.sql"), directory / "tests/contract.sql")
-render(Path("v2/db/migrations/035_upgrade_oracle_1_15_1_to_1_15_2.sql"),
-       directory / "db/migrations/035_upgrade_oracle_1_15_1_to_1_15_2.sql")
+for name in ("035_upgrade_oracle_1_15_1_to_1_15_2.sql", "036_upgrade_oracle_1_15_2_to_1_16_0.sql"):
+    render(Path("v2/db/migrations") / name, directory / "db/migrations" / name)
 PY
 psql --dbname "$development_db" --file "$migration_source_dir/catalog-grants/tests/contract.sql"
 development_verify_output="$(python3 v2/scripts/run_development_migrations.py --verify-only)"
@@ -290,7 +289,7 @@ assert set(result) == {
 }
 assert result["database"] == "nova_toll_development"
 assert result["user"] == "schema_migrator_development"
-assert result["before"] == result["after"] == {"pricing": "1.4.0", "oracle": "1.15.2"}
+assert result["before"] == result["after"] == {"pricing": "1.5.0", "oracle": "1.16.0"}
 assert result["applied"] == []
 assert re.fullmatch(r"[0-9a-f]{40}", result["commit"])
 assert re.fullmatch(
@@ -328,7 +327,7 @@ migration = runner.Migration(
     source_sha256=hashlib.sha256(Path(migration_path).read_bytes()).hexdigest(),
 )
 
-runner._registry = lambda: ((), {"pricing": "1.0.1", "oracle": "1.15.2"})
+runner._registry = lambda: ((), {"pricing": "1.0.1", "oracle": "1.16.0"})
 runner._migration_candidates = lambda _schemas: (migration,)
 runner._history_preflight_sql = lambda *_args, **_kwargs: ""
 

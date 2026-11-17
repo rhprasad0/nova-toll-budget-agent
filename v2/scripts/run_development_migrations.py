@@ -502,8 +502,7 @@ BEGIN
   FROM pg_roles WHERE rolname = 'pricing_owner_development';
   SELECT oid INTO STRICT oracle_owner
   FROM pg_roles WHERE rolname = 'oracle_owner_development';
-  IF (SELECT count(*) FROM pg_roles
-      WHERE rolname IN ('pricing_caller_development', 'report_publisher_development')) <> 2 THEN
+  IF to_regrole('pricing_caller_development') IS NULL THEN
     RAISE EXCEPTION 'runtime roles required by released migrations are missing';
   END IF;
   IF EXISTS (

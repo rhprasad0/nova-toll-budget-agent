@@ -33,8 +33,6 @@ ROLES = {
         "oracle_owner",
         "tollchat_agent",
         "pricing_caller",
-        "report_publisher",
-        "eval_writer",
     ),
     "development": (
         "pricing_loader_writer_development",
@@ -42,8 +40,6 @@ ROLES = {
         "oracle_owner_development",
         "tollchat_agent_development",
         "pricing_caller_development",
-        "report_publisher_development",
-        "eval_writer_development",
         "pricing_owner_development",
         "schema_migrator_development",
     ),
@@ -52,9 +48,12 @@ IDENTIFIER = re.compile(r"[a-z][a-z0-9_]*\Z")
 RDS_ENDPOINT = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\Z")
 LOCAL_PORT = re.compile(r"[1-9][0-9]{0,4}\Z")
 DEVELOPMENT_RUNTIME_ROLE_COUNT = len(ROLES["production"])
+RETIRED_ROLES = {
+    "report_publisher": "report_publisher_development",
+    "eval_writer": "eval_writer_development",
+}
 PRICING_OWNER_TABLES = (
     "pricing.schema_version",
-    "pricing.evaluation_runs",
     "pricing.trip_pricing_i95",
     "pricing.trip_pricing_i66",
 )
@@ -379,12 +378,15 @@ def psql(
 
 
 def render(source: Path, destination: Path) -> None:
-    replacements = dict(
-        zip(
-            ROLES["production"],
-            ROLES["development"][:DEVELOPMENT_RUNTIME_ROLE_COUNT],
-            strict=True,
+    replacements = (
+        dict(
+            zip(
+                ROLES["production"],
+                ROLES["development"][:DEVELOPMENT_RUNTIME_ROLE_COUNT],
+                strict=True,
+            )
         )
+        | RETIRED_ROLES
     )
     pattern = re.compile(r"\b(" + "|".join(map(re.escape, replacements)) + r")\b")
     destination.write_text(
@@ -797,7 +799,7 @@ def main() -> int:
         not IDENTIFIER.fullmatch(name) for names in ROLES.values() for name in names
     ):
         raise RuntimeError("bootstrap role map contains an unsafe identifier")
-    if len(set(ROLES["production"] + ROLES["development"])) != 16:
+    if len(set(ROLES["production"] + ROLES["development"])) != 12:
         raise RuntimeError("bootstrap role map contains duplicate identifiers")
     if len(sys.argv) == 2 and sys.argv[1] == "--fresh-development":
         return fresh_development()
@@ -825,7 +827,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname IN ({dev_roles})) THEN
     RAISE EXCEPTION 'development role already exists';
   END IF;
-  IF (SELECT count(*) FROM pg_roles WHERE rolname IN ({", ".join(repr(role) for role in ROLES["production"])})) <> 7 THEN
+  IF (SELECT count(*) FROM pg_roles WHERE rolname IN ({", ".join(repr(role) for role in ROLES["production"])})) <> 5 THEN
     RAISE EXCEPTION 'required production role is missing';
   END IF;
   IF EXISTS (
@@ -834,7 +836,7 @@ BEGIN
       AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)
   ) OR EXISTS (
     SELECT 1 FROM pg_roles
-    WHERE rolname IN ('pricing_loader_writer', 'pricing_reader', 'tollchat_agent', 'pricing_caller', 'report_publisher')
+    WHERE rolname IN ('pricing_loader_writer', 'pricing_reader', 'tollchat_agent', 'pricing_caller')
       AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)
   ) THEN
     RAISE EXCEPTION 'production role has unsafe attributes';
@@ -843,7 +845,7 @@ BEGIN
     SELECT 1 FROM pg_auth_members membership
     JOIN pg_roles member_role ON member_role.oid = membership.member
     JOIN pg_roles granted_role ON granted_role.oid = membership.roleid
-    WHERE member_role.rolname IN ('pricing_loader_writer', 'pricing_reader', 'tollchat_agent', 'pricing_caller', 'report_publisher')
+    WHERE member_role.rolname IN ('pricing_loader_writer', 'pricing_reader', 'tollchat_agent', 'pricing_caller')
       AND granted_role.rolname <> 'rds_iam'
   ) OR EXISTS (
     SELECT 1 FROM pg_auth_members membership JOIN pg_roles member_role ON member_role.oid = membership.member
@@ -852,7 +854,6 @@ BEGIN
     OR NOT pg_has_role('pricing_reader', 'rds_iam', 'MEMBER')
     OR NOT pg_has_role('tollchat_agent', 'rds_iam', 'MEMBER')
     OR NOT pg_has_role('pricing_caller', 'rds_iam', 'MEMBER')
-    OR NOT pg_has_role('report_publisher', 'rds_iam', 'MEMBER')
   THEN
     RAISE EXCEPTION 'production role has unexpected membership';
   END IF;
@@ -861,8 +862,7 @@ BEGIN
     WHERE database.datname = 'nova_toll' AND privilege.privilege_type = 'CONNECT'
       AND privilege.grantee NOT IN (0, database.datdba)
       AND privilege.grantee NOT IN (to_regrole('pricing_loader_writer'), to_regrole('pricing_reader'),
-        to_regrole('oracle_owner'), to_regrole('tollchat_agent'), to_regrole('pricing_caller'),
-        to_regrole('report_publisher'), to_regrole('eval_writer'))
+        to_regrole('oracle_owner'), to_regrole('tollchat_agent'), to_regrole('pricing_caller'))
   ) THEN
     RAISE EXCEPTION 'production database has unexpected CONNECT grantee';
   END IF;
@@ -940,8 +940,7 @@ BEGIN
     WHERE database.datname = 'nova_toll' AND privilege.privilege_type = 'CONNECT'
       AND privilege.grantee <> database.datdba
       AND privilege.grantee NOT IN (to_regrole('pricing_loader_writer'), to_regrole('pricing_reader'),
-        to_regrole('oracle_owner'), to_regrole('tollchat_agent'), to_regrole('pricing_caller'),
-        to_regrole('report_publisher'), to_regrole('eval_writer'))
+        to_regrole('oracle_owner'), to_regrole('tollchat_agent'), to_regrole('pricing_caller'))
   ) OR EXISTS (
     SELECT 1 FROM pg_database database, LATERAL aclexplode(database.datacl) privilege
     WHERE database.datname = 'nova_toll_development' AND privilege.privilege_type = 'CONNECT'
@@ -949,7 +948,7 @@ BEGIN
       AND privilege.grantee NOT IN (to_regrole('pricing_loader_writer_development'),
         to_regrole('pricing_reader_development'), to_regrole('oracle_owner_development'),
         to_regrole('tollchat_agent_development'), to_regrole('pricing_caller_development'),
-        to_regrole('report_publisher_development'), to_regrole('eval_writer_development'), to_regrole('pricing_owner_development'),
+        to_regrole('pricing_owner_development'),
         to_regrole('schema_migrator_development'))
   ) THEN RAISE EXCEPTION 'database has unexpected CONNECT grantee'; END IF;
   FOREACH role_name IN ARRAY production_roles LOOP
@@ -969,7 +968,7 @@ BEGIN
     JOIN pg_roles member_role ON member_role.oid = membership.member
     JOIN pg_roles granted_role ON granted_role.oid = membership.roleid
     WHERE member_role.rolname IN ('pricing_loader_writer_development', 'pricing_reader_development',
-      'tollchat_agent_development', 'pricing_caller_development', 'report_publisher_development')
+      'tollchat_agent_development', 'pricing_caller_development')
       AND granted_role.rolname <> 'rds_iam'
   ) OR EXISTS (
     SELECT 1 FROM pg_auth_members membership JOIN pg_roles member_role ON member_role.oid = membership.member

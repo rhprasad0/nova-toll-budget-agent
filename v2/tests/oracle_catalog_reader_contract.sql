@@ -3,7 +3,7 @@
 DO $$
 BEGIN
   IF current_database() <> 'nova_toll_development'
-     OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.15.2' THEN
+     OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.16.0' THEN
     RAISE EXCEPTION 'catalog grant regression requires the disposable canonical development DB';
   END IF;
 END $$;
@@ -32,3 +32,5 @@ BEGIN
   END;
 END $$;
 RESET ROLE;
+\ir ../db/migrations/036_upgrade_oracle_1_15_2_to_1_16_0.sql
+\ir ../db/migrations/036_upgrade_oracle_1_15_2_to_1_16_0.sql

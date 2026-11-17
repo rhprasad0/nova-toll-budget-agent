@@ -21,6 +21,83 @@ def retained(path: str, baseline: str) -> bytes:
     return subprocess.check_output(["git", "show", f"{baseline}:{path}"], cwd=ROOT)
 
 
+RETIRED_REPORT_AND_EVALUATION_OBJECTS: dict[
+    str, tuple[tuple[bytes, bytes, int], ...]
+] = {
+    "schema.sql": ((b"1.4.0", b"1.5.0", 2),),
+    "oracle/schema.sql": (
+        (b"1.15.2", b"1.16.0", 2),
+        (
+            b"DO $$\nBEGIN\n    CREATE ROLE report_publisher LOGIN;\nEXCEPTION\n"
+            b"    WHEN duplicate_object THEN NULL;\nEND $$;\n\n",
+            b"",
+            1,
+        ),
+        (
+            b"WHERE rolname IN ('tollchat_agent', 'pricing_caller', 'report_publisher')",
+            b"WHERE rolname IN ('tollchat_agent', 'pricing_caller')",
+            1,
+        ),
+        (
+            b"WHERE member_role.rolname IN (\n"
+            b"            'tollchat_agent', 'pricing_caller', 'report_publisher'\n        )",
+            b"WHERE member_role.rolname IN ('tollchat_agent', 'pricing_caller')",
+            1,
+        ),
+        (
+            b"to_regrole('pricing_caller'),\n              to_regrole('report_publisher')",
+            b"to_regrole('pricing_caller')",
+            1,
+        ),
+        (
+            b"to_regrole('pricing_caller'),\n            to_regrole('report_publisher')",
+            b"to_regrole('pricing_caller')",
+            3,
+        ),
+        (b"pricing_caller, report_publisher;", b"pricing_caller;", 2),
+        (
+            b"GRANT EXECUTE ON FUNCTION oracle.get_i95_i495_report_inputs()\n"
+            b"TO report_publisher;\n",
+            b"",
+            1,
+        ),
+        (
+            b"ALTER FUNCTION oracle.get_i95_i495_report_inputs() OWNER TO oracle_owner;\n"
+            b"ALTER FUNCTION oracle.get_agent_report_routes() OWNER TO oracle_owner;\n",
+            b"",
+            1,
+        ),
+        (
+            b"SET LOCAL ROLE oracle_owner;\n"
+            b"GRANT EXECUTE ON FUNCTION oracle.get_agent_report_routes()\n"
+            b"TO report_publisher;\n",
+            b"",
+            1,
+        ),
+    ),
+}
+RETIRED_SPANS = {
+    "schema.sql": (
+        b"CREATE TABLE pricing.evaluation_runs (",
+        b"CREATE TABLE pricing.trip_pricing_i95 (",
+    ),
+    "oracle/schema.sql": (
+        b"CREATE FUNCTION oracle.get_i95_i495_report_inputs()",
+        b"REVOKE ALL ON ALL TABLES IN SCHEMA oracle FROM PUBLIC;",
+    ),
+}
+
+
+def without_retired_objects(name: str, previous: bytes) -> bytes:
+    start, end = RETIRED_SPANS[name]
+    assert previous.count(start) == previous.count(end) == 1
+    previous = previous[: previous.index(start)] + previous[previous.index(end) :]
+    for old, new, count in RETIRED_REPORT_AND_EVALUATION_OBJECTS[name]:
+        assert previous.count(old) == count
+        previous = previous.replace(old, new)
+    return previous
+
+
 def load(path: Path, name: str) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec and spec.loader
@@ -46,6 +123,8 @@ def test_mixed_loader_and_cost_contracts(
     ]
     for name, digest in REVIEW["schemas"].items():
         previous = retained("v2/db/" + name, baseline)
+        if name in RETIRED_SPANS:
+            previous = without_retired_objects(name, previous)
         current = (ROOT / "v2/db" / name).read_bytes()
         review = (
             f"v2/db/{name} differs from reviewed baseline {baseline}. Extending "

@@ -80,11 +80,8 @@ def test_fast_keeps_targeted_contracts_and_disables_exhaustive_blocks(
     sources: tuple[Path, Path], calls: list[list[str]]
 ) -> None:
     contracts.run_contracts(sources[1], "fast")
-    assert len(calls) == len(contracts.CONTRACTS) - 1
+    assert len(calls) == len(contracts.CONTRACTS)
     assert all("full_contract=false" in command for command in calls)
-    assert not any(
-        "oracle_report_contract.sql" in " ".join(command) for command in calls
-    )
     assert any("oracle_fast_contract.sql" in " ".join(command) for command in calls)
 
 
@@ -236,7 +233,7 @@ def test_diagnostics_keep_sql_private_and_preserve_failures(
     else:
         contracts.run_contracts(sources[1], "full")
         report = next(
-            cmd for cmd in commands if "oracle_report_contract.sql" in " ".join(cmd)
+            cmd for cmd in commands if "oracle_security_contract.sql" in " ".join(cmd)
         )
         assert report.index("BEGIN") < report.index("--file") < report.index("ROLLBACK")
     output = capsys.readouterr()
@@ -300,32 +297,29 @@ def test_malformed_retained_guard_fails_before_sql(
     assert calls == []
 
 
-def test_retained_report_changes_only_approved_metadata() -> None:
-    source = (
-        b"(SELECT version FROM oracle.schema_version WHERE singleton) <> '1.15.0'\n"
-        b"report.destination->>'label' <> 'Westpark Drive'\n"
-        b"report.destination->>'display_name' <> 'old display'\n"
-        b"report.destination->>'point_id' <> 'i495:185ND'\n"
-        b"RAISE EXCEPTION 'failing behavioral marker';\n"
+def test_retained_fast_contract_drops_only_the_retired_report_span(
+    sources: tuple[Path, Path], calls: list[list[str]]
+) -> None:
+    start, end = contracts.RETIRED_REPORT_SPAN
+    retained = sources[1] / "oracle_fast_contract.sql"
+    retained.write_bytes(
+        b"SELECT 1;\n"
+        + start
+        + b"\nSET ROLE report_publisher;\n"
+        + end
+        + b"\nSELECT 2;\n"
     )
-    candidate = (
-        source.replace(b"1.15.0", b"1.15.1")
-        .replace(
-            b"'Westpark Drive'",
-            b"'Westpark Drive (from I-495 northbound or I-95/I-395 northbound)'",
-        )
-        .replace(b"'old display'", b"'new display'")
+    contracts.run_contracts(sources[1], "full")
+    adapted = Path(calls[0][calls[0].index("--file") + 1])
+    assert adapted.name == "oracle_fast_contract.sql" and adapted.parent != sources[1]
+    assert contracts.retained_report_removal(retained.read_bytes()) == (
+        b"SELECT 1;\n" + end + b"\nSELECT 2;\n"
     )
-    assert (
-        contracts.retained_version_guard(source, candidate, report_labels=True)
-        == candidate
-    )
-    for malformed in (
-        source.replace(b"display_name", b"other_field"),
-        source + b"report.destination->>'label' <> 'extra'",
-    ):
-        with pytest.raises(ValueError, match="exactly one"):
-            contracts.retained_version_guard(malformed, candidate, report_labels=True)
+    calls.clear()
+    retained.write_bytes(start + b"\n" + start + end)
+    with pytest.raises(ValueError, match="retired report span"):
+        contracts.run_contracts(sources[1], "full")
+    assert calls == []
 
 
 def test_retained_ballpark_contract_skips_a_holiday_wednesday() -> None:

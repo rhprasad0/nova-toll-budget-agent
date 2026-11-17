@@ -106,7 +106,7 @@ def test_adoption_selects_only_current_canonical_rows() -> None:
     assert {
         (baseline.schema, baseline.version)
         for baseline in adopt.load_baseline_manifest()
-    } == {("pricing", "1.4.0"), ("oracle", "1.15.2")}
+    } == {("pricing", "1.5.0"), ("oracle", "1.16.0")}
 
 
 @pytest.mark.parametrize(
@@ -123,7 +123,7 @@ def test_canonical_drift_is_rejected_once_before_sql(
     pricing = next(
         item
         for item in manifest
-        if item["schema"] == "pricing" and item["version"] == "1.4.0"
+        if item["schema"] == "pricing" and item["version"] == "1.5.0"
     )
     if drift == "manifest-path":
         pricing["source_path"] = "arbitrary.sql"
@@ -2083,3 +2083,29 @@ SELECT md5(jsonb_build_object(
     )
     assert after.returncode == 0, after.stderr
     assert after.stdout == before.stdout
+
+    monkeypatch.setattr(runner, "PRODUCTION_MAX_MIGRATION_NUMBER", 37)
+    retired = runner.run_production()
+    assert retired["before"] == {"pricing": "1.4.0", "oracle": "1.15.2"}
+    assert retired["after"] == {"pricing": "1.5.0", "oracle": "1.16.0"}
+    assert retired["applied"] == [
+        "v2/db/migrations/036_upgrade_oracle_1_15_2_to_1_16_0.sql",
+        "v2/db/migrations/037_upgrade_pricing_1_4_0_to_1_5_0.sql",
+    ]
+    assert runner.run_production()["applied"] == []
+    remaining = run_psql(
+        "--username",
+        "postgres",
+        "--dbname",
+        "nova_toll",
+        "--tuples-only",
+        "--no-align",
+        input_sql="SELECT to_regprocedure('oracle.get_agent_report_routes()') IS NULL "
+        "AND to_regprocedure('oracle.get_i95_i495_report_inputs()') IS NULL "
+        "AND to_regclass('pricing.evaluation_runs') IS NULL "
+        "AND NOT has_schema_privilege('report_publisher', 'oracle', 'USAGE') "
+        "AND NOT has_schema_privilege('eval_writer', 'pricing', 'USAGE') "
+        "AND has_schema_privilege('pricing_caller', 'oracle', 'USAGE');",
+    )
+    assert remaining.returncode == 0, remaining.stderr
+    assert remaining.stdout.strip() == "t"
