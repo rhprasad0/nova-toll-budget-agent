@@ -421,6 +421,22 @@ def watch(
             "build",
             "no factory spec reported",
         ),
+        (
+            OWNER,
+            FakeGitHub(
+                comments=[
+                    SPEC,
+                    {
+                        **REPORT,
+                        "body": "The factory's session left a draft.\n\n"
+                        "Outcome: **flawed**\n\n<details>"
+                        f"{dispatch.SPEC_OUTCOME} {SPEC['html_url']}</details>",
+                    },
+                ]
+            ),
+            "build",
+            "no factory spec reported",
+        ),
     ],
 )
 def test_start_refuses_and_unlabels_without_a_session(
@@ -594,7 +610,9 @@ def test_the_dispatcher_owns_the_closing_line_and_the_body_length() -> None:
     body = dispatch.pull_request_body(
         799, "Closes #799\nFixes #12 too\nresolves other/repo#3\nWhat changed"
     )
-    assert body == "Closes #799\n\nWhat changed"
+    assert body == (
+        "Closes #799\n\nFixes # 12 too\nresolves other/repo# 3\nWhat changed"
+    )
     long = dispatch.pull_request_body(799, "x" * 70000)
     assert len(long) < 60100 and long.endswith("(truncated)")
 

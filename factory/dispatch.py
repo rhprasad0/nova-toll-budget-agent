@@ -500,18 +500,24 @@ def approved_spec(
     comments: list[dict[str, Any]], author: str, labeled_at: str
 ) -> dict[str, Any] | None:
     reports = [
-        c
+        lines
         for c in comments
         if c["user"]["login"] == REPORTER
-        and SPEC_OUTCOME in c["body"]
         and c["created_at"] < labeled_at
+        and len(lines := c["body"].splitlines()) > 2
+        and lines[2].startswith(SPEC_OUTCOME)
     ]
-    link = SPEC_LINK.search(reports[-1]["body"]) if reports else None
+    link = SPEC_LINK.search(reports[-1][0]) if reports else None
     return spec_by_id(comments, author, int(link[1])) if link else None
 
 
 def pull_request_body(issue: int, body: str) -> str:
-    kept = "\n".join(line for line in body.splitlines() if not CLOSING.search(line))
+    own = [
+        line
+        for line in body.splitlines()
+        if not (CLOSING.fullmatch(line.strip()) and line.strip().endswith(f"#{issue}"))
+    ]
+    kept = CLOSING.sub(lambda match: match[0].replace("#", "# "), "\n".join(own))
     text = f"Closes #{issue}\n\n{kept.strip()}"
     return text if len(text) <= BODY_LIMIT else text[:BODY_LIMIT] + "\n\n(truncated)"
 
