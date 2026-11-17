@@ -8,10 +8,10 @@
     "lock_identity": "V2-AWS60"
   },
   "deployment_inputs": {
-    ".github/workflows/v2-development-delivery-privileged.yml": "cef438110f2ee817b1b7dacaaabbba9f83a589b7ae42b7fe3021448e0d284433",
-    ".github/workflows/v2-development-delivery.yml": "c3dca8a6ea443c30c375a1b3c8910f665e2b851b5b0d60d576d393be5bf94cf9",
+    ".github/workflows/v2-development-delivery-privileged.yml": "cee1db196bce7add18b6efb1834dbeeadda620f28c8042115e7de12f01dcdd19",
+    ".github/workflows/v2-development-delivery.yml": "adb1e8d03872a11fa291f5bf7a8c80bf2c130f7cc86f25f3c91a37da6f2601af",
     ".github/workflows/v2-development-migrations.yml": "41fb882a1ce1fb6b537f3d578864d91037a5881d84c0e2afd9308cdad9d85cc9",
-    ".github/workflows/v2-development-plan.yml": "edf83f31d17a22cedb272aaa8460615f3578f946e75c0c15c3c0d23a5977a62d",
+    ".github/workflows/v2-development-plan.yml": "1672f0a2312b5ca2370bf27a6e0a2f28716090aa651bdad96131f5985cdfef87",
     ".github/workflows/v2-production-migrations.yml": "ca8416a406334fb37390cb1944f501c7c844894920f54d9cddfa1c94e3bd7154",
     "infra/.terraform.lock.hcl": "798415e2b72a761023f0ee096521a29223173428c99de7e4c50103e726eef4d8",
     "infra/account-contract.json": "c5959d0778042c89768547979937d789d454a9b2d36db2e77f35147e0ab1e8fa",
@@ -22,11 +22,10 @@
     "infra/budget.tf": "01980ebb992a5256e5cdb3ae4b3da19a197e5011b83551d94b638d0dfc1d3ec7",
     "infra/costs-delivery.tf": "a282207d78257f3371f080e34afd74b22a733ed5279c7ca38962803fed7c780c",
     "infra/data.tf": "e8e443e33a9d908f405eec54fa6bee2075fa8c228e293d734d1b0a5fc0428bc1",
-    "infra/delivery_plan_validator.py": "c82f49a71410caafd77bee21f22d5fa148052f513bf4a108b817be407d247ac4",
+    "infra/delivery_plan_validator.py": "cff1ee2cff449032ff9e9d2bb33277d15a2bc0f4296726546caeafa66b0c95ec",
     "infra/development-tracing.tf": "489b1cb626e528a6fb0dc68d8d2dbf8e3beb24d40a7b3d7fa92631f00e920c97",
     "infra/factory.tf": "e6b5e3ccb7425274d7d06552ca4307674ca6b074b6fbcb2f03b606ba9d972da9",
-    "infra/golden_eval.tf": "881e8a8871aa70d7d9168453bd5151529e3597c29015f9cadfae4dfacdea1aeb",
-    "infra/iam.tf": "9398717570bf4514dcbb6e9f8b113cf0e4ce519c2766924d3ce9385df812e60e",
+    "infra/iam.tf": "a409b433b53e99cabb60a82a17d809244cbfb3f960e8d0a2a7d52127f1099420",
     "infra/kms.tf": "be9512e49926805d56b6c521793c08880929948b820f943f0a2c5a0f9e589168",
     "infra/lambda-stub/handler.py": "d86cf7746868e087960da8c551496bcf21aa71d79baf4d910e60fb3f43a05868",
     "infra/lambda.tf": "c95fafdc5f815820273eb9f314787532e8b6e5c1f601f50c2481f51b5c48ce0c",
@@ -36,7 +35,7 @@
     "infra/phoenix.tf": "deb39fffbc5dc821b746adbb89a955850339a3f61c9347a5b1941be742393c38",
     "infra/providers.tf": "698c60284f5f3621a8fdd47ae29684254d54bb1b57db4fbe5aa42f453a8b57e5",
     "infra/rds.tf": "59ff33513cbc7104b14c342d6138d18a7536d76d0b854676af0bf6c532a132c3",
-    "infra/release_manifest.py": "1023c97786fddeacd01f70ca565535ca8c1842605357245292f10b181f5bfdf4",
+    "infra/release_manifest.py": "60b05dba7e04749a028ef5b7c1b2565a69173eb99fd76d3e244c48e2345b036d",
     "infra/router-nat.tf": "42b11c0581cb52a13bd40662fe736e9caee6177f894aaca1d29c52dfdde416bb",
     "infra/s3.tf": "e74b230347830bd268099bdacad255656f4c60d68d53159e1240a8b56dbc2d6d",
     "infra/ssm.tf": "84d24c7793f7ac21208a7a67b4796cd4a107dd22ff4d01d6ae05c3390e88c68e",
@@ -47,7 +46,7 @@
     "infra/versions.tf": "f36522386a6e5e733d6d0ed5b61cccb33ba5e08737233da00698682beae671a5",
     "v2/agent-sops/nova-toll-pricing-assistant.sop.md": "f0d0bc0cc574909dc822e8707ae4c72657ec2fbabaf18e788bc7bb0b4160e5ed",
     "v2/agent/__init__.py": "9a7c5def20c27bee02ace31193aa0ab9b8548e1502db2f894fcf67d3b86a5e88",
-    "v2/agent/agentcore_entrypoint.py": "1629ba8bcdf0756dd8faef8c78bf5a8bf18f73ff1388c803dc7bc06b9c9963d3",
+    "v2/agent/agentcore_entrypoint.py": "6380ba7e31b0cec80dfa732307ec5924887f0d6b668cd3196ac9de1abf984158",
     "v2/agent/assets/LICENSE.txt": "792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473",
     "v2/agent/assets/chat-markdown.mjs": "76d3c21d3a0b6f2af17ec86bfcdf082284d229191f10879dd4498fcda2ca930b",
     "v2/agent/assets/chat.css": "00af8ea67002392581a591a2b2e1415582ac113741c6c276e347ace90a9201e8",
@@ -59,7 +58,6 @@
     "v2/agent/assets/costs.mjs": "38964764c0202b1b4a35750359acd9db3ddb13020102ade803dbda383b38d153",
     "v2/agent/assets/coverage-locations.json": "d53fda712210689eecb7e723a00dc6800d24beb82ea05bc9bd1247456025f4c6",
     "v2/agent/assets/evals.css": "a769365269ebde99103a56e6ce64a619f1a728c137aeeeca93ea04023db85688",
-    "v2/agent/assets/evals.mjs": "d27890fabc2c8a901beaea6497726ade5ae2604ed926b8c08480c7c6d3d7a803",
     "v2/agent/assets/favicon.png": "dc47e12a0652a019c819ac6ff92fab231974af7fa0d5efff6652415645a149ad",
     "v2/agent/assets/maplibre-gl-6.0.0/LICENSE.txt": "ee5fc05a0677eaf69601d2c7db0d9ecd6cc27c3abc1d0733bc9ed34707cf8ef2",
     "v2/agent/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs": "ba5bae6a93301ad92b8466fce6b80f8299c5825c41ae76496293bde34db96713",
@@ -70,16 +68,15 @@
     "v2/agent/assets/markdown-it.esm.min.d.mts": "48d8b18bea52d233b29c2297714d80e98cb29f3f60d454730d9aaf70458be96b",
     "v2/agent/assets/markdown-it.esm.min.mjs": "eb0a6cb2beb08326ea4d3e0e3b25ac72c1e6f119a619d9bbe061e72000ffa118",
     "v2/agent/assets/releases.css": "d674a6707b661b7f86013857de730dbb60d0af75116bcff7a3a9af7ed5976e4a",
-    "v2/agent/assets/releases.html": "bd74928cd111acff77a4af2c6eabf5180baeff4852847ef6cb057a099ecf3bb4",
+    "v2/agent/assets/releases.html": "ab25b69b79690995722865f2fe8eb1478d99852a9203b09837e0c252015d5efb",
     "v2/agent/assets/tollchat-annual-commute-example.png": "c648fb2b4be4a8f4741d807a0b6e946aff6bcfbc20529bc288900e39beb6bb6a",
     "v2/agent/assets/tollchat-logo.png": "da0167c64714b0e37c234d18695aecf6f81226627ca21e105e1fcc43c397e1a6",
-    "v2/agent/costs.html": "6d7deb55e3473d64ebdcf2ca36134f7887c924eb256041299c77ac1be944cc0a",
-    "v2/agent/dev_chat.html": "23ec9e06b4879e76080740b80ab97176941fd2484b7501da830247c5b8130bfb",
-    "v2/agent/evals.html": "0cdae384a0833fe9ea486ac13ef1f42b2f17678c26ac5e38415980805f536ec2",
-    "v2/agent/faq.html": "749fe4b3b237b9a55a4a8be870aa52b93b77cc208a6a402d61736a76748a8775",
+    "v2/agent/costs.html": "76e8bc36fcb00f4ccd4683e48f1de247935ec59e3e9b86a6975892e1f6b66c32",
+    "v2/agent/dev_chat.html": "2ddcab4f18dc4515289e77fe1f0f26ae061cf7af757845df7d62d202822f50fe",
+    "v2/agent/faq.html": "45d2a90e769da766648c8fee356d472d6b9d09f74c36cf68a25d9a047245d353",
     "v2/agent/privacy.txt": "cb5fd608f0d0ecf9e324a32e40967cb76ef14c081b8ece8bb3f078bfe3dd016b",
     "v2/agent/public-api-gate.js": "1c93d8b91885a207b674a8abc7f9ec6bcd5747b6d6b373082d27fe681fd3e082",
-    "v2/agent/public-report-routes.js": "7d05de16a43e9fde954b87b38b62e35acfff6076666907e2bc94d45079eefc9f",
+    "v2/agent/public-report-routes.js": "179b0800976e8a700855a73898567e884f73a64fa138a03fb14f87b250f6dedc",
     "v2/agent/public_chat.mjs": "da3d334ef47dab08eebb6c292e8f5413f221bb27242368c759e492666391a021",
     "v2/agent/robots.txt": "16ceb5ee3e0dc13aa9adf31a3ebbe45a1d965b8c2b9f72eaf84e5911e140ed95",
     "v2/agent/telemetry.py": "2d749d8501c72f4e8ecfe4ac9dfff4bcd457e74718a9b4df23db2ed718aaee2c",
@@ -135,27 +132,23 @@
     "v2/db/oracle/schema.sql": "48c5471cb4733bf6bb4a7d6d7ac229e2ddca942bb0a1e5de223e9960d5d0f095",
     "v2/db/roles.sql": "ac2bd729a38763870e904747622b9d76a6e9bf7ba2762870607a75004e5469f1",
     "v2/db/schema.sql": "9bed36a8a09b3f49dabf0f640702b2c72ad6955f6fb24db66825898016f6ed72",
-    "v2/eval/dashboard.py": "9075408027c860f66edca89747793953a974a6ac6f292a788eeff4220e2d788f",
-    "v2/eval/run_evaluation.py": "b4a9abb3ccd913d747b4227466d3138af0b5b681c89438f5c50406f2473da18b",
-    "v2/eval/test-cases.jsonl": "88339a635880daea8c29171f0003386e0d7f6efb8c787ec806eeb92fed6bdf5c",
     "v2/infra/.terraform.lock.hcl": "fd42f83e883fe5b260118f566eeb4f4a918f6c68dd791bcf7a3e5677f3830fad",
     "v2/infra/agent_measurement.tf": "f2d3095935f7371c99ba8e922ff171a1e77e79d24aca8b9c7fb1af299ab58d70",
-    "v2/infra/agentcore.tf": "be8f55ccf3549905260b991a4c1cd7ed1af25f32ac9c937c9e1e85bcdd95d1cd",
+    "v2/infra/agentcore.tf": "21eeea21fcf601bbedbdc486f29817c031ff06b90e534c391c45dd284d8da6e6",
     "v2/infra/backend.development.hcl": "e9140a8f8120f479e04d22def7149d32e63fd34d5e82d04db9bda51e4ccbf313",
     "v2/infra/costs.tf": "cdef22b9490b7e59bf77f6b09e4f18d747fa89f9dadb14a1ff963e5073f99c67",
     "v2/infra/data.tf": "6288fa2b14e10e503499a59a8cca7a763d4f23ea9d27f167d922ae41cd24569b",
-    "v2/infra/development.tfvars": "73f91fa50c80c95491b83d664d7a7b1f9661198026b94977e10c63b36f475fff",
+    "v2/infra/development.tfvars": "f3f734cb3f489d5cb5e30fc5f22d6826d47d1981efe7d0cf993ed61fca1662a3",
     "v2/infra/environment.tf": "21a39a1eb18b7e05d7c9445ef726c7d0ad5cfb93b86f5e196bcfd3c419f46b7e",
     "v2/infra/lambda-stub/handler.py": "b012092f485d3ed57d93e39b65c57af4a34c4b03b8586c00dd1c39c088484327",
     "v2/infra/main.tf": "72849a2a2149328d848273dabff4cb0852a7e5fe043f310c148281cec7f9f40f",
     "v2/infra/providers.tf": "b5fc8bb0f92ed4990625aebbe95811d683f36d48a9f18ad3520238d79b95e4aa",
     "v2/infra/release-bootstrap.tf": "65fbaa8f39b2a6d365ff41e58ac8505e8d463a0b41b81021d9c79822e9c17f55",
     "v2/infra/releases.tf": "81588ec85c0c1e0018040660537930a5cd9d48b78ac4ba64d9b51caceb932ff4",
-    "v2/infra/site.tf": "f9bfe3fc5c25a141576934e6882c28c47431efebe6cc67d60a7a1980be5a4e80",
+    "v2/infra/site.tf": "c7f967c9d35c1bebde874e01584106f251bbc17783a6b4337e7c7a651f922761",
     "v2/infra/telemetry-log-policy.tf": "641ab81e8c947e3c04196e856addee12bdd06a06c1e9a9f14cdb8b5f8830c03a",
-    "v2/infra/timed_checks.tf": "63d14d1c2f51e6983ce55956feb7430db6004c8b10ca3e5719c6830adf3aca40",
     "v2/infra/trace_redaction.tf": "70bd43bf038c175f47ff2ff9a125c911d0452b12ced42081fdd93808dbf60569",
-    "v2/infra/variables.tf": "fee94c7b316946fa65e28a46ce596a5b8d744cfc8687d7ff57fe021e21c37a7a",
+    "v2/infra/variables.tf": "e1af07511cdd7dd7b18090475b60164887e89264f8cb47554cdc917045cf9a0d",
     "v2/infra/versions.tf": "e08079981fe5f42c0af5906a3710c635d03e346e2724811d02cb8528bb5ad32d",
     "v2/lambdas/chat_proxy/handler.mjs": "b8a4769cd8c9039e607c25ccde364a9f3fb0e33ac8f0f7e3c6c807d073e740bf",
     "v2/lambdas/chat_proxy/package-lock.json": "247f0d8b76dc17b79c2c626f8cb5b50deb404cc500fe89fc11e4df3725aabd69",
@@ -165,43 +158,37 @@
     "v2/lambdas/loader/parse_csv.py": "313d5d0843f9e884e7649dc66da3ebc5cdb015e2484899f4152d5ab9fb7b19ac",
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
     "v2/lambdas/publisher/costs.py": "61b82090f88090b0f5742dee2674c8ebc3ce2c38712f9e7dce0b8f2765783abf",
-    "v2/lambdas/timed_checks/handler.py": "b7f952df617bddccc03d4e34245a40b49fdb66f4af74e4f1ed884540221ae3ea",
-    "v2/pyproject.toml": "d244dda52d5ced38d4a983dbed744288d8fa706a838623e1bb01b0bf54797224",
+    "v2/pyproject.toml": "b37288b18a04b000c365a12af5fdd42a0b28a92b6617f52ac40e8ee40f195634",
     "v2/scripts/adopt_production_baseline.py": "77d574fc0bab36483224a5f8187cb80f107509e80290ab3cac9a2990f52c6737",
-    "v2/scripts/blue_green.py": "ae8d89813293d79981f586e94c5e8ff8a9aef0d9eb20ff2fbb6e6136d2a9b329",
+    "v2/scripts/blue_green.py": "66f6d9b0d1ef3b68f90f2c63f3a192d77880bad0a67a1ad9898f94ab26bde7c4",
     "v2/scripts/build_agentcore_zips.sh": "9c76ef918f4d7c21b2d7eb6f51f2db6d3103810c2c618c1b73b2ab41c77684c4",
     "v2/scripts/build_loader_zip.sh": "b37e082fc5afd07b508512014b7d9bef52e3ff52077acdc87e8826e811bcb6bd",
     "v2/scripts/build_publisher_zip.sh": "75edf16d5e681622dffd9a7a6d86b6bd62e89474948daecf8dd99d5539b44184",
-    "v2/scripts/build_release_bundle.sh": "40bf8759eddb5b75a5b0e44b3fbd568f2252f1e5fa034163da8111c444a5c6e8",
-    "v2/scripts/build_timed_checks_zip.sh": "8680d744a19c8aa3d7ac7c19da521952a0cf8fbee4ee85d89599aa3e8bbd6b66",
+    "v2/scripts/build_release_bundle.sh": "f5ea3703dd9e6ca7c1b5abd21a36f2322cf34a3373100c025f296425905e0540",
     "v2/scripts/check_development_admission.py": "d24a12373d8ee4831762a53c93112e6d2338ea238b0c874dff74e3de30919d40",
     "v2/scripts/check_development_release.py": "7ccc1f51e752074b167761f343ab2dd4eee2912aee63ba1d29d903833a8fa97b",
     "v2/scripts/check_production_release.py": "18a9c4ce7c0a61885f11ff5bc7cdd3aaf4eb4246d127c317a975175f8e24a5d6",
     "v2/scripts/classify_deployment_error.py": "8211c8395b88dc59107b1079308093a047a9ce240bb2d93073bd2dbde9ff3865",
-    "v2/scripts/cost_dashboard_release.py": "b1458ec66aadea3c67eee3a411c60b73aa8fd239d23ab60439d8039f0d9fb150",
+    "v2/scripts/cost_dashboard_release.py": "9770565da5347b29193463706428bff0972c422bc9b2249df9b25290ccf37334",
     "v2/scripts/development_deployment_status.py": "41bbcb7f419483dc8d8a5b2cbb20f42e5f816d5fc2092b48c639aae4eaecc91b",
     "v2/scripts/loader-requirements.in": "38c314f1e9470587a6b566f2c8ed28cdf2ed3df2d87d349c3cbfc9f5a707230e",
     "v2/scripts/loader-requirements.txt": "7e35ab33589fae931d8bac07a7e32f868c02c4f37b629eb4208075a98fd918b4",
-    "v2/scripts/release_blue_green.py": "01c58b52c14c0ebd3bf49f3ddfbe204d2731d3ab0adb9cb3cdf80b37217db131",
+    "v2/scripts/release_blue_green.py": "d2a723d2ad8c87347b30b96fb4aff35056c4f222c3cc056cc075bf5321926ed9",
     "v2/scripts/run_development_migrations.py": "3347f175b449f11853a6ea2d67e31fd63bd1e14819c57c58d3ee310ee5921606",
     "v2/scripts/run_development_migrations_workflow.sh": "ed94f267bf2d87ee0fbc2bb9787b139d2ed23c8379f69e6e743976940116b3ff",
     "v2/scripts/run_private_stage.sh": "7557685f176439a393a8b9cfbe3460bf70875dc2fa1a0b16ff5b4ec4dec7f38e",
     "v2/scripts/run_production_migrations.py": "2077cbd16ba4832de6c75f1f113c2f23bb16f1d57a0dcb1615701b2631bb2e5c",
     "v2/scripts/run_production_migrations_workflow.sh": "0ae2cd3e0caba5df95fb4b945469f8c7d1cb064e812c28da3d862e6c478718b7",
-    "v2/scripts/shared-package-compatibility.json": "974d7590332624bffb767d7a1e8aa3690bd2bc9d1d15d192b7364308d3cf6ad1",
-    "v2/scripts/shared_packages.py": "8e1cdaefd7bdd8aab146fc792749de445994e61d4ff6a248a5f9942998cf21fd",
-    "v2/scripts/timed-checks-requirements.in": "8218bd738a1337e889d04756b2f7c53f1693503b97c519dcc8a10a423b2837e5",
-    "v2/scripts/timed-checks-requirements.txt": "ad170076d836f3a6e1db34d8678afbbc1a8de57b3d9b95b05116ad7b73623c5f",
-    "v2/scripts/verify_release_bundle.py": "ef5261e25b548727df96da06f01421bb18398b0fdda8d2f01d112e99a81f2a96",
-    "v2/timed_checks.py": "97fe53756b8ef3fd9cf5b17a8b00d3c5d59496030ce955ea40a90b3271d1d6cf",
-    "v2/uv.lock": "cc279b28b74ae427fb6ae8e04b72d1e45cb99d038e361508e992f0fec0782ea8"
+    "v2/scripts/shared-package-compatibility.json": "224a74c04c29ccc38fd8fd8fd302a432ce7025865944723b6d1a273a02fa44ac",
+    "v2/scripts/shared_packages.py": "16247f229569e9e89b81e1a36243e183840a38ba4207a61edf227f1222130331",
+    "v2/scripts/verify_release_bundle.py": "a0ff16ce79746979c9653b8c71fac4f12f6ca9475f09ebd289b623e66b8483d1",
+    "v2/uv.lock": "3d0e8499dd9b2073c66798046337ed9493139ea98e4d2dc913c221a9dbe33df1"
   },
   "packages": {
-    "agentcore.zip": "273849abc5c3b5b19f1960ec8b86c31065c301249376742f5fb7fb8299e61e49",
+    "agentcore.zip": "eb3167c01338e742f2aca5ee4b8ab1b3b063e6de0efc8a3174e9e47b485e2b03",
     "chat-proxy.zip": "66150b47286b9ee0d8a8d1257c00aa589f26be41ce81c6cd10a1da2b9bd65332",
     "loader.zip": "8cc20381b24f19011e33c13aa037450e93eb3c20a1feadbbf2d88749bb17aaf6",
-    "publisher.zip": "acd0e46af7b877b8451a7bca1301ac0e5dc2f19bdde4350c86a884a0b67e98da",
-    "timed-checks.zip": "cee1101d918a96f12aaf9a12334ef0ee66abde455f06ac463b4d6fb0f65ebf22"
+    "publisher.zip": "acd0e46af7b877b8451a7bca1301ac0e5dc2f19bdde4350c86a884a0b67e98da"
   },
   "mutations": [
     {
@@ -230,23 +217,6 @@
     },
     {
       "address": "aws_lambda_function.tollchat_proxy",
-      "action": "update",
-      "operation_class": "lambda-code",
-      "changed_fields": [
-        "s3_object_version",
-        "source_code_hash"
-      ]
-    },
-    {
-      "address": "aws_s3_object.timed_checks",
-      "action": "update",
-      "operation_class": "artifact-upload",
-      "changed_fields": [
-        "source_hash"
-      ]
-    },
-    {
-      "address": "aws_lambda_function.timed_checks",
       "action": "update",
       "operation_class": "lambda-code",
       "changed_fields": [
@@ -513,36 +483,6 @@
       "operation_class": "cloudfront-code",
       "changed_fields": [
         "code"
-      ]
-    },
-    {
-      "address": "aws_s3_object.evals",
-      "action": "update",
-      "operation_class": "site-object-upload",
-      "changed_fields": [
-        "content"
-      ]
-    },
-    {
-      "address": "aws_s3_object.site_assets[\"evals.css\"]",
-      "action": "create",
-      "operation_class": "site-asset-upload",
-      "changed_fields": [
-        "cache_control",
-        "content_type",
-        "source",
-        "source_hash"
-      ]
-    },
-    {
-      "address": "aws_s3_object.site_assets[\"evals.mjs\"]",
-      "action": "create",
-      "operation_class": "site-asset-upload",
-      "changed_fields": [
-        "cache_control",
-        "content_type",
-        "source",
-        "source_hash"
       ]
     },
     {
@@ -862,18 +802,6 @@
       "conditions": {}
     },
     {
-      "address": "aws_s3_object.timed_checks",
-      "action": "s3:PutObject",
-      "resource": "arn:aws:s3:::nova-toll-agentcore-903859731897/lambda/v2/timed-checks-dev.zip",
-      "conditions": {}
-    },
-    {
-      "address": "aws_lambda_function.timed_checks",
-      "action": "lambda:UpdateFunctionCode",
-      "resource": "arn:aws:lambda:us-east-1:903859731897:function:nova-toll-v2-timed-checks-dev",
-      "conditions": {}
-    },
-    {
       "address": "aws_lambda_alias.tollchat_live",
       "action": "lambda:UpdateAlias",
       "resource": "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-chat-proxy-dev",
@@ -1173,24 +1101,6 @@
       "address": "aws_cloudfront_function.public_report_routes",
       "action": "cloudfront:PublishFunction",
       "resource": "arn:aws:cloudfront::903859731897:function/tollchat-v2-public-report-routes-dev",
-      "conditions": {}
-    },
-    {
-      "address": "aws_s3_object.evals",
-      "action": "s3:PutObject",
-      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/*",
-      "conditions": {}
-    },
-    {
-      "address": "aws_s3_object.site_assets[\"evals.css\"]",
-      "action": "s3:PutObject",
-      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/*",
-      "conditions": {}
-    },
-    {
-      "address": "aws_s3_object.site_assets[\"evals.mjs\"]",
-      "action": "s3:PutObject",
-      "resource": "arn:aws:s3:::tollchat-site-903859731897-dev/*",
       "conditions": {}
     },
     {

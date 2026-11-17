@@ -440,7 +440,7 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   dynamic "ordered_cache_behavior" {
-    for_each = ["/usage.json", "/evals/*", "/evals.html", "/eval-dashboard*", "/evals.json", "/assets/evals*", "/cost-dashboard*", "/costs.html", "/costs.json", "/assets/costs*", "/robots.txt"]
+    for_each = ["/usage.json", "/assets/evals*", "/cost-dashboard*", "/costs.html", "/costs.json", "/assets/costs*", "/robots.txt"]
     content {
       allowed_methods        = ["GET", "HEAD"]
       cached_methods         = ["GET", "HEAD"]
@@ -636,15 +636,6 @@ output "public_site" {
   }
 }
 
-resource "aws_s3_object" "evals" {
-  bucket        = aws_s3_bucket.site.id
-  key           = "evals.html"
-  content       = templatefile("${path.module}/../agent/evals.html", { environment = var.environment })
-  content_type  = "text/html; charset=utf-8"
-  cache_control = "no-cache"
-  depends_on    = [aws_s3_bucket_server_side_encryption_configuration.site]
-}
-
 resource "aws_cloudfront_distribution" "staging" {
   enabled             = true
   staging             = true
@@ -727,7 +718,7 @@ resource "aws_cloudfront_distribution" "staging" {
   }
 
   dynamic "ordered_cache_behavior" {
-    for_each = ["/usage.json", "/evals/*", "/evals.html", "/eval-dashboard*", "/evals.json", "/assets/evals*", "/cost-dashboard*", "/costs.html", "/costs.json", "/assets/costs*", "/robots.txt"]
+    for_each = ["/usage.json", "/assets/evals*", "/cost-dashboard*", "/costs.html", "/costs.json", "/assets/costs*", "/robots.txt"]
     content {
       allowed_methods        = ["GET", "HEAD"]
       cached_methods         = ["GET", "HEAD"]

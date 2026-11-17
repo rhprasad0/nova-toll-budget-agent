@@ -44,8 +44,6 @@ def package_plan(
         else blue_green.desired(retained, promote=True)
     )
     suffix = "-dev" if environment == "development" else ""
-    bucket = f"nova-toll-agentcore-{expected['account']}"
-    key = f"lambda/v2/timed-checks{suffix}.zip"
     rows: list[dict[str, Any]] = []
     for component, identity in shared_packages.identities(expected).items():
         package = shared_packages.FUNCTIONS[component][1]
@@ -61,13 +59,6 @@ def package_plan(
             "s3_key": None,
             "s3_object_version": None,
         }
-        if component == "timed_checks":
-            values.update(
-                filename=None,
-                s3_bucket=bucket,
-                s3_key=key,
-                s3_object_version="version-2" if partial != "none" else None,
-            )
         if component == "costs":
             values.update(
                 handler="costs.handler",
@@ -89,8 +80,6 @@ def package_plan(
         before = dict(
             values, source_code_hash=base64.b64encode(bytes([1]) * 32).decode()
         )
-        if component == "timed_checks":
-            before["s3_object_version"] = "version-1"
         done = (
             phase != "prepare"
             or partial == "complete"
@@ -98,64 +87,16 @@ def package_plan(
         )
         if done:
             before = deepcopy(values)
-        unknown = (
-            {"s3_object_version": True}
-            if component == "timed_checks" and not done and partial == "none"
-            else {}
-        )
         rows.append(
             change(
                 "aws_lambda_function." + component,
                 before,
                 values,
                 ["no-op"] if done else ["update"],
-                unknown,
             )
         )
-    values = {
-        "bucket": bucket,
-        "key": key,
-        "source": "build/timed-checks.zip",
-        "source_hash": base64.b64encode(bytes(32)).decode(),
-        "version_id": "version-2" if partial != "none" or phase != "prepare" else None,
-    }
-    done = partial != "none" or phase != "prepare"
-    before = (
-        deepcopy(values)
-        if done
-        else dict(values, source_hash="old", version_id="version-1")
-    )
-    rows.append(
-        change(
-            shared_packages.OBJECT,
-            before,
-            values,
-            ["no-op"] if done else ["update"],
-            {} if done else {"version_id": True},
-        )
-    )
     document = plan(inputs, rows, retained)
-    document.update(
-        terraform_version="1.15.8",
-        applyable=True,
-        configuration={
-            "root_module": {
-                "resources": [
-                    {
-                        "address": "aws_lambda_function.timed_checks",
-                        "expressions": {
-                            "s3_object_version": {
-                                "references": [
-                                    shared_packages.OBJECT,
-                                    shared_packages.OBJECT + ".version_id",
-                                ]
-                            }
-                        },
-                    }
-                ]
-            }
-        },
-    )
+    document.update(terraform_version="1.15.8", applyable=True)
     document["variables"]["environment"] = {"value": environment}
     for row in rows:
         row["type"], row["name"] = row["address"].split(".")
@@ -169,8 +110,8 @@ def development_validate(
     manifest: dict[str, Any] = {
         "schema_version": 1,
         "provider_identity": dict(delivery_plan_validator.EXPECTED_IDENTITY),
-        "deployment_inputs": {"v2/scripts/build_timed_checks_zip.sh": "0" * 64},
-        "packages": dict.fromkeys(delivery_plan_validator.TIMED_PACKAGES, "0" * 64),
+        "deployment_inputs": {"v2/scripts/build_release_bundle.sh": "0" * 64},
+        "packages": dict.fromkeys(delivery_plan_validator.PACKAGES, "0" * 64),
         "mutations": [],
         "permissions": [],
     }
@@ -210,7 +151,7 @@ def development_validate(
 
 
 @pytest.mark.parametrize("environment", shared_packages.ACCOUNTS)
-@pytest.mark.parametrize("partial", ["none", "s3", "lambda", "complete"])
+@pytest.mark.parametrize("partial", ["none", "lambda", "complete"])
 def test_shared_preparation_composes_with_real_policies(
     environment: str, partial: str
 ) -> None:
@@ -236,20 +177,15 @@ def test_shared_preparation_composes_with_real_policies(
         "identity_after",
         "configuration",
         "unknown_hash",
-        "reference",
-        "producer_hash",
-        "producer_identity",
-        "producer_version",
         "noop_hash",
         "iam",
         "unrelated",
     ],
 )
 def test_package_faults_fail_closed(environment: str, fault: str) -> None:
-    document, retained, expected = package_plan(environment, partial="s3")
+    document, retained, expected = package_plan(environment)
     evidence = deepcopy(expected)
     row = document["resource_changes"][0]
-    producer = document["resource_changes"][-1]
     if fault == "missing":
         evidence = None
     elif fault == "account":
@@ -264,18 +200,6 @@ def test_package_faults_fail_closed(environment: str, fault: str) -> None:
         row["change"]["after"]["memory_size"] = 1024
     elif fault == "unknown_hash":
         row["change"]["after_unknown"]["source_code_hash"] = True
-    elif fault == "reference":
-        document["configuration"]["root_module"]["resources"][0]["expressions"][
-            "s3_object_version"
-        ] = {"constant_value": "version-2"}
-    elif fault in {"producer_hash", "producer_identity", "producer_version"}:
-        field = {
-            "producer_hash": "source_hash",
-            "producer_identity": "bucket",
-            "producer_version": "version_id",
-        }[fault]
-        for side in ("before", "after"):
-            producer["change"][side][field] = "unverified"
     elif fault == "noop_hash":
         row["change"]["actions"] = ["no-op"]
         row["change"]["after"] = deepcopy(row["change"]["before"])
@@ -310,9 +234,7 @@ def test_readbacks_include_earlier_success_and_do_not_invoke_handlers(
         return {
             "FunctionName": item["name"],
             "FunctionArn": item["arn"],
-            "CodeSha256": item["sha256"]
-            if item != identities["timed_checks"]
-            else "wrong",
+            "CodeSha256": item["sha256"],
             "State": "Active",
             "LastUpdateStatus": "Successful",
         }
@@ -321,7 +243,6 @@ def test_readbacks_include_earlier_success_and_do_not_invoke_handlers(
     monkeypatch.setattr(release_blue_green.time, "sleep", sleeps.append)
     assert release_blue_green.shared_readiness(expected, wait=False) == {
         "loader": "unknown",
-        "timed_checks": "failed",
         "costs": "verified",
     }
     assert sleeps == []
@@ -394,7 +315,7 @@ def test_staged_package_bytes_and_paths_fail_closed(tmp_path: Path, fault: str) 
 
 @pytest.mark.parametrize("environment", shared_packages.ACCOUNTS)
 def test_blue_green_cli_requires_evidence(tmp_path: Path, environment: str) -> None:
-    document, retained, expected = package_plan(environment, partial="s3")
+    document, retained, expected = package_plan(environment)
     for name, value in (
         ("plan", document),
         ("previous", retained),
@@ -644,10 +565,7 @@ def test_manual_recovery_uses_original_package_authority(
     for row in document["resource_changes"]:
         address = row["address"]
         values = row["change"]["after"]
-        if address == shared_packages.OBJECT:
-            values["source_hash"] = identities["timed_checks"]["sha256"]
-        else:
-            values["source_code_hash"] = identities[address.rsplit(".", 1)[1]]["sha256"]
+        values["source_code_hash"] = identities[address.rsplit(".", 1)[1]]["sha256"]
         row["change"]["before"] = deepcopy(values)
     code = (ROOT / "v2/agent/public-api-gate.js").read_text()
     if legacy:

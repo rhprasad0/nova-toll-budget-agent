@@ -256,7 +256,7 @@ is mounted into the sandbox.
     `.githooks/` on commit;
 - the branch may contain no merge commits, which hide changes from the
   secrets scan;
-- in `v2/eval/EXPERIMENT_JOURNAL.md` and `v2/eval/journal/`, the diff may add
+- in `v2/journal/EXPERIMENT_JOURNAL.md` and `v2/journal/pages/`, the diff may add
   lines but not delete or rewrite existing ones. The journal's history is
   permanent.
 - one file under `infra/` is partly open:

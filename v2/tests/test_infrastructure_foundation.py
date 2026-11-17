@@ -25,7 +25,6 @@ from tests.infrastructure_support import (
     FOUNDATION_TRIGGERS,
     MAIN_TF,
     REPO_ROOT,
-    TIMED_CHECKS_TF,
     V2_ROOT,
     VERIFY_SCRIPT,
     hcl_attribute,
@@ -297,9 +296,7 @@ def test_v2_uses_the_typed_boundary_without_foundation_discovery() -> None:
         "nova-toll-agentcore-920534282028",
     ):
         assert forbidden not in terraform_sources
-    assert terraform_sources.count('data "aws_kms_alias"') == 1
-    assert 'data "aws_kms_alias" "alerts"' in TIMED_CHECKS_TF
-    assert 'name = "alias/nova-toll-alerts"' in TIMED_CHECKS_TF
+    assert 'data "aws_kms_alias"' not in terraform_sources
     for field in (
         "vpc_id",
         "vpc_cidr_block",

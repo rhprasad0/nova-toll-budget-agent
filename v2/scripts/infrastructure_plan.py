@@ -44,7 +44,6 @@ PROVIDERS = ROOT / "v2/infra/.terraform/providers"
 # One address per line: resources an administrator applies by hand.
 ADMINISTRATOR_APPLIED = ROOT / "v2/infra/administrator-applied.txt"
 READ_PATHS = ("v2/infra", "v2/agent", "v2/analytics", "infra/account-contract.json")
-PACKAGES = ("loader", "publisher", "timed-checks")
 
 Plan = dict[str, dict[str, Any]]
 
@@ -63,10 +62,11 @@ def planned(tree: Path) -> Plan:
             (module / source.name).write_text(text)
         shutil.copytree(tree / "v2/infra/lambda-stub", module / "lambda-stub")
         (module / "build").mkdir()
-        for name in PACKAGES:
-            (module / "build" / f"{name}.zip").write_bytes(b"placeholder")
+        fixture = tree / FIXTURE.relative_to(ROOT)
+        for name in re.findall(r'"build/([\w.-]+\.zip)"', fixture.read_text()):
+            (module / "build" / name).write_bytes(b"placeholder")
         (module / "tests").mkdir()
-        shutil.copy(FIXTURE, module / "tests")
+        shutil.copy(fixture, module / "tests")
         shutil.copy(ROOT / "v2/infra/.terraform.lock.hcl", module)
         (module / ".terraform").mkdir()
         (module / ".terraform/providers").symlink_to(
@@ -175,8 +175,6 @@ def main(arguments: list[str]) -> int:
             capture_output=True,
         ).stdout
         subprocess.run(["tar", "-x", "-C", scratch], input=archive, check=True)
-        # shortcut: uses this change's fixture; a change that drops a required input
-        # fails here. Plan the base with its own fixture if that happens.
         base = planned(Path(scratch))
     problems = blocked(base, planned(ROOT), administrator_applied())
     if not problems:

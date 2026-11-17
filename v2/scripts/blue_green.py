@@ -29,7 +29,7 @@ except ModuleNotFoundError:
 
 # Review the environment expression again before updating this source pin.
 AGENTCORE_SOURCE_SHA256 = (
-    "be8f55ccf3549905260b991a4c1cd7ed1af25f32ac9c937c9e1e85bcdd95d1cd"
+    "21eeea21fcf601bbedbdc486f29817c031ff06b90e534c391c45dd284d8da6e6"
 )
 
 SLOTS = ("blue", "green")
@@ -688,7 +688,7 @@ def validate_plan(
                         source = "tfconfig/m-/agentcore.tf"
                         require(names.count(source) == 1, "proxy_source_proof")
                         require(
-                            archive.getinfo(source).file_size == 28635,
+                            archive.getinfo(source).file_size == 28263,
                             "proxy_source_proof",
                         )
                         require(

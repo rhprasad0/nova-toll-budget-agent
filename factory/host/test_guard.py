@@ -28,7 +28,7 @@ def repo(tmp_path: Path) -> Path:
     tmp_path = tmp_path / "repo"
     tmp_path.mkdir()
     git(tmp_path, "init", "--quiet", "--initial-branch=main")
-    write(tmp_path, "v2/eval/EXPERIMENT_JOURNAL.md", "# Journal\n\n- first entry\n")
+    write(tmp_path, "v2/journal/EXPERIMENT_JOURNAL.md", "# Journal\n\n- first entry\n")
     write(tmp_path, guard.MANIFEST, json.dumps(
         {"deployment_inputs": {"a": "1"}, "packages": {}, "mutations": ["x"]}, indent=2))  # fmt: skip
     write(tmp_path, "v2/app.py", "print('hi')\n")
@@ -177,7 +177,7 @@ def test_deleting_a_dashed_journal_line_blocks_the_push(repo: Path) -> None:
 def test_appending_to_the_journal_passes(repo: Path) -> None:
     def append(r: Path) -> None:
         write(r, guard.JOURNAL_FILE, "# Journal\n\n- first entry\n- second entry\n")
-        write(r, "v2/eval/journal/2026-11-15.md", "New page.\n")
+        write(r, "v2/journal/pages/2026-11-15.md", "New page.\n")
 
     assert commit(repo, append) == []
 

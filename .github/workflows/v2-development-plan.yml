@@ -69,58 +69,15 @@ jobs:
           checksum: "68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2"
           python-version: "3.13"
 
-      - name: Resolve candidate package mode
-        id: package-mode
-        run: |
-          set -euo pipefail
-          MANIFEST="infra/development-release-manifest.json"
-          test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST"
-          PACKAGE_MODE="$(python3 - "$MANIFEST" <<'PY'
-          import json
-          import sys
-          from pathlib import Path
-
-          try:
-              value = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          except (OSError, UnicodeError, json.JSONDecodeError) as error:
-              raise SystemExit(f"invalid candidate manifest: {error}")
-          if not isinstance(value, dict) or not isinstance(value.get("deployment_inputs"), dict):
-              raise SystemExit("invalid candidate manifest shape")
-          print(
-              "timed"
-              if "v2/scripts/build_timed_checks_zip.sh" in value["deployment_inputs"]
-              else "legacy"
-          )
-          PY
-          )"
-          case "$PACKAGE_MODE" in
-            legacy|timed) printf 'mode=%s\n' "$PACKAGE_MODE" >>"$GITHUB_OUTPUT" ;;
-            *) exit 1 ;;
-          esac
-
       - name: Build reviewed deployment packages
         working-directory: v2
-        env:
-          PACKAGE_MODE: ${{ steps.package-mode.outputs.mode }}
         run: |
           set -euo pipefail
-          case "$PACKAGE_MODE" in
-            legacy)
-              PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip)
-              EXPECTED_PACKAGE_NAMES="agentcore.zip chat-proxy.zip loader.zip publisher.zip "
-              ;;
-            timed)
-              PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip)
-              EXPECTED_PACKAGE_NAMES="agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip "
-              ;;
-            *) exit 1 ;;
-          esac
+          PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip)
+          EXPECTED_PACKAGE_NAMES="agentcore.zip chat-proxy.zip loader.zip publisher.zip "
           ./scripts/build_loader_zip.sh
           ./scripts/build_publisher_zip.sh
           ./scripts/build_agentcore_zips.sh
-          if [[ "$PACKAGE_MODE" = timed ]]; then
-            ./scripts/build_timed_checks_zip.sh
-          fi
           for package in "${PACKAGE_NAMES[@]}"; do
             test -f "infra/build/$package" && test ! -L "infra/build/$package" && test -s "infra/build/$package"
           done
@@ -293,43 +250,14 @@ jobs:
           MANIFEST="$STAGING/development-release-manifest.json"
           CHECKSUMS="$STAGING/DEPLOYMENT_SHA256SUMS"
           test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST"
-          PACKAGE_MODE="$(python3 - "$MANIFEST" <<'PY'
-          import json
-          import sys
-          from pathlib import Path
-
-          try:
-              value = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          except (OSError, UnicodeError, json.JSONDecodeError) as error:
-              raise SystemExit(f"invalid downloaded manifest: {error}")
-          if not isinstance(value, dict) or not isinstance(value.get("deployment_inputs"), dict):
-              raise SystemExit("invalid downloaded manifest shape")
-          print(
-              "timed"
-              if "v2/scripts/build_timed_checks_zip.sh" in value["deployment_inputs"]
-              else "legacy"
-          )
-          PY
-          )"
-          case "$PACKAGE_MODE" in
-            legacy)
-              PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip)
-              PACKAGE_COUNT=4
-              EXPECTED_PACKAGE_NAMES="agentcore.zip chat-proxy.zip loader.zip publisher.zip "
-              ;;
-            timed)
-              PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip)
-              PACKAGE_COUNT=5
-              EXPECTED_PACKAGE_NAMES="agentcore.zip chat-proxy.zip loader.zip publisher.zip timed-checks.zip "
-              ;;
-            *) exit 1 ;;
-          esac
+          PACKAGE_NAMES=(agentcore.zip chat-proxy.zip loader.zip publisher.zip)
+          EXPECTED_PACKAGE_NAMES="agentcore.zip chat-proxy.zip loader.zip publisher.zip "
           test -f "$CHECKSUMS" && test ! -L "$CHECKSUMS" && test -r "$CHECKSUMS"
           test "$(find "$STAGING" -mindepth 1 -maxdepth 1 -name '*.zip' -printf '%f\n' | LC_ALL=C sort | tr '\n' ' ')" = "$EXPECTED_PACKAGE_NAMES"
           for package in "${PACKAGE_NAMES[@]}"; do
             test -f "$STAGING/$package" && test ! -L "$STAGING/$package" && test -s "$STAGING/$package"
           done
-          test "$(wc -l <"$CHECKSUMS")" -eq "$PACKAGE_COUNT"
+          test "$(wc -l <"$CHECKSUMS")" -eq 4
           test "$(cd "$STAGING" && awk '{print $2}' "$(basename "$CHECKSUMS")" | LC_ALL=C sort | tr '\n' ' ')" = "$EXPECTED_PACKAGE_NAMES"
           (cd "$STAGING" && sha256sum --check "$(basename "$CHECKSUMS")" >/dev/null)
           python3 trusted/infra/release_manifest.py \
@@ -418,7 +346,6 @@ jobs:
             -var-file="$RUNNER_TEMP/retained-slots.tfvars.json" \
             -var loader_package_path=build/loader.zip \
             -var publisher_package_path=build/publisher.zip \
-            -var timed_checks_package_path=build/timed-checks.zip \
             >"$PLAN_LOG" 2>&1
           terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" show -json "$PLAN" \
             >"$PLAN_JSON" 2>"$SHOW_LOG"

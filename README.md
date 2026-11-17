@@ -7,7 +7,7 @@
 [Live demo](https://tollchat.ai/) · [Engineering evidence](#engineering-evidence) ·
 [Evaluation status](#evaluation-status) · [Technical guide](v2/README.md)
 
-**[Experiment journal: how I test and improve the agent](v2/eval/EXPERIMENT_JOURNAL.md)**
+**[Experiment journal: how I test and improve the agent](v2/journal/EXPERIMENT_JOURNAL.md)**
 Follow the hypotheses, baseline comparisons, measured results, costs, limitations, and decisions behind changes to TollChat.
 
 ## For humans
@@ -16,7 +16,7 @@ TollChat answers a practical question: **"What would this Northern Virginia comm
 
 I built the data pipeline, directed PostgreSQL/PostGIS route model, two deterministic pricing tools, and the Strands agent that uses them. I deployed the application on Amazon Bedrock AgentCore with separate AWS development and production environments, reviewed release workflows, and safety checks around the conversation. Diagnostic traces redact detected personal information before export.
 
-This reference implementation demonstrates how I build and operate an AI application, including the boundaries around the model. Six scheduled scenarios now exercise simulated conversations with deterministic tool-call checks and model-based judges. A locally authored suite of 50 training, 10 shadow and 25 external holdout cases scores whole conversations; findings are in the [experiment journal](v2/eval/EXPERIMENT_JOURNAL.md). Exposed training results do not qualify production.
+This reference implementation demonstrates how I build and operate an AI application, including the boundaries around the model. Past evaluation findings are in the [experiment journal](v2/journal/EXPERIMENT_JOURNAL.md).
 
 ![TollChat showing an annual commute estimate beside a map of supported Northern Virginia toll routes](v2/agent/assets/tollchat-annual-commute-example.png)
 
@@ -29,12 +29,11 @@ Each row links a claim to its implementation and a way to inspect or verify it. 
 | Separate development and production environments | [Development backend](infra/backend.development.hcl), [production backend](infra/backend.production.hcl), and [account contract](infra/account-contract.json) | [Foundation contract tests](v2/tests/test_infrastructure_foundation.py) and [delivery documentation](v2/README.md#verify-the-build) | Separate account/state configuration; release evidence is specific to an artifact and run. |
 | Reviewed, reproducible delivery | [Development delivery](.github/workflows/v2-development-delivery.yml), [production release](.github/workflows/v2-production-release.yml), and [production plan/apply](.github/workflows/v2-production-plan.yml) | [Release checks](v2/tests/test_check_production_release.py), [plan workflow tests](v2/tests/test_production_plan_workflow.py), and [operator runbook](v2/RUNBOOK.md) | Production delivery checks the candidate and saved plan and requires protected review. PR checks use disposable database validation. |
 | Blue-green delivery protects release and conversation boundaries | [Release controller](v2/scripts/release_blue_green.py) and [chat proxy](v2/lambdas/chat_proxy/handler.mjs) | [Deployment tests](v2/tests/test_blue_green.py), [session isolation tests](v2/lambdas/chat_proxy/handler.test.mjs), and [browser restart tests](v2/tests/test_public_chat_ui.mjs) | Separate production cutover approval; retained release for recovery. Sessions restart across releases. See the [deployment runbook](v2/runbooks/blue-green-deployments.md). |
-| The model delegates route validation and money arithmetic to deterministic tools | [Current toll tool](v2/agent_tools/get_current_toll_price.py), [annual commute tool](v2/agent_tools/get_annual_toll_ballpark.py), and [routing contract](v2/db/oracle/CONTRACT.md) | [Tool contract tests](v2/tests/test_tool_contract.py) and [historical live-check summary](v2/eval/journal/2026-08-17.md#august-22-live-integration-checks) | Tools own pricing; generated explanations still need grounding evaluation. |
+| The model delegates route validation and money arithmetic to deterministic tools | [Current toll tool](v2/agent_tools/get_current_toll_price.py), [annual commute tool](v2/agent_tools/get_annual_toll_ballpark.py), and [routing contract](v2/db/oracle/CONTRACT.md) | [Tool contract tests](v2/tests/test_tool_contract.py) and [historical live-check summary](v2/journal/pages/2026-08-17.md#august-22-live-integration-checks) | Tools own pricing; generated explanations still need grounding evaluation. |
 | Guardrails check inputs, streamed assistant snapshots, and completed answers | [Runtime checks](v2/agent/agentcore_entrypoint.py) and [versioned guardrail policy](v2/infra/agentcore.tf) | [Input/output blocking and safe-failure tests](v2/tests/test_agentcore_entrypoint.py) and [live release gates](v2/scripts/check_development_release.py) | Configured content, prompt-attack, and credential protections reduce abuse risk; they do not guarantee prevention. |
 | Detected PII is redacted from telemetry before export | [Telemetry exporter](v2/agent/telemetry.py) and [additional masking and alarms](v2/infra/trace_redaction.tf) | [Redaction and failure-path tests](v2/tests/test_telemetry_redaction.py), [observed trace example](#observed-trace-redaction), and [verification runbook](v2/runbooks/telemetry-pii-redaction.md) | Detection can miss information. Redaction failures omit affected content; the screenshot demonstrates one address-redaction example. |
 | Runtime access and credentials have explicit boundaries | [Runtime IAM permissions](v2/infra/agentcore.tf), [database roles](v2/db/roles.sql), and [security policy](SECURITY.md) | [IAM contract tests](v2/tests/test_infrastructure_iam.py) and [database validation instructions](v2/README.md#verify-the-build) | IAM-authenticated database access; deployed credentials live in SSM Parameter Store. |
-| Agent behavior has executable evaluation checks | [Scheduled simulation and judges](v2/eval/simulated.py), [evaluation runner](v2/eval/run_evaluation.py), and [evaluation guide](v2/eval/README.md) | [Simulation contract tests](v2/tests/test_simulated_evaluation.py), [dashboard runbook](v2/runbooks/eval-dashboard.md), and [recorded experiments](#evaluation-status) | Six scheduled current-toll scenarios; development dashboard publication first, production activation pending. Local suite: 50 training, 10 shadow, 25 external holdout cases. |
-| From v1.2.0, each release is compared with the agent it replaces | [Release scorecard](v2/agent/assets/releases.html), live at [tollchat.ai/release-dashboard](https://tollchat.ai/release-dashboard) | [Holdout procedure](v2/eval/GOLDEN_RUNNER.md#external-holdout-checkpoints) and [experiment journal](v2/eval/journal/2026-10-12.md#october-15-compare-the-v120-candidate-with-the-production-agent-on-holdout) | v1.2.0 and v1.1.2 ran on the same 25 holdout cases, five runs each. The holdout is not blind, and only aggregate results are published. |
+| v1.2.0 was compared with the agent it replaced (holdout since retired) | [Release scorecard](v2/agent/assets/releases.html), live at [tollchat.ai/release-dashboard](https://tollchat.ai/release-dashboard) | [Holdout procedure](https://github.com/rhprasad0/nova-toll-budget-agent/blob/2181e7e2fffbc3576f0093c86fa0da796deddc18/v2/eval/GOLDEN_RUNNER.md#external-holdout-checkpoints) and [experiment journal](v2/journal/pages/2026-10-12.md#october-15-compare-the-v120-candidate-with-the-production-agent-on-holdout) | v1.2.0 and v1.1.2 ran on the same 25 holdout cases, five runs each. The holdout is not blind, and only aggregate results are published. |
 
 ## Architecture and safety
 
@@ -73,7 +72,7 @@ Northern Virginia has four distinct pricing systems: I-66 Inside the Beltway, th
 
 I reverse-engineered VDOT feed identifiers against public calculators and operator maps to recover directed ramps, aliases, pricing keys, and cross-road handoffs. The [source mappings](v2/oracle/sources/) and [data builder](v2/oracle/build_oracle_data.py) produce the routing oracle's checked-in SQL inputs. Coordinates help identify nearby ramps; proximity alone never creates a road connection.
 
-That work exposed 330 pricing IDs in the I-95/I-495 route map but only 314 in retained VDOT history. The missing 16 affected 107 of 685 published routes. The [proxy mapping](v2/db/analysis.sql) uses source-overlap evidence to select available price proxies and labels those prices as modeled. The [historical holdout summary](v2/eval/journal/2026-09-21.md#i-95i-495-identity-proxy-validation) documents their measured error and limitations.
+That work exposed 330 pricing IDs in the I-95/I-495 route map but only 314 in retained VDOT history. The missing 16 affected 107 of 685 published routes. The [proxy mapping](v2/db/analysis.sql) uses source-overlap evidence to select available price proxies and labels those prices as modeled. The [historical holdout summary](v2/journal/pages/2026-09-21.md#i-95i-495-identity-proxy-validation) documents their measured error and limitations.
 
 ## Blue-green deployments and conversation cutover
 
@@ -89,35 +88,26 @@ Promotion changes routing to the validated candidate and retains the previous re
 
 ## Evaluation status
 
-**50 training and 10 shadow cases are in the repo, with 25 holdout cases stored
-externally.** Training hill-climbing defaults to one trial per case;
-shadow runs are manual, not a CI gate. The holdout is not blind (it was read for an
-October 10 diagnosis), and exposed development measurements do not qualify
-production or establish whole-agent accuracy. The former production qualification
-gate remains retired. Production delivery
-uses the existing artifact provenance, protected human approvals, saved-plan,
-migration, and canary checks described in the [runbook](v2/RUNBOOK.md#production-release-checks).
-These delivery checks do not establish independently measured agent accuracy.
-
-The [experiment journal](v2/eval/EXPERIMENT_JOURNAL.md) records what was tried,
-results, limitations, costs, and decisions. The [evaluation guide](v2/eval/README.md)
-covers current usage. Granular experiment output stays in private storage.
-The [dashboard runbook](v2/runbooks/eval-dashboard.md) covers scheduled operational
-results, which are separate from local experiments.
+The train, shadow, holdout and scheduled evaluation suites were retired on
+November 17, 2026 because they did not represent real use. Evaluation restarts
+from scratch in Phoenix. Production delivery uses the artifact
+provenance, protected human approvals, saved-plan, migration, and canary checks
+described in the [runbook](v2/RUNBOOK.md#production-release-checks); these do
+not measure agent accuracy. The [experiment journal](v2/journal/EXPERIMENT_JOURNAL.md)
+records past experiments, results, costs, and decisions.
 
 ## Reproduce and inspect
 
 - [Run the local agent](v2/README.md#local-agent-console) or try the [deployed application](https://tollchat.ai/).
 - Inspect [daily AWS and OpenAI billing](https://tollchat.ai/cost-dashboard) in the cost dashboard; per-answer cost is not yet measured.
 - [Build and validate](v2/README.md#verify-the-build), including disposable database checks.
-- [Run offline evaluation checks](v2/eval/README.md#frozen-golden-evaluation) or follow the separately credentialed [live evaluation instructions](v2/eval/README.md#scheduled-and-live-checks).
 - Inspect [release operations](v2/RUNBOOK.md), [telemetry verification](v2/runbooks/telemetry-pii-redaction.md), and [shared foundation changes](v2/README.md#shared-foundation-changes).
 
 | Area | Contents |
 | --- | --- |
 | [`v2/agent/`](v2/agent/) and [`v2/agent_tools/`](v2/agent_tools/) | Agent, frontend, versioned prompt/tool contracts, and deterministic tools |
 | [`v2/db/`](v2/db/), [`v2/oracle/`](v2/oracle/), and [`v2/lambdas/`](v2/lambdas/) | Database, migrations, source mappings, data ingestion, and chat proxy |
-| [`v2/tests/`](v2/tests/) and [`v2/eval/`](v2/eval/) | Executable checks, evaluation cases, and recorded experiments |
+| [`v2/tests/`](v2/tests/) and [`v2/journal/`](v2/journal/) | Executable checks and recorded experiments |
 | [`v2/infra/`](v2/infra/), [`infra/`](infra/), and [`.github/workflows/`](.github/workflows/) | Application/shared infrastructure and delivery workflows |
 
 ## License

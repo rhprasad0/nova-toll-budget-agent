@@ -13,17 +13,15 @@ from typing import Any, cast
 ACCOUNTS = {"development": "903859731897", "production": "920534282028"}
 FUNCTIONS = {
     "loader": ("toll-v2-pricing-loader", "loader.zip"),
-    "timed_checks": ("nova-toll-v2-timed-checks", "timed-checks.zip"),
     "costs": ("tollchat-v2-cost-publisher", "publisher.zip"),
 }
-OBJECT = "aws_s3_object.timed_checks"
 CHAT_ROUTES = "aws_cloudfront_function.public_chat_routes"
 LEGACY_RECOVERY_RELEASE = "4f6334a8e0cba0b6ccda8bc45fee82a9a5cdfafe"
 CHAT_CODE = (
     "695db31f3ab2a4f5a3ff38959b02b0bba34fd577737e1a4eae1222cd649a2bf8",
     "1c93d8b91885a207b674a8abc7f9ec6bcd5747b6d6b373082d27fe681fd3e082",
 )
-RESOURCES = {f"aws_lambda_function.{name}" for name in FUNCTIONS} | {OBJECT}
+RESOURCES = {f"aws_lambda_function.{name}" for name in FUNCTIONS}
 PACKAGES = {package for _, package in FUNCTIONS.values()}
 SCHEMAS = {"application-schemas.json", "oracle/schema.sql", "schema.sql"}
 COMPONENTS = {address: address.rsplit(".", 1)[1] for address in RESOURCES}
@@ -54,15 +52,6 @@ FIELDS = {
     "ordered_cache_behavior",
 }
 LAMBDA_COMPUTED = {"last_modified", "source_code_size", "code_sha256"}
-OBJECT_COMPUTED = {
-    "etag",
-    "version_id",
-    "checksum_crc32",
-    "checksum_crc32c",
-    "checksum_crc64nvme",
-    "checksum_sha1",
-    "checksum_sha256",
-}
 
 
 def inventory(plan: dict[str, Any], phase: str) -> dict[str, Any]:
@@ -452,75 +441,23 @@ def validate(
     unknowns = change.get("after_unknown", {})
     require(isinstance(unknowns, dict))
     require(not unknown(change.get("after_sensitive", {})))
-    suffix = "-dev" if expected["environment"] == "development" else ""
-    bucket = f"nova-toll-agentcore-{expected['account']}"
-    key = f"lambda/v2/timed-checks{suffix}.zip"
-    if address == OBJECT:
-        package = expected["packages"]["timed-checks.zip"]
-        identity = {"bucket": bucket, "key": key}
-        mutable = {"source", "source_hash"}
-        computed = OBJECT_COMPUTED
-        require(after.get("source") == package["path"], "shared_package_path")
-        require(
-            after.get("source_hash")
-            == base64.b64encode(bytes.fromhex(package["sha256"])).decode(),
-            "shared_package_hash",
-        )
-    else:
-        component = address.removeprefix("aws_lambda_function.")
-        identity_row = identities(expected)[component]
-        identity = {"function_name": identity_row["name"], "arn": identity_row["arn"]}
-        mutable = {"filename", "source_code_hash"}
-        computed = LAMBDA_COMPUTED
-        require(
-            after.get("source_code_hash") == identity_row["sha256"],
-            "shared_package_hash",
-        )
-        if component == "timed_checks":
-            identity |= {"s3_bucket": bucket, "s3_key": key, "filename": None}
-            mutable = {"s3_object_version", "source_code_hash"}
-            producers = [
-                row for row in plan["resource_changes"] if row["address"] == OBJECT
-            ]
-            require(len(producers) == 1, "shared_package_reference")
-            validate(producers[0], plan, expected)
-            resources = (
-                plan.get("configuration", {})
-                .get("root_module", {})
-                .get("resources", [])
-            )
-            consumers = [row for row in resources if row.get("address") == address]
-            require(len(consumers) == 1, "shared_package_reference")
-            expression = consumers[0].get("expressions", {}).get("s3_object_version")
-            require(
-                isinstance(expression, dict)
-                and set(cast(dict[str, Any], expression)) == {"references"}
-                and sorted(cast(dict[str, Any], expression)["references"])
-                == sorted([OBJECT, OBJECT + ".version_id"]),
-                "shared_package_reference",
-            )
-            producer = producers[0]["change"]
-            if unknowns.get("s3_object_version") is True:
-                require(
-                    producer["actions"] == ["update"]
-                    and producer.get("after_unknown", {}).get("version_id") is True
-                    and after.get("s3_object_version") is None,
-                    "shared_package_reference",
-                )
-                computed = computed | {"s3_object_version"}
-            else:
-                version = producer["after"].get("version_id")
-                require(
-                    producer["actions"] == ["no-op"]
-                    and isinstance(version, str)
-                    and version not in ("", "null")
-                    and after.get("s3_object_version") == version,
-                    "shared_package_reference",
-                )
-        else:
-            identity |= {"s3_bucket": None, "s3_key": None, "s3_object_version": None}
-            package = expected["packages"][FUNCTIONS[component][1]]
-            require(after.get("filename") == package["path"], "shared_package_path")
+    component = address.removeprefix("aws_lambda_function.")
+    identity_row = identities(expected)[component]
+    identity = {
+        "function_name": identity_row["name"],
+        "arn": identity_row["arn"],
+        "s3_bucket": None,
+        "s3_key": None,
+        "s3_object_version": None,
+    }
+    mutable = {"filename", "source_code_hash"}
+    computed = LAMBDA_COMPUTED
+    require(
+        after.get("source_code_hash") == identity_row["sha256"],
+        "shared_package_hash",
+    )
+    package = expected["packages"][FUNCTIONS[component][1]]
+    require(after.get("filename") == package["path"], "shared_package_path")
     for field, value in identity.items():
         require(
             (not before or before.get(field) == value)

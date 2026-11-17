@@ -80,7 +80,7 @@ const { chromium } = require('playwright');
     assert.equal(await page.locator('#answer-cost').innerText(), '$0.000087');
     fail = false;
     await go();
-    assert.deepEqual(await page.locator('.nav-links a').allTextContents(), ['Chat', 'Cost', 'Evaluation results', 'Release']);
+    assert.deepEqual(await page.locator('.nav-links a').allTextContents(), ['Chat', 'Cost', 'Release']);
     assert.equal(await page.locator('.nav-links a[aria-current]').getAttribute('href'), '/cost-dashboard');
     await page.reload();
     await page.waitForFunction(() => {

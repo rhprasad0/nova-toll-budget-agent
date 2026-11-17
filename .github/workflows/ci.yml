@@ -15,25 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  golden-artifact-smoke:
-    runs-on: ubuntu-24.04-arm
-    defaults:
-      run:
-        working-directory: v2
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
-        with:
-          python-version: '3.13'
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version: '22.22.1'
-      - run: uv sync --frozen
-      - run: ./scripts/build_agentcore_zips.sh
-      - name: Run packaged agent with a canned provider and frozen replay
-        run: uv run python -m tests.golden_artifact_smoke infra/build/agentcore
   v2-loader:
     runs-on: ubuntu-latest
     defaults:
@@ -112,7 +93,7 @@ jobs:
         if: steps.changes.outputs.frontend == 'true'
         run: |
           status=0
-          for check in eval_dashboard cost_dashboard release_dashboard public_chat_scroll commute_map frontend_e2e; do
+          for check in cost_dashboard release_dashboard public_chat_scroll commute_map frontend_e2e; do
             node "tests/${check}_browser.cjs" || status=1
           done
           exit "$status"

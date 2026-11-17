@@ -20,7 +20,7 @@ from scripts import shared_packages
 
 def shared_fixture(bundle: Path, environment: str = "development") -> dict[str, Any]:
     files: list[dict[str, str]] = []
-    for name in ("loader", "publisher", "timed-checks"):
+    for name in ("loader", "publisher"):
         path = bundle / f"v2/infra/build/{name}.zip"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(name.encode())
@@ -57,7 +57,7 @@ def test_plan_package_paths_are_workspace_independent(
             bundle = bundle / "release-overlay"
         packages = bundle / "v2/infra/build"
         packages.mkdir(parents=True)
-        for name in ("loader", "publisher", "timed-checks"):
+        for name in ("loader", "publisher"):
             (packages / f"{name}.zip").write_bytes(name.encode())
         expected = shared_fixture(bundle)
         delivery.plan(
@@ -83,9 +83,8 @@ def test_plan_package_paths_are_workspace_independent(
         assert {arg for arg in args[1:] if arg.startswith("-var=")} == {
             "-var=loader_package_path=build/loader.zip",
             "-var=publisher_package_path=build/publisher.zip",
-            "-var=timed_checks_package_path=build/timed-checks.zip",
         }
-        for name in ("loader", "publisher", "timed-checks"):
+        for name in ("loader", "publisher"):
             assert (root / "build" / f"{name}.zip").read_bytes() == name.encode()
 
 
@@ -195,7 +194,6 @@ def test_two_successive_releases_preserve_active_descriptor() -> None:
         "aws_cloudfront_function.public_chat_routes",
         "aws_iam_role.tollchat_runtime",
         "aws_security_group.tollchat_runtime",
-        "aws_scheduler_schedule.timed_checks",
         "aws_lambda_function.loader",
     ],
 )
@@ -539,11 +537,8 @@ def test_existing_upload_requires_browser_metadata(
 
 
 @pytest.mark.parametrize("has_scorecard", [False, True])
-@pytest.mark.parametrize(
-    "module", [b"// legacy dashboard", b"// scheduled-critical-v1"]
-)
 def test_scorecard_is_checked_with_its_retained_release(
-    monkeypatch: pytest.MonkeyPatch, has_scorecard: bool, module: bytes
+    monkeypatch: pytest.MonkeyPatch, has_scorecard: bool
 ) -> None:
     monkeypatch.setattr(delivery, "environment", "development")
     prefix = "/releases/release2"
@@ -555,18 +550,10 @@ def test_scorecard_is_checked_with_its_retained_release(
         prefix + "/index.html": index,
         prefix + "/assets/releases.html": scorecard,
         prefix + "/assets/evals.css": b"body {}",
-        prefix + "/assets/evals.mjs": module,
-        "/evals.html": b'<meta name="eval-environment" content="development"><link href="/assets/evals.css"><script src="/assets/evals.mjs"></script>',
         prefix + "/assets/releases.css": b"svg {}",
     }
     observed: list[str] = []
-    monkeypatch.setitem(
-        gate.cost_release.ASSET_SHA256,
-        "development/evals.html",
-        hashlib.sha256(payloads["/evals.html"]).hexdigest(),
-    )
     wrong_route = False
-    fault = ""
 
     def request(
         jar: object, path: str, *, expected_cache_control: str | None = None
@@ -577,10 +564,6 @@ def test_scorecard_is_checked_with_its_retained_release(
             if path == "/"
             else prefix + "/assets/releases.html"
             if path == "/release-dashboard"
-            else "/evals.html"
-            if path == "/eval-dashboard"
-            else prefix + path
-            if path.startswith("/assets/evals")
             else path
         )
         body = (
@@ -588,21 +571,7 @@ def test_scorecard_is_checked_with_its_retained_release(
             if wrong_route and path == "/release-dashboard"
             else payloads[source]
         )
-        if path.startswith("/assets/evals"):
-            assert expected_cache_control == "no-store"
-        if fault == "stale_module" and path == "/assets/evals.mjs":
-            body = b"stale root module"
-        if fault == "wrong_environment" and path == "/evals.html":
-            body = body.replace(b"development", b"production")
-        if fault == "alias" and path == "/eval-dashboard":
-            body = b"wrong document"
-        content_type = (
-            "text/html"
-            if source.endswith(".html")
-            else "text/javascript"
-            if source.endswith(".mjs")
-            else "text/css"
-        )
+        content_type = "text/html" if source.endswith(".html") else "text/css"
         return 200, content_type, body
 
     def head(*args: str) -> dict[str, str]:
@@ -616,17 +585,6 @@ def test_scorecard_is_checked_with_its_retained_release(
     delivery.assets(slot("green", "release2"), document=True)
     assert ("/release-dashboard" in observed) == has_scorecard
     assert (prefix + "/assets/releases.css" in observed) == has_scorecard
-    assert {
-        "/evals.html",
-        "/eval-dashboard",
-        "/assets/evals.css",
-        "/assets/evals.mjs",
-    } <= set(observed)
-    for failure in ("stale_module", "wrong_environment", "alias"):
-        fault = failure
-        with pytest.raises(gate.Rejected, match=r"asset_content|candidate_document"):
-            delivery.assets(slot("green", "release2"), document=True)
-    fault = ""
     if has_scorecard:
         wrong_route = True
         with pytest.raises(gate.Rejected, match="candidate_release_document"):
@@ -844,7 +802,7 @@ def test_complete_release_state_machine(
     saved.write_bytes(b"approved-preparation")
     packages = tmp_path / "v2/infra/build"
     packages.mkdir(parents=True)
-    for name in ("loader", "publisher", "timed-checks"):
+    for name in ("loader", "publisher"):
         (packages / f"{name}.zip").write_bytes(name.encode())
     expected_packages = shared_fixture(tmp_path, target)
     monkeypatch.setattr(
@@ -919,7 +877,7 @@ def test_complete_release_state_machine(
             return json.dumps(document)
         assert args[0] == "apply"
         if target == "production":
-            for name in ("loader", "publisher", "timed-checks"):
+            for name in ("loader", "publisher"):
                 assert (_root / "build" / f"{name}.zip").read_bytes() == name.encode()
         phase = Path(args[-1]).stem
         applied.append(phase)

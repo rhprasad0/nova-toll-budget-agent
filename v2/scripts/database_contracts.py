@@ -125,7 +125,7 @@ def run_contracts(retained: Path, profile: str) -> None:
     output = Path(
         os.environ.get(
             "DB_CONTRACT_PROFILE_DIR",
-            str(CURRENT.parent / "eval/private/ci-profiling/contracts"),
+            str(CURRENT.parent / "private/ci-profiling/contracts"),
         )
     )
     names = [name for name in CONTRACTS if profile == "full" or name != "oracle_report"]

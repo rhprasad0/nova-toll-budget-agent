@@ -10,7 +10,6 @@ from tests.infrastructure_support import (
     DEPLOYMENT,
     FOUNDATION_ROOT,
     MEASUREMENT_INFRA,
-    TIMED_CHECKS_TF,
     V2_ROOT,
     assert_assignment,
     hcl_expression,
@@ -524,46 +523,3 @@ def test_usage_rollout_has_no_retired_foundation_step() -> None:
     assert "dynamodb:TransactWriteItems" not in DEPLOYMENT
     assert "tollchat_usage_optout=1" not in DEPLOYMENT
     assert "--consistent-read" not in DEPLOYMENT
-
-
-def test_eval_dashboard_is_configured_in_both_environments() -> None:
-    assert_assignment(
-        TIMED_CHECKS_TF,
-        "eval_db_user",
-        'local.is_production ? "eval_writer" : "eval_writer_development"',
-    )
-    policy = terraform_block(
-        TIMED_CHECKS_TF, 'resource "aws_iam_role_policy" "timed_checks_lambda"'
-    )
-    for sid, actions, resources in (
-        (
-            "ConnectEvaluationHistory",
-            '["rds-db:connect"]',
-            '["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.eval_db_user}"]',
-        ),
-        (
-            "PublishEvaluationSnapshot",
-            '["s3:PutObject"]',
-            '["${aws_s3_bucket.site.arn}/evals.json"]',
-        ),
-        (
-            "EncryptEvaluationSnapshot",
-            '["kms:GenerateDataKey", "kms:Decrypt"]',
-            "[aws_kms_key.site.arn]",
-        ),
-    ):
-        statement = next(
-            block for block in re.split(r"\n\s+\{\n", policy)[1:] if f'"{sid}"' in block
-        )
-        assert_assignment(statement, "Action", actions)
-        assert_assignment(statement, "Resource", resources)
-    assert 'dynamic "statement"' not in policy
-    function = terraform_block(
-        TIMED_CHECKS_TF, 'resource "aws_lambda_function" "timed_checks"'
-    )
-    # Both variables must be in the unconditional map, before the alerts merge.
-    base_environment = function.split("variables = merge({", 1)[1].split("},", 1)[0]
-    assert_assignment(
-        base_environment, "EVAL_DASHBOARD_BUCKET", "aws_s3_bucket.site.id"
-    )
-    assert_assignment(base_environment, "EVAL_DB_USER", "local.eval_db_user")

@@ -1,6 +1,0 @@
-{
-  "status": "approved",
-  "corpus_sha256": "c16b5e1c4f3846369ccfcfc2faf0209f399d6a40d9c6b2c4c60c0764d7165b2c",
-  "reviewer": "Claude",
-  "evidence": "Approved by Claude at Ryan's request on 2026-11-15. Inputs are byte-identical to approved 5.2.20. Only the protected v2/uv.lock identity changed, for Pillow 13.0.0 with strands-agents-tools 0.9.0 and ADOT 0.22.0 with OpenTelemetry 1.45.1. No case inspection occurred."
-}

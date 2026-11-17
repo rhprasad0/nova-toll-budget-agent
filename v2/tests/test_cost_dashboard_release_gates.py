@@ -55,7 +55,7 @@ def test_future_billing_role_has_only_its_fixed_permissions(environment: str) ->
 
 
 def test_future_billing_routes_preserve_all_existing_behaviors() -> None:
-    model = {"path_pattern": "/eval-dashboard*", "target_origin_id": "site"}
+    model = {"path_pattern": "/usage.json", "target_origin_id": "site"}
     before = {"ordered_cache_behavior": [model]}
     after = {
         "ordered_cache_behavior": [

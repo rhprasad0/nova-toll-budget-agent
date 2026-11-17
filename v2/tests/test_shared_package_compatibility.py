@@ -2,7 +2,6 @@
 
 import hashlib
 import importlib.util
-import itertools
 import json
 import subprocess
 import sys
@@ -34,19 +33,17 @@ def load(path: Path, name: str) -> ModuleType:
 @pytest.mark.parametrize(
     "baseline", [REVIEW["baseline"], REVIEW["development_baseline"]]
 )
-def test_mixed_loader_timed_and_cost_contracts(
+def test_mixed_loader_and_cost_contracts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, baseline: str
 ) -> None:
     monkeypatch.setattr(sys, "path", [str(ROOT / "v2/lambdas/loader"), *sys.path])
-    modules: dict[str, list[Any]] = {}
-    for name in ("loader", "timed_checks"):
-        path = f"v2/lambdas/{name}/handler.py"
-        old = tmp_path / (name + ".py")
-        old.write_bytes(retained(path, baseline))
-        modules[name] = [
-            load(old, "retained_" + name),
-            load(ROOT / path, "candidate_" + name),
-        ]
+    path = "v2/lambdas/loader/handler.py"
+    old = tmp_path / "loader.py"
+    old.write_bytes(retained(path, baseline))
+    loaders: list[Any] = [
+        load(old, "retained_loader"),
+        load(ROOT / path, "candidate_loader"),
+    ]
     for name, digest in REVIEW["schemas"].items():
         previous = retained("v2/db/" + name, baseline)
         current = (ROOT / "v2/db" / name).read_bytes()
@@ -59,13 +56,9 @@ def test_mixed_loader_timed_and_cost_contracts(
         assert hashlib.sha256(current).hexdigest() == digest, review
     for environment in shared_packages.ACCOUNTS:
         monkeypatch.setenv("TOLLCHAT_ENVIRONMENT", environment)
-        for loader, timed in itertools.product(*modules.values()):
-            assert loader.UPSERT_I95_SQL == modules["loader"][0].UPSERT_I95_SQL
-            assert loader.UPSERT_I66_SQL == modules["loader"][0].UPSERT_I66_SQL
-            for schedule, window in timed.SCHEDULE_WINDOW_PAIRS:
-                assert timed._validate_event(
-                    {"window_id": window, "schedule": schedule}
-                ) == (window, schedule)
+        for loader in loaders:
+            assert loader.UPSERT_I95_SQL == loaders[0].UPSERT_I95_SQL
+            assert loader.UPSERT_I66_SQL == loaders[0].UPSERT_I66_SQL
 
 
 @pytest.mark.parametrize("environment", ["development", "production"])

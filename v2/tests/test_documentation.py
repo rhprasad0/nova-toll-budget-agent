@@ -7,11 +7,10 @@ import subprocess
 from datetime import date
 from pathlib import Path
 
-import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-JOURNAL = "v2/eval/journal/"
+JOURNAL = "v2/journal/pages/"
 FACTORY_DEFINITIONS = ("factory/agents/", "factory/rubrics/")
 
 
@@ -29,11 +28,11 @@ def test_markdown_files_only_shrink() -> None:
         for path in tracked_markdown()
         if not path.startswith((JOURNAL, *FACTORY_DEFINITIONS))
     ]
-    assert len(documents) <= 31, (
+    assert len(documents) <= 22, (
         "Do not add Markdown files. Write a deterministic check whose error names "
         "the fix (CLAUDE.md), or delete a stale document to make room."
     )
-    assert len(documents) == 31, (
+    assert len(documents) == 22, (
         f"A Markdown file was removed: lower this limit to {len(documents)}."
     )
 
@@ -82,45 +81,16 @@ def test_relative_links_and_anchors_resolve() -> None:
 
 
 def test_journal_pages_are_mondays_linked_from_the_index() -> None:
-    index = (REPO_ROOT / "v2/eval/EXPERIMENT_JOURNAL.md").read_text()
+    index = (REPO_ROOT / "v2/journal/EXPERIMENT_JOURNAL.md").read_text()
     for path in tracked_markdown():
         if path.startswith(JOURNAL):
             name = Path(path).stem
             assert date.fromisoformat(name).weekday() == 0, (
                 f"Rename {path} to the Monday that starts its week."
             )
-            assert f"](journal/{name}.md)" in index, (
-                f"Add a row linking journal/{name}.md to v2/eval/EXPERIMENT_JOURNAL.md."
+            assert f"](pages/{name}.md)" in index, (
+                f"Add a row linking pages/{name}.md to v2/journal/EXPERIMENT_JOURNAL.md."
             )
-
-
-@pytest.mark.parametrize(
-    ("runbook", "terraform"),
-    [
-        ("v2/runbooks/timed-checks-scheduler.md", "v2/infra/timed_checks.tf"),
-    ],
-)
-def test_runbook_targets_name_every_resource(runbook: str, terraform: str) -> None:
-    block = re.search(
-        r"_TARGETS=\(\n(.*?)\n\)", (REPO_ROOT / runbook).read_text(), re.DOTALL
-    )
-    assert block is not None
-    targets = {
-        re.sub(r"\[\d+\]$", "", target)
-        for target in re.findall(r"-target='?([^'\s]+)", block.group(1))
-    }
-    resources = {
-        f"{kind}.{name}"
-        for kind, name in re.findall(
-            r'^resource "(\w+)" "(\w+)"',
-            (REPO_ROOT / terraform).read_text(),
-            re.MULTILINE,
-        )
-    }
-    assert targets == resources, (
-        f"Make the -target list in {runbook} match the resources in {terraform}: "
-        f"missing {sorted(resources - targets)}, extra {sorted(targets - resources)}"
-    )
 
 
 def test_skill_names_an_existing_workflow_step() -> None:

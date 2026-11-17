@@ -28,11 +28,7 @@ The public `/release-dashboard` page is a static scorecard shipped with each
 immutable site release. Add future releases as dated, anchored sections in
 `agent/assets/releases.html`; preserve historical metrics and their measured contract
 versions. Publish curated aggregates, keeping raw evaluation evidence private.
-The [experiment journal](eval/EXPERIMENT_JOURNAL.md) records release decisions.
-
-Reproduce the descriptive intervals and repetition spread from two private
-three-repetition reports with
-`python scripts/release_statistics.py BASELINE_REPORT FINAL_REPORT`.
+The [experiment journal](journal/EXPERIMENT_JOURNAL.md) records release decisions.
 Run `node tests/release_dashboard_browser.cjs` for the static page checks.
 
 ## Runtime boundaries
@@ -50,7 +46,7 @@ Run `node tests/release_dashboard_browser.cjs` for the static page checks.
 
 - [PostgreSQL schema](db/schema.sql)
 - [IAM-authenticated database roles](db/roles.sql)
-- [Missing I-95/495 OD proxy guidance](eval/results/i95-missing-od-pricing.md) and
+- [Missing I-95/495 OD proxy guidance](docs/i95-missing-od-pricing.md) and
   [production proxy mapping and pricing views](db/analysis.sql)
 
 The independently deployable `pricing` application schema declares its version
@@ -166,7 +162,6 @@ From `v2/`, run the offline tests and deterministic release builds:
 ```sh
 uv sync --locked
 python3 scripts/check_repository.py
-uv run pytest -q tests/test_run_evaluation.py
 uv run coverage run -m pytest
 uv run coverage report
 node --test tests/*.mjs
@@ -177,7 +172,6 @@ uv run python oracle/build_oracle_data.py --check
 ./scripts/build_publisher_zip.sh
 ./scripts/build_agentcore_zips.sh
 ./scripts/build_fetcher_zip.sh
-./scripts/build_timed_checks_zip.sh
 (cd infra/build && sha256sum --check AGENTCORE_SHA256SUMS)
 ```
 
@@ -207,7 +201,7 @@ profile, retained/candidate version, elapsed seconds, and outcome. Identical
 retained and candidate contracts run once; changed versions both run.
 The disposable test sessions disable PostgreSQL JIT to avoid repeated compilation
 of small route queries and refresh fixture statistics before running contracts.
-See the [profiling results](eval/EXPERIMENT_JOURNAL.md).
+See the [profiling results](journal/EXPERIMENT_JOURNAL.md).
 Full PR CI runs retained and candidate contracts concurrently in separate
 PostGIS services on the same runner. Each service repeats the disposable setup
 and migration checks; either worker failing fails the job. Fast CI and local
@@ -217,7 +211,7 @@ runs keep both identities in one service. `DB_CONTRACT_IDENTITY` defaults to
 To profile the same contracts, set `DB_CONTRACT_DIAGNOSTICS=timing` before
 running the command above. Statement timings are printed with contract identity
 and statement ordinal; SQL output stays in
-`v2/eval/private/ci-profiling/contracts/`. Set `DB_CONTRACT_PROFILE_DIR` to a
+`v2/private/ci-profiling/contracts/`. Set `DB_CONTRACT_PROFILE_DIR` to a
 different ignored directory for each repetition. Use a fresh container each time.
 
 For a separate local diagnostic pass, use `DB_CONTRACT_DIAGNOSTICS=plans`.
@@ -227,7 +221,7 @@ per-node timing. It preserves the contract's role changes and transactions.
 Detailed plans stay in the same private logs, including on failure. Diagnostics
 default to `off`; never compare instrumented runs with ordinary runs as a claimed
 speedup. Run summaries and limitations belong in the
-[experiment journal](eval/EXPERIMENT_JOURNAL.md).
+[experiment journal](journal/EXPERIMENT_JOURNAL.md).
 
 The required `v2-database` CI job selects full coverage for PR/merge-group changes
 under `v2/db/`, `v2/oracle/`, `v2/tests/`, `v2/scripts/`, either infrastructure

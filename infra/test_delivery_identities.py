@@ -147,23 +147,12 @@ def rendered_production_policies(
     test_kms_arn = (
         "arn:aws:kms:us-east-1:920534282028:key/00000000-0000-0000-0000-000000000000"
     )
-    test_alerts_kms_arn = (
-        "arn:aws:kms:us-east-1:920534282028:key/11111111-1111-1111-1111-111111111111"
-    )
-    policy_data = (
-        policy_data.replace(
-            "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
-        )
-        .replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
-        .replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
-    )
-    production_locals = (
-        production_locals.replace(
-            "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
-        )
-        .replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
-        .replace("aws_kms_key.alerts.arn", "local.test_alerts_kms_key_arn")
-    )
+    policy_data = policy_data.replace(
+        "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
+    ).replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
+    production_locals = production_locals.replace(
+        "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
+    ).replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
     configuration = dedent(
         f"""
         terraform {{
@@ -188,7 +177,6 @@ def rendered_production_policies(
           green_trace_log_arns = []
           test_tfstate_bucket_arn = "{test_bucket_arn}"
           test_tfstate_kms_key_arn = "{test_kms_arn}"
-          test_alerts_kms_key_arn = "{test_alerts_kms_arn}"
         }}
 
         {first_locals}
@@ -202,7 +190,7 @@ def rendered_production_policies(
         }}
 
         output "production_delivery_planner_statements" {{
-          value = concat(local.production_delivery_planner_state_statements, local.production_delivery_discovery_statements, [local.production_delivery_dynamodb_default_key_statement, local.production_delivery_alerts_key_statement, local.production_delivery_agentcore_default_statement])
+          value = concat(local.production_delivery_planner_state_statements, local.production_delivery_discovery_statements, [local.production_delivery_dynamodb_default_key_statement, local.production_delivery_agentcore_default_statement])
         }}
 
         output "production_delivery_application_policy_statements" {{
@@ -529,7 +517,7 @@ def _check_production_planner() -> None:
     require("--verify-checkout", PRODUCTION_PLAN)
     require('--bundle-root "$overlay"', PRODUCTION_PLAN)
     controller = (ROOT / "v2/scripts/release_blue_green.py").read_text()
-    for package in ("loader", "publisher", "agentcore", "chat-proxy", "timed-checks"):
+    for package in ("loader", "publisher", "agentcore", "chat-proxy"):
         require(f'"{package}"', controller)
 
     require(
@@ -888,20 +876,13 @@ def main() -> None:
         IAM, 'data "aws_iam_policy_document" "development_delivery"'
     )
     development_shards = terraform_block(IAM, "locals", 1)
-    assert development_delivery.count('sid       = "PassTimedChecksSchedulerRole"') == 1
-    require('actions   = ["iam:PassRole"]', development_delivery)
+    assert "scheduler" not in development_delivery
     require(
-        "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-timed-checks-scheduler-dev",
-        development_delivery,
-    )
-    require('variable = "iam:PassedToService"', development_delivery)
-    require('values   = ["scheduler.amazonaws.com"]', development_delivery)
-    require(
-        "Statement = slice(local.development_delivery_policy_statements, 46, 56)",
+        "Statement = slice(local.development_delivery_policy_statements, 46, 54)",
         development_shards,
     )
     require(
-        "Statement = slice(local.development_delivery_policy_statements, 56, 65)",
+        "Statement = slice(local.development_delivery_policy_statements, 54, 62)",
         development_shards,
     )
 
@@ -918,7 +899,6 @@ def main() -> None:
         application_slice,
         "application refresh statements must retain ReadPreprovisionedApplicationRoles",
     )
-    require('"ReadAlertsKeyForTimedChecks",', application_slice)
     assert '"s3:GetObjectVersion"' not in planner
     assert (
         '"s3:DeleteObject"]\n      Resource = ["${aws_s3_bucket.tfstate.arn}/plans/'
@@ -941,7 +921,7 @@ def main() -> None:
             application_statements,
             deploy_documents,
         )
-    ) == ("1406c4bee9ab4563cf5b82399f3c71976c81f46efa90871fa745225ec89f6124")
+    ) == ("2fb102f9936bdf18e87ec6104e2ad3462620758bba0ef1ba215dee7024e492a2")
     production_locals = terraform_block(IAM, "locals", 3)
     for sid in (
         "ReadAgentCoreTraceSubscription",
@@ -962,7 +942,7 @@ def main() -> None:
         )
         assert production_policies_digest(
             rendered_production_policies(leaked_trace_sid)
-        ) != ("1406c4bee9ab4563cf5b82399f3c71976c81f46efa90871fa745225ec89f6124")
+        ) != ("2fb102f9936bdf18e87ec6104e2ad3462620758bba0ef1ba215dee7024e492a2")
     assert len(planner_documents) == 10
     assert len(planner_documents) <= 10
     assert set(planner_documents) == {
@@ -1023,30 +1003,12 @@ def main() -> None:
         ],
         "Sid": "ReadProductionDynamoDBDefaultKey",
     }
-    expected_alerts_key_read = {
-        "Action": ["kms:DescribeKey"],
-        "Effect": "Allow",
-        "Resource": [
-            "arn:aws:kms:us-east-1:920534282028:key/11111111-1111-1111-1111-111111111111"
-        ],
-        "Sid": "ReadProductionAlertsKeyForTimedChecks",
-    }
     for documents in (planner_documents, deploy_documents):
         assert [
             statement
             for statement in documents["data"]["Statement"]
             if statement.get("Sid") == "ReadProductionDynamoDBDefaultKey"
         ] == [expected_dynamodb_default_key_read]
-        # Cutover and recovery refresh the full application plan under the deploy role.
-        assert [
-            statement
-            for statement in documents["data"]["Statement"]
-            if statement.get("Sid") == "ReadProductionAlertsKeyForTimedChecks"
-        ] == [expected_alerts_key_read]
-    assert not any(
-        statement.get("Sid") == "ReadAlertsKeyForTimedChecks"
-        for statement in application_statements
-    )
     for statement in split_statements:
         if "s3:GetObjectVersion" in statement.get("Action", []):
             assert all("/plans/" not in resource for resource in statement["Resource"])
@@ -1058,7 +1020,6 @@ def main() -> None:
         "storage",
         "data",
         "runtime",
-        "schedules",
         "edge",
         "telemetry",
     }
@@ -1101,27 +1062,12 @@ def main() -> None:
         "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-920534282028/agentcore-traces/*"
     ]
     assert "logs:Unmask" not in json.dumps(telemetry_deploy)
-    schedule_statements = deploy_documents["schedules"]["Statement"]
-    assert [statement.get("Sid") for statement in schedule_statements] == [
-        "ManageApplicationSchedules",
-        "PassTimedChecksSchedulerRole",
-    ]
-    passrole = schedule_statements[1]
-    assert passrole["Action"] in ("iam:PassRole", ["iam:PassRole"])
-    assert passrole["Resource"] in (
-        "arn:aws:iam::920534282028:role/nova-toll-v2-timed-checks-scheduler",
-        ["arn:aws:iam::920534282028:role/nova-toll-v2-timed-checks-scheduler"],
-    )
-    assert passrole.get("Condition") == {
-        "StringEquals": {"iam:PassedToService": "scheduler.amazonaws.com"}
-    }
     deploy_application_keys = (
         "compute",
         "observability",
         "storage",
         "data",
         "runtime",
-        "schedules",
         "edge",
     )
     rendered_deploy_application = [
@@ -1133,7 +1079,6 @@ def main() -> None:
             "ReadProductionAgentCoreDefaultEndpoint",
             "PassProductionAgentCoreRuntimeRole",
             "ReadProductionDynamoDBDefaultKey",
-            "ReadProductionAlertsKeyForTimedChecks",
         }
     ]
     assert rendered_deploy_application == application_statements

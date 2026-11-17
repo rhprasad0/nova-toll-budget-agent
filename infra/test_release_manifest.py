@@ -6,7 +6,6 @@ import tempfile
 import unittest
 from contextlib import ExitStack
 from pathlib import Path
-from typing import cast
 from unittest import mock
 
 from infra import release_manifest
@@ -58,27 +57,6 @@ class ReleaseManifestTests(unittest.TestCase):
 
     def write_manifest(self) -> None:
         self.manifest.write_text(json.dumps(self.manifest_value), encoding="utf-8")
-
-    def enable_timed_mode(self) -> None:
-        for relative in sorted(release_manifest.TIMED_INPUTS):
-            self.track(relative, b"timed-reviewed\n")
-        (self.packages / "timed-checks.zip").write_bytes(b"timed-checks.zip")
-        self.checksums.write_text(
-            "".join(
-                f"{digest(self.packages / name)}  {name}\n"
-                for name in release_manifest.TIMED_PACKAGES
-            ),
-            encoding="ascii",
-        )
-        self.manifest_value["deployment_inputs"] = {
-            relative: digest(self.root / relative)
-            for relative in sorted({"input.txt", *release_manifest.TIMED_INPUTS})
-        }
-        self.manifest_value["packages"] = {
-            name: digest(self.packages / name)
-            for name in release_manifest.TIMED_PACKAGES
-        }
-        self.write_manifest()
 
     def track(self, relative: str, content: bytes = b"reviewed\n") -> Path:
         path = self.root / relative
@@ -304,28 +282,6 @@ class ReleaseManifestTests(unittest.TestCase):
             encoding="ascii",
         )
         self.assert_rejected("package_inventory_invalid")
-
-    def test_timed_marker_requires_full_inventory_and_five_packages(self) -> None:
-        self.enable_timed_mode()
-        self.assertEqual(self.verify()["status"], "accepted")
-
-        missing = min(release_manifest.TIMED_INPUTS)
-        cast(dict[str, JSON], self.manifest_value["deployment_inputs"]).pop(missing)
-        self.write_manifest()
-        self.assert_rejected("inventory_incomplete")
-
-        self.enable_timed_mode()
-        (self.packages / "timed-checks.zip").unlink()
-        self.assert_rejected("package_inventory_invalid")
-
-    def test_legacy_mode_excludes_tracked_timed_inputs(self) -> None:
-        for relative in sorted(release_manifest.TIMED_INPUTS):
-            self.track(relative)
-        with (
-            mock.patch.object(release_manifest, "EXACT_INPUTS", {"input.txt"}),
-            mock.patch.object(release_manifest, "INPUT_PREFIXES", ()),
-        ):
-            self.assertEqual(release_manifest.tracked_inputs(self.root), ["input.txt"])
 
     def test_production_control_inventory_is_feature_detected_and_complete(
         self,
@@ -582,17 +538,6 @@ class ReleaseManifestTests(unittest.TestCase):
                 release_manifest.Invalid, "^input_digest_mismatch$"
             ):
                 self.verify()
-
-
-class DashboardInventoryTests(unittest.TestCase):
-    def test_dashboard_is_bounded_and_optional(self) -> None:
-        self.assertTrue(
-            release_manifest.selected("v2/eval/dashboard.py", timed_enabled=True)
-        )
-        self.assertFalse(release_manifest.selected("v2/eval/dashboard.py"))
-        self.assertTrue(release_manifest.selected("v2/agent/evals.html"))
-        self.assertFalse(release_manifest.selected("v2/agent/arbitrary.html"))
-        self.assertNotIn("v2/eval/dashboard.py", release_manifest.TIMED_INPUTS)
 
 
 if __name__ == "__main__":

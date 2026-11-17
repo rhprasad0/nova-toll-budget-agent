@@ -25,7 +25,6 @@ from infra.delivery_plan_validator import (
     TRACE_PREFIX,
     TRACE_QUERY,
     TRACE_TAGS,
-    timed_schedule_plan_value,
 )
 from infra.delivery_plan_validator import (
     validate_plan as _validate_plan,
@@ -181,25 +180,14 @@ def validate_plan(
     )
 
 
-def manifest_header(*, timed: bool = False) -> ManifestHeader:
-    inputs = {"v2/infra/main.tf": HASH}
-    if timed:
-        inputs["v2/scripts/build_timed_checks_zip.sh"] = HASH
+def manifest_header() -> ManifestHeader:
     return {
         "schema_version": 1,
         "provider_identity": dict(EXPECTED_IDENTITY),
-        "deployment_inputs": inputs,
-        "packages": {
-            name: HASH
-            for name in (
-                "agentcore.zip",
-                "chat-proxy.zip",
-                "loader.zip",
-                "publisher.zip",
-                "timed-checks.zip",
-            )
-            if timed or name != "timed-checks.zip"
-        },
+        "deployment_inputs": {"v2/infra/main.tf": HASH},
+        "packages": dict.fromkeys(
+            ("agentcore.zip", "chat-proxy.zip", "loader.zip", "publisher.zip"), HASH
+        ),
     }
 
 
@@ -454,24 +442,14 @@ def _mutation_change(
         before["code"] = original
         after["code"] = code
     if address in shared_packages.RESOURCES:
-        if address == shared_packages.OBJECT:
-            before["source"] = (
-                "old.zip" if "source" in fields else "build/timed-checks.zip"
-            )
-            after["source"] = "build/timed-checks.zip"
-            after["source_hash"] = base64.b64encode(bytes(32)).decode()
-        else:
-            component = address.rsplit(".", 1)[1]
-            name, package = shared_packages.FUNCTIONS[component]
-            before["arn"] = after["arn"] = (
-                f"arn:aws:lambda:us-east-1:903859731897:function:{name}-dev"
-            )
-            if component != "timed_checks":
-                before["filename"] = (
-                    "old.zip" if "filename" in fields else f"build/{package}"
-                )
-                after["filename"] = f"build/{package}"
-            after["source_code_hash"] = base64.b64encode(bytes(32)).decode()
+        component = address.rsplit(".", 1)[1]
+        name, package = shared_packages.FUNCTIONS[component]
+        before["arn"] = after["arn"] = (
+            f"arn:aws:lambda:us-east-1:903859731897:function:{name}-dev"
+        )
+        before["filename"] = "old.zip" if "filename" in fields else f"build/{package}"
+        after["filename"] = f"build/{package}"
+        after["source_code_hash"] = base64.b64encode(bytes(32)).decode()
     if action == "no-op":
         after = copy.deepcopy(before)
     return _resource_change(address, action, before, after)
@@ -803,20 +781,12 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
     def test_rejects_hash_only_s3_lambda_updates_at_both_boundaries_and_cli(
         self,
     ) -> None:
-        for address in (
-            "aws_lambda_function.tollchat_proxy",
-            "aws_lambda_function.timed_checks",
-        ):
+        for address in ("aws_lambda_function.tollchat_proxy",):
             with self.subTest(address=address, boundary="runtime"):
                 plan = _plan([_mutation_change(address, ("source_code_hash",))])
                 manifest = _mutation_manifest(
                     ((address, "update", ("source_code_hash",)),)
                 )
-                if address.endswith("timed_checks"):
-                    manifest["deployment_inputs"][
-                        "v2/scripts/build_timed_checks_zip.sh"
-                    ] = HASH
-                    manifest["packages"]["timed-checks.zip"] = HASH
                 result = validate_plan(plan, manifest)
                 self.assertEqual(
                     result,
@@ -840,11 +810,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 manifest = _mutation_manifest(
                     ((address, "update", ("source_code_hash",)),)
                 )
-                if address.endswith("timed_checks"):
-                    manifest["deployment_inputs"][
-                        "v2/scripts/build_timed_checks_zip.sh"
-                    ] = HASH
-                    manifest["packages"]["timed-checks.zip"] = HASH
                 result = validate_plan(plan, manifest)
                 self.assertEqual(
                     result,
@@ -1109,64 +1074,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             validate_plan(lambda_plan(), manifest)["reason_code"],
             "manifest_mutation_mismatch",
         )
-
-    def test_manifest_package_order_follows_reviewed_timed_marker(self) -> None:
-        legacy = lambda_manifest()
-        self.assertEqual(validate_plan(lambda_plan(), legacy)["status"], "accepted")
-
-        timed = copy.deepcopy(legacy)
-        timed["deployment_inputs"]["v2/scripts/build_timed_checks_zip.sh"] = HASH
-        timed["packages"]["timed-checks.zip"] = HASH
-        self.assertEqual(validate_plan(lambda_plan(), timed)["status"], "accepted")
-
-        legacy_extra = copy.deepcopy(legacy)
-        legacy_extra["packages"]["timed-checks.zip"] = HASH
-        self.assertEqual(
-            validate_plan(lambda_plan(), legacy_extra)["reason_code"], "malformed_input"
-        )
-
-        timed_missing = copy.deepcopy(timed)
-        timed_missing["packages"].pop("timed-checks.zip")
-        self.assertEqual(
-            validate_plan(lambda_plan(), timed_missing)["reason_code"],
-            "malformed_input",
-        )
-
-    def test_marker_free_manifest_cannot_declare_timed_contract_entries(self) -> None:
-        addresses = (
-            "aws_s3_object.timed_checks",
-            "aws_lambda_function.timed_checks",
-            'aws_scheduler_schedule.timed_checks["greenway-eb-mon-0723"]',
-        )
-        for address in addresses:
-            with self.subTest(address=address):
-                spec = CONTRACT[address]
-                fields = (
-                    ("schedule_expression",)
-                    if address.startswith("aws_scheduler")
-                    else spec.fields[:2]
-                )
-                manifest: Manifest = {
-                    **manifest_header(),
-                    "mutations": [
-                        {
-                            "address": address,
-                            "action": "update",
-                            "operation_class": spec.operation_class,
-                            "changed_fields": list(fields),
-                        }
-                    ],
-                    "permissions": [
-                        {
-                            "address": address,
-                            "action": permission.action,
-                            "resource": permission.resources[0],
-                            "conditions": dict(permission.conditions),
-                        }
-                        for permission in spec.permissions
-                    ],
-                }
-                self.assert_reason("timed_contract_requires_marker", manifest=manifest)
 
     def test_lambda_updates_require_exact_development_function_identity(self) -> None:
         fields_by_address = {
@@ -1742,21 +1649,10 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 # v2/tests/test_cost_dashboard_release.py, not placeholder values.
                 continue
             action = spec.actions[0]
-            timed = address.startswith(
-                'aws_scheduler_schedule.timed_checks["'
-            ) or address in {
-                "aws_lambda_function.timed_checks",
-                "aws_s3_object.timed_checks",
-            }
             if address in {"aws_s3_object.agentcore", "aws_s3_object.tollchat_proxy"}:
                 action = "update"
                 fields = ("source_hash",)
-            elif address.startswith('aws_scheduler_schedule.timed_checks["'):
-                fields = ("schedule_expression",)
-            elif address in {
-                "aws_lambda_function.tollchat_proxy",
-                "aws_lambda_function.timed_checks",
-            }:
+            elif address == "aws_lambda_function.tollchat_proxy":
                 fields = ("s3_object_version", "source_code_hash")
             elif spec.operation_class == "lambda-code":
                 fields = ("filename", "source_code_hash")
@@ -1770,16 +1666,11 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 fields = (spec.fields[0],)
             before: dict[str, JSON] | None = None if action == "create" else {}
             after: dict[str, JSON] = {}
-            if address.startswith('aws_scheduler_schedule.timed_checks["'):
-                after = timed_schedule_plan_value(address)
-                before = copy.deepcopy(after)
-                before["schedule_expression"] = "cron(0 0 ? * SUN *)"
             if before is not None:
                 for field in fields:
                     _set_path(before, field, "old")
             for field in fields:
-                if not address.startswith('aws_scheduler_schedule.timed_checks["'):
-                    _set_path(after, field, "new")
+                _set_path(after, field, "new")
             for field, value in spec.create_identity:
                 if before is not None:
                     before[field] = value
@@ -1795,7 +1686,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 fields = tuple(sorted(after))
             plan = _plan([_resource_change(address, action, before, after)])
             manifest: Manifest = {
-                **manifest_header(timed=timed),
+                **manifest_header(),
                 "mutations": [
                     {
                         "address": address,
@@ -2719,11 +2610,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "lambda-code",
                 ("s3_object_version", "source_code_hash"),
             ),
-            "aws_s3_object.timed_checks": ("artifact-upload", ("source_hash",)),
-            "aws_lambda_function.timed_checks": (
-                "lambda-code",
-                ("s3_object_version", "source_code_hash"),
-            ),
             "aws_lambda_alias.tollchat_live": ("lambda-alias", ("function_version",)),
             "aws_bedrockagentcore_agent_runtime.tollchat": (
                 "agentcore-code",
@@ -2862,14 +2748,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                     "cloudfront-code",
                     ("code",),
                 ),
-                "aws_s3_object.evals": ("site-object-upload", ("content",)),
-                **{
-                    f'aws_s3_object.site_assets["{name}"]': (
-                        "site-asset-upload",
-                        ("cache_control", "content_type", "source", "source_hash"),
-                    )
-                    for name in ("evals.css", "evals.mjs")
-                },
             }
         )
         for address, spec in CONTRACT.items():
@@ -2962,31 +2840,10 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             fields = expected_mutations[address][1]
             if address in shared_packages.RESOURCES:
                 row = _mutation_change(address, fields)
-                package = (
-                    "timed-checks.zip"
-                    if address == shared_packages.OBJECT
-                    else shared_packages.FUNCTIONS[address.rsplit(".", 1)[1]][1]
-                )
-                hash_field = (
-                    "source_hash"
-                    if address == shared_packages.OBJECT
-                    else "source_code_hash"
-                )
-                row["change"]["after"][hash_field] = base64.b64encode(
+                package = shared_packages.FUNCTIONS[address.rsplit(".", 1)[1]][1]
+                row["change"]["after"]["source_code_hash"] = base64.b64encode(
                     bytes.fromhex(manifest["packages"][package])
                 ).decode()
-                if address in {
-                    shared_packages.OBJECT,
-                    "aws_lambda_function.timed_checks",
-                }:
-                    version_field = (
-                        "version_id"
-                        if address == shared_packages.OBJECT
-                        else "s3_object_version"
-                    )
-                    row["change"]["before"][version_field] = "old-version"
-                    row["change"]["after"][version_field] = None
-                    row["change"]["after_unknown"][version_field] = True
                 return row
             spec = CONTRACT[address]
             before: dict[str, JSON] = {}
@@ -3024,28 +2881,10 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             return _resource_change(address, "update", before, after)
 
         plan = _plan([update(address) for address in committed_updates])
-        plan["configuration"] = {
-            "root_module": {
-                "resources": [
-                    {
-                        "address": "aws_lambda_function.timed_checks",
-                        "expressions": {
-                            "s3_object_version": {
-                                "references": [
-                                    "aws_s3_object.timed_checks",
-                                    "aws_s3_object.timed_checks.version_id",
-                                ]
-                            }
-                        },
-                    }
-                ]
-            }
-        }
-
         accepted = validate_plan(plan, manifest)
         self.assertEqual(accepted["status"], "accepted", accepted)
         self.assertEqual(accepted["reason_code"], "ok")
-        self.assertEqual(accepted["addresses"], sorted(committed_updates))
+        self.assertEqual(accepted["addresses"], list(committed_updates))
 
         missing_permission = copy.deepcopy(manifest)
         missing_permission["permissions"] = [
@@ -3066,52 +2905,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         rejected = validate_plan(plan, widened_permission)
         self.assertEqual(rejected["status"], "rejected")
         self.assertEqual(rejected["reason_code"], "invalid_permission")
-
-    def test_dashboard_create_computed_acl_requires_omitted_configuration(self) -> None:
-        manifest = json.loads(
-            (Path(__file__).parent / "development-release-manifest.json").read_text()
-        )
-        # The current release updates the existing page. Retain coverage of the
-        # original create boundary using its own declaration.
-        next(
-            row
-            for row in manifest["mutations"]
-            if row["address"] == "aws_s3_object.evals"
-        ).update(
-            action="create", changed_fields=list(CONTRACT["aws_s3_object.evals"].fields)
-        )
-        for address in (
-            "aws_s3_object.evals",
-            'aws_s3_object.site_assets["evals.css"]',
-            'aws_s3_object.site_assets["evals.mjs"]',
-        ):
-            spec = CONTRACT[address]
-            after: dict[str, JSON] = {
-                **dict(spec.create_identity),
-                **{field: None for field in spec.fields},
-            }
-            resource = _resource_change(address, "create", None, after)
-            resource["change"]["after_unknown"] = {"acl": True}
-            config = {
-                "address": address.split("[", 1)[0],
-                "expressions": {"bucket": {"constant_value": after["bucket"]}},
-            }
-            plan = _plan(
-                [resource], configuration={"root_module": {"resources": [config]}}
-            )
-            self.assertEqual(validate_plan(plan, manifest)["status"], "accepted")
-            for acl in ({"references": ["var.acl"]}, {"constant_value": "public-read"}):
-                cast(dict[str, JSON], config["expressions"])["acl"] = cast(JSON, acl)
-                self.assertEqual(
-                    validate_plan(plan, manifest)["reason_code"],
-                    "unknown_authorization_value",
-                )
-            cast(dict[str, JSON], config["expressions"]).pop("acl")
-            plan.pop("configuration")
-            self.assertEqual(
-                validate_plan(plan, manifest)["reason_code"],
-                "unknown_authorization_value",
-            )
 
     def test_committed_manifest_covers_coverage_asset_update_subset(self) -> None:
         address = 'aws_s3_object.site_assets["coverage-locations.json"]'
@@ -3217,256 +3010,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 self.assertFalse(
                     {"before", "after", "source", "source_hash"} & set(result)
                 )
-
-    def test_timed_schedule_updates_require_fixed_enabled_target(self) -> None:
-        address = 'aws_scheduler_schedule.timed_checks["greenway-eb-mon-0723"]'
-        spec = CONTRACT[address]
-        after = timed_schedule_plan_value(address)
-        before = copy.deepcopy(after)
-        before["schedule_expression"] = "cron(0 0 ? * SUN *)"
-        manifest: Manifest = {
-            **manifest_header(timed=True),
-            "mutations": [
-                {
-                    "address": address,
-                    "action": "update",
-                    "operation_class": spec.operation_class,
-                    "changed_fields": ["schedule_expression"],
-                }
-            ],
-            "permissions": [
-                {
-                    "address": address,
-                    "action": permission.action,
-                    "resource": permission.resources[0],
-                    "conditions": dict(permission.conditions),
-                }
-                for permission in spec.permissions
-            ],
-        }
-        self.assertEqual(
-            validate_plan(
-                _plan([_resource_change(address, "update", before, after)]), manifest
-            )["status"],
-            "accepted",
-        )
-
-        missing_passrole = copy.deepcopy(manifest)
-        missing_passrole["permissions"] = [
-            record
-            for record in missing_passrole["permissions"]
-            if record["action"] != "iam:PassRole"
-        ]
-        self.assertEqual(
-            validate_plan(
-                _plan([_resource_change(address, "update", before, after)]),
-                missing_passrole,
-            )["reason_code"],
-            "missing_permission",
-        )
-
-        widened_passrole = copy.deepcopy(manifest)
-        next(
-            record
-            for record in widened_passrole["permissions"]
-            if record["action"] == "iam:PassRole"
-        )["resource"] = "*"
-        self.assertEqual(
-            validate_plan(
-                _plan([_resource_change(address, "update", before, after)]),
-                widened_passrole,
-            )["reason_code"],
-            "invalid_permission",
-        )
-
-        wrong_service = copy.deepcopy(manifest)
-        next(
-            record
-            for record in wrong_service["permissions"]
-            if record["action"] == "iam:PassRole"
-        )["conditions"] = {"iam:PassedToService": "events.amazonaws.com"}
-        self.assertEqual(
-            validate_plan(
-                _plan([_resource_change(address, "update", before, after)]),
-                wrong_service,
-            )["reason_code"],
-            "invalid_permission",
-        )
-
-        wrong_role = copy.deepcopy(manifest)
-        next(
-            record
-            for record in wrong_role["permissions"]
-            if record["action"] == "iam:PassRole"
-        )[
-            "resource"
-        ] = "arn:aws:iam::903859731897:role/nova-toll-v2-timed-checks-scheduler-other"
-        self.assertEqual(
-            validate_plan(
-                _plan([_resource_change(address, "update", before, after)]), wrong_role
-            )["reason_code"],
-            "invalid_permission",
-        )
-
-        wrong_condition_key = copy.deepcopy(manifest)
-        next(
-            record
-            for record in wrong_condition_key["permissions"]
-            if record["action"] == "iam:PassRole"
-        )["conditions"] = {"iam:PassedToServiceCondition": "scheduler.amazonaws.com"}
-        self.assertEqual(
-            validate_plan(
-                _plan([_resource_change(address, "update", before, after)]),
-                wrong_condition_key,
-            )["reason_code"],
-            "invalid_permission",
-        )
-
-        orphan_permission = copy.deepcopy(manifest)
-        orphan_permission["permissions"].append(
-            {
-                "address": 'aws_scheduler_schedule.timed_checks["greenway-eb-fri-0723"]',
-                "action": "scheduler:UpdateSchedule",
-                "resource": "arn:aws:scheduler:us-east-1:903859731897:schedule/default/nova-toll-v2-greenway-eb-fri-0723-dev",
-                "conditions": {},
-            }
-        )
-        self.assertEqual(
-            validate_plan(
-                _plan([_resource_change(address, "update", before, after)]),
-                orphan_permission,
-            )["reason_code"],
-            "manifest_coverage_mismatch",
-        )
-
-        provider_after = copy.deepcopy(after)
-        provider_after["flexible_time_window"][0]["maximum_window_in_minutes"] = None
-        for field in (
-            "ecs_parameters",
-            "eventbridge_parameters",
-            "kinesis_parameters",
-            "sagemaker_pipeline_parameters",
-            "sqs_parameters",
-        ):
-            provider_after["target"][0][field] = []
-        provider_before = copy.deepcopy(provider_after)
-        provider_before["schedule_expression"] = "cron(0 0 ? * SUN *)"
-        provider_snapshot = copy.deepcopy(provider_after)
-        self.assertEqual(
-            validate_plan(
-                _plan(
-                    [
-                        _resource_change(
-                            address, "update", provider_before, provider_after
-                        )
-                    ]
-                ),
-                manifest,
-            )["status"],
-            "accepted",
-        )
-        self.assertEqual(provider_after, provider_snapshot)
-
-        def assert_invalid_provider_value(
-            candidate: object, changed_field: str
-        ) -> None:
-            invalid_manifest = copy.deepcopy(manifest)
-            cast(dict[str, JSON], cast(list[JSON], invalid_manifest["mutations"])[0])[
-                "changed_fields"
-            ] = [changed_field]
-            self.assertEqual(
-                validate_plan(
-                    _plan(
-                        [_resource_change(address, "update", provider_after, candidate)]
-                    ),
-                    invalid_manifest,
-                )["reason_code"],
-                "invalid_schedule_value",
-            )
-
-        for value in cast(tuple[JSON, ...], (0, -1, False, 1, True, "0", [], {})):
-            invalid_window = copy.deepcopy(provider_after)
-            invalid_window["flexible_time_window"][0]["maximum_window_in_minutes"] = (
-                value
-            )
-            assert_invalid_provider_value(invalid_window, "flexible_time_window")
-
-        for field in (
-            "ecs_parameters",
-            "eventbridge_parameters",
-            "kinesis_parameters",
-            "sagemaker_pipeline_parameters",
-            "sqs_parameters",
-        ):
-            for value in cast(
-                tuple[JSON, ...], (None, {}, [{}], [{"unexpected": "value"}], "[]")
-            ):
-                invalid_target = copy.deepcopy(provider_after)
-                invalid_target["target"][0][field] = value
-                assert_invalid_provider_value(invalid_target, "target")
-
-        unknown_target = copy.deepcopy(provider_after)
-        unknown_target["target"][0]["unexpected_parameters"] = []
-        assert_invalid_provider_value(unknown_target, "target")
-
-        unknown_window = copy.deepcopy(provider_after)
-        unknown_window["flexible_time_window"][0]["unexpected"] = None
-        assert_invalid_provider_value(unknown_window, "flexible_time_window")
-
-        for field in ("retry_policy", "dead_letter_config"):
-            invalid_required = copy.deepcopy(provider_after)
-            invalid_required["target"][0][field] = []
-            assert_invalid_provider_value(invalid_required, "target")
-
-        invalid_input = copy.deepcopy(provider_after)
-        invalid_input["target"][0]["input"] = "{}"
-        assert_invalid_provider_value(invalid_input, "target")
-
-        invalid_timezone = copy.deepcopy(provider_after)
-        invalid_timezone["schedule_expression_timezone"] = "UTC"
-        assert_invalid_provider_value(invalid_timezone, "schedule_expression_timezone")
-
-        disabled = copy.deepcopy(after)
-        disabled["state"] = "DISABLED"
-        disabled_manifest = copy.deepcopy(manifest)
-        cast(dict[str, JSON], cast(list[JSON], disabled_manifest["mutations"])[0])[
-            "changed_fields"
-        ] = ["state"]
-        self.assertEqual(
-            validate_plan(
-                _plan([_resource_change(address, "update", after, disabled)]),
-                disabled_manifest,
-            )["reason_code"],
-            "invalid_schedule_value",
-        )
-
-        retargeted = copy.deepcopy(after)
-        retargeted["target"][0]["arn"] = (
-            "arn:aws:lambda:us-east-1:903859731897:function:evil"
-        )
-        retargeted_manifest = copy.deepcopy(manifest)
-        cast(dict[str, JSON], cast(list[JSON], retargeted_manifest["mutations"])[0])[
-            "changed_fields"
-        ] = ["target"]
-        self.assertEqual(
-            validate_plan(
-                _plan([_resource_change(address, "update", after, retargeted)]),
-                retargeted_manifest,
-            )["reason_code"],
-            "invalid_schedule_value",
-        )
-
-        extended_target = copy.deepcopy(after)
-        extended_target["target"][0]["sqs_parameters"] = [
-            {"message_group_id": "unexpected"}
-        ]
-        self.assertEqual(
-            validate_plan(
-                _plan([_resource_change(address, "update", after, extended_target)]),
-                retargeted_manifest,
-            )["reason_code"],
-            "invalid_schedule_value",
-        )
 
     def test_rejects_lambda_configuration_disguised_as_code(self) -> None:
         plan = lambda_plan(runtime="python3.13")
@@ -3960,7 +3503,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 "aws_s3_object.index",
                 "aws_s3_object.faq",
                 "aws_s3_object.privacy",
-                "aws_s3_object.timed_checks",
             }:
                 continue
             if (
@@ -3979,13 +3521,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             }
             plan = _plan([_resource_change(address, "create", None, after)])
             manifest: Manifest = {
-                **manifest_header(
-                    timed=address
-                    in {
-                        "aws_s3_object.timed_checks",
-                        "aws_lambda_function.timed_checks",
-                    }
-                ),
+                **manifest_header(),
                 "mutations": [
                     {
                         "address": address,

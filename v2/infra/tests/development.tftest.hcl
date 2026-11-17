@@ -8,13 +8,11 @@ mock_provider "aws" {
 mock_provider "cloudflare" {}
 
 variables {
-  loader_package_path                   = "build/loader.zip"
-  publisher_package_path                = "build/publisher.zip"
-  timed_checks_package_path             = "build/timed-checks.zip"
-  environment                           = "development"
-  enable_public_dns                     = false
-  enable_development_custom_domain      = true
-  enable_development_timed_check_alerts = true
+  loader_package_path              = "build/loader.zip"
+  publisher_package_path           = "build/publisher.zip"
+  environment                      = "development"
+  enable_public_dns                = false
+  enable_development_custom_domain = true
   release_slots = {
     blue = {
       release_id             = "blue-release"
@@ -109,11 +107,6 @@ override_data {
   target          = data.aws_prefix_list.dynamodb
   override_during = plan
   values          = { id = "pl-dynamodb" }
-}
-override_data {
-  target          = data.aws_kms_alias.alerts
-  override_during = plan
-  values          = { target_key_arn = "arn:aws:kms:us-east-1:903859731897:key/11111111-1111-1111-1111-111111111111" }
 }
 override_data {
   target          = data.aws_cloudfront_cache_policy.caching_disabled
