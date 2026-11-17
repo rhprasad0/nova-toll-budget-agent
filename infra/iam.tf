@@ -125,8 +125,6 @@ locals {
   development_delivery_region     = "us-east-1"
   development_delivery_role_names = [
     "toll-v2-pricing-loader-dev",
-    "toll-v2-report-publisher-dev",
-    "toll-v2-report-publisher-scheduler-dev",
     "nova-toll-v2-timed-checks-dev",
     "nova-toll-v2-timed-checks-lambda-dev",
     "nova-toll-v2-timed-checks-scheduler-dev",
@@ -141,7 +139,6 @@ locals {
   development_delivery_lambda_arns = [
     for function_name in [
       "toll-v2-pricing-loader-dev",
-      "toll-v2-report-publisher-dev",
       "tollchat-v2-chat-proxy-dev",
       "nova-toll-v2-timed-checks-dev",
     ] : "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:${function_name}"
@@ -159,8 +156,6 @@ locals {
     for queue_name in [
       "toll-v2-pricing-loader-invoke-failure-dev",
       "toll-v2-pricing-loader-delivery-failure-dev",
-      "toll-v2-report-publisher-invoke-failure-dev",
-      "toll-v2-report-publisher-delivery-failure-dev",
       "nova-toll-v2-timed-checks-invoke-failure-dev",
       "nova-toll-v2-timed-checks-delivery-failure-dev",
     ] : "arn:aws:sqs:${local.development_delivery_region}:${local.development_delivery_account_id}:${queue_name}"
@@ -174,7 +169,6 @@ locals {
   development_delivery_legacy_rollup_role_arn       = "arn:aws:iam::${local.development_delivery_account_id}:role/tollchat-v2-agent-usage-rollup-dev"
   development_delivery_log_group_arns = [
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/toll-v2-pricing-loader-dev",
-    "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/toll-v2-report-publisher-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/tollchat-v2-usage-publisher-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/nova-toll-v2-timed-checks-dev",
@@ -189,10 +183,6 @@ locals {
       "toll-v2-pricing-loader-delivery-failure-queue-dev",
       "toll-v2-pricing-loader-errors-dev",
       "toll-v2-pricing-loader-invoke-failure-queue-dev",
-      "toll-v2-report-generation-freshness-dev",
-      "toll-v2-report-publisher-delivery-failure-queue-dev",
-      "toll-v2-report-publisher-errors-dev",
-      "toll-v2-report-publisher-invoke-failure-queue-dev",
       "tollchat-v2-agentcore-active-sessions-dev",
       "tollchat-v2-chat-proxy-errors-dev",
       "tollchat-v2-chat-proxy-failures-dev",
@@ -868,7 +858,6 @@ data "aws_iam_policy_document" "development_delivery" {
     actions = ["scheduler:GetSchedule", "scheduler:ListTagsForResource", "scheduler:TagResource", "scheduler:UntagResource", "scheduler:UpdateSchedule"]
     resources = concat(
       [
-        "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev",
         "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default",
       ],
       local.development_delivery_timed_schedule_arns,
@@ -1019,18 +1008,6 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
-    sid       = "UpdateReportPublisherInlinePolicy"
-    actions   = ["iam:PutRolePolicy"]
-    resources = ["arn:aws:iam::${local.development_delivery_account_id}:role/toll-v2-report-publisher-dev"]
-  }
-
-  statement {
-    sid       = "UpdateReportGenerationFreshnessAlarm"
-    actions   = ["cloudwatch:PutMetricAlarm"]
-    resources = ["arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:toll-v2-report-generation-freshness-dev"]
-  }
-
-  statement {
     sid       = "ReadAlertsKeyForTimedChecks"
     actions   = ["kms:DescribeKey"]
     resources = [aws_kms_key.alerts.arn]
@@ -1081,7 +1058,7 @@ locals {
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 56, 67)
+      Statement = slice(local.development_delivery_policy_statements, 56, 65)
     })
   }
 }
@@ -1424,7 +1401,6 @@ data "aws_iam_policy_document" "development_plan" {
     actions = ["scheduler:GetSchedule", "scheduler:ListTagsForResource"]
     resources = concat(
       [
-        "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev",
         "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default",
       ],
       local.development_delivery_timed_schedule_arns,

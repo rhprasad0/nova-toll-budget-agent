@@ -139,7 +139,7 @@ resource "aws_cloudfront_function" "public_chat_routes" {
 resource "aws_cloudfront_function" "public_report_routes" {
   name    = "tollchat-v2-public-report-routes${local.suffix}"
   runtime = "cloudfront-js-2.0"
-  comment = "Resolve canonical TollChat report directories"
+  comment = "Resolve TollChat dashboard paths"
   publish = true
   code    = file("${path.module}/../agent/public-report-routes.js")
 }
@@ -440,7 +440,7 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   dynamic "ordered_cache_behavior" {
-    for_each = ["/tolls/*", "/usage.json", "/evals/*", "/evals.html", "/eval-dashboard*", "/evals.json", "/assets/evals*", "/cost-dashboard*", "/costs.html", "/costs.json", "/assets/costs*", "/robots.txt", "/sitemap.xml"]
+    for_each = ["/usage.json", "/evals/*", "/evals.html", "/eval-dashboard*", "/evals.json", "/assets/evals*", "/cost-dashboard*", "/costs.html", "/costs.json", "/assets/costs*", "/robots.txt"]
     content {
       allowed_methods        = ["GET", "HEAD"]
       cached_methods         = ["GET", "HEAD"]
@@ -727,7 +727,7 @@ resource "aws_cloudfront_distribution" "staging" {
   }
 
   dynamic "ordered_cache_behavior" {
-    for_each = ["/tolls/*", "/usage.json", "/evals/*", "/evals.html", "/eval-dashboard*", "/evals.json", "/assets/evals*", "/cost-dashboard*", "/costs.html", "/costs.json", "/assets/costs*", "/robots.txt", "/sitemap.xml"]
+    for_each = ["/usage.json", "/evals/*", "/evals.html", "/eval-dashboard*", "/evals.json", "/assets/evals*", "/cost-dashboard*", "/costs.html", "/costs.json", "/assets/costs*", "/robots.txt"]
     content {
       allowed_methods        = ["GET", "HEAD"]
       cached_methods         = ["GET", "HEAD"]

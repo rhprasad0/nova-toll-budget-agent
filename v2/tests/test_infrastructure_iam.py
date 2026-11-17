@@ -622,28 +622,15 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         ],
         "PassExistingAgentCoreRuntimeRole": ["iam:PassRole"],
         "PassTimedChecksSchedulerRole": ["iam:PassRole"],
-        "UpdateReportPublisherInlinePolicy": ["iam:PutRolePolicy"],
         "PassAgentCoreTraceLogsRole": ["iam:PassRole"],
         "PassAgentCoreTraceFirehoseRole": ["iam:PassRole"],
         "ManageAgentCoreTraceRuntimePolicy": ["iam:PutRolePolicy"],
     }
-    assert by_sid["UpdateReportPublisherInlinePolicy"]["resources"] == [
-        "arn:aws:iam::${local.development_delivery_account_id}:role/toll-v2-report-publisher-dev"
-    ]
-    assert by_sid["UpdateReportPublisherInlinePolicy"]["conditions"] == []
     assert by_sid["ManageAgentCoreTraceRuntimePolicy"] == {
         "sid": "ManageAgentCoreTraceRuntimePolicy",
         "actions": ["iam:PutRolePolicy"],
         "resources": [
             "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-agentcore-runtime-dev"
-        ],
-        "conditions": [],
-    }
-    assert by_sid["UpdateReportGenerationFreshnessAlarm"] == {
-        "sid": "UpdateReportGenerationFreshnessAlarm",
-        "actions": ["cloudwatch:PutMetricAlarm"],
-        "resources": [
-            "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:toll-v2-report-generation-freshness-dev"
         ],
         "conditions": [],
     }
@@ -811,7 +798,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         + name
         for name in (
             "/aws/lambda/toll-v2-pricing-loader-dev",
-            "/aws/lambda/toll-v2-report-publisher-dev",
             "/aws/lambda/tollchat-v2-chat-proxy-dev",
             "/aws/lambda/tollchat-v2-usage-publisher-dev",
             "/aws/lambda/nova-toll-v2-timed-checks-dev",
@@ -1084,7 +1070,7 @@ def _assert_application_roles_are_bootstrap_owned() -> None:
         "timed_checks.tf": TIMED_CHECKS_TF,
     }
     role_names = {
-        "main.tf": ("loader", "timed_checks", "publisher", "publisher_scheduler"),
+        "main.tf": ("loader", "timed_checks"),
         "agentcore.tf": ("tollchat_runtime", "tollchat_proxy"),
         "site.tf": (),
         "agent_measurement.tf": (),
@@ -1635,7 +1621,7 @@ DEVELOPMENT_PLAN_REFRESH_TUPLES = {
     "ReadApplicationSchedules": (
         ("scheduler:GetSchedule", "scheduler:ListTagsForResource"),
         (
-            'concat([ "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev", "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default", ], local.development_delivery_timed_schedule_arns)',
+            'concat([ "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default", ], local.development_delivery_timed_schedule_arns)',
         ),
         _NO_PLAN_CONDITIONS,
     ),
@@ -2373,26 +2359,6 @@ def test_development_delivery_direct_api_denials_are_resource_scoped() -> None:
         & all_actions
     )
     assert _statement_allows(
-        by_sid["UpdateReportPublisherInlinePolicy"],
-        "iam:PutRolePolicy",
-        "arn:aws:iam::${local.development_delivery_account_id}:role/toll-v2-report-publisher-dev",
-    )
-    assert not _statement_allows(
-        by_sid["UpdateReportPublisherInlinePolicy"],
-        "iam:PutRolePolicy",
-        "arn:aws:iam::903859731897:role/unrelated-dev",
-    )
-    assert _statement_allows(
-        by_sid["UpdateReportGenerationFreshnessAlarm"],
-        "cloudwatch:PutMetricAlarm",
-        "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:toll-v2-report-generation-freshness-dev",
-    )
-    assert not _statement_allows(
-        by_sid["UpdateReportGenerationFreshnessAlarm"],
-        "cloudwatch:PutMetricAlarm",
-        "arn:aws:cloudwatch:us-east-1:903859731897:alarm:unrelated-dev",
-    )
-    assert _statement_allows(
         by_sid["UpdateApplicationLambdaFunctions"],
         "lambda:UpdateFunctionCode",
         "local.development_delivery_lambda_resources",
@@ -2817,7 +2783,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded(
     ],
 ) -> None:
     statements = parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 67
+    assert len(statements) == 65
     expected_groups = {
         "state": (
             0,
@@ -2919,7 +2885,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded(
         ),
         "edge": (
             56,
-            67,
+            65,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -2929,8 +2895,6 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded(
                 "ReadManagedCloudFrontPolicy",
                 "ManageApplicationWaf",
                 "ReadDevelopmentCertificate",
-                "UpdateReportPublisherInlinePolicy",
-                "UpdateReportGenerationFreshnessAlarm",
                 "ReadAlertsKeyForTimedChecks",
             ],
         ),
@@ -2938,7 +2902,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded(
     rendered_documents, rendered_aggregate, _ = rendered_development_delivery_policies
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups) | {"telemetry"}
-    assert len(rendered_aggregate) == len(statements) == 67
+    assert len(rendered_aggregate) == len(statements) == 65
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
         "StringEquals": {"aws:RequestedRegion": "us-east-1"}
@@ -2958,18 +2922,6 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded(
     )
     assert rendered_by_sid["PassTimedChecksSchedulerRole"]["Condition"] == {
         "StringEquals": {"iam:PassedToService": "scheduler.amazonaws.com"}
-    }
-    assert rendered_by_sid["UpdateReportPublisherInlinePolicy"] == {
-        "Action": "iam:PutRolePolicy",
-        "Effect": "Allow",
-        "Resource": "arn:aws:iam::903859731897:role/toll-v2-report-publisher-dev",
-        "Sid": "UpdateReportPublisherInlinePolicy",
-    }
-    assert rendered_by_sid["UpdateReportGenerationFreshnessAlarm"] == {
-        "Action": "cloudwatch:PutMetricAlarm",
-        "Effect": "Allow",
-        "Resource": "arn:aws:cloudwatch:us-east-1:903859731897:alarm:toll-v2-report-generation-freshness-dev",
-        "Sid": "UpdateReportGenerationFreshnessAlarm",
     }
     temporary_sids = {
         "RetireUsagePublisherIam",

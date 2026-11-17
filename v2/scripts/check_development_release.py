@@ -55,7 +55,6 @@ _CANARY_DISCLAIMER_SUFFIX = re.compile(
 MAX_BODY = 8 * 1024 * 1024
 profile_functions = {
     "loader": ("toll-v2-pricing-loader-dev", "loader.zip"),
-    "publisher": ("toll-v2-report-publisher-dev", "publisher.zip"),
     "costs": ("tollchat-v2-cost-publisher-dev", "publisher.zip"),
     "tollchat_proxy": ("tollchat-v2-chat-proxy-dev", "chat-proxy.zip"),
 }
@@ -90,7 +89,6 @@ def configure(profile: str) -> None:
     profile_runtime_arn = f"arn:aws:bedrock-agentcore:us-east-1:{profile_account}:runtime/{profile_runtime}"
     profile_functions = {
         "loader": ("toll-v2-pricing-loader-dev", "loader.zip"),
-        "publisher": ("toll-v2-report-publisher-dev", "publisher.zip"),
         "costs": ("tollchat-v2-cost-publisher-dev", "publisher.zip"),
         "tollchat_proxy": ("tollchat-v2-chat-proxy-dev", "chat-proxy.zip"),
     }
@@ -105,7 +103,6 @@ def configure(profile: str) -> None:
     profile_runtime_arn = f"arn:aws:bedrock-agentcore:us-east-1:{profile_account}:runtime/{profile_runtime}"
     profile_functions = {
         "loader": ("toll-v2-pricing-loader", "loader.zip"),
-        "publisher": ("toll-v2-report-publisher", "publisher.zip"),
         "costs": ("tollchat-v2-cost-publisher", "publisher.zip"),
         "tollchat_proxy": ("tollchat-v2-chat-proxy", "chat-proxy.zip"),
     }

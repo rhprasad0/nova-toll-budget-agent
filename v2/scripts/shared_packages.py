@@ -13,7 +13,6 @@ from typing import Any, cast
 ACCOUNTS = {"development": "903859731897", "production": "920534282028"}
 FUNCTIONS = {
     "loader": ("toll-v2-pricing-loader", "loader.zip"),
-    "publisher": ("toll-v2-report-publisher", "publisher.zip"),
     "timed_checks": ("nova-toll-v2-timed-checks", "timed-checks.zip"),
     "costs": ("tollchat-v2-cost-publisher", "publisher.zip"),
 }

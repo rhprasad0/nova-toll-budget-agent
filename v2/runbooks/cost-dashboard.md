@@ -1,8 +1,8 @@
 # Billing cost dashboard
 
 `/cost-dashboard` reads the public, version 1 `/costs.json` snapshot. The scheduled
-publisher shares the report publisher's archive, but has its own Lambda and
-execution role. It has no database or model permissions.
+publisher ships in `publisher.zip` with its own Lambda and execution role. It has
+no database or model permissions.
 
 Development runs at **08:17 and 12:17 UTC** and combines its own AWS account's billing with
 OpenAI organization-wide costs. OpenAI includes all environments, not just development.

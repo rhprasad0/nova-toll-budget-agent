@@ -896,24 +896,12 @@ def main() -> None:
     )
     require('variable = "iam:PassedToService"', development_delivery)
     require('values   = ["scheduler.amazonaws.com"]', development_delivery)
-    require('sid       = "UpdateReportPublisherInlinePolicy"', development_delivery)
-    require('actions   = ["iam:PutRolePolicy"]', development_delivery)
-    require(
-        "arn:aws:iam::${local.development_delivery_account_id}:role/toll-v2-report-publisher-dev",
-        development_delivery,
-    )
-    require('sid       = "UpdateReportGenerationFreshnessAlarm"', development_delivery)
-    require('actions   = ["cloudwatch:PutMetricAlarm"]', development_delivery)
-    require(
-        "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:toll-v2-report-generation-freshness-dev",
-        development_delivery,
-    )
     require(
         "Statement = slice(local.development_delivery_policy_statements, 46, 56)",
         development_shards,
     )
     require(
-        "Statement = slice(local.development_delivery_policy_statements, 56, 67)",
+        "Statement = slice(local.development_delivery_policy_statements, 56, 65)",
         development_shards,
     )
 
@@ -953,7 +941,7 @@ def main() -> None:
             application_statements,
             deploy_documents,
         )
-    ) == ("f905c5e50a33561531e97913f91dd3d7637c6b803fa28e14f9abe30451002a9b")
+    ) == ("1406c4bee9ab4563cf5b82399f3c71976c81f46efa90871fa745225ec89f6124")
     production_locals = terraform_block(IAM, "locals", 3)
     for sid in (
         "ReadAgentCoreTraceSubscription",
@@ -974,7 +962,7 @@ def main() -> None:
         )
         assert production_policies_digest(
             rendered_production_policies(leaked_trace_sid)
-        ) != ("f905c5e50a33561531e97913f91dd3d7637c6b803fa28e14f9abe30451002a9b")
+        ) != ("1406c4bee9ab4563cf5b82399f3c71976c81f46efa90871fa745225ec89f6124")
     assert len(planner_documents) == 10
     assert len(planner_documents) <= 10
     assert set(planner_documents) == {
