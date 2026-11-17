@@ -4,6 +4,14 @@
     "base_url": "https://api.anthropic.com"
   },
   "resources": {
+    "./agents/docs.md": {
+      "kind": "agent",
+      "id": "agent_01N8SxzRnREt1Rzsu6LCRzPD",
+      "version": "1",
+      "hash": "45eb565ac4d82274b71368520ae0bde5",
+      "remote_hash": "bf1da04bd630a6b6654aeae8a5c4a60d",
+      "stamp": "1"
+    },
     "./agents/reviewer.md": {
       "kind": "agent",
       "id": "agent_011ssC4G41v97wCzCAjg8iQU",
@@ -26,6 +34,20 @@
       "hash": "76b5d14d5717dd901a6deb7bac190e5a",
       "remote_hash": "a18a3f68821e1e867d049c3d967b9ee9",
       "stamp": "2026-11-16T21:10:45.215718Z"
+    },
+    "./memory_stores/docs.yaml": {
+      "kind": "memory_store",
+      "id": "memstore_01YFjrSSYZ3i4A3ThX7uexv9",
+      "hash": "882b89408a8118bc156e7b2c43de38a8",
+      "remote_hash": "882b89408a8118bc156e7b2c43de38a8",
+      "stamp": "2026-11-17T21:16:57.484066Z"
+    },
+    "./vaults/docs-github.yaml": {
+      "kind": "vault",
+      "id": "vlt_011Ch9CGytbJYSdYMXCha8iG",
+      "hash": "e3348a1be523f5300fb511d6399aaf7e",
+      "remote_hash": "e3348a1be523f5300fb511d6399aaf7e",
+      "stamp": "2026-11-17T21:16:57.703947Z"
     },
     "./vaults/github.yaml": {
       "kind": "vault",
