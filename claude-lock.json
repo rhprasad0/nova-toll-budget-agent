@@ -7,10 +7,10 @@
     "./agents/docs.md": {
       "kind": "agent",
       "id": "agent_01N8SxzRnREt1Rzsu6LCRzPD",
-      "version": "1",
-      "hash": "45eb565ac4d82274b71368520ae0bde5",
-      "remote_hash": "bf1da04bd630a6b6654aeae8a5c4a60d",
-      "stamp": "1"
+      "version": "2",
+      "hash": "1d184debcb5272bfcae466e9d9033208",
+      "remote_hash": "2c49526e4db6f7a853d15723cd61a107",
+      "stamp": "2"
     },
     "./agents/reviewer.md": {
       "kind": "agent",
@@ -27,6 +27,13 @@
       "hash": "08f9e7be38e49493f522ad35f58b0bcb",
       "remote_hash": "4ed3a8dedac6d129d1aac9d99b2aa0d3",
       "stamp": "3"
+    },
+    "./deployments/docs.yaml": {
+      "kind": "deployment",
+      "id": "depl_01K3PwTB9u29yFfz9tAJKPfp",
+      "hash": "a1967095cb52d58f3779fd27f1997edc",
+      "remote_hash": "a1967095cb52d58f3779fd27f1997edc",
+      "stamp": "2026-11-17T21:21:11.249819Z"
     },
     "./environments/tollchat.yaml": {
       "kind": "environment",
