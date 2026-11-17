@@ -6,13 +6,11 @@ account scopes, failure behavior, and development-first rollout checks.
 Trusted development planning runs automatically in PR and merge-queue CI. Its
 reusable plan validates the event-derived candidate and runs a read-only
 Terraform plan in the reviewer-free `development-plan` environment; it never
-applies Terraform. Development application delivery does not run on merge. It
-delivers the tip of `main` nightly at 08:17 UTC, or on demand with
-`gh workflow run v2-development-delivery.yml --ref main`. It uses exact CI
-admission, one saved plan, fixed development migrations, application apply, and
-readiness gates. Workflow-level concurrency runs one delivery at a time; a newer
-pending run replaces an older pending one. GitHub disables schedules in a public
-repository after 60 days without activity; re-enable the workflow if that happens.
+applies Terraform. Development application delivery runs on every push to
+`main`, or on demand with `gh workflow run v2-development-delivery.yml --ref main`.
+It uses exact CI admission, one saved plan, fixed development migrations,
+application apply, and readiness gates. Workflow-level concurrency runs one
+delivery at a time; a newer pending run replaces an older pending one.
 
 The PR plan keeps Terraform and its checker on trusted `main`. It stages the
 candidate's `public-report-routes.js` as data only after checking its digest
@@ -37,11 +35,11 @@ The secret-bearing manual
 `github.ref == 'refs/heads/main' && github.actor_id == '91573985' && github.triggering_actor == github.actor`.
 Only reruns initiated by that original actor may reach the
 development environment credentials. This owner-ID gate is separate from the
-reviewer-free `development` environment and does not change the nightly
+reviewer-free `development` environment and does not change the push
 delivery path. Its credentialed deploy job requires
 this exact predicate:
 `vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor`,
-without restricting scheduled or dispatched `main` runs by owner ID.
+without restricting pushed or dispatched `main` runs by owner ID.
 
 To stop development delivery, first delete that repository variable (or set it to
 literal `false`) with
@@ -58,7 +56,7 @@ step touches production.
 
 PRs use disposable PostGIS migration validation only; the checks are
 credential-free and never access or mutate deployed databases or schemas. The
-nightly delivery path is separate from the explicit manual development
+push delivery path is separate from the explicit manual development
 migration workflow, which may be dispatched from `refs/heads/main` for the
 fixed development target and accepts no arbitrary target or migration-path
 inputs. See the [protected development migration workflow](#protected-development-migration-workflow-305-slice-3)
@@ -83,7 +81,7 @@ below. The one-time baseline adoption is complete. Application release
 artifacts alone do not authorize or execute schema changes.
 
 Admission compares the tip of `main` with the last successful delivery run
-(push runs from before nightly delivery count). If the tip is that commit, or
+(scheduled runs from the nightly period count). If the tip is that commit, or
 everything since is Markdown not pinned in
 `infra/development-release-manifest.json`, the run is admitted but not built or
 deployed. The only Markdown that reaches a package or the release bundle is the
@@ -91,9 +89,9 @@ pinned agent SOP, so such a run changes nothing that runs. A skipped run ends
 after admission and leaves no release evidence. Production admission uses the
 earliest successful delivery run of the exact release commit and needs its
 evidence. It rejects a commit that was never delivered, so before publishing a
-release, dispatch a delivery on that `main` tip or tag a commit a nightly run
-delivered. If a delivery fails and nothing merges, the next night retries the
-same commit and fails at the retained release artifact. Re-run the failed run's
+release, dispatch a delivery on that `main` tip or tag a commit a delivery run
+delivered. If a delivery fails, a dispatched retry of the same commit fails at the
+retained release artifact. Re-run the failed run's
 jobs instead. Never use "Re-run all jobs" on a successful delivery: its build
 fails at the retained artifact, the run turns to failure, and that commit can
 neither deliver nor release until a new commit merges.

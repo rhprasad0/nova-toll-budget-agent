@@ -79,9 +79,8 @@ class FakeAPI:
             103: [_job("scan", 103, SHA)],
             900: [_job("Admit exact main delivery", 900, SHA)],
         }
-        self.current = _run(SHA, 900, number=9, event="schedule")
+        self.current = _run(SHA, 900, number=9, event="push")
         self.current.update(status="in_progress", conclusion=None, path=DELIVERY_PATH)
-        # The last push-era delivery is the first nightly predecessor.
         self.history = [_run(BEFORE, 800, number=8)]
         self.descendant: dict[str, object] | None = None
         self.compare_status = "ahead"
@@ -137,14 +136,15 @@ def test_exact_sha_evidence_is_admitted() -> None:
 @pytest.mark.parametrize(
     ("event_name", "ref", "accepted"),
     [
-        ("schedule", "refs/heads/main", True),
+        ("push", "refs/heads/main", True),
         ("workflow_dispatch", "refs/heads/main", True),
         ("workflow_dispatch", "refs/heads/feature", False),
-        ("push", "refs/heads/main", False),
+        ("push", "refs/heads/feature", False),
+        ("schedule", "refs/heads/main", False),
         ("pull_request", "refs/pull/1/merge", False),
     ],
 )
-def test_only_scheduled_or_dispatched_main_runs_deliver(
+def test_only_pushed_or_dispatched_main_runs_deliver(
     event_name: str, ref: str, accepted: bool
 ) -> None:
     if accepted:
@@ -516,7 +516,7 @@ def test_main_resolves_predecessor_and_skips_only_when_nothing_deployable_change
     monkeypatch.setattr(admission, "GitHubAPI", fake_api)
     monkeypatch.setattr(admission, "admit", admitted)
 
-    def run(candidate: str, event: str = "schedule") -> tuple[int, str]:
+    def run(candidate: str, event: str = "push") -> tuple[int, str]:
         api.current["head_sha"] = candidate
         api.history = [_run(delivered, 800, number=8)]
         status = admission.main(
@@ -536,7 +536,7 @@ def test_main_resolves_predecessor_and_skips_only_when_nothing_deployable_change
         return status, capsys.readouterr().out.strip()
 
     for candidate, expected in (
-        (delivered, "not-required"),  # Quiet night: already delivered.
+        (delivered, "not-required"),  # Already delivered.
         (docs, "not-required"),  # Only unpinned Markdown since.
         (code, "required"),
     ):
@@ -544,16 +544,16 @@ def test_main_resolves_predecessor_and_skips_only_when_nothing_deployable_change
         assert status == 0
         assert _workflow_parse(line) == (delivered, expected)
 
-    assert run(code, "push") == (1, "")
+    assert run(code, "schedule") == (1, "")
     api.compare_status = "diverged"
     assert run(code) == (1, "")
     assert _workflow_parse("development admission accepted: sha=x") is None
 
 
-def test_delivery_runs_only_on_schedule_or_dispatch_one_at_a_time() -> None:
+def test_delivery_runs_only_on_push_or_dispatch_one_at_a_time() -> None:
     workflow = yaml.safe_load((ROOT / DELIVERY_PATH).read_text())
     triggers = workflow[True]  # PyYAML reads the bare `on` key as True.
-    assert set(triggers) == {"schedule", "workflow_dispatch"}
+    assert triggers == {"push": {"branches": ["main"]}, "workflow_dispatch": None}
     assert workflow["concurrency"] == {
         "group": "v2-development-delivery-${{ github.ref }}",
         "cancel-in-progress": False,
