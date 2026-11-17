@@ -629,7 +629,6 @@ def test_development_checks_current_attempt_evidence_status_and_bundle_metadata(
             }
             return {
                 "workflow_runs": [
-                    # A later quiet-night no-op of the same SHA has no evidence.
                     {**delivered, "id": 20, "run_number": 9, "event": "schedule"},
                     delivered,
                     {**delivered, "id": 11, "run_number": 4, "conclusion": "failure"},

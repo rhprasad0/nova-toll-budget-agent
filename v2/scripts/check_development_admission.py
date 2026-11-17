@@ -19,7 +19,6 @@ from typing import Any, cast
 
 SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 DELIVERY_WORKFLOW = "v2-development-delivery.yml"
-# Scheduled runs stay valid history from the nightly period.
 DELIVERY_EVENTS = ("push", "schedule", "workflow_dispatch")
 TRIGGER_EVENTS = ("push", "workflow_dispatch")
 REQUIRED_WORKFLOWS: dict[str, tuple[str, ...]] = {

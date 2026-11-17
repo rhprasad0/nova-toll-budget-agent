@@ -26,7 +26,6 @@ from scripts.check_development_release import _canary_contract
 REPOSITORY = "rhprasad0/nova-toll-budget-agent"
 LISTENER_WORKFLOW = ".github/workflows/v2-production-release.yml"
 DEVELOPMENT_WORKFLOW = ".github/workflows/v2-development-delivery.yml"
-# Schedule runs are the history from nightly delivery; recovery still reads them.
 DEVELOPMENT_EVENTS = ("push", "schedule", "workflow_dispatch")
 PRODUCTION_ENVIRONMENT = "production-release"
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
