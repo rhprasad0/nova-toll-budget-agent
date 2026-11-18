@@ -105,7 +105,7 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      postgres_retained:
+      postgres-retained:
         image: postgis/postgis:17-3.5
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
@@ -118,7 +118,7 @@ jobs:
       PGHOST: postgres
       PGPORT: 5432
       PGUSER: postgres
-      RETAINED_PGHOST: postgres_retained
+      RETAINED_PGHOST: postgres-retained
       RETAINED_PGPORT: 5432
       DATABASE_PROFILE: full
     steps:
@@ -129,7 +129,7 @@ jobs:
         env:
           SCHEMA_BASE_REF: ${{ github.event.pull_request.base.sha }}
           POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
-          RETAINED_POSTGRES_CONTAINER_ID: ${{ job.services.postgres_retained.id }}
+          RETAINED_POSTGRES_CONTAINER_ID: ${{ job.services.postgres-retained.id }}
           DISPOSABLE_DOCKER_NETWORK: container:${{ job.container.id }}
 
   factory:
