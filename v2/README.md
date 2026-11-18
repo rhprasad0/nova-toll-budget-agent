@@ -95,7 +95,9 @@ to use the [protected production migration component](RUNBOOK.md#protected-produ
 
 ## Verify the build
 
-Install Node.js (the version `.github/workflows/ci.yml` pins) and uv, then run the setup script in each clone or
+Install Node.js and uv (the versions `factory/agent/Dockerfile` pins), or run any
+command in the toolchain image CI uses with `v2/scripts/toolchain.sh COMMAND`.
+Then run the setup script in each clone or
 new worktree (Linux amd64/arm64). It installs the locked development tools and
 the pinned checkers into `~/.local/bin`, enables the Git hooks, and runs the
 static checks:

@@ -1,4 +1,6 @@
+import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -92,3 +94,43 @@ def test_toolchain_pins_outside_the_image_match_its_args() -> None:
                 f"{path.relative_to(ROOT)} records Terraform {version}; "
                 f"use {expected['terraform_version']} from factory/agent/Dockerfile"
             )
+
+
+def run_wrapper(tmp_path: Path, security: str) -> list[str]:
+    tmp_path.mkdir()
+    socket = tmp_path / "docker.sock"
+    socket.touch()
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "docker").write_text(
+        "#!/usr/bin/env bash\n"
+        f'case "$1" in context) echo unix://{socket} ;; info) echo "{security}" ;;\n'
+        '  run) printf "%s\\n" "$@" ;; esac\n'
+    )
+    (fake / "docker").chmod(0o755)
+    result = subprocess.run(
+        [str(ROOT / "v2/scripts/toolchain.sh")],
+        cwd=ROOT,
+        env={**os.environ, "PATH": f"{fake}:{os.environ['PATH']}"},
+        capture_output=True,
+        text=True,
+        check=True,
+        stdin=subprocess.DEVNULL,
+    )
+    return result.stdout.splitlines()
+
+
+def test_toolchain_wrapper_runs_the_ci_digest_on_the_checkout(tmp_path: Path) -> None:
+    digest: str = jobs("ci.yml")["v2-loader"]["container"]["image"]
+    for security, user in (
+        ("[name=seccomp name=rootless]", ["--user", "0:0"]),
+        ("[name=seccomp]", ["--user", f"{os.getuid()}:{os.getgid()}"]),
+    ):
+        args = run_wrapper(tmp_path / user[1].replace(":", "-"), security)
+        assert args[-2:] == [digest, "bash"]
+        assert args[args.index("--user") : args.index("--user") + 2] == user
+        assert f"{ROOT}:{ROOT}" in args
+        assert args[args.index("--workdir") + 1] == str(ROOT)
+        assert any(arg.endswith(":/var/run/docker.sock") for arg in args)
+        assert f"UV_PROJECT_ENVIRONMENT={ROOT}/v2/.venv-toolchain" in args
+        assert "--privileged" not in args
