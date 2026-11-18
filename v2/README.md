@@ -118,7 +118,7 @@ JavaScript compilation is required.
 The tests also shell out to `jq`, `xxd`, `zip` and `unzip` (on Debian, the
 packages of the same names) and stop at startup if one is missing. GitHub's
 runners ship them; a bare container image does not. The full suite also needs
-Terraform (the version `ci.yml` pins): some of its tests fail without it and others skip. Tests
+Terraform (`TERRAFORM_VERSION` in `factory/agent/Dockerfile`): some of its tests fail without it and others skip. Tests
 that need Gitleaks, Docker or `psql` skip without them, so a skip locally can
 still be a failure in CI.
 

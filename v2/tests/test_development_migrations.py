@@ -562,6 +562,13 @@ def test_psql_include_path_opens_exact_file(tmp_path: Path) -> None:
     assert running.stdout.strip() == "true"
     if os.environ.get("DISPOSABLE_DOCKER_NETWORK"):
         host, port = os.environ["PGHOST"], os.environ["PGPORT"]
+        aliases = subprocess.run(
+            [docker, "inspect", "--format",
+             "{{range .NetworkSettings.Networks}}{{join .Aliases \" \"}} {{end}}",
+             container],
+            capture_output=True, text=True, check=True,
+        ).stdout.split()  # fmt: skip
+        assert host in {"127.0.0.1", "localhost", *aliases}
     else:
         published = subprocess.run(
             [docker, "port", container, "5432/tcp"],

@@ -29,18 +29,20 @@ def test_ci_workers_use_separate_targets_and_fail_if_either_fails(
         "#!/usr/bin/env bash\nset -eu\n"
         'echo "worker=$DB_CONTRACT_IDENTITY"\n'
         'if [[ "$DB_CONTRACT_IDENTITY" == retained ]]; then\n'
-        '  test "$PGPORT:$POSTGRES_CONTAINER_ID" = 5433:retained\n'
+        '  test "$PGHOST:$PGPORT:$POSTGRES_CONTAINER_ID" = retained-host:5433:retained\n'
         '  exit "$RETAINED_EXIT"\n'
         "fi\n"
-        'test "$PGPORT:$POSTGRES_CONTAINER_ID" = 5432:candidate\n'
+        'test "$PGHOST:$PGPORT:$POSTGRES_CONTAINER_ID" = candidate-host:5432:candidate\n'
         'exit "$CANDIDATE_EXIT"\n'
     )
     runner.chmod(0o755)
     result = subprocess.run(
         [str(verify), "database", "base"],
         env={
-            **os.environ,
+            **{k: v for k, v in os.environ.items() if not k.startswith("RETAINED_PG")},
             "DATABASE_PROFILE": profile,
+            "PGHOST": "candidate-host",
+            "RETAINED_PGHOST": "retained-host",
             "PGPORT": "5432",
             "POSTGRES_CONTAINER_ID": "candidate",
             "RETAINED_POSTGRES_CONTAINER_ID": "retained",

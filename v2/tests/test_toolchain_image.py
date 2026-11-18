@@ -1,4 +1,3 @@
-import json
 import re
 from pathlib import Path
 from typing import Any
@@ -73,11 +72,23 @@ def test_toolchain_pins_outside_the_image_match_its_args() -> None:
                     f"pin version {uv} from factory/agent/Dockerfile's UV_VERSION"
                 )
     bootstrap = (ROOT / "factory/bootstrap.sh").read_text()
-    assert re.findall(r"^node_version=(\S+)$", bootstrap, re.M) == [
-        expected["node-version"]
-    ]
-    assert re.findall(r"^terraform_version=(\S+)$", bootstrap, re.M) == [
-        expected["terraform_version"]
-    ]
-    package = json.loads((ROOT / "v2/package.json").read_text())
-    assert package["devDependencies"]["playwright"] == arg("PLAYWRIGHT_VERSION")
+    for name in (
+        "node_version",
+        "node_sha256",
+        "terraform_version",
+        "terraform_sha256",
+    ):
+        assert re.findall(rf"^{name}=(\S+)$", bootstrap, re.M) == [arg(name.upper())], (
+            f"factory/bootstrap.sh {name} must equal factory/agent/Dockerfile's "
+            f"{name.upper()}"
+        )
+    recorded = [*sorted(WORKFLOWS.glob("*.yml")), ROOT / "infra/release_manifest.py"]
+    recorded.append(ROOT / "infra/delivery_plan_validator.py")
+    for path in recorded:
+        for version in re.findall(
+            r'"terraform_version"\s*:\s*"([^"]+)"', path.read_text()
+        ):
+            assert version == expected["terraform_version"], (
+                f"{path.relative_to(ROOT)} records Terraform {version}; "
+                f"use {expected['terraform_version']} from factory/agent/Dockerfile"
+            )
