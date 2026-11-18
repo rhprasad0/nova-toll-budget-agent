@@ -119,3 +119,23 @@ def test_anchors_follow_github_slugs() -> None:
         "a-b-c",
         "a-b-c-1",
     }
+
+
+def test_readme_leads_with_the_factory() -> None:
+    """The README sells the factory first; TollChat is the product it builds."""
+    readme = (REPO_ROOT / "README.md").read_text()
+    prose = strip_fences(readme)
+    intro = prose.split("\n## ", 1)[0]
+    assert intro.startswith("# TollChat"), "Keep TollChat as the README title."
+    assert "factory" in intro.lower(), "Name the factory before the first '##'."
+    headings = re.findall(r"^## +(.+?) *$", prose, re.MULTILINE)
+    factory = [i for i, h in enumerate(headings) if "factory" in h.lower()]
+    assert factory and factory[0] == 0, "Make a factory section the first '##'."
+    for path in (
+        "factory/host/guard.py",
+        "factory/agents/",
+        "factory/sandbox/egress.nft",
+        "factory/host/dispatcher.py",
+        ".github/scripts/verify.sh",
+    ):
+        assert f"]({path})" in readme, f"Link {path} from the factory section."
