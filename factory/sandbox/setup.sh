@@ -113,6 +113,7 @@ for user in "${!ports[@]}"; do
   as_user "$user" systemctl --user restart docker.service
   as_user "$user" systemctl --user enable --now factory-sessions-clean.timer
   as_user "$user" docker pull --quiet postgis/postgis:17-3.5 >/dev/null
+  as_user "$user" docker pull --quiet "$(sed -n '1s/^FROM //p' "$here/Dockerfile")" >/dev/null
   build="$(mktemp -d)"
   cp "$here/Dockerfile" "$build/"
   install -m 644 /etc/factory-sandbox/mitm-ca.pem "$build/mitmproxy-ca-cert.pem"

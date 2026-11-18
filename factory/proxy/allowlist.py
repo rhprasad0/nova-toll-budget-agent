@@ -16,6 +16,8 @@
   the API), so a sandbox can push without holding it; without it they go anonymous.
 - Run with `--set rawtcp=false`, so traffic that is not HTTP is dropped instead of
   relayed past these checks.
+- The checks and credential changes run in `requestheaders`, before mitmproxy sends
+  anything upstream, so they hold when `stream_large_bodies` streams a request body.
 - Every flow is appended to /state/flows/flows.jsonl, tagged with the current job id,
   with Anthropic's rate-limit headers (never credentials) on API responses.
 """
@@ -129,7 +131,7 @@ def http_connect(flow: Flow) -> None:
         _log(flow, allowed=False, kind="connect")
 
 
-def request(flow: Flow) -> None:
+def requestheaders(flow: Flow) -> None:
     if _is_telemetry(flow):
         return
     req = flow.request

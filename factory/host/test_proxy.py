@@ -43,6 +43,10 @@ with open("/tmp/echo.pem", "wb") as f:
             serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
 
 class Echo(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("content-length", 0)))
+        self.do_GET()
+
     def do_GET(self):
         body = json.dumps({"path": self.path, "headers": dict(self.headers)}).encode()
         self.send_response(200)
@@ -109,7 +113,7 @@ def connect(host, port):
     s.sendall(f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n".encode())
     return s, status(head(s))
 
-def https(host, path, host_header=None):
+def https(host, path, host_header=None, body=b""):
     s, code = connect(host, 443)
     if code != 200:
         return {"status": code}
@@ -117,8 +121,11 @@ def https(host, path, host_header=None):
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
     t = context.wrap_socket(s, server_hostname=host)
-    t.sendall((f"GET {path} HTTP/1.1\r\nHost: {host_header or host}\r\n"
-               "Authorization: Bearer from-the-sandbox\r\nConnection: close\r\n\r\n").encode())
+    method = "POST" if body else "GET"
+    t.sendall((f"{method} {path} HTTP/1.1\r\nHost: {host_header or host}\r\n"
+               f"Content-Length: {len(body)}\r\n"
+               "Authorization: Bearer from-the-sandbox\r\nConnection: close\r\n\r\n").encode()
+              + body)
     return parse(rest(t))
 
 def plain(url, host_header):
@@ -133,6 +140,8 @@ for name, (kind, *args) in cases.items():
         results[name] = {"status": connect(*args)[1]}
     elif kind == "https":
         results[name] = https(*args)
+    elif kind == "post":
+        results[name] = https(args[0], args[1], None, b"x" * 4096)
     else:
         results[name] = plain(*args)
 print(json.dumps(results))
@@ -157,9 +166,12 @@ CASES: dict[str, list[Any]] = {
     "repository": ["https", "github.com", REPOSITORY + ".git/info/refs"],
     "repository_api": ["https", "api.github.com", "/repos" + REPOSITORY + "/issues"],
     "other_repository_api": ["https", "api.github.com", "/repos/someone/repo"],
+    "repository_push": ["post", "github.com", REPOSITORY + "/git-receive-pack"],
+    "other_repository_push": ["post", "github.com", "/someone/repo/git-receive-pack"],
 }
 ALLOWED = {
     "anthropic", "pypi", "cloudflare_release", "rds_bundle", "repository", "repository_api",
+    "repository_push",
 }  # fmt: skip
 
 
@@ -186,13 +198,18 @@ def results() -> Iterator[dict[str, Any]]:
         docker("run", "--detach", "--name", f"{tag}-echo", "--network", tag,
                *[a for alias in aliases for a in ("--network-alias", alias)],
                "--entrypoint", "python3", MITMPROXY, "-c", ECHO)  # fmt: skip
-        command = proxy_command()
-        proxies = {
-            "subscription": ["--env", f"CLAUDE_CODE_OAUTH_TOKEN={TOKEN}"],
-            "sandbox-read": [],
-            "sandbox-write": ["--env", f"GITHUB_TOKEN={GITHUB_TOKEN}"],
+        proxies: dict[str, tuple[list[str], list[str]]] = {
+            "subscription": (
+                ["--env", f"CLAUDE_CODE_OAUTH_TOKEN={TOKEN}"],
+                proxy_command(),
+            ),
+            "sandbox-read": ([], sandbox_proxy_command()),
+            "sandbox-write": (
+                ["--env", f"GITHUB_TOKEN={GITHUB_TOKEN}"],
+                sandbox_proxy_command(),
+            ),
         }
-        for name, env in proxies.items():
+        for name, (env, command) in proxies.items():
             docker("run", "--detach", "--name", f"{tag}-{name}", "--network", tag,
                    "--network-alias", name, "--tmpfs", "/state/flows:mode=1777",
                    *env, f"{tag}:test", *command, "--set", "ssl_insecure=true")  # fmt: skip
@@ -220,9 +237,18 @@ def proxy_command() -> list[str]:
     return [line.strip()[2:] for line in block.group(1).splitlines()]
 
 
+def sandbox_proxy_command() -> list[str]:
+    """The sandbox proxies' command exactly as sandbox/compose.yaml runs it."""
+    text = (dispatcher.FACTORY / "sandbox/compose.yaml").read_text()
+    block = re.search(r"  command:\n((?:    - .+\n)+)", text)
+    assert block
+    return [line.strip()[2:] for line in block.group(1).splitlines()]
+
+
 def test_compose_drops_traffic_that_is_not_http() -> None:
-    command = proxy_command()
-    assert command[command.index("--set") + 1] == "rawtcp=false"
+    for command in (proxy_command(), sandbox_proxy_command()):
+        assert command[command.index("--set") + 1] == "rawtcp=false"
+    assert "stream_large_bodies=1" in sandbox_proxy_command()
 
 
 def authorization(result: dict[str, Any]) -> str | None:
@@ -255,6 +281,8 @@ def test_sandbox_proxies_pass_the_worker_key_and_hold_the_github_token(
         assert results[proxy]["repository"]["status"] == 200, proxy
         assert authorization(results[proxy]["repository"]) == git, proxy
         assert authorization(results[proxy]["repository_api"]) == api, proxy
+        assert results[proxy]["repository_push"]["status"] == 200, proxy
+        assert authorization(results[proxy]["repository_push"]) == git, proxy
 
 
 @pytest.mark.parametrize("name", [n for n in CASES if n not in ALLOWED])

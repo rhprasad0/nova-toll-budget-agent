@@ -7,6 +7,8 @@ x-proxy: &proxy
     - mitmdump
     - --set
     - rawtcp=false
+    - --set
+    - stream_large_bodies=1
     - --mode
     - regular@8080
     - --ignore-hosts
