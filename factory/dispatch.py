@@ -629,12 +629,28 @@ def wait_for_idle(
     return None, None
 
 
+def messages(client: Sdk, session_id: str, limit: int) -> list[str]:
+    return [
+        "\n".join(b.text for b in event.content if b.type == "text").strip()
+        for event in client.beta.sessions.events.list(
+            session_id, types=["agent.message"], order="desc", limit=limit
+        )
+    ]
+
+
 def final_message(client: Sdk, session_id: str) -> str:
-    for event in client.beta.sessions.events.list(
-        session_id, types=["agent.message"], order="desc", limit=1
-    ):
-        return "\n".join(b.text for b in event.content if b.type == "text").strip()
-    return ""
+    return next(iter(messages(client, session_id, 1)), "")
+
+
+def latest_spec(client: Sdk, session_id: str) -> str:
+    return next(
+        (
+            text
+            for text in messages(client, session_id, 50)
+            if text.startswith(SPEC_HEADING)
+        ),
+        "",
+    )
 
 
 def wait_for_checks(
@@ -774,7 +790,10 @@ def watch_plan(run: Run, minutes: int) -> str:
         result, status = "blocked", "stopped before it finished a spec"
     elif rubric != "satisfied" or not spec.startswith(SPEC_HEADING):
         result, status = "flawed", "finished without a spec that passed its rubric"
-        extra += draft("Last draft", spec)
+        last_spec = latest_spec(run.client, run.session_id)
+        extra += draft("Last spec draft", last_spec)
+        if spec != last_spec:
+            extra += draft("Final message", spec)
     elif len(spec) > BODY_LIMIT:
         result, status = "flawed", "wrote a spec too long to post"
         extra += draft("Last draft", spec)
