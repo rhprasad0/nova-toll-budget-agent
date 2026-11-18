@@ -1,5 +1,5 @@
 [Unit]
-Description=Remove week-old TollChat factory session workdirs for %i daily
+Description=Remove leftover TollChat factory sessions for %i daily
 
 [Timer]
 OnCalendar=daily

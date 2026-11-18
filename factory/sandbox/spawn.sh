@@ -11,7 +11,7 @@ proxy=(--env "HTTPS_PROXY=$FACTORY_PROXY" --env "HTTP_PROXY=$FACTORY_PROXY"
   --env "https_proxy=$FACTORY_PROXY" --env "http_proxy=$FACTORY_PROXY")
 
 cleanup() {
-  docker rm --force "$name" "$name-postgres" "$name-retained" >/dev/null 2>&1 || true
+  docker rm --force --volumes "$name" "$name-postgres" "$name-retained" >/dev/null 2>&1 || true
   docker network rm "$name" >/dev/null 2>&1 || true
 }
 

@@ -58,6 +58,7 @@ if [[ "$(/usr/local/bin/ant --version 2>/dev/null)" != *"$ant_version"* ]]; then
   rm -f "$archive"
 fi
 install -D -m 755 -o root -g root "$here/spawn.sh" /usr/local/libexec/factory-spawn
+install -D -m 755 -o root -g root "$here/clean.sh" /usr/local/libexec/factory-clean
 
 for user in "${!ports[@]}"; do
   getent passwd "$user" >/dev/null || useradd --create-home --shell /bin/bash "$user"
