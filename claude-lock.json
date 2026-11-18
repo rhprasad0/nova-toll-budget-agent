@@ -7,33 +7,47 @@
     "./agents/docs.md": {
       "kind": "agent",
       "id": "agent_01N8SxzRnREt1Rzsu6LCRzPD",
-      "version": "2",
-      "hash": "1d184debcb5272bfcae466e9d9033208",
-      "remote_hash": "2c49526e4db6f7a853d15723cd61a107",
-      "stamp": "2"
+      "version": "3",
+      "hash": "3ff3aed529a16625a1705f07b6bc3868",
+      "remote_hash": "4c79278450961ed82a1836c5e59bda9a",
+      "stamp": "3"
     },
     "./agents/reviewer.md": {
       "kind": "agent",
       "id": "agent_011ssC4G41v97wCzCAjg8iQU",
-      "version": "1",
-      "hash": "d7ac5cadd62086aab26f5a490e56dbcb",
-      "remote_hash": "230e316291e3b08f702a20d3d8b97c91",
-      "stamp": "1"
+      "version": "2",
+      "hash": "f95073c37799384e055d10988f064e83",
+      "remote_hash": "63508e7a61fcf2d90fb73fa45fcf18c0",
+      "stamp": "2"
     },
     "./agents/worker.md": {
       "kind": "agent",
       "id": "agent_01Y8aT4NryjgTqtipBqBssyY",
-      "version": "3",
-      "hash": "08f9e7be38e49493f522ad35f58b0bcb",
-      "remote_hash": "4ed3a8dedac6d129d1aac9d99b2aa0d3",
-      "stamp": "3"
+      "version": "4",
+      "hash": "875199311df09e0583288bc6f1989bfc",
+      "remote_hash": "bf0702ba701e96d4b6e0f2f68d9b35ee",
+      "stamp": "4"
     },
     "./deployments/docs.yaml": {
       "kind": "deployment",
       "id": "depl_01K3PwTB9u29yFfz9tAJKPfp",
-      "hash": "a1967095cb52d58f3779fd27f1997edc",
-      "remote_hash": "a1967095cb52d58f3779fd27f1997edc",
-      "stamp": "2026-11-17T21:21:11.249819Z"
+      "hash": "55afba265934ea3d97f49dcda0dba1ab",
+      "remote_hash": "55afba265934ea3d97f49dcda0dba1ab",
+      "stamp": "2026-11-18T18:35:52.702091Z"
+    },
+    "./environments/tollchat-box-read.yaml": {
+      "kind": "environment",
+      "id": "env_01LmwXcuLPzGxoDS8LdVxCE7",
+      "hash": "3980ef6c785cd34036f54f8ee25c7ed8",
+      "remote_hash": "224f72865cb9dcd91b932652f92bc27c",
+      "stamp": "2026-11-18T18:35:51.736366Z"
+    },
+    "./environments/tollchat-box-write.yaml": {
+      "kind": "environment",
+      "id": "env_01Kn446Kycj5HTnkVFnaXriT",
+      "hash": "dfef0a6db6a50ae31e186e9208b52782",
+      "remote_hash": "7f5bc28eae5ff8bf1243b23edabfaaa7",
+      "stamp": "2026-11-18T18:35:51.951365Z"
     },
     "./environments/tollchat.yaml": {
       "kind": "environment",
