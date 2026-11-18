@@ -28,6 +28,8 @@ RUN npx --yes "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium fi
  && chmod -R a+rX /opt/ms-playwright && rm -rf /root/.npm
 
 
+RUN git config --system --add safe.directory '*'
+
 RUN useradd --create-home --uid 1000 agent \
  && mkdir -p /work && chown agent:agent /work
 

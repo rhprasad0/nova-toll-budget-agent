@@ -179,7 +179,7 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-      options: --user root
+      options: --user 1001
     defaults:
       run:
         working-directory: v2
