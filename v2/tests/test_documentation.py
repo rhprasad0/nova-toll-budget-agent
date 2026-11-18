@@ -11,7 +11,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 JOURNAL = "v2/journal/pages/"
-FACTORY_DEFINITIONS = ("factory/agents/", "factory/rubrics/")
+FACTORY_DEFINITIONS = ("factory/agents/",)
 
 
 def tracked_markdown() -> list[str]:

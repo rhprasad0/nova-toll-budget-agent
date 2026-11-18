@@ -25,15 +25,6 @@ LOCK = {
         dispatch.VAULT_KEY: {"id": "vlt_1"},
     },
 }
-SPEC_TEXT = "## Factory spec\n\nFix the loader."
-REPORT: dict[str, Any] = {
-    "id": 10,
-    "body": "The factory's session wrote the spec below.\n\n"
-    f"{dispatch.SPEC_OUTCOME} · rubric: `satisfied`\n\n{SPEC_TEXT}",
-    "user": {"login": dispatch.REPORTER},
-    "created_at": "2026-11-17T11:00:00Z",
-}
-LABELED_AT = "2026-11-17T12:00:00Z"
 HEAD = "a" * 40
 PR_BODY = "Closes #799\n\nVerified: pytest"
 
@@ -69,24 +60,15 @@ def passing(seen: tuple[Any, Any]) -> tuple[Any, Any, bool]:
 
 
 def phase(
-    idle_id: str | None,
-    rubric: str | None = "satisfied",
-    stop: str = "end_turn",
-    status: str = "idle",
-    explanation: str = "",
+    idle_id: str | None, stop: str = "end_turn", status: str = "idle"
 ) -> tuple[Any, Any]:
-    outcomes = [] if rubric is None else [ns(result=rubric, explanation=explanation)]
-    session = ns(
-        status=status,
-        outcome_evaluations=outcomes,
-        usage=ns(list_cost=ns(amount="412", currency="USD")),
-    )
+    session = ns(status=status, usage=ns(list_cost=ns(amount="412", currency="USD")))
     idle = None if idle_id is None else ns(id=idle_id, stop_reason=ns(type=stop))
     return session, idle
 
 
 def reviewed(stop: str = "end_turn") -> tuple[Any, Any]:
-    session, idle = phase("ridle_1", rubric=None, stop=stop)
+    session, idle = phase("ridle_1", stop=stop)
     session.usage = ns(list_cost=ns(amount="100", currency="USD"))
     return session, idle
 
@@ -105,7 +87,6 @@ class FakeClient:
         }
         self.on_send = on_send
         self.messages = {"sesn_1": PR_BODY, "sesn_review": verdict}
-        self.drafts: dict[str, list[str]] = {}
         self.created: list[dict[str, Any]] = []
         self.sent: list[tuple[str, str]] = []
         self.interrupted: list[str] = []
@@ -143,11 +124,10 @@ class FakeClient:
 
     def events(self, session_id: str, **kwargs: Sdk) -> list[Any]:
         if kwargs["types"] == ["agent.message"]:
-            texts = [*self.drafts.get(session_id, []), self.messages[session_id]]
+            assert kwargs["order"] == "desc"
+            texts = ["An earlier message.", self.messages[session_id]]
             events = [ns(content=[ns(type="text", text=text)]) for text in texts]
-            if kwargs["order"] == "desc":
-                events.reverse()
-            return events[: kwargs["limit"]]
+            return events[::-1][: kwargs["limit"]]
         assert kwargs["types"] == ["session.status_idle"]
         idle = self.current[session_id][1]
         return [] if idle is None else [idle]
@@ -200,14 +180,12 @@ class FakeGitHub:
         checks: list[list[dict[str, str]]] | None = None,
         open_prs: list[str] | None = None,
         branch: str | None = None,
-        comments: list[dict[str, Any]] | None = None,
     ) -> None:
         self.issue_data = issue_data or issue()
         self.pr = pr
         self.checks = list(checks or [PASSING])
         self.open_prs = open_prs or []
         self.branch = branch
-        self.thread = [REPORT] if comments is None else comments
         self.posted: list[tuple[int, str, str | None]] = []
         self.deleted: list[int] = []
         self.unlabeled: list[tuple[int, str]] = []
@@ -224,9 +202,6 @@ class FakeGitHub:
     def branch_head(self, branch: str) -> str | None:
         assert branch == "factory/issue-799"
         return self.branch
-
-    def comments(self, number: int) -> list[dict[str, Any]]:
-        return self.thread
 
     def factory_pull_request(self, number: int) -> dict[str, Any] | None:
         return self.pr
@@ -308,20 +283,17 @@ def start(
     github: FakeGitHub,
     client: FakeClient,
     requester: str = OWNER,
-    stage: str = "build",
 ) -> str | None:
     return dispatch.run_start(
         client=client,
         github=github,
         tokens=FakeTokens(),
         lock=LOCK,
-        phase=stage,
         repo=REPO,
         issue_number=799,
         requester=requester,
         factory_login=BOT,
         budget_cents=1000,
-        labeled_at=LABELED_AT,
     )
 
 
@@ -330,115 +302,52 @@ def watch(
     github: FakeGitHub,
     minutes: int = 270,
     status_comment_id: int | None = 55,
-    stage: str = "build",
-    tokens: FakeTokens | None = None,
-    spec_id: int | None = 10,
 ) -> str:
     dispatch.run_watch(
         client=client,
         github=github,
-        tokens=tokens or FakeTokens(),
+        tokens=FakeTokens(),
         lock=LOCK,
-        phase=stage,
         repo=REPO,
         session_id="sesn_1",
         issue=799,
         status_comment_id=status_comment_id,
         minutes=minutes,
         review_budget_cents=300,
-        spec_id=spec_id,
         clock=FakeClock(),  # type: ignore[arg-type]
     )
     assert github.deleted == ([] if status_comment_id is None else [55])
-    assert github.unlabeled == [(799, dispatch.LABELS[stage])]
+    assert github.unlabeled == [(799, "factory")]
     (number, report, token) = github.posted[-1]
-    assert number == 799 and token == (None if stage == "plan" else "ghs_app")
+    assert number == 799 and token == "ghs_app"
     return report
 
 
 @pytest.mark.parametrize(
-    ("requester", "github", "stage", "reason"),
+    ("requester", "github", "reason"),
     [
-        (BOT, FakeGitHub(), "plan", "only `rhprasad0` can start the factory"),
-        ("someone", FakeGitHub(), "build", "only `rhprasad0` can start the factory"),
-        (
-            OWNER,
-            FakeGitHub(issue("someone")),
-            "plan",
-            "takes only issues `rhprasad0` wrote",
-        ),
-        (OWNER, FakeGitHub(issue(state="CLOSED")), "plan", "the issue is closed"),
+        (BOT, FakeGitHub(), "only `rhprasad0` can start the factory"),
+        ("someone", FakeGitHub(), "only `rhprasad0` can start the factory"),
+        (OWNER, FakeGitHub(issue("someone")), "takes only issues `rhprasad0` wrote"),
+        (OWNER, FakeGitHub(issue(state="CLOSED")), "the issue is closed"),
         (
             OWNER,
             FakeGitHub(open_prs=["https://x/pull/3"]),
-            "build",
             "already addresses it: https://x/pull/3",
         ),
-        (
-            OWNER,
-            FakeGitHub(branch=HEAD),
-            "plan",
-            "branch `factory/issue-799` already exists",
-        ),
-        (OWNER, FakeGitHub(comments=[]), "build", "no factory spec reported"),
-        (
-            OWNER,
-            FakeGitHub(comments=[{**REPORT, "created_at": "2026-11-17T13:00:00Z"}]),
-            "build",
-            "no factory spec reported",
-        ),
-        (
-            OWNER,
-            FakeGitHub(comments=[{**REPORT, "user": {"login": BOT}}]),
-            "build",
-            "no factory spec reported",
-        ),
-        (
-            OWNER,
-            FakeGitHub(
-                comments=[
-                    {
-                        **REPORT,
-                        "body": f"x\n\nOutcome: **flawed**\n\n{SPEC_TEXT}",
-                    }
-                ]
-            ),
-            "build",
-            "no factory spec reported",
-        ),
-        (
-            OWNER,
-            FakeGitHub(
-                comments=[{**REPORT, "body": f"x\n\n{dispatch.SPEC_OUTCOME}\n\nhello"}]
-            ),
-            "build",
-            "no factory spec reported",
-        ),
+        (OWNER, FakeGitHub(branch=HEAD), "branch `factory/issue-799` already exists"),
     ],
 )
 def test_start_refuses_and_unlabels_without_a_session(
-    requester: str, github: FakeGitHub, stage: str, reason: str
+    requester: str, github: FakeGitHub, reason: str
 ) -> None:
     client = FakeClient()
-    assert start(github, client, requester, stage) is None
+    assert start(github, client, requester) is None
     assert client.created == []
     (_, body, token) = github.posted[0]
     assert body.startswith("The factory skipped this issue: ") and reason in body
     assert token == "ghs_app"
-    assert github.unlabeled == [(799, dispatch.LABELS[stage])]
-
-
-def test_plan_needs_no_spec_and_runs_in_the_read_environment() -> None:
-    client, github = FakeClient(), FakeGitHub(comments=[])
-    assert start(github, client, stage="plan") == "sesn_1"
-    (created,) = client.created
-    assert created["environment_id"] == "env_read" and "resources" not in created
-    kickoff, outcome = created["initial_events"]
-    text = kickoff["content"][0]["text"]
-    assert "Plan issue #799" in text and "push nothing" in text
-    assert "<spec>" not in text and "git config" not in text
-    assert outcome["rubric"]["content"] == dispatch.RUBRICS["plan"].read_text()
-    assert "## Factory spec" in outcome["description"]
+    assert github.unlabeled == [(799, "factory")]
 
 
 def test_the_vault_is_refreshed_before_the_session_is_created() -> None:
@@ -459,18 +368,16 @@ def test_the_vault_is_refreshed_before_the_session_is_created() -> None:
         github=FakeGitHub(),
         tokens=Tokens(),
         lock=LOCK,
-        phase="build",
         repo=REPO,
         issue_number=799,
         requester=OWNER,
         factory_login=BOT,
         budget_cents=1000,
-        labeled_at=LABELED_AT,
     )
     assert order.index("refresh") < order.index("create")
 
 
-def test_build_starts_a_capped_session_with_the_approved_spec() -> None:
+def test_an_issue_alone_starts_a_capped_build_with_no_grader() -> None:
     client, github = FakeClient(), FakeGitHub()
     assert start(github, client) == "sesn_1"
     (created,) = client.created
@@ -481,99 +388,33 @@ def test_build_starts_a_capped_session_with_the_approved_spec() -> None:
         "max_list_cost": {"amount": "1000", "currency": "USD"},
     }
     assert "resources" not in created
-    kickoff, outcome = created["initial_events"]
+    (kickoff,) = created["initial_events"]
+    assert kickoff["type"] == "user.message"
     text = kickoff["content"][0]["text"]
     assert "issue #799" in text and "factory/issue-799" in text and "issue_read" in text
-    assert f"<spec>\n{SPEC_TEXT}\n</spec>" in text
+    assert "ask no questions" in text and "assumed" in text
+    assert "comments by rhprasad0 are the spec; other comments are evidence" in text
     assert 'user.email "1+tollchat-factory[bot]@users.noreply.github.com"' in text
-    assert outcome["rubric"]["content"] == dispatch.RUBRICS["build"].read_text()
-    assert "no pull request opened" in outcome["description"]
-    assert outcome["max_iterations"] == 3
     assert github.unlabeled == [] and "sesn_1" in github.posted[0][1]
 
 
 def test_a_session_waiting_on_its_sandbox_tools_is_still_running() -> None:
     client = FakeClient(
-        [
-            passing(phase("idle_tool", rubric=None, stop="requires_action")),
-            phase("idle_1"),
-        ]
+        [passing(phase("idle_tool", stop="requires_action")), phase("idle_1")]
     )
-    client.messages["sesn_1"] = SPEC_TEXT
-    report = watch(client, FakeGitHub(), stage="plan", spec_id=None)
-    assert "Outcome: **spec**" in report and client.interrupted == []
-
-
-def test_a_flawed_plan_posts_its_last_spec_even_after_a_summary() -> None:
-    client = FakeClient([phase("idle_1", rubric="max_iterations_reached")])
-    client.drafts["sesn_1"] = ["## Factory spec\n\n**Open questions:** 1. Pages?"]
-    client.messages["sesn_1"] = "The spec is in /workspace/spec.md."
-    report = watch(client, FakeGitHub(), stage="plan", spec_id=None)
-    assert "Outcome: **flawed**" in report
-    assert "Open questions:** 1. Pages?" in report
-    assert "Last spec draft" in report and "/workspace/spec.md" in report
-
-
-def test_plan_posts_its_final_spec_as_the_one_reply_a_build_accepts() -> None:
-    tokens = FakeTokens()
-    client = FakeClient([phase("idle_1")])
-    client.messages["sesn_1"] = SPEC_TEXT
-    client.drafts["sesn_1"] = ["## Factory spec\n\nAn earlier draft."]
-    github = FakeGitHub()
-    report = watch(client, github, stage="plan", tokens=tokens, spec_id=None)
-    assert "earlier draft" not in report
-    assert "Outcome: **spec**" in report and report.endswith(SPEC_TEXT)
-    assert "`factory-build`" in report and "cost: $4.12" in report
-    assert len(github.posted) == 1
-    posted = {
-        "id": 12,
-        "body": report,
-        "user": {"login": dispatch.REPORTER},
-        "created_at": "2026-11-17T11:30:00Z",
-    }
-    approved = dispatch.approved_spec([posted], LABELED_AT)
-    assert approved == {"id": 12, "body": SPEC_TEXT}
-
-
-@pytest.mark.parametrize(
-    ("session_phase", "message", "result"),
-    [
-        (phase("idle_1"), "Here is my plan.", "flawed"),
-        (phase("idle_1"), SPEC_TEXT + "x" * 70000, "flawed"),
-        (phase("idle_1", rubric="max_iterations_reached"), SPEC_TEXT, "flawed"),
-        (phase("idle_1", stop="retries_exhausted"), SPEC_TEXT, "blocked"),
-    ],
-)
-def test_plan_without_a_passing_spec_posts_no_spec(
-    session_phase: Sdk, message: str, result: str
-) -> None:
-    client = FakeClient([session_phase])
-    client.messages["sesn_1"] = message
-    report = watch(client, FakeGitHub(), stage="plan", spec_id=None)
-    assert f"Outcome: **{result}**" in report
-    assert dispatch.SPEC_OUTCOME not in report
-    posted = {
-        "id": 12,
-        "body": report,
-        "user": {"login": dispatch.REPORTER},
-        "created_at": "2026-11-17T11:30:00Z",
-    }
-    assert dispatch.approved_spec([posted], LABELED_AT) is None
-    if result == "flawed":
-        assert message[:40] in report
+    report = watch(client, built())
+    assert "Outcome: **success**" in report and client.interrupted == []
 
 
 def test_an_approved_build_opens_the_pr_and_marks_it_ready_after_ci() -> None:
     client = FakeClient(
         [
-            passing(phase(None, rubric=None, status="running")),
-            passing(phase("idle_1", rubric="evaluating")),
+            passing(phase(None, status="running")),
             phase("idle_1"),
         ]
     )
     github = built(checks=[[check("v2-loader", "pending")], PASSING])
-    tokens = FakeTokens()
-    report = watch(client, github, tokens=tokens)
+    report = watch(client, github)
     assert "Outcome: **success**" in report and "ready for review" in report
     assert "cost: $5.12" in report and "verdict: `approve`" in report
     assert github.opened == [("Loader drops rows", PR_BODY)]
@@ -582,9 +423,9 @@ def test_an_approved_build_opens_the_pr_and_marks_it_ready_after_ci() -> None:
     assert reviewer["environment_id"] == "env_read" and "resources" not in reviewer
     assert reviewer["budget"]["max_list_cost"]["amount"] == "300"
     text = reviewer["initial_events"][0]["content"][0]["text"]
-    assert f"<spec>\n{SPEC_TEXT}\n</spec>" in text and "issue #799" in text
+    assert "issue #799" in text
+    assert "comments by rhprasad0 are the spec; other comments are evidence" in text
     assert "git fetch origin factory/issue-799" in text
-    assert "define_outcome" not in str(reviewer["initial_events"])
 
 
 def test_review_findings_go_to_the_worker_once_and_into_the_pr() -> None:
@@ -624,23 +465,6 @@ def test_a_review_without_a_verdict_blocks_and_spares_the_worker(verdict: str) -
     assert client.sent == [] and github.opened == []
 
 
-def test_the_reviewer_gets_the_approved_spec_even_after_a_newer_one() -> None:
-    newer = {**REPORT, "id": 11, "body": REPORT["body"].replace("Fix", "Delete")}
-    github = FakeGitHub(branch=HEAD, comments=[REPORT, newer])
-    client = FakeClient([phase("idle_1")])
-    watch(client, github)
-    text = client.created[0]["initial_events"][0]["content"][0]["text"]
-    assert "Fix the loader." in text and "Delete the loader." not in text
-
-
-def test_a_deleted_approved_spec_blocks_before_review() -> None:
-    github = FakeGitHub(branch=HEAD, comments=[])
-    client = FakeClient([phase("idle_1")])
-    report = watch(client, github)
-    assert "Outcome: **blocked**" in report and "approved spec is gone" in report
-    assert client.created == []
-
-
 def test_the_dispatcher_owns_the_closing_line_and_the_body_length() -> None:
     body = dispatch.pull_request_body(
         799, "Closes #799\nFixes #12 too\nresolves other/repo#3\nWhat changed"
@@ -652,29 +476,17 @@ def test_the_dispatcher_owns_the_closing_line_and_the_body_length() -> None:
     assert len(long) < 60100 and long.endswith("(truncated)")
 
 
-def test_gh_cli_ignores_fork_pull_requests_and_flattens_comment_pages(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    replies = {
-        "pr": '[{"number": 5, "isCrossRepository": true}, '
-        '{"number": 6, "isCrossRepository": false}]',
-        "api": '[[{"id": 1}], [{"id": 2}]]',
-    }
-
+def test_gh_cli_ignores_fork_pull_requests(monkeypatch: pytest.MonkeyPatch) -> None:
     def gh(self: dispatch.GhCli, *args: str, **kwargs: str | None) -> str:
-        return replies[args[0]]
+        return '[{"number": 5, "isCrossRepository": true}, {"number": 6, "isCrossRepository": false}]'
 
     monkeypatch.setattr(dispatch.GhCli, "gh", gh)
-    cli = dispatch.GhCli(REPO)
-    pull = cli.factory_pull_request(799)
+    pull = dispatch.GhCli(REPO).factory_pull_request(799)
     assert pull is not None and pull["number"] == 6
-    assert [c["id"] for c in cli.comments(799)] == [1, 2]
 
 
 def test_a_review_that_times_out_is_interrupted_and_blocks() -> None:
-    client = FakeClient(
-        [phase("idle_1")], review=[phase(None, rubric=None, status="running")]
-    )
+    client = FakeClient([phase("idle_1")], review=[phase(None, status="running")])
     github = built()
     report = watch(client, github, minutes=5)
     assert "Outcome: **blocked**" in report and "ran out of time" in report
@@ -725,25 +537,9 @@ def test_watch_calls_a_round_without_a_push_flawed() -> None:
 @pytest.mark.parametrize(
     ("session_phase", "head", "result", "text"),
     [
-        (phase("idle_1"), None, "manual", "why it did not build the spec"),
-        (
-            phase(
-                "idle_1",
-                rubric="max_iterations_reached",
-                explanation="No failing test.",
-            ),
-            HEAD,
-            "flawed",
-            "No failing test.",
-        ),
-        (
-            phase("idle_1", stop="retries_exhausted"),
-            None,
-            "blocked",
-            "stopped before it finished",
-        ),
+        (phase("idle_1"), None, "manual", PR_BODY),
+        (phase("idle_1", stop="retries_exhausted"), None, "blocked", "stopped before"),
         (phase(None, status="terminated"), HEAD, "blocked", "stopped and left"),
-        (phase("idle_1", rubric=None), HEAD, "flawed", "rubric: `not graded`"),
     ],
 )
 def test_watch_reports_each_outcome(
@@ -757,7 +553,7 @@ def test_watch_reports_each_outcome(
 
 def test_watch_times_out_as_blocked() -> None:
     report = watch(
-        FakeClient([phase(None, rubric=None, status="running")]),
+        FakeClient([phase(None, status="running")]),
         FakeGitHub(),
         minutes=5,
     )
@@ -833,8 +629,6 @@ def test_lock_keys_name_the_factory_files() -> None:
     )
     for key in keys:
         assert (dispatch.FACTORY / key).is_file(), key
-    for rubric in dispatch.RUBRICS.values():
-        assert rubric.is_file(), rubric
 
 
 def test_watch_waits_until_every_required_check_reports() -> None:
@@ -854,7 +648,7 @@ def test_a_feedback_round_that_stops_early_is_blocked() -> None:
 
 
 def test_a_timed_out_session_is_interrupted() -> None:
-    client = FakeClient([phase(None, rubric=None, status="running")])
+    client = FakeClient([phase(None, status="running")])
     watch(client, FakeGitHub(), minutes=5)
     assert client.interrupted == ["sesn_1"]
 
@@ -877,7 +671,7 @@ def test_start_records_the_session_before_commenting(
 
     with pytest.raises(RuntimeError):
         start(Failing(), FakeClient())
-    assert outputs.read_text() == "started=true\nsession_id=sesn_1\nspec_id=10\n"
+    assert outputs.read_text() == "started=true\nsession_id=sesn_1\n"
 
 
 @pytest.mark.parametrize("bad", ["../agents", "agent_1\nstarted=true", 7])
@@ -887,19 +681,11 @@ def test_a_malformed_lock_id_stops_the_run(bad: object) -> None:
         dispatch.lock_id(lock, dispatch.AGENT_KEY)
 
 
-def test_a_spec_that_cannot_be_built_is_explained_in_the_one_reply() -> None:
+def test_a_build_without_a_branch_posts_its_last_message() -> None:
     client = FakeClient([phase("idle_1")])
-    client.messages["sesn_1"] = "The loader has no rows to drop."
+    client.messages["sesn_1"] = "The change needs factory/host/guard.py."
     github = FakeGitHub()
     report = watch(client, github)
-    assert "Outcome: **manual**" in report
-    assert report.endswith("The loader has no rows to drop.")
+    assert "Outcome: **manual**" in report and "pushed no branch" in report
+    assert report.endswith("The change needs factory/host/guard.py.")
     assert len(github.posted) == 1 and client.created == []
-
-
-def test_a_failed_build_without_a_branch_still_shows_its_last_message() -> None:
-    client = FakeClient([phase("idle_1", rubric="max_iterations_reached")])
-    client.messages["sesn_1"] = "The spec deletes code CI still runs."
-    report = watch(client, FakeGitHub())
-    assert "Outcome: **flawed**" in report
-    assert "The spec deletes code CI still runs." in report
