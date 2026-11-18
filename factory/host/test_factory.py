@@ -31,7 +31,7 @@ def test_image_toolchains_match_ci() -> None:
 
 def test_published_toolchain_target_carries_no_factory_proxy() -> None:
     toolchain, factory_stage = DOCKERFILE.split("\nFROM toolchain AS factory\n")
-    assert toolchain.startswith("FROM debian:trixie-slim AS toolchain\n")
+    toolchain = toolchain.split("\nFROM debian:trixie-slim AS toolchain\n", 1)[1]
     for box_only in ("proxy", "--from=certs", "run-verify.sh", "prepare-work.sh"):
         assert box_only not in toolchain, box_only
         assert box_only in factory_stage, box_only

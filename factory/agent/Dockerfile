@@ -1,3 +1,7 @@
+ARG UV_VERSION=0.12.5
+
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+
 FROM debian:trixie-slim AS toolchain
 
 ARG CLAUDE_CODE_VERSION=2.1.325
@@ -19,7 +23,7 @@ RUN curl -fsSLo /tmp/node.txz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${
 RUN curl -fsSLo /tmp/tf.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" \
  && echo "${TERRAFORM_SHA256}  /tmp/tf.zip" | sha256sum -c - \
  && unzip -q /tmp/tf.zip terraform -d /usr/local/bin && rm /tmp/tf.zip
-COPY --from=ghcr.io/astral-sh/uv:0.13.8 /uv /uvx /usr/local/bin/
+COPY --from=uv /uv /uvx /usr/local/bin/
 COPY --from=docker:28.5.1-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker:28.5.1-cli /usr/local/libexec/docker/cli-plugins /usr/local/libexec/docker/cli-plugins
 COPY v2/scripts/install_check_tools.sh /tmp/
