@@ -127,7 +127,8 @@ database_contracts() {
   if [[ "$DATABASE_PROFILE" == full ]]; then
     local log retained_pid status=0
     log="$(mktemp)"
-    PGPORT=5433 POSTGRES_CONTAINER_ID="$RETAINED_POSTGRES_CONTAINER_ID" \
+    PGHOST="${RETAINED_PGHOST:-${PGHOST:-localhost}}" PGPORT="${RETAINED_PGPORT:-5433}" \
+      POSTGRES_CONTAINER_ID="$RETAINED_POSTGRES_CONTAINER_ID" \
       DB_CONTRACT_IDENTITY=retained \
       v2/scripts/run_db_tests.sh "$base" --profile "$DATABASE_PROFILE" \
       >"$log" 2>&1 &

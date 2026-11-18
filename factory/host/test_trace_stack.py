@@ -27,8 +27,8 @@ def test_collector_config_validates_with_the_pinned_image() -> None:
     config = dispatcher.FACTORY / "collector/config.yaml"
     result = subprocess.run(
         ["docker", "run", "--rm", "--env", "FACTORY_TRACES_BUCKET=example",
-         "--volume", f"{config}:/etc/otelcol/config.yaml:ro",
-         image("collector"), "validate", "--config=/etc/otelcol/config.yaml"],
+         "--env", f"COLLECTOR_CONFIG={config.read_text()}",
+         image("collector"), "validate", "--config=env:COLLECTOR_CONFIG"],
         capture_output=True, text=True, check=False,
     )  # fmt: skip
     assert result.returncode == 0, result.stderr

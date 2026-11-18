@@ -1,0 +1,196 @@
+name: spike-toolchain-image
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/spike-toolchain-image.yml
+
+env:
+  IMAGE: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain:spike-814
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: push
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker build -f factory/agent/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE")"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "$digest" >> "$GITHUB_STEP_SUMMARY"
+          docker image ls "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+
+  probe:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        user: ["", "--user 1001", "--user root"]
+    container:
+      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain:spike-814
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: ${{ matrix.user }}
+    steps:
+      - run: id; echo "HOME=$HOME"; ls -la /__w /__w/_temp || true; ls -la /var/run/docker.sock || true; docker version || true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: git status --short | head; stat -c '%u:%g %n' . .git; touch probe-file && echo writable
+      - run: docker ps --format '{{.Names}} {{.Image}}'
+
+  loader:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain:spike-814
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    defaults:
+      run:
+        working-directory: v2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: ../.github/scripts/verify.sh loader "$BASE_REF"
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha }}
+
+  database:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain:spike-814
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      postgres_retained:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: postgres
+      RETAINED_PGHOST: postgres_retained
+      RETAINED_PGPORT: 5432
+      DATABASE_PROFILE: full
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: .github/scripts/verify.sh database "$SCHEMA_BASE_REF"
+        env:
+          SCHEMA_BASE_REF: ${{ github.event.pull_request.base.sha }}
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+          RETAINED_POSTGRES_CONTAINER_ID: ${{ job.services.postgres_retained.id }}
+          DISPOSABLE_DOCKER_NETWORK: container:${{ job.container.id }}
+
+  factory:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain:spike-814
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: .github/scripts/verify.sh factory
+
+  terraform:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain:spike-814
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: .github/scripts/verify.sh terraform
+
+  frontend-browser:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain:spike-814
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    defaults:
+      run:
+        working-directory: v2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: npm ci --ignore-scripts
+      - run: |
+          status=0
+          for check in cost_dashboard release_dashboard public_chat_scroll commute_map frontend_e2e; do
+            node "tests/${check}_browser.cjs" || status=1
+          done
+          exit "$status"
