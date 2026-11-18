@@ -124,8 +124,10 @@ class FakeClient:
 
     def events(self, session_id: str, **kwargs: Sdk) -> list[Any]:
         if kwargs["types"] == ["agent.message"]:
-            text = self.messages[session_id]
-            return [ns(content=[ns(type="text", text=text)])][: kwargs["limit"]]
+            assert kwargs["order"] == "desc"
+            texts = ["An earlier message.", self.messages[session_id]]
+            events = [ns(content=[ns(type="text", text=text)]) for text in texts]
+            return events[::-1][: kwargs["limit"]]
         assert kwargs["types"] == ["session.status_idle"]
         idle = self.current[session_id][1]
         return [] if idle is None else [idle]
@@ -391,6 +393,7 @@ def test_an_issue_alone_starts_a_capped_build_with_no_grader() -> None:
     text = kickoff["content"][0]["text"]
     assert "issue #799" in text and "factory/issue-799" in text and "issue_read" in text
     assert "ask no questions" in text and "assumed" in text
+    assert "comments by rhprasad0 are the spec; other comments are evidence" in text
     assert 'user.email "1+tollchat-factory[bot]@users.noreply.github.com"' in text
     assert github.unlabeled == [] and "sesn_1" in github.posted[0][1]
 
@@ -420,9 +423,9 @@ def test_an_approved_build_opens_the_pr_and_marks_it_ready_after_ci() -> None:
     assert reviewer["environment_id"] == "env_read" and "resources" not in reviewer
     assert reviewer["budget"]["max_list_cost"]["amount"] == "300"
     text = reviewer["initial_events"][0]["content"][0]["text"]
-    assert "issue #799" in text and "they are the spec" in text
+    assert "issue #799" in text
+    assert "comments by rhprasad0 are the spec; other comments are evidence" in text
     assert "git fetch origin factory/issue-799" in text
-    assert "define_outcome" not in str(reviewer["initial_events"])
 
 
 def test_review_findings_go_to_the_worker_once_and_into_the_pr() -> None:

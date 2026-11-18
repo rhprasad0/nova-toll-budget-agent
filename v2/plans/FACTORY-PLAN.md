@@ -67,7 +67,7 @@ the proxy and the credential helper still run there; Stage 4 stops them.
 - The worker model is Sonnet.
 - Steering follows Phoenix: there is no persistent session across labels.
   Re-adding the `factory` label starts a new session, and that session reads the
-  whole issue thread, so a comment answers a question the last run asked.
+  whole issue thread.
 - Phoenix is hosted in AWS and is reachable from the internet with
   authentication on.
 - The development TollChat agent drops ADOT and the telemetry guardrail and
@@ -112,7 +112,7 @@ the proxy and the credential helper still run there; Stage 4 stops them.
   real secret (the vault swaps a placeholder for the token at the network edge),
   so the scan moves into the guard check as a second line.
 - `factory/` becomes a protected path, as in Phoenix: its files define the
-  agent, its tools and its rubric. The spec let the factory work on itself.
+  agent and its tools. The spec let the factory work on itself.
 - Web search and web fetch are on, as in Phoenix, limited to the environment's
   allowed hosts. The spec turned them off because they bring untrusted text into
   the session; that session now also holds a push token.
@@ -477,7 +477,9 @@ was too slow.
 - `factory` starts a build in the write environment. The issue body and Ryan's
   comments are the spec. Where they leave something open, the worker infers
   what Ryan wants, builds it, lists its choices under `Assumptions` in the pull
-  request body, and asks nothing. Ryan iterates on the pull request.
+  request body, and asks nothing. Ryan reviews the pull request. To rerun,
+  close it, delete `factory/issue-N`, comment and add `factory` again:
+  admission refuses an issue with an open pull request or that branch.
 - The worker pushes the branch without opening a pull request. `dispatch.py`
   then starts `factory/agents/reviewer.md` in its own session in the read
   environment. It reviews once, against the issue. Its findings go back to the
