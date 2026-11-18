@@ -1,0 +1,60 @@
+name: toolchain-provenance
+
+on:
+  workflow_call:
+    inputs:
+      candidate_sha:
+        description: Commit whose toolchain image pins are verified.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify toolchain image pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - name: Require the candidate to be the commit that triggered the run
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_REPOSITORY: ${{ github.repository }}
+          INPUT_SHA: ${{ inputs.candidate_sha }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGE_GROUP_SHA: ${{ github.event.merge_group.head_sha }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$EVENT_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"
+          case "$EVENT_NAME" in
+            pull_request) EVENT_SHA="$PR_SHA" ;;
+            merge_group) EVENT_SHA="$MERGE_GROUP_SHA" ;;
+            push)
+              [[ "$EVENT_REF" == refs/heads/main || "$EVENT_REF" == refs/tags/* ]]
+              EVENT_SHA="$PUSH_SHA"
+              ;;
+            *) exit 1 ;;
+          esac
+          [[ "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$INPUT_SHA" = "$EVENT_SHA"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          persist-credentials: false
+      - name: Require every toolchain image pin to be built and attested on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          grep -ho 'ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:[0-9a-f]\{64\}' \
+            .github/workflows/*.y*ml factory/sandbox/Dockerfile | sort -u | while read -r image; do
+            gh attestation verify "oci://$image" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/toolchain-image.yml" \
+              --source-ref refs/heads/main
+          done
