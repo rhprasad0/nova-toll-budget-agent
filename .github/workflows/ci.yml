@@ -15,32 +15,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  toolchain-provenance:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+  trusted-toolchain-provenance:
+    uses: rhprasad0/nova-toll-budget-agent/.github/workflows/toolchain-provenance.yml@main
+    with:
+      candidate_sha: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
     permissions:
       contents: read
       attestations: read
+
+  toolchain-provenance:
+    if: always()
+    needs: trusted-toolchain-provenance
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Require every toolchain image pin to be built and attested on main
+      - name: Require main's toolchain provenance check to pass
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          grep -ho 'ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:[0-9a-f]\{64\}' \
-            .github/workflows/*.yml | sort -u | while read -r image; do
-            gh attestation verify "oci://$image" --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/toolchain-image.yml" \
-              --source-ref refs/heads/main
-          done
+          CALL_RESULT: ${{ needs.trusted-toolchain-provenance.result }}
+        run: test "$CALL_RESULT" = success
 
   v2-loader:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:c8d9d79225fb2a6715221cc6b90ee05ab2debdbd169f88df8ce04db548dabdd3
+      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:55f9efde563122cda78c9fdba2b385aef1db7e2e732d404f4d5570e879fa6e6f
       options: --user root
     defaults:
       run:
@@ -63,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:c8d9d79225fb2a6715221cc6b90ee05ab2debdbd169f88df8ce04db548dabdd3
+      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:55f9efde563122cda78c9fdba2b385aef1db7e2e732d404f4d5570e879fa6e6f
       options: --user 1001
     defaults:
       run:
@@ -113,7 +109,7 @@ jobs:
   v2-database:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:c8d9d79225fb2a6715221cc6b90ee05ab2debdbd169f88df8ce04db548dabdd3
+      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:55f9efde563122cda78c9fdba2b385aef1db7e2e732d404f4d5570e879fa6e6f
       options: --user root
     services:
       postgres:
@@ -157,7 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     container:
-      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:c8d9d79225fb2a6715221cc6b90ee05ab2debdbd169f88df8ce04db548dabdd3
+      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:55f9efde563122cda78c9fdba2b385aef1db7e2e732d404f4d5570e879fa6e6f
       options: --user root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

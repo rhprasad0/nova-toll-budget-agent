@@ -17,7 +17,7 @@ jobs:
   fmt-validate:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:c8d9d79225fb2a6715221cc6b90ee05ab2debdbd169f88df8ce04db548dabdd3
+      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:55f9efde563122cda78c9fdba2b385aef1db7e2e732d404f4d5570e879fa6e6f
       options: --user root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
