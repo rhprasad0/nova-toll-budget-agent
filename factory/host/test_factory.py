@@ -7,6 +7,8 @@ import json
 import re
 from pathlib import Path
 
+import yaml
+
 from factory.host import dispatcher as factory
 
 ROOT = factory.CHECKOUT
@@ -33,8 +35,28 @@ def test_published_toolchain_target_carries_no_factory_proxy() -> None:
     for box_only in ("proxy", "--from=certs", "run-verify.sh", "prepare-work.sh"):
         assert box_only not in toolchain, box_only
         assert box_only in factory_stage, box_only
-    workflow = (ROOT / ".github/workflows/toolchain-image.yml").read_text()
-    assert "--target toolchain --file factory/agent/Dockerfile" in workflow
+
+
+def test_only_main_publishes_the_toolchain_image_with_provenance() -> None:
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/toolchain-image.yml").read_text()
+    )
+    jobs = workflow["jobs"]
+    assert jobs["build"]["if"] == "github.event_name == 'pull_request'"
+    assert "packages" not in jobs["build"]["permissions"]
+    assert all("push" not in step.get("run", "") for step in jobs["build"]["steps"])
+    publish = jobs["publish"]
+    assert publish["if"] == (
+        "github.event_name != 'pull_request' && github.ref == 'refs/heads/main'"
+    )
+    assert publish["permissions"]["attestations"] == "write"
+    steps = [step.get("uses", "") + step.get("run", "") for step in publish["steps"]]
+    builds = [step for step in steps if "docker build" in step]
+    assert len(builds) == 1
+    assert "--target toolchain --file factory/agent/Dockerfile" in builds[0]
+    assert any(step.startswith("actions/attest-build-provenance@") for step in steps)
+    assert set(workflow[True]) == {"pull_request", "push", "workflow_dispatch"}
+    assert workflow[True]["push"]["branches"] == ["main"]
 
 
 def test_sandbox_reaches_out_only_through_the_shared_namespace() -> None:
