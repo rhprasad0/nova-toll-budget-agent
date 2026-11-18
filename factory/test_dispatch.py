@@ -492,6 +492,18 @@ def test_build_starts_a_capped_session_with_the_approved_spec() -> None:
     assert github.unlabeled == [] and "sesn_1" in github.posted[0][1]
 
 
+def test_a_session_waiting_on_its_sandbox_tools_is_still_running() -> None:
+    client = FakeClient(
+        [
+            passing(phase("idle_tool", rubric=None, stop="requires_action")),
+            phase("idle_1"),
+        ]
+    )
+    client.messages["sesn_1"] = SPEC_TEXT
+    report = watch(client, FakeGitHub(), stage="plan", spec_id=None)
+    assert "Outcome: **spec**" in report and client.interrupted == []
+
+
 def test_plan_posts_its_final_spec_as_the_one_reply_a_build_accepts() -> None:
     tokens = FakeTokens()
     client = FakeClient([phase("idle_1")])

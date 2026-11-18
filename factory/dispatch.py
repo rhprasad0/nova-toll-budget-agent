@@ -612,7 +612,11 @@ def wait_for_idle(
                 ),
                 None,
             )
-            if idle is not None and idle.id != after:
+            if (
+                idle is not None
+                and idle.id != after
+                and idle.stop_reason.type != "requires_action"
+            ):
                 outcome = latest_outcome(session)
                 grading = (
                     idle.stop_reason.type == "end_turn"
