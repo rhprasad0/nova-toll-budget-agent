@@ -43,6 +43,7 @@ docker run --rm --init --name "$name" --network "$name" \
   --env ANTHROPIC_SESSION_ID --env ANTHROPIC_WORK_ID --env ANTHROPIC_ENVIRONMENT_ID \
   --env ANTHROPIC_ENVIRONMENT_KEY --env ANTHROPIC_WORK_SECRET --env ANTHROPIC_BASE_URL \
   "${proxy[@]}" \
+  --env GH_TOKEN=replaced-by-the-proxy \
   --env PGHOST=postgres --env PGPORT=5432 --env PGUSER=postgres \
   --env RETAINED_PGHOST=postgres-retained --env RETAINED_PGPORT=5432 \
   --env POSTGRES_CONTAINER_ID="$name-postgres" \

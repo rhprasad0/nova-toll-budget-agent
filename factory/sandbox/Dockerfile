@@ -19,7 +19,6 @@ ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt \
     UV_SYSTEM_CERTS=1 \
     GIT_TERMINAL_PROMPT=0 \
-    GH_TOKEN=replaced-by-the-proxy \
     NO_PROXY=localhost,127.0.0.1 \
     no_proxy=localhost,127.0.0.1
 WORKDIR /workspace

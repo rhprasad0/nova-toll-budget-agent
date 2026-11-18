@@ -54,6 +54,7 @@ def test_spawn_runs_one_session_with_its_databases_and_only_work_credentials(
     assert "ANTHROPIC_WORK_SECRET" in passed
     assert "ANTHROPIC_API_KEY" not in " ".join(passed)
     assert "HTTPS_PROXY=http://10.249.0.1:18081" in passed
+    assert "GH_TOKEN=replaced-by-the-proxy" in passed
     assert "DISPOSABLE_DOCKER_NETWORK=container:work-work_1" in passed
     assert "POSTGRES_CONTAINER_ID=work-work_1-postgres" in passed
     removals = [
