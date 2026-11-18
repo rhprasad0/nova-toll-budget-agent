@@ -3,7 +3,6 @@
 The end-to-end check is `dispatcher.py verify` on the factory machine (FACTORY-PLAN, Stage 3).
 """
 
-import json
 import re
 from pathlib import Path
 
@@ -16,17 +15,9 @@ DOCKERFILE = (factory.FACTORY / "agent/Dockerfile").read_text()
 
 
 def arg(name: str) -> str:
-    match = re.search(rf"^ARG {name}=(\S+)$", DOCKERFILE, re.M)
+    match = re.search(rf"^ARG {name}=(\S+)$", DOCKERFILE, re.MULTILINE)
     assert match, name
     return match.group(1)
-
-
-def test_image_toolchains_match_ci() -> None:
-    ci = (ROOT / ".github/workflows/ci.yml").read_text()
-    assert f'node-version: "{arg("NODE_VERSION")}"' in ci
-    assert f'terraform_version: "{arg("TERRAFORM_VERSION")}"' in ci
-    package = json.loads((ROOT / "v2/package.json").read_text())
-    assert package["devDependencies"]["playwright"] == arg("PLAYWRIGHT_VERSION")
 
 
 def test_published_toolchain_target_carries_no_factory_proxy() -> None:

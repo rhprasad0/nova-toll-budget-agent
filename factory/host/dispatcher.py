@@ -19,8 +19,8 @@ under test.
 
 Network layout per work order: the candidate PostGIS container owns a network
 namespace on factory-internal, and the retained PostGIS and the sandbox join it.
-So the databases are on localhost at 5432 and 5433, as in CI, and the proxy is
-the only way out.
+So the databases are on localhost at 5432 and 5433, and the proxy is the only
+way out.
 """
 
 import argparse

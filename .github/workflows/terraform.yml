@@ -16,11 +16,11 @@ concurrency:
 jobs:
   fmt-validate:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:c8d9d79225fb2a6715221cc6b90ee05ab2debdbd169f88df8ce04db548dabdd3
+      options: --user root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_wrapper: false
       - name: Reuse providers within this job
         run: |
           mkdir -p "$RUNNER_TEMP/terraform-provider-cache"

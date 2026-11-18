@@ -36,13 +36,6 @@ from tests.infrastructure_support import (
 
 def test_ci_installs_proxy_dependencies_once_before_testing() -> None:
     steps = yaml.safe_load(CI_WORKFLOW)["jobs"]["v2-loader"]["steps"]
-    node = next(
-        step for step in steps if step.get("uses", "").startswith("actions/setup-node@")
-    )
-    assert node["with"]["cache-dependency-path"].splitlines() == [
-        "v2/package-lock.json",
-        "v2/lambdas/chat_proxy/package-lock.json",
-    ]
     assert [step["run"] for step in steps if "verify.sh" in step.get("run", "")] == [
         '../.github/scripts/verify.sh loader "$BASE_REF"'
     ]
@@ -92,14 +85,6 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed() -> 
     assert '.github/scripts/verify.sh database "$SCHEMA_BASE_REF"' in CI_WORKFLOW
     assert "step python3 v2/scripts/check_schema_versions.py" in VERIFY_SCRIPT
     assert "v2/scripts/run_db_tests.sh" in VERIFY_SCRIPT
-    ci_jobs = cast(dict[str, dict[str, object]], yaml.safe_load(CI_WORKFLOW)["jobs"])
-    database_setup_uv = [
-        step
-        for step in cast(list[dict[str, object]], ci_jobs["v2-database"]["steps"])
-        if cast(str, step.get("uses", "")).startswith("astral-sh/setup-uv@")
-    ]
-    # Any full-SHA pin: Dependabot moves it; test_workflow_lint checks the format.
-    assert [step["with"] for step in database_setup_uv] == [{"python-version": "3.13"}]
 
 
 def test_pull_request_workflows_have_no_production_access() -> None:
@@ -1904,6 +1889,7 @@ def test_ci_jobs_run_verify() -> None:
         "frontend-browser": "needs Playwright browsers and the deployed development AI",
         "trusted-development-plan": "needs AWS credentials",
         "development-plan": "reports trusted-development-plan",
+        "toolchain-provenance": "needs the GitHub attestations API",
     }
     jobs = yaml.safe_load(CI_WORKFLOW)["jobs"]
     inline = sorted(
