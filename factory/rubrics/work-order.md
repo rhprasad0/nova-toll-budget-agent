@@ -13,6 +13,7 @@ Grade the build session from its transcript and what it left on GitHub. The kick
 7. The checks the bootstrap report lists as runnable here ran for the touched areas and passed in the transcript.
 8. The final message is only the pull request body, with no closing keywords: its `Verified:` line matches the commands the transcript shows, and its `Not verified:` line names any check the sandbox could not run.
 9. The TollChat agent's model and prompt are unchanged unless the issue asked for it.
+10. The final message is complete on its own: it points to no file outside the repository and to no sandbox path.
 
 ## B: spec cannot be built
 

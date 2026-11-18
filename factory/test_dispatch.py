@@ -504,6 +504,16 @@ def test_a_session_waiting_on_its_sandbox_tools_is_still_running() -> None:
     assert "Outcome: **spec**" in report and client.interrupted == []
 
 
+def test_a_flawed_plan_posts_its_last_spec_even_after_a_summary() -> None:
+    client = FakeClient([phase("idle_1", rubric="max_iterations_reached")])
+    client.drafts["sesn_1"] = ["## Factory spec\n\n**Open questions:** 1. Pages?"]
+    client.messages["sesn_1"] = "The spec is in /workspace/spec.md."
+    report = watch(client, FakeGitHub(), stage="plan", spec_id=None)
+    assert "Outcome: **flawed**" in report
+    assert "Open questions:** 1. Pages?" in report
+    assert "Last spec draft" in report and "/workspace/spec.md" in report
+
+
 def test_plan_posts_its_final_spec_as_the_one_reply_a_build_accepts() -> None:
     tokens = FakeTokens()
     client = FakeClient([phase("idle_1")])
@@ -550,7 +560,7 @@ def test_plan_without_a_passing_spec_posts_no_spec(
     }
     assert dispatch.approved_spec([posted], LABELED_AT) is None
     if result == "flawed":
-        assert "Last draft" in report and message[:40] in report
+        assert message[:40] in report
 
 
 def test_an_approved_build_opens_the_pr_and_marks_it_ready_after_ci() -> None:

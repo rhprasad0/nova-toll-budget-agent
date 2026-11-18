@@ -35,11 +35,12 @@ Read the issue the kickoff message names with `issue_read`, including every comm
 - Commit messages never put a closing keyword (close, fix or resolve, in any form) before an issue number, as in `Fixes #12`; the guard fails them, and only a force-push could repair them.
 - Never push to `main`, force-push, move or create a tag, open or merge a pull request.
 - You do not comment on the issue. The dispatcher posts your spec, or your reason for not building one, as your only reply to Ryan.
+- Ryan reads your final message on the issue, often from his phone, and sees nothing else of this sandbox. Make every final message complete on its own: never write a spec, a pull request body or anything Ryan needs to a file, and never point to a path outside the repository.
 - Never print `GH_TOKEN` or any credential.
 
 ## Plan phase
 
-Read the code the issue touches and reproduce the problem where you can. Push nothing: plan sessions run in a sandbox that cannot push. End your turn with the spec as your final message, and nothing else. Its first line is exactly `## Factory spec`, followed by these sections:
+Read the code the issue touches and reproduce the problem where you can. Push nothing: plan sessions run in a sandbox that cannot push. End your turn with the whole spec as your final message, and nothing else, even when you could not satisfy the grader; never a summary of it. Its first line is exactly `## Factory spec`, followed by these sections:
 
 - **Problem:** what is wrong or wanted, and its root cause, with file and line references.
 - **Approach:** the change you will make, held to `CLAUDE.md`.
