@@ -81,7 +81,8 @@ def test_clean_removes_only_containers_older_than_any_session_and_old_workdirs(
         "#!/usr/bin/env bash\n"
         f'printf "%s\\0" "$@" >> {calls}\nprintf "\\n" >> {calls}\n'
         'case "$1 ${4:-}" in\n'
-        '  "ps "*) printf "leaked\\nlive\\n" ;;\n'
+        '  "ps "*) printf "gone\\nleaked\\nlive\\n" ;;\n'
+        '  "inspect gone") exit 1 ;;\n'
         '  "inspect leaked") date -u -d "13 hours ago" +%Y-%m-%dT%H:%M:%S.000000000Z ;;\n'
         '  "inspect live") date -u -d "4 hours ago" +%Y-%m-%dT%H:%M:%S.000000000Z ;;\n'
         "esac\n"
@@ -93,6 +94,7 @@ def test_clean_removes_only_containers_older_than_any_session_and_old_workdirs(
     removed = [line for line in lines if line[0] == "rm"]
     assert removed == [["rm", "--force", "--volumes", "leaked"]]
     assert ["volume", "prune", "--all", "--force"] in lines
+    assert ["image", "prune", "--force", "--filter", "until=12h"] in lines
     (find,) = [line for line in lines if line[0] == "run"]
     assert f"{tmp_path}/sessions:/sessions" in find
     assert find[-7:] == ["-mtime", "+1", "-exec", "rm", "-rf", "{}", "+"]

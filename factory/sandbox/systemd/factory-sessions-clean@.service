@@ -1,7 +1,5 @@
 [Unit]
 Description=Remove leftover TollChat factory sessions, containers and images for %i
-Requires=user@%i.service
-After=user@%i.service
 
 [Service]
 Type=oneshot
