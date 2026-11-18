@@ -42,7 +42,7 @@ the proxy and the credential helper still run there; Stage 4 stops them.
 | `factory-dispatch.yml` running `dispatch.py start`, then `watch` | Kept, trimmed |
 | Session mounts the repo; the kickoff message carries only the issue number; the agent reads the issue with `issue_read` | Kept |
 | Session pushes `factory/issue-N` and opens a draft PR itself | Session pushes; the dispatcher opens the draft PR after review (Stage 6) |
-| Outcome rubric graded by `user.define_outcome`, up to 3 revisions | Kept, one rubric. `watch` treats an ungraded session as `flawed`, so the loop depends on it |
+| Outcome rubric graded by `user.define_outcome`, up to 3 revisions | Dropped (#829). The grader saw neither the transcript nor the final message; the reviewer session and required CI are the checks |
 | Required CI failures sent back to the session, up to 3 rounds; PR marked ready once CI passes | Kept |
 | Run outcomes `success`, `flawed`, `blocked`, `manual`, with cost, in one issue comment | Kept |
 | `factory-guard.yml` as a required check | Kept, with this repo's protected paths |
@@ -73,8 +73,7 @@ the proxy and the credential helper still run there; Stage 4 stops them.
 - The development TollChat agent drops ADOT and the telemetry guardrail and
   exports to Phoenix only. Production stays as it is. The product is now the
   factory.
-- `factory/agents/` and `factory/rubrics/` are exempt from the no-new-Markdown
-  rule.
+- `factory/agents/` is exempt from the no-new-Markdown rule.
 - The GitHub credential is a GitHub App, as in Phoenix, so the factory has its
   own login. Admission and the guard match on that login to tell the factory
   from Ryan.
@@ -468,26 +467,20 @@ code keeps both paths and the environment chooses one.
 `tollchat-agent-dev` project, and a production chat still arrives redacted in
 `agentcore-traces/`.
 
-## Stage 6: Spec approval and review
+## Stage 6: Build from the issue, then review
 
-**Status on 2026-11-17: built, not yet run.** Ryan asked for a plan step he
-approves before anything is built, and an independent check before the pull
-request opens.
+**Status on 2026-11-18 (#829):** the spec phase and the outcome grader are
+gone. Neither run of #829 got a spec past the grader, which could see neither
+the transcript nor the final message, and answering open questions from a phone
+was too slow.
 
-- `factory` starts the plan phase: the worker mounts the repository read-only
-  and ends with the spec as its final message, graded by
-  `factory/rubrics/spec.md`. The dispatcher posts it as one comment, with the
-  report, so grader revisions never reach the issue. The worker has no comment
-  tool.
-  To revise, Ryan comments and adds `factory` again.
-- `factory-build` starts the build phase. Admission takes the spec in the
-  dispatcher's own last plan report (posted as `github-actions[bot]`, before
-  the label was added), and refuses an issue without one. The kickoff
-  and the reviewer get the spec from that comment, and the worker pushes the
-  branch without opening a pull request, graded by
-  `factory/rubrics/work-order.md`.
-- `dispatch.py` then starts `factory/agents/reviewer.md` in its own session on
-  a read-only mount of the branch. It reviews once. Its findings go back to the
+- `factory` starts a build in the write environment. The issue body and Ryan's
+  comments are the spec. Where they leave something open, the worker infers
+  what Ryan wants, builds it, lists its choices under `Assumptions` in the pull
+  request body, and asks nothing. Ryan iterates on the pull request.
+- The worker pushes the branch without opening a pull request. `dispatch.py`
+  then starts `factory/agents/reviewer.md` in its own session in the read
+  environment. It reviews once, against the issue. Its findings go back to the
   worker once, with no second review, and into the pull request body.
 - The dispatcher opens the draft pull request with the worker's final message
   as its body, then runs the CI feedback rounds as before.
@@ -496,14 +489,11 @@ request opens.
 - Both agents run Sonnet 5.5 at medium effort, Ryan's choice on 2026-11-17.
   Raising either to high waits for evals that show the gain.
 
-1. [ ] **Ryan:** create the `factory-build` label.
-2. [ ] Merge; `factory-sync` creates the reviewer agent. The `factory-state`
-   lock has `./agents/reviewer.md`.
-3. [ ] Run one issue through both phases.
+1. [ ] **Ryan:** delete the `factory-build` label.
+2. [ ] Run #829 through the factory.
 
-**Done when:** an issue gets a spec, and after `factory-build` it becomes a pull
-request that is ready for review, with the reviewer's session and verdict in
-the report.
+**Done when:** an issue labelled `factory` becomes a pull request that is ready
+for review, with the reviewer's session and verdict in the report.
 
 ## Not in this plan
 

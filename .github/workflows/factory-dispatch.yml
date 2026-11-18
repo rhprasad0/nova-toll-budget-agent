@@ -8,7 +8,7 @@ on:
 
 jobs:
   dispatch:
-    if: github.event.label.name == 'factory' || github.event.label.name == 'factory-build'
+    if: github.event.label.name == 'factory'
     concurrency:
       group: factory-${{ github.event.issue.number }}
       cancel-in-progress: false
@@ -27,8 +27,6 @@ jobs:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
       ISSUE_NUMBER: ${{ github.event.issue.number }}
-      LABEL: ${{ github.event.label.name }}
-      PHASE: ${{ github.event.label.name == 'factory-build' && 'build' || 'plan' }}
       ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
       ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
       ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
@@ -53,22 +51,19 @@ jobs:
         env:
           FACTORY_APP_PRIVATE_KEY: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
           REQUESTED_BY: ${{ github.event.sender.login }}
-          LABELED_AT: ${{ github.event.issue.updated_at }}
-        run: uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" --phase "$PHASE" start --requested-by "$REQUESTED_BY" --labeled-at "$LABELED_AT"
+        run: uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" start --requested-by "$REQUESTED_BY"
       - name: Watch session
         if: ${{ !cancelled() && steps.start.outputs.session_id != '' }}
         env:
           FACTORY_APP_PRIVATE_KEY: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
           SESSION_ID: ${{ steps.start.outputs.session_id }}
           STATUS_COMMENT_ID: ${{ steps.start.outputs.status_comment_id }}
-          SPEC_ID: ${{ steps.start.outputs.spec_id }}
         run: |
           options=()
           if [ -n "$STATUS_COMMENT_ID" ]; then options+=(--status-comment-id "$STATUS_COMMENT_ID"); fi
-          if [ -n "$SPEC_ID" ]; then options+=(--spec-id "$SPEC_ID"); fi
-          uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" --phase "$PHASE" watch --session-id "$SESSION_ID" "${options[@]}"
+          uv run --locked --script factory/dispatch.py --repo "$GH_REPO" --issue "$ISSUE_NUMBER" watch --session-id "$SESSION_ID" "${options[@]}"
       - name: Report a failed start
         if: failure() && steps.start.outputs.session_id == ''
         run: |
           gh issue comment "$ISSUE_NUMBER" --body "The factory failed before it could start; see the [workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
-          gh issue edit "$ISSUE_NUMBER" --remove-label "$LABEL"
+          gh issue edit "$ISSUE_NUMBER" --remove-label factory
