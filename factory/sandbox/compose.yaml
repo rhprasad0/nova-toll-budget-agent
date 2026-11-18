@@ -1,0 +1,33 @@
+name: factory-sandbox
+
+x-proxy: &proxy
+  build: ../proxy
+  image: factory-proxy:dev
+  command:
+    - mitmdump
+    - --set
+    - rawtcp=false
+    - --mode
+    - regular@8080
+    - --ignore-hosts
+    - ^(registry-1\.docker\.io|auth\.docker\.io|production\.cloudfront\.docker\.com|ghcr\.io|pkg-containers\.githubusercontent\.com):443$
+    - -s
+    - /addon/allowlist.py
+  restart: unless-stopped
+
+services:
+  proxy-read:
+    <<: *proxy
+    ports: ["10.249.0.1:18080:8080"]
+    volumes:
+      - ${HOME}/.local/state/factory-sandbox/certs:/home/mitmproxy/.mitmproxy
+      - ${HOME}/.local/state/factory-sandbox/flows-read:/state/flows
+
+  proxy-write:
+    <<: *proxy
+    ports: ["10.249.0.1:18081:8080"]
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:?}
+    volumes:
+      - ${HOME}/.local/state/factory-sandbox/certs:/home/mitmproxy/.mitmproxy
+      - ${HOME}/.local/state/factory-sandbox/flows-write:/state/flows

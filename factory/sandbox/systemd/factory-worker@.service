@@ -1,0 +1,18 @@
+[Unit]
+Description=TollChat factory self-hosted sandbox worker %i
+Requires=docker.service
+After=docker.service
+
+[Service]
+EnvironmentFile=%h/.config/factory/proxy.env
+EnvironmentFile=%h/.config/factory/environment.env
+Environment=DOCKER_HOST=unix://%t/docker.sock
+Environment=SSL_CERT_FILE=/etc/factory-sandbox/ca-bundle.pem
+ExecStart=/usr/local/bin/ant beta:worker poll --on-work %h/.local/bin/factory-spawn --log-format json
+Restart=always
+RestartSec=10
+KillSignal=SIGTERM
+TimeoutStopSec=90
+
+[Install]
+WantedBy=default.target

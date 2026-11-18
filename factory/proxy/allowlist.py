@@ -7,15 +7,20 @@
   with a path allows that host only for that path: a trailing slash allows paths
   under it, and no trailing slash allows that one file. Paths are decoded first,
   and empty, `.` or `..` segments are refused.
-- Requests to api.anthropic.com lose whatever credential the client sent and get the
-  real subscription token from the proxy's own environment as a bearer header, so the
-  agent never holds it. Without a token they are refused.
+- With CLAUDE_CODE_OAUTH_TOKEN set, requests to api.anthropic.com lose whatever
+  credential the client sent and get that subscription token as a bearer header, so
+  the agent never holds it. Without it, the client's own credential passes through:
+  a self-hosted sandbox worker authenticates with its environment key.
+- Requests to github.com and api.github.com always lose the client's credential.
+  With GITHUB_TOKEN set they get that token instead (basic auth for git, bearer for
+  the API), so a sandbox can push without holding it; without it they go anonymous.
 - Run with `--set rawtcp=false`, so traffic that is not HTTP is dropped instead of
   relayed past these checks.
 - Every flow is appended to /state/flows/flows.jsonl, tagged with the current job id,
   with Anthropic's rate-limit headers (never credentials) on API responses.
 """
 
+import base64
 import importlib
 import json
 import os
@@ -41,6 +46,7 @@ for entry in ENTRIES:
         host, path = entry.split("/", 1)
         PATHS.setdefault(host, []).append("/" + path)
 API_HOST = "api.anthropic.com"
+GITHUB_HOSTS = {"github.com", "api.github.com"}
 PORT = 443
 OTLP_PORT = 4318  # the reverse listener that forwards telemetry to the collector
 JOB_FILE = Path("/state/current-job")
@@ -136,15 +142,19 @@ def request(flow: Flow) -> None:
         _deny(flow)
         _log(flow, allowed=False, kind="request")
         return
-    if req.host == API_HOST:
+    token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+    if req.host == API_HOST and token:
         for header in ("authorization", "x-api-key"):
             req.headers.pop(header, None)
-        token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
-        if not token:
-            _deny(flow)
-            _log(flow, allowed=False, kind="request")
-            return
         req.headers["authorization"] = f"Bearer {token}"
+    if req.host in GITHUB_HOSTS:
+        req.headers.pop("authorization", None)
+        github = os.environ.get("GITHUB_TOKEN")
+        if github and req.host == "github.com":
+            basic = base64.b64encode(f"x-access-token:{github}".encode()).decode()
+            req.headers["authorization"] = f"Basic {basic}"
+        elif github:
+            req.headers["authorization"] = f"Bearer {github}"
 
 
 def response(flow: Flow) -> None:

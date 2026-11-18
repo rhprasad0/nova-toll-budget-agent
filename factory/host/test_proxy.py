@@ -3,6 +3,7 @@ against an echo server that answers for every allowlisted name on an internal
 network. Needs Docker; CI's factory job has it, so there a missing Docker fails.
 """
 
+import base64
 import json
 import os
 import re
@@ -20,6 +21,8 @@ MITMPROXY = "mitmproxy/mitmproxy:12.2.3"
 TOKEN = "test-token-not-a-credential"
 CLOUDFLARE = "/cloudflare/terraform-provider-cloudflare/releases/download/"
 RDS = "/global/global-bundle.pem"
+REPOSITORY = "/rhprasad0/nova-toll-budget-agent"
+GITHUB_TOKEN = "github-test-token-not-a-credential"
 
 ECHO = r"""
 import datetime, http.server, json, ssl, threading
@@ -96,7 +99,7 @@ def parse(data):
 def proxy():
     for _ in range(60):
         try:
-            return socket.create_connection(("proxy", 8080), timeout=10)
+            return socket.create_connection((sys.argv[2], 8080), timeout=10)
         except OSError:
             time.sleep(1)
     sys.exit("proxy never listened")
@@ -151,7 +154,13 @@ CASES: dict[str, list[Any]] = {
     "github_encoded_dot_dot": ["https", "github.com", CLOUDFLARE + "%2e%2e/%2e%2e/x"],
     "github_double_slash": ["https", "github.com", CLOUDFLARE + "v5//x"],
     "rds_suffix": ["https", "truststore.pki.rds.amazonaws.com", RDS + "X"],
+    "repository": ["https", "github.com", REPOSITORY + ".git/info/refs"],
+    "repository_api": ["https", "api.github.com", "/repos" + REPOSITORY + "/issues"],
+    "other_repository_api": ["https", "api.github.com", "/repos/someone/repo"],
 }
+ALLOWED = {
+    "anthropic", "pypi", "cloudflare_release", "rds_bundle", "repository", "repository_api",
+}  # fmt: skip
 
 
 def docker(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -171,22 +180,34 @@ def results() -> Iterator[dict[str, Any]]:
         "build", "--quiet", "--tag", f"{tag}:test", str(dispatcher.FACTORY / "proxy")
     )
     docker("network", "create", "--internal", tag)
-    aliases = ["api.anthropic.com", "pypi.org", "github.com", "evil"]
+    aliases = ["api.anthropic.com", "pypi.org", "github.com", "api.github.com", "evil"]
     aliases += ["truststore.pki.rds.amazonaws.com"]
     try:
         docker("run", "--detach", "--name", f"{tag}-echo", "--network", tag,
                *[a for alias in aliases for a in ("--network-alias", alias)],
                "--entrypoint", "python3", MITMPROXY, "-c", ECHO)  # fmt: skip
         command = proxy_command()
-        docker("run", "--detach", "--name", f"{tag}-proxy", "--network", tag,
-               "--network-alias", "proxy", "--tmpfs", "/state/flows:mode=1777",
-               "--env", f"CLAUDE_CODE_OAUTH_TOKEN={TOKEN}", f"{tag}:test",
-               *command, "--set", "ssl_insecure=true")  # fmt: skip
-        out = docker("run", "--rm", "--network", tag, "--entrypoint", "python3",
-                     MITMPROXY, "-c", CLIENT, json.dumps(CASES))  # fmt: skip
-        yield json.loads(out.stdout)
+        proxies = {
+            "subscription": ["--env", f"CLAUDE_CODE_OAUTH_TOKEN={TOKEN}"],
+            "sandbox-read": [],
+            "sandbox-write": ["--env", f"GITHUB_TOKEN={GITHUB_TOKEN}"],
+        }
+        for name, env in proxies.items():
+            docker("run", "--detach", "--name", f"{tag}-{name}", "--network", tag,
+                   "--network-alias", name, "--tmpfs", "/state/flows:mode=1777",
+                   *env, f"{tag}:test", *command, "--set", "ssl_insecure=true")  # fmt: skip
+        client = ["run", "--rm", "--network", tag, "--entrypoint", "python3", MITMPROXY]
+        out = {
+            name: json.loads(
+                docker(*client, "-c", CLIENT, json.dumps(CASES), name).stdout
+            )
+            for name in proxies
+        }
+        yield out
     finally:
-        docker("rm", "--force", f"{tag}-echo", f"{tag}-proxy", check=False)
+        docker("rm", "--force", f"{tag}-echo",
+               *[f"{tag}-{name}" for name in ("subscription", "sandbox-read", "sandbox-write")],
+               check=False)  # fmt: skip
         docker("network", "rm", tag, check=False)
         docker("image", "rm", f"{tag}:test", check=False)
 
@@ -210,16 +231,34 @@ def authorization(result: dict[str, Any]) -> str | None:
 
 
 def test_token_reaches_only_https_to_anthropic(results: dict[str, Any]) -> None:
-    anthropic = results["anthropic"]
-    assert anthropic["status"] == 200
-    assert authorization(anthropic) == f"Bearer {TOKEN}"
-    for name in ("pypi", "cloudflare_release", "rds_bundle"):
-        assert results[name]["status"] == 200, name
-        assert authorization(results[name]) == "Bearer from-the-sandbox", name
+    subscription = results["subscription"]
+    assert subscription["anthropic"]["status"] == 200
+    assert authorization(subscription["anthropic"]) == f"Bearer {TOKEN}"
+    for name in ("pypi", "rds_bundle"):
+        assert subscription[name]["status"] == 200, name
+        assert authorization(subscription[name]) == "Bearer from-the-sandbox", name
+    assert subscription["cloudflare_release"]["status"] == 200
+    assert authorization(subscription["cloudflare_release"]) is None
 
 
-@pytest.mark.parametrize("name", [n for n in CASES if n not in {
-    "anthropic", "pypi", "cloudflare_release", "rds_bundle"}])  # fmt: skip
-def test_refused(results: dict[str, Any], name: str) -> None:
-    assert results[name]["status"] in {0, 403}, results[name]
-    assert "echo" not in results[name]
+def test_sandbox_proxies_pass_the_worker_key_and_hold_the_github_token(
+    results: dict[str, Any],
+) -> None:
+    basic = base64.b64encode(f"x-access-token:{GITHUB_TOKEN}".encode()).decode()
+    for proxy in ("sandbox-read", "sandbox-write"):
+        assert authorization(results[proxy]["anthropic"]) == "Bearer from-the-sandbox"
+    for proxy, git, api in (
+        ("subscription", None, None),
+        ("sandbox-read", None, None),
+        ("sandbox-write", f"Basic {basic}", f"Bearer {GITHUB_TOKEN}"),
+    ):
+        assert results[proxy]["repository"]["status"] == 200, proxy
+        assert authorization(results[proxy]["repository"]) == git, proxy
+        assert authorization(results[proxy]["repository_api"]) == api, proxy
+
+
+@pytest.mark.parametrize("name", [n for n in CASES if n not in ALLOWED])
+@pytest.mark.parametrize("proxy", ["subscription", "sandbox-read", "sandbox-write"])
+def test_refused(results: dict[str, Any], proxy: str, name: str) -> None:
+    assert results[proxy][name]["status"] in {0, 403}, results[proxy][name]
+    assert "echo" not in results[proxy][name]

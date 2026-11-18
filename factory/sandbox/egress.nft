@@ -1,0 +1,11 @@
+table inet factory_sandbox
+delete table inet factory_sandbox
+
+table inet factory_sandbox {
+  chain output {
+    type filter hook output priority filter; policy accept;
+    meta skuid "factory-read" ip daddr 10.249.0.1 tcp dport 18080 accept
+    meta skuid "factory-write" ip daddr 10.249.0.1 tcp dport 18081 accept
+    meta skuid { "factory-read", "factory-write" } counter reject
+  }
+}

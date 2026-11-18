@@ -83,10 +83,17 @@ def test_proxy_allowlist_has_no_wildcards_and_github_only_by_path() -> None:
             paths.setdefault(host, []).append(path)
     assert paths["api.anthropic.com"] == [""]
     assert not [host for host in paths if "*" in host]
-    # GitHub only by path, and only for one repository's release downloads each.
+    repository = {
+        "rhprasad0/nova-toll-budget-agent/",
+        "rhprasad0/nova-toll-budget-agent.git/",
+    }
     github = paths["github.com"]
-    assert all(path.split("/")[2:4] == ["releases", "download"] for path in github)
+    assert all(
+        path in repository or path.split("/")[2:4] == ["releases", "download"]
+        for path in github
+    )
     assert "" not in github
+    assert "" not in paths["api.github.com"]
 
 
 def test_verify_script_comes_from_this_checkout() -> None:
