@@ -38,9 +38,9 @@
     "./environments/tollchat-box-read.yaml": {
       "kind": "environment",
       "id": "env_01LmwXcuLPzGxoDS8LdVxCE7",
-      "hash": "3980ef6c785cd34036f54f8ee25c7ed8",
-      "remote_hash": "224f72865cb9dcd91b932652f92bc27c",
-      "stamp": "2026-11-18T18:35:51.736366Z"
+      "hash": "afb5e6df4a647846cfafd3b7998de279",
+      "remote_hash": "7f50564d777bf18839ec00205699111d",
+      "stamp": "2026-11-18T21:57:57.095724Z"
     },
     "./environments/tollchat-box-write.yaml": {
       "kind": "environment",
@@ -48,13 +48,6 @@
       "hash": "dfef0a6db6a50ae31e186e9208b52782",
       "remote_hash": "7f5bc28eae5ff8bf1243b23edabfaaa7",
       "stamp": "2026-11-18T18:35:51.951365Z"
-    },
-    "./environments/tollchat.yaml": {
-      "kind": "environment",
-      "id": "env_01Dx3GHf76EfPsxdAwGuLsxa",
-      "hash": "76b5d14d5717dd901a6deb7bac190e5a",
-      "remote_hash": "a18a3f68821e1e867d049c3d967b9ee9",
-      "stamp": "2026-11-16T21:10:45.215718Z"
     },
     "./memory_stores/docs.yaml": {
       "kind": "memory_store",
